@@ -35,7 +35,14 @@ export function phaseOfCode(code: string | null | undefined): RecoveryPhase {
 
 const clamp = (value: unknown) => typeof value === 'number' && isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : null
 
-export interface ControllerOptions { stallMs?: number; now?: () => number; onReady?: () => void }
+export interface ControllerOptions {
+  stallMs?: number
+  now?: () => number
+  /** A wait reached ready: continue with this fresh report (the page must not reuse its cached readiness, #349). */
+  onReady?: (report: ImportReadiness | null) => void
+  /** Every readiness report the controller read, so the page's readiness is never older than the controller's. */
+  onReport?: (report: ImportReadiness) => void
+}
 export const STALL_MS = 10 * 60 * 1000
 
 export function createRecoveryController(api: RecoveryApi, options: ControllerOptions = {}) {
@@ -50,9 +57,18 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     state = next
     listeners.forEach(fn => fn(state))
   }
+  const read = async () => {
+    const report = await api.readiness().catch(() => null)
+    if (report && options.onReport) options.onReport(report)
+    return report
+  }
   const fromCheck = async (check: ReadinessCheck | null | undefined): Promise<RecoveryState> => {
     if (!check || check.ok) return { phase: 'ready', percent: 100 }
     const model = check.model ?? state.model
+    if (check.code === 'whisper_not_installed' && installing) {
+      // #350: our install request was accepted but the backend has not reported it yet -> still installing.
+      return { phase: 'installing', percent: state.percent, model }
+    }
     if (check.code === 'whisper_installing') {
       const runtime = await api.getRuntimeStatus().catch(() => null)
       if (runtime?.status === 'error') return { phase: 'failed', percent: null, model }
@@ -79,17 +95,20 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     close() { installing = false; set({ phase: 'idle', percent: null }) },
     /** One-click install: runtime, then the model, without leaving the dialog. */
     async install() {
-      installing = true
-      set({ phase: 'installing', percent: null, model: state.model })
-      const report = await api.readiness().catch(() => null)
+      // #350: the request goes out first; the waiting phase (and its polls) starts only once it was accepted.
+      installing = false
+      const report = await read()
       const check = report?.checks?.transcription
       try {
         if (check && String(check.code).startsWith('whisper_model')) {  // runtime is in: (re)start the model download
           const model = check.model ?? state.model
-          if (model) { await api.downloadModel(model); set({ phase: 'downloading', percent: 0, model }); return }
+          if (model) { await api.downloadModel(model); installing = true; set({ phase: 'downloading', percent: 0, model }); return }
         }
         await api.installRuntime()
+        installing = true
+        set({ phase: 'installing', percent: null, model: state.model })
       } catch {
+        installing = false
         set({ phase: 'failed', percent: null, model: state.model })
       }
     },
@@ -98,7 +117,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     /** One poll; returns the new state. Waiting phases time out after stallMs without progress. */
     async poll(): Promise<RecoveryState> {
       if (state.phase !== 'installing' && state.phase !== 'downloading') return state
-      const report = await api.readiness().catch(() => null)
+      const report = await read()
       const next = report ? await fromCheck(report.checks?.transcription) : state
       if ((next.phase === 'installing' || next.phase === 'downloading') && next.percent === state.percent && next.phase === state.phase
         && now() - progressAt >= stallMs) {
@@ -107,7 +126,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
       }
       const waited = state.phase === 'installing' || state.phase === 'downloading'
       set(next)
-      if (waited && next.phase === 'ready' && options.onReady) options.onReady()  // #232: continue by itself
+      if (waited && next.phase === 'ready' && options.onReady) options.onReady(report)  // #232: continue by itself
       return state
     },
   }

@@ -7,7 +7,9 @@ export function useTranscriptionRecovery(api: RecoveryApi, options: ControllerOp
   const ref = useRef<RecoveryController | null>(null)
   const onReady = useRef(options.onReady)
   onReady.current = options.onReady
-  if (!ref.current) ref.current = createRecoveryController(api, { ...options, onReady: () => onReady.current?.() })
+  const onReport = useRef(options.onReport)
+  onReport.current = options.onReport
+  if (!ref.current) ref.current = createRecoveryController(api, { ...options, onReady: report => onReady.current?.(report), onReport: report => onReport.current?.(report) })
   const controller = ref.current
   const [state, setState] = useState<RecoveryState>(controller.state)
   useEffect(() => controller.subscribe(setState), [controller])

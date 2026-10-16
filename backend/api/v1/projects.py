@@ -51,7 +51,6 @@ async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
                                 srt_available=has_srt, route='content')
 
 
-from .gate_errors import gate_refusal  # noqa: E402
 from .studio import stage_upload, _stage_for_gate as stage_for_gate  # noqa: E402
 
 

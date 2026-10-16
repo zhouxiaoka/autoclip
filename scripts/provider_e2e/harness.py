@@ -127,6 +127,31 @@ def import_project(base_url: str, fixture: dict[str, Any]) -> str:
     return str(project_id)
 
 
+def paid_calls(seen: int | None, ledger: int | None) -> int | None:
+    """#353: the larger of the observer count and the project ledger; None when neither exists (never 0)."""
+    known = [value for value in (seen, ledger) if value is not None]
+    return max(known) if known else None
+
+
+def observed_chat_calls(observer: MockServer | None, events_before: int) -> int | None:
+    """Chat-completion requests the mock provider saw since ``events_before``; None without an observer."""
+    if observer is None:
+        return None
+    events = observer.state.snapshot()['events'][events_before:]
+    return sum(1 for event in events if 'chat/completions' in str(event.get('path') or ''))
+
+
+def refusal_workspace(expect: str, exc: HttpError) -> dict[str, Any] | None:
+    """#418: the one preflight refuses a bad source at import with a coded 422 (no project, no state). Only a
+    should-block case may read that as its result (failed at INGEST with that code); any other case keeps the error."""
+    if expect != 'block':
+        return None
+    refused = import_refusal_code(exc)
+    if refused is None:
+        return None
+    return {'generation': {'status': 'failed', 'error_code': refused, 'failure_stage': 'INGEST'}, 'analysis': {}}
+
+
 def import_refusal_code(exc: HttpError) -> str | None:
     """The source code of a coded 422 import refusal (``detail.code``), else None."""
     if getattr(exc, 'status', None) != 422:
@@ -143,7 +168,7 @@ def import_refusal_code(exc: HttpError) -> str | None:
 def evaluate_case(
     expect: str,
     workspace: dict[str, Any],
-    billable_calls_before_failure: int,
+    billable_calls_before_failure: int | None,
     block_code: str | None = None,
     *,
     expected_upstream_error_type: str | None = None,
@@ -244,12 +269,9 @@ def run_case(
         else:
             workspace = poll_workspace(base_url, project_id, timeout)
     except HttpError as exc:
-        refused = import_refusal_code(exc) if expect == 'block' else None
+        refused = refusal_workspace(expect, exc)
         if refused is not None:
-            # #418: the one preflight refuses a bad source at import with a coded 422 (no project, no state);
-            # that is the earliest possible block, judged like a failed run with that code at INGEST.
-            workspace = {'generation': {'status': 'failed', 'error_code': refused, 'failure_stage': 'INGEST'},
-                         'analysis': {}}
+            workspace = refused
         else:
             error = f'{type(exc).__name__}: {exc}'
             if getattr(exc, 'body', None):
@@ -260,7 +282,10 @@ def run_case(
             error += f' body={exc.body[:400]}'
     finally:
         backend.stop()
-    billable = billable_calls_before_failure(data_dir, project_id) if project_id else 0
+    # #353: paid calls are counted, never inferred from "no project": the request observer (mock suites) counts
+    # every chat request since this case started; otherwise the project's ledger; with neither it is unknown.
+    billable = paid_calls(observed_chat_calls(observer, events_before),
+                          billable_calls_before_failure(data_dir, project_id) if project_id else None)
     prompt_tokens, completion_tokens = (0, 0)
     if project_id:
         prompt_tokens, completion_tokens = usage_tokens(usage_rows(data_dir, project_id))

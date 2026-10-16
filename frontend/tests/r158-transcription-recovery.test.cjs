@@ -130,6 +130,34 @@ test('#232: a wait that reaches ready continues by itself exactly once; failed /
   assert.equal(failing.state.phase, 'failed'); assert.equal(readyCalls, 1)
 })
 
+test('#350: the install request goes out before the wait; a poll that still sees not_installed keeps waiting', async () => {
+  const order = []
+  let report = check('whisper_not_installed')
+  const api = fakeApi({ report: () => report, runtime: () => ({ status: 'installing', progress: 5 }) })
+  const sendInstall = api.installRuntime
+  api.installRuntime = async () => { order.push('request'); await sendInstall() }
+  const c = recovery.createRecoveryController(api)
+  c.subscribe(s => order.push(s.phase))
+  c.open('whisper_not_installed')
+  await c.install()
+  assert.deepEqual(order, ['install_required', 'request', 'installing'], 'request first, then the waiting phase')
+  assert.equal((await c.poll()).phase, 'installing', 'stale not_installed right after the request is still installing')
+  report = check('whisper_installing')
+  assert.equal((await c.poll()).phase, 'installing')
+  report = check('ok')
+  assert.equal((await c.poll()).phase, 'ready')
+})
+
+test('#349: onReady hands over the fresh report; every report read reaches onReport', async () => {
+  let report = check('whisper_model_downloading', { model: 'base' })
+  const seen = []; let handed
+  const c = recovery.createRecoveryController(fakeApi({ report: () => report, models: () => [] }), { onReport: r => seen.push(r.checks.transcription.code), onReady: r => { handed = r } })
+  c.open('whisper_model_downloading', 'base')
+  await c.poll(); report = check('ok'); await c.poll()
+  assert.deepEqual(seen, ['whisper_model_downloading', 'ok'])
+  assert.equal(handed.checks.transcription.code, 'ok')
+})
+
 function render(props) {
   const host = document.createElement('div'); document.body.appendChild(host)
   const root = createRoot(host)

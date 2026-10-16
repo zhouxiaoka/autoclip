@@ -5,7 +5,7 @@ const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')  // #328: the one sandbox helper (same file as #422)
 const ts = require('typescript')
 const { Window } = require('happy-dom')
 
@@ -48,7 +48,7 @@ function load(file, mocks) {
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks)
     throw new Error('unexpected import ' + id)
   }
-  vm.runInNewContext(outputText, { exports, require: req, window, console, URL, HTMLElement: window.HTMLElement, Promise, setTimeout, clearTimeout })
+  runInSandbox(outputText, { exports, require: req, window, console, URL, HTMLElement: window.HTMLElement, Promise, setTimeout, clearTimeout })
   return exports
 }
 

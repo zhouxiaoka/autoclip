@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')  // #328: the one sandbox helper (same file as #422)
 const ts = require('typescript')
 const { Window } = require('happy-dom')
 
@@ -43,7 +43,7 @@ function load(file, mocks, clock) {
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks, clock)
     throw new Error('unexpected import ' + id)
   }
-  vm.runInNewContext(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, setTimeout: clock ? clock.setTimeout : setTimeout, clearTimeout: clock ? clock.clearTimeout : clearTimeout, ...(clock ? { Date: clock.Date } : {}) })
+  runInSandbox(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, setTimeout: clock ? clock.setTimeout : setTimeout, clearTimeout: clock ? clock.clearTimeout : clearTimeout, ...(clock ? { Date: clock.Date } : {}) })
   return exports
 }
 
@@ -328,5 +328,46 @@ test('R24 #232: a stalled download times out into retry (model download again) o
   assert.ok(button(view.host, '打开转写设置'))
   await act(async () => { button(view.host, '重试').click() }); await act(async () => {}); await act(async () => {})
   assert.deepEqual(downloads, ['small'])
+  act(() => view.root.unmount())
+})
+
+test('#349: from model_missing (no READY first): 一键安装 -> download -> done -> the import really goes out once, no second install prompt', async () => {
+  const clock = fakeClock()
+  let report = check('whisper_model_missing', { model: 'small' })
+  const downloads = []
+  const imports = []
+  const view = await render({ clock, dropZone: true, readiness: async () => report,
+    speech: { getModels: async () => [{ name: 'small', status: 'downloading', downloadProgress: 50 }], downloadModel: async model => { downloads.push(model); report = check('whisper_model_downloading', { model }); return {} } },
+    importImpl: async body => { imports.push(body); return { project_id: 'p' } } })
+  await dropFile(view.host, 'talk.mp4')
+  await act(async () => { startButton(view.host).click() }); await act(async () => {})
+  assert.equal(view.host.querySelector('[role=alertdialog]').getAttribute('aria-label'), '需要先安装本地转写')
+  assert.equal(imports.length, 0)
+  await act(async () => { button(view.host, '一键安装').click() }); await act(async () => {}); await act(async () => {})
+  assert.deepEqual(downloads, ['small'])
+  await clock.advance(2000)
+  assert.match(view.host.textContent, /正在下载转写模型/)
+  report = READY
+  await clock.advance(2000); await act(async () => {}); await act(async () => {}); await act(async () => {})
+  assert.equal(imports.length, 1, 'the import request is sent after the download (was 0: stale readiness reopened the prompt)')
+  assert.equal(imports[0].get('video').name, 'talk.mp4')
+  assert.equal(view.host.querySelector('[role=alertdialog]'), null, 'no install prompt again')
+  act(() => view.root.unmount())
+})
+
+test('#353: the readiness list install button runs through the one recovery controller (no parallel install flow)', async () => {
+  const clock = fakeClock()
+  const installs = []
+  let report = check('whisper_not_installed', { repair: 'install_whisper' })
+  const view = await render({ clock, readiness: async () => report,
+    speech: { installRuntime: async () => { installs.push('runtime'); report = check('whisper_installing'); return {} }, getRuntimeStatus: async () => ({ status: 'installing', progress: 30 }) },
+    importImpl: async () => ({ project_id: 'p' }) })
+  const listButton = [...view.host.querySelectorAll('button')].find(b => b.textContent === '安装 Whisper')
+  assert.ok(listButton, 'readiness list offers install')
+  await act(async () => { listButton.click() }); await act(async () => {}); await act(async () => {})
+  assert.deepEqual(installs, ['runtime'])
+  await clock.advance(2000)
+  assert.equal(view.host.querySelector('[role=alertdialog]').getAttribute('aria-label'), '等待安装完成', 'the controller dialog waits with progress')
+  assert.match(view.host.textContent, /已完成 30%/)
   act(() => view.root.unmount())
 })

@@ -424,6 +424,39 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIsNone(import_refusal_code(HttpError(422, 'not json')))
         self.assertIsNone(import_refusal_code(HttpError(422, _json.dumps({'detail': '视频文件为空'}))))
 
+    def test_refusal_counts_only_for_should_block_cases(self):
+        import json as _json
+        from provider_e2e.harness import refusal_workspace
+        from provider_e2e.http_util import HttpError
+        exc = HttpError(422, _json.dumps({'detail': {'code': 'source_too_short', 'message': 'x'}}))
+        self.assertEqual(refusal_workspace('block', exc)['generation']['error_code'], 'source_too_short')
+        for expect in ('succeed', 'service_restarted'):
+            self.assertIsNone(refusal_workspace(expect, exc), expect)
+
+    def test_unknown_paid_call_count_never_passes_a_block(self):
+        # #353: "no project" is not "zero calls"; a call seen by the observer before the 422 fails the case.
+        from provider_e2e.harness import evaluate_case, observed_chat_calls
+        refused = {'generation': {'status': 'failed', 'error_code': 'source_no_audio', 'failure_stage': 'INGEST'}, 'analysis': {}}
+        self.assertFalse(evaluate_case('block', refused, None, 'source_no_audio')['passed'])
+        self.assertTrue(evaluate_case('block', refused, 0, 'source_no_audio')['passed'])
+
+        class Observer:
+            class state:
+                @staticmethod
+                def snapshot():
+                    return {'events': [{'path': '/v1/models'}, {'path': '/v1/chat/completions'}]}
+        self.assertEqual(observed_chat_calls(Observer, 0), 1)
+        self.assertEqual(observed_chat_calls(Observer, 2), 0)
+        self.assertIsNone(observed_chat_calls(None, 0))
+        from provider_e2e.harness import paid_calls
+        self.assertIsNone(paid_calls(None, None), 'no project and no observer: unknown, not 0')
+        self.assertEqual(paid_calls(1, None), 1)
+        self.assertEqual(paid_calls(None, 2), 2)
+        self.assertEqual(paid_calls(1, 0), 1, 'a call the observer saw counts even if the ledger missed it')
+        from provider_e2e import judge
+        row = {'id': 'mock:no_audio', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': None, 'billable_calls': None}
+        self.assertFalse(judge.judge_suite({'status': 'ok', 'cases': [row]})['passed'])
+
     def test_evaluate_block_requires_zero_billable(self):
         from provider_e2e.harness import evaluate_case
         workspace = {

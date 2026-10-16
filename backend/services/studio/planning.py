@@ -28,13 +28,10 @@ FRAME_EXTRACT_FALLBACK_MESSAGE = '读取素材画面失败，已改用字幕分�
 
 
 def source_duration(video: Path, info: dict | None = None) -> float:
-    """Planning's duration: the preflight's material probe (one ffprobe, ffmpeg decode fallback reusing it).
-    Raises the preflight's source failure when the source is unreadable or under 1 s."""
+    """Planning's duration from the caller's own ffprobe ``info`` (#351: no second ffprobe; a missing duration
+    gets one ffmpeg decode). Raises the preflight's source failure when unreadable or under 1 s."""
     from backend.services.studio import preflight
-    if info is not None and info.get('duration'):
-        probe = preflight.MaterialProbe(preflight.ProbeState.READABLE, Path(video), float(info['duration']))
-    else:
-        probe = preflight.probe_material(video)
+    probe = preflight.probe_from_info(video, info)
     failure = preflight.classify_source(probe, srt_available=True, subtitle_route=False)
     if failure is not None:
         raise failure
@@ -130,9 +127,15 @@ def _subtitle_blockers(video: Path, duration: float, options: ImportOptions, con
     attached SRT, used to spend screening and clip-finding calls before failing.
     """
     from backend.pipeline import media_precheck
+    from backend.services.studio import preflight
     srt_attached = (video.parent / 'input.srt').is_file()
-    short = media_precheck.too_short(duration)
-    no_audio = not srt_attached and media_precheck.has_audio(video) is False
+    # #351: the subtitle-route verdict is the one classify_source; audio is only looked up when it matters.
+    audio = None if srt_attached or media_precheck.too_short(duration) else media_precheck.has_audio(video)
+    probe = preflight.MaterialProbe(preflight.ProbeState.READABLE, Path(video), duration, audio)
+    verdict = preflight.classify_source(probe, srt_available=srt_attached, subtitle_route=True)
+    code = verdict.code if verdict is not None else None
+    short = code == media_precheck.SOURCE_TOO_SHORT
+    no_audio = code == media_precheck.SOURCE_NO_AUDIO
     if not (short or no_audio):
         return False, False
     vision = duration <= VISUAL_MAX_SOURCE_SEC and configured

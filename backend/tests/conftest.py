@@ -137,6 +137,10 @@ def _placeholder_media_is_readable(monkeypatch, request):
         return
     monkeypatch.setattr(preflight, "probe_material",
                         lambda video: preflight.MaterialProbe(preflight.ProbeState.READABLE, video, 60.0, True, ffprobe_runs=1))
+    # A caller's own ffprobe that found no duration (fake bytes) finishes as the same readable stand-in (#351).
+    monkeypatch.setattr(preflight, "_after_ffprobe",
+                        lambda path, duration, audio, width, height, stderr='': preflight.MaterialProbe(
+                            preflight.ProbeState.READABLE, path, duration or 60.0, True if audio is None else audio, width, height, ffprobe_runs=1))
     yield
 
 

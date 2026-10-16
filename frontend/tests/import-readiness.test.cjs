@@ -137,7 +137,7 @@ function render(options = {}) {
       downloadModel: async model => { installs.push('model:' + model); return { status: 'downloading', model, message: '' } },
     } },
     './importReadiness': readiness,
-    './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},
+    './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c,m)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c);installs.push('open:'+c+(m?':'+m:''))},close(){},install:async()=>{installs.push('controller.install')},retry:async()=>{}}]},
     './studio.css': {},
     './quick-output.css': {},
   }
@@ -161,7 +161,8 @@ test('the banner installs whisper, opens first-run setup, and blocks an unready 
   assert.deepEqual(opened.blocked, ['setup'])
   assert.deepEqual(opened.navigations, [])
   await button(opened.tree, '安装 Whisper').props.onClick()
-  assert.deepEqual(opened.installs, ['whisper'])
+  // #353: the banner button goes through the one recovery controller, never a page-owned install call.
+  assert.deepEqual(opened.installs, ['open:whisper_not_installed', 'controller.install'])
   const unready = render({ report: failing })
   await button(unready.tree, '生成成片').props.onClick()
   assert.equal(unready.calls.length, 0)
@@ -220,7 +221,7 @@ test('an installed runtime without its model offers the model download, not anot
   const view = render({ report: missing })
   assert.equal(button(view.tree, '安装 Whisper'), undefined)
   await button(view.tree, '下载转写模型').props.onClick()
-  assert.deepEqual(view.installs, ['model:small'])
+  assert.deepEqual(view.installs, ['open:whisper_model_missing:small', 'controller.install'], 'the controller downloads the model (#353)')
   assert.equal(readiness.submissionBlock(missing, false, true), 'transcription')
   assert.equal(readiness.submissionBlock(missing, true, true), null)
   const downloading = render({ report: report({ transcription: { ...check(false, 'whisper_model_downloading', 'none'), model: 'small' } }) })

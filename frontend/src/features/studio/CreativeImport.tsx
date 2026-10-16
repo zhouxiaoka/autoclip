@@ -89,16 +89,13 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [readiness, setReadiness] = useState<ImportReadiness | null>(null)
   const currentReadiness = readiness
   const [settled, setSettled] = useState(false)
-  const [repairing, setRepairing] = useState(false)
   const [platformOpen, setPlatformOpen] = useState(false)
   const [pending, setPending] = useState<{ trigger: 'paste' | 'drop' } | null>(null)
   const [dragging, setDragging] = useState(false)
   const platformSource = useRef<PlatformSource>(initialPlatforms.current.source)
   const overridden = useRef(false)
   const starting = useRef(false)
-  const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button') => Promise<void>>(async () => {})
-  // Installing the runtime is only half of local transcription: download the model right after.
-  const modelAfterRuntime = useRef(false)
+  const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button', fresh?: ImportReadiness | null) => Promise<void>>(async () => {})
   const allowLink = flagEnabled('link_import_without_whisper')
   const dropZone = flagEnabled('import_drop_zone')
   const hidePreferences = flagEnabled('hide_legacy_entrypoints')
@@ -121,20 +118,6 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const stored = readImportPreferences()
     if (stored) setOptions(current => ({ ...stored, instruction: current.instruction }))
   }, [hidePreferences])
-  useEffect(() => {
-    const check = readiness?.checks?.transcription
-    if (check?.code === 'whisper_model_missing' && check.model && modelAfterRuntime.current) {
-      modelAfterRuntime.current = false
-      void downloadModel(check.model)
-      return
-    }
-    if (check?.code === 'whisper_install_failed') modelAfterRuntime.current = false
-    if (check?.code !== 'whisper_installing' && check?.code !== 'whisper_model_downloading') return
-    const timer = window.setInterval(() => {
-      studioApi.readiness().then(setReadiness).catch(() => undefined)
-    }, 2000)
-    return () => window.clearInterval(timer)
-  }, [readiness?.checks?.transcription?.code])
   useEffect(() => {
     if (!shouldBackgroundInstallWhisper(allowLink, readiness?.checks?.transcription?.code)) return
     if (!claimBackgroundWhisperInstall()) return
@@ -165,28 +148,9 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     return () => window.removeEventListener('paste', onPaste)
   }, [pasteFlag, dropZone, busy, settled, allowLink, source])
   const issues = visibleIssues(readiness, !!subtitle, blockOptions)
-  const downloadModel = async (model: string) => {
-    setRepairing(true)
-    setError('')
-    try {
-      await speechApi.downloadModel(model)
-      setReadiness(await studioApi.readiness())
-      setSettled(true)
-    } catch (e) { setError(t(errorText(e))) } finally { setRepairing(false) }
-  }
   const repair = async (item: ReadinessIssue) => {
-    if (item.repair === 'install_whisper' && item.model) { await downloadModel(item.model); return }
-    if (item.repair === 'install_whisper') {
-      modelAfterRuntime.current = true
-      setRepairing(true)
-      setError('')
-      try {
-        await speechApi.installRuntime()
-        setReadiness(await studioApi.readiness())
-        setSettled(true)
-      } catch (e) { modelAfterRuntime.current = false; setError(t(errorText(e))) } finally { setRepairing(false) }
-      return
-    }
+    // #353: the readiness list's install button goes through the one recovery controller (no second install flow).
+    if (item.repair === 'install_whisper') { setError(''); recover.open(item.code || 'whisper_not_installed', item.model); await recover.install(); return }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
     const destination = repairDestination(item.repair)
     if (destination) navigate(destination)
@@ -194,8 +158,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   // #418 rewrite: the one install-recovery controller (shared with the confirm page): install -> download ->
   // ready (continues by itself) / failed / timeout (retry or transcription settings).
   // Done waiting -> the same import continues by itself (#232); the 继续导入 button is the manual exit.
-  const continueAfterRecovery = () => { recover.close(); setError(''); void submitRef.current?.('button') }
-  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: () => continueAfterRecovery() })
+  // #349: continue with the report the controller just read, never the page's cached readiness.
+  const continueAfterRecovery = (report: ImportReadiness | null) => { recover.close(); setError(''); if (report) setReadiness(report); void submitRef.current?.('button', report) }
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: report => continueAfterRecovery(report), onReport: report => setReadiness(report) })
+  const repairing = recovery.phase === 'installing' || recovery.phase === 'downloading'
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
     if (remembered) writeRememberedPlatforms(next)
@@ -240,7 +206,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     setPending(null)
     if (trigger) trackOneClickUndone({ trigger }, flagAssigned('one_click_paste_start'))
   }
-  const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button') => {
+  const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null) => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
     // R20 #166: one busy state from the click on. The re-probe below can wait, and the inputs stay locked
@@ -248,7 +214,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     starting.current = true
     setBusy(true)
     try {
-      let report = readiness
+      let report = fresh ?? readiness
       if (settled && !report) {
         // R19 #115 (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
         report = await probeReadiness(() => studioApi.readiness())
@@ -334,7 +300,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       </div>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
-      <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={continueAfterRecovery} navigate={navigate}/>
+      <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
       {error&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>

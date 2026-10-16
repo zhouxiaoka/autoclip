@@ -255,7 +255,9 @@ def judge_suite(report: dict[str, Any], *, library: list[dict[str, Any]] | None 
     faults = [row for row in all_cases if _injected(row)]
     succeed_rate = success_rate(succeed)
     block_ok = all(row.get('passed') for row in blocked) if blocked else True
-    billable_ok = all(billable_calls_before_failure(row) == 0 for row in blocked)
+    # #353: a should-block row passes only with a counted zero; an unknown count (None) is not zero.
+    billable_ok = all(row.get('billable_calls_before_failure', row.get('billable_calls')) is not None
+                      and billable_calls_before_failure(row) == 0 for row in blocked)
     fault_ok = all(row.get('passed') and _fault_contract_ok(row) for row in faults) if faults else True
     window = report.get('window')
     live_like = _live_like(report)

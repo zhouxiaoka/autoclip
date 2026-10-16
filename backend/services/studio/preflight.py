@@ -2,7 +2,7 @@
 
 One resolution gives ``ResolvedInputs + MaterialProbe + SettingsSnapshot``; ``preflight()`` decides from those three
 values only, and every entry (HTTP / CLI / MCP / Celery import / pipelines / confirm) calls it and only converts
-the result to its own protocol. HTTP entries call ``run_async`` so the whole check (settings read, ffprobe,
+the result to its own protocol. HTTP entries call ``backend.api.v1.transcription_gate.run`` so the whole check (settings read, ffprobe,
 ffmpeg decode fallback) runs in the threadpool, never on the event loop.
 
 Invariants (each has an acceptance test in ``backend/tests/test_r158_preflight.py``):
@@ -137,6 +137,12 @@ def probe_material(video) -> MaterialProbe:
             audio = any(row.get('codec_type') == 'audio' for row in streams)
             video_row = next((row for row in streams if row.get('codec_type') == 'video'), {})
             width, height = video_row.get('width'), video_row.get('height')
+    return _after_ffprobe(path, duration, audio, width, height, stderr)
+
+
+def _after_ffprobe(path: Path, duration, audio, width, height, stderr: str = '') -> MaterialProbe:
+    """Finish a probe whose one ffprobe already ran: no duration -> one ffmpeg decode, never a second ffprobe."""
+    from backend.pipeline import media_precheck
     if duration and duration > 0:
         return MaterialProbe(ProbeState.READABLE, path, duration, audio, width, height, ffprobe_runs=1)
     found, decode_err = media_precheck._ffmpeg_decode_duration(path)
@@ -145,6 +151,17 @@ def probe_material(video) -> MaterialProbe:
     detail = media_precheck.sanitize_tool_output(f'ffprobe: {stderr or "no duration"}\nffmpeg: {decode_err}', path)
     return MaterialProbe(ProbeState.UNREADABLE, path, None, audio, width, height,
                          ffprobe_runs=1, decode_runs=1, diagnostics=detail)
+
+
+def probe_from_info(video, info: Optional[dict]) -> MaterialProbe:
+    """#351: a caller that already ran its ffprobe (``info``) gets the same probe without a second ffprobe."""
+    if info is None:
+        return probe_material(video)
+    try:
+        duration = float(info.get('duration') or 0) or None
+    except (TypeError, ValueError):
+        duration = None
+    return _after_ffprobe(Path(video), duration, info.get('audio'), info.get('width'), info.get('height'))
 
 
 def classify_source(probe: MaterialProbe, *, srt_available: bool, subtitle_route: bool,
@@ -243,17 +260,6 @@ def enforce(result: PreflightResult) -> PreflightResult:
 
 def check(inputs: ResolvedInputs, **kwargs) -> PreflightResult:
     return enforce(preflight(inputs, **kwargs))
-
-
-async def run_async(inputs: ResolvedInputs, **kwargs) -> PreflightResult:
-    """HTTP entries: the whole preflight off the event loop; refusals become the one coded 422."""
-    from starlette.concurrency import run_in_threadpool
-    from backend.api.v1.gate_errors import gate_refusal
-    from backend.services.studio import readiness
-    try:
-        return await run_in_threadpool(check, inputs, **kwargs)
-    except (SourceRejected, readiness.TranscriptionNotReady) as exc:
-        raise gate_refusal(exc) from exc
 
 
 def project_inputs(project_id: str, *, entry: Entry = 'content', goal: Optional[str] = 'auto') -> Optional[ResolvedInputs]:

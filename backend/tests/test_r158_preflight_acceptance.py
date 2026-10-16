@@ -254,3 +254,91 @@ def test_i7_probe_states_are_distinct():
     assert preflight.classify_source(unknown_audio, srt_available=False, subtitle_route=True) is None
     failed = preflight.MaterialProbe(preflight.ProbeState.UNREADABLE, Path('v'))
     assert preflight.classify_source(failed, srt_available=True, subtitle_route=False).code == 'source_unreadable'
+
+
+# ------------------------------------------------- I3b (#351): planning reuses its own ffprobe, never a second ---
+@pytest.mark.own_whisper_status
+def test_i3b_planning_recommend_missing_duration_one_ffprobe_then_decode(tmp_path, monkeypatch):
+    """recommend(): its ffprobe answers without a duration -> one ffmpeg decode, not ffprobe -> ffprobe -> ffmpeg."""
+    settings('subtitle'); asr(monkeypatch, 'ready')
+    from backend.services.studio import planning
+    from backend.services.studio.models import ImportOptions
+    real_run, real_out = subprocess.run, subprocess.check_output
+    calls = []
+
+    def tool(cmd):
+        return Path(str(cmd[0])).name
+
+    def check_output(cmd, *a, **k):
+        if tool(cmd).startswith('ffprobe'):
+            calls.append('ffprobe')
+            return json.dumps({'streams': [{'codec_type': 'video', 'width': 160, 'height': 90}], 'format': {}})
+        return real_out(cmd, *a, **k)
+
+    def run(cmd, *a, **k):
+        name = tool(cmd)
+        if name.startswith('ffprobe'):
+            calls.append('ffprobe')
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps({'streams': [{'codec_type': 'video'}, {'codec_type': 'audio'}], 'format': {}}), stderr='')
+        if name.startswith('ffmpeg'):
+            calls.append('ffmpeg')
+            return subprocess.CompletedProcess(cmd, 0, stdout='', stderr='size=N/A time=00:00:42.00 bitrate=N/A')
+        return real_run(cmd, *a, **k)
+    monkeypatch.setattr(subprocess, 'check_output', check_output)
+    monkeypatch.setattr(subprocess, 'run', run)
+    video = broken(tmp_path / 'p' / 'raw' / 'input.mp4')
+    (video.parent / 'input.srt').write_text(SRT)
+    try:
+        planning.recommend(video, ImportOptions(goal='content', auto_start=False))
+    except Exception:  # noqa: BLE001 - only the probe order before the first decode matters here
+        pass
+    first_decode = calls.index('ffmpeg')
+    assert calls[:first_decode] == ['ffprobe'], calls
+
+
+# --------------------------------------------- #352: for_project entries and MCP after-run code are guarded ---
+@pytest.mark.own_whisper_status
+def test_i8_projects_process_endpoint_refuses_a_broken_project_source(tmp_path, monkeypatch):
+    """POST /projects/{id}/process (the for_project preflight): an unreadable on-disk source is a coded 422 and
+    processing is never started."""
+    settings('subtitle'); asr(monkeypatch, 'ready')
+    from backend.api.v1 import processing
+    from backend.core.path_utils import get_project_raw_directory
+    started = []
+    app = FastAPI(); app.include_router(processing.router)
+    app.dependency_overrides[processing.get_processing_service] = lambda: SimpleNamespace(process_project=lambda pid: started.append(pid) or {})
+    broken(get_project_raw_directory('p418') / 'input.mp4')
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post('/projects/p418/process')
+    assert r.status_code == 422 and r.json()['detail']['code'] == 'source_unreadable', r.text
+    assert started == []
+
+
+@pytest.mark.own_whisper_status
+def test_i9_mcp_job_keeps_the_pipeline_source_code_after_running(tmp_path, monkeypatch):
+    """A failure the pipeline reports after it started (source_no_audio) stays that code on the MCP job."""
+    from backend import mcp_server
+    from backend.services import local_runner
+    from backend.services.local_runner import RunRequest
+    video = media(tmp_path / 'ok.mp4', seconds=40)
+    monkeypatch.setattr(local_runner, 'configure_llm', lambda *a, **k: None)
+    monkeypatch.setattr(local_runner, 'prepare_project', lambda req, link=False: video)
+    monkeypatch.setattr(local_runner, 'run_pipeline', lambda req, v, on_progress=None: {
+        'status': 'failed', 'error_code': 'source_no_audio', 'error': '这个视频没有声音'})
+    req = RunRequest(video=video, project_id='mcp418')
+    mcp_server._jobs[req.project_id] = {'status': 'queued'}
+    job = mcp_server._run_job(req, None, False)
+    assert job['status'] == 'failed' and job['error_code'] == 'source_no_audio'
+
+
+def test_i10_service_layer_never_imports_the_api_layer():
+    """#354: the coded 422 shape lives in the API layer; services/studio/preflight.py has no backend.api import."""
+    import ast
+    src = Path(__file__).resolve().parents[1] / 'services' / 'studio' / 'preflight.py'
+    names = []
+    for node in ast.walk(ast.parse(src.read_text(encoding='utf-8'))):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            names.append(node.module)
+        elif isinstance(node, ast.Import):
+            names.extend(alias.name for alias in node.names)
+    assert not [n for n in names if n.startswith('backend.api')], names

@@ -52,13 +52,14 @@ async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route
     """Stage the upload outside any project and run the one preflight on it, in the threadpool.
     Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
     from backend.services.studio import preflight
+    from backend.api.v1 import transcription_gate
     staged = await stage_upload(video, first_chunk, ext)
     try:
         subtitle = staged.with_suffix('.srt') if srt_available else None
         if subtitle is not None:
             subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
         try:
-            await preflight.run_async(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
+            await transcription_gate.run(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
         finally:
             if subtitle is not None:
                 subtitle.unlink(missing_ok=True)
