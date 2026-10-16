@@ -84,11 +84,6 @@ class Events:
     def add(self, person, minutes, event='studio_generation_finished', env='production', runtime='desktop',
             app_version='1.5.8', **props):
         self.n += 1
-        # R25 #346: v4 rows carry the backend receipt sequence (here: insertion order); legacy=True drops it.
-        if props.pop('legacy', False):
-            props.pop('attempt_sequence', None)
-        else:
-            props.setdefault('attempt_sequence', str(self.n))
         props = {'analytics_environment': env, 'runtime': runtime, 'app_version': app_version, **props}
         self.rows.append((f'u{self.n:04d}', event, person, DAY + timedelta(minutes=minutes), props))
 
@@ -158,8 +153,8 @@ def test_daily_attempt_and_flow_rates_match_hand_count():
 
 
 MUTATIONS = {
-    'last->any success': ("argMax(o, (seq, ts)) AS fo", "if(max(o = 'success'), 'success', 'error') AS fo"),
-    'last->first': ("argMax(o, (seq, ts)) AS fo", "argMin(o, (seq, ts)) AS fo"),
+    'last->any success': ("argMax(o, ord) AS fo", "if(max(o = 'success'), 'success', 'error') AS fo"),
+    'last->first': ("argMax(o, ord) AS fo", "argMin(o, ord) AS fo"),
     'ignore retry_of': ("b.fid) AS chain_fid", "b.fid) AS chain_fid_unused, b.fid AS chain_fid"),
 }
 
@@ -221,7 +216,7 @@ def test_per_version_query():
 
 def test_per_version_last_any_mutation_is_caught():
     stmt = statements()[4]
-    old = "argMax(o, (seq, ts)) AS fo"
+    old = "argMax(o, ord) AS fo"
     assert old in stmt
     rows = {r['app_version']: r for r in fixture().run(stmt.replace(old, "if(max(o = 'success'), 'success', 'error') AS fo"))}
     assert rows['1.5.8']['flow_ok'] != 2
@@ -498,58 +493,72 @@ def test_346_out_of_order_observation_keeps_the_flow_successful_in_figure_1_and_
 @pytest.mark.parametrize('figure', [0, 4])
 def test_346_ordering_by_observation_time_is_caught(figure):
     stmt = statements()[figure]
-    assert stmt.count(', (seq, ts))') >= 3
-    rows = _out_of_order().run(stmt.replace(', (seq, ts))', ', ts)'))
+    assert stmt.count('(ifNull(seq, 0), leaf, ts) AS ord') == 1
+    rows = _out_of_order().run(stmt.replace('(ifNull(seq, 0), leaf, ts) AS ord', '(ts) AS ord'))
     assert rows[0]['flow_ok'] == 0  # the old argMax(o, ts): 100% -> 0%
 
 
-def _legacy(e, person, base=0):
-    """pre-#419 rows: no attempt_sequence. One success flow and one fail -> retry-success flow."""
-    e.add(person, base, attempt_id=person + 'l1', flow_id='F' + person + '1', outcome='completed', legacy=True)
-    e.add(person, base + 1, attempt_id=person + 'l2', flow_id='F' + person + '2', outcome='error', error_code='timeout', legacy=True)
-    e.add(person, base + 2, attempt_id=person + 'l3', flow_id='F' + person + '3', retry_of=person + 'l2', outcome='completed', legacy=True)
+def test_346_legacy_rows_without_sequence_still_order_by_time():
+    e = Events()
+    e.add('L', 0, attempt_id='l1', flow_id='FL', outcome='error', error_code='timeout')
+    e.add('L', 5, attempt_id='l2', flow_id='FL', retry_of='l1', outcome='completed')
+    assert e.run(statements()[0])[0]['flow_ok'] == 1
 
 
-@pytest.mark.parametrize('figure', [0, 4])
-def test_346_legacy_only_has_empty_denominators_and_counts_unknown(figure):
-    e = Events(); _legacy(e, 'L')
-    [row] = e.run(statements()[figure])
-    assert (row['ok'], row['q_all'], row['q_prod'], row['flow_ok'] or 0, row['fq_all'] or 0, row['unknown_attempts']) == (0, 0, 0, 0, 0, 3)
-    assert row['overall_attempt_rate'] is None and row['product_attempt_rate'] is None and row['overall_flow_rate'] is None
-
+# --- R26 #362: legacy flows (no attempt_sequence) ---
+# The R16 fixture() has no attempt_sequence at all: it IS the legacy data set. Its hand counts (EXPECTED_DAY,
+# per-version) are the pre-#346 SQL results and are asserted unchanged above; here the unknown column is 0.
 
 @pytest.mark.parametrize('figure', [0, 4])
-def test_346_mixed_counts_only_rows_with_a_sequence(figure):
-    e = Events(); _legacy(e, 'L')
-    e.add('N', 0, attempt_id='n1', flow_id='FN', outcome='error', error_code='timeout')
-    e.add('N', 1, attempt_id='n2', flow_id='FN', retry_of='n1', outcome='completed')
-    [row] = e.run(statements()[figure])
-    assert (row['ok'], row['q_all'], row['flow_ok'], row['fq_all'], row['unknown_attempts']) == (1, 2, 1, 1, 3)
-    assert row['overall_attempt_rate'] == 0.5 and row['overall_flow_rate'] == 1.0
+def test_362_legacy_fixture_results_unchanged_and_no_unknown_flow(figure):
+    rows = fixture().run(statements()[figure])
+    assert all(r['unknown_flows'] == 0 for r in rows)
+    if figure == 0:
+        assert _daily() == EXPECTED_DAY
+
+
+def _legacy_out_of_order(e, retry_linked):
+    """an old flow: fail, then success - but the success is observed first. retry_linked: the success names the
+    failure in retry_of (its end is provable); else both carry the same flow_id and nothing else (unprovable)."""
+    e.add('Z', 30, attempt_id='z2', flow_id='FZ', outcome='completed', **({'retry_of': 'z1'} if retry_linked else {}))
+    e.add('Z', 40, attempt_id='z1', flow_id='FZ', outcome='error', error_code='timeout')
+    return e
+
+
+def test_362_unprovable_legacy_flow_is_unknown_and_out_of_the_flow_denominator():
+    [day] = _legacy_out_of_order(fixture(), retry_linked=False).run(statements()[0])
+    # base fixture flows 3/7; the old SQL judged FZ by observation time -> 3/8 = 37.5%; now 3/7 = 42.9% + 1 unknown
+    assert (day['flow_ok'], day['fq_all'], day['overall_flow_rate'], day['unknown_flows']) == (3, 7, 0.429, 1)
+    assert day['q_all'] == EXPECTED_DAY['q_all'] + 2 and day['ok'] == EXPECTED_DAY['ok'] + 1  # attempts still count
+    rows = {r['app_version']: r for r in _legacy_out_of_order(fixture(), retry_linked=False).run(statements()[4])}
+    assert (rows['1.5.8']['flow_ok'], rows['1.5.8']['fq_all'], rows['1.5.8']['unknown_flows']) == (2, 5, 1)
+
+
+def test_362_retry_linked_legacy_flow_takes_the_chain_end_whatever_the_arrival_order():
+    [day] = _legacy_out_of_order(fixture(), retry_linked=True).run(statements()[0])
+    assert (day['flow_ok'], day['fq_all'], day['unknown_flows']) == (4, 8, 0)  # 4/8 = 50%
 
 
 LEGACY_MUTATIONS = {
-    'legacy counted in denominators': ('(seq IS NOT NULL) AS known', 'TRUE AS known'),
-    'legacy counted as failures': ("(known AND (o = 'success' OR NOT user_hard)) AS qual_all", "(NOT known OR o = 'success' OR NOT user_hard) AS qual_all"),
-    'legacy successes in the numerator': ("countIf(o = 'success' AND known) AS ok", "countIf(o = 'success') AS ok"),
-    'legacy rows in flows': ('FROM c WHERE known GROUP BY chain_fid', 'FROM c GROUP BY chain_fid'),
-    'legacy ordered as 0 (old rule)': ('max(toInt(properties.attempt_sequence)) AS seq', 'max(ifNull(toInt(properties.attempt_sequence), 0)) AS seq'),
+    'no unknown rule': ("(countIf(seq IS NOT NULL) = 0 AND sum(leaf) > 1) AS unknown", "(1 = 0) AS unknown"),
+    'every legacy multi-attempt flow unknown': ("(countIf(seq IS NOT NULL) = 0 AND sum(leaf) > 1) AS unknown", "(countIf(seq IS NOT NULL) = 0 AND count() > 1) AS unknown"),
+    'unknown still in the denominator': ("countIf(fqa AND NOT unknown) AS fq_all", "countIf(fqa) AS fq_all"),
+    'chain end ignored': ("(ifNull(seq, 0), leaf, ts) AS ord", "(ifNull(seq, 0), ts) AS ord"),
 }
 
 
 @pytest.mark.parametrize('figure', [0, 4])
 @pytest.mark.parametrize('name', LEGACY_MUTATIONS)
-def test_346_legacy_rule_mutations_are_caught(figure, name):
+def test_362_legacy_rule_mutations_are_caught(figure, name):
     old, new = LEGACY_MUTATIONS[name]
     stmt = statements()[figure]
     assert old in stmt, name
     mutated = stmt.replace(old, new)
-    def run(e):
-        return e.run(mutated)[0]
-    only = Events(); _legacy(only, 'L')
-    mixed = Events(); _legacy(mixed, 'L')
-    mixed.add('N', 0, attempt_id='n1', flow_id='FN', outcome='error', error_code='timeout')
-    mixed.add('N', 1, attempt_id='n2', flow_id='FN', retry_of='n1', outcome='completed')
-    a, b = run(only), run(mixed)
-    got = ((a['ok'], a['q_all'], a['fq_all'] or 0, a['unknown_attempts']), (b['ok'], b['q_all'], b['flow_ok'], b['fq_all'], b['unknown_attempts']))
-    assert got != ((0, 0, 0, 3), (1, 2, 1, 1, 3)), name
+    key = (lambda r: (r['flow_ok'], r['fq_all'], r['unknown_flows'])) if figure == 0 else (lambda r: next((x['flow_ok'], x['fq_all'], x['unknown_flows']) for x in [r]))
+    def got(e):
+        rows = e.run(mutated)
+        return [key(r) for r in rows]
+    def want(e):
+        return [key(r) for r in e.run(stmt)]
+    cases = [fixture(), _legacy_out_of_order(fixture(), False), _legacy_out_of_order(fixture(), True)]
+    assert any(got(c) != want(c) for c in cases), name

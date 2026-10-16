@@ -132,11 +132,9 @@ process.stdout.write(JSON.stringify(events))
         # R25 #346: last attempt by the backend sequence (observation time breaks ties only).
         self.assertEqual(v4['flow_definition']['order_property'], 'attempt_sequence')
         self.assertIn('max(toInt(properties.attempt_sequence)) AS seq', body)
-        # PM 2026-10-17: rows without attempt_sequence are in no denominator, only in unknown_attempts (figures 1 and 5).
-        self.assertEqual(body.count('(seq IS NOT NULL) AS known'), 2)
-        self.assertEqual(body.count('FROM c WHERE known GROUP BY chain_fid'), 2)
-        self.assertEqual(body.count('AS unknown_attempts'), 2)
-        self.assertIn('SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, (seq, ts)) AS fo', body)
+        self.assertEqual(body.count('(ifNull(seq, 0), leaf, ts) AS ord'), 2)  # R26 #362: then the retry_of chain end
+        self.assertIn('SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, ord) AS fo', body)
+        self.assertEqual(body.count('AS unknown_flows'), 2)
         for rate in ('overall_attempt_rate', 'product_attempt_rate', 'overall_flow_rate', 'product_flow_rate'):
             self.assertIn(rate, body)
 
