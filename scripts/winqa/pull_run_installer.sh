@@ -9,6 +9,7 @@
 # 退出码：2 无 artifact；3 拿不到下载地址；4 无有效 digest；5 provenance 下载/解析失败；其它为远端脚本退出码。
 # 兼容 macOS 自带 bash 3.2：所有变量都写成 ${VAR}（R16 #50：不加花括号的变量紧挨中文全角字符会被误解析）。
 set -euo pipefail
+command -v python3 >/dev/null 2>&1 || { echo "错误：需要 python3（provenance 解析和诊断脱敏）。" >&2; exit 1; }
 RUN="${1:?run_id}"; REPO="${WINQA_REPO:-zhouxiaoka/autoclip}"
 HOST="${WINQA_HOST:?set WINQA_HOST to the acceptance machine}"; USER_="${WINQA_USER:-Administrator}"; ID="${WINQA_IDENTITY:-${HOME}/.ssh/autoclip_winqa}"
 ART="autoclip-desktop-windows-x64"; PARTS="${WINQA_PARTS:-16}"
@@ -16,7 +17,8 @@ PROV_NAMES="internal-desktop-provenance internal-desktop-provenance-windows-x64"
 SSH=(ssh -i "${ID}" -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 "${USER_}@${HOST}")
 TMP=$(mktemp -d); trap 'rm -rf "${TMP}"' EXIT
 
-redact() { sed -E -e 's#(/Users|/home)/[^/[:space:]]+#\1/<user>#g' -e 's#[A-Za-z]:\\\\Users\\\\[^\\[:space:]]+#C:\\Users\\<user>#g' -e 's#https?://[^[:space:]]+#<url>#g'; }
+# R17 #55: one scrubber for paths (redact.py scrub_homes) plus URLs; never a second regex copy.
+redact() { python3 "$(dirname "$0")/redact.py" --stdin; }
 
 LISTING=$(gh api "repos/${REPO}/actions/runs/${RUN}/artifacts" --jq '.artifacts[]|select(.expired|not)|"\(.name) \(.id) \(.size_in_bytes) \(.digest // "")"')
 LINE=$(printf '%s\n' "${LISTING}" | awk -v a="${ART}" '$1==a{print; exit}')
@@ -43,20 +45,29 @@ if [ -n "${PROV_NAME}" ]; then
   [ -n "${PROV_FILE}" ] || { echo "错误：${PROV_NAME} 里没有 json 文件。" >&2; exit 5; }
   if ! EXP_EXE=$(python3 - "${PROV_FILE}" 2>"${TMP}/parse.log" <<'PY'
 import json, re, sys
-d = json.load(open(sys.argv[1], encoding="utf-8")); hits = []
+d = json.load(open(sys.argv[1], encoding="utf-8")); raw = []
 def walk(o):
     if isinstance(o, dict):
-        n = str(o.get("name") or o.get("file") or o.get("path") or ""); h = o.get("sha256") or o.get("hash")
-        if n.endswith("-setup.exe") and isinstance(h, str): hits.append(h.lower().removeprefix("sha256:"))
+        n = str(o.get("name") or o.get("file") or o.get("path") or "")
+        if n.endswith("-setup.exe"):
+            raw.append(o.get("sha256", o.get("hash")))
         for k, v in o.items():
-            if k.endswith("-setup.exe") and isinstance(v, str): hits.append(v.lower().removeprefix("sha256:"))
+            if k.endswith("-setup.exe") and not isinstance(v, (dict, list)):
+                raw.append(v)
             walk(v)
     elif isinstance(o, list):
         for x in o: walk(x)
 walk(d)
-good = sorted({h for h in hits if re.fullmatch(r"[0-9a-f]{64}", h)})
-if len(good) != 1 or len(good) != len(set(hits)):
-    sys.exit("provenance has %d valid / %d recorded setup.exe hashes; expected exactly one valid" % (len(good), len(set(hits))))
+# R16 #49 / R17 #54: every setup.exe entry must be a valid sha256 string (null, numbers, garbage
+# all fail), and they must agree on exactly one value.
+def norm(h):
+    if not isinstance(h, str): return None
+    h = h.lower().removeprefix("sha256:")
+    return h if re.fullmatch(r"[0-9a-f]{64}", h) else None
+bad = [type(h).__name__ for h in raw if norm(h) is None]
+good = sorted({norm(h) for h in raw if norm(h)})
+if not raw or bad or len(good) != 1:
+    sys.exit("provenance setup.exe hashes: %d entries, %d invalid (%s), %d distinct valid; expected exactly one valid" % (len(raw), len(bad), ",".join(bad), len(good)))
 print(good[0])
 PY
   ) || ! [[ "${EXP_EXE}" =~ ^[0-9a-f]{64}$ ]]; then

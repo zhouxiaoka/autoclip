@@ -25,6 +25,8 @@ EXE_SHA = 'b' * 64
 BASHES = ['bash'] + ([os.environ['WINQA_TEST_BASH32']] if os.environ.get('WINQA_TEST_BASH32') else []) \
     + (['/bin/bash'] if sys.platform == 'darwin' else [])
 PWSH = os.environ.get('WINQA_TEST_PWSH') or shutil.which('pwsh')
+# R17 #57: pwsh is a required test dependency (scripts/winqa/README.md); a missing pwsh fails the
+# PowerShell cases instead of skipping them (quality_gate treats skips as BLOCKED).
 
 
 def _bin(folder, name, body):
@@ -88,7 +90,7 @@ def test_no_artifact_exits_2(tmp_path, bash):
 
 @pytestmark_bash
 @pytest.mark.parametrize('bash', BASHES)
-@pytest.mark.parametrize('case', ['download_fails', 'no_json', 'garbage_hash', 'no_hash', 'two_hashes', 'not_json'])
+@pytest.mark.parametrize('case', ['download_fails', 'no_json', 'garbage_hash', 'no_hash', 'two_hashes', 'not_json', 'valid_plus_null', 'valid_plus_number', 'only_null'])
 def test_listed_provenance_that_cannot_be_used_aborts_with_5(tmp_path, bash, case):
     prov_download, prov_json = {
         'download_fails': ('fail', None), 'no_json': ('empty', None),
@@ -96,6 +98,9 @@ def test_listed_provenance_that_cannot_be_used_aborts_with_5(tmp_path, bash, cas
         'no_hash': ('ok', {'assets': {'AutoClip.dmg': EXE_SHA}}),
         'two_hashes': ('ok', {'assets': {'a-setup.exe': EXE_SHA, 'b-setup.exe': 'c' * 64}}),
         'not_json': ('ok', '{not json'),
+        'valid_plus_null': ('ok', {'assets': [{'name': 'a-setup.exe', 'sha256': EXE_SHA}, {'name': 'b-setup.exe', 'sha256': None}]}),
+        'valid_plus_number': ('ok', {'assets': {'a-setup.exe': EXE_SHA, 'b-setup.exe': 12345}}),
+        'only_null': ('ok', {'assets': [{'name': 'a-setup.exe', 'sha256': None}]}),
     }[case]
     done, calls = _run(tmp_path, bash, artifacts=('autoclip-desktop-windows-x64', 'internal-desktop-provenance-windows-x64'),
                        prov_download=prov_download, prov_json=prov_json)
@@ -131,7 +136,15 @@ def test_every_shell_variable_is_braced_for_bash32():
 
 # ---------------- PowerShell (R16 #51 #52) ----------------
 
-need_pwsh = pytest.mark.skipif(not PWSH, reason='pwsh not installed')
+def need_pwsh(fn):
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not PWSH:
+            pytest.fail('pwsh (PowerShell 7) is required for scripts/winqa tests; install it or set WINQA_TEST_PWSH (see scripts/winqa/README.md)')
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 def _zip_with_exe(payload=b'installer'):
@@ -147,21 +160,27 @@ def _ps(tmp_path, *, want_zip, want_exe='', curl_mode='ok', data=b''):
     (inst / '.url-9').write_text('https://signed.invalid/zip')
     src = tmp_path / 'artifact.bin'
     src.write_bytes(data)
-    fake = tmp_path / 'fakecurl'
-    fake.write_text(f'''#!/usr/bin/env python3
-import sys
+    fake = tmp_path / 'fakecurl.py'
+    fake.write_text(f'''import sys
 a = sys.argv[1:]
-if "{curl_mode}" == "http_error":
+if {curl_mode!r} == "http_error":
     assert "--fail" in a, "curl must run with --fail"
     sys.exit(22)
 lo, hi = map(int, a[a.index("-r") + 1].split("-"))
-open(a[a.index("-o") + 1], "wb").write(open("{src}", "rb").read()[lo:hi + 1])
+open(a[a.index("-o") + 1], "wb").write(open({str(src)!r}, "rb").read()[lo:hi + 1])
 ''')
-    fake.chmod(0o755)
+    # R17 #58: Start-Process needs a real executable on every OS: .cmd on Windows, a shell shim elsewhere.
+    if sys.platform == 'win32':
+        shim = tmp_path / 'fakecurl.cmd'
+        shim.write_text(f'@"{sys.executable}" "{fake}" %*\r\n')
+    else:
+        shim = tmp_path / 'fakecurl'
+        shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"\n')
+        shim.chmod(0o755)
     args = [PWSH, '-NoProfile', '-File', str(PS1), '-Run', '9', '-Total', str(len(data) or 10), '-N', '2', '-WantZip', want_zip]
     if want_exe:
         args += ['-WantExe', want_exe]
-    env = {**os.environ, 'WINQA_INST': str(inst), 'WINQA_CURL': str(fake)}
+    env = {**os.environ, 'WINQA_INST': str(inst), 'WINQA_CURL': str(shim)}
     return subprocess.run(args, env=env, capture_output=True, text=True), inst
 
 
@@ -248,9 +267,35 @@ def test_exe_provenance_records_setup_sha256(tmp_path):
     ('/Users/zhoukk/AutoClipQA/158', '/Users/<user>/AutoClipQA/158'),
     ('/home/runner/work/x', '/home/<user>/work/x'),
     ('GET /api/home/feed', 'GET /api/home/feed'),
+    (r'C:\Users\qa', r'C:\Users\<user>'),
+    (r'C:\Users\Jane Doe\AppData\x.log', r'C:\Users\<user>\AppData\x.log'),
+    ('{"p": "C:\\\\Users\\\\Jane Doe\\\\a"}', '{"p": "C:\\\\Users\\\\<user>\\\\a"}'),
+    ('/Users/Jane Doe/AutoClipQA', '/Users/<user>/AutoClipQA'),
+    ('/home/Jane Doe', '/home/<user>'),
+    ('see /home/a and more /x', 'see /home/<user> and more /x'),
 ])
 def test_redact_scrubs_home_directories(tmp_path, raw, expected):
     redact = _module('redact')
     (tmp_path / 'e.log').write_text(raw, encoding='utf-8')
     redact.main(str(tmp_path))
     assert (tmp_path / 'e.log').read_text(encoding='utf-8') == expected
+
+
+@pytestmark_bash
+@pytest.mark.parametrize('bash', BASHES)
+def test_shell_diagnostics_use_redact_py(tmp_path, bash):
+    """R17 #55: the .sh scrubber is redact.py (plain C:\\Users\\x, spaced names, /api/home kept)."""
+    bins = tmp_path / 'bin'
+    bins.mkdir()
+    msg = r'fail C:\Users\qa\x and /Users/Jane Doe/y GET /api/home/feed https://signed.invalid/z?sig=1'
+    _bin(bins, 'gh', f'''case "$1" in
+  api) echo "autoclip-desktop-windows-x64 1 4096 {DIGEST}"; echo "internal-desktop-provenance 2 10";;
+  run) echo '{msg}' >&2; exit 1;;
+esac''')
+    env = {**os.environ, 'PATH': f'{bins}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid', 'LANG': UTF8, 'LC_ALL': UTF8}
+    done = subprocess.run([bash, str(SH), '9'], env=env, capture_output=True, text=True)
+    assert done.returncode == 5, done.stderr
+    assert r'C:\Users\<user>\x' in done.stderr and '/Users/<user>/y' in done.stderr
+    assert 'GET /api/home/feed' in done.stderr and '<url>' in done.stderr
+    assert 'qa' not in done.stderr.replace('qa.invalid', '') and 'Jane' not in done.stderr and 'sig=1' not in done.stderr
+    assert 'redact.py' in SH.read_text(encoding='utf-8')

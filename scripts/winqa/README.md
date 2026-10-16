@@ -9,3 +9,11 @@
 - `exe_provenance.py`：CI 里给 Windows 安装包写 sha256 清单。
 - `redact.py`：证据脱敏，去掉 QA key、掩码 key 和个人目录（`C:\Users\x`、`/Users/x`、`/home/x`）。
 - 退出码：2 无 artifact；3 无下载地址；4 无有效 digest；5 provenance 列出但下载/解析失败；6 下载/HTTP 失败；7 哈希不符（坏分片已删）。
+
+## 测试依赖（必需）
+
+- `pytest backend/tests/test_winqa_scripts.py` 需要 **PowerShell 7（pwsh）**；没装时 PowerShell 用例直接失败，不会跳过。
+  - macOS：`brew install --cask powershell`；Linux：见 PowerShell 官方安装说明；GitHub ubuntu/windows runner 自带。
+  - 也可用 `WINQA_TEST_PWSH=/path/to/pwsh` 指定。
+- 可选 `WINQA_TEST_BASH32=/path/to/bash-3.2`，额外在 bash 3.2 下跑 .sh 用例（macOS 上自动用 /bin/bash）。
+- `python3` 必需（.sh 的 provenance 解析和诊断脱敏都调 python3）。

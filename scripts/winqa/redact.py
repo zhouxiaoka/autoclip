@@ -7,10 +7,15 @@ import os, re, sys
 from pathlib import Path
 
 # R16 #53: the user name segment after a home root becomes <user>; the rest of the path stays.
+# R17 #56: a user name may contain spaces ("Jane Doe"); the whole segment up to the next path
+# separator (or end of value) is masked. A spaced run only counts when another path separator,
+# a quote or the end of the line follows, so prose after a bare "/home/a" is not swallowed.
+_SEG = r'(?!<user>)(?:[^\\/\s"\'<>|:*?]+(?: +[^\\/\s"\'<>|:*?]+)*(?=\\|/|["\']|$)|[^\\/\s"\'<>|:*?]+)'
 HOME_PATTERNS = [
-    (re.compile(r'(?i)\b([a-z]:)((?:\\\\|\\|/)+)users((?:\\\\|\\|/)+)(?!<user>)[^\\/\s"\'<>|:*?]+'), r'\1\2Users\3<user>'),
-    (re.compile(r'(?<![\w.-])/(Users|home)/(?!<user>)[^/\s"\'<>]+'), r'/\1/<user>'),
+    (re.compile(r'(?im)\b([a-z]:)((?:\\\\|\\|/)+)users((?:\\\\|\\|/)+)' + _SEG), r'\1\2Users\3<user>'),
+    (re.compile(r'(?m)(?<![\w.-])/(Users|home)/' + _SEG), r'/\1/<user>'),
 ]
+URL = re.compile(r'https?://\S+')
 
 
 def scrub_homes(text: str) -> str:
@@ -44,5 +49,13 @@ def _run(folder):
     return hits
 
 
+def scrub_stream(text: str) -> str:
+    """Diagnostics piped from the shell puller: home directories and URLs (signed links)."""
+    return URL.sub('<url>', scrub_homes(text))
+
+
 if __name__ == '__main__':
-    main(sys.argv[1])
+    if sys.argv[1:] == ['--stdin']:
+        sys.stdout.write(scrub_stream(sys.stdin.read()))
+    else:
+        main(sys.argv[1])
