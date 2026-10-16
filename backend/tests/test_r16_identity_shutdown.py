@@ -16,8 +16,9 @@ LATER = {'provider': 'kimi', 'config_source': 'customized'}  # settings changed 
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
-    from backend.services.studio import failure_identity
+    from backend.services.studio import failure_identity, shutdown_marker
     monkeypatch.setattr(failure_identity, 'provider_identity', lambda: dict(LATER))
+    shutdown_marker._consumed.clear()
 
 
 def _variant(vid, status, code=None):
@@ -88,7 +89,7 @@ def test_screening_start_records_identity_and_failure_keeps_it(monkeypatch):
 
 # --- #43 ------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize('marker,kind', [(None, 'unknown'), ('clean', 'clean'), ('parent_lost', 'parent_lost')])
+@pytest.mark.parametrize('marker,kind', [(None, 'crash'), ('user_quit', 'clean'), ('update', 'clean'), ('parent_lost', 'parent_lost')])
 def test_restart_midway_through_rendering_records_shutdown_kind(marker, kind):
     from backend.services.studio.shutdown_marker import mark
     old = 'f' * 32
@@ -116,29 +117,74 @@ def test_finished_render_without_restart_has_no_shutdown_kind():
 
 # --- #42 ------------------------------------------------------------------------------------
 
+TOKEN = 'local-test-token-0123456789'
+
+
+def _client(monkeypatch, token=TOKEN):
+    from backend.api.internal import TOKEN_ENV, router
+    if token is None:
+        monkeypatch.delenv(TOKEN_ENV, raising=False)
+    else:
+        monkeypatch.setenv(TOKEN_ENV, token)
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def _kind_now():
+    from backend.services.studio import shutdown_marker
+    shutdown_marker._consumed.clear()
+    return shutdown_marker.shutdown_kind(store.INSTANCE)
+
+
 def test_begin_shutdown_writes_no_clean_marker():
     from backend.core import project_cancellation
-    from backend.services.studio.shutdown_marker import shutdown_kind
     project_cancellation.begin_shutdown()
     try:
-        assert shutdown_kind(store.INSTANCE) == 'unknown'
+        assert _kind_now() == 'crash'
     finally:
         project_cancellation._shutting_down = False
 
 
-def test_shell_shutdown_intent_endpoint_marks_clean():
-    from backend.api.v1 import api_router
-    from backend.services.studio.shutdown_marker import shutdown_kind
-    app = FastAPI()
-    app.include_router(api_router, prefix='/api/v1')
-    with TestClient(app) as client:
-        assert client.post('/api/v1/health/shutdown-intent').json() == {'ok': True}
-    assert shutdown_kind(store.INSTANCE) == 'clean'
+@pytest.mark.parametrize('kind', ['user_quit', 'update'])
+def test_shell_shutdown_intent_marks_clean_and_does_not_shut_down(monkeypatch, kind):
+    from backend.core import project_cancellation
+    with _client(monkeypatch) as client:
+        response = client.post('/internal/shutdown-intent', json={'kind': kind}, headers={'X-AutoClip-Local-Token': TOKEN})
+    assert response.status_code == 200 and response.json() == {'ok': True}
+    assert project_cancellation.shutting_down() is False  # the shell kills us; we never start it
+    from backend.services.studio.shutdown_marker import _root
+    assert (_root() / store.INSTANCE).read_text() == kind
+    assert _kind_now() == 'clean'
+    assert not (_root() / store.INSTANCE).exists()  # read once and deleted
+
+
+@pytest.mark.parametrize('kind', ['parent_lost', 'clean', 'crash', '', 'USER_QUIT', '../x'])
+def test_invalid_kind_is_rejected(monkeypatch, kind):
+    with _client(monkeypatch) as client:
+        response = client.post('/internal/shutdown-intent', json={'kind': kind}, headers={'X-AutoClip-Local-Token': TOKEN})
+    assert response.status_code == 422
+    assert _kind_now() == 'crash'
+
+
+@pytest.mark.parametrize('header,env', [(None, TOKEN), ('wrong', TOKEN), (TOKEN, None), ('', '')])
+def test_only_the_local_token_is_accepted_and_never_echoed(monkeypatch, caplog, header, env):
+    headers = {} if header is None else {'X-AutoClip-Local-Token': header}
+    with _client(monkeypatch, env) as client:
+        response = client.post('/internal/shutdown-intent', json={'kind': 'user_quit'}, headers=headers)
+    assert response.status_code == 403
+    assert TOKEN not in response.text and TOKEN not in caplog.text
+    assert _kind_now() == 'crash'
+
+
+def test_intent_router_is_mounted_in_the_app():
+    from backend.app_factory import create_app
+    paths = {getattr(route, 'path', None) for route in create_app(mode='web').routes}
+    assert '/internal/shutdown-intent' in paths
 
 
 def test_parent_loss_marks_parent_lost(monkeypatch):
     from backend.core import parent_watch
-    from backend.services.studio.shutdown_marker import shutdown_kind
 
     class _Gone:
         def __init__(self, pid):
@@ -150,20 +196,37 @@ def test_parent_loss_marks_parent_lost(monkeypatch):
     done = threading.Event()
     parent_watch.start(lambda pid: done.set(), pid=12345, interval=0.01)
     assert done.wait(5)
-    assert shutdown_kind(store.INSTANCE) == 'parent_lost'
+    assert _kind_now() == 'parent_lost'
 
 
-def test_clean_intent_then_parent_watch_stays_clean():
-    from backend.services.studio.shutdown_marker import mark, shutdown_kind
-    mark('clean')
+@pytest.mark.parametrize('first', ['user_quit', 'update'])
+def test_parent_watch_after_quit_intent_stays_clean(first):
+    from backend.services.studio.shutdown_marker import mark
+    assert mark(first)
     mark('parent_lost')
-    assert shutdown_kind(store.INSTANCE) == 'clean'
-    mark('garbage')
-    assert shutdown_kind(store.INSTANCE) == 'clean'
+    assert mark('clean') is False and mark('garbage') is False
+    assert _kind_now() == 'clean'
 
 
-def test_pre_r16_empty_marker_reads_clean():
+@pytest.mark.parametrize('content', [b'', b'garbage', b'clean', b'\xff\xfe\x00'])
+def test_corrupted_or_legacy_marker_reads_unknown(content):
     from backend.services.studio.shutdown_marker import _root, shutdown_kind
     _root().mkdir(parents=True, exist_ok=True)
-    (_root() / ('2' * 32)).touch()
-    assert shutdown_kind('2' * 32) == 'clean'
+    (_root() / ('2' * 32)).write_bytes(content)
+    assert shutdown_kind('2' * 32) == 'unknown'
+
+
+def test_unreadable_marker_reads_unknown():
+    from backend.services.studio.shutdown_marker import _root, shutdown_kind
+    (_root() / ('3' * 32)).mkdir(parents=True)  # a directory cannot be read as a marker
+    assert shutdown_kind('3' * 32) == 'unknown'
+
+
+def test_marker_write_is_atomic(monkeypatch):
+    import os
+    from backend.services.studio import shutdown_marker
+    calls = []
+    real = os.replace
+    monkeypatch.setattr(shutdown_marker.os, 'replace', lambda a, b: (calls.append((str(a), str(b))), real(a, b)))
+    assert shutdown_marker.mark('update')
+    assert calls and calls[0][1].endswith(store.INSTANCE) and calls[0][0].endswith('.tmp')

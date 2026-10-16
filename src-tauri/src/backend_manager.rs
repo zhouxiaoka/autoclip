@@ -30,6 +30,8 @@ impl Default for BackendStatus {
 pub struct BackendManager {
     status: Arc<Mutex<BackendStatus>>,
     process: Arc<Mutex<Option<Child>>>,
+    /// R16 #42: per-launch secret for POST /internal/shutdown-intent; never logged.
+    local_token: Mutex<String>,
     #[cfg(windows)]
     job: Mutex<Option<crate::windows_job::BackendJob>>,
 }
@@ -45,6 +47,7 @@ impl BackendManager {
         Self {
             status: Arc::new(Mutex::new(BackendStatus::default())),
             process: Arc::new(Mutex::new(None)),
+            local_token: Mutex::new(String::new()),
             #[cfg(windows)]
             job: Mutex::new(None),
         }
@@ -77,6 +80,9 @@ impl BackendManager {
             // The backend exits when this process is gone, even after kill -9 or a crash
             // (macOS has no Job Object; on Windows the job already covers it).
             .env("AUTOCLIP_PARENT_PID", std::process::id().to_string());
+        let token = new_local_token();
+        cmd.env("AUTOCLIP_SHUTDOWN_TOKEN", &token);
+        *self.local_token.lock().unwrap() = token;
 
         // 崩溃上报：构建时若注入了 SENTRY_DSN，传给 Python 后端（未配置则为空，sentry_setup no-op）
         if let Some(dsn) = option_env!("SENTRY_DSN") {
@@ -173,12 +179,17 @@ impl BackendManager {
     }
 
     pub fn stop(&self) -> Result<(), String> {
+        self.stop_with_intent(ShutdownIntent::UserQuit)
+    }
+
+    /// R16 #42: tell the backend why it is stopping (it writes its marker and answers 200, waited
+    /// on for at most 3 s), then kill. A lost parent never comes through here.
+    pub fn stop_with_intent(&self, intent: ShutdownIntent) -> Result<(), String> {
         let mut status = self.status.lock().unwrap();
         let mut process = self.process.lock().unwrap();
-        // R16 #42: a normal quit/update tells the backend first, so runs it leaves behind are
-        // recovered as shutdown_kind=clean; a lost parent (crash, kill -9) never gets here.
         if status.port != 0 && process.as_mut().map_or(false, |c| matches!(c.try_wait(), Ok(None))) {
-            let _ = notify_shutdown_intent(status.port);
+            let token = self.local_token.lock().unwrap().clone();
+            let _ = notify_shutdown_intent(status.port, &token, intent, Duration::from_secs(3));
         }
         #[cfg(windows)]
         let terminated_tree = {
@@ -489,42 +500,123 @@ impl BackendManager {
 }
 
 
-/// R16 #42: POST /api/v1/health/shutdown-intent on loopback, bounded to ~1.5 s so quitting never hangs.
-pub(crate) fn notify_shutdown_intent(port: u16) -> std::io::Result<bool> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownIntent {
+    UserQuit,
+    Update,
+}
+
+impl ShutdownIntent {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ShutdownIntent::UserQuit => "user_quit",
+            ShutdownIntent::Update => "update",
+        }
+    }
+}
+
+/// 128 bits from the OS-seeded SipHash keys of two fresh RandomStates (no extra crate).
+fn new_local_token() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let mut out = String::new();
+    for salt in 0..2u64 {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u64(salt);
+        hasher.write_u128(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+        hasher.write_u32(std::process::id());
+        out.push_str(&format!("{:016x}", hasher.finish()));
+    }
+    out
+}
+
+/// R16 #42: POST /internal/shutdown-intent on loopback and wait (bounded by `budget`) for 200.
+pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownIntent, budget: Duration) -> std::io::Result<bool> {
     use std::io::{Read, Write};
+    let deadline = std::time::Instant::now() + budget;
+    let left = || deadline.saturating_duration_since(std::time::Instant::now()).max(Duration::from_millis(1));
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(500))?;
-    stream.set_read_timeout(Some(Duration::from_secs(1)))?;
-    stream.set_write_timeout(Some(Duration::from_millis(500)))?;
+    let mut stream = TcpStream::connect_timeout(&addr, left().min(Duration::from_secs(1)))?;
+    stream.set_write_timeout(Some(left()))?;
+    let body = format!("{{\"kind\":\"{}\"}}", intent.as_str());
     let request = format!(
-        "POST /api/v1/health/shutdown-intent HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        "POST /internal/shutdown-intent HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nX-AutoClip-Local-Token: {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
     );
     stream.write_all(request.as_bytes())?;
-    let mut head = [0u8; 12];
-    let read = stream.read(&mut head)?;
-    Ok(read >= 12 && &head[9..12] == b"200")
+    let mut head = Vec::new();
+    let mut buf = [0u8; 64];
+    while head.len() < 12 {
+        stream.set_read_timeout(Some(left()))?;
+        let n = stream.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        head.extend_from_slice(&buf[..n]);
+    }
+    Ok(head.len() >= 12 && &head[9..12] == b"200")
 }
 
 #[cfg(test)]
 mod shutdown_intent_tests {
-    use super::notify_shutdown_intent;
+    use super::{new_local_token, notify_shutdown_intent, ShutdownIntent};
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
 
     #[test]
-    fn posts_shutdown_intent_before_kill() {
+    fn posts_intent_with_token_and_waits_for_200_before_returning() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = mpsc::channel();
         let server = std::thread::spawn(move || {
             let (mut conn, _) = listener.accept().unwrap();
-            let mut buf = [0u8; 512];
+            let mut buf = [0u8; 1024];
             let n = conn.read(&mut buf).unwrap();
+            // The marker write happens here; the caller must still be blocked.
+            std::thread::sleep(Duration::from_millis(300));
+            tx.send(Instant::now()).unwrap();
             conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").unwrap();
             String::from_utf8_lossy(&buf[..n]).to_string()
         });
-        assert!(notify_shutdown_intent(port).unwrap());
+        let ok = notify_shutdown_intent(port, "tok123", ShutdownIntent::Update, Duration::from_secs(3)).unwrap();
+        let returned = Instant::now();
+        assert!(ok);
+        assert!(returned >= rx.recv().unwrap(), "returned before the backend answered");
         let request = server.join().unwrap();
-        assert!(request.starts_with("POST /api/v1/health/shutdown-intent HTTP/1.1"));
+        assert!(request.starts_with("POST /internal/shutdown-intent HTTP/1.1"));
+        assert!(request.contains("X-AutoClip-Local-Token: tok123"));
+        assert!(request.ends_with("{\"kind\":\"update\"}"));
+    }
+
+    #[test]
+    fn non_200_is_not_success() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = conn.read(&mut buf);
+            conn.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n").unwrap();
+        });
+        assert!(!notify_shutdown_intent(port, "bad", ShutdownIntent::UserQuit, Duration::from_secs(3)).unwrap());
+    }
+
+    #[test]
+    fn silent_backend_times_out_within_budget() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hold = std::thread::spawn(move || {
+            let (conn, _) = listener.accept().unwrap();
+            std::thread::sleep(Duration::from_millis(1500));
+            drop(conn);
+        });
+        let started = Instant::now();
+        let result = notify_shutdown_intent(port, "t", ShutdownIntent::UserQuit, Duration::from_millis(400));
+        assert!(result.is_err() || !result.unwrap());
+        assert!(started.elapsed() < Duration::from_millis(1200), "waited past the budget");
+        hold.join().unwrap();
     }
 
     #[test]
@@ -532,6 +624,14 @@ mod shutdown_intent_tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         drop(listener);
-        assert!(notify_shutdown_intent(port).is_err());
+        assert!(notify_shutdown_intent(port, "t", ShutdownIntent::UserQuit, Duration::from_secs(3)).is_err());
+    }
+
+    #[test]
+    fn tokens_are_fresh_hex() {
+        let (a, b) = (new_local_token(), new_local_token());
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
     }
 }

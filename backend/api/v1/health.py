@@ -11,14 +11,6 @@ from backend import __version__
 router = APIRouter()
 
 
-@router.post("/shutdown-intent")
-async def shutdown_intent():
-    """R16 #42: the desktop shell is about to stop this backend on a normal quit/update."""
-    from backend.services.studio.shutdown_marker import mark
-    mark('clean')
-    return {"ok": True}
-
-
 @router.get("/")
 async def health_check() -> Dict[str, Any]:
     """健康检查端点."""
