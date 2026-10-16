@@ -114,7 +114,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|service_restarted)$/.test(input.error_code)) out.error_code = input.error_code
   if (typeof input.model === 'string' && /^[\w.\-:/]{1,64}$/.test(input.model) && !input.model.toLowerCase().includes('sk-') && !input.model.includes('://')) out.model = input.model
   if (typeof input.base_url_host === 'string' && (input.base_url_host === 'local' || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/.test(input.base_url_host))) out.base_url_host = input.base_url_host
-  for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id', 'retry_of']) {
+  for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id']) {
     if (typeof input[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(input[key] as string)) out[key] = input[key] as string
   }
   return out
@@ -317,10 +317,7 @@ export class WorkflowTracker {
     const existing = this.watches.find(w => w.kind === kind && w.id === id && (!runId || w.runId === runId))
     if (existing && (!existing.settled || kind === 'studio-export') && !restart) return
     if (existing) this.watches = this.watches.filter(w => w !== existing)
-    // 1.5.8: a restart of the same kind/id is a retry: new attempt_id, linked to the previous one via retry_of.
-    const previous = existing || (restart ? [...this.watches].reverse().find(w => w.kind === kind && w.id === id) : undefined)
-    const retry = restart && previous?.token ? { retry_of: previous.token } : {}
-    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties, ...retry }), token: telemetryId() })
+    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
   }
