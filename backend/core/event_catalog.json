@@ -171,6 +171,12 @@
       "auto",
       "subtitle",
       "visual"
+    ],
+    "degrade_reason": [
+      "vision_unavailable_subtitle_fallback",
+      "vision_invalid_subtitle_fallback",
+      "frame_extract_subtitle_fallback",
+      "source_too_long_subtitle_route"
     ]
   },
   "attribution": {
@@ -251,7 +257,10 @@
         "insufficient_quota",
         "permission_denied"
       ]
-    }
+    },
+    "product_error_codes": [
+      "frame_extract_failed"
+    ]
   },
   "privacy": {
     "forbidden_keys": [

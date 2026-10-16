@@ -149,7 +149,7 @@ export interface ImportOptions {
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
 export interface ImportPlan {
-  degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback'
+  degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback' | 'frame_extract_subtitle_fallback' | 'source_too_long_subtitle_route'
   aspect?: Draft['aspect']
   recommended_analysis?: AnalysisMode; confirmed_analysis?: AnalysisMode
 

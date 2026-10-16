@@ -285,7 +285,9 @@ def test_huggingface_source_never_falls_back(monkeypatch, tmp_path):
     assert [call["endpoint"] for call in calls] == ["https://huggingface.co"]
     info = manager.get_model_info("base")
     assert info.status == ModelStatus.ERROR
-    assert "10060" in info.error_message
+    from backend.services.whisper_model_manager import WHISPER_DOWNLOAD_USER_ERROR
+    assert info.error_message == WHISPER_DOWNLOAD_USER_ERROR
+    assert "10060" not in (info.error_message or "")
 
 
 def test_user_hf_endpoint_is_respected_without_fallback(monkeypatch, tmp_path):
@@ -305,7 +307,9 @@ def test_both_sources_failing_reports_both(monkeypatch, tmp_path):
     manager._download_blocking("base")
     info = manager.get_model_info("base")
     assert info.status == ModelStatus.ERROR
-    assert "huggingface" in info.error_message and "hf-mirror" in info.error_message
+    from backend.services.whisper_model_manager import WHISPER_DOWNLOAD_USER_ERROR
+    assert info.error_message == WHISPER_DOWNLOAD_USER_ERROR
+    assert "huggingface.co" not in (info.error_message or "")
 
 
 # ---- RC156 Win QA #5: the download endpoint must not claim completion ----
@@ -345,7 +349,9 @@ def test_download_api_says_started_and_background_failure_is_visible(monkeypatch
                 thread.join(5)
         status = client.get("/whisper-models/base/status").json()
         assert status["status"] == "error"
-        assert "10060" in status["errorMessage"]
+        from backend.services.whisper_model_manager import WHISPER_DOWNLOAD_USER_ERROR
+        assert status["errorMessage"] == WHISPER_DOWNLOAD_USER_ERROR
+        assert "10060" not in status["errorMessage"]
 
 
 def test_download_api_reports_an_installed_model(monkeypatch, tmp_path):
@@ -373,8 +379,10 @@ def test_ensure_downloaded_raises_the_recorded_error(monkeypatch, tmp_path):
     _, download = _recording(tmp_path, fail_endpoints=("https://huggingface.co",))
     _install_fake_hub(monkeypatch, download)
     manager = _manager(monkeypatch, tmp_path)
-    with pytest.raises(RuntimeError, match="10060"):
+    from backend.services.whisper_model_manager import WHISPER_DOWNLOAD_USER_ERROR
+    with pytest.raises(RuntimeError, match="Whisper 模型下载失败"):
         manager.ensure_downloaded("base")
+    assert manager.get_model_info("base").error_message == WHISPER_DOWNLOAD_USER_ERROR
 
 
 def test_ensure_downloaded_waits_for_a_running_download(monkeypatch, tmp_path):
@@ -438,3 +446,29 @@ def test_e3_model_source_api_round_trip(monkeypatch, tmp_path):
     assert client.put("/whisper/model-source", json={"source": "hf-mirror"}).json() == {"source": "hf-mirror"}
     assert client.get("/whisper/model-source").json()["source"] == "hf-mirror"
     assert client.put("/whisper/model-source", json={"source": "nope"}).status_code == 422
+
+
+def test_r2_status_api_never_echoes_raw_download_exception(monkeypatch, tmp_path):
+    """R2: exception text with URL/query must not reach GET status errorMessage."""
+    secret = "tok_leaked_credential_r2"
+    url = f"https://huggingface.co/models/x?token={secret}"
+
+    def boom(**_kwargs):
+        raise ConnectionError(f"Failed to download {url} Authorization: Bearer {secret}")
+
+    _install_fake_hub(monkeypatch, boom)
+    manager = _manager(monkeypatch, tmp_path)
+    monkeypatch.setattr("backend.api.v1.speech_recognition.get_model_manager", lambda: manager)
+    manager._download_blocking("base")
+    info = manager.get_model_info("base")
+    from backend.services.whisper_model_manager import WHISPER_DOWNLOAD_USER_ERROR
+    assert info.error_message == WHISPER_DOWNLOAD_USER_ERROR
+    assert secret not in (info.error_message or "")
+    assert "huggingface.co" not in (info.error_message or "")
+    with _client() as client:
+        status = client.get("/whisper-models/base/status").json()
+    assert status["status"] == "error"
+    assert status["errorMessage"] == WHISPER_DOWNLOAD_USER_ERROR
+    assert secret not in status["errorMessage"]
+    assert url not in status["errorMessage"]
+

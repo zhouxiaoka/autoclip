@@ -1468,6 +1468,7 @@
   "排队生成中": "Na fila",
   "包含 Made with AutoClip 片尾": "Inclui encerramento “Made with AutoClip”",
   "不含品牌片尾": "Sem encerramento da marca",
+  "品牌片尾未能添加，已保留成片": "Não foi possível adicionar o encerramento da marca; o vídeo foi mantido.",
   "这条版本未完成，其他成片不受影响。": "Esta versão não foi concluída. Os outros vídeos não são afetados.",
   "素材没有足够完整的长内容": "o material não tem um trecho completo longo o bastante",
   "YouTube 视频": "Vídeo do YouTube",
@@ -1946,5 +1947,8 @@
   "服务商账户余额不足，请充值或换一个服务商": "O saldo da sua conta no provedor é insuficiente. Recarregue ou troque de provedor.",
   "这个 API Key 没有该模型的使用权限，请到设置里更换": "Esta chave de API não tem acesso ao modelo. Troque-a nas Configurações.",
   "还没有配置可用的模型，请先到设置里添加": "Ainda não há nenhum modelo utilizável. Adicione um nas Configurações.",
-  "继续制作": "Continuar"
+  "继续制作": "Continuar",
+  "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "A análise visual suporta fontes de até 120 minutos. Mudamos para a análise de legendas para continuar.",
+  "读取素材画面失败，已改用字幕分析继续制作。": "Não foi possível ler os quadros da fonte. Mudamos para a análise de legendas para continuar.",
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Falha ao baixar o modelo Whisper. Verifique a rede e baixe novamente em Configurações → Transcrição, ou mude a fonte para o espelho hf-mirror."
 }
