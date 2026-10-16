@@ -39,9 +39,9 @@ test('the address row shows the hint for local setups only', () => {
   }).default
   const hints = connection => flatten(Fields({ connection, placement: 'settings_model', onChoose() {}, onEdit() {} }))
     .filter(node => React.isValidElement(node) && node.type === 'row').map(node => node.props.hint).filter(h => typeof h === 'string')
-  assert.ok(hints({ provider: 'ollama', base_url: '' }).some(h => h.includes(OLLAMA) && h.includes('本机服务无需 API Key')))
+  assert.ok(hints({ provider: 'ollama', base_url: '' }).some(h => h.includes(OLLAMA) && h.includes('本机服务用默认地址即可。')))
   assert.ok(hints({ provider: 'lmstudio', base_url: '' }).some(h => h.includes(LMSTUDIO)))
-  assert.ok(hints({ provider: 'compatible', base_url: 'http://localhost:8000/v1', api_key: '' }).includes(GENERIC))
+  assert.ok(hints({ provider: 'compatible', base_url: 'http://localhost:8000/v1', api_key: '' }).some(h => h.includes(GENERIC)))
   assert.ok(!hints({ provider: 'compatible', base_url: 'https://openrouter.ai/api/v1', api_key: '' }).some(h => h.includes('16384')))
   assert.ok(!hints({ provider: 'dashscope', base_url: '', api_key: '' }).some(h => h.includes('16384')))
 })

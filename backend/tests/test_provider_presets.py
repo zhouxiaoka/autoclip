@@ -36,16 +36,16 @@ CONSUMERS = (
 )
 
 
-def test_catalog_has_thirty_eight_grouped_providers():
+def test_catalog_has_thirty_nine_grouped_providers():
     catalog = provider_presets.get_catalog()
     assert catalog.schema_version == 1
     assert catalog.version >= 1
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 38
+    assert len(catalog.providers) == 39
     groups = {}
     for item in catalog.providers.values():
         groups[item.group] = groups.get(item.group, 0) + 1
-    assert groups == {"recommended": 2, "popular": 10, "local": 4, "more": 22}
+    assert groups == {"recommended": 2, "popular": 10, "local": 4, "more": 23}
     assert set(catalog.providers) >= {
         "api88", "infistar", "deepseek", "dashscope", "siliconflow", "seed", "glm",
         "kimi", "minimax-cn", "xiaomi", "openai", "gemini", "whisper", "sensevoice",
@@ -120,11 +120,11 @@ def test_importlib_resources_finds_the_catalog():
     assert found == CATALOG_PATH
     catalog = provider_presets.load_provider_catalog()
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 38
+    assert len(catalog.providers) == 39
 
 
 def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
-    """A wheel installed away from the checkout must still load 38 providers."""
+    """A wheel installed away from the checkout must still load 39 providers."""
     wheel_dir = tmp_path / "wheel"
     installed = tmp_path / "installed"
     elsewhere = tmp_path / "elsewhere"
@@ -171,7 +171,7 @@ assert Path(backend.__file__).resolve().is_relative_to(root)
 assert Path(provider_presets.__file__).resolve().is_relative_to(root)
 provider_presets.reset_catalog_cache()
 catalog = provider_presets.get_catalog()
-assert len(catalog.providers) == 38
+assert len(catalog.providers) == 39
 assert catalog.path.resolve().is_relative_to(root)
 resource = provider_presets._resource_presets_path()
 assert resource is not None and resource.resolve().is_relative_to(root)

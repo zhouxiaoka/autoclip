@@ -9,7 +9,7 @@ import { bindingCapability, modelSettingsApi, type Connection, type FetchListRes
 import { applyModelDefaults } from './modelDefaults'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
-import { assignAnalysis, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
+import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
@@ -43,6 +43,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   // First run only: the recommended image model turns AI covers on. Any explicit cover choice ends it.
   const autoCover = useRef(false)
   const settingsRef = useRef(settings)
+  const listsRef = useRef(lists)
+  listsRef.current = lists
   settingsRef.current = settings
   const savedRef = useRef<ModelSettings | null>(null)
   const summary = (value: ModelSettings) => ({
@@ -350,11 +352,84 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     finally { setTesting(false) }
   }
 
+
+  const testCatalogProvider = async (presetId: string, draft?: Partial<Connection>) => {
+    if (!settings) return
+    const preset = catalogPreset(presetId)
+    if (!preset) return
+    const ensured = ensureCatalogConnection(settings, preset)
+    let next = ensured.settings
+    let connection = ensured.connection
+    if (!connection) return
+    const patch: Partial<Connection> = { ...(draft || {}) }
+    if (!(patch.base_url ?? connection.base_url)?.trim() && preset.base_url) {
+      patch.base_url = preset.base_url
+    }
+    if (Object.keys(patch).length) {
+      next = logic.editConnection(next, connection.id, patch)
+      connection = next.connections.find(row => row.id === connection!.id) || connection
+    }
+    if (!connection.base_url.trim() && preset.protocol !== 'local') {
+      const text = t('请先填写接口地址。')
+      setError(text)
+      message.error(text)
+      replace(next)
+      return
+    }
+    if (!(connection.api_key || '').trim() && !connection.has_key && preset.auth === 'api_key') {
+      const text = t('请先填写 API 密钥。')
+      setError(text)
+      message.error(text)
+      replace(next)
+      return
+    }
+    replace(next)
+    const finish = beginExperience('provider_connection_test', {
+      placement, provider: PROVIDERS[connection.provider as ProviderKey] ? connection.provider : 'other', capability: 'auto',
+    })
+    setTesting(true)
+    try {
+      let model = (preset.candidates?.analysis || preset.candidates?.vision || [])[0] || ''
+      try {
+        const result = await modelSettingsApi.discover(connection, true)
+        const merged = mergeCustomList(connection, result)
+        setLists(old => ({ ...old, [connection!.id]: merged }))
+        setListErrors(old => { const copy = { ...old }; delete copy[connection!.id]; return copy })
+        model = merged.models.find(row => row.analysis)?.id || merged.models[0]?.id || model
+      } catch (e) {
+        // Fall through to probe with a catalog candidate; probe surfaces the real error.
+        setListErrors(old => ({ ...old, [connection!.id]: errorText(e) }))
+      }
+      if (!model) model = 'gpt-4o-mini'
+      const value = await probe(connection, model, false, 'analysis')
+      emitValidation(connection, value)
+      const applied = logic.applyValidation(settingsRef.current || next, connection.id, value)
+      replace(applied)
+      finish(passed(value) ? 'completed' : 'failed')
+      if (passed(value)) {
+        const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
+        backfillModels(normalized, value)
+        void discover(normalized, true, 'manual')
+        message.success(t('连接正常'))
+        setError('')
+      } else {
+        const text = validationCopy(value.error_type, value.hint_key)
+        setError(text)
+        message.error(text)
+      }
+    } catch (e) {
+      finish('failed', {}, e)
+      message.error(errorText(e))
+    } finally {
+      setTesting(false)
+    }
+  }
+
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
-    assignAnalysisConnection, validateCatalogConnection, selectLocalAsrProvider, setTranscriptionLocal,
+    assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }
 }
