@@ -479,8 +479,9 @@ def _refs_path(project_id):
 
 
 def _fsync_file(path):
-    """R24 #295: the bytes of a file we are about to publish are on disk."""
-    fd = os.open(path, os.O_RDONLY)
+    """R24 #295: the bytes of a file we are about to publish are on disk. Windows fsync
+    (_commit) needs a writable descriptor, so open it read-write."""
+    fd = os.open(path, os.O_RDWR | getattr(os, 'O_BINARY', 0))
     try:
         os.fsync(fd)
     finally:
