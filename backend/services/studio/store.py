@@ -524,8 +524,15 @@ def _recover_interrupted_run(data):
 
 
 def settle_generation(data):
-    """Settle the generation once every requested (not backup) variant is completed or failed."""
-    variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
+    """Settle the generation once every requested (not backup) variant is completed or failed.
+    R28 #409: judged only on this round's outputs (attempts.round_outputs - the same scope as the receipt): the
+    current attempt's outputs plus those a variant retry redid. A failure redone in place counts by its latest
+    result; an older round's failure, or its leftover queued output, neither taints nor blocks this round. No
+    attempt record / no stamped output in scope -> the whole workspace, as before."""
+    from backend.services.studio import attempts
+    scope = attempts.round_outputs(data)
+    pool = data['output_variants'] if scope is None else scope
+    variants = [item for item in pool if item['status'] != 'on_demand']
     if all(item['status'] in ('completed', 'failed') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
         outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
@@ -574,7 +581,11 @@ def settle_generation(data):
             reason = next((text for text in reasons if isinstance(text, str) and text), None)
             if reason:
                 data['generation']['error'] = reason
-        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
+        # R28 #409: failures outside this round (an older round's, not redone) - the results page can say
+        # "this re-run succeeded, N still to redo" from this number; no separate tally.
+        ids = {id(item) for item in variants}
+        outside = sum(1 for item in data['output_variants'] if id(item) not in ids and item.get('status') == 'failed')
+        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now(), not_redone_failed_count=outside)
         error = data['generation'].get('error') if outcome == 'failed' else None
         data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'upstream_error_type': data['generation']['upstream_error_type']} if data['generation'].get('upstream_error_type') else {}), **secondary, **({'error': error} if error else {})}
 

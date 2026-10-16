@@ -75,7 +75,7 @@ def materialize(payload, attempts, store):
     terminal['analysis'] = {**analysis, 'run_id': analysis.get('run_id') or run, **({'phase': analysis.get('phase') or 'production'} if kind == 'production' else {})}
     if kind == 'generation' and isinstance(terminal.get('generation'), dict):
         terminal['generation'] = {**terminal['generation'], 'attempt_id': receipt['attempt_id']}
-    if reached_production:  # R27 #376: the snapshot's outputs were created by this attempt's production
+    if reached_production:  # R27 #376 / R28 #412: unstamped snapshot outputs are this attempt's; stamped ones keep theirs
         attempts.own_outputs(terminal, [v for v in terminal.get('output_variants') or [] if isinstance(v, dict)])
     store.write(pid, terminal)
     data = store.read(pid)

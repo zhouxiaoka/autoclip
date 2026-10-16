@@ -123,11 +123,15 @@ def bind_run(receipt, run_id):
 
 def own_outputs(data, variants):
     """R27 #376/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
-    open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only."""
-    receipt = current(data)
+    open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only.
+    R28 #410: outputs appended to a finished generation (append_platform_variants, no attempt open) belong to that
+    generation's round - generation.attempt_id - and its plan. Already stamped outputs are never re-stamped."""
+    receipt = current(data) or find(data, (data.get('generation') or {}).get('attempt_id'))
     if not receipt:
         return
     for variant in variants:
+        if variant.get('produced_by_attempt'):
+            continue
         variant['produced_by_attempt'] = receipt['attempt_id']
         if receipt.get('plan_id'):
             variant['produced_by_plan'] = receipt['plan_id']
@@ -205,7 +209,7 @@ def settle(receipt, state, record, now=None, plan=None, base=None):
         receipt['summary']['route'] = own['recommended_analysis']
     for key, value in (receipt.get('inherited') or {}).items():  # R26 #364: the source plan, when it is not current
         if key in PLAN_KEYS and not own:
-            receipt['summary'].setdefault(key, value)
+            receipt['summary'][key] = value  # R28 #411: the source output's plan wins over the live workspace route
     reason = own.get('degrade_reason') if own else (receipt.get('inherited') or {}).get('degrade_reason')
     if reason in DEGRADE_REASONS:
         receipt['degrade_reason'] = reason
@@ -230,12 +234,11 @@ def _millis(value):
     return round((parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp() * 1000)
 
 
-def generation_summary(data, owners=None) -> dict:
+def generation_summary(data, variants=None) -> dict:
     """R25 #347: the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
     (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
-    all_variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)
-                    and (owners is None or v.get('produced_by_attempt') in owners)]
+    all_variants = [v for v in (data.get('output_variants') or [] if variants is None else variants) if isinstance(v, dict)]
     variants = [v for v in all_variants if v.get('status') != 'on_demand']
     templates = {d.get('id'): d.get('packaging') for d in data.get('drafts') or [] if isinstance(d, dict)}
     packaged = [templates.get(v.get('draft_id')) for v in variants if templates.get(v.get('draft_id'))]
@@ -287,14 +290,35 @@ def generation_summary(data, owners=None) -> dict:
     return {k: v for k, v in out.items() if v is not None}
 
 
+def owners_of(data):
+    """R28 #409: the attempts whose outputs this round is judged on - the current generation attempt, plus (for a
+    variant retry) the attempts that produced the outputs it redid. None when the round has no attempt record."""
+    attempt_id = (data.get('generation') or {}).get('attempt_id') if isinstance(data.get('generation'), dict) else None
+    if not attempt_id:
+        return None
+    return {attempt_id, *((find(data, attempt_id) or {}).get('sources') or ())}
+
+
+def round_outputs(data):
+    """R28 #409: THE one scope rule, shared by store.settle_generation (status, counts, error code, wording, the
+    'all done' gate) and the receipt summary. Outputs (on_demand included) produced by owners_of(data). None means
+    "fall back to the whole workspace": no attempt record, or no stamped output in scope (old projects, a retry of
+    an old output) - never an empty scope, which settle would turn into a validation failure."""
+    owners = owners_of(data)
+    if owners is None:
+        return None
+    owned = [v for v in data.get('output_variants') or [] if isinstance(v, dict) and v.get('produced_by_attempt') in owners]
+    return owned or None
+
+
 def _owned_summary(receipt, data):
-    """R26 #363 / R27 #376: output counts are those of the outputs this attempt produced (or, for a variant retry,
-    the outputs of the attempt(s) it re-renders) by their stored produced_by_attempt - having a plan is not owning
-    the workspace. An attempt that produced nothing keeps the request fields but no output counts."""
-    owners = {receipt['attempt_id'], *(receipt.get('sources') or ())}
-    if not any(isinstance(v, dict) and v.get('produced_by_attempt') in owners for v in data.get('output_variants') or []):
-        return {k: v for k, v in generation_summary(data, owners).items() if k in OUTPUT_FREE}
-    return generation_summary(data, owners)
+    """R26 #363 / R27 #376 / R28 #409: output counts are those of round_outputs (the same scope settle_generation
+    judges the status on). With no stamped output in scope the receipt keeps the request fields but no counts -
+    unstamped outputs are not attributed by inference."""
+    owned = round_outputs(data)
+    if owned is None:
+        return {k: v for k, v in generation_summary(data).items() if k in OUTPUT_FREE}
+    return generation_summary(data, variants=owned)
 
 
 def reconcile(data, now=None):

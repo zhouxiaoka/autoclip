@@ -45,7 +45,10 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const automatic = !!workspace.generation?.auto_start
   const hideLegacy = legacyEntrypointsHidden(flagEnabled('hide_legacy_entrypoints'), managed || automatic)
   const noteLegacy = (action: 'plan_adjust' | 'collection' | 'export_confirm') => trackLegacyEntry({ legacy_action: action }, flagAssigned('hide_legacy_entrypoints'))
-  const generationDescription = workspace.generation?.status === 'completed' ? t('已按所选平台生成可发布成片。')
+  // R28 #409: the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
+  const notRedone = workspace.generation?.not_redone_failed_count || 0
+  const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
+    : workspace.generation?.status === 'completed' ? t('已按所选平台生成可发布成片。')
     : workspace.generation?.status === 'partial' ? t('部分成片已完成，未完成版本可稍后重试。')
       : workspace.generation?.status === 'failed' ? t('这次制作未完成') : t('AI 正在按所选平台制作成片。')
   const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
