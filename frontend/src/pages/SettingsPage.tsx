@@ -31,11 +31,11 @@ const NAV: Array<{ key: SectionKey; label: string }> = [
 ]
 // 旧链接（项目卡「模型设置」「转写设置」等）仍能打开，并滚到对应小节
 const SECTION_ALIASES: Record<string, { section: SectionKey; anchor?: string }> = {
-  model: { section: 'ai', anchor: 'ai-model' },
-  analysis: { section: 'ai', anchor: 'ai-model' },
-  vision: { section: 'ai', anchor: 'ai-model' },
-  speech: { section: 'ai', anchor: 'ai-speech' },
-  cover: { section: 'ai', anchor: 'ai-cover' },
+  model: { section: 'ai', anchor: 'ai-defaults' },
+  analysis: { section: 'ai', anchor: 'ai-defaults-analysis' },
+  vision: { section: 'ai', anchor: 'ai-defaults-vision' },
+  speech: { section: 'ai', anchor: 'ai-defaults-transcription' },
+  cover: { section: 'ai', anchor: 'ai-defaults-cover' },
 }
 
 // Calm Premium settings — left nav + setting rows (see DESIGN.md → App Layer)

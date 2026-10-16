@@ -23,6 +23,12 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
     if (id === 'react/jsx-runtime' || id === 'react') return require(id)
     if (id.startsWith('.')) {
       const resolved = path.join(path.dirname(abs), id)
+      // Static assets (OhMyGame-style provider icons): expose a string URL for <img src>.
+      if (/\.(svg|png|jpe?g|webp|gif)(\?.*)?$/i.test(id)) {
+        const asset = resolved.split('?')[0]
+        if (!fs.existsSync(asset)) throw new Error(id)
+        return asset
+      }
       const hit = ['', '.ts', '.tsx', '.json'].map(ext => resolved + ext).find(candidate => fs.existsSync(candidate))
       if (!hit) throw new Error(id)
       if (hit.endsWith('.json')) return JSON.parse(fs.readFileSync(hit, 'utf8'))

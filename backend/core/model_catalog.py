@@ -106,6 +106,7 @@ _SKIP_SUBSTR = (
     "whisper",
     "transcribe",
     "tts",
+    "-stt",
     "asr",
     "dall-e",
     "dalle",
