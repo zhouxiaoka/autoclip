@@ -165,35 +165,35 @@ multiIf(
 
 ### 4.2 `upstream_error_type`
 
-只描述 **模型 HTTP 上游**。实现与提示见第 0 步契约，此处不另造值。
+只描述 **模型 HTTP 上游**。实现与提示见第 0 步契约，此处不另造值。分母规则为成功率 **v4**（与 §6.1、`event_catalog.json` → `attribution.success_rate_v4`、[`success_rate.sql`](success_rate.sql) 一致）。
 
-| 值 | 用户原因？ | 计入产品失败分母？ |
+| 值 | 全量口径分母 | 产品口径分母 |
 | --- | --- | --- |
-| `invalid_key` | 是（密钥错/过期） | 否 |
-| `insufficient_quota` | 是（余额/额度） | 否 |
-| `permission_denied` | 是（分组/模型权限） | 否 |
-| `model_not_found` | 是（选了没有的模型） | 否 |
-| `bad_endpoint` | 是（地址漏 `/v1`、填成控制台） | 否 |
-| `rate_limited` | 否（产品应退避） | 是 |
-| `upstream_unavailable` | 否（5xx） | 是 |
-| `timeout` | 否（产品/网络，算产品侧直到能拆开） | 是 |
-| `connection` | 否（同上） | 是 |
-| `output_truncated` | 否 | 是 |
-| `unknown` | 否 | 是 |
+| `invalid_key` | **剔除**（用户：密钥错/过期） | **剔除** |
+| `insufficient_quota` | **剔除**（用户：余额/额度） | **剔除** |
+| `permission_denied` | **剔除**（用户：分组/模型权限） | **剔除** |
+| `model_not_found` | 计入（v4 算产品失败：默认/推荐模型要能用） | 计入 |
+| `bad_endpoint` | 计入（v4 算产品失败：地址校验应在前面拦住） | 计入 |
+| `rate_limited` | 计入（产品应退避） | 计入 |
+| `upstream_unavailable` | 计入（5xx） | 计入 |
+| `timeout` | 计入 | 计入 |
+| `connection` | 计入 | 计入（只有 `error_code = connection` 才在产品口径剔除，见 §4.3） |
+| `output_truncated` | 计入 | 计入 |
+| `unknown` | 计入 | 计入 |
 
 **不要**把 `source_blocked`（B 站 403）、`source_too_short`、`source_no_audio` 标成 `upstream_error_type`。
 
 ### 4.3 `error_code` 与归因
 
-Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率口径把失败分成三类：
+Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率 **v4** 把每个非成功 attempt 归到三类之一（`success_rate.sql` 图 3 的 `attribution` 列）：
 
-| 归因 `failure_attribution` | 包含 | 按次/按人分母 |
-| --- | --- | --- |
-| `user` | `insufficient_quota`；`invalid_key`；`permission_denied`；`model_not_found`；`bad_endpoint`；`llm_not_configured`；`llm_auth_invalid`；`source_too_short`；`source_no_audio`；`source_unreadable`；`whisper_not_installed`（且无字幕） | **剔除** |
-| `environment` | `source_blocked`；`service_restarted` | **剔除** |
-| `product` | 其余（`unexpected`、`rate_limited`、`timeout`、`connection`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 失败等） | **计入** |
+| 归因 | 包含 | 全量口径分母 | 产品口径分母 |
+| --- | --- | --- | --- |
+| `user_both`（`user_hard`） | `outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)` | **剔除** | **剔除** |
+| `user_product_only`（`user_x`） | `error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)` | 计入 | **剔除** |
+| `product` | 其余，**明确包括** `whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`，以及 `unexpected`、`rate_limited`、`timeout`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 等 | 计入 | 计入 |
 
-查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验用 `event_catalog.json` 的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes`。
+`outcome_canon = success` 一律算成功，忽略错误字段。查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验只用 `event_catalog.json` → `attribution.success_rate_v4`（`overall_excluded_*`、`product_extra_excluded_error_codes`、`product_failure_codes`、`flow_definition`）；同文件的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes` 是 v4 之前的口径，仅留作历史，**不得**再用于成功率。
 
 ### 4.4 `os` 与 `app_version`（唯一取值）
 
@@ -342,13 +342,15 @@ multiIf(
 
 ## 6. 核心指标口径
 
-窗口默认 **发布后 7 日**，过滤：
+口径 **v4**。窗口用固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含）（报某版本时一般取发布日起 7 天），过滤：
 
 ```
 analytics_environment = production
-app_version = 当前发布版本
-runtime = desktop   -- 主指标；web 可另列
+runtime = desktop                      -- 主指标；web 可另列
+person_id NOT IN COHORT {internal_cohort_id}
 ```
+
+不在过滤里写死 `app_version`：按版本看用 [`success_rate.sql`](success_rate.sql) 图 5（每个 `app_version` 一行，按次 / 按流程、全量 / 产品、partial-delivery 率；流程归到其最后一次 attempt 的版本）。
 
 `partial` 算出片未成功（分子只认 `outcome_canon=success`），另列 **partial-delivery 率** = `partial` 次数 / 产品口径分母。
 
@@ -376,7 +378,7 @@ runtime = desktop   -- 主指标；web 可另列
 
 ### 6.3 漏斗（辅助，不替代 6.1）
 
-同一 `distinct_id`、7 日滚动（或发布窗口），步与步之间允许不等待：
+同一 `person_id`、固定 UTC 窗口 `{date_from}` / `{date_to}`（与 §6.1 一致），步与步之间允许不等待：
 
 1. `app_opened`
 2. `provider_validation_finished` 且 `result=success`（1.5.8 线 B 上线前，暂用 `provider_connection_test_finished` 且 `outcome_canon=success`）
@@ -393,26 +395,28 @@ runtime = desktop   -- 主指标；web 可另列
 
 新建看板，名称建议：**AutoClip｜1.5.8 出片成功率**。不要改 2026-09-30 Studio V2 看板的历史口径。项目：`450605`。
 
-公共过滤（每张 insight 都加）：
+公共过滤（每张 insight 都加，v4）：
 
-- 事件属性 `analytics_environment = production`
-- 事件属性 `app_version = <本版>`（发版后改，或用「最新正式版」看板变量）
-- 日期：发布日起 7 天，或滚动 7 天并在图题写明
+- 事件属性 `analytics_environment = production`、`runtime = desktop`
+- 排除内部 cohort `{internal_cohort_id}`（450605 为 641509）
+- 日期：固定 UTC 区间 `{date_from}` / `{date_to}`，写在图题里；不用滚动 7 天
+- 不加 `app_version` 过滤，按版本看图 11（`success_rate.sql` 图 5）
 
 | # | 图 | Insight 类型 | 事件 | 过滤 / 拆解 | 公式或读法 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 按次出片成功率 | Trends · formula | A `studio_generation_finished` + `studio_production_finished` | 排除 user/environment（见下） | `A_success / A_qualifying`。A 用两条事件的 **Trends 公式** 或一条 HogQL |
-| 2 | 按人首次出片成功率 | HogQL / SQL insight | 同上 | 按 `distinct_id` 取 earliest qualifying | 见下方 HogQL |
-| 3 | 按服务商按次成功率 | Trends · 公式，breakdown `provider` | 同上 | 同上 | 看 api88 / deepseek / … 不要用设置页 provider |
-| 4 | 按 `failure_stage` × `error_code` | Trends · total count | 失败的出片终态 | `outcome_canon ∈ (error, partial)` | 堆叠或表格；`unexpected` 要下钻 `llm_request_finished` |
+| 1 | 按日 按次 / 按流程成功率（全量 + 产品）+ partial-delivery 率 | SQL insight | `studio_generation_finished` + `studio_production_finished` | `success_rate.sql` 图 1 | attempt 去重；flow 沿 `retry_of` 取最后一次 attempt；分母按 §4.3 v4 |
+| 2 | 按人首次出片成功率 | SQL insight | 同上 | `success_rate.sql` 图 2 | 按 `person_id`（不是 `distinct_id`）取第一条合格 attempt |
+| 3 | 按服务商按次成功率 | SQL insight，按 `provider` 分组 | 同上 | 图 1 的 base / c，加 `provider` | 事件上的 run `provider` slug；不要用设置页 provider |
+| 4 | 按 `failure_stage` × `error_code` × 归因 | SQL insight | 失败的出片终态（attempt 去重） | `success_rate.sql` 图 3 | 表格；`unexpected` 要下钻 `llm_request_finished` |
 | 5 | 按 `upstream_error_type` | Trends | `llm_request_finished` | `outcome=error`，breakdown `upstream_error_type`、`provider` | 诊断用，不是 6.1 分母 |
 | 6 | 配置→能跑 | Funnel | `app_opened` → `provider_validation_finished` (`result=success`) → `studio_import_accepted` | 生产 + 版本 | 线 B 上线后主看 |
 | 7 | 导入→出片 | Funnel | `studio_import_accepted` → `studio_screen_finished` → 出片 `outcome_canon=success` | `material_origin=user` | 真实素材，排除 sample |
 | 8 | 出片→落盘 | Funnel | 出片 `outcome_canon=success` → `studio_download_saved` | `download_mode=native` | 浏览器下载不进 |
 | 9 | D7 回访 | Retention | `app_opened` | 起始事件 `app_installed` 或首次出片成功 | 第一列 D1、第七列 D7 |
 | 10 | 收数健康 | Trends | 核心事件列表 | 按 event 分列 | 无收数先查同意/发布，不判产品失败 |
+| 11 | 按版本成功率 | SQL insight | 同图 1 | `success_rate.sql` 图 5 | 每个 `app_version` 一行；与图 1 同一口径 |
 
-图 1–3 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 最终结果、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率）。本文件不再复制 SQL，避免两份漂移。
+图 1–4、11 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 沿 `retry_of` 取最后一次 attempt、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率、按版本）。该 SQL 在 CI 里用 DuckDB 对合成数据真实执行（`backend/tests/test_r16_success_rate_duckdb.py`）。本文件不再复制 SQL，避免两份漂移。
 
 可审查 SQL 副本放在 `docs/analytics/success_rate.sql`（与本规范一起落地）。线上看板建好后把 insight 链接回写本节，仿照 [`dashboards-20260930/README.md`](dashboards-20260930/README.md)。
 

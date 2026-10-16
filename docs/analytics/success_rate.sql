@@ -161,3 +161,62 @@ WHERE event = 'llm_request_finished'
   AND person_id NOT IN COHORT {internal_cohort_id}
 GROUP BY provider, upstream_error_type
 ORDER BY events DESC;
+
+
+-- 图 5：按版本（app_version）按次 / 按流程成功率（全量 + 产品）与 partial-delivery 率
+-- 与图 1 同一 base / chained / c；流程归到最后一次 attempt 的版本
+WITH base AS (
+  SELECT
+    toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
+    argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
+    argMax(person_id, timestamp) AS pid,
+    max(timestamp) AS ts,
+    argMax(toString(properties.outcome), timestamp) AS o_raw,
+    argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
+    argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
+    argMax(coalesce(toString(properties.failure_stage), '(空)'), timestamp) AS stage,
+    argMax(toString(properties.app_version), timestamp) AS v,
+    argMax(coalesce(toString(properties.retry_of), ''), timestamp) AS rof
+  FROM events
+  WHERE event IN ('studio_generation_finished', 'studio_production_finished')
+    AND toString(properties.analytics_environment) = 'production'
+    AND toString(properties.runtime) = 'desktop'
+    AND timestamp >= toDateTime({date_from}, 'UTC')
+    AND timestamp < toDateTime({date_to}, 'UTC')
+    AND person_id NOT IN COHORT {internal_cohort_id}
+  GROUP BY aid
+), chained AS (
+  -- retry chain: follow retry_of up to 4 hops to the chain root, the flow is the root's flow.
+  SELECT b.*,
+    multiIf(p4.aid != '', p4.fid, p3.aid != '', p3.fid, p2.aid != '', p2.fid, p1.aid != '', p1.fid, b.fid) AS chain_fid
+  FROM base b
+  LEFT JOIN base p1 ON b.rof = p1.aid
+  LEFT JOIN base p2 ON p1.rof = p2.aid
+  LEFT JOIN base p3 ON p2.rof = p3.aid
+  LEFT JOIN base p4 ON p3.rof = p4.aid
+), c AS (
+  SELECT *,
+    multiIf(o_raw IN ('completed', 'success'), 'success', o_raw = 'partial', 'partial', o_raw IN ('cancelled', 'canceled'), 'cancelled', 'error') AS o,
+    (o = 'cancelled'
+      OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
+      OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
+    (o = 'success' OR NOT user_hard) AS qual_all,
+    (o = 'success' OR NOT user_x) AS qual
+  FROM chained
+), flows AS (
+  SELECT chain_fid AS fid, argMax(v, ts) AS fv, argMax(o, ts) AS fo, argMax(qual, ts) AS fq, argMax(qual_all, ts) AS fqa FROM c GROUP BY chain_fid
+), v1 AS (
+  SELECT v, countIf(o = 'success') AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
+    countIf(o = 'partial' AND qual) AS partial_n
+  FROM c GROUP BY v
+), v2 AS (
+  SELECT fv AS v, countIf(fo = 'success') AS flow_ok, countIf(fqa) AS fq_all, countIf(fq) AS fq_prod FROM flows GROUP BY fv
+)
+SELECT v1.v AS app_version, v1.ok AS ok,
+  round(v1.ok / v1.q_all, 3) AS overall_attempt_rate, round(v1.ok / v1.q_prod, 3) AS product_attempt_rate,
+  round(v2.flow_ok / v2.fq_all, 3) AS overall_flow_rate, round(v2.flow_ok / v2.fq_prod, 3) AS product_flow_rate,
+  round(v1.partial_n / v1.q_prod, 3) AS partial_delivery_rate,
+  v1.q_all AS q_all, v1.q_prod AS q_prod, v2.flow_ok AS flow_ok, v2.fq_all AS fq_all, v2.fq_prod AS fq_prod
+FROM v1 LEFT JOIN v2 ON v1.v = v2.v
+ORDER BY app_version;
