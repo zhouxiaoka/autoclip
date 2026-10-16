@@ -144,6 +144,7 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
     video = ROOT / 'input.mp4'
 
     recorded: list[list[str]] = []
+    decodes: list[list[str]] = []
     scripts: dict[str, str] = {}
 
     def remember(argv: list[str]) -> None:
@@ -167,6 +168,10 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
             body = json.dumps(PROBE)
             stdout = body if text else body.encode()
             return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
+        if argv[-3:] == ['-f', 'null', '-']:
+            # R11 #413 decode-only validation of the staged output: not an encoder argv.
+            decodes.append(argv)
+            return subprocess.CompletedProcess(argv, 0, stdout='' if text else b'', stderr='' if text else b'')
         remember(argv)
         stdout = '' if text else b''
         return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')

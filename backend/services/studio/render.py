@@ -305,6 +305,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                 not math.isfinite(duration) or duration <= 0 or
                 not validated.get('width') or not validated.get('height')):
             raise ValueError('渲染输出无效，请重新导出')
+        # R11 #413: probe metadata survives a truncated mp4 (faststart moov up front); only a
+        # full decode proves every frame is readable before the file replaces the saved video.
+        try:
+            decoded = project_cancellation.run(
+                [get_ffmpeg_path(), '-v', 'error', '-xerror', '-i', str(ready), '-f', 'null', '-'],
+                check=True, capture_output=True, timeout=max(120, duration * 2))
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+            raise ValueError('渲染输出无效，请重新导出') from None
+        if (decoded.stderr or b'').strip():
+            raise ValueError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)
         os.replace(ready, output)
         result = {'title': draft.title, 'duration': duration, 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
