@@ -26,6 +26,8 @@ KINDS = ('generation', 'production')  # the two v4 terminals: studio_generation_
 TERMINAL = ('completed', 'partial', 'failed')
 RETRYABLE_PARENT = ('failed', 'partial')
 KEEP = 100
+PLAN_KEYS = ('recommendation_mode', 'analysis_mode', 'route')  # frozen from the attempt's own plan
+OUTPUT_FREE = ('platform_count', 'portrait_style', 'brand_outro_enabled', 'recommended_template', 'accepted_recommendation', 'burned_captions')
 SUMMARY_KEYS = ('provider', 'model', 'base_url_host', 'billable_calls_before_failure', 'retry_count', 'degrade_count',
                 'llm_calls', 'prompt_tokens', 'completion_tokens', 'route', 'http_status', 'duration_ms',
                 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'completed_variant_count')
@@ -119,6 +121,21 @@ def bind_run(receipt, run_id):
     receipt['run_id'] = run_id
 
 
+def inherit_plan(receipt, parent):
+    """R26 #364: a variant retry re-renders outputs of the parent attempt, so it belongs to the plan that produced
+    them (the parent's), not whatever plan the workspace holds now. The parent's frozen enums go along in case that
+    plan has been replaced by a re-screen since."""
+    if receipt is None or not parent:
+        return
+    if parent.get('plan_id'):
+        receipt['plan_id'] = parent['plan_id']
+    summary = parent.get('summary') or {}
+    inherited = {k: v for k, v in (('degrade_reason', parent.get('degrade_reason') or (parent.get('inherited') or {}).get('degrade_reason')),
+                                   *((k, summary.get(k)) for k in PLAN_KEYS)) if isinstance(v, str) and v}
+    if inherited:
+        receipt['inherited'] = inherited
+
+
 def bind_plan(receipt, plan):
     """R25 #348: the plan this attempt actually runs (auto: written when screening starts production; manual: the
     confirmed one). Only a bound plan's degrade_reason is frozen at settle - an attempt that fails before its own
@@ -166,7 +183,10 @@ def settle(receipt, state, record, now=None, plan=None, base=None):
             receipt['summary'][key] = value
     if receipt.get('kind') == 'generation' and not receipt['summary'].get('route') and isinstance(own.get('recommended_analysis'), str):
         receipt['summary']['route'] = own['recommended_analysis']
-    reason = own.get('degrade_reason')
+    for key, value in (receipt.get('inherited') or {}).items():  # R26 #364: the source plan, when it is not current
+        if key in PLAN_KEYS and not own:
+            receipt['summary'].setdefault(key, value)
+    reason = own.get('degrade_reason') if own else (receipt.get('inherited') or {}).get('degrade_reason')
     if reason in DEGRADE_REASONS:
         receipt['degrade_reason'] = reason
     if ranked:
@@ -246,6 +266,13 @@ def generation_summary(data) -> dict:
     return {k: v for k, v in out.items() if v is not None}
 
 
+def _owned_summary(receipt, data):
+    """R26 #363: output counts belong to this attempt only once it has its own (or inherited) plan, i.e. it reached
+    production; an attempt that failed before that keeps the request fields but not the previous run's outputs."""
+    summary = generation_summary(data)
+    return summary if receipt.get('plan_id') else {k: v for k, v in summary.items() if k in OUTPUT_FREE}
+
+
 def reconcile(data, now=None):
     """Called by store.write for every state write: settle the open attempt when its run reached a terminal."""
     receipt = current(data)
@@ -258,7 +285,7 @@ def reconcile(data, now=None):
             return
         record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS}, **generation}
         settle(receipt, generation['status'], record, now, data.get('plan') if isinstance(data.get('plan'), dict) else None,
-               base=generation_summary(data))
+               base=_owned_summary(receipt, data))
     elif receipt['kind'] == 'production':
         if not receipt.get('run_id') or analysis.get('run_id') != receipt['run_id'] or analysis.get('phase') != 'production' \
                 or analysis.get('status') not in ('completed', 'failed'):
@@ -269,4 +296,4 @@ def reconcile(data, now=None):
 
 def public(receipt) -> dict:
     """What the API returns: the receipt without the idempotency key."""
-    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id')}
+    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id', 'inherited')}

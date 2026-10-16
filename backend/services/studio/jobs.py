@@ -1470,6 +1470,7 @@ def _variant_attempt(data, retry):
         parent = _retry_parent(data, (retry or {}).get('parent_attempt_id'))
         receipt = attempts.open_attempt(data, 'generation', trigger='variant_retry', parent=parent,
                                         run_id=uuid.uuid4().hex, key=(retry or {}).get('key'), now=store.now())
+        attempts.inherit_plan(receipt, parent)  # R26 #364: the plan that produced the outputs being retried
     data['generation']['attempt_id'] = receipt['attempt_id']
     return receipt
 

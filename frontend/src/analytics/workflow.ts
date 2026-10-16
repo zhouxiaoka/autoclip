@@ -202,53 +202,6 @@ export interface StudioSnapshot {
 }
 
 /** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
-export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
-  const all = snapshot.output_variants || []
-  // Backup clips are not packaged until someone asks for them: template counts cover produced versions.
-  const variants = all.filter(v => v.status !== 'on_demand')
-  const templates = new Map((snapshot.drafts || []).map(d => [d.id, d.packaging] as const))
-  const packaged = variants.map(v => templates.get(v.draft_id)).filter(Boolean)
-  const count = (test: (v: (typeof variants)[number]) => boolean) => variants.filter(test).length
-  const jobs = new Map((snapshot.jobs || []).map(j => [j.job_id, j]))
-  const completed = variants.filter(v => v.status === 'completed').map(v => ({ variant: v, job: jobs.get(v.render_job_id || '') }))
-  const created = utcMillis(snapshot.generation?.created_at), finished = utcMillis(snapshot.generation?.finished_at)
-  return {
-    variant_count: all.length,
-    completed_variant_count: count(v => v.status === 'completed'),
-    failed_variant_count: count(v => v.status === 'failed'),
-    on_demand_variant_count: all.length - variants.length,
-    skipped_variant_count: Array.isArray(snapshot.generation?.skipped) ? snapshot.generation!.skipped!.length : 0,
-    platform_count: snapshot.generation?.requested_platforms?.length || 0,
-    interview_count: packaged.filter(p => p?.template === 'interview_zh').length,
-    podcast_count: packaged.filter(p => p?.template === 'podcast_en').length,
-    landscape_count: variants.length - packaged.length,
-    editorial_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'editorial' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
-    street_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'street' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
-    classic_count: variants.filter(v => {
-      const report = jobs.get(v.render_job_id || '')?.result?.template_render
-      if (report) return report.downgraded === true || report.template === 'classic'
-      const packaging = templates.get(v.draft_id)
-      return packaging?.template === 'interview_zh' || packaging?.template === 'podcast_en'
-    }).length,
-    html_downgrade_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded === true).length,
-    speaker_framed_count: count(v => v.framing === 'speaker'),
-    full_frame_count: count(v => v.framing === 'full_frame'),
-    framing_pending_count: count(v => v.framing === 'full_frame_pending'),
-    framing_captions_count: count(v => v.framing === 'full_frame_captions'),
-    portrait_style: snapshot.generation?.portrait_style,
-    brand_outro_enabled: snapshot.generation?.branding?.outro_enabled,
-    outro_applied_count: completed.filter(({ job }) => job?.result?.outro_applied === true).length,
-    outro_fallback_count: completed.filter(({ variant, job }) => (job?.brand_outro ?? variant.branding?.outro_enabled) === true && job?.result?.outro_applied === false).length,
-    outro_unknown_count: completed.filter(({ job }) => typeof job?.result?.outro_applied !== 'boolean').length,
-    packaging_fallback_count: packaged.filter(p => p?.fallback).length,
-    trimmed_count: count(v => !!v.trimmed_to_sec),
-    burned_captions: !!snapshot.generation?.source_has_burned_subtitles,
-    ...(snapshot.generation?.recommended_template ? { recommended_template: snapshot.generation.recommended_template } : {}),
-    ...(typeof snapshot.generation?.accepted_recommendation === 'boolean' ? { accepted_recommendation: snapshot.generation.accepted_recommendation } : {}),
-    duration_ms: created !== undefined && finished !== undefined ? Math.max(0, finished - created) : undefined,
-  }
-}
-
 /** Time from generation.created_at to the first completed render. No observer clock, no titles. */
 export function firstClipReady(snapshot: StudioSnapshot): Record<string, unknown> | null {
   const created = utcMillis(snapshot.generation?.created_at)
