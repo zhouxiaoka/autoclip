@@ -12,3 +12,12 @@ def test_204_dashboard_null_claim_waits_for_the_post_merge_sync():
 
 def test_205_retry_of_dependency_on_419_is_documented():
     assert '#419' in PLAN and '同批合入' in PLAN
+
+
+def test_225_sql_header_does_not_claim_live_dashboard_is_aligned():
+    """R22 #225: the live insights are synced only after #416/#419 merge, so line 1 must not say they
+    already match. Fails on 101deaf4."""
+    sql = (Path(__file__).resolve().parents[2] / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
+    header = sql.splitlines()[0]
+    assert '对齐' not in header
+    assert '合入后同步' in header
