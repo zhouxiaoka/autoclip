@@ -352,7 +352,6 @@ def test_ps1_uses_redact_py_patterns():
     redact = _module('redact')
     text = PS1.read_text(encoding='utf-8')
     q = lambda s: "'" + s.replace("'", "''") + "'"
-    assert f'$WinJsonPattern = {q(redact.WIN_JSON_PATTERN)}' in text
     assert f'$WinPattern = {q(redact.WIN_PATTERN)}' in text
     assert f'$PosixPattern = {q(redact.POSIX_PATTERN)}' in text
     fail = text[text.index('function Fail'):text.index('trap {')]
@@ -401,9 +400,9 @@ def test_redact_json_colliding_keys_are_all_kept(tmp_path):
 
 
 def test_redact_json_is_scrubbed_after_parsing(tmp_path):
-    """R20 #122: escaped solidus and mixed escapes only decode through json.loads (text rules miss them)."""
+    """R20 #122: escaped letters inside the root (U\\u0073ers) only decode through json.loads (text rules miss them)."""
     redact = _module('redact')
-    raw = '{"p": "\\/Users\\/kris\\/a", "w": "C:\\\\U\\u0073ers\\\\qa\\\\x"}'
+    raw = '{"p": "\\/U\\u0073ers\\/kris\\/a", "w": "C:\\\\U\\u0073ers\\\\qa\\\\x"}'
     assert json.loads(raw) == {'p': '/Users/kris/a', 'w': 'C:\\Users\\qa\\x'}
     assert redact.scrub_homes(raw) == raw, 'text rules alone do not see these; the JSON step must'
     (tmp_path / 'e.json').write_text(raw, encoding='utf-8')
@@ -427,3 +426,84 @@ def test_pwsh_verify_only_replaces_its_own_files(tmp_path):
     assert 'candidate-setup.exe' in (inst / 'candidate.sha256').read_text()
     for name in ('prev-setup.exe', 'notes.txt', 'other-setup.exe'):
         assert (inst / name).read_bytes() == keep[name], name
+
+
+# ---------------- R21: one rule for every spelling (#127 #128 #130 #131 #132) ----------------
+
+R21_CASES = [
+    (r'C:/Users/\u5f20\u4e09/x', 'C:/Users/<user>/x'),                          # 127
+    (r'see c:/users/\u5f20\u4e09', 'see c:/Users/<user>'),                       # 127
+    (r'/Users/\\u5f20\\u4e09/x', r'/Users/\\<user>/x'),                          # 130
+    (r'C:\Users\\u5f20\\u4e09\x', r'C:\Users\\<user>\x'),                        # 130
+    (r'\/Users\/alice\/x', r'\/Users\/<user>\/x'),
+    (r'C:\u005cUsers\u005calice\u005cx', r'C:\u005cUsers\u005c<user>\u005cx'),
+    (r'\u002fhome\u002fbob\u002fx', r'\u002fhome\u002f<user>\u002fx'),
+    (r'C:\\Users\\alice\u002fx', r'C:\\Users\\<user>\u002fx'),
+    ("/Users/D''Arcy/x", '/Users/<user>/x'),                                    # 132
+    ("/Users/D' Artagnan/x", '/Users/<user>/x'),                                # 132
+    ("C:\\Users\\D' Artagnan", 'C:\\Users\\<user>'),                            # 132
+    ("/home/D''Arcy", '/home/<user>'),                                          # 132
+    ("x '/home/D''Arcy' y", "x '/home/<user>' y"),                              # 132
+    ("x '/home/kris' y", "x '/home/<user>' y"),
+    (r'GET \/api\/home\/feed', r'GET \/api\/home\/feed'),
+]
+
+
+@pytest.mark.parametrize('raw,expected', R21_CASES)
+def test_redact_one_rule_for_every_spelling(tmp_path, raw, expected):
+    redact = _module('redact')
+    assert redact.scrub_homes(raw) == expected
+    (tmp_path / 'e.log').write_bytes(raw.encode('utf-8'))
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes().decode('utf-8') == expected
+
+
+def test_redact_json_with_bom_is_parsed(tmp_path):
+    """R21 #131: a BOM must not make the JSON step fall back; BOM is kept on write."""
+    redact = _module('redact')
+    raw = '\ufeff{"p": "\\/Users\\/alice\\/x", "w": "\\/U\\u0073ers\\/bob"}'
+    (tmp_path / 'e.json').write_bytes(raw.encode('utf-8'))
+    redact.main(str(tmp_path))
+    out = (tmp_path / 'e.json').read_bytes()
+    assert out.startswith(b'\xef\xbb\xbf')
+    assert json.loads(out.decode('utf-8-sig')) == {'p': '/Users/<user>/x', 'w': '/Users/<user>'}
+
+
+@pytest.mark.parametrize('suffix', ['.log', '.json'])
+def test_redact_non_utf8_file_is_replaced_bytewise(tmp_path, suffix):
+    """R21 #128: GBK (or broken) bytes outside the masked name come back unchanged."""
+    redact = _module('redact')
+    head = '错误 C:\\Users\\'.encode('gbk')
+    tail = '\\AppData 日志\r\n'.encode('gbk') + b'\xff\xfe raw\n'
+    raw = head + b'kris' + tail
+    (tmp_path / ('e' + suffix)).write_bytes(raw)
+    redact.main(str(tmp_path))
+    assert (tmp_path / ('e' + suffix)).read_bytes() == head + b'<user>' + tail
+
+
+def test_redact_utf8_key_is_masked_in_byte_mode(tmp_path, monkeypatch):
+    """Byte mode still masks the QA key and its masked form (matched as UTF-8 bytes)."""
+    redact = _module('redact')
+    key = 'sk-' + 'q' * 20 + 'Z9x'
+    monkeypatch.setenv('WINQA_MODEL_API_KEY', key)
+    raw = ('k=' + key + ' m=' + key[:3] + '…' + key[-3:] + ' ').encode('utf-8') + b'\xff'
+    (tmp_path / 'e.log').write_bytes(raw)
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes() == b'k=*** m=*** \xff'
+
+
+CONSISTENCY_CORPUS = [raw for raw, _ in R21_CASES] + [
+    r'C:\Users\u1234\AppData\x.log', r'C:\Users\uface', '/Users/Jane Doe: Permission denied',
+    'see /home/a and more /x', 'GET /api/home/feed', "/Users/O'Connor/a", '/USERS/kris/x and /HOME/qa',
+    '"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a"', 'C:\\Users\\Jane Doe\\x.log', '/home/Jane Doe', 'c:/users/kris/a.log',
+]
+
+
+@need_pwsh
+@pytest.mark.parametrize('raw', CONSISTENCY_CORPUS)
+def test_pwsh_and_python_redact_identically(tmp_path, raw):
+    """R21: py and ps1 apply the same rule; the ps1 error exit must print exactly redact.py's output."""
+    redact = _module('redact')
+    done, _ = _ps(tmp_path, want_zip='', run=raw)
+    assert done.returncode == 4, done.stdout + done.stderr
+    assert done.stderr.rstrip('\n') == 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(raw)

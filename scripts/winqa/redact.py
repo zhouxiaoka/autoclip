@@ -6,59 +6,73 @@ Usage: python3 redact.py EVIDENCE_DIR  (key from WINQA_MODEL_API_KEY, or legacy 
 import json, os, re, sys
 from pathlib import Path
 
-# R16 #53: the user name segment after a home root becomes <user>; the rest of the path stays.
-# R17 #56: a user name may contain spaces ("Jane Doe"); the whole segment up to the next path
-# separator (or end of value) is masked. A spaced run only counts when another path separator,
-# a quote, a colon (R18 #88: "/Users/Jane Doe: Permission denied") or the end of the line follows,
-# so prose after a bare "/home/a" is not swallowed.
-# R18 #85 / R20 #116: JSON-escaped text carries the name as \\uXXXX escapes ("/Users/\\u5f20\\u4e09").
-# Escapes are only read as name characters where separators are JSON's doubled backslash (WIN_JSON)
-# or '/' (POSIX); plain Windows paths (single backslash) treat "\u1234" as separator + name "u1234".
-# R20 #117: a CR (CRLF line end) also ends a spaced name. R20 #118: an apostrophe between name
-# characters ("O'Connor") is part of the name; a leading/trailing quote is not.
-# .json files are additionally parsed and scrubbed string by string (see _scrub_json).
-# R18 #86: ps/pull_run_installer.ps1 embeds these exact pattern strings (test_ps1_uses_redact_py_patterns).
-_X = r'[^\\/\s"' + "'" + r'<>|:*?]'
-_XE = r'(?:\\u[0-9a-fA-F]{4}|' + _X + ')'
+# R21 rewrite (Dong's rule, replaces the R16-R20 patch series): after a home root (C:\Users, /Users,
+# /home, in any escaped spelling) everything up to the next path separator is the user name and is
+# replaced whole, whatever escapes, quotes or spaces it contains. Over-masking is accepted.
+#   separator: / and \ in every spelling: \/ \\ \\\\ \u002f \u005c \\u002f ... (SEP)
+#   a backslash run directly followed by u+4 hex (other than 002f/005c) is an escaped name
+#   character, except a lone backslash right after a non-separator, which is a plain Windows
+#   separator ("C:\Users\u1234").
+#   a name also stops at '"', ':', CR/LF and < > | * ? (cannot appear in Windows names).
+# Two narrow trims keep surrounding text (see _mask): a quote that opened right before the root
+# closes the name ('/home/kris'), and prose ("see /home/a and more /x") stops at the first space
+# when the run ends in a space right before a separator.
+# ps/pull_run_installer.ps1 embeds WIN_PATTERN / POSIX_PATTERN verbatim and the same _mask steps;
+# test_pwsh_and_python_redact_identically runs one corpus through both.
+_HEX = r'[0-9a-fA-F]{4}'
+_SEPU = r'u00(?:2[fF]|5[cC])'
+SEP = r'(?:\\*/|\\+' + _SEPU + r'|(?:\\\\)+|(?<![\\/])\\|\\(?!u' + _HEX + r'))'
+NAME = r'(?:\\+u(?!00(?:2[fF]|5[cC]))' + _HEX + r'|[^\\/"\r\n<>|*?:])+'
+WIN_PATTERN = r'\b([a-zA-Z]:)(' + SEP + r'+)[uU][sS][eE][rR][sS](' + SEP + r'+)(?!<user>)(' + NAME + r')'
+POSIX_PATTERN = r'(?<![\w.\\-])(\\*/|\\+u002[fF])(Users|home)(' + SEP + r'+)(?!<user>)(' + NAME + r')'
+_WIN, _POSIX = re.compile(WIN_PATTERN), re.compile(POSIX_PATTERN)
 
 
-def _seg(ch):
-    word = ch + "+(?:'" + ch + '+)*'
-    return r'(?!<user>)(?:' + word + r'(?: +' + word + r')*(?=\\|/|["' + "'" + r':\r]|$)|' + word + ')'
+def _mask(name: str, before: str, after: str) -> str:
+    if before == "'":
+        q = re.search(r"'(?=[ \t]|$)", name)   # the closing quote: one followed by a space or the end
+        if q:
+            return '<user>' + name[q.start():]
+    if after in ('/', '\\') and name[-1] in ' \t':
+        cut = min(i for i in (name.find(' '), name.find('\t')) if i >= 0)
+        return '<user>' + name[cut:]
+    return '<user>'
 
 
-WIN_JSON_PATTERN = r'(?im)\b([a-z]:)((?:\\\\)+)users((?:\\\\)+)' + _seg(_XE)
-WIN_PATTERN = r'(?im)\b([a-z]:)((?:\\|/)+)users((?:\\|/)+)' + _seg(_X)
-POSIX_PATTERN = r'(?m)(?<![\w.-])/(Users|home)/' + _seg(_XE)
-WIN_REPLACEMENT, POSIX_REPLACEMENT = r'\1\2Users\3<user>', r'/\1/<user>'
-HOME_PATTERNS = [
-    (re.compile(WIN_JSON_PATTERN), WIN_REPLACEMENT),
-    (re.compile(WIN_PATTERN), WIN_REPLACEMENT),
-    (re.compile(POSIX_PATTERN), POSIX_REPLACEMENT),
-]
-URL = re.compile(r'https?://\S+')
+def _sub(pattern, text, head):
+    def repl(m):
+        before = text[m.start() - 1] if m.start() else ''
+        after = text[m.end()] if m.end() < len(text) else ''
+        return head(m) + _mask(m.group(4), before, after)
+    return pattern.sub(repl, text)
 
 
 def scrub_homes(text: str) -> str:
-    for pattern, replacement in HOME_PATTERNS:
-        text = pattern.sub(replacement, text)
-    return text
+    text = _sub(_WIN, text, lambda m: m.group(1) + m.group(2) + 'Users' + m.group(3))
+    return _sub(_POSIX, text, lambda m: m.group(1) + m.group(2) + m.group(3))
 
 
-def _scrub_text(n: str, key: str) -> str:
+URL = re.compile(r'https?://\S+')
+
+
+def _scrub_text(n: str, key: str, masked: str = None) -> str:
+    """key / masked (the app's "abc…xyz" form) must be in n's own representation."""
     if key:
         n = n.replace(key, '***')
     n = scrub_homes(n)
     n = re.sub(r'("api_key_masked"\s*:\s*")[^"]*(")', r'\1***\2', n)
-    if key and len(key) > 8:
-        n = n.replace(key[:3] + '…' + key[-3:], '***')
+    if masked is None and key and len(key) > 8:
+        masked = key[:3] + '…' + key[-3:]
+    if masked:
+        n = n.replace(masked, '***')
     return n
 
 
 def _scrub_json(text: str, key: str):
     """R18 #85: decode first so \\u-escaped names are seen as text; returns None if not JSON."""
+    bom = '\ufeff' if text.startswith('\ufeff') else ''   # R21 #131: strip BOM before parsing
     try:
-        data = json.loads(text)
+        data = json.loads(text[len(bom):])
     except ValueError:
         return None
 
@@ -84,7 +98,7 @@ def _scrub_json(text: str, key: str):
     clean = walk(data)
     if clean == data:
         return text
-    return json.dumps(clean, ensure_ascii=False, indent=2 if '\n' in text.strip() else None) + ('\n' if text.endswith('\n') else '')
+    return bom + json.dumps(clean, ensure_ascii=False, indent=2 if '\n' in text.strip() else None) + ('\n' if text.endswith('\n') else '')
 
 
 def main(folder):
@@ -97,13 +111,23 @@ def _run(folder):
     for p in folder.rglob('*'):
         if not p.is_file() or p.suffix.lower() not in ('.json', '.log', '.err', '.txt', '.md', '.cmd'):
             continue
-        t = p.read_bytes().decode('utf-8', errors='replace')   # R20 #117: keep CRLF as-is
-        n = _scrub_json(t, key) if p.suffix.lower() == '.json' else None
-        if n is None:
-            n = _scrub_text(t, key)
-        if n != t:
+        raw = p.read_bytes()
+        out = None
+        if p.suffix.lower() == '.json':
+            try:
+                j = _scrub_json(raw.decode('utf-8'), key)
+                out = None if j is None else j.encode('utf-8')
+            except UnicodeDecodeError:
+                pass
+        if out is None:
+            # R21 #128: never decode/re-encode; latin-1 maps every byte 1:1, so GBK or broken bytes
+            # outside a match come back unchanged. Masks are ASCII; the key is matched as UTF-8 bytes.
+            as_bytes = lambda v: v.encode('utf-8').decode('latin-1')
+            masked = as_bytes(key[:3] + '…' + key[-3:]) if key and len(key) > 8 else ''
+            out = _scrub_text(raw.decode('latin-1'), as_bytes(key), masked).encode('latin-1')
+        if out != raw:
             hits += 1
-            p.write_bytes(n.encode('utf-8'))
+            p.write_bytes(out)
     print(f'redact: rewrote {hits} file(s)')
     return hits
 
