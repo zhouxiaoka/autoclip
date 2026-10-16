@@ -225,7 +225,8 @@ def test_per_version_last_any_mutation_is_caught():
 import json  # noqa: E402
 
 V4 = json.loads((ROOT / 'docs/analytics/event_catalog.json').read_text(encoding='utf-8'))['attribution']['success_rate_v4']
-PRODUCT_FAILURE_UPSTREAM = ('model_not_found', 'bad_endpoint')
+# R19 #104: every forced product failure also in upstream_error_type form.
+PRODUCT_FAILURE_UPSTREAM = ('model_not_found', 'bad_endpoint', 'whisper_not_installed', 'service_restarted')
 
 
 def exclusion_fixture():
@@ -276,7 +277,10 @@ def test_catalog_lists_every_rule_dong_named():
 def test_every_exclusion_and_product_failure_lands_in_the_right_denominator():
     # 2 ok; hard (N_HARD) out of both; user_x (N_X) only out of product; forced failures (N_PF) in both.
     assert _excl() == EXPECTED_EXCL
-    assert (N_HARD, N_X, N_PF) == (11, 5, 6)
+    assert (N_HARD, N_X, N_PF) == (11, 5, 8)
+    # R19 #104: 8 forced product failures -> all/product denominators 15/10.
+    assert (EXPECTED_EXCL['q_all'], EXPECTED_EXCL['q_prod']) == (15, 10)
+    assert set(PRODUCT_FAILURE_UPSTREAM) == set(V4['product_failure_codes'])
 
 
 def test_forced_product_failures_count_in_both_rates_and_attribution():
@@ -335,3 +339,50 @@ def test_each_exclusion_rule_mutation_is_caught(name):
     mutated = MUTATIONS_R18[name](original)
     assert mutated != original, name
     assert _excl(mutated) != EXPECTED_EXCL, name
+
+
+# --- R19 #103: the same rule mutations must be caught in every figure that carries the rules (1, 2, 3, 5),
+# each figure mutated on its own (the other statements stay intact). ---
+
+RATE_KEYS = ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')
+
+
+def _fig1(rows):
+    return {k: rows[0][k] for k in RATE_KEYS}
+
+
+def _fig2(rows):
+    r = rows[0]
+    return (r['overall_first_ok'], r['overall_people'], r['product_first_ok'], r['product_people'])
+
+
+def _fig3(rows):
+    return sorted((str(r['error_code']), str(r['outcome']), str(r['attribution']), r['attempts']) for r in rows)
+
+
+def _fig5(rows):
+    assert len(rows) == 1 and rows[0]['app_version'] == '1.5.8'
+    return {k: rows[0][k] for k in RATE_KEYS}
+
+
+FIGURES = {'fig1_daily': (0, _fig1), 'fig2_first_per_person': (1, _fig2),
+           'fig3_failure_identity': (2, _fig3), 'fig5_per_version': (4, _fig5)}
+
+
+def test_figure_baselines_match_hand_count():
+    stmts = statements()
+    run = lambda i: exclusion_fixture().run(stmts[i])
+    assert _fig1(run(0)) == EXPECTED_EXCL
+    assert _fig5(run(4)) == EXPECTED_EXCL
+    assert _fig2(run(1)) == (2, 2 + N_X + N_PF, 2, 2 + N_PF)
+
+
+@pytest.mark.parametrize('figure', sorted(FIGURES))
+@pytest.mark.parametrize('name', sorted(MUTATIONS_R18))
+def test_each_rule_mutation_is_caught_in_every_figure(figure, name):
+    index, extract = FIGURES[figure]
+    stmt = statements()[index]
+    mutated = MUTATIONS_R18[name](stmt)
+    assert mutated != stmt, (figure, name)
+    baseline = extract(exclusion_fixture().run(stmt))
+    assert extract(exclusion_fixture().run(mutated)) != baseline, (figure, name)
