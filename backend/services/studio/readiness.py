@@ -185,9 +185,23 @@ LOCAL_TRANSCRIPTION_REQUIRED = '需要先安装本地转写：视频没有字幕
 LOCAL_TRANSCRIPTION_INSTALLING = '等待安装完成：本地 Whisper 正在安装，装好后再开始。'
 
 
+GATE_CODES = ('whisper_not_installed', 'whisper_install_failed', 'whisper_installing')
+
+
 class TranscriptionNotReady(ValueError):
-    """1.5.8 gate refusal. Callers map exactly this (not any ValueError) to ``invalid_input``."""
+    """1.5.8 gate refusal. Callers map exactly this (not any ValueError) to ``invalid_input``.
+
+    ``code`` is the transcription check code (one of ``GATE_CODES``); HTTP callers send ``detail``
+    so the desktop maps the prompt from the code, never from the Chinese text (R20 #168)."""
     error_code = 'invalid_input'
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(LOCAL_TRANSCRIPTION_INSTALLING if code == 'whisper_installing' else LOCAL_TRANSCRIPTION_REQUIRED)
+
+    @property
+    def detail(self) -> dict:
+        return {'code': self.code, 'message': str(self)}
 
 
 def _gate_settings():
@@ -200,31 +214,45 @@ def _gate_settings():
     return settings or ai_models.ModelSettings()
 
 
-def ensure_local_transcription_for_import(*, srt_available: bool, video=None, route: str = 'studio') -> None:
+def _source_duration(video):
+    if video is None:
+        return None
+    from backend.pipeline import media_precheck
+    try:
+        return media_precheck.probe(Path(video)).get('duration')
+    except Exception:  # noqa: BLE001 - unknown duration never earns the visual route
+        return None
+
+
+def ensure_local_transcription_for_import(*, srt_available: bool, video=None, route: str = 'studio', goal: str | None = 'auto') -> None:
     """1.5.8 import gate for a local file: local Whisper selected, runtime missing/installing, no SRT -> block.
 
-    ``route='studio'`` honours the saved analysis mode (visual-only needs no ASR). ``route='content'`` is the
-    CLI / MCP / legacy content pipeline, which always transcribes without an SRT, whatever the global mode.
+    ``route='studio'`` asks planning which route the job really takes (R20 #144): visual only when the
+    saved mode is visual, the goal is not ``content`` and the source is within the visual length limit
+    (the duration needs ``video``; without it the gate refuses so the caller stages and asks again).
+    ``route='content'`` is the CLI / MCP / legacy content pipeline, which always transcribes without an SRT.
     Never switches provider (no silent cloud fallback) and never installs anything.
     Links are not gated here: platform captions are tried first after download.
     """
-    # Missing / unreadable settings fall back to defaults on every route, like the runtime check (R19 #115).
-    settings = _gate_settings()
-    mode = None if route == 'content' else settings.analysis_mode
-    if not needs_transcription(srt_available=srt_available, analysis_mode=mode):
+    if srt_available:
         return
+    settings = _gate_settings()  # missing / unreadable settings -> defaults on every route (R19 #115)
     choice = settings.transcription or ai_models.Transcription()
     if choice.provider != 'whisper_local':
         return
     code = _transcription(settings).get('code')
-    if code not in ('whisper_not_installed', 'whisper_install_failed', 'whisper_installing'):
+    if code not in GATE_CODES:
         return
+    if route == 'studio' and settings.analysis_mode == 'visual' and goal != 'content' and video is not None:
+        from backend.services.studio import planning
+        if planning.takes_visual_route(settings.analysis_mode, goal, _source_duration(video)):
+            return
     if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
         return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code
-    raise TranscriptionNotReady(LOCAL_TRANSCRIPTION_INSTALLING if code == 'whisper_installing' else LOCAL_TRANSCRIPTION_REQUIRED)
+    raise TranscriptionNotReady(code)
 
 
-def ensure_local_transcription_for_paths(video, srt=None, *, sibling_srt: bool = True, route: str = 'content') -> None:
+def ensure_local_transcription_for_paths(video, srt=None, *, sibling_srt: bool = True, route: str = 'content', goal: str | None = 'auto') -> None:
     """Same gate for entry points that already have files on disk (process / retry / submit / CLI / MCP).
     Defaults to the content route: those paths run SimplePipelineAdapter, which ignores analysis_mode.
 
@@ -237,7 +265,7 @@ def ensure_local_transcription_for_paths(video, srt=None, *, sibling_srt: bool =
         srt_ok = Path(srt).is_file()
     else:
         srt_ok = sibling_srt and (Path(video).parent / 'input.srt').is_file()
-    ensure_local_transcription_for_import(srt_available=srt_ok, video=Path(video), route=route)
+    ensure_local_transcription_for_import(srt_available=srt_ok, video=Path(video), route=route, goal=goal)
 
 
 def ensure_local_transcription_for_project(project_id: str) -> None:

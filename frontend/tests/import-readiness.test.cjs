@@ -21,6 +21,7 @@ function loadReadiness() {
 }
 
 const readiness = loadReadiness()
+const realErrorText = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'), {}, path.join(__dirname, '../src/features/studio'))
 const check = (ok, code, repair) => ({ ok, code, repair })
 function report(overrides = {}) {
   return {
@@ -115,7 +116,8 @@ function render(options = {}) {
         import: async body => { calls.push(body); if (options.importError) throw options.importError; return { project_id: 'project-1' } },
         readiness: async () => { probes.push(1); if (options.probeFails) throw new Error('readiness down'); return options.probeValue === undefined ? value : options.probeValue },
       },
-      errorText: e => (e && e.detail) || String(e),
+      errorText: realErrorText.errorText,
+      errorCode: realErrorText.errorCode,
     },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
@@ -280,14 +282,38 @@ test('R19 #115: a re-check that recovers uses the fresh report (blocked by the l
   assert.equal(view.errors.at(-1), '还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
 })
 
-test('R19 #115: a backend 422 whisper refusal opens the install prompt (and the installing prompt)', async () => {
-  const gate = render({ importError: { detail: '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。' } })
+const axios422 = detail => Object.assign(new Error('Request failed with status code 422'), { response: { status: 422, data: { detail } } })
+
+test('R20 #168: a coded backend 422 opens the install prompt (and the installing prompt) from the code', async () => {
+  const gate = render({ importError: axios422({ code: 'whisper_not_installed', message: 'any wording' }) })
   await button(gate.tree, '生成成片').props.onClick()
   assert.equal(gate.calls.length, 1)
   assert.equal(gate.errors.at(-1), '需要先安装本地转写')
-  const wait = render({ importError: { detail: '等待安装完成：本地 Whisper 正在安装，装好后再开始。' } })
+  const wait = render({ importError: axios422({ code: 'whisper_installing', message: 'any wording' }) })
   await button(wait.tree, '生成成片').props.onClick()
   assert.equal(wait.errors.at(-1), '等待安装完成')
+  const failed = render({ importError: axios422({ code: 'whisper_install_failed', message: 'x' }) })
+  await button(failed.tree, '生成成片').props.onClick()
+  assert.equal(failed.errors.at(-1), '需要先安装本地转写')
+})
+
+test('R20 #168: the prompt is never chosen from the Chinese text; an uncoded 422 shows its message', async () => {
+  const text = '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。'
+  const view = render({ importError: axios422(text) })
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.errors.at(-1), text)
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'), 'utf8')
+  assert.doesNotMatch(source, /startsWith\(LOCAL_TRANSCRIPTION/)
+})
+
+test('R20 #145: visual mode with a non-content goal is not blocked by the desktop; goal content still is', () => {
+  const r = { ...report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), analysis_mode: 'visual' }
+  assert.equal(readiness.submissionBlock(r, false, true, { source: 'file', goal: 'auto' }), null)
+  assert.equal(readiness.localTranscriptionGate(r, false, 'file', 'auto'), null)
+  assert.equal(readiness.submissionBlock(r, false, true, { source: 'file', goal: 'content' }), 'transcription')
+  assert.equal(readiness.localTranscriptionGate(r, false, 'file', 'content'), 'install')
+  const sub = { ...r, analysis_mode: 'subtitle' }
+  assert.equal(readiness.submissionBlock(sub, false, true, { source: 'file', goal: 'auto' }), 'transcription')
 })
 
 test('R19 #115: no settings file -> default local Whisper not installed, no SRT: blocked before start', async () => {

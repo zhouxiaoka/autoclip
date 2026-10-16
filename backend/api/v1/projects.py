@@ -44,28 +44,17 @@ def _transcription_gate(video_path, srt_path) -> None:
     from backend.services.studio import readiness
     try:
         readiness.ensure_local_transcription_for_paths(video_path, srt_path)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except readiness.TranscriptionNotReady as exc:
+        raise gate_refusal(exc) from exc
 
 
 async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
     """Run the import gate; returns the staged upload path when the file had to be probed, else None."""
-    from backend.services.studio import readiness
-    try:
-        readiness.ensure_local_transcription_for_import(srt_available=has_srt, route='content')
-        return None
-    except ValueError:
-        pass
-    staged = await stage_upload(video_file, b'', Path(video_file.filename or '').suffix.lower() or '.mp4')
-    try:
-        readiness.ensure_local_transcription_for_import(srt_available=has_srt, video=staged, route='content')
-    except ValueError as exc:
-        staged.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return staged
+    return await stage_for_gate(video_file, b'', Path(video_file.filename or '').suffix.lower() or '.mp4',
+                                srt_available=has_srt, route='content')
 
 
-from .studio import stage_upload  # noqa: E402
+from .studio import stage_upload, gate_refusal, _stage_for_gate as stage_for_gate  # noqa: E402
 
 
 @router.post("/upload", response_model=ProjectResponse)
@@ -572,8 +561,8 @@ async def retry_processing(
         from backend.services.studio import readiness
         try:  # gate before touching project status
             readiness.ensure_local_transcription_for_project(project_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except readiness.TranscriptionNotReady as exc:
+            raise gate_refusal(exc) from exc
         
         # 重置项目状态
         project_service.update_project_status(project_id, "pending")

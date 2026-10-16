@@ -6,7 +6,7 @@ import { Select } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
 import PlatformPicker from './PlatformPicker'
-import { studioApi, errorText } from './api'
+import { studioApi, errorText, errorCode } from './api'
 import { trackAsrReadiness, trackAutoChoiceOverridden, trackOneClickStarted, trackOneClickUndone, trackQuickOutputPlatforms } from '../../analytics/studio'
 import { telemetryId } from '../../analytics/workflow'
 import { featureSnapshot, flagAssigned, flagEnabled, flagValue, useFlag } from '../../analytics/flags'
@@ -16,7 +16,7 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, gateKind, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
@@ -207,10 +207,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const nextUrl = next?.url ?? url
     const nextSource = next?.file ? 'file' : next?.url ? 'link' : source
     if (nextSource === 'file' ? !nextFile : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
-    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
+    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink, goal: options.goal })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
-    const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource) : null
+    const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource, options.goal) : null
     if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
     if (trigger !== 'button') setError('')
@@ -231,17 +231,19 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button') => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
-    let report = readiness
-    if (settled && !report) {
-      // R19 #115 (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
-      starting.current = true
-      try { report = await probeReadiness(() => studioApi.readiness()) } finally { starting.current = false }
-      if (report) setReadiness(report)
-    }
-    if (!readyToStart(trigger, undefined, report)) return
+    // R20 #166: one busy state from the click on. The re-probe below can wait, and the inputs stay locked
+    // (busy disables them) so the request carries exactly what the user saw when they clicked.
     starting.current = true
-    setBusy(true); setError('')
+    setBusy(true)
     try {
+      let report = readiness
+      if (settled && !report) {
+        // R19 #115 (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
+        report = await probeReadiness(() => studioApi.readiness())
+        if (report) setReadiness(report)
+      }
+      if (!readyToStart(trigger, undefined, report)) return
+      setError('')
       const flowId = telemetryId()
       const body = new FormData()
       body.append('goal', options.goal); body.append('language', options.language); body.append('instruction', options.instruction)
@@ -274,7 +276,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       // Project refresh should never make a successful import look like an upload failure.
       void onImported().catch(() => undefined)
       navigate(`/project/${result.project_id}`)
-    } catch (e) { const text = errorText(e); setError(text.startsWith(LOCAL_TRANSCRIPTION_GATE) ? LOCAL_TRANSCRIPTION_GATE : text.startsWith(LOCAL_TRANSCRIPTION_INSTALLING) ? LOCAL_TRANSCRIPTION_INSTALLING : t(text)) } finally { starting.current = false; setBusy(false) }
+    } catch (e) {
+      // R20 #168: the backend gate sends a stable code; the prompt is chosen from it, never from the text.
+      const kind = gateKind(errorCode(e))
+      setError(kind === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : kind === 'install' ? LOCAL_TRANSCRIPTION_GATE : t(errorText(e)))
+    } finally { starting.current = false; setBusy(false) }
   }
   submitRef.current = submit
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -294,7 +300,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
         <p className="ac-dropzone-title">{t('把链接或视频放在这里')}</p>
         <p className="ac-dropzone-hint">{t('粘贴链接，或拖入一个视频文件。')}</p>
         <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} disabled={busy}/></label>
-        {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" onClick={() => setFile(null)}>{t('移除')}</button></p>}
+        {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
         <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
       </div> : <>
         <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>!busy&&setSource(v)} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>

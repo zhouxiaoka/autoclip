@@ -300,13 +300,20 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
         logger.warning(f"更新项目状态失败: {e}")
 
 
-def prepare_project(req: RunRequest, link: bool = True, *, gate: bool = True) -> Path:
+def prepare_project(req: RunRequest, link: bool = True) -> Path:
     """
-    建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。
+    CLI / MCP 建项入口：先跑 1.5.8 门禁（content 路线），再把视频放进 raw/（见 place_video）。
     返回 raw 里的视频路径。
     """
-    from backend.core.path_utils import get_project_directory
+    _resolve_inputs(req)
+    from backend.services.studio import readiness
+    # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
+    # source does not count; the content route always transcribes, whatever the global analysis mode.
+    readiness.ensure_local_transcription_for_paths(req.video, req.srt, sibling_srt=False, route='content')
+    return place_video(req, link)
 
+
+def _resolve_inputs(req: RunRequest) -> None:
     req.video = req.video.expanduser().resolve()
     if not req.video.exists():
         raise FileNotFoundError(f"视频不存在: {req.video}")
@@ -314,13 +321,15 @@ def prepare_project(req: RunRequest, link: bool = True, *, gate: bool = True) ->
         req.srt = req.srt.expanduser().resolve()
         if not req.srt.exists():
             raise FileNotFoundError(f"字幕不存在: {req.srt}")
-    # 1.5.8: CLI / MCP run share the desktop gate (local Whisper missing or installing, no subtitle).
-    from backend.services.studio import readiness
-    # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
-    # source does not count; the content route always transcribes, whatever the global analysis mode.
-    # gate=False: the caller (quick output) already ran the single decision for its own route (R19 #113).
-    if gate:
-        readiness.ensure_local_transcription_for_paths(req.video, req.srt, sibling_srt=False, route='content')
+
+
+def place_video(req: RunRequest, link: bool = True) -> Path:
+    """
+    建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。不做门禁：
+    调用方（prepare_project、quick output）各自在建项入口判一次（R20 #148）。
+    """
+    from backend.core.path_utils import get_project_directory
+    _resolve_inputs(req)
 
     project_dir = get_project_directory(req.project_id)
     raw_dir = project_dir / "raw"

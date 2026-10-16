@@ -36,11 +36,39 @@ def call(fn, *args, **kwargs):
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from None
     except ValueError as error:
+        from backend.services.studio.readiness import TranscriptionNotReady
+        if isinstance(error, TranscriptionNotReady):
+            raise gate_refusal(error) from None
         raise HTTPException(422, str(error)) from None
 
 def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
+
+def gate_refusal(exc) -> HTTPException:
+    """The one HTTP shape of a 1.5.8 gate refusal: 422 with a stable ``code`` (R20 #168)."""
+    return HTTPException(422, exc.detail)
+
+
+async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
+    """Run the import gate; stage the upload only when the gate needs the file to decide.
+    Returns the staged path (or None). Every failure after staging removes the staged file;
+    only a gate refusal becomes a 422 (R20 #146)."""
+    from backend.services.studio import readiness
+    try:
+        readiness.ensure_local_transcription_for_import(srt_available=srt_available, route=route, goal=goal)
+        return None
+    except readiness.TranscriptionNotReady:
+        pass
+    staged = await stage_upload(video, first_chunk, ext)
+    try:
+        readiness.ensure_local_transcription_for_import(srt_available=srt_available, video=staged, route=route, goal=goal)
+    except BaseException as exc:
+        staged.unlink(missing_ok=True)
+        if isinstance(exc, readiness.TranscriptionNotReady):
+            raise gate_refusal(exc) from exc
+        raise
+    return staged
 
 @router.get('/title-presets/{style}/thumbnail')
 def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=6)):
@@ -142,15 +170,10 @@ async def import_visual(
     if video:
         # 1.5.8: block before creating a project when local Whisper is required but missing.
         try:
-            readiness.ensure_local_transcription_for_import(srt_available=subtitle_bytes is not None)
-        except ValueError:
-            staged = await stage_upload(video, first_chunk, ext)
-            try:
-                readiness.ensure_local_transcription_for_import(srt_available=subtitle_bytes is not None, video=staged)
-            except ValueError as exc:
-                staged.unlink(missing_ok=True)
-                await video.close()
-                raise HTTPException(422, str(exc)) from exc
+            staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
+        except HTTPException:
+            await video.close()
+            raise
     try:
         prefs = ImportOptions(
             goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
@@ -340,7 +363,7 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
     if not url:
         from backend.services.studio import readiness
         call(readiness.ensure_local_transcription_for_import,
-             srt_available=(jobs.source(project_id).parent / 'input.srt').is_file(), video=jobs.source(project_id))
+             srt_available=(jobs.source(project_id).parent / 'input.srt').is_file(), video=jobs.source(project_id), goal=prefs.goal)
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
 
@@ -360,7 +383,7 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
                 raise HTTPException(404, '原素材不存在，请重新导入')
         if not url:
             from backend.services.studio import readiness
-            call(readiness.ensure_local_transcription_for_paths, jobs.source(project_id), route='studio')
+            call(readiness.ensure_local_transcription_for_paths, jobs.source(project_id), route='studio', goal=body.goal)
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()

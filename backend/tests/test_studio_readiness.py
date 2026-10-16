@@ -47,7 +47,7 @@ def report_for(monkeypatch, settings):
     return readiness.report()
 
 
-@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_saved_document_is_ready_without_a_provider_call(monkeypatch):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness
@@ -124,7 +124,7 @@ def test_missing_whisper_offers_install(monkeypatch):
     assert report_for(monkeypatch, document())['checks']['transcription'] == {'ok': False, 'code': 'whisper_installing', 'repair': 'none'}
 
 
-@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_runtime_without_the_selected_model_is_not_ready(monkeypatch, isolated):
     # RC156 Win QA #5: an installed runtime alone cannot transcribe.
     from backend.services.whisper_model_manager import get_model_manager
@@ -142,7 +142,7 @@ def test_runtime_without_the_selected_model_is_not_ready(monkeypatch, isolated):
     assert report_for(monkeypatch, small)['checks']['transcription'] == {'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
 
 
-@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
     large = document(transcription=Transcription(model='large'))
     assert report_for(monkeypatch, large)['checks']['transcription']['model'] == 'large-v3'
@@ -179,7 +179,7 @@ def test_missing_ffmpeg_has_no_repair_action(monkeypatch):
     assert result['checks']['ffmpeg'] == {'ok': False, 'code': 'missing', 'repair': 'none'}
 
 
-@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_http_readiness_is_registered_before_project_routes(isolated, monkeypatch):
     from backend.services import ai_model_settings as ai
     ai.path().write_text(document().model_dump_json(), encoding='utf-8')
@@ -250,7 +250,7 @@ def test_require_transcription_raises_before_caller_spends(monkeypatch):
     readiness.require_transcription(srt_available=False, analysis_mode='visual')
 
 
-@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
     # W157 IA: right after the download thread reports "downloaded", readiness must say installed.
     from backend.services.whisper_model_manager import get_model_manager

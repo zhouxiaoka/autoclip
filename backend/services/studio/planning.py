@@ -19,6 +19,12 @@ class Recommendation(BaseModel):
 
 
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
+
+
+def takes_visual_route(analysis_mode, goal, duration) -> bool:
+    """Visual analysis mode keeps the visual route unless the goal is content or the source is too long.
+    Shared by planning and the import gate (readiness) so both decide the same route (R20 #144)."""
+    return analysis_mode == 'visual' and goal != 'content' and duration is not None and duration <= VISUAL_MAX_SOURCE_SEC
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
 # E1: AUTO mode, screening answered but the answer could not be parsed.
@@ -201,7 +207,7 @@ def recommend(video: Path, options: ImportOptions):
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    route = 'subtitle' if invalid_degrade else 'visual' if duration <= VISUAL_MAX_SOURCE_SEC and result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
+    route = 'subtitle' if invalid_degrade else 'visual' if takes_visual_route(consent.analysis_mode, result.goal, duration) or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content' and duration <= VISUAL_MAX_SOURCE_SEC) else 'subtitle'
     if short or no_audio:
         from backend.pipeline import media_precheck
         if route == 'subtitle' and options.auto_start:

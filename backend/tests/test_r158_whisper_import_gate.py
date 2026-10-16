@@ -59,12 +59,14 @@ def test_gate_blocks_missing_local_whisper_without_srt(monkeypatch, status):
 @pytest.mark.parametrize('kw,status,provider,mode', [
     ({'srt_available': True}, 'missing', 'whisper_local', 'subtitle'),
     ({'srt_available': False}, 'installed', 'whisper_local', 'subtitle'),
-    ({'srt_available': False}, 'missing', 'whisper_local', 'visual'),
+    # R20 #144: visual mode passes once the staged source shows it fits the visual route.
+    ({'srt_available': False, 'video': 'staged.mp4'}, 'missing', 'whisper_local', 'visual'),
 ])
 def test_gate_allows_srt_installed_cloud_or_visual(monkeypatch, kw, status, provider, mode):
     _settings(provider, mode)
     _whisper(monkeypatch, status)
     monkeypatch.setattr(readiness, '_whisper_model', lambda model: {'ok': True, 'code': 'whisper_installed'})
+    monkeypatch.setattr(readiness, '_source_duration', lambda video: 60.0)
     readiness.ensure_local_transcription_for_import(**kw)
 
 

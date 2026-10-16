@@ -264,8 +264,8 @@ async def smart_retry_project(
             from backend.services.studio import readiness
             try:
                 readiness.ensure_local_transcription_for_project(project_id)
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            except readiness.TranscriptionNotReady as exc:
+                raise HTTPException(status_code=422, detail=exc.detail) from exc
             processing_result = await retry_processing_only(project_id, db)
             return RetryResponse(
                 success=True,

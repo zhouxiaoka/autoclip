@@ -25,8 +25,8 @@ async def process_project(
     from backend.services.studio import readiness
     try:
         readiness.ensure_local_transcription_for_project(project_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except readiness.TranscriptionNotReady as exc:
+        raise HTTPException(status_code=422, detail=exc.detail) from exc
     try:
         result = processing_service.process_project(project_id)
         return {

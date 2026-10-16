@@ -25,7 +25,7 @@ os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autocli
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "stdlib_only: runtime regression without application dependencies")
-    config.addinivalue_line("markers", "real_whisper_status: skip the default simulated installed local Whisper")
+    config.addinivalue_line("markers", "own_whisper_status: the test simulates its own Whisper runtime state; skip the default simulated installed Whisper")
 
 
 class _FollowStudioExecutor:
@@ -85,7 +85,7 @@ def _whisper_installed_by_default(monkeypatch, request):
     # CI has no Whisper, so every suite runs with "local Whisper installed, model on disk" simulated;
     # the gate code itself still runs everywhere and passes because its condition is not met.
     # test_r158_whisper_* (and any test) override get_status to simulate "not installed".
-    if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("real_whisper_status"):
+    if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("own_whisper_status"):
         yield
         return
     from backend.services import whisper_runtime
