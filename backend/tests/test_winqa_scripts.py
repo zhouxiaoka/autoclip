@@ -288,12 +288,23 @@ def test_exe_provenance_records_setup_sha256(tmp_path):
     (r'log /home/\u5f20\u4e09', r'log /home/<user>'),
     (r'log "C:\\Users\\\u5f20\u4e09\\a"', r'log "C:\\Users\\<user>\\a"'),
     ('/Users/张三/a', '/Users/<user>/a'),
+    # R20 #116: plain Windows names that look like \\uXXXX (u + 4 hex digits).
+    (r'C:\Users\u1234\AppData\x.log', r'C:\Users\<user>\AppData\x.log'),
+    (r'C:\Users\uface', r'C:\Users\<user>'),
+    ('"C:\\\\Users\\\\u1234\\\\a"', '"C:\\\\Users\\\\<user>\\\\a"'),
+    # R20 #117: CRLF line end after a spaced name.
+    ('/Users/Jane Doe\r\nnext /home/Jane Doe\r\n', '/Users/<user>\r\nnext /home/<user>\r\n'),
+    (r'C:\Users\Jane Doe' + '\r\nx', r'C:\Users\<user>' + '\r\nx'),
+    # R20 #118: apostrophe inside a name; surrounding quotes are kept.
+    ("/Users/O'Connor/a", '/Users/<user>/a'),
+    (r"C:\Users\O'Connor\a", r'C:\Users\<user>\a'),
+    ("open '/home/kris' now", "open '/home/<user>' now"),
 ])
 def test_redact_scrubs_home_directories(tmp_path, raw, expected):
     redact = _module('redact')
-    (tmp_path / 'e.log').write_text(raw, encoding='utf-8')
+    (tmp_path / 'e.log').write_bytes(raw.encode('utf-8'))   # bytes: CRLF cases must reach redact.py intact
     redact.main(str(tmp_path))
-    assert (tmp_path / 'e.log').read_text(encoding='utf-8') == expected
+    assert (tmp_path / 'e.log').read_bytes().decode('utf-8') == expected
 
 
 @pytestmark_bash
@@ -337,12 +348,15 @@ def test_redact_json_with_escaped_chinese_names_stays_valid(tmp_path, indent):
 
 
 def test_ps1_uses_redact_py_patterns():
-    """R18 #86: the ps1 error exit embeds redact.py's exact WIN_PATTERN / POSIX_PATTERN."""
+    """R18 #86 / R20 #120: the ps1 error exit embeds redact.py's exact patterns and only uses -creplace."""
     redact = _module('redact')
     text = PS1.read_text(encoding='utf-8')
     q = lambda s: "'" + s.replace("'", "''") + "'"
+    assert f'$WinJsonPattern = {q(redact.WIN_JSON_PATTERN)}' in text
     assert f'$WinPattern = {q(redact.WIN_PATTERN)}' in text
     assert f'$PosixPattern = {q(redact.POSIX_PATTERN)}' in text
+    fail = text[text.index('function Fail'):text.index('trap {')]
+    assert '-creplace' in fail and not re.search(r'-i?replace\b', fail)
 
 
 PS1_ERROR_CASES = [
@@ -353,6 +367,12 @@ PS1_ERROR_CASES = [
     ('C:\\Users\\张三\\a', 'C:\\Users\\<user>\\a'),
     ('"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a"', '"C:\\\\Users\\\\<user>\\\\a"'),
     ('https://signed.invalid/z?sig=1', '<url>'),
+    (r'C:\Users\u1234\x', r'C:\Users\<user>\x'),
+    ('/Users/Jane Doe\r\nnext', '/Users/<user>\r\nnext'),
+    ("/Users/O'Connor/a", '/Users/<user>/a'),
+    # R20 #120: POSIX roots are case-sensitive in Python; PowerShell must agree.
+    ('/USERS/kris/x and /HOME/qa', '/USERS/kris/x and /HOME/qa'),
+    ('HTTPS://x.invalid/y', 'HTTPS://x.invalid/y'),
 ]
 
 
@@ -364,4 +384,46 @@ def test_pwsh_error_exit_redacts_like_redact_py(tmp_path, raw, expected):
     assert redact.scrub_stream(raw) == expected
     done, _ = _ps(tmp_path, want_zip='', run=raw)
     assert done.returncode == 4, done.stdout + done.stderr
-    assert done.stderr.strip() == f'artifact digest missing or invalid; refusing to download run {expected}'
+    # text-mode capture folds CRLF to LF; leaked name parts would still show up.
+    assert done.stderr.rstrip('\n') == f'artifact digest missing or invalid; refusing to download run {expected}'.replace('\r\n', '\n')
+
+
+def test_redact_json_colliding_keys_are_all_kept(tmp_path):
+    """R20 #119: two users' paths as keys scrub to one key; both entries must survive."""
+    redact = _module('redact')
+    doc = {'/Users/alice/a.log': 1, '/Users/bob/a.log': 2, '/Users/<user>/a.log#2': 3, 'other': 4}
+    (tmp_path / 'e.json').write_text(json.dumps(doc), encoding='utf-8')
+    redact.main(str(tmp_path))
+    data = json.loads((tmp_path / 'e.json').read_text(encoding='utf-8'))
+    assert sorted(data.values()) == [1, 2, 3, 4]
+    assert all('alice' not in k and 'bob' not in k for k in data)
+    assert data['/Users/<user>/a.log'] == 1 and data['other'] == 4
+
+
+def test_redact_json_is_scrubbed_after_parsing(tmp_path):
+    """R20 #122: escaped solidus and mixed escapes only decode through json.loads (text rules miss them)."""
+    redact = _module('redact')
+    raw = '{"p": "\\/Users\\/kris\\/a", "w": "C:\\\\U\\u0073ers\\\\qa\\\\x"}'
+    assert json.loads(raw) == {'p': '/Users/kris/a', 'w': 'C:\\Users\\qa\\x'}
+    assert redact.scrub_homes(raw) == raw, 'text rules alone do not see these; the JSON step must'
+    (tmp_path / 'e.json').write_text(raw, encoding='utf-8')
+    redact.main(str(tmp_path))
+    assert json.loads((tmp_path / 'e.json').read_text(encoding='utf-8')) == {'p': '/Users/<user>/a', 'w': 'C:\\Users\\<user>\\x'}
+
+
+@need_pwsh
+def test_pwsh_verify_only_replaces_its_own_files(tmp_path):
+    """R20 #121: other files in the install folder (and prev-setup.exe) are left alone."""
+    data = _zip_with_exe()
+    inst = tmp_path / 'inst'
+    inst.mkdir()
+    keep = {'prev-setup.exe': b'prev', 'notes.txt': b'n', 'other-setup.exe': b'o', 'candidate.sha256': b'old'}
+    for name, body in keep.items():
+        (inst / name).write_bytes(body)
+    (inst / 'candidate-setup.exe').write_bytes(b'old candidate')
+    done, inst = _ps(tmp_path, want_zip=hashlib.sha256(data).hexdigest(), want_exe=hashlib.sha256(b'installer').hexdigest(), data=data)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert (inst / 'candidate-setup.exe').read_bytes() == b'installer'
+    assert 'candidate-setup.exe' in (inst / 'candidate.sha256').read_text()
+    for name in ('prev-setup.exe', 'notes.txt', 'other-setup.exe'):
+        assert (inst / name).read_bytes() == keep[name], name

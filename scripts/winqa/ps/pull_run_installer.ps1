@@ -2,10 +2,12 @@ param([string]$Run,[int64]$Total,[int]$N=16,[string]$WantZip='',[string]$WantExe
 # Exit codes: 4 missing/invalid digest; 6 download (HTTP/curl) failure; 7 hash mismatch; 1 any other error.
 # R16 #51: report on stderr and exit with the code; the Write-Err*r cmdlet under 'Stop' would abort before exit.
 function Fail([int]$Code, [string]$Message) {
-  # R18 #86: same rules as redact.py (WIN_PATTERN / POSIX_PATTERN, copied verbatim; a test keeps them in sync).
-  $WinPattern = '(?im)\b([a-z]:)((?:\\\\|\\(?!u[0-9a-fA-F]{4})|/)+)users((?:\\\\|\\(?!u[0-9a-fA-F]{4})|/)+)(?!<user>)(?:(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+(?: +(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)*(?=\\|/|["\'':]|$)|(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)'
-  $PosixPattern = '(?m)(?<![\w.-])/(Users|home)/(?!<user>)(?:(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+(?: +(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)*(?=\\|/|["\'':]|$)|(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)'
-  $clean = $Message -replace $WinPattern, '$1$2Users$3<user>' -replace $PosixPattern, '/$1/<user>' -replace 'https?://\S+', '<url>'
+  # R18 #86: same rules as redact.py (patterns copied verbatim; test_ps1_uses_redact_py_patterns keeps them in sync).
+  # R20 #120: -creplace so case sensitivity comes only from the inline flags, exactly as in Python re.
+  $WinJsonPattern = '(?im)\b([a-z]:)((?:\\\\)+)users((?:\\\\)+)(?!<user>)(?:(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+(?:''(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+)*(?: +(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+(?:''(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+)*)*(?=\\|/|["'':\r]|$)|(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+(?:''(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+)*)'
+  $WinPattern = '(?im)\b([a-z]:)((?:\\|/)+)users((?:\\|/)+)(?!<user>)(?:[^\\/\s"''<>|:*?]+(?:''[^\\/\s"''<>|:*?]+)*(?: +[^\\/\s"''<>|:*?]+(?:''[^\\/\s"''<>|:*?]+)*)*(?=\\|/|["'':\r]|$)|[^\\/\s"''<>|:*?]+(?:''[^\\/\s"''<>|:*?]+)*)'
+  $PosixPattern = '(?m)(?<![\w.-])/(Users|home)/(?!<user>)(?:(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+(?:''(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+)*(?: +(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+(?:''(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+)*)*(?=\\|/|["'':\r]|$)|(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+(?:''(?:\\u[0-9a-fA-F]{4}|[^\\/\s"''<>|:*?])+)*)'
+  $clean = $Message -creplace $WinJsonPattern, '$1$2Users$3<user>' -creplace $WinPattern, '$1$2Users$3<user>' -creplace $PosixPattern, '/$1/<user>' -creplace 'https?://\S+', '<url>'
   [Console]::Error.WriteLine($clean); exit $Code
 }
 trap { Fail 1 ("unexpected error: " + $_.Exception.Message) }
@@ -42,7 +44,8 @@ $exe=Get-ChildItem (Join-Path $dir 'unz') -Recurse -Filter '*-setup.exe' | Selec
 if(-not $exe){ Remove-Item -Recurse -Force $dir; Fail 7 'no *-setup.exe in artifact' }
 $eh=(Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower(); "exe=$($exe.Name) size=$($exe.Length) sha256=$eh"
 if($WantExe -and $eh -ne $WantExe){ Remove-Item -Recurse -Force $dir; Fail 7 "exe sha256 mismatch vs provenance (want $WantExe)" }
-Get-ChildItem $inst -File | Where-Object { $_.Name -ne 'prev-setup.exe' -and $_.Name -notlike '.url-*' } | Remove-Item -Force
+# R20 #121: replace only this script's own outputs; never sweep other files in the install folder.
+foreach($own in 'candidate-setup.exe','candidate.sha256'){ Remove-Item -LiteralPath (Join-Path $inst $own) -Force -ErrorAction SilentlyContinue }
 Move-Item $exe.FullName (Join-Path $inst 'candidate-setup.exe') -Force
 Set-Content (Join-Path $inst 'candidate.sha256') "$eh  candidate-setup.exe  run=$Run  name=$($exe.Name)"
 Remove-Item -Recurse -Force $dir

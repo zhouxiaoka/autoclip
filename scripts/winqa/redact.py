@@ -11,18 +11,30 @@ from pathlib import Path
 # separator (or end of value) is masked. A spaced run only counts when another path separator,
 # a quote, a colon (R18 #88: "/Users/Jane Doe: Permission denied") or the end of the line follows,
 # so prose after a bare "/home/a" is not swallowed.
-# R18 #85: JSON text may carry the name as \\uXXXX escapes ("/Users/\\u5f20\\u4e09"); an escape is one
-# name character, and a backslash that starts an escape is never a path separator. .json files are
-# additionally parsed and scrubbed string by string (see _scrub_json).
+# R18 #85 / R20 #116: JSON-escaped text carries the name as \\uXXXX escapes ("/Users/\\u5f20\\u4e09").
+# Escapes are only read as name characters where separators are JSON's doubled backslash (WIN_JSON)
+# or '/' (POSIX); plain Windows paths (single backslash) treat "\u1234" as separator + name "u1234".
+# R20 #117: a CR (CRLF line end) also ends a spaced name. R20 #118: an apostrophe between name
+# characters ("O'Connor") is part of the name; a leading/trailing quote is not.
+# .json files are additionally parsed and scrubbed string by string (see _scrub_json).
 # R18 #86: ps/pull_run_installer.ps1 embeds these exact pattern strings (test_ps1_uses_redact_py_patterns).
-CH = r'(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\'<>|:*?])'
-SEP = r'(?:\\\\|\\(?!u[0-9a-fA-F]{4})|/)+'
-SEG = r'(?!<user>)(?:' + CH + r'+(?: +' + CH + r'+)*(?=\\|/|["\':]|$)|' + CH + r'+)'
-WIN_PATTERN = r'(?im)\b([a-z]:)(' + SEP + r')users(' + SEP + r')' + SEG
-POSIX_PATTERN = r'(?m)(?<![\w.-])/(Users|home)/' + SEG
+_X = r'[^\\/\s"' + "'" + r'<>|:*?]'
+_XE = r'(?:\\u[0-9a-fA-F]{4}|' + _X + ')'
+
+
+def _seg(ch):
+    word = ch + "+(?:'" + ch + '+)*'
+    return r'(?!<user>)(?:' + word + r'(?: +' + word + r')*(?=\\|/|["' + "'" + r':\r]|$)|' + word + ')'
+
+
+WIN_JSON_PATTERN = r'(?im)\b([a-z]:)((?:\\\\)+)users((?:\\\\)+)' + _seg(_XE)
+WIN_PATTERN = r'(?im)\b([a-z]:)((?:\\|/)+)users((?:\\|/)+)' + _seg(_X)
+POSIX_PATTERN = r'(?m)(?<![\w.-])/(Users|home)/' + _seg(_XE)
+WIN_REPLACEMENT, POSIX_REPLACEMENT = r'\1\2Users\3<user>', r'/\1/<user>'
 HOME_PATTERNS = [
-    (re.compile(WIN_PATTERN), r'\1\2Users\3<user>'),
-    (re.compile(POSIX_PATTERN), r'/\1/<user>'),
+    (re.compile(WIN_JSON_PATTERN), WIN_REPLACEMENT),
+    (re.compile(WIN_PATTERN), WIN_REPLACEMENT),
+    (re.compile(POSIX_PATTERN), POSIX_REPLACEMENT),
 ]
 URL = re.compile(r'https?://\S+')
 
@@ -52,7 +64,17 @@ def _scrub_json(text: str, key: str):
 
     def walk(o, field=None):
         if isinstance(o, dict):
-            return {walk(k): walk(v, k) for k, v in o.items()}
+            # R20 #119: two different home paths used as keys may scrub to the same key; keep both.
+            out = {}
+            for k, v in o.items():
+                ck = walk(k)
+                if ck in out:
+                    i = 2
+                    while f'{ck}#{i}' in out:
+                        i += 1
+                    ck = f'{ck}#{i}'
+                out[ck] = walk(v, k)
+            return out
         if isinstance(o, list):
             return [walk(x) for x in o]
         if isinstance(o, str):
@@ -75,13 +97,13 @@ def _run(folder):
     for p in folder.rglob('*'):
         if not p.is_file() or p.suffix.lower() not in ('.json', '.log', '.err', '.txt', '.md', '.cmd'):
             continue
-        t = p.read_text(encoding='utf-8', errors='replace')
+        t = p.read_bytes().decode('utf-8', errors='replace')   # R20 #117: keep CRLF as-is
         n = _scrub_json(t, key) if p.suffix.lower() == '.json' else None
         if n is None:
             n = _scrub_text(t, key)
         if n != t:
             hits += 1
-            p.write_text(n, encoding='utf-8')
+            p.write_bytes(n.encode('utf-8'))
     print(f'redact: rewrote {hits} file(s)')
     return hits
 
