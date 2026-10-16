@@ -16,7 +16,7 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, gateKind, waitProgress, type WaitProgress, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, createTranscriptionWait, gateKind, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
@@ -191,14 +191,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   }
   // R24 #232: the waiting prompt polls readiness and the install / download progress, continues the
   // same import in one click once ready, and can restart a failed or stalled install.
-  const waitForTranscription = useRef(async (): Promise<WaitProgress> => {
-    const report = await studioApi.readiness()
-    if (report) setReadiness(report)
-    const check = report?.checks?.transcription
-    const runtime = check?.code === 'whisper_installing' ? await speechApi.getRuntimeStatus() : null
-    const models = check?.code === 'whisper_model_downloading' ? await speechApi.getModels() : null
-    return waitProgress(check, runtime, models)
-  }).current
+  const waitForTranscription = useRef(createTranscriptionWait({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), downloadModel: model => speechApi.downloadModel(model) }, report => setReadiness(report))).current
   const continueAfterWait = () => { setError(''); void submitRef.current?.('button') }
   const retryWait = async () => {
     const check = readiness?.checks?.transcription

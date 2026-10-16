@@ -1,13 +1,13 @@
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Btn, Dialog, Row, Segmented, fmtDuration } from '../../ui'
 import { AnalysisMode, Goal, ImportOptions, ImportPlan, defaultImportOptions, goalLabels, languages } from './types'
 import ImportPreferences from './ImportPreferences'
 import { studioApi, errorText, errorCode } from './api'
 import { useNavigate } from 'react-router-dom'
 import { speechApi } from '../../services/api'
-import { gateKind, type ReadinessIssue } from './importReadiness'
+import { createTranscriptionWait, gateKind, type ReadinessCheck, type ReadinessIssue } from './importReadiness'
 import TranscriptionGatePrompt, { LOCAL_TRANSCRIPTION_GATE, LOCAL_TRANSCRIPTION_INSTALLING } from './TranscriptionGatePrompt'
 
 const contentLabels: Record<string,string> = {gameplay:'游戏录屏',talk:'讲解 / 访谈',sport:'运动内容',vlog:'生活记录',mixed:'混合内容',other:'视频内容'}
@@ -36,7 +36,11 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
   const show=()=>{setValue({...defaultImportOptions,...plan?.overrides});setError('');setOpen(true)}
   const apply=async()=>{setBusy(true);setError('');try{await studioApi.correctPlan(projectId,value);setOpen(false);onChanged()}catch(e){setError(t(errorText(e)))}finally{setBusy(false)}}
   const start=async()=>{if(!plan||!selected.length)return;setBusy(true);setError('');setGate(null);try{await studioApi.confirmPlan(projectId,plan.id,selected,value,analysisMode);if(onStarted)onStarted();else onChanged()}catch(e){const kind=gateKind(errorCode(e));if(kind)setGate(kind);else setError(t(errorText(e)))}finally{setBusy(false)}}
-  const install=async(item:ReadinessIssue)=>{setRepairing(true);setError('');try{if(item.model)await speechApi.downloadModel(item.model);else await speechApi.installRuntime();setGate(null)}catch(e){setError(t(errorText(e)))}finally{setRepairing(false)}}
+  // R24 #281: the one-click install keeps the dialog open and waits through runtime -> model download (same poll as the import page, #280).
+  const install=async(item:ReadinessIssue)=>{setRepairing(true);setError('');try{const known=item.model?item:(await studioApi.readiness().catch(()=>null))?.checks?.transcription;if(known?.model&&String(known.code).startsWith('whisper_model'))await speechApi.downloadModel(known.model);else await speechApi.installRuntime();setGate('installing')}catch(e){setError(t(errorText(e)))}finally{setRepairing(false)}}
+  const [lastCheck,setLastCheck]=useState<ReadinessCheck|null>(null)
+  const wait=useRef(createTranscriptionWait({readiness:()=>studioApi.readiness(),getRuntimeStatus:()=>speechApi.getRuntimeStatus(),getModels:()=>speechApi.getModels(),downloadModel:model=>speechApi.downloadModel(model)},report=>setLastCheck(report.checks?.transcription||null))).current
+  const retryWait=async()=>{try{if(lastCheck?.model&&lastCheck.code!=='whisper_installing')await speechApi.downloadModel(lastCheck.model);else await speechApi.installRuntime()}catch{/* next poll reports */}}
   const incompatible=analysisMode==='visual'&&selected.length===1&&selected[0]==='content'
   const unavailable=analysisMode==='visual'&&!capability?.visual_analysis
   const prefs=plan?.preferences
@@ -62,7 +66,7 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
         <details className="studio-details"><summary>{t("调整制作参数（可选）")}</summary><ImportPreferences value={value} onChange={setValue} hideGoal/></details>
         <div className="studio-row studio-confirm-footer"><span className="studio-muted">{selected.length?t('将制作 {{count}} 类内容', { count: selected.length }):t("至少选择一种制作类型")}</span><Btn variant="cta" disabled={!selected.length||busy||incompatible||unavailable} loading={busy} onClick={start}>{t("确认并开始制作")}</Btn></div>
       </> : <div className="studio-actions">{plan?.selected_goals&&<span className="studio-muted">{plan.selected_goals.map(g=>t(goalLabels[g])).join(' / ')}</span>}<Btn size="sm" disabled={running} onClick={show}>{t("修改方案")}</Btn></div>}
-      {!open&&gate&&<TranscriptionGatePrompt kind={gate==='installing'?LOCAL_TRANSCRIPTION_INSTALLING:LOCAL_TRANSCRIPTION_GATE} busy={busy} repairing={repairing} repair={install} navigate={navigate}/>}
+      {!open&&gate&&<TranscriptionGatePrompt kind={gate==='installing'?LOCAL_TRANSCRIPTION_INSTALLING:LOCAL_TRANSCRIPTION_GATE} busy={busy} repairing={repairing} repair={install} navigate={navigate} check={lastCheck} wait={wait} onContinue={()=>{setGate(null);void start()}} retry={retryWait}/>}
       {!open&&error&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={open} onClose={()=>!busy&&setOpen(false)} title={t("调整制作方案")} description={t("使用同一份素材重新推荐，确认后再制作；已有草稿和导出会保留。")} footer={<div className="studio-actions"><Btn disabled={busy} onClick={()=>setOpen(false)}>{t("取消")}</Btn><Btn variant="cta" loading={busy} onClick={apply}>{t("重新推荐")}</Btn></div>}>

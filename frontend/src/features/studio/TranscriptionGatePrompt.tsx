@@ -30,8 +30,8 @@ const STALL_MS = 10 * 60 * 1000
 
 /** R24 #232: waiting for Whisper (install or model download) never traps the user: progress while it runs,
  * one-click continue once ready, retry or transcription settings when it fails or stalls. */
-function WaitingPrompt({ wait, onContinue, retry, navigate, busy, pollMs = 2000, stallMs = STALL_MS }: TranscriptionGatePromptProps) {
-  const [state, setState] = useState<WaitProgress>({ state: 'waiting' })
+function WaitingPrompt({ wait, onContinue, retry, navigate, busy, check, pollMs = 2000, stallMs = STALL_MS }: TranscriptionGatePromptProps) {
+  const [state, setState] = useState<WaitProgress>({ state: 'waiting', phase: check?.code === 'whisper_model_downloading' ? 'download' : 'install' })
   const [stalled, setStalled] = useState(false)
   const [round, setRound] = useState(0)
   const last = useRef<{ percent: number | null | undefined; at: number }>({ percent: undefined, at: Date.now() })
@@ -54,7 +54,7 @@ function WaitingPrompt({ wait, onContinue, retry, navigate, busy, pollMs = 2000,
     void tick()
     return () => { alive = false; if (timer) clearTimeout(timer) }
   }, [wait, round, pollMs, stallMs])
-  const again = async () => { setStalled(false); setState({ state: 'waiting' }); await retry?.(); setRound(value => value + 1) }
+  const again = async () => { setStalled(false); setState({ state: 'waiting', phase: state.phase }); await retry?.(); setRound(value => value + 1) }
   const failed = state.state === 'failed' || stalled
   const percent = typeof state.percent === 'number' ? Math.max(0, Math.min(100, Math.round(state.percent))) : null
   return <div className="studio-readiness" role="alertdialog" aria-label={t('等待安装完成')}>
@@ -69,7 +69,7 @@ function WaitingPrompt({ wait, onContinue, retry, navigate, busy, pollMs = 2000,
         <Btn size="sm" disabled={busy} onClick={() => navigate(repairDestination('settings_transcription') as string)}>{t('打开转写设置')}</Btn>
       </div>
     </> : <>
-      <span>{t('本地 Whisper 正在安装，装好后再开始。')}</span>
+      <span>{t(state.phase === 'download' ? '正在下载转写模型，下载完成后即可继续。' : '本地 Whisper 正在安装，装好后再开始。')}</span>
       {percent != null && <span className="studio-muted" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>{t('已完成 {{percent}}%', { percent })}</span>}
     </>}
   </div>

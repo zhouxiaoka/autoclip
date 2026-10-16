@@ -1956,5 +1956,6 @@
   "安装或模型下载失败，可以重试，或到转写设置里查看。": "La instalación o la descarga del modelo falló. Reintenta o revisa los ajustes de transcripción.",
   "已完成 {{percent}}%": "{{percent}}% completado",
   "这个素材无法使用": "Este archivo no se puede usar",
-  "换一个视频": "Usar otro vídeo"
+  "换一个视频": "Usar otro vídeo",
+  "正在下载转写模型，下载完成后即可继续。": "Descargando el modelo de transcripción. Podrás continuar cuando termine."
 }

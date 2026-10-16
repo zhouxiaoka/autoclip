@@ -263,6 +263,8 @@ test('R24 #232: the model download dialog shows live progress, then one click co
   await openWaiting(view)
   assert.equal(view.host.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '35')
   assert.match(view.host.textContent, /已完成 35%/)
+  assert.match(view.host.textContent, /正在下载转写模型/, 'a download is not shown as an install')
+  assert.doesNotMatch(view.host.textContent, /正在安装/)
   percent = 80
   await clock.advance(2000)
   assert.equal(view.host.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '80')

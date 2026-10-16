@@ -43,7 +43,7 @@ const h = React.createElement
 const Btn = ({ children, onClick, disabled, loading }) => h('button', { type: 'button', onClick, disabled: !!(disabled || loading) }, children)
 const axios422 = detail => Object.assign(new Error('Request failed with status code 422'), { response: { status: 422, data: { detail } } })
 
-async function mount(confirmPlan) {
+async function mount(confirmPlan, poll = {}) {
   const installs = []; const navs = []
   const realErrorText = load('errorText.ts', {})
   const mocks = {
@@ -53,8 +53,8 @@ async function mount(confirmPlan) {
     '../../ui': { Btn, Dialog: () => null, Row: ({ children }) => h('div', null, children), Segmented: () => null, fmtDuration: String },
     './types': { defaultImportOptions: {}, goalLabels: { content: '内容切片', highlight: '高光', promo: '推广' }, languages: [] },
     './ImportPreferences': { default: () => null },
-    './api': { studioApi: { capabilities: async () => ({ visual_analysis: false, visual_model: '' }), confirmPlan }, ...realErrorText },
-    '../../services/api': { speechApi: { installRuntime: async () => { installs.push('runtime'); return {} }, downloadModel: async m => { installs.push(m); return {} } } },
+    './api': { studioApi: { capabilities: async () => ({ visual_analysis: false, visual_model: '' }), confirmPlan, readiness: poll.readiness || (async () => null) }, ...realErrorText },
+    '../../services/api': { speechApi: { installRuntime: async () => { installs.push('runtime'); return {} }, downloadModel: async m => { installs.push(m); return {} }, getRuntimeStatus: poll.runtime || (async () => ({ status: 'installing', progress: 0 })), getModels: poll.models || (async () => []) } },
   }
   const PlanSummary = load('PlanSummary.tsx', mocks).default
   const host = document.createElement('div')
@@ -70,22 +70,30 @@ async function mount(confirmPlan) {
 }
 const dialog = host => host.querySelector('[role=alertdialog]')
 
-test('R23 #211: confirm refused with whisper_not_installed opens the install prompt; 一键安装 runs the install', async () => {
+test('R24 #281: 一键安装 on the confirm page carries a clean setup through runtime -> model download, then one click confirms again', async () => {
   swallowed.length = 0
-  const view = await mount(async () => { throw axios422({ code: 'whisper_not_installed', message: '需要先安装本地转写：……' }) })
+  const tc = (code, extra = {}) => ({ analysis_mode: 'subtitle', ready: false, checks: { transcription: { ok: false, code, repair: 'none', ...extra } } })
+  const reports = [tc('whisper_installing'), tc('whisper_model_missing', { model: 'base' }), tc('whisper_model_downloading', { model: 'base' }), { analysis_mode: 'subtitle', ready: true, checks: { transcription: { ok: true, code: 'whisper_installed', repair: 'none' } } }]
+  let polls = 0
+  let confirms = 0
+  const view = await mount(async () => { confirms++; if (confirms === 1) throw axios422({ code: 'whisper_not_installed', message: '需要先安装本地转写：……' }) },
+    { readiness: async () => reports[Math.min(polls++, reports.length - 1)], runtime: async () => ({ status: 'installing', progress: 40 }), models: async () => [{ name: 'base', status: 'downloading', downloadProgress: 60 }] })
   await view.confirm()
-  assert.ok(dialog(view.host), 'the install prompt must open, not only the error text')
   assert.equal(dialog(view.host).getAttribute('aria-label'), '需要先安装本地转写')
-  assert.equal(view.host.querySelector('.studio-error'), null)
   await act(async () => { view.button('一键安装').click() })
   await act(async () => {})
-  assert.deepEqual(view.installs, ['runtime'])
-  assert.equal(dialog(view.host), null, 'prompt closes once the install started; the user confirms again')
-  await act(async () => { view.button('确认并开始制作').click() })
+  assert.equal(view.installs[0], 'runtime')
+  assert.equal(dialog(view.host).getAttribute('aria-label'), '等待安装完成', 'the prompt stays and waits instead of closing')
+  const until = async (fn, ms = 12000) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await act(async () => { await new Promise(r => setTimeout(r, 100)) }) }
+  await until(() => view.installs.includes('base'))
+  assert.deepEqual(view.installs, ['runtime', 'base'], 'runtime done, model missing -> the model download starts by itself')
+  await until(() => /下载转写模型/.test(view.host.textContent))
+  assert.match(view.host.textContent, /正在下载转写模型/)
+  await until(() => !!view.button('继续导入'))
+  await act(async () => { view.button('继续导入').click() })
   await act(async () => {})
-  assert.equal(dialog(view.host).getAttribute('aria-label'), '需要先安装本地转写')
-  await act(async () => { view.button('改用云端转写').click() })
-  assert.deepEqual(view.navs, ['/settings?section=speech&provider=cloud'])
+  assert.equal(confirms, 2, 'continue confirms the same plan again')
+  assert.equal(dialog(view.host), null)
   assert.deepEqual(swallowed, [])
   view.unmount()
 })

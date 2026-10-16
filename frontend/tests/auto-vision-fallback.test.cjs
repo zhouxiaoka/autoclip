@@ -30,7 +30,7 @@ test('S5 AUTO fallback message renders from the plan in all eight locales',()=>{
    '../../ui':{Btn:passthrough,Dialog:()=>null,Row:passthrough,Segmented:()=>null,fmtDuration:String},
    './types':{defaultImportOptions:{},goalLabels:{content:'content'},languages:[]},
    './ImportPreferences':{default:()=>null},'./api':{studioApi:{},errorText:String},
-   'react-router-dom':{useNavigate:()=>()=>{}},'../../services/api':{speechApi:{}},'./importReadiness':{gateKind:()=>null},
+   'react-router-dom':{useNavigate:()=>()=>{}},'../../services/api':{speechApi:{}},'./importReadiness':{gateKind:()=>null,createTranscriptionWait:()=>async()=>({state:'waiting'})},
    './TranscriptionGatePrompt':{default:()=>null,LOCAL_TRANSCRIPTION_GATE:'g',LOCAL_TRANSCRIPTION_INSTALLING:'i'},
   }).default
   const html=renderToStaticMarkup(React.createElement(Plan,{
