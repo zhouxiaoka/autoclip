@@ -30,6 +30,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
     if (name === '../../analytics/studio') return { trackLegacyEntry() {} }
     if (name === './legacyEntrypoints') return { legacyEntrypointsHidden: () => false }
+    if (name === './FailureActions') return loadTsx('../src/features/studio/FailureActions.tsx', moduleRequire)
     return { default: empty }
   }
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
@@ -40,6 +41,14 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     project: { id: 'test', status: 'processing', settings: { smart_import: {} }, clips: [], collections: [] },
     onCreateCollection() {}, onReload() {},
   }))
+}
+
+function loadTsx(rel, moduleRequire, globals = {}) {
+  const exportsObject = {}
+  const src = fs.readFileSync(path.join(__dirname, rel), 'utf8')
+  vm.runInNewContext(ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText,
+    { exports: exportsObject, require: moduleRequire, URLSearchParams, ...globals })
+  return exportsObject
 }
 
 const navigations = []
@@ -72,7 +81,7 @@ test('active automatic output never offers a second analysis submission', () => 
 
 test('invalid API key renders the new copy instead of missing-key guidance', () => {
   const html = render(true, 'production', 'failed', [], [], 'llm_auth_invalid')
-  assert.match(html, /API Key 无效或已过期，请检查后重试/)
+  assert.match(html, /API Key 无效或已过期，请到设置里更新后再试/)
   assert.doesNotMatch(html, /需要你自己的 API Key|自备/)
 })
 
@@ -174,11 +183,33 @@ test('R20 #125 settings save returns to the project only when opened from one an
   r.notifySettingsSaved({ dispatchEvent: e => { fired.push(e.type); return true } })
   assert.deepEqual(fired, [r.SETTINGS_SAVED_EVENT])
 })
-test('R20 #125 wiring: only a validated save notifies; App mounts the listener', () => {
-  const hook = fs.readFileSync(path.join(__dirname, '../src/features/settings/useModelSettings.ts'), 'utf8')
+test('R22 #173: the real listener returns to the project on the one save notification', () => {
   const r = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
-  assert.ok(hook.includes('if (!failed && !visionFailed) notifySaved()'))
-  assert.ok(hook.includes(`window.dispatchEvent(new Event('${r.SETTINGS_SAVED_EVENT}'))`))
+  const listeners = {}, navigated = []
+  const win = { addEventListener: (n, f) => { listeners[n] = f }, removeEventListener: (n) => { delete listeners[n] }, dispatchEvent: e => { listeners[e.type]?.(e); return true } }
+  const effects = []
+  const mod = loadTsx('../src/features/studio/SettingsReturnListener.tsx', name => {
+    if (name === 'react') return { useEffect: f => effects.push(f) }
+    if (name === 'react-router-dom') return { useLocation: () => ({ pathname: '/settings', search: '?section=speech&return_project=p-1' }), useNavigate: () => to => navigated.push(to) }
+    if (name === './settingsReturn') return r
+    throw new Error(name)
+  }, { window: win })
+  mod.default(); effects.forEach(f => f())
+  r.notifySettingsSaved(win)                        // the function production calls after a validated save
+  assert.deepEqual(navigated, ['/project/p-1?continue=1'])
+  const hook = fs.readFileSync(path.join(__dirname, '../src/features/settings/useModelSettings.ts'), 'utf8')
+  assert.ok(hook.includes('if (!failed && !visionFailed) notifySettingsSaved()'))
+  assert.equal(/dispatchEvent|function notifySaved/.test(hook), false, 'no second notification implementation')
   const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8')
   assert.ok(app.includes('<SettingsReturnListener />'))
+})
+test('R22 code health: failure state computed once, each button at most once', () => {
+  const fa = loadTsx('../src/features/studio/FailureActions.tsx', name => name === './failureAction' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')) : name === '../../utils/llmFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts')) : name === 'react/jsx-runtime' ? require(name) : {})
+  const keys = p => JSON.parse(JSON.stringify(p.buttons.map(b => `${b.key}${b.cta ? '*' : ''}`)))
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, false)), ['settings*', 'continue'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, true)), ['continue*', 'settings'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, false, true)), ['settings*'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
+  assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '这个 API Key 没有该模型的使用权限，请到设置里更换')
 })

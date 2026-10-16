@@ -17,6 +17,7 @@ export function returnAfterSave(search: string): string | null {
   return pid && /^[\w-]{1,128}$/.test(pid) ? `/project/${encodeURIComponent(pid)}?${CONTINUE_PARAM}=1` : null
 }
 
+/** The only save notification (R22 #173). A notification problem never turns a saved settings into a failure. */
 export function notifySettingsSaved(target: { dispatchEvent(e: Event): boolean } | undefined = typeof window === 'undefined' ? undefined : window) {
-  target?.dispatchEvent(new Event(SETTINGS_SAVED_EVENT))
+  try { target?.dispatchEvent(new Event(SETTINGS_SAVED_EVENT)) } catch { /* no DOM (tests / SSR) */ }
 }
