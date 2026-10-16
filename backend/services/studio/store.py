@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-import threading
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -14,7 +13,16 @@ from pathlib import Path
 
 from backend.core.path_utils import get_projects_directory
 
-lock = threading.RLock()
+from backend.core.file_lock import ProcessLock  # noqa: E402
+
+
+def _lock_path():
+    return Path(get_projects_directory()) / '.studio-store.lock'
+
+
+# R25 #415 #335: every project writer AND the shutdown-marker scan->delete hold this lock; it also
+# excludes CLI/MCP child processes writing the same data directory (file lock with a timeout).
+lock = ProcessLock(_lock_path)
 from backend.core.launch_token import instance_id as _shell_instance_id  # noqa: E402
 INSTANCE = _shell_instance_id() or uuid.uuid4().hex  # R19 #98: shell-assigned when launched by the desktop app
 
@@ -489,17 +497,19 @@ def _fsync_file(path):
 
 
 def _fsync_dir(directory):
-    """R24 #295: a rename inside ``directory`` survives power loss (POSIX; no-op on Windows)."""
+    """R24 #295 / R25 #337: a rename inside ``directory`` survives power loss (POSIX; Windows has no
+    directory fsync). Returns False when durability is unknown; callers must not shrink protection."""
     if os.name == 'nt':
-        return
+        return True
     try:
         fd = os.open(directory, os.O_RDONLY)
     except OSError:
-        return
+        return False
     try:
         os.fsync(fd)
+        return True
     except OSError:
-        pass
+        return False
     finally:
         os.close(fd)
 
@@ -511,7 +521,8 @@ def _publish(path, text, encoding):
         tmp.write_text(text, encoding=encoding)
         _fsync_file(tmp)
         _replace_state(tmp, path)
-        _fsync_dir(path.parent)
+        if not _fsync_dir(path.parent):
+            logger.warning('Ledger directory durability unknown')
     finally:
         try:
             tmp.unlink(missing_ok=True)
@@ -554,8 +565,15 @@ def _write_refs(state_path, data, previous):
     old = _ledger_content(path) or set()
     before = _instances_referenced(previous) if isinstance(previous, dict) else set()
     after = _instances_referenced(data)
-    _set_refs(path, old | before | after)
+    if not _set_refs(path, old | before | after):
+        # R25 #334: prepare failed -> studio.json must not be committed (it could reference an
+        # instance the ledger does not protect).
+        raise LedgerPrepareError('instance reference ledger prepare failed')
     return path, old | before, after
+
+
+class LedgerPrepareError(OSError):
+    """R25 #334: the reference ledger could not be widened before a studio.json replace."""
 
 
 def commit_refs(context):
@@ -802,8 +820,11 @@ def write(project_id, data, *, _recover_previous=True):
         _fsync_file(tmp)  # R24 #295
         refs = _write_refs(path, data, previous if path.exists() else None)
         _replace_state(tmp, path)
-        _fsync_dir(path.parent)
-        commit_refs(refs)  # R24 #293: release only after studio.json is durable
+        if _fsync_dir(path.parent):
+            commit_refs(refs)  # R24 #293: release only after studio.json is durable
+        else:
+            # R25 #337: replaced but durability unknown -> keep the union until a durable write.
+            logger.warning('Project state directory durability unknown; reference ledger kept')
         if usage_checkpoint is not None:
             usage_checkpoint[0].update(usage_checkpoint[1])
         _observe_worker_write(path, previous, data)
@@ -848,20 +869,62 @@ def _ensure_failure_identity(data):
     fill(analysis)
 
 
+IDENTITY_FIELDS = ('provider', 'config_source', 'model', 'base_url_host')
+FAILURE_FIELDS = ('http_status', 'upstream_error_type', 'failure_stage')
+ATTRIBUTION_FIELDS = (*IDENTITY_FIELDS, *FAILURE_FIELDS)
+
+
+def _paired(record):
+    return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
+
+
+def _apply_attribution(record, snapshot, failed):
+    """R25 #415: identity is ONE record, written whole or not at all (never merged field by field).
+
+    - a stored identity without its provider/config_source pair (legacy) reads as empty;
+    - failed: the failed request's attribution replaces the group whole; a phase attribution never
+      downgrades a request attribution already recorded for this failure;
+    - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one;
+    - nothing attributed (e.g. a render write): the stored identity is left exactly as it is."""
+    if not _paired(record):
+        for key in IDENTITY_FIELDS:
+            record.pop(key, None)
+    if not failed:
+        for key in FAILURE_FIELDS:
+            record.pop(key, None)
+    source = snapshot.get('attribution_source')
+    if not (source and snapshot.get('provider') and snapshot.get('config_source')):
+        return
+    if failed:
+        if source != 'request' and record.get('attribution_source') == 'request':
+            return
+        # request: that request's identity AND status/upstream, whole. phase: the identity only; the
+        # job's own status/upstream of the same error (studio_failure_context) stays.
+        fields = ATTRIBUTION_FIELDS if source == 'request' else IDENTITY_FIELDS
+    else:
+        if _paired(record):
+            return
+        fields = IDENTITY_FIELDS
+    stage = record.get('failure_stage')  # the job's own failure stage (e.g. dispatch) is authoritative
+    for key in fields:
+        record.pop(key, None)
+        if snapshot.get(key) not in (None, ''):
+            record[key] = snapshot[key]
+    if failed and stage:
+        record['failure_stage'] = stage
+    record['attribution_source'] = source
+
+
 def _attach_run_telemetry(data, project_id, previous):
     try:
         from backend.core.llm_emit import run_usage_checkpoint
         from backend.core.llm_telemetry import run_snapshot
-        snapshot = run_snapshot(project_id)
+        snapshot = run_snapshot(project_id, with_source=True)
         checkpoint = run_usage_checkpoint()
     except Exception:  # noqa: BLE001 - telemetry cannot block a state write
         return
     if not snapshot:
         return
-    skip_unless_failed = {
-        'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure',
-    }
-    keep_if_set = {'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure'}
     usage_keys = {'llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'degrade_count', 'retry_count'}
     persisted = {}
     for name in ('generation', 'analysis'):
@@ -879,28 +942,23 @@ def _attach_run_telemetry(data, project_id, previous):
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = record.get('status') in ('failed', 'partial')
-        if not failed:
-            for key in skip_unless_failed:
-                record.pop(key, None)
+        _apply_attribution(record, snapshot, failed)
         for key, value in snapshot.items():
-            if value is None:
+            if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue
-            if key in skip_unless_failed and not failed:
-                continue
-            if key in keep_if_set and record.get(key) not in (None, ''):
+            if key == 'billable_calls_before_failure':
+                if failed and record.get(key) in (None, ''):
+                    record[key] = value
                 continue
             if key in usage_keys and checkpoint is not None and identity:
                 base = (prior.get(key) or 0) if prior_identity == identity else 0
                 record[key] = base + value - counted.get(key, 0)
             elif key == 'retry_count' and not snapshot.get('llm_calls') and prior_identity == identity:
                 record[key] = prior.get(key) or value
-            elif key in ATTEMPT_IDENTITY_KEYS and isinstance(record.get(key), str) and record[key]:
-                # R19 #95 (R16 #40): the identity recorded at attempt start is final; the provider the
-                # snapshot saw (settings may have changed mid-run) is kept apart, never in its place.
-                if key == 'provider' and value != record[key]:
-                    record['called_provider'] = value
             else:
                 record[key] = value
+        if not failed:
+            record.pop('billable_calls_before_failure', None)
         persisted[usage_id] = {key: snapshot[key] for key in usage_keys if key in snapshot}
     return (checkpoint, persisted) if checkpoint is not None else None
 

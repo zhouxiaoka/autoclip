@@ -83,9 +83,9 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
     with telem.track_run(), telem.bind_context(provider="dashscope", model="qwen-plus", base_url=provider.base_url):
         response = provider.call("private prompt", {"caption": "secret subtitle"})
         assert response.content == '{"ok":true}'
-        with pytest.raises(_StatusError):
+        with pytest.raises(_StatusError) as caught:
             provider.call("private prompt", fail=True)
-        snapshot = telem.run_snapshot()
+        snapshot = telem.run_snapshot(error=caught.value)  # R25 #415: the failed request's own record
     events = [row for row in capture if row["event"] == "llm_request_finished"]
     assert len(events) == 2
     ok, failed = events
@@ -126,12 +126,15 @@ def test_consecutive_failures_keep_latest_error_in_run_and_store(capture, monkey
         telem.request_finished(provider="openai", outcome="error", error=_StatusError("fixture", 429), stage="analyze")
         error = _StatusError("fixture", second_status) if second_status else TimeoutError()
         telem.request_finished(provider="openai", outcome="error", error=error, stage="production", retries=1)
-        snapshot = telem.run_snapshot()
-        store.write("p1", {
-            "schema_version": 2,
-            "generation": {"status": "failed"},
-            "analysis": {"status": "failed", "phase": "production"},
-        })
+        snapshot = telem.run_snapshot(error=error)
+        try:  # R25 #415: the failure is written while its exception is handled (as the job workers do)
+            raise error
+        except Exception:
+            store.write("p1", {
+                "schema_version": 2,
+                "generation": {"status": "failed"},
+                "analysis": {"status": "failed", "phase": "production"},
+            })
 
     events = [row["properties"] for row in capture if row["event"] == "llm_request_finished"]
     assert len(events) == 2
@@ -151,9 +154,9 @@ def test_successful_recovery_clears_upstream_error_across_run_and_store(capture,
     (tmp_path / "p1").mkdir()
     provider = _ProbeProvider()
     with telem.track_run():
-        with pytest.raises(_StatusError):
+        with pytest.raises(_StatusError) as caught:
             provider.call("fixture", fail=True)
-        assert telem.run_snapshot()["upstream_error_type"] == "rate_limited"
+        assert telem.run_snapshot(error=caught.value)["upstream_error_type"] == "rate_limited"
         provider.call("fixture")
         snapshot = telem.run_snapshot()
         store.write("p1", {
@@ -190,9 +193,12 @@ def test_reused_store_records_clear_stale_failure_telemetry(capture, monkeypatch
     }
     provider = _ProbeProvider()
     with telem.track_run():
-        with pytest.raises(_StatusError):
+        with pytest.raises(_StatusError) as caught:
             provider.call("fixture", fail=True)
-        store.write("p1", state)
+        try:  # R25 #415: written while the failure is handled
+            raise caught.value
+        except _StatusError:
+            store.write("p1", state)
         state = json.loads(path.read_text())
         for name in ("generation", "analysis"):
             assert state[name]["upstream_error_type"] == "rate_limited"
@@ -434,12 +440,12 @@ def test_degrade_count_hook_is_integer_only_and_reaches_request_and_run(monkeypa
 
 def test_sentry_tags_are_allowlisted_strings():
     with telem.track_run():
+        error = _StatusError("rate", 429)
         telem.request_finished(
             provider="api88", model="gpt-4o-mini", base_url="https://88api.ai/v1",
-            outcome="error", http_status=429, error=_StatusError("rate", 429),
-            failure_stage="analyze", duration_ms=9,
+            outcome="error", http_status=429, error=error, failure_stage="analyze", duration_ms=9,
         )
-        tags = telem.sentry_tags_for_error(_StatusError("rate", 429), "analyze")
+        tags = telem.sentry_tags_for_error(error, "analyze")  # R25 #415: the same failure's record
     assert tags["provider"] == "api88"
     assert tags["upstream_error_type"] == "rate_limited"
     assert tags["failure_stage"] == "analyze"

@@ -50,9 +50,19 @@ def _project(pid, data):
 
 def _vision_failure():
     # R22 #195: vision_call freezes the identity before it sends; the emitter only carries it.
+    # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
+    error = RuntimeError('fixture')
     llm_emit.emit_vision_request(config={'model': 'private-vision-model', 'base_url': 'https://vision.fixture.example/v1'},
-                                 started=time.monotonic(), error=RuntimeError('fixture'),
+                                 started=time.monotonic(), error=error,
                                  identity=failure_identity.provider_identity('vision'))
+    return error
+
+
+def _handling(error, fn):
+    try:
+        raise error
+    except type(error):
+        return fn()
 
 
 # --- #194 -------------------------------------------------------------------------------------
@@ -80,9 +90,9 @@ def test_194_visual_production_start_request_terminal_all_name_the_vision_connec
     start = failure_identity.phase_identity('production', VISUAL_PLAN, ['highlight'])
     _project('p194', {'id': 'p194', 'analysis': {**start, 'status': 'running', 'phase': 'production', 'run_id': 'r'}})
     with llm_emit.track_run():
-        _vision_failure()
-        snap = llm_emit.run_snapshot()
-        store.change('p194', lambda d: d['analysis'].update(status='failed', error_code='timeout', failure_stage='production'))
+        error = _vision_failure()
+        snap = llm_emit.run_snapshot(error=error)
+        _handling(error, lambda: store.change('p194', lambda d: d['analysis'].update(status='failed', error_code='timeout', failure_stage='production')))
     analysis = store.read('p194')['analysis']
     assert {k: analysis.get(k) for k in EYES} == EYES
     assert {k: snap.get(k) for k in EYES} == EYES
@@ -92,17 +102,17 @@ def test_194_visual_production_start_request_terminal_all_name_the_vision_connec
 
 def test_195_snapshot_provider_and_config_source_come_from_one_connection(two_connections):
     with llm_emit.track_run():
-        _vision_failure()
-        snap = llm_emit.run_snapshot()
+        error = _vision_failure()
+        snap = llm_emit.run_snapshot(error=error)
     assert (snap.get('provider'), snap.get('config_source')) == ('kimi', 'customized')
 
 
 def test_195_mid_run_settings_change_does_not_split_the_snapshot_identity(two_connections):
     with llm_emit.track_run():
-        _vision_failure()
+        error = _vision_failure()
         settings = ai.load()
         ai.save(settings.model_copy(update={'vision': ai.Assignment(connection_id='text', model='deepseek-flash', capability='multimodal')}))
-        snap = llm_emit.run_snapshot()
+        snap = llm_emit.run_snapshot(error=error)
     assert (snap.get('provider'), snap.get('config_source')) == ('kimi', 'customized')
 
 

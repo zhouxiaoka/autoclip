@@ -158,15 +158,16 @@ def _vision_request(monkeypatch, during=None):
             during()
         raise urllib.error.URLError(TimeoutError())
     monkeypatch.setattr(intelligence.urllib.request, 'urlopen', urlopen)
-    with pytest.raises(intelligence.VisionRequestError):
+    with pytest.raises(intelligence.VisionRequestError) as caught:
         intelligence.vision_call([{'type': 'text', 'text': 'fixture'}])
+    return caught.value  # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
 
 
 def test_195_settings_changed_while_a_vision_request_is_in_flight_do_not_move_it(monkeypatch, posted):
     _settings()
     with llm_emit.track_run():
-        _vision_request(monkeypatch, during=lambda: _settings(vision='other'))
-        snap = llm_emit.run_snapshot()
+        error = _vision_request(monkeypatch, during=lambda: _settings(vision='other'))
+        snap = llm_emit.run_snapshot(error=error)
     assert _ident(snap) == EYES
     assert posted[-1][1]['provider'] == 'kimi'                   # the request event too
 
@@ -178,8 +179,8 @@ def test_195_each_request_freezes_its_own_identity_and_the_latest_request_is_nam
     with llm_emit.track_run():
         _vision_request(monkeypatch)
         _settings(vision='other')
-        _vision_request(monkeypatch)
-        snap = llm_emit.run_snapshot()
+        error = _vision_request(monkeypatch)
+        snap = llm_emit.run_snapshot(error=error)
     assert _ident(snap) == OTHER
     assert snap.get('base_url_host') == 'other.fixture.example' 
 
@@ -192,8 +193,9 @@ class _TextProvider:
 def _text_request():
     def impl(*_a, **_k):
         raise RuntimeError('fixture')
-    with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError):  # R23: route identity
+    with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError) as caught:  # R23: route identity
         llm_emit.observe_provider_call(_TextProvider(), impl, 'p')
+    return caught.value
 
 
 @pytest.mark.parametrize('order,expected', [(('vision', 'text'), TEXT), (('text', 'vision'), EYES)])
@@ -201,8 +203,8 @@ def test_195_snapshot_names_the_latest_requests_role(order, expected, monkeypatc
     _settings()
     with llm_emit.track_run():
         for kind in order:
-            _vision_request(monkeypatch) if kind == 'vision' else _text_request()
-        snap = llm_emit.run_snapshot()
+            error = _vision_request(monkeypatch) if kind == 'vision' else _text_request()
+        snap = llm_emit.run_snapshot(error=error)
     assert _ident(snap) == expected                              # mutation 195-role-not-latest
 
 
@@ -213,9 +215,9 @@ def test_195_text_identity_is_read_before_the_request_is_sent(posted):
         _settings(analysis='other')
         raise RuntimeError('fixture')
     with llm_emit.track_run():
-        with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError):
+        with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError) as caught:
             llm_emit.observe_provider_call(_TextProvider(), impl, 'p')
-        snap = llm_emit.run_snapshot()
+        snap = llm_emit.run_snapshot(error=caught.value)
     assert _ident(snap) == TEXT
 
 

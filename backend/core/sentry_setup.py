@@ -40,6 +40,9 @@ def studio_error_code(error: Exception) -> str:
     # Local render, frame sampling and optional-runtime preparation use typed subprocess timeouts.
     if isinstance(error, subprocess.TimeoutExpired):
         return "timeout"
+    from backend.core.file_lock import LockTimeout
+    if isinstance(error, LockTimeout):
+        return "timeout"  # R25 #335: store_lock_timeout is logged; the catalog code stays ``timeout``
     # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
     # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
     try:

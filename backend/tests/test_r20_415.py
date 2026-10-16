@@ -44,7 +44,9 @@ def test_137_run_sanitizer_keeps_config_source_and_drops_garbage():
 
 
 def test_137_run_snapshot_carries_config_source(two_connections):
+    # R25 #415: inside a run the identity is the frozen phase connection (settings are never read).
     with llm_emit.track_run():
+        llm_emit.freeze_phase_identity(failure_identity.phase_identity('production', {'confirmed_analysis': 'subtitle'}))
         snap = llm_emit.run_snapshot()
     assert snap.get('config_source') == 'preset'
     assert set(snap) <= set(schema.RUN_LEVEL_FIELDS)

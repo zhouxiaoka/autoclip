@@ -10,6 +10,7 @@ import contextvars
 import itertools
 import json
 import logging
+import sys
 import threading
 import time
 import urllib.error
@@ -76,11 +77,61 @@ class _DegradeAcc:
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
 
+@dataclass(frozen=True)
+class RequestRecord:
+    """R25 #415: ONE immutable record per model request. provider/config_source come as a pair from
+    the connection frozen at request start; model/host/status/upstream are that SAME request's. A failed
+    request's record rides on its exception; persistence and Sentry read only it (never stitched)."""
+    seq: int
+    role: str
+    provider: str = ""
+    config_source: str = ""
+    model: str | None = None
+    base_url_host: str | None = None
+    outcome: str = ""
+    http_status: int | None = None
+    upstream_error_type: str | None = None
+    failure_stage: str | None = None
+
+    def attribution(self) -> dict[str, Any]:
+        if not (self.provider and self.config_source):
+            return {}  # an incomplete identity is no identity: never fill a half from elsewhere
+        out = {"provider": self.provider, "config_source": self.config_source, "model": self.model,
+               "base_url_host": self.base_url_host, "http_status": self.http_status,
+               "upstream_error_type": self.upstream_error_type, "failure_stage": self.failure_stage}
+        return {k: v for k, v in out.items() if v not in (None, "")}
+
+
+_RECORD_ATTR = "_autoclip_request_record"
+ATTRIBUTION_SOURCE_REQUEST = "request"
+ATTRIBUTION_SOURCE_PHASE = "phase"
+
+
+def _attach_record(error: BaseException | None, record: RequestRecord) -> None:
+    """The failing request's record travels WITH its exception (concurrent siblings cannot replace it)."""
+    if error is None or isinstance(getattr(error, _RECORD_ATTR, None), RequestRecord):
+        return
+    try:
+        setattr(error, _RECORD_ATTR, record)
+    except (AttributeError, TypeError):  # exotic exception types without __dict__
+        pass
+
+
+def record_of(error: BaseException | None) -> RequestRecord | None:
+    """R25 #415: the record of the request that failed, found on ``error`` or up its
+    ``__cause__``/``__context__`` chain (re-wrapped errors keep it). None: no request failed here."""
+    seen: set[int] = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        record = getattr(error, _RECORD_ATTR, None)
+        if isinstance(record, RequestRecord):
+            return record
+        error = error.__cause__ or error.__context__
+    return None
+
+
 @dataclass
 class _RunAcc:
-    provider: str = ""
-    model: str = ""
-    host: str = ""
     calls: int = 0
     billable: int = 0
     prompt_tokens: int = 0
@@ -88,19 +139,10 @@ class _RunAcc:
     reasoning_tokens: int = 0
     last_retry: int = 0  # run-level total retries (sum over logical calls)
     last_degrade: int = 0
-    last_http_status: int | None = None
-    last_upstream: str | None = None
-    last_outcome: str = ""
-    last_stage: str = ""
     persisted_usage: dict = field(default_factory=dict)
-    # R22 #195: provider + config_source per role, frozen at the START of that role's first request in
-    # this run (failure_identity.connection_identity); ``role`` is the role of the latest request.
-    identities: dict = field(default_factory=dict)
-    role: str = ""
-    # R22 #223: identity the current phase froze at its start; used until a request has run.
+    seq: int = 0
+    # R22 #223 / R24 #291: identity the current phase froze at its start from ONE connection.
     phase_identity: dict = field(default_factory=dict)
-    # R24 #290: the latest request as ONE record (identity + model/host/status/upstream of that request).
-    last_request: dict = field(default_factory=dict)
     phase_frozen: bool = False
     # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
@@ -301,7 +343,7 @@ def request_finished(
             # R24 #297: no frozen identity -> the config this request sent (one rule, never settings).
             from backend.services.studio.failure_identity import sent_identity
             identity = sent_identity(properties.get("provider"), base_url, properties.get("model"))
-        _remember_run(properties, role="vision" if kind == "vision" else "analysis", identity=identity)
+        _remember_run(properties, role="vision" if kind == "vision" else "analysis", identity=identity, error=error)
         _post_event(schema.EVENT_LLM_REQUEST_FINISHED, properties)
         return properties
     except Exception:  # noqa: BLE001 - telemetry must not break a model call
@@ -453,30 +495,38 @@ def run_usage_checkpoint() -> dict | None:
     return acc.persisted_usage if acc is not None else None
 
 
-def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
-    """Sanitized run-level fields for generation / production / Sentry tags."""
+def attribution(error: BaseException | None = None) -> dict[str, Any]:
+    """R25 #415: THE attribution rule for snapshots, persistence and Sentry.
+
+    1. ``error`` (else the exception being handled in this thread) carries the failed request's record
+       -> that record, whole (``attribution_source=request``);
+    2. else the identity this run's phase froze from one connection (``attribution_source=phase``);
+    3. else {}. Never the latest/biggest-seq request, never settings."""
+    if error is None:
+        error = sys.exception()
+    record = record_of(error)
+    if record is not None:
+        out = record.attribution()
+        return {**out, "attribution_source": ATTRIBUTION_SOURCE_REQUEST} if out else {}
     acc = _run_acc.get()
-    # Settings are a last-saved identity, not this run. Only fill gaps inside track_run.
-    # Settings only when this run has nothing frozen at all (no phase start, no request): then the one
-    # saved connection is the only fact, and all its fields come from it together.
-    blank = acc is None or (not acc.last_request and not acc.phase_frozen)
-    configured = configured_connection_fields() if blank else {}
-    # R24 #290/#291: every attribution field comes from ONE record: the latest request (identity,
-    # model, host, status, upstream of that same request), else what the phase froze from one
-    # connection at its start. Inside a run nothing is filled from settings; unknown stays empty.
-    if not blank:
-        with acc.lock:
-            request = dict(acc.last_request)
-            phase = dict(acc.phase_identity)
-        record = request or phase
-        provider, source = record.get("provider"), record.get("config_source")
-        model, host = _safe_model(record.get("model")), record.get("base_url_host")
-        status = request.get("http_status") if request else None
-        upstream = request.get("upstream_error_type") if request else None
-    else:
-        provider, source = configured.get("provider"), configured.get("config_source")
-        model, host = _safe_model(configured.get("model")), configured.get("base_url_host")
-        status = upstream = None
+    if acc is None:
+        return {}
+    with acc.lock:
+        phase = dict(acc.phase_identity)
+    if not phase:
+        return {}
+    return {**phase, "attribution_source": ATTRIBUTION_SOURCE_PHASE}
+
+
+def run_snapshot(project_id: str | None = None, *, error: BaseException | None = None,
+                 with_source: bool = False) -> dict[str, Any]:
+    """Sanitized run-level fields for generation / production / Sentry tags. Identity fields come
+    whole from ``attribution`` (R25 #415); settings are never read."""
+    acc = _run_acc.get()
+    found = attribution(error)
+    provider, source = found.get("provider"), found.get("config_source")
+    model, host = _safe_model(found.get("model")), found.get("base_url_host")
+    status, upstream = found.get("http_status"), found.get("upstream_error_type")
     raw: dict[str, Any] = {
         "provider": provider,
         "model": model,
@@ -509,10 +559,15 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     if acc is not None:
         raw.update(llm_calls=calls, prompt_tokens=prompt, completion_tokens=completion,
                    reasoning_tokens=acc.reasoning_tokens, retry_count=retry, degrade_count=degrade)
-    if acc and acc.last_outcome == "error":
-        raw["failure_stage"] = normalize_failure_stage(acc.last_stage)
+    if found.get("failure_stage"):
+        raw["failure_stage"] = normalize_failure_stage(found["failure_stage"])
     out = schema.sanitize_run_properties(raw)
     out.pop("success_rate_schema_version", None)
+    if not (out.get("provider") and out.get("config_source")):
+        for key in ("provider", "config_source", "model", "base_url_host"):
+            out.pop(key, None)  # R25 #415: a pair or nothing
+    elif with_source and found.get("attribution_source"):
+        out["attribution_source"] = found["attribution_source"]
     return {key: value for key, value in out.items()
             if value not in (None, "", 0) or key == "billable_calls_before_failure"
             or (acc is not None and value == 0)}
@@ -547,16 +602,10 @@ def configured_connection_fields(*, role: str = "analysis") -> dict[str, Any]:
 
 
 def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, str]:
-    """Allowlisted string tags only."""
+    """Allowlisted string tags only. R25 #415: read the failed request's record whole; the exception's
+    own status is never pasted onto another request's identity."""
     tags: dict[str, str] = {}
-    snapshot = run_snapshot()
-    if error is not None:
-        kind = classify_run_upstream(error, _http_status(error))
-        if kind:
-            snapshot["upstream_error_type"] = kind
-        status = _http_status(error)
-        if status is not None and 400 <= status <= 599:
-            snapshot["http_status"] = status
+    snapshot = run_snapshot(error=error)
     stage = normalize_failure_stage(snapshot.get("failure_stage") or phase)
     if stage:
         tags["failure_stage"] = stage
@@ -632,21 +681,31 @@ def freeze_phase_identity(identity: dict | None) -> None:
         acc.phase_frozen = True
 
 
-def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: dict | None = None) -> None:
-    acc = _run_acc.get()
-    if acc is None:
-        return
+def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: dict | None = None,
+                 error: BaseException | None = None) -> None:
     from backend.services.studio.failure_identity import frozen
     pair = frozen(identity)
-    # R24 #290: one record per request; the latest request replaces it WHOLE (never field by field).
     status = properties.get("http_status")
-    record = {
-        **pair,
-        "model": properties.get("model"),
-        "base_url_host": properties.get("base_url_host"),
-        "http_status": status if isinstance(status, int) else None,
-        "upstream_error_type": None if properties.get("outcome") == "success" else properties.get("upstream_error_type"),
-    }
+    failed = properties.get("outcome") != "success"
+    acc = _run_acc.get()
+    seq = 0
+    if acc is not None:
+        with acc.lock:
+            acc.seq += 1
+            seq = acc.seq
+    record = RequestRecord(
+        seq=seq, role=role,
+        provider=pair.get("provider", ""), config_source=pair.get("config_source", ""),
+        model=properties.get("model") or None, base_url_host=properties.get("base_url_host") or None,
+        outcome=str(properties.get("outcome") or ""),
+        http_status=status if isinstance(status, int) else None,
+        upstream_error_type=(properties.get("upstream_error_type") or None) if failed else None,
+        failure_stage=(properties.get("failure_stage") or None) if failed else None,
+    )
+    if failed:
+        _attach_record(error, record)
+    if acc is None:
+        return
     # E2: retries are counted per logical call. ``retry_count`` on a request is that call's
     # attempt index (text) or its own retry total (vision); only the rise above the peak
     # already counted for this call in this context is new. The peak lives in a contextvar,
@@ -660,26 +719,13 @@ def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: 
     elif retry == 0:
         _retry_peak.set(0)
     with acc.lock:
-        acc.last_request = {k: v for k, v in record.items() if v not in (None, "")}
-        if pair:
-            acc.identities[role] = pair
         acc.calls += 1
-        acc.role = role
-        acc.provider = properties.get("provider") or acc.provider
-        acc.model = properties.get("model") or acc.model
-        acc.host = properties.get("base_url_host") or acc.host
         acc.last_retry += delta
         acc.last_degrade = max(acc.last_degrade, int(properties.get("degrade_count") or 0))
-        status = properties.get("http_status")
-        acc.last_http_status = status if isinstance(status, int) else None
-        acc.last_upstream = properties.get("upstream_error_type")
-        acc.last_outcome = str(properties.get("outcome") or "")
-        acc.last_stage = str(properties.get("failure_stage") or properties.get("stage") or "")
         acc.prompt_tokens += int(properties.get("prompt_tokens") or 0)
         acc.completion_tokens += int(properties.get("completion_tokens") or 0)
         acc.reasoning_tokens += int(properties.get("reasoning_tokens") or 0)
-        if properties.get("outcome") == "success":
-            acc.last_upstream = None
+        if not failed:
             acc.billable += 1
 
 

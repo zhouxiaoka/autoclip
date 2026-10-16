@@ -752,7 +752,9 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 身份归因（1.5.8 R22）：`provider` / `config_source` 只有一条规则（`failure_identity.connection_identity`），在**开始时冻结**，结束时不重读设置。
 - 阶段：screening 用视觉连接；production/rendering 走视觉路线且目标不全是 content 时用视觉连接，否则用文本连接；确认路线（`confirmed_analysis`）优先于推荐路线。screening 的身份单独存为 `screening_identity`，自动流程里 production 重新冻结不会覆盖它；`studio_screen_finished` 读这一份。
 - 一次 generation 尝试中途换阶段时，失败按失败阶段归因：screening 失败报视觉连接，production 失败报路线连接。
-- 请求：每个模型请求在**发出前**冻结所用连接；同一次运行里每个 role 以第一个请求为准，run 快照与 Sentry 取最近一次请求的 role；还没有请求时取阶段开始时冻结的身份。
+- 请求：每个模型请求在**发出前**冻结所用连接，结束时生成一条不可变请求记录（provider/config_source 成对，加上同一次请求的 model/host/http_status/upstream_error_type）。失败的记录随异常携带（沿 `__cause__`/`__context__` 链可找回）。
+- 归因（1.5.8 R25）：失败按**出错的那次请求**的记录整条归因（`attribution_source=request`）；找不到请求记录时用阶段开始时冻结的身份（`attribution_source=phase`）；不取"最近一次请求"，运行中不读设置。落盘、run 快照、Sentry 都只读这一条，不逐字段合并。
+- 旧记录：provider/config_source 不成对时整组（provider、config_source、model、base_url_host）当空，不补。
 
 `service_restarted` 失败另带 `shutdown_kind`，按上次进程在 `<标记目录>/<instance>` 留下的记录分类（标记目录由桌面壳启动时统一解析为 `<应用目录>/shutdown_markers`，经 `AUTOCLIP_SHUTDOWN_MARKER_DIR` 交给后端，壳写 `unacked` 也写这里；无壳运行时为 `<数据目录>/shutdown_markers`）（每个 instance 一条记录、一个目录、一套修剪规则）：
 

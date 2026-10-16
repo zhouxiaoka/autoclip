@@ -190,10 +190,14 @@ def _resolve(body):
     return stored
 
 
-def test(body):
+def test(body, *, identity=None):
+    """``identity``: the identity of the saved connection being tested (R25 #336); without it the
+    sent config's identity is used."""
     from backend.services.studio.intelligence import vision_call
     import base64, struct, zlib
     config = _resolve(body)
+    if identity:
+        config = {**config, 'identity': dict(identity)}
     def chunk(kind, data):
         return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
     image = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 32, 32, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + b'\xff\0\0' * 32) * 32)) + chunk(b'IEND', b'')

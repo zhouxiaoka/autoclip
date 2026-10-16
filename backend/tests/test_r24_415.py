@@ -75,10 +75,11 @@ def _text(identity, base, model, status=None):
         return None
     with llm_emit.bind_context(identity=identity):
         if status:
-            with pytest.raises(_Status):
+            with pytest.raises(_Status) as caught:
                 llm_emit.observe_provider_call(_provider(base, model), impl, 'p')
-        else:
-            llm_emit.observe_provider_call(_provider(base, model), impl, 'p')
+            return caught.value
+        llm_emit.observe_provider_call(_provider(base, model), impl, 'p')
+        return None
 
 
 # --- invariant 1: a failure names ONE request ----------------------------------------------------
@@ -86,9 +87,10 @@ def _text(identity, base, model, status=None):
 def test_290_same_role_second_request_fails_snapshot_and_sentry_name_that_request_whole(posted):
     with llm_emit.track_run():
         _text(TEXT, 'https://api.deepseek.com', 'deepseek-flash')                       # DeepSeek OK
-        _text(OTHER, 'https://other.fixture.example/v1', 'glm-4', status=503)          # GLM 503
-        snap = llm_emit.run_snapshot()
-        tags = llm_emit.sentry_tags_for_error(None, 'analyze')
+        error = _text(OTHER, 'https://other.fixture.example/v1', 'glm-4', status=503)  # GLM 503
+        # R25 #415: the failure is read from the record its exception carries.
+        snap = llm_emit.run_snapshot(error=error)
+        tags = llm_emit.sentry_tags_for_error(error, 'analyze')
     assert _who(snap) == {**OTHER, 'model': 'glm-4', 'base_url_host': 'other.fixture.example', 'http_status': 503}
     assert tags.get('provider') == 'glm' and tags.get('model') == 'glm-4' and tags.get('http_status') == '503'
 
@@ -98,7 +100,9 @@ def test_290_a_later_success_clears_the_earlier_failure_of_another_connection(po
         _text(OTHER, 'https://other.fixture.example/v1', 'glm-4', status=503)
         _text(TEXT, 'https://api.deepseek.com', 'deepseek-flash')
         snap = llm_emit.run_snapshot()
-    assert _who(snap) == {**TEXT, 'model': 'deepseek-flash', 'base_url_host': 'api.deepseek.com', 'http_status': None}
+    # R25 #415: with no failure being handled the snapshot names no request at all (no phase frozen
+    # here), so neither GLM's 503 nor a "latest request" identity can leak into it.
+    assert _who(snap) == dict.fromkeys(('provider', 'config_source', 'model', 'base_url_host', 'http_status'))
     assert not snap.get('upstream_error_type')
 
 
@@ -108,8 +112,9 @@ def _vision(monkeypatch):
     def urlopen(*_a, **_k):
         raise urllib.error.URLError(TimeoutError())
     monkeypatch.setattr(intelligence.urllib.request, 'urlopen', urlopen)
-    with pytest.raises(intelligence.VisionRequestError):
+    with pytest.raises(intelligence.VisionRequestError) as caught:
         intelligence.vision_call([{'type': 'text', 'text': 'fixture'}])
+    return caught.value
 
 
 def test_224_same_role_vision_requests_on_two_connections_name_the_latest_one_whole(monkeypatch, posted):
@@ -117,8 +122,8 @@ def test_224_same_role_vision_requests_on_two_connections_name_the_latest_one_wh
     with llm_emit.track_run():
         _vision(monkeypatch)
         _settings(vision='other')                       # the NEXT request really runs on GLM
-        _vision(monkeypatch)
-        snap = llm_emit.run_snapshot()
+        error = _vision(monkeypatch)
+        snap = llm_emit.run_snapshot(error=error)       # R25 #415: the failing request's record
     assert _who(snap)['provider'] == 'glm' and _who(snap)['config_source'] == 'customized'
     assert snap.get('model') == 'private-other-model' and snap.get('base_url_host') == 'other.fixture.example'
 
@@ -165,10 +170,10 @@ def test_297_text_request_without_frozen_identity_uses_the_config_it_sent(monkey
     _settings(analysis='other')                         # saved analysis = GLM; the request sends DeepSeek
     reads = _no_settings(monkeypatch)
     with llm_emit.track_run():
-        with pytest.raises(_Status):
+        with pytest.raises(_Status) as caught:
             llm_emit.observe_provider_call(_provider('https://api.deepseek.com', 'deepseek-flash'),
                                            lambda *_a, **_k: (_ for _ in ()).throw(_Status(503)), 'p')
-        snap = llm_emit.run_snapshot()
+        snap = llm_emit.run_snapshot(error=caught.value)  # R25 #415
     assert {k: snap.get(k) for k in TEXT} == TEXT
     assert [p for e, p in posted if e == 'llm_request_finished'][-1]['provider'] == 'deepseek'
     assert reads == []
@@ -184,9 +189,9 @@ def test_297_vision_test_of_an_unsaved_form_is_attributed_to_the_form_not_saved_
     reads = _no_settings(monkeypatch)
     form = {'api_key': 'fixture-key', 'base_url': 'https://api.deepseek.com', 'model': 'deepseek-flash'}
     with llm_emit.track_run():
-        with pytest.raises(intelligence.VisionRequestError):
+        with pytest.raises(intelligence.VisionRequestError) as caught:
             intelligence.vision_call([{'type': 'text', 'text': 'fixture'}], config=form)
-        snap = llm_emit.run_snapshot()
+        snap = llm_emit.run_snapshot(error=caught.value)  # R25 #415
     request = [p for e, p in posted if e == 'llm_request_finished'][-1]
     assert request['provider'] == 'deepseek'
     assert {k: snap.get(k) for k in TEXT} == TEXT

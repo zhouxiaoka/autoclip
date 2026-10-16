@@ -182,9 +182,27 @@ export interface StudioSnapshot {
 export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string; config_source?: string } {
   const analysis = snapshot.analysis
   for (const own of [analysis?.screening_identity, snapshot.generation?.auto_start ? snapshot.generation.screening_identity : undefined]) {
-    if (own && (own.provider || own.config_source)) return { provider: own.provider, config_source: own.config_source }
+    if (own && own.provider && own.config_source) return { provider: own.provider, config_source: own.config_source }
   }
-  return { provider: analysis?.provider, config_source: analysis?.config_source }
+  const own = attributionOf([analysis], false)
+  return own.provider ? { provider: own.provider as string, config_source: own.config_source as string } : {}
+}
+
+type Attributed = { provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string } | null | undefined
+
+/** R25 #415: identity is ONE record. Take the first record carrying the provider/config_source pair,
+ * whole (model/host and, for failures, status/upstream of that same record); an unpaired record is empty. */
+export function attributionOf(records: Attributed[], failure: boolean): Record<string, unknown> {
+  const own = records.find(r => !!r && !!r.provider && !!r.config_source)
+  if (!own) {
+    // No identity at all: the failure's own status/upstream still report, attached to no connection.
+    if (!failure) return {}
+    const first = records.find(r => !!r && (r.http_status !== undefined || !!r.upstream_error_type))
+    return first ? { http_status: first.http_status, upstream_error_type: first.upstream_error_type } : {}
+  }
+  const out: Record<string, unknown> = { provider: own.provider, config_source: own.config_source, model: own.model, base_url_host: own.base_url_host }
+  if (failure) { out.http_status = own.http_status; out.upstream_error_type = own.upstream_error_type }
+  return out
 }
 
 export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
@@ -416,12 +434,8 @@ export class WorkflowTracker {
       const run = snapshot.generation, analysis = snapshot.analysis
       details = { ...generationSummary(snapshot), error_code: unfinished ? run?.error_code || analysis?.error_code : undefined,
         failure_stage: unfinished ? run?.failure_stage || analysis?.failure_stage : undefined,
-        http_status: unfinished ? run?.http_status ?? analysis?.http_status : undefined,
-        provider: run?.provider || analysis?.provider, model: run?.model || analysis?.model,
-        config_source: run?.config_source || analysis?.config_source,
         shutdown_kind: unfinished ? run?.shutdown_kind || analysis?.shutdown_kind : undefined,
-        base_url_host: run?.base_url_host || analysis?.base_url_host,
-        upstream_error_type: unfinished ? run?.upstream_error_type || analysis?.upstream_error_type : undefined,
+        ...attributionOf([run, analysis], unfinished),
         billable_calls_before_failure: unfinished ? run?.billable_calls_before_failure ?? analysis?.billable_calls_before_failure : undefined,
         retry_count: run?.retry_count ?? analysis?.retry_count,
         degrade_count: run?.degrade_count ?? analysis?.degrade_count,

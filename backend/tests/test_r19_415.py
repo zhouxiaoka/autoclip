@@ -31,7 +31,7 @@ def _snapshot(monkeypatch, snap):
     # Patch only llm_emit: llm_telemetry resolves run_snapshot lazily via __getattr__ (patching it too
     # would pin the fake there for the rest of the session).
     from backend.core import llm_emit
-    monkeypatch.setattr(llm_emit, 'run_snapshot', lambda project_id=None: dict(snap))
+    monkeypatch.setattr(llm_emit, 'run_snapshot', lambda project_id=None, **_k: dict(snap))
 
 
 def _project(pid, data):
@@ -48,13 +48,15 @@ def test_95_snapshot_provider_never_overwrites_start_identity(monkeypatch):
     store.change('p95', lambda d: d['analysis'].update(status='failed', error_code='timeout', failure_stage='production'))
     analysis = store.read('p95')['analysis']
     assert {k: analysis.get(k) for k in START} == START
-    assert analysis['called_provider'] == 'kimi'
+    # R25 #415: an unpaired snapshot identity reads as empty and called_provider is no longer written.
+    assert 'called_provider' not in analysis
     history = store.read('p95')['analysis_history'][-1]['analysis']
     assert history['provider'] == 'deepseek' and history['config_source'] == 'preset'
 
 
 def test_95_snapshot_still_fills_identity_when_start_had_none(monkeypatch):
-    _snapshot(monkeypatch, {'provider': 'kimi'})
+    # R25 #415: the identity fills whole from ONE attribution (a lone provider would read as empty).
+    _snapshot(monkeypatch, {'provider': 'kimi', 'config_source': 'customized', 'attribution_source': 'phase'})
     _project('p95b', {'id': 'p95b', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r'}})
     store.change('p95b', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
     analysis = store.read('p95b')['analysis']

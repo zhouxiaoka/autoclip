@@ -53,9 +53,10 @@ def _failing_send(monkeypatch, provider, during=None):
 
 def _run(manager, route):
     with llm_emit.track_run():
-        with pytest.raises(Exception):
+        with pytest.raises(Exception) as caught:
             manager.call('p', _route=route)
-        return llm_emit.run_snapshot(), llm_emit.sentry_tags_for_error(RuntimeError('fixture'), 'analyze')
+        # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
+        return llm_emit.run_snapshot(error=caught.value), llm_emit.sentry_tags_for_error(caught.value, 'analyze')
 
 
 def test_r23_settings_saved_after_route_before_send_keep_the_route_connection(monkeypatch, posted):
