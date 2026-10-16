@@ -1607,7 +1607,6 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
-            previous['attempt_sequence'] = state.get('attempt_sequence')  # sequence never goes back
             store.write(project_id, previous, _recover_previous=False)
             raise ValueError(message) from None
 
@@ -1738,7 +1737,6 @@ def confirm_project(project_id, body):
             capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
-            previous['attempt_sequence'] = state.get('attempt_sequence')  # sequence never goes back
             store.write(project_id, previous, _recover_previous=False)
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 

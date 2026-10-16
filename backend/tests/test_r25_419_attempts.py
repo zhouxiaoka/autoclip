@@ -94,14 +94,15 @@ def test_restart_keeps_lineage_and_sequence_never_goes_back(monkeypatch):
     before = json.loads(json.dumps(flow.receipts(pid)))
     monkeypatch.setattr(store, '_pending_links', {}); monkeypatch.setattr(store, '_read_failures', {})
     assert flow.receipts(pid) == before  # state is the file, not a process or browser cache
-    # a rejected dispatch rolls the reservation back but keeps the sequence counter moving forward
+    # a rejected dispatch rolls the whole reservation back (state exactly as before): the receipt never existed for
+    # any consumer (an open receipt emits nothing), so its number is not a gap in the sequence
     flow.screening_failed(pid)
     def reject(*_a, **_k):
         raise RuntimeError('pool closed')
     monkeypatch.setattr(jobs.executor, 'submit', reject)
     with pytest.raises(ValueError):
         jobs.inspect_project(pid, flow.AUTO, retry={'key': 'k2'})
-    assert len(flow.receipts(pid)) == 2 and store.read(pid)['attempt_sequence'] == 3
+    assert len(flow.receipts(pid)) == 2 and store.read(pid)['attempt_sequence'] == 2
     monkeypatch.undo()
 
 
@@ -178,3 +179,13 @@ def test_manual_retry_whose_screening_failed_can_be_retried_again(monkeypatch):
     jobs.inspect_project(pid, flow.MANUAL, retry={'key': 'm2'})  # the unbound attempt never ran: replaced, not blocking
     states = [(r['state'], r['retry_of']) for r in flow.receipts(pid)]
     assert states == [('failed', None), ('abandoned', first['attempt_id']), ('open', first['attempt_id'])]
+
+
+def test_settle_picks_the_tier_primary_even_from_an_unranked_record():
+    receipt = {'attempt_id': 't-x0000000000', 'state': 'open'}
+    record = {'status': 'failed', 'error_code': 'authentication', 'upstream_error_type': 'invalid_key', 'failure_stage': 'subtitle',
+              'secondary_error_codes': ['timeout'], 'secondary_upstream_error_types': [''], 'secondary_failure_stages': ['analyze']}
+    attempts.settle(receipt, 'failed', record)
+    assert receipt['error_code'] == 'timeout' and receipt['failure_stage'] == 'analyze'
+    assert [c['code'] for c in receipt['causes']] == ['timeout', 'authentication']
+    assert receipt['secondary_upstream_error_types'] == ['invalid_key'] and receipt['secondary_failure_stages'] == ['subtitle']

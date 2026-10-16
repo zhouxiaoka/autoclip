@@ -137,3 +137,13 @@ test('first clip is reported once per real generation, also when a retry adds a 
   for (const w of h.tracker.list().filter(w => w.kind === 'studio-generation')) h.tracker.noteFirstClip(w, s, true)
   assert.equal(h.events.filter(e => e.event === 'studio_first_clip_ready').length, 1)
 })
+
+test('a watch from before receipts is pinned to the attempt it first saw, not to a later retry', () => {
+  const h = tracker()
+  h.t.watch('studio-generation', 'p1')
+  const legacy = h.t.list()[0]
+  h.t.observeStudio(legacy, snap([receipt(A, 1, 'open')], { status: 'rendering', attempt_id: A }))
+  h.t.watchAttempt('p1', receipt(B, 2, 'open', { retry_of: A }))
+  for (const w of h.t.list()) h.t.observeStudio(w, snap([failedA, doneB], { status: 'completed', attempt_id: B }))
+  assert.deepEqual(h.finished('studio_generation_finished').map(p => [p.attempt_id, p.outcome]).sort(), [[A, 'error'], [B, 'success']])
+})
