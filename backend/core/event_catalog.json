@@ -65,6 +65,34 @@
       "output_truncated",
       "unknown"
     ],
+    "studio_error_code": [
+      "network",
+      "timeout",
+      "unknown",
+      "validation",
+      "missing_resource",
+      "unexpected",
+      "connection",
+      "authentication",
+      "rate_limited",
+      "provider_error",
+      "invalid_response",
+      "output_truncated",
+      "refused",
+      "multiple",
+      "llm_not_configured",
+      "llm_auth_invalid",
+      "whisper_not_installed",
+      "whisper_install_failed",
+      "transcription_empty",
+      "subtitle_setup",
+      "timeline_empty",
+      "source_blocked",
+      "source_too_short",
+      "source_no_audio",
+      "source_unreadable",
+      "service_restarted"
+    ],
     "provider": [
       "dashscope",
       "openai",
@@ -545,6 +573,20 @@
       },
       "optional_ids": {
         "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
+      },
+      "optional_properties": {
+        "secondary_error_codes": {
+          "description": "R23 #228: error_code of the other failed goals of a multi-goal attempt (primary is error_code), in failure order; positional with secondary_upstream_error_types. Not used by the success rate. Values outside the list are sent as unknown; http_4xx/http_5xx also allowed.",
+          "values": "studio_error_code",
+          "format": "comma_joined",
+          "max_items": 3
+        },
+        "secondary_upstream_error_types": {
+          "description": "R23 #228: upstream_error_type of each secondary cause, same positions as secondary_error_codes; empty slot when the cause has none or it is not in the list.",
+          "values": "upstream_error_type",
+          "format": "comma_joined",
+          "max_items": 3
+        }
       }
     },
     "studio_production_finished": {
@@ -564,6 +606,20 @@
       },
       "optional_ids": {
         "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
+      },
+      "optional_properties": {
+        "secondary_error_codes": {
+          "description": "R23 #228: error_code of the other failed goals of a multi-goal attempt (primary is error_code), in failure order; positional with secondary_upstream_error_types. Not used by the success rate. Values outside the list are sent as unknown; http_4xx/http_5xx also allowed.",
+          "values": "studio_error_code",
+          "format": "comma_joined",
+          "max_items": 3
+        },
+        "secondary_upstream_error_types": {
+          "description": "R23 #228: upstream_error_type of each secondary cause, same positions as secondary_error_codes; empty slot when the cause has none or it is not in the list.",
+          "values": "upstream_error_type",
+          "format": "comma_joined",
+          "max_items": 3
+        }
       }
     },
     "studio_export_finished": {

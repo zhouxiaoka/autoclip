@@ -280,6 +280,15 @@ multiIf(
 
 失败两者都必须有 `error_code`、`failure_stage`；模型失败加 `provider`、`base_url_host`、`upstream_error_type`、`http_status`、`billable_calls_before_failure`。身份按 **本次 run 实际调用**，不用设置页最后保存值。
 
+多目标尝试（R23 #228）有多个失败原因时，`error_code` / `upstream_error_type` 是主原因（产品类优先，同类取最早失败），其余原因放在两个可选字段，两个终态事件都可带，`event_catalog.json` 里登记在 `optional_properties`：
+
+| 字段 | 说明 | 取值白名单 | 格式 |
+| --- | --- | --- | --- |
+| `secondary_error_codes` | 其余失败目标的 `error_code`，按失败顺序 | `enums.studio_error_code` 加 `http_4xx`/`http_5xx`；不在单内发 `unknown` | 英文逗号拼接，最多 3 个，无空格，例 `authentication,timeout` |
+| `secondary_upstream_error_types` | 与上一字段同位置的 `upstream_error_type` | `enums.upstream_error_type`；没有或不在单内留空 | 英文逗号拼接，与上一字段等长，例 `invalid_key,` |
+
+这两个字段只做诊断，**不进**成功率分母口径。页面提示用的 `secondary_failure_stages` 只存在分析记录里，不上报。
+
 ### 5.6 导出 / 下载
 
 | 事件 | 必填 | 说明 |
