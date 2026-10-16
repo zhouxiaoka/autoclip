@@ -6,19 +6,36 @@
 # 校验两层：① artifact zip 对 GitHub 记录的 digest（缺失即退出 4）；
 #           ② 解出的 exe 对 provenance 里记录的 sha256。run 里列出了 provenance 但下载或解析失败即退出 5；
 #              run 确实没有 provenance 时只校验 zip，并明确打印出来。
-# 退出码：2 无 artifact；3 拿不到下载地址；4 无有效 digest；5 provenance 下载/解析失败；其它为远端脚本退出码。
+# 退出码：2 无 artifact；3 拿不到下载地址；4 无有效 digest；5 provenance 下载/解析失败；8 诊断脱敏失败；其它为远端脚本退出码。
 # 兼容 macOS 自带 bash 3.2：所有变量都写成 ${VAR}（R16 #50：不加花括号的变量紧挨中文全角字符会被误解析）。
 set -euo pipefail
 command -v python3 >/dev/null 2>&1 || { echo "错误：需要 python3（provenance 解析和诊断脱敏）。" >&2; exit 1; }
+
+# R23 #186/#187: everything this script prints (gh, curl, ssh, scp, the remote ps1, cleanup) goes through
+# redact.py: the script re-runs itself with stdout and stderr each piped through `redact.py --stdin`.
+# If either redact fails its output is withheld and the script exits non-zero (8 when the run itself
+# succeeded), never 0.
+if [ -z "${WINQA_REDACTED_CHILD:-}" ]; then
+  REDACT_PY="$(cd "$(dirname "$0")" && pwd)/redact.py"
+  FIFO_DIR=$(mktemp -d); trap 'rm -rf "${FIFO_DIR}"' EXIT
+  mkfifo "${FIFO_DIR}/out" "${FIFO_DIR}/err"
+  python3 "${REDACT_PY}" --stdin <"${FIFO_DIR}/out" & P_OUT=$!
+  python3 "${REDACT_PY}" --stdin <"${FIFO_DIR}/err" >&2 & P_ERR=$!
+  RC=0; WINQA_REDACTED_CHILD=1 "${BASH:-bash}" "$0" "$@" >"${FIFO_DIR}/out" 2>"${FIFO_DIR}/err" || RC=$?
+  R_OUT=0; wait "${P_OUT}" || R_OUT=$?
+  R_ERR=0; wait "${P_ERR}" || R_ERR=$?
+  if [ "${R_OUT}" -ne 0 ] || [ "${R_ERR}" -ne 0 ]; then
+    echo "错误：诊断脱敏失败（redact 退出码 stdout=${R_OUT} stderr=${R_ERR}），输出已丢弃；脚本退出码 ${RC}。" >&2
+    [ "${RC}" -ne 0 ] || RC=8
+  fi
+  exit "${RC}"
+fi
 RUN="${1:?run_id}"; REPO="${WINQA_REPO:-zhouxiaoka/autoclip}"
 HOST="${WINQA_HOST:?set WINQA_HOST to the acceptance machine}"; USER_="${WINQA_USER:-Administrator}"; ID="${WINQA_IDENTITY:-${HOME}/.ssh/autoclip_winqa}"
 ART="autoclip-desktop-windows-x64"; PARTS="${WINQA_PARTS:-16}"
 PROV_NAMES="internal-desktop-provenance internal-desktop-provenance-windows-x64"
 SSH=(ssh -i "${ID}" -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 "${USER_}@${HOST}")
 TMP=$(mktemp -d); trap 'rm -rf "${TMP}"' EXIT
-
-# R17 #55: one scrubber for paths (redact.py scrub_homes) plus URLs; never a second regex copy.
-redact() { python3 "$(dirname "$0")/redact.py" --stdin; }
 
 LISTING=$(gh api "repos/${REPO}/actions/runs/${RUN}/artifacts" --jq '.artifacts[]|select(.expired|not)|"\(.name) \(.id) \(.size_in_bytes) \(.digest // "")"')
 LINE=$(printf '%s\n' "${LISTING}" | awk -v a="${ART}" '$1==a{print; exit}')
@@ -39,7 +56,7 @@ for NAME in ${PROV_NAMES}; do
 done
 if [ -n "${PROV_NAME}" ]; then
   if ! gh run download "${RUN}" -R "${REPO}" -n "${PROV_NAME}" -D "${TMP}/prov" >"${TMP}/prov.log" 2>&1; then
-    echo "错误：run ${RUN} 有 ${PROV_NAME}，但下载失败：" >&2; redact <"${TMP}/prov.log" | tail -5 >&2; exit 5
+    echo "错误：run ${RUN} 有 ${PROV_NAME}，但下载失败：" >&2; tail -5 "${TMP}/prov.log" >&2; exit 5
   fi
   PROV_FILE=$(ls "${TMP}/prov"/*.json 2>/dev/null | head -1 || true)
   [ -n "${PROV_FILE}" ] || { echo "错误：${PROV_NAME} 里没有 json 文件。" >&2; exit 5; }
@@ -73,7 +90,7 @@ if not raw or bad or len(good) != 1:
 print(good[0])
 PY
   ) || ! [[ "${EXP_EXE}" =~ ^[0-9a-f]{64}$ ]]; then
-    echo "错误：${PROV_NAME} 解析不出有效的 exe sha256：" >&2; redact <"${TMP}/parse.log" | tail -3 >&2; exit 5
+    echo "错误：${PROV_NAME} 解析不出有效的 exe sha256：" >&2; tail -3 "${TMP}/parse.log" >&2; exit 5
   fi
   echo "provenance (${PROV_NAME}) exe sha256=${EXP_EXE}"
 else
@@ -89,11 +106,8 @@ SCP=(scp -q -i "${ID}" -o BatchMode=yes -o ConnectTimeout=20)
 "${SCP[@]}" "$(dirname "$0")/ps/pull_run_installer.ps1" "${USER_}@${HOST}:C:/winqa/ps/"
 umask 077; printf '%s' "${URL}" > "${TMP}/url"; unset URL
 "${SCP[@]}" "${TMP}/url" "${USER_}@${HOST}:C:/winqa/inst/.url-${RUN}"; rm -f "${TMP}/url"
-# R22: the ps1 has no scrubber of its own; all of its output goes through redact.py (one implementation).
-set +e
-"${SSH[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\winqa\\ps\\pull_run_installer.ps1 -Run ${RUN} -Total ${ASIZE} -N ${PARTS} -WantZip ${ADIGEST}${EXP_EXE:+ -WantExe ${EXP_EXE}}" 2>"${TMP}/ps.err" | redact
-RC=${PIPESTATUS[0]}
-set -e
-redact <"${TMP}/ps.err" >&2
+# The ps1 has no scrubber of its own; its output reaches the outer scrub pipes like everything else.
+RC=0
+"${SSH[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\winqa\\ps\\pull_run_installer.ps1 -Run ${RUN} -Total ${ASIZE} -N ${PARTS} -WantZip ${ADIGEST}${EXP_EXE:+ -WantExe ${EXP_EXE}}" || RC=$?
 "${SSH[@]}" "powershell -NoProfile -Command \"Remove-Item -Force -ErrorAction SilentlyContinue C:\\winqa\\inst\\.url-${RUN}\"" || true
 exit "${RC}"

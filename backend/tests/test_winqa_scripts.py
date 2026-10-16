@@ -387,7 +387,7 @@ def test_redact_utf8_key_is_masked_in_byte_mode(tmp_path, monkeypatch):
 # R22: GBK trail byte 0x5C ('\\', e.g. 乗 81 5C, 淺 9C 5C) or 0x7C ('|', e.g. 億 83 7C) inside a user
 # name used to end the name early in byte mode, leaking every byte after it.
 GBK_5C_NAMES = ['乗', '张乗', '淺野', '乗a', '億x', '张三']
-GBK_5C_ROOTS = [('C:\\Users\\', '\\AppData\\x.log'), ('/home/', '/x'), ('/Users/', ': 拒绝访问')]
+GBK_5C_ROOTS = [('C:\\Users\\', '\\AppData\\x.log'), ('/home/', '/x'), ('/Users/', '/拒绝访问 x')]
 
 
 @pytest.mark.parametrize('name', GBK_5C_NAMES)
@@ -502,9 +502,10 @@ def test_ps1_has_no_scrubbing_rule_and_sh_pipes_it_through_redact():
     for gone in ('$WinPattern', '$PosixPattern', 'Scrub-Homes', 'Mask-HomeName', '<user>'):
         assert gone not in text
     sh = SH.read_text(encoding='utf-8')
-    run = sh[sh.index('pull_run_installer.ps1 -Run'):]
-    assert '2>"${TMP}/ps.err" | redact' in run and 'redact <"${TMP}/ps.err" >&2' in run
-    assert 'RC=${PIPESTATUS[0]}' in run
+    # R23 #186: one outer wrapper pipes the whole script (stdout and stderr) through redact.py
+    head, body = sh.split('RUN="${1:?run_id}"', 1)
+    assert '--stdin <"${FIFO_DIR}/out"' in head and '--stdin <"${FIFO_DIR}/err" >&2' in head
+    assert 'redact' not in body, 'no second, partial redact pipe'
 
 
 @pytestmark_bash
@@ -594,15 +595,16 @@ def test_redact_has_one_home_implementation():
         assert gone not in src
 
 
-BOUNDARY_KEEP_PROSE = [("x '/home/kris' y", "x '/home/<user>' y"), ("open '/home/kris' now", "open '/home/<user>' now"),
-                       ("x '/home/D''Arcy' y", "x '/home/<user>' y"), ("say '/Users/Jane Doe' ok", "say '/Users/<user>' ok")]
+BOUNDARY_TO_EOL = [("x '/home/kris' y", "x '/home/<user>"), ("open '/home/kris' now\nnext", "open '/home/<user>\nnext"),
+                   ("x '/home/D''Arcy' y", "x '/home/<user>"), ("say '/Users/Jane Doe' ok", "say '/Users/<user>"),
+                   ("x '/home/D' Artagnan y", "x '/home/<user>"), ("x 'C:\\Users\\D' Artagnan' y", "x 'C:\\Users\\<user>")]
 BOUNDARY_NO_LEAK = [('/home/Jane Doe /x', 'Doe'), ("x '/home/D' Artagnan/x' y", 'Artagnan'),
                     ('C:\\Users\\Jane Doe \\x', 'Doe'), ("/Users/D' Artagnan/x", 'Artagnan')]
 
 
-@pytest.mark.parametrize('raw,expected', BOUNDARY_KEEP_PROSE)
-def test_boundary_rule_keeps_text_after_a_quoted_path(raw, expected):
-    """R22 Dong: only the user name goes; the closing quote and the prose after it stay."""
+@pytest.mark.parametrize('raw,expected', BOUNDARY_TO_EOL)
+def test_r23_179_no_quote_rule_name_runs_to_separator_or_line_end(raw, expected):
+    """R23 #179: no quote cut-off; without a separator the name runs to the end of the line (mask more)."""
     assert _module('redact').scrub_homes(raw) == expected
 
 
@@ -615,3 +617,204 @@ def test_boundary_rule_never_leaks_the_rest_of_a_spaced_or_quoted_name(raw, leak
 def test_home_and_users_roots_are_both_case_insensitive():
     out = _module('redact').scrub_homes('/HOME/qa\n/Home/bob\n/USERS/kris\n/users/amy')
     assert out == '/HOME/<user>\n/Home/<user>\n/USERS/<user>\n/users/<user>'
+
+
+# ---------------- R23 (#179-#193, #154 #184): one boundary rule, union of readings ----------------
+
+def test_r23_code_health_no_per_sample_branches():
+    """R23: no quote rule, no <user>-prefix exemption, no implicit-escape branch, no stop-character sets."""
+    src = (ROOT / 'redact.py').read_text(encoding='utf-8')
+    for gone in ('implicit', '== "\'"', 'startswith(USER', '_WIN_STOP', '_POSIX_STOP', 'URL.sub'):
+        assert gone not in src, gone
+    assert "_WIN_SEPS, _POSIX_SEPS = '\\\\/', '/'" in src
+
+
+@pytest.mark.parametrize('raw,expected', [
+    ('C:\\Users\\u0022Alice\\x', 'C:\\Users\\<user>\\x'), ('C:\\Users\\u003aAlice\\x', 'C:\\Users\\<user>\\x'),
+    ('C:\\Users\\u003aAlice', 'C:\\Users\\<user>'), ('/home/\\u0022Alice/x', '/home/<user>/x')])
+def test_r23_180_escape_ambiguity_masks_union_of_raw_and_decoded(raw, expected):
+    out = _module('redact').scrub_homes(raw)
+    assert out == expected and 'Alice' not in out
+
+
+@pytest.mark.parametrize('raw', ['/home/<user>alice/x', 'C:\\Users\\<user>alice\\x', '/Users/<user>alice'])
+def test_r23_182_only_an_exact_user_segment_is_left_alone(raw):
+    redact = _module('redact')
+    out = redact.scrub_homes(raw)
+    assert 'alice' not in out and out == redact.scrub_homes(out)
+
+
+@pytest.mark.parametrize('raw', ['/home/A\\B/x', '/Users/A"B/x', '/home/A:B/x'])
+def test_r23_183_posix_names_end_only_at_slash(raw):
+    assert _module('redact').scrub_homes(raw) == raw[:raw.index('/', 1) + 1] + '<user>/x'
+
+
+@pytest.mark.parametrize('raw,expected', [('/home/./kris/x', '/home/./<user>/x'), ('/home/../kris/x', '/home/../<user>/x'),
+                                          ('C:\\Users\\.\\kris\\x', 'C:\\Users\\.\\<user>\\x')])
+def test_r23_189_dot_segments_are_skipped(raw, expected):
+    assert _module('redact').scrub_homes(raw) == expected
+
+
+@pytest.mark.parametrize('raw', ['HTTPS://x.invalid/y?sig=1', 'https:\\/\\/x.invalid\\/y?sig=1',
+                                 'https:\\u002f\\u002fx.invalid/y?sig=1', 'HtTp://x.invalid/y?sig=1'])
+def test_r23_185_urls_any_case_and_escaped(raw):
+    redact = _module('redact')
+    assert redact.scrub_stream('a ' + raw + ' b') == 'a <url> b'
+    assert redact.scrub_stream_bytes(('a ' + raw + ' b').encode()) == b'a <url> b'
+
+
+@pytest.mark.parametrize('name', ['ｱソAlice', 'ｶﾞソ太郎', 'ﾃｽﾄ表示'])
+def test_r23_181_shift_jis_halfwidth_names_masked_whole(tmp_path, name):
+    redact = _module('redact')
+    raw = ('ログ C:\\Users\\' + name + '\\AppData\\x /home/' + name + '/y\r\n').encode('shift_jis')
+    want = 'ログ C:\\Users\\<user>\\AppData\\x /home/<user>/y\r\n'.encode('shift_jis')
+    (tmp_path / 'e.log').write_bytes(raw)
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes() == want
+    p = subprocess.run(SH_REDACT, input=raw, capture_output=True)
+    assert p.returncode == 0 and p.stdout == want
+
+
+def _layered(text):
+    """Reference: undo escapes by repeated full left-to-right passes (the R22 definition)."""
+    hexd = set('0123456789abcdefABCDEF')
+    ch = list(text)
+    while True:
+        out, i, changed = [], 0, False
+        while i < len(ch):
+            if ch[i] == '\\' and i + 1 < len(ch) and ch[i + 1] in '\\/':
+                out.append(ch[i + 1]); i += 2; changed = True
+            elif ch[i] == '\\' and i + 5 < len(ch) and ch[i + 1] == 'u' and all(x in hexd for x in ch[i + 2:i + 6]):
+                out.append(chr(int(''.join(ch[i + 2:i + 6]), 16))); i += 6; changed = True
+            else:
+                out.append(ch[i]); i += 1
+        ch = out
+        if not changed:
+            return ''.join(ch)
+
+
+def test_r23_184_single_pass_decoder_equals_repeated_passes():
+    import random
+    rnd = random.Random(414)
+    parts = ['\\', 'u', '0', '5', 'c', '2', 'f', '/', 'a', '\\u005c', '\\u0075', '4', '1', '\\\\']
+    redact = _module('redact')
+    for _ in range(20000):
+        t = ''.join(rnd.choice(parts) for _ in range(rnd.randint(0, 16)))
+        ch, st, en = redact._decoded_view(t)
+        assert ''.join(ch) == _layered(t), t
+        assert all(e <= s2 for e, s2 in zip(en, st[1:])) and (not en or en[-1] == len(t))
+
+
+@pytest.mark.parametrize('unit', ['u005c', 'u005cu005c', '\\\\'], ids=['u005c-chain', 'double', 'backslash-pairs'])
+def test_r23_184_multi_layer_escapes_scale_linearly(unit):
+    """R23 #184: 40 KB of nested \\u005c took 13 s; now < 1 s and doubling the input at most ~doubles the time."""
+    import time
+    redact = _module('redact')
+
+    def cost(size):
+        raw = '/home/\\' + unit * (size // len(unit)) + 'kris/x'
+        t = time.perf_counter()
+        out = redact.scrub_stream(raw)
+        assert 'kris' not in out
+        return time.perf_counter() - t
+    cost(2000)
+    small, big = min(cost(20000) for _ in range(3)), min(cost(40000) for _ in range(3))
+    assert big < 1.0
+    assert big < 3.5 * small + 0.02, (small, big)
+
+
+def test_r23_188_read_or_write_error_on_one_file_does_not_stop_the_rest(tmp_path, monkeypatch, capsys):
+    redact = _module('redact')
+    (tmp_path / 'a.log').write_text('/Users/bob/x\n', encoding='utf-8')
+    (tmp_path / 'b.log').write_text('/Users/carol/x\n', encoding='utf-8')
+    real = Path.read_bytes
+
+    def flaky(self):
+        if self.name == 'a.log':
+            raise PermissionError('denied')
+        return real(self)
+    monkeypatch.setattr(Path, 'read_bytes', flaky)
+    with pytest.raises(SystemExit) as exc:
+        redact.main(str(tmp_path))
+    assert exc.value.code == 2
+    assert (tmp_path / 'b.log').read_text(encoding='utf-8') == '/Users/<user>/x\n'
+    assert 'a.log' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('codec', ['utf-16-le', 'utf-16-be'])
+def test_r23_190_utf16_without_bom_is_masked_and_written_back(tmp_path, codec):
+    redact = _module('redact')
+    (tmp_path / 'e.log').write_bytes('C:\\Users\\kris\\x /home/bob/y\r\n'.encode(codec))
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes() == 'C:\\Users\\<user>\\x /home/<user>/y\r\n'.encode(codec)
+    assert redact.scrub_stream_bytes('/Users/kris/x'.encode(codec)) == '/Users/<user>/x'.encode(codec)
+
+
+def test_r23_192_inexact_round_trip_is_refused_and_file_kept(tmp_path, monkeypatch, capsys):
+    """R23 #192: a reading that does not map back to the same bytes must leave the file untouched."""
+    redact = _module('redact')
+    monkeypatch.setattr(redact, '_FALLBACK', ('gb18030', 'replace'))   # lossy on purpose: \xff -> U+FFFD
+    bad = b'\xff C:\\Users\\kris\\x\n'
+    (tmp_path / 'a.log').write_bytes(bad)
+    with pytest.raises(SystemExit) as exc:
+        redact.main(str(tmp_path))
+    assert exc.value.code == 2
+    assert (tmp_path / 'a.log').read_bytes() == bad
+    assert 'a.log' in capsys.readouterr().err
+    with pytest.raises(ValueError):
+        redact.scrub_stream_bytes(bad)
+
+
+def test_r23_187_stdin_error_prints_nothing_and_exits_non_zero():
+    bad = b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00'
+    p = subprocess.run(SH_REDACT, input=bad, capture_output=True)
+    assert p.returncode != 0 and p.stdout == b''
+    assert b'Traceback' not in p.stderr and b'bob' not in p.stderr
+
+
+def _sh_env(tmp_path):
+    return {**os.environ, 'PATH': f'{tmp_path / "bin"}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid',
+            'WINQA_IDENTITY': '/Users/kris/.ssh/id_winqa', 'LANG': UTF8, 'LC_ALL': UTF8}
+
+
+@pytestmark_bash
+@pytest.mark.parametrize('bash', BASHES)
+@pytest.mark.parametrize('tool', ['gh', 'curl', 'ssh', 'scp'])
+def test_r23_186_every_command_output_goes_through_redact(tmp_path, bash, tool):
+    """R23 #186: gh, curl, ssh (mkdir, ps1, cleanup) and scp output is scrubbed, not only the ps1 call."""
+    _run(tmp_path, bash)
+    bins = tmp_path / 'bin'
+    leak = 'warn: Identity file /Users/kris/.ssh/id_winqa C:\\\\Users\\\\Jane Doe\\\\x https://s.invalid/z?sig=1'
+    body = (bins / tool).read_text().split('\n', 1)[1]
+    out = '' if tool == 'curl' else f'echo "{tool} out {leak}"; '   # curl's stdout is the signed URL
+    _bin(bins, tool, f'{out}echo "{tool} err {leak}" >&2\n' + body)
+    done = subprocess.run([bash, str(SH), '999'], env=_sh_env(tmp_path), capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert f'{tool} err' in done.stderr and '/Users/<user>/.ssh' in done.stderr
+    for bad in ('kris', 'Jane', 'sig=1'):
+        assert bad not in done.stdout + done.stderr, (bad, done.stdout, done.stderr)
+
+
+@pytestmark_bash
+@pytest.mark.parametrize('bash', BASHES)
+@pytest.mark.parametrize('remote_rc', [0, 7])
+def test_r23_187_redact_failure_never_exits_0(tmp_path, bash, remote_rc):
+    """R23 #187: undecodable output (odd-length UTF-16 on stderr) makes redact fail: nothing raw is printed and
+    the script exits non-zero (8 if the run itself succeeded, else the run's own code)."""
+    _run(tmp_path, bash)
+    bins = tmp_path / 'bin'
+    payload = (b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00')
+    (tmp_path / 'bad.bin').write_bytes(payload)
+    _bin(bins, 'ssh', 'case "$*" in\n  *pull_run_installer.ps1*) cat "' + str(tmp_path / 'bad.bin') + '" >&2; exit '
+         + str(remote_rc) + ';;\nesac; exit 0')
+    done = subprocess.run([bash, str(SH), '999'], env=_sh_env(tmp_path), capture_output=True)
+    assert done.returncode == (8 if remote_rc == 0 else remote_rc), done.stderr
+    assert '脱敏失败'.encode() in done.stderr and b'Traceback' not in done.stderr
+    assert b'b\x00o\x00b' not in done.stdout + done.stderr
+
+
+def test_r23_193_readme_keeps_the_harness_documentation():
+    text = (ROOT / 'README.md').read_text(encoding='utf-8')
+    for kept in ('run_winqa.sh', '每次运行都会先卸载 AutoClip 并删除用户数据', '仍需人工 / 界面的部分', 'WINQA_MODEL_API_KEY',
+                 '验收机拉包脚本（E9）', '测试依赖（必需）'):
+        assert kept in text, kept

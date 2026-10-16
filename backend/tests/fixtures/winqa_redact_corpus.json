@@ -1,5 +1,5 @@
 {
- "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only). Boundary rule: a name run that reaches / or \\ is masked whole (spaces, quotes included); a run that ends without a separator after a root opened by a quote ends at the first quote followed by whitespace or the end.",
+ "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only). Boundary rule (R23): after a home root the name runs from the separator to the next real separator (POSIX /, Windows \\\\ or /) or the end of the line; raw and decoded readings (and, for bytes, every candidate encoding) are masked as a union.",
  "cases": [
   {
    "round": "R16-R20",
@@ -78,20 +78,23 @@
   {
    "round": "R16-R20",
    "text": "/Users/Jane Doe: Permission denied",
-   "expected": "/Users/<user>: Permission denied",
-   "id": "c012"
+   "expected": "/Users/<user>",
+   "id": "c012",
+   "note": "R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R16-R20",
    "text": "C:\\Users\\Jane Doe: Access is denied",
-   "expected": "C:\\Users\\<user>: Access is denied",
-   "id": "c013"
+   "expected": "C:\\Users\\<user>",
+   "id": "c013",
+   "note": "R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R16-R20",
    "text": "/home/Jane Doe:/bin/bash",
-   "expected": "/home/<user>:/bin/bash",
-   "id": "c014"
+   "expected": "/home/<user>/bin/bash",
+   "id": "c014",
+   "note": "R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R16-R20",
@@ -162,8 +165,8 @@
   {
    "round": "R16-R20",
    "text": "open '/home/kris' now",
-   "expected": "open '/home/<user>' now",
-   "note": "R22 boundary rule: run ends without a separator after a quote-opened root -> name ends at the matching quote; prose kept",
+   "expected": "open '/home/<user>",
+   "note": "R23 #179: no quote rule; the rest of the line goes with the name. R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)",
    "id": "c026"
   },
   {
@@ -243,15 +246,15 @@
   {
    "round": "R21",
    "text": "x '/home/D''Arcy' y",
-   "expected": "x '/home/<user>' y",
-   "note": "R22 boundary rule: matching quote = first quote followed by whitespace/end (D''Arcy stays inside)",
+   "expected": "x '/home/<user>",
+   "note": "R23 #179: no quote rule; the rest of the line goes with the name. R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)",
    "id": "c039"
   },
   {
    "round": "R21",
    "text": "x '/home/kris' y",
-   "expected": "x '/home/<user>' y",
-   "note": "R22 boundary rule: matching quote, rest kept",
+   "expected": "x '/home/<user>",
+   "note": "R23 #179: no quote rule; the rest of the line goes with the name. R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)",
    "id": "c040"
   },
   {
@@ -316,12 +319,13 @@
   {
    "round": "R18-R20 ps1",
    "text": "HTTPS://x.invalid/y",
-   "expected": "HTTPS://x.invalid/y",
+   "expected": "<url>",
    "chains": [
     "stream",
     "pwsh"
    ],
-   "id": "c050"
+   "id": "c050",
+   "note": "R23 #185: URLs are matched case-insensitively (was wrongly expected unmasked)"
   },
   {
    "round": "R22 #150",
@@ -387,8 +391,9 @@
   {
    "round": "R22 #152",
    "text": "C:\\Users\\a?b\\x",
-   "expected": "C:\\Users\\<user>?b\\x",
-   "id": "c061"
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c061",
+   "note": "R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R22 #153",
@@ -465,8 +470,9 @@
   {
    "round": "R22 Big5",
    "text": "/Users/許功蓋: 拒絕存取",
-   "expected": "/Users/<user>: 拒絕存取",
-   "id": "c074"
+   "expected": "/Users/<user>",
+   "id": "c074",
+   "note": "R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R22 SJIS half-width",
@@ -481,14 +487,16 @@
   {
    "round": "R22 boundary rule",
    "text": "'/home/kris'",
-   "expected": "'/home/<user>'",
-   "id": "c076"
+   "expected": "'/home/<user>",
+   "id": "c076",
+   "note": "R23 #179: no quote rule; the rest of the line goes with the name. R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R22 boundary rule: spaced name inside quotes",
    "text": "say '/Users/Jane Doe' ok",
-   "expected": "say '/Users/<user>' ok",
-   "id": "c077"
+   "expected": "say '/Users/<user>",
+   "id": "c077",
+   "note": "R23 #179: no quote rule; the rest of the line goes with the name. R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
   },
   {
    "round": "R22 Dong: /home case-insensitive",
@@ -499,8 +507,151 @@
   {
    "round": "R22 boundary rule + CRLF",
    "text": "x '/home/kris' y\r\nz",
-   "expected": "x '/home/<user>' y\r\nz",
-   "id": "c079"
+   "expected": "x '/home/<user>\r\nz",
+   "id": "c079",
+   "note": "R23 #179: no quote rule; the rest of the line goes with the name. R23 rule: a name runs from the separator to the next real separator (POSIX /, Windows \\ or /) or the end of the line; nothing else ends it (PM: when in doubt, mask more)"
+  },
+  {
+   "round": "R23 #179",
+   "text": "x '/home/D' Artagnan y",
+   "expected": "x '/home/<user>",
+   "id": "c080"
+  },
+  {
+   "round": "R23 #179",
+   "text": "x 'C:\\Users\\D' Artagnan' y",
+   "expected": "x 'C:\\Users\\<user>",
+   "id": "c081"
+  },
+  {
+   "round": "R23 #180 #150",
+   "text": "C:\\Users\\u0022Alice\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c082"
+  },
+  {
+   "round": "R23 #180 #150",
+   "text": "C:\\Users\\u003aAlice\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c083"
+  },
+  {
+   "round": "R23 #180 #150",
+   "text": "C:\\Users\\u003aAlice",
+   "expected": "C:\\Users\\<user>",
+   "id": "c084"
+  },
+  {
+   "round": "R23 #180 #150",
+   "text": "/home/\\u0022Alice/x",
+   "expected": "/home/<user>/x",
+   "id": "c085"
+  },
+  {
+   "round": "R23 #181 SJIS",
+   "text": "C:\\Users\\ｱソAlice\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c086"
+  },
+  {
+   "round": "R23 #181 SJIS",
+   "text": "/home/ｶﾞソ太郎/x",
+   "expected": "/home/<user>/x",
+   "id": "c087"
+  },
+  {
+   "round": "R23 #182",
+   "text": "/home/<user>alice/x",
+   "expected": "/home/<user>/x",
+   "id": "c088"
+  },
+  {
+   "round": "R23 #182",
+   "text": "C:\\Users\\<user>alice\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c089"
+  },
+  {
+   "round": "R23 #183 #152",
+   "text": "/home/A\\B/x",
+   "expected": "/home/<user>/x",
+   "id": "c090"
+  },
+  {
+   "round": "R23 #183 #152",
+   "text": "/Users/A\"B/x",
+   "expected": "/Users/<user>/x",
+   "id": "c091"
+  },
+  {
+   "round": "R23 #189",
+   "text": "/home/./kris/x",
+   "expected": "/home/./<user>/x",
+   "id": "c092"
+  },
+  {
+   "round": "R23 #189",
+   "text": "C:\\Users\\..\\kris\\x",
+   "expected": "C:\\Users\\..\\<user>\\x",
+   "id": "c093"
+  },
+  {
+   "round": "R23 #151",
+   "text": "/home/Jane Doe /x",
+   "expected": "/home/<user>/x",
+   "id": "c094"
+  },
+  {
+   "round": "R23 #184 #154",
+   "text": "/home/\\u005cu005cu005ckris/x",
+   "expected": "/home/<user>/x",
+   "id": "c095"
+  },
+  {
+   "round": "R23 #184 #154",
+   "text": "C:\\\\Users\\\\\\u005cu005ckris\\\\x",
+   "expected": "C:\\\\Users\\\\\\<user>\\\\x",
+   "id": "c096"
+  },
+  {
+   "round": "R23 #185",
+   "text": "HTTPS://x.invalid/y?sig=1 ok",
+   "expected": "<url> ok",
+   "id": "c097",
+   "chains": [
+    "stream",
+    "pwsh"
+   ]
+  },
+  {
+   "round": "R23 #185",
+   "text": "https:\\/\\/x.invalid\\/y?sig=1 ok",
+   "expected": "<url> ok",
+   "id": "c098",
+   "chains": [
+    "stream",
+    "pwsh"
+   ]
+  },
+  {
+   "round": "R23 #185",
+   "text": "https:\\u002f\\u002fx.invalid/y?sig=1",
+   "expected": "<url>",
+   "id": "c099",
+   "chains": [
+    "stream",
+    "pwsh"
+   ]
+  },
+  {
+   "round": "R23 #185",
+   "text": "HtTp://x.invalid/y",
+   "expected": "<url>",
+   "id": "c100",
+   "chains": [
+    "stream",
+    "pwsh"
+   ]
   }
  ]
 }
