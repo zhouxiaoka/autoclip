@@ -748,3 +748,5 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 `studio_screen_finished` / `studio_generation_finished` / `studio_production_finished` 失败时必带 `failure_stage`（含服务重启、IO 失败、调度失败路径）、`upstream_error_type`；全部带 `provider`（目录 slug 或 `other`）与 `config_source`（`preset` = 目录 base URL + 目录模型 id，否则 `customized`）。不发送 URL 或自定义模型名。
 
 `service_restarted` 失败另带 `shutdown_kind`：`clean`（上次进程正常退出/更新，写了退出标记）、`crash`（有标记目录但没有该进程的标记）、`unknown`（无进程标识或从未写过标记）。
+
+终态事件可带 `retry_of`（上一次 attempt 的 `attempt_id`，`t-` 遥测 id）：失败态「重试」按钮复用 `/studio/{id}/analyze`，新 run 生成新 `attempt_id`。不自动续跑。
