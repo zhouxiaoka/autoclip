@@ -20,3 +20,16 @@ test('1.5.8 one-click retry: new attempt_id, linked to the failed one via retry_
   assert.equal(first.retry_of, undefined)
   assert.equal(second.retry_of, first.attempt_id)
 })
+
+test('1.5.8 failed-state Retry button reuses the rerun API, which restarts the watch (new attempt + retry_of)', () => {
+  const fs = require('node:fs')
+  const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
+  const failed = ui.slice(ui.indexOf("workspace.analysis?.status==='failed'"))
+  assert.match(failed.slice(0, 900), /!workspace\.output_variants\?\.length && <Btn[^>]*onClick=\{\(\)=>act\('retry-analysis', async\(\)=>\{await studioApi\.analyze\(project\.id, !!automatic\)\}\)\}>\{t\("重试"\)\}/)
+  const api = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/api.ts'), 'utf8')
+  assert.match(api, /analyze: \(pid: string, automatic = false\)[\s\S]{0,300}workflow\.watch\('studio-screen', pid, undefined, undefined, props, true/)
+  // retry_of survives the property allow-list and is never accepted when not a telemetry id
+  const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
+  assert.equal(workflow.safeStudioProperties({ retry_of: 't-0123456789abc' }).retry_of, 't-0123456789abc')
+  assert.equal(workflow.safeStudioProperties({ retry_of: 'https://x/sk-abc' }).retry_of, undefined)
+})
