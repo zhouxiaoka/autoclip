@@ -84,6 +84,7 @@ step "1. 上传脚本、安装包和 CI 冒烟用到的仓库文件"
 remote 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force C:\winqa\ps,C:\winqa\py,C:\winqa\inst,C:\winqa\out,C:\winqa\repo | Out-Null"'
 "${SCP[@]}" "$HERE"/ps/*.ps1 "$USER_@$HOST:C:/winqa/ps/"
 "${SCP[@]}" "$HERE"/py/*.py "$USER_@$HOST:C:/winqa/py/"
+"${SCP[@]}" "$HERE/redact.py" "$USER_@$HOST:C:/winqa/py/"   # R23: winqa_probe.py imports it (one scrubber)
 remote_hash() { remote "powershell -NoProfile -Command \"if (Test-Path C:\\winqa\\inst\\$1) { (Get-FileHash C:\\winqa\\inst\\$1).Hash.ToLower() }\"" | tr -d '\r'; }
 # copy /b 的分片列表：C:\winqa\inst\parts-<dst>\p00+...。以前用 sed "s|^|...\\|"，结尾的 \| 把分隔符转义掉了
 # （unterminated s command），列表为空，拼接后的哈希永远对不上（RC156 Win QA #16）。printf 不经过 sed 的转义。

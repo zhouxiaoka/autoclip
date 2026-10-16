@@ -84,7 +84,7 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 - `py/winqa_probe.py`：`seed` / `check` / `failure`，用包内 Python 跑，只调 127.0.0.1。
 - `py/winqa_real.py`：`model` / `whisper` / `local` / `link` / `final` 真实场景；key 只从 stdin 读。
 - `summarize.py`：证据目录 → `summary.md` + `windows-rows.draft.json`。
-- `redact.py`：按 `WINQA_MODEL_API_KEY` 精确替换证据里的 key 和应用的打码形式。
+- `redact.py`：按 `WINQA_MODEL_API_KEY` 精确替换证据里的 key 和应用的打码形式。`py/winqa_probe.py` 写进证据的字段也调用它（`scrub_diagnostic`），第 1 步随 py/ 一起上传。
 
 ## 验收机拉包脚本（E9）
 

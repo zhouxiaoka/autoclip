@@ -213,6 +213,17 @@ def scrub_homes(text: str) -> str:
     return _apply(text, text_ranges(text), str)
 
 
+_SECRETS = [(re.compile(r'sk-[A-Za-z0-9_\-]{6,}'), 'sk-***'),
+            (re.compile(r'(?i)(api[_-]?key|authorization|bearer)(["\'=:\s]+)[^\s"\',]+'), r'\1\2***')]
+
+
+def scrub_diagnostic(text: str) -> str:
+    """winqa_probe.py evidence fields: generic key shapes, then home directories and URLs."""
+    for pat, rep in _SECRETS:
+        text = pat.sub(rep, text)
+    return scrub_stream(text)
+
+
 def scrub_stream(text: str) -> str:
     """Diagnostics: home directories and URLs (signed links)."""
     return _apply(text, text_ranges(text, urls=True), str)

@@ -64,10 +64,9 @@ def body(r, limit=4000):
         return r.text[:limit]
 
 
-def redact(text):
-    text = re.sub(r'sk-[A-Za-z0-9_\-]{6,}', 'sk-***', text)
-    text = re.sub(r'(?i)(api[_-]?key|authorization|bearer)(["\'=:\s]+)[^\s"\',]+', r'\1\2***', text)
-    return re.sub(r'C:\\\\?Users\\\\?[^\\\\]+', r'C:\\Users\\<user>', text)
+# R23: one scrubber. redact.py is uploaded next to this file (run_winqa.sh step 1); in the repo it is one level up.
+sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
+from redact import scrub_diagnostic as redact  # noqa: E402
 
 
 # ---------------------------------------------------------------- media

@@ -818,3 +818,34 @@ def test_r23_193_readme_keeps_the_harness_documentation():
     for kept in ('run_winqa.sh', '每次运行都会先卸载 AutoClip 并删除用户数据', '仍需人工 / 界面的部分', 'WINQA_MODEL_API_KEY',
                  '验收机拉包脚本（E9）', '测试依赖（必需）'):
         assert kept in text, kept
+
+
+def _probe(monkeypatch, tmp_path):
+    pytest.importorskip('requests')
+    import importlib.util
+    monkeypatch.setenv('APPDATA', str(tmp_path))
+    spec = importlib.util.spec_from_file_location('winqa_probe_r23', ROOT / 'py' / 'winqa_probe.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize('raw,leaks', [
+    ('err C:\\Users\\Jane Doe\\AppData x', ['Jane', 'Doe']), ('err /home/kris/x and /Users/amy/y', ['kris', 'amy']),
+    ('err C:\\Users\\u0022Alice\\x', ['Alice']), ('POST https://api.invalid/v1?sig=abc failed', ['sig=abc']),
+    ('auth sk-abcdefgh1234 Bearer tok123 api_key=zzz999', ['abcdefgh1234', 'tok123', 'zzz999'])])
+def test_r23_probe_evidence_uses_redact_py(monkeypatch, tmp_path, raw, leaks):
+    """R23 (Dong): winqa_probe.py output lands in check-*.json / failure.json in the evidence dir; it must use
+    redact.py (one scrubber), not its own C:\\Users-only regex."""
+    probe = _probe(monkeypatch, tmp_path)
+    out = probe.redact(raw)
+    assert out == _module('redact').scrub_diagnostic(raw)
+    for leak in leaks:
+        assert leak not in out, (leak, out)
+    src = (ROOT / 'py' / 'winqa_probe.py').read_text(encoding='utf-8')
+    assert 'def redact(' not in src and 'Users\\\\' not in src
+
+
+def test_r23_run_winqa_uploads_redact_py_next_to_the_probe():
+    sh = (ROOT / 'run_winqa.sh').read_text(encoding='utf-8')
+    assert '"${SCP[@]}" "$HERE/redact.py" "$USER_@$HOST:C:/winqa/py/"' in sh
