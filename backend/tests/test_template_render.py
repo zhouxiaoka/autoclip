@@ -61,6 +61,22 @@ def test_fill_uses_packaging_fields_and_a_platform_safe_area():
     assert build_fill(two, 1.0)['hook']['text'] == 'AI is a five-layer cake.\nEnergy is the bottom layer.'
 
 
+def test_issue_367_html_build_fill_honors_captions_switch():
+    """P2/#396: HTML overlay fill ignored captions_enabled; ASS path already gated cues."""
+    on = Packaging(version=2, template='editorial', audience_language='zh',
+                   title_lines=['好的投资人'], cues=[{'start': 0.0, 'end': 1.0, 'text': '第一句'}])
+    off = on.model_copy(update={'captions_enabled': False})
+    filled_on = build_fill(on, 1.0)
+    filled_off = build_fill(off, 1.0)
+    assert filled_on['words'] and filled_on['words'][0]['text'] == '第一句'
+    assert filled_off['words'] == []
+    assert filled_off['title_lines'] == ['好的投资人']  # title stays
+    assert filled_off['hook']['text'] == '好的投资人'
+    # dict packaging (cache / older callers) must honor the flag too
+    assert build_fill({'cues': [{'start': 0, 'end': 1, 'text': 'x'}], 'captions_enabled': False,
+                       'title_lines': ['t']}, 1.0)['words'] == []
+
+
 def test_missing_runtime_and_over_budget_downgrade_without_raising(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setattr('backend.services.studio.template_choice.runtime_is_ready', lambda: False)

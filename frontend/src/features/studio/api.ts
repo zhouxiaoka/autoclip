@@ -6,10 +6,11 @@ import api from '../../services/api'
 import type { ImportReadiness } from './importReadiness'
 import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant, PostCopy } from './types'
 import { noteWorkspaceCompletion } from './noticeRuntime'
+import { effectiveSubtitles } from './subtitleState'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export function draftProperties(draft?: Partial<Draft>): Properties {
   const packaging = draft?.packaging
-  return safeStudioProperties({ aspect: draft?.aspect, subtitle_enabled: draft?.subtitles, title_style: draft?.title_style,
+  return safeStudioProperties({ aspect: draft?.aspect, subtitle_enabled: draft ? effectiveSubtitles(draft) : undefined, title_style: draft?.title_style,
     layout: draft?.layout, has_crop_track: !!draft?.scenes?.some(s => s.crop_track?.length),
     has_manual_adjustment: !!draft?.scenes?.some(s => s.framing_adjusted),
     auto_frame_retained: (draft?.layout === 'crop' || draft?.layout === 'window') && !!draft?.scenes?.some(s => s.framing_source === 'auto' && !s.framing_adjusted && s.crop_track?.length),
