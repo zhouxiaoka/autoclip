@@ -306,10 +306,10 @@ def prepare_project(req: RunRequest, link: bool = True) -> Path:
     返回 raw 里的视频路径。
     """
     _resolve_inputs(req)
-    from backend.services.studio import readiness
+    from backend.services.studio import preflight
     # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
     # source does not count; the content route always transcribes, whatever the global analysis mode.
-    readiness.ensure_local_transcription_for_paths(req.video, req.srt, sibling_srt=False, route='content')
+    preflight.check(preflight.ResolvedInputs(req.video, req.srt, entry='content'))
     return _place_resolved(req, link)
 
 

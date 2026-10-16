@@ -1645,26 +1645,11 @@ def confirm_project(project_id, body):
                 raise ValueError('视觉模型不可用，请配置后重新确认；原素材已保留')
         if route == 'subtitle' or 'content' in body.goals:
             # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
-            from backend.pipeline import media_precheck
-            from backend.pipeline.failures import PipelineFailure
+            # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
+            # prompt (coded 422, waiting codes kept as is), before production spends any model call.
+            from backend.services.studio import preflight
             video = source(project_id)
-            srt_available = (video.parent / 'input.srt').is_file()
-            blocked = media_precheck.subtitle_source_failure(  # the one source classification (R24)
-                video, srt_available=srt_available, duration=plan.get('source_duration'))
-            if blocked:
-                raise ValueError(str(blocked))
-            if not srt_available:
-                from backend.services.studio import readiness
-                gate_code = readiness.transcription_gate_code()
-                if gate_code:
-                    # Coded 422 like every other gate refusal, so the desktop opens the install prompt (R22 #211);
-                    # the readiness code is kept as is, so installing / downloading stay waiting states (R23 #232).
-                    raise readiness.TranscriptionNotReady(gate_code)
-                try:
-                    readiness.require_transcription(
-                        stage='SUBTITLE', srt_available=False, analysis_mode='subtitle')
-                except PipelineFailure as missing:
-                    raise ValueError(missing.user_message()) from missing
+            preflight.check(preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', route='subtitle'))
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals

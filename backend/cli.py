@@ -162,6 +162,7 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         return 2
 
     from backend.services.studio.readiness import TranscriptionNotReady
+    from backend.services.studio.preflight import SourceRejected
     req = RunRequest(
         video=Path(args.video),
         srt=Path(args.srt) if args.srt else None,
@@ -172,10 +173,12 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
     )
     try:
         video_in_raw = prepare_project(req, link=not args.copy)
-    except (FileNotFoundError, TranscriptionNotReady) as e:  # only the 1.5.8 gate, not any ValueError (R18 #77)
-        outcome.update(ok=False, error_code='invalid_input', job_id=req.project_id)
+    except (FileNotFoundError, TranscriptionNotReady, SourceRejected) as e:  # only preflight refusals (R18 #77)
+        # #284: a source refusal keeps its own code (source_unreadable / source_too_short / source_no_audio).
+        code = e.code if isinstance(e, SourceRejected) else 'invalid_input'
+        outcome.update(ok=False, error_code=code, job_id=req.project_id)
         if args.json:  # R18 #76: scripts read the contract from stdout
-            print(json.dumps({'ok': False, 'error_code': 'invalid_input', 'project_id': req.project_id,
+            print(json.dumps({'ok': False, 'error_code': code, 'project_id': req.project_id,
                               'error': str(e)}, ensure_ascii=False))
         else:
             _err(str(e))

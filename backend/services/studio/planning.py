@@ -22,12 +22,17 @@ VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sour
 
 
 def source_duration(video: Path, info: dict | None = None) -> float:
-    """The one duration rule for planning and the import gate (R21 #175): probe first, ffmpeg decode as fallback.
-    Raises like ``media_precheck.duration_or_fail`` when the source is unreadable or under 1 s."""
-    from backend.pipeline import media_precheck
-    if info is None:
-        info = intelligence._probe(video)
-    return media_precheck.duration_or_fail(video, info.get('duration'), probed=True)  # R24 #282
+    """Planning's duration: the preflight's material probe (one ffprobe, ffmpeg decode fallback reusing it).
+    Raises the preflight's source failure when the source is unreadable or under 1 s."""
+    from backend.services.studio import preflight
+    if info is not None and info.get('duration'):
+        probe = preflight.MaterialProbe(preflight.ProbeState.READABLE, Path(video), float(info['duration']))
+    else:
+        probe = preflight.probe_material(video)
+    failure = preflight.classify_source(probe, srt_available=True, subtitle_route=False)
+    if failure is not None:
+        raise failure
+    return float(probe.duration)
 
 
 def vision_configured(analysis_mode: str) -> bool:
@@ -71,36 +76,6 @@ def preferred_analysis_mode() -> str | None:
         return analysis_preferences.load().analysis_mode
     except ValueError:
         return None
-
-
-def route_before_screening(requested_goal: str | None, video: Path, info: dict | None = None) -> str | None:
-    """Route the import gate must assume before any paid call: final goal without a screening answer,
-    duration with the same ffmpeg fallback as recommend().
-
-    None means planning will stop on its own before any paid call (unreadable preference, or a source it
-    cannot read: SourceUnreadable / under 1 s), so the gate must not answer for it (R22 #207).
-    The full duration rule (ffmpeg decode fallback, up to 180 s) only runs when it can change the answer or
-    when one ffprobe cannot read the source (R22 #206): if even the longest visual-eligible source would take
-    the subtitle route, a readable source is on the subtitle route.
-
-    ``info`` is the caller's ``media_precheck.probe()`` result, so the gate runs ffprobe once (R23 #230); a
-    duration recovered by the decode fallback is written back into it so the caller never decodes twice."""
-    analysis_mode = preferred_analysis_mode()
-    if analysis_mode is None:
-        return None
-    goal = final_goal(requested_goal, analysis_mode, vision_configured(analysis_mode))
-    from backend.pipeline import media_precheck
-    from backend.pipeline.failures import PipelineFailure
-    if info is None:
-        info = media_precheck.probe(video)
-    if resolve_route(analysis_mode, goal, VISUAL_MAX_SOURCE_SEC) == 'subtitle' and info.get('duration'):
-        return 'subtitle'  # readable by one ffprobe; the duration itself cannot change the route
-    try:
-        duration = source_duration(video, info)
-    except PipelineFailure:
-        return None
-    info['duration'] = duration
-    return resolve_route(analysis_mode, goal, duration)
 
 
 def transcription_may_be_skipped(analysis_mode: str | None = None) -> bool:

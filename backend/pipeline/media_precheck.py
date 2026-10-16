@@ -128,29 +128,6 @@ def subtitle_route_failure(video, *, srt_available: bool, duration: Optional[flo
     return None
 
 
-def subtitle_source_failure(video, *, srt_available: bool, info: Optional[dict] = None,
-                            duration: Optional[float] = None, stage: str = "INGEST") -> Optional[PipelineFailure]:
-    """The one source classification for every route and entry (R23 #231, R24 #285): unreadable or under 1 s
-    (``duration_or_fail``), too short, or no audio without an SRT; None when the source is usable.
-    The import gate, the content pipeline, the Celery import and confirm all call this one function.
-
-    ``info`` is a ``probe()`` result the caller already has; ``duration`` a duration already validated
-    (e.g. the plan's). At most one ffprobe runs here, and none when ffprobe already ran (R24 #282):
-    a probed source without a duration goes straight to the ffmpeg decode fallback.
-    An unknown audio answer never blocks (see ``probe``)."""
-    if info is None and (duration is None or not srt_available):
-        info = probe(Path(video))
-    probed = info is not None
-    info = info or {}
-    try:
-        duration = duration_or_fail(video, duration or info.get("duration"), stage, probed=probed)
-    except PipelineFailure as failure:
-        return failure
-    audio = info.get("audio")
-    return subtitle_route_failure(video, srt_available=srt_available, duration=duration,
-                                  audio=True if audio is None else audio, stage=stage)
-
-
 def is_no_audio_text(text: str) -> bool:
     return (text or "").startswith("这个视频没有声音")
 

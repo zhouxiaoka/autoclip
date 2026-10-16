@@ -145,6 +145,7 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
     """阻塞执行；在线程里调用。"""
     from backend.services.local_runner import configure_llm, prepare_project, run_pipeline, summarize_project
     from backend.services.studio.readiness import TranscriptionNotReady
+    from backend.services.studio.preflight import SourceRejected
 
     with _pipeline_lock:
         try:
@@ -165,6 +166,9 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
             summary = summarize_project(req.project_id)
             _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
                         error_code="none", result=summary)
+            return _jobs[req.project_id]
+        except SourceRejected as e:  # #284: the source's own code, never folded into invalid_input / failed
+            _job_update(req.project_id, status="failed", error_code=e.code, error=str(e)[:500])
             return _jobs[req.project_id]
         except TranscriptionNotReady as e:  # only the 1.5.8 gate; other ValueErrors are product failures (R18 #77)
             _job_update(req.project_id, status="failed", error_code="invalid_input", error=str(e)[:500])

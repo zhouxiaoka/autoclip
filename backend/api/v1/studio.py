@@ -39,7 +39,8 @@ def call(fn, *args, **kwargs):
         raise HTTPException(404, str(error)) from None
     except ValueError as error:
         from backend.services.studio.readiness import TranscriptionNotReady
-        if isinstance(error, TranscriptionNotReady):
+        from backend.services.studio.preflight import SourceRejected
+        if isinstance(error, (TranscriptionNotReady, SourceRejected)):
             raise gate_refusal(error) from None
         raise HTTPException(422, str(error)) from None
 
@@ -48,25 +49,21 @@ def validate_draft(project_id, draft):
     intelligence.validate_scenes(draft.scenes, duration)
 
 async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
-    """Run the import gate; stage the upload only when the gate needs the file to decide.
-    Returns the staged path (or None). Every failure after staging removes the staged file;
-    only a gate refusal becomes a 422 (R20 #146)."""
-    from backend.services.studio import readiness
-    try:
-        # R24 #283: the first (file-less) check reads settings and the runtime state: also off the event loop.
-        await run_in_threadpool(readiness.ensure_local_transcription_for_import, srt_available=srt_available, route=route, goal=goal)
-        return None
-    except readiness.TranscriptionNotReady:
-        pass
+    """Stage the upload outside any project and run the one preflight on it, in the threadpool.
+    Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
+    from backend.services.studio import preflight
     staged = await stage_upload(video, first_chunk, ext)
     try:
-        # ffprobe / ffmpeg-decode can take up to 180 s: never on the event loop (R22 #206).
-        await run_in_threadpool(readiness.ensure_local_transcription_for_import,
-                                srt_available=srt_available, video=staged, route=route, goal=goal)
-    except BaseException as exc:
+        subtitle = staged.with_suffix('.srt') if srt_available else None
+        if subtitle is not None:
+            subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
+        try:
+            await preflight.run_async(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
+        finally:
+            if subtitle is not None:
+                subtitle.unlink(missing_ok=True)
+    except BaseException:
         staged.unlink(missing_ok=True)
-        if isinstance(exc, readiness.TranscriptionNotReady):
-            raise gate_refusal(exc) from exc
         raise
     return staged
 
@@ -361,9 +358,9 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
     if not url:
-        from backend.services.studio import readiness
-        call(readiness.ensure_local_transcription_for_import,
-             srt_available=(jobs.source(project_id).parent / 'input.srt').is_file(), video=jobs.source(project_id), goal=prefs.goal)
+        from backend.services.studio import preflight
+        video = jobs.source(project_id)
+        call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=prefs.goal))
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
 
@@ -382,8 +379,9 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
         if not url:
-            from backend.services.studio import readiness
-            call(readiness.ensure_local_transcription_for_paths, jobs.source(project_id), route='studio', goal=body.goal)
+            from backend.services.studio import preflight
+            video = jobs.source(project_id)
+            call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()

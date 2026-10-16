@@ -275,24 +275,19 @@ class SimplePipelineAdapter:
             checkpoint(self.project_id)
             emit_progress(self.project_id, "INGEST", "素材准备完成")
             # 源视频比最短片段还短、或没有音轨又没带字幕：字幕路线注定失败，先拦下，不调用任何模型（RC156 #10/#11）
-            from backend.pipeline import media_precheck
-            # R24 #285: one classification for every path (SRT attached or not), before any paid call:
-            # unreadable / under 1 s / too short / no audio without SRT.
-            blocked = media_precheck.subtitle_source_failure(
-                input_video_path, srt_available=bool(input_srt_path and Path(input_srt_path).exists()))
-            if blocked:
-                raise blocked
+            # The one preflight (#418 rewrite), before any paid call, SRT attached or not: the source is decided
+            # first (unreadable / under 1 s / too short / no audio without SRT), then transcription.
+            from backend.services.studio import preflight
+            checked = preflight.preflight(preflight.ResolvedInputs(
+                Path(input_video_path), Path(input_srt_path) if input_srt_path else None, entry='content'))
+            if checked.source_failure is not None:
+                raise checked.source_failure
+            if not checked.ok:
+                from backend.services.studio import readiness
+                readiness.require_transcription(stage="SUBTITLE", srt_available=False)
+                raise checked.asr_failure or PipelineFailure("SUBTITLE", "转写不可用", code="asr_not_ready")
             from backend.pipeline.concurrency import reset_limiter
             reset_limiter()
-            srt_available = bool(input_srt_path and Path(input_srt_path).exists())
-            if not srt_available:
-                from backend.services.studio import readiness
-                try:
-                    readiness.require_transcription(stage="SUBTITLE", srt_available=False)
-                except PipelineFailure as missing:
-                    # Same classification as the import gate (R23 #231): a source nothing can read is
-                    # source_unreadable, never "install Whisper".
-                    raise media_precheck.subtitle_source_failure(input_video_path, srt_available=False) or missing from None
             self._preflight_llm()
             checkpoint(self.project_id)
 
