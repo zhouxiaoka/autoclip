@@ -1941,5 +1941,10 @@
   "全部启用": "Activar todos",
   "全部停用": "Desactivar todos",
   "未启用": "No activados",
-  "关闭后成片不压字幕，标题和名牌保留。": "Desactivado: sin subtítulos incrustados; el título y los rótulos se mantienen."
+  "关闭后成片不压字幕，标题和名牌保留。": "Desactivado: sin subtítulos incrustados; el título y los rótulos se mantienen.",
+  "需要先安装本地转写": "Primero hay que instalar la transcripción local",
+  "视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。": "Este vídeo no tiene subtítulos y el Whisper local seleccionado no está instalado. Instálalo y vuelve a empezar, o cambia a la transcripción en la nube.",
+  "一键安装": "Instalar ahora",
+  "改用云端转写": "Usar transcripción en la nube",
+  "需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。": "Primero hay que instalar la transcripción local: el vídeo no tiene subtítulos y el Whisper local seleccionado no está instalado. Instálalo en Ajustes → Transcripción o cambia a la nube y vuelve a importar."
 }

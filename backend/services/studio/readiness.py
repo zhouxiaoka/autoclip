@@ -179,3 +179,27 @@ def require_transcription(*, stage: str = 'SUBTITLE', srt_available: bool = Fals
         return
     from backend.pipeline.failures import transcription_not_ready_failure
     raise transcription_not_ready_failure(check, stage)
+
+
+LOCAL_TRANSCRIPTION_REQUIRED = '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。'
+
+
+def ensure_local_transcription_for_import(*, srt_available: bool) -> None:
+    """1.5.8 import gate for a local file: local Whisper selected, runtime missing, no SRT -> block.
+
+    Never switches provider (no silent cloud fallback) and never installs anything.
+    Links are not gated here: platform captions are tried first after download.
+    """
+    try:
+        settings = ai_models.load()
+    except Exception:  # noqa: BLE001 - corrupt settings are handled by ensure_analysis_usable
+        return
+    if settings is None:
+        return
+    if not needs_transcription(srt_available=srt_available, analysis_mode=settings.analysis_mode):
+        return
+    choice = settings.transcription or ai_models.Transcription()
+    if choice.provider != 'whisper_local':
+        return
+    if _transcription(settings).get('code') in ('whisper_not_installed', 'whisper_install_failed'):
+        raise ValueError(LOCAL_TRANSCRIPTION_REQUIRED)

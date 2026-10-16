@@ -1941,5 +1941,10 @@
   "全部启用": "Ativar todos",
   "全部停用": "Desativar todos",
   "未启用": "Não ativados",
-  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem."
+  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem.",
+  "需要先安装本地转写": "É preciso instalar primeiro a transcrição local",
+  "视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。": "Este vídeo não tem legendas e o Whisper local escolhido não está instalado. Instale-o e comece de novo, ou mude para a transcrição na nuvem.",
+  "一键安装": "Instalar agora",
+  "改用云端转写": "Usar transcrição na nuvem",
+  "需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。": "É preciso instalar primeiro a transcrição local: o vídeo não tem legendas e o Whisper local escolhido não está instalado. Instale-o em Definições → Transcrição ou mude para a nuvem e importe de novo."
 }

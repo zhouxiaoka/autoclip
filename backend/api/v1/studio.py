@@ -121,6 +121,9 @@ async def import_visual(
         host = (parsed.hostname or '').lower()
         if parsed.scheme != 'https' or parsed.username or parsed.password or not any(host == d or host.endswith('.' + d) for d in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')):
             raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
+    if video:
+        # 1.5.8: block before creating a project when local Whisper is required but missing.
+        call(readiness.ensure_local_transcription_for_import, srt_available=bool(subtitle))
     ext = Path(video.filename or '').suffix.lower() if video else '.mp4'
     if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi'):
         raise HTTPException(422, '不支持的视频格式')
@@ -295,6 +298,10 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
+    if not url:
+        from backend.services.studio import readiness
+        call(readiness.ensure_local_transcription_for_import,
+             srt_available=(jobs.source(project_id).parent / 'input.srt').is_file())
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
 

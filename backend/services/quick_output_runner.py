@@ -52,6 +52,9 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
     if browser not in (None, 'chrome', 'edge', 'firefox', 'safari'):
         raise ValueError('不支持的浏览器')
     create_tables()
+    if not url:
+        from backend.services.studio import readiness
+        readiness.ensure_local_transcription_for_import(srt_available=bool(subtitle))
     with SessionLocal() as db:
         project = ProjectService(db).create_project(ProjectCreate(
             name=name or (video.stem if not url else 'Quick output'), project_type='default', source_url=url,
