@@ -102,3 +102,14 @@ def test_r24_page_gets_the_user_cause_stage_while_event_primary_stays_product(mo
     assert a['error_code'] == 'timeout' and a['failure_stage'] == 'vision'
     assert a['secondary_error_codes'] == ['authentication'] and a['secondary_upstream_error_types'] == ['invalid_key']
     assert a['secondary_failure_stages'] == ['subtitle'], a
+
+
+def test_267_history_row_keeps_the_secondary_causes(monkeypatch, tmp_path):
+    """R24 #267: the analysis_history allow-list kept error_code but dropped the secondary causes."""
+    _produce(monkeypatch, tmp_path, ['content', 'highlight'], intelligence.VisionRequestError('timeout', '视觉模型请求超时'))
+    from backend.services.studio import store as s
+    data = _on_disk(s)
+    [row] = [r for r in data['analysis_history'] if r['run_id'] == 'run-m']
+    assert row['analysis']['error_code'] == 'timeout'
+    assert row['analysis']['secondary_error_codes'] == ['authentication'], row
+    assert row['analysis']['secondary_upstream_error_types'] == ['invalid_key']
