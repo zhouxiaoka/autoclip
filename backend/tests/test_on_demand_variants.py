@@ -274,7 +274,7 @@ def test_dispatch_missing_draft_is_terminal_without_render_callback(monkeypatch)
     assert state['generation']['status'] == 'failed'
 
 
-@pytest.mark.parametrize('codes,expected', [(['timeout'], 'timeout'), (['rate_limited', 'timeout'], 'multiple'), (['private/path'], 'unexpected'), ([{'private': 'path'}], 'unexpected')])
+@pytest.mark.parametrize('codes,expected', [(['timeout'], 'timeout'), (['rate_limited', 'timeout'], 'rate_limited'), (['private/path'], 'unexpected'), ([{'private': 'path'}], 'unexpected')])
 def test_render_failures_keep_controlled_generation_codes(codes, expected):
     state = {'generation': {'status': 'rendering'}, 'analysis': {'run_id': 'run'},
              'jobs': [{'job_id': f'j{i}', 'error_code': code} for i, code in enumerate(codes)],

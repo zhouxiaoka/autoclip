@@ -531,14 +531,30 @@ def settle_generation(data):
         outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
         from backend.core.sentry_setup import STUDIO_ERROR_CODES
         jobs = {job['job_id']: job for job in data.get('jobs', [])}
-        codes = set()
+        # R24 #265: one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
+        from backend.core.failure_attribution import rank_failures
+        failures = []
         for item in variants:
             if item['status'] == 'failed':
-                code = item.get('error_code') or jobs.get(item.get('render_job_id'), {}).get('error_code')
-                codes.add(code if isinstance(code, str) and code in STUDIO_ERROR_CODES else 'unexpected')
+                job = jobs.get(item.get('render_job_id'), {})
+                code = item.get('error_code') or job.get('error_code')
+                upstream = item.get('upstream_error_type') or job.get('upstream_error_type')
+                failures.append({'error_code': code if isinstance(code, str) and code in STUDIO_ERROR_CODES else 'unexpected',
+                                 **({'upstream_error_type': upstream} if isinstance(upstream, str) and upstream else {})})
         if not variants:
-            codes.add('validation')
-        code = 'multiple' if len(codes) > 1 else next(iter(codes), None)
+            failures.append({'error_code': 'validation'})
+        ranked = rank_failures(failures)
+        code = ranked[0]['error_code'] if ranked else None
+        secondary = {}
+        if len(ranked) > 1:
+            secondary = {'secondary_error_codes': [f['error_code'] for f in ranked[1:]],
+                         'secondary_upstream_error_types': [f.get('upstream_error_type') or '' for f in ranked[1:]],
+                         'secondary_failure_stages': ['render'] * (len(ranked) - 1)}
+        for key in ('upstream_error_type', 'secondary_error_codes', 'secondary_upstream_error_types', 'secondary_failure_stages'):
+            data['generation'].pop(key, None)
+        if ranked and ranked[0].get('upstream_error_type'):
+            data['generation']['upstream_error_type'] = ranked[0]['upstream_error_type']
+        data['generation'].update(secondary)
         if code:
             data['generation']['error_code'] = code
             data['generation']['failure_stage'] = 'render'
@@ -560,7 +576,7 @@ def settle_generation(data):
                 data['generation']['error'] = reason
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
         error = data['generation'].get('error') if outcome == 'failed' else None
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'error': error} if error else {})}
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'upstream_error_type': data['generation']['upstream_error_type']} if data['generation'].get('upstream_error_type') else {}), **secondary, **({'error': error} if error else {})}
 
 
 @_serialized
