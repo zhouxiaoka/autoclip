@@ -84,7 +84,8 @@ def test_a4_resume_old_ok_never_covers_new_fail(tmp_path, bash):
     second = _run(tmp_path, bash, 'no-python')
     assert second.returncode != 0, second.stdout[-600:]
     assert 'pull_final=FAIL' in _steps(tmp_path) and 'pull_final=ok' not in _steps(tmp_path), _steps(tmp_path)
-    rows = [json.loads(l) for l in (tmp_path / 'ev' / 'steps.jsonl').read_text().splitlines()]
+    rows = [json.loads(l) for f in sorted((tmp_path / 'ev' / 'runs').glob('*/receipts.jsonl')) for l in f.read_text().splitlines()]
+    rows.sort(key=lambda r: r['attempt'])
     final = [r for r in rows if r['step'] == 'pull_final']
     assert [r['status'] for r in final] == ['ok', 'FAIL'] and [r['attempt'] for r in final] == [1, 2]
     assert final[0]['run_id'] != final[1]['run_id']
@@ -196,9 +197,12 @@ def test_u1_exact_key_comes_from_stdin_never_argv_and_is_never_printed(tmp_path)
     assert done.returncode == 0 and KEY.encode() not in done.stdout + done.stderr
     with zipfile.ZipFile(tmp_path / 'exp' / 'b1.zip') as z:
         assert KEY.encode() not in b''.join(z.read(n) for n in z.namelist())
+    # R29 #323: the remote exporter is called through the fixed entry; the key only ever goes to a stdin pipe
     sh = (ROOT / 'run_winqa.sh').read_text()
-    line = next(l for l in sh.splitlines() if 'export_evidence.py export' in l)
-    assert 'MODEL_API_KEY' not in line.split('remote', 1)[1] and '--keys-stdin' in line
+    assert 'rcall_key export_evidence export' in sh and '--keys-stdin' in sh
+    for l in sh.splitlines():
+        if 'MODEL_API_KEY' in l and not l.lstrip().startswith('#'):
+            assert "printf '%s\\n' \"$MODEL_API_KEY\"" in l or l.strip().startswith(('MODEL_API_KEY=', 'export -n', 'unset ', '--real ', '[ -n "$MODEL_API_KEY" ]')), l
 
 
 def test_u2_names_and_members_follow_the_content_policy(tmp_path):
@@ -381,13 +385,17 @@ def test_u9_bash32_reads_rc_before_fullwidth_paren():
 
 
 def test_u10_every_step_declares_the_evidence_it_produces():
-    """#306: stop-candidate, the smoke detail reports and the step 10-14 real/*.json are required evidence, declared
-    right after the command that writes them (a step that "succeeds" without its JSON is then incomplete)."""
-    import re
-    sh = (ROOT / 'run_winqa.sh').read_text(encoding='utf-8')
-    declared = set(re.findall(r'\brequire ([A-Za-z0-9._/-]+)', sh))
+    """#306 / R29 #318: the required evidence comes from ONE static table (py/winqa_plan.py), not from require()
+    calls in the shell; every producer's JSON is in it (whisper-hfmirror only as optional: it exists only after a
+    failed first try)."""
+    sys.path.insert(0, str(ROOT / 'py'))
+    import winqa_plan
+    produced = {f for rows in winqa_plan.TABLE.values() for _, prod, _, _ in rows for f in prod}
+    optional = {f for rows in winqa_plan.TABLE.values() for _, _, _, opt in rows for f in opt}
     for f in ('stop-candidate.json', 'smoke.json', 'windows-smoke.json', 'windows-smoke-desktop.json',
               'windows-sensevoice-installed.json', 'windows-whisper-installed.json', 'real/model.json',
-              'real/whisper.json', 'real/whisper-hfmirror.json', 'real/local.json', 'real/link.json', 'real/final.json',
-              'collect-logs-final.json', 'failure.json', 'check-candidate.json'):
-        assert f in declared, f
+              'real/whisper.json', 'real/local.json', 'real/link.json', 'real/final.json',
+              'collect-logs-final.json', 'failure.json', 'check-candidate.json', 'clean.json', 'env.json'):
+        assert f in produced, f
+    assert optional == {'real/whisper-hfmirror.json'}
+    assert 'require ' not in (ROOT / 'run_winqa.sh').read_text(encoding='utf-8').replace('--require', '')

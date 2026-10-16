@@ -2,15 +2,20 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
-$WinQA = 'C:\winqa'
+$WinQA = Split-Path -Parent $PSScriptRoot   # C:\winqa on the test machine (scripts live in C:\winqa\ps)
 $Out = Join-Path $WinQA 'out'
 New-Item -ItemType Directory -Force $Out | Out-Null
 
+# R29 point 2: a result that cannot be written is a failure of the producer (exit 4), never a silent success.
 function Save-Json($obj, [string]$name) {
   $p = Join-Path $Out $name
-  [IO.File]::WriteAllText($p, ($obj | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
+  try { [IO.File]::WriteAllText($p, ($obj | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false)) }
+  catch { [Console]::Error.WriteLine("WINQA_E_SAVE $name"); exit 4 }
   Write-Host "saved $p"
 }
+
+# R29 point 2: one exit rule for every producer: ok -> 0, otherwise the given code (default 1).
+function Exit-WithResult($ok, [int]$code = 1) { if ($ok) { exit 0 } else { exit $code } }
 
 function Now-Iso { (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss.fffzzz') }
 

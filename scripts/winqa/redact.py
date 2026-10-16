@@ -253,21 +253,34 @@ def is_secret_field(name) -> bool:
     return isinstance(name, str) and bool(_FIELD_TAIL.search(_norm_field(name)))
 
 
+_TERMINATORS = ',;&<>)}]'
+
+
 def _field_value(s, a, name):
     """Raw [a, b) of the value that starts at a, or None."""
+    v = _field_value_ex(s, a, name)
+    return v[:2] if v else None
+
+
+def _field_value_ex(s, a, name):
+    """R29 #316: (a, b, open) of the value that starts at a, or None. Line breaks do not end quoted or bracketed
+    values; a value still open at the end of the text is masked to the end (open=True) - never left as plain text.
+    Header-style values (cookie, authorization) run to the end of the line plus HTTP folded lines (next line starts
+    with a blank); open=True when the text ends right after such a value (a folded line may still follow)."""
     n = len(s)
     if a >= n or s[a] in _EOL:
         return None
-    lim = n   # R27 #303: the whole value, however long (no 4096-character cap)
     c = s[a]
     if c in '"\'':
         b = a + 1
-        while b < lim and s[b] != c and s[b] not in _EOL:
+        while b < n and s[b] != c:
             b += 2 if s[b] == '\\' else 1
-        return (a + 1, min(b, lim)) if b > a + 1 else None
+        if b >= n:
+            return (a + 1, n, True) if n > a + 1 else None
+        return (a + 1, b, False) if b > a + 1 else None
     if c in _CLOSE:
         depth, b, quote = 0, a, None
-        while b < lim and s[b] not in _EOL:
+        while b < n:
             ch = s[b]
             if quote:                                   # R27 #303: a } or ] inside a string does not close
                 if ch == '\\':
@@ -280,18 +293,43 @@ def _field_value(s, a, name):
                 depth += 1 if ch == c else -1 if ch == _CLOSE[c] else 0
             b += 1
             if depth == 0 and not quote:
-                break
-        return a, min(b, lim)
+                return a, min(b, n), False
+        return a, n, True
     b = a
     if any(_norm_field(name).endswith(w) for w in _TO_EOL):
-        while b < lim and s[b] not in _EOL:
-            b += 1
+        while True:
+            while b < n and s[b] not in _EOL:
+                b += 1
+            e = b + (2 if s[b:b + 2] == '\r\n' else 1 if b < n else 0)
+            if e < n and s[e] in ' \t':                  # HTTP folded continuation line
+                b = e
+                continue
+            break
+        open_ = s[b:].strip('\r\n') == ''
         while b > a and s[b - 1] in ' \t':
             b -= 1
-    else:
-        while b < lim and not s[b].isspace() and s[b] not in ',;&"\'<>)}]':
+        return (a, b, open_) if b > a else None
+    if c in _TERMINATORS:                             # R29 #327: a value starting with a terminator is still a value
+        while b < n and not s[b].isspace():
             b += 1
-    return (a, b) if b > a else None
+        return (a, b, False) if b > a else None
+    while b < n and not s[b].isspace() and s[b] not in ',;&"\'<>)}]':
+        b += 1
+    return (a, b, False) if b > a else None
+
+
+def value_open_at_end(s) -> bool:
+    """True when a credential value in s is still open at its end (live line mode must hold the text)."""
+    until = -1
+    for m in _FIELD_TEXT.finditer(s):
+        if m.start() < until or not is_secret_field(m.group(2)):
+            continue
+        v = _field_value_ex(s, m.end(), m.group(2))
+        if v:
+            until = v[1]
+            if v[2]:
+                return True
+    return False
 
 
 def _field_ranges(s):
@@ -560,16 +598,61 @@ def _stdin():
     return 0
 
 
+HOLD_LIMIT = 1 << 20     # R29 #316: an open credential value longer than this is masked to the end of the stream
+
+
+def held_open(buf: bytes) -> bool:
+    """A credential value is still open at the end of buf in some reading -> hold it until it closes."""
+    text = buf.decode('utf-8', 'replace')
+    return any(value_open_at_end(''.join(v[0])) for v in _views(text))
+
+
+class LineScrubber:
+    """R29 #316 multi-line state for live logs. Lines are released only when no credential value is open across
+    them (quotes/escapes, bracket stack, HTTP folding - see _field_value_ex). Held text crosses read chunks. At EOF
+    held text is scrubbed with open values masked to the end; past HOLD_LIMIT everything after the open value is
+    masked until EOF. Plain text is never released while a value is open."""
+
+    def __init__(self, keys):
+        self.keys, self.buf, self.sink, self.sunk = keys, b'', False, 0
+
+    def feed(self, line: bytes) -> bytes:
+        if self.sink:
+            self.sunk += 1
+            return b''
+        self.buf += line
+        if len(self.buf) > HOLD_LIMIT:
+            out = scrub_bytes(self.buf, stream=True, keys=self.keys)   # the open value runs to the end: masked
+            self.buf, self.sink = b'', True
+            return out
+        if not self.buf.endswith(b'\n') or held_open(self.buf):   # partial line across reads, or a value open
+            return b''
+        out, self.buf = scrub_bytes(self.buf, stream=True, keys=self.keys), b''
+        return out
+
+    def close(self) -> bytes:
+        out = scrub_bytes(self.buf, stream=True, keys=self.keys) if self.buf else b''
+        if self.sunk:
+            out += f'[redact: {self.sunk} line(s) masked to the end of the stream]\n'.encode()
+        self.buf = b''
+        return out
+
+
 def _lines():
-    """Live logs: each line is scrubbed on its own and flushed; a line that cannot be read is withheld."""
-    keys = _env_keys()
-    for line in sys.stdin.buffer:
-        try:
-            out = scrub_bytes(line, stream=True, keys=keys)
-        except Exception as exc:
-            out = f'[redact: line withheld ({type(exc).__name__})]\n'.encode()
-        sys.stdout.buffer.write(out)
+    """Live logs through LineScrubber. Any error: the held text is dropped, one fixed line, exit 3 (R29 #316: the
+    old handler withheld the line but still exited 0)."""
+    sc = LineScrubber(_env_keys())
+    try:
+        for line in sys.stdin.buffer:
+            out = sc.feed(line)
+            if out:
+                sys.stdout.buffer.write(out)
+                sys.stdout.buffer.flush()
+        sys.stdout.buffer.write(sc.close())
         sys.stdout.buffer.flush()
+    except Exception as exc:
+        sys.stderr.write(f'redact: ERROR {type(exc).__name__}; held text withheld\n')
+        return 3
     return 0
 
 

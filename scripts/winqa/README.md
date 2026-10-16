@@ -76,6 +76,16 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 导入页拦截与修复入口的界面表现、YouTube（验收机需代理）、视觉生成、失败后的界面重试入口、隐私监控（需 validation 构建）、
 首页卡片状态。VM 上没有界面的项（WebView2 画面）要人工看截图确认，并在记录里注明「虚拟机」与系统版本。
 
+## 运行事实与裁决（R29，设计稿 414-design-v4）
+
+- `runs/<run_id>/plan.json`：第 0 步原子写一次，之后不可变；必需证据由 `py/winqa_plan.py` 的静态表算出，`steps.json` 无条件必需。续跑（`--from-step` > 0）沿用上一轮的全部义务。
+- `runs/<run_id>/receipts.jsonl`：只追加，记录每一步的真实返回码；写不进就以 72 退出。
+- 第 3/6 步的阶段导出只要求已到期的证据；第 8 步导出和第 9 步裁决要求整份计划。
+- `py/winqa_verdict.py` 是唯一判定：本轮内失败锁存；`summarize.py <证据目录> --verdict <文件>` 只渲染这份裁决，绑定（plan/回执哈希）不符就不渲染。`steps.txt` 只是视图。
+- 旧证据目录由 `winqa_plan.py migrate` 迁成 `runs/legacy`：保留旧 required（恢复不了标 unknown，裁决为 incomplete，要求从第 0 步重跑），推断的退出码标 `exit_code_source=inferred`，不能证明成功。
+- 远端：ssh 命令行固定为 `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\winqa\ps\entry.ps1`，参数是 stdin 第一行 JSON（`py/winqa_req.py` 生成），key 在第二行，只给 `py` 操作。坏请求退出 64。
+- 日志通道：`logpipe.py`（脱敏 + run.log + 终端）握手成功后才接管 stdout/stderr；起不来、中途死、收尾超时或真实退出码非 0，脚本都以 70 退出，只打印 `WINQA_E_LOGPIPE 70`。已知：脱敏值没闭合时，后面的日志会延迟显示到闭合或结束。
+
 ## 文件
 
 - `run_winqa.sh`：入口（在控制机上跑）。

@@ -141,7 +141,9 @@ def seed(args):
     out['seed_project_analysis'] = (ws.get('analysis') if isinstance(ws, dict) else ws)
     out['projects'] = projects_index()
     out['finished_at'] = now()
+    out['ok'] = bool(pid) and out.get('ai_models_put') == 200
     save('seed.json', out)
+    return 0 if out['ok'] else 1
 
 
 def check(args):
@@ -223,6 +225,7 @@ def check(args):
     out['finished_at'] = now()
     out['ok'] = all(A.values())
     save(f'check-{args.label}.json', out)
+    return 0 if out['ok'] else 1
 
 
 def log_lines(pattern, tail=8):
@@ -370,6 +373,7 @@ def failure(args):
     out['finished_at'] = now()
     out['ok'] = all(A.values())
     save('failure.json', out)
+    return 0 if out['ok'] else 1
 
 
 if __name__ == '__main__':
@@ -381,4 +385,5 @@ if __name__ == '__main__':
     ap.add_argument('--label', default='candidate')
     ap.add_argument('--timeout', type=int, default=420)
     a = ap.parse_args()
-    {'seed': seed, 'check': check, 'failure': failure}[a.phase](a)
+    # R29 point 2: the phase's own ok decides the exit code (it used to exit 0 after writing ok:false)
+    sys.exit({'seed': seed, 'check': check, 'failure': failure}[a.phase](a) or 0)

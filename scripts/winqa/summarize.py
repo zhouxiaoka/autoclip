@@ -1,11 +1,27 @@
-import re
 #!/usr/bin/env python3
-"""Summarise a winqa evidence directory into Markdown (stdout) and windows-rows.draft.json."""
+"""Render a winqa evidence directory into Markdown (stdout) and windows-rows.draft.json.
+
+    summarize.py EVIDENCE_DIR --verdict FILE
+
+R29 point 3: this file decides nothing. The conclusion is the verdict that py/winqa_verdict.py wrote, and it is
+rendered only if its binding (plan hash, receipts hash and count) still matches the evidence directory. The rows
+below show evidence; their marks never change the conclusion."""
 import json
+import re
 import sys
 from pathlib import Path, PureWindowsPath
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'py'))
+import winqa_verdict  # noqa: E402
+
+if len(sys.argv) != 4 or sys.argv[2] != '--verdict':
+    print(__doc__, file=sys.stderr); sys.exit(2)
 ev = Path(sys.argv[1])
+VERDICT = json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
+if VERDICT.get('schema') != winqa_verdict.SCHEMA or not winqa_verdict.check_binding(ev, VERDICT):
+    print('summarize: verdict is not bound to this evidence directory; not rendered', file=sys.stderr); sys.exit(3)
+_HEAD = {'pass': 'PASS', 'fail': 'FAIL', 'incomplete': 'INCOMPLETE', 'rejected': 'REJECTED'}[VERDICT['overall']]
+print(f"{_HEAD}：{'；'.join(VERDICT['reasons']) or '全部步骤通过、必需证据完整'}\n")
 
 
 def load(name):
@@ -147,7 +163,6 @@ if real_rows:
 
 # Draft internal-acceptance rows: automated parts only; case rows stay pending (each needs UI / real model).
 now = __import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')
-auto_ok = all(r[1] is True for r in rows)
 draft = {
     'note': 'DRAFT ONLY. Windows rows for internal_acceptance.py; matrix cases stay pending until the GUI/real-model parts are done by a named tester.',
     'platform': 'windows-x64',
@@ -188,4 +203,4 @@ if RM:
     reg('1.5.6-issue266-key-kept', 'saving AI settings with the key field left empty keeps the stored key; connection test still passes (real model endpoint)',
         all(RM.get('assertions', {}).get(k) for k in ('issue266_field_absent_key_kept', 'issue266_field_absent_test_passes', 'issue266_explicit_null_key_kept', 'issue266_explicit_null_test_passes')), 'real/model.json')
 (ev / 'windows-rows.draft.json').write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding='utf-8')
-print(f"\n自动项全部通过：{auto_ok}。矩阵 10 个 case 全部保持 pending（需界面/真实模型）。草稿：{ev / 'windows-rows.draft.json'}")
+print(f"\n最终裁决：{_HEAD}（runs/{VERDICT['run_id']}/verdict-final.json）。矩阵 10 个 case 全部保持 pending（需界面/真实模型）。草稿：{ev / 'windows-rows.draft.json'}")

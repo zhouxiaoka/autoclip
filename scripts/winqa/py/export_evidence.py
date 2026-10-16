@@ -35,7 +35,8 @@ Usage
   export_evidence.py export --src DIR --dest DIR --bundle NAME [--require a.json,real/b.json] [--steps FILE] --keys-stdin
       last stdout line: "EXPORT <complete|incomplete> <NAME>.zip <sha256>"; exit 0 complete, 3 incomplete,
       1 nothing committed.
-  export_evidence.py verify --bundle FILE --sha256 HEX --into DIR --keys-stdin
+  export_evidence.py verify --bundle FILE --sha256 HEX --into DIR [--plan PLAN --upto N] --keys-stdin
+      R29: with --plan the bundle's required list and plan_sha256 must equal the local plan's (stage: due by step N).
       exit 0 and DIR holds the members + manifest.json; any mismatch exits 1 and DIR is removed.
 """
 import hashlib, io, json, os, re, shutil, sys, time, zipfile
@@ -45,7 +46,7 @@ _here = Path(__file__).resolve().parent
 sys.path[:0] = [str(_here), str(_here.parent)]   # on the VM redact.py sits next to this file; in the repo one up
 import redact  # noqa: E402
 
-SCHEMA, POLICY = 'winqa-evidence-bundle/2', 'winqa-export/1'
+SCHEMA, POLICY = 'winqa-evidence-bundle/3', 'winqa-export/1'
 STEPS = 'steps.json'
 _STEP_STATUS = ('ok', 'FAIL')
 _SEG = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
@@ -182,10 +183,12 @@ def contract_problem(name: str, data):
                     or not isinstance(r.get('attempt'), int) or isinstance(r.get('attempt'), bool) or r['attempt'] < 1 \
                     or not isinstance(r.get('exit_code'), int) or isinstance(r.get('exit_code'), bool):
                 return 'steps_record'
+            if r['status'] == 'ok' and r['exit_code'] != 0:        # R29 point 2: a contradiction is not evidence
+                return 'steps_contradiction'
     return None
 
 
-def export(src: Path, dest: Path, bundle: str, required, keys, steps: Path = None):
+def export(src: Path, dest: Path, bundle: str, required, keys, steps: Path = None, plan_sha256: str = None):
     if not _BUNDLE.match(bundle):
         raise ExportError('bad bundle name')
     required = sorted(set(required) | {STEPS})                              # I7: step results always required
@@ -220,6 +223,7 @@ def export(src: Path, dest: Path, bundle: str, required, keys, steps: Path = Non
     parsed = {rel: json.loads(data) for rel, data in members}
     problems, missing, codes = derive(required, parsed)
     manifest = {'schema': SCHEMA, 'policy': POLICY, 'bundle': bundle, 'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+                'plan_sha256': plan_sha256, 'ok_false': ok_false(required, parsed),
                 'source_tree_sha256': tree_hash(before), 'status': 'incomplete' if missing else 'complete',
                 'required': required, 'missing_required': missing, 'contract_problems': problems,
                 'error_codes': codes, 'files': files, 'withheld': withheld}
@@ -248,6 +252,11 @@ def export(src: Path, dest: Path, bundle: str, required, keys, steps: Path = Non
     digest = sha(written)
     os.replace(part, final)                                                  # commit
     return m['status'], final.name, digest, len(files), len(withheld)
+
+
+def ok_false(required, parsed):
+    """R29 point 2: required files whose producer wrote ok:false (the verdict fails a step that says ok)."""
+    return sorted(r for r in required if r != STEPS and isinstance(parsed.get(r), dict) and parsed[r].get('ok') is False)
 
 
 def derive(required, parsed):
@@ -308,16 +317,29 @@ def validate_bundle(raw: bytes, keys):
     problems, missing, codes = derive(m['required'], parsed)                 # #307: recomputed, not trusted
     status = 'incomplete' if missing else 'complete'
     if m.get('missing_required') != missing or m.get('status') != status or m.get('contract_problems') != problems \
-            or m.get('error_codes') != codes:
+            or m.get('error_codes') != codes or m.get('ok_false') != ok_false(m['required'], parsed):
         raise ExportError('manifest status/required/missing/error_codes do not match the members')
     return m, out
 
 
-def verify(bundle: Path, digest: str, into: Path, keys):
+def expected_required(plan_file: Path, upto: int):
+    """#318: the control machine's own plan decides what the bundle must contain, never the bundle."""
+    import winqa_plan
+    plan = json.loads(plan_file.read_text(encoding='utf-8'))
+    if plan.get('plan_sha256') != winqa_plan.plan_hash(plan):
+        raise ExportError('local plan hash mismatch')
+    return plan, (plan['required'] if upto >= 99 else winqa_plan.due(plan, upto))
+
+
+def verify(bundle: Path, digest: str, into: Path, keys, plan_file: Path = None, upto: int = 99):
     raw = bundle.read_bytes()
     if sha(raw) != digest.lower():
         raise ExportError('bundle hash mismatch')
     m, out = validate_bundle(raw, keys)
+    if plan_file is not None:
+        plan, want = expected_required(plan_file, upto)
+        if m.get('plan_sha256') != plan['plan_sha256'] or sorted(m['required']) != sorted(want):
+            raise ExportError('bundle required/plan does not match the local plan')
     mtext = json.dumps(m, ensure_ascii=False, indent=2) + '\n'
     shutil.rmtree(into, ignore_errors=True)
     into.mkdir(parents=True)
@@ -343,13 +365,15 @@ def main(argv):
             req = [r for r in (_arg(argv, '--require', '') or '').split(',') if r]
             steps = _arg(argv, '--steps')
             status, name, digest, n, w = export(Path(_arg(argv, '--src')), Path(_arg(argv, '--dest')), _arg(argv, '--bundle'),
-                                                req, keys, Path(steps) if steps else None)
+                                                req, keys, Path(steps) if steps else None, _arg(argv, '--plan-sha256'))
             print(f'export: {n} file(s) exported, {w} withheld (kept on the test machine)')
             print(f'EXPORT {status} {name} {digest}')
             return 0 if status == 'complete' else 3
         into = Path(_arg(argv, '--into'))
         try:
-            m = verify(Path(_arg(argv, '--bundle')), _arg(argv, '--sha256', ''), into, keys)
+            pf = _arg(argv, '--plan')
+            m = verify(Path(_arg(argv, '--bundle')), _arg(argv, '--sha256', ''), into, keys, Path(pf) if pf else None,
+                       int(_arg(argv, '--upto', '99')))
         except BaseException:
             shutil.rmtree(into, ignore_errors=True)
             raise

@@ -1,6 +1,6 @@
 """Shared fake-VM harness for the winqa tests (R29 #333: one helper module instead of tests importing tests).
-The fake VM is a directory; the fake ssh runs the REAL scripts that sit in the VM's C:\\winqa\\py with the local
-Python; the fake scp really copies."""
+The fake VM is a directory; the fake ssh speaks the entry.ps1 protocol (fixed command line, JSON request on stdin)
+and runs the REAL scripts that sit in the VM's C:\\winqa\\py with the local Python; the fake scp really copies."""
 import hashlib
 import io
 import json
@@ -55,7 +55,7 @@ def _leak_probe():
         lines.append('LEAK ssh env')
     for d in glob.glob('/proc/[0-9]*'):
         try:
-            if b'redact.py' not in open(d + '/cmdline', 'rb').read():
+            if b'logpipe.py' not in open(d + '/cmdline', 'rb').read():
                 continue
             vals = [e.split(b'=', 1)[-1] for e in open(d + '/environ', 'rb').read().split(b'\0')]
         except OSError:
@@ -66,19 +66,33 @@ def _leak_probe():
     with open(out, 'a') as fh:
         fh.write(''.join(l + '\n' for l in lines))
 _leak_probe()
-m = re.search(r'runpy\.ps1\s+(\S+)(.*)$', cmd)
-if m:
-    if MODE == 'no-python':
-        sys.exit(1)
-    script = tr(m.group(1))
-    # cmd.exe + powershell -File: single quotes are NOT removed (#310); split on blanks like Windows argv does
-    rest = [tr(t) for t in m.group(2).replace('\\', '/').split()]
-    env = dict(os.environ, WINQA_OUT=VM + '/out')
-    if MODE == 'export-killed' and script.endswith('export_evidence.py'):
-        code = ("import os, runpy, sys; os.replace = lambda *a: os._exit(137); sys.argv = sys.argv[1:]; "
-                "runpy.run_path(sys.argv[0], run_name='__main__')")
-        sys.exit(subprocess.run([sys.executable, '-c', code, script] + rest, env=env).returncode)
-    sys.exit(subprocess.run([sys.executable, script] + rest, env=env).returncode)
+ENTRY = 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\\winqa\\ps\\entry.ps1'
+FIXED = ('hostname', 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force C:\\winqa\\ctl | Out-Null"')
+with open(os.environ['FAKE_CMDS'], 'a') as fh:     # R29 #323: every remote command line, for the argv assertion
+    fh.write(cmd + '\n')
+if cmd == ENTRY:
+    import json
+    raw = sys.stdin.buffer.readline()
+    req = json.loads(raw)                           # entry.ps1 reads exactly line 1 (+ the key line if has_key)
+    with open(os.environ['FAKE_REQS'], 'a') as fh:
+        fh.write(json.dumps(req) + '\n')
+    if req['op'] == 'py':
+        if MODE == 'no-python':
+            sys.exit(1)
+        key = sys.stdin.buffer.readline() if req['has_key'] else b''
+        script = VM + '/py/' + req['args']['script'] + '.py'
+        rest = [tr(t) for t in req['args']['args']]
+        env = dict(os.environ, WINQA_OUT=VM + '/out')
+        if MODE == 'export-killed' and script.endswith('export_evidence.py'):
+            code = ("import os, runpy, sys; os.replace = lambda *a: os._exit(137); sys.argv = sys.argv[1:]; "
+                    "runpy.run_path(sys.argv[0], run_name='__main__')")
+            sys.exit(subprocess.run([sys.executable, '-c', code, script] + rest, env=env, input=key).returncode)
+        sys.exit(subprocess.run([sys.executable, script] + rest, env=env, input=key).returncode)
+    if req['op'] == 'hash':
+        sys.exit(0)
+    if req['op'] == 'ps' and MODE == 'collect-fail' and req['args']['script'] == 'collect_logs':
+        sys.exit(3)
+    print('remote: C:\\Users\\kris\\Desktop ok'); sys.exit(0)
 print('remote: C:\\Users\\kris\\Desktop ok')
 sys.exit(0)
 '''
@@ -152,10 +166,10 @@ import os, signal, sys
 mode, a = os.environ.get('FAKE_MODE', ''), sys.argv[1:]
 if mode == 'verify-crash' and 'verify' in a:
     os.kill(os.getpid(), signal.SIGKILL)
-if mode == 'redact-crash' and '--lines' in a:
-    # the real scrubber runs until the run reaches step 8 (staging dir exists by then), then the scrubber dies
+if mode == 'redact-crash' and any(x.endswith('logpipe.py') for x in a):
+    # the real log channel runs until the run reaches step 8 (staging dir exists by then), then it dies
     import subprocess
-    child = subprocess.Popen([os.environ['FAKE_REAL_PY']] + a, stdin=subprocess.PIPE, pass_fds=(3,))
+    child = subprocess.Popen([os.environ['FAKE_REAL_PY']] + a, stdin=subprocess.PIPE, pass_fds=(6,))
     for line in sys.stdin.buffer:
         if '8. '.encode() in line and b'====' in line:
             child.kill(); os.kill(os.getpid(), signal.SIGKILL)
@@ -211,6 +225,7 @@ def _env(tmp_path, mode='', key=KEY, required=True, steps=('8', '8')):
                 'TMPDIR': str(tmpd), 'LANG': UTF8, 'LC_ALL': UTF8, 'WINQA_MODEL_API_KEY': key, 'FAKE_VM': str(vm),
                 'FAKE_MODE': mode, 'FAKE_DELIVERED': str(tmp_path / 'delivered.bin'), 'FAKE_MODES': str(tmp_path / 'modes.txt'),
                 'FAKE_REAL_PY': sys.executable, 'FAKE_ENVLEAK': str(tmp_path / 'envleak.txt'),
+                'FAKE_CMDS': str(tmp_path / 'cmds.txt'), 'FAKE_REQS': str(tmp_path / 'reqs.jsonl'),
                 'FAKE_KEY_SHA': hashlib.sha256(key.encode()).hexdigest()})
     args = ['--prev', str(inst), '--candidate', str(inst), '--version', '1.5.8', '--out', str(tmp_path / 'ev'),
             '--from-step', steps[0], '--to-step', steps[1]]
