@@ -109,8 +109,10 @@ def test_346_out_of_order_observation_is_still_one_successful_flow(fig):
     reordered = [e for e in result['events'] if e not in gen] + list(reversed(gen))
     [row] = run_sql(figure(fig, SQL, WINDOW), _rows(reordered))
     assert (row['flow_ok'], row['fq_all']) == (1, 1), row
-    assert row['unknown_attempts'] == 0
-    for e in reordered:  # mutation guard: without the producer's sequence the attempts are unknown (PM rule), not counted
+    assert row['unknown_flows'] == 0
+    for e in reordered:  # without sequence AND without the retry_of link the last attempt is unprovable: unknown (#362)
         e['props'].pop('attempt_sequence', None)
+        e['props'].pop('retry_of', None)
+        e['props']['flow_id'] = gen[0]['props']['flow_id'] if e in gen else e['props'].get('flow_id')
     [row] = run_sql(figure(fig, SQL, WINDOW), _rows(reordered))
-    assert (row['q_all'], row['fq_all'] or 0, row['unknown_attempts']) == (0, 0, 2)
+    assert (row['flow_ok'] or 0, row['fq_all'] or 0, row['unknown_flows']) == (0, 0, 1)
