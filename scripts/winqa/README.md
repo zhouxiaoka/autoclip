@@ -7,3 +7,5 @@
   - 有 `internal-desktop-provenance`（或 `internal-desktop-provenance-windows-x64`）时，解出的 exe 必须和其中记录的 sha256 一致。
 - `ps/pull_run_installer.ps1`：验收机端，分段下载、校验 zip/exe 哈希；缺 digest 同样退出码 4。
 - `exe_provenance.py`：CI 里给 Windows 安装包写 sha256 清单。
+- `redact.py`：证据脱敏，去掉 QA key、掩码 key 和个人目录（`C:\Users\x`、`/Users/x`、`/home/x`）。
+- 退出码：2 无 artifact；3 无下载地址；4 无有效 digest；5 provenance 列出但下载/解析失败；6 下载/HTTP 失败；7 哈希不符（坏分片已删）。
