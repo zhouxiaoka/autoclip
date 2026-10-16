@@ -103,7 +103,7 @@ test('identity waits for the desktop port, retries failure and cancels retries o
   assert.equal(identityPuts.length, 2)
 })
 
-test('X2: opting out tells the backend so Sentry drops user.id; re-enable only after an opt-out', async () => {
+test('X2: opting out tells the backend so Sentry drops user.id; startup syncs the saved preference', async () => {
   const storage = memory()
   const puts = []
   const sdk = { init() {}, capture() { return {} }, get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
@@ -116,13 +116,69 @@ test('X2: opting out tells the backend so Sentry drops user.id; re-enable only a
   ph.initAnalytics()
   ph.setAnalyticsEnabled(true)
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(consent(), [])
+  // R10 P2: the backend state is unknown at launch, so the saved "on" is synced once.
+  assert.deepEqual(consent(), [true])
   ph.setAnalyticsEnabled(false)
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(consent(), [false])
+  assert.deepEqual(consent(), [true, false])
   ph.setAnalyticsEnabled(true)
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(consent(), [false, true])
+  assert.deepEqual(consent(), [true, false, true])
+})
+
+test('R10 P1: off→on written but response lost, then off again still reaches the backend', async () => {
+  const puts = []
+  let lose = false
+  const timers = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: memory(), window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length },
+    clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      // Backend applied the write, but the response never arrives.
+      return lose ? Promise.reject(new Error('response lost')) : Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  const base = puts.length
+  assert.equal(puts[base - 1], false)
+  lose = true
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts.slice(base), [true])
+  lose = false
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  // The opt-out must be sent even though the last confirmed state was also "off".
+  assert.deepEqual(puts.slice(base), [true, false])
+  // A pending retry from the lost PUT must not resend "on" over the newer opt-out.
+  for (const fn of timers.splice(0)) fn()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.slice(base + 2).includes(true))
+})
+
+test('R10 P2: re-enable write failed, restart syncs the persisted "on" to the backend', async () => {
+  const storage = memory()
+  storage.setItem('autoclip.analytics.optOut', 'false')
+  const puts = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => {
+      if (String(url).includes('/settings/analytics-consent')) puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts, [true])
 })
 
 
@@ -144,7 +200,11 @@ test('X2r: consent is marked sent only after success and failed PUTs retry', asy
     },
   })
   const consent = () => puts.slice()
+  respondOk = true
   ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts.splice(0), [true]) // R10 P2 startup sync
+  respondOk = false
   ph.setAnalyticsEnabled(false)
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(consent(), [false])
@@ -154,7 +214,6 @@ test('X2r: consent is marked sent only after success and failed PUTs retry', asy
   timer()
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(consent(), [false, false])
-  // Re-enable only after the opt-out was successfully published.
   ph.setAnalyticsEnabled(true)
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(consent(), [false, false, true])
@@ -178,6 +237,10 @@ test('X2r: rapid toggle serializes so the backend ends on the latest UI value', 
     },
   })
   ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts.splice(0), [true]) // R10 P2 startup sync
+  pending.splice(0)[0]({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
   ph.setAnalyticsEnabled(false) // in-flight: false
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(puts, [false])
@@ -229,7 +292,10 @@ test('reset identity waits for the previous PUT and cannot be overwritten by it'
     init() {}, get_distinct_id: () => id, reset() { id = next },
   }, './workflow': core }, {
     localStorage: memory(), window: {},
-    fetch: (_url, options) => { ids.push(JSON.parse(options.body).distinct_id); return new Promise(resolve => { finish = resolve }) },
+    fetch: (url, options) => {
+      if (String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      ids.push(JSON.parse(options.body).distinct_id); return new Promise(resolve => { finish = resolve })
+    },
   })
   ph.initAnalytics()
   ph.resetUser()
@@ -377,14 +443,14 @@ test('the anonymous distinct id is stored once for backend events', async () => 
       return Promise.resolve({ ok: true })
     },
   })
+  const identity = () => puts.filter(p => p.url === '/api/v1/settings/analytics-identity')
   ph.initAnalytics()
   await new Promise(resolve => setTimeout(resolve, 0))
-  assert.equal(puts.length, 1)
-  assert.equal(puts[0].url, '/api/v1/settings/analytics-identity')
-  assert.equal(JSON.parse(puts[0].body).distinct_id, id)
+  assert.equal(identity().length, 1)
+  assert.equal(JSON.parse(identity()[0].body).distinct_id, id)
   ph.setAnalyticsEnabled(true)
   await new Promise(resolve => setTimeout(resolve, 0))
-  assert.equal(puts.length, 1)
+  assert.equal(identity().length, 1)
 })
 test('turning analytics off pauses flag reloads and never asks for flags while opted out', () => {
   const storage = memory()

@@ -7,6 +7,13 @@ from backend.core import project_cancellation
 from backend.services import output_branding
 
 
+@pytest.fixture(autouse=True)
+def _reset_shutdown_flag(monkeypatch):
+    # begin_shutdown is process-global; never leak it into later test modules.
+    monkeypatch.setattr(project_cancellation, '_shutting_down', False)
+    yield
+
+
 @pytest.fixture
 def spawns(monkeypatch, tmp_path):
     calls = []

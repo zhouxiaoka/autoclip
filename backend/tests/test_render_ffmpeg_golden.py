@@ -1,4 +1,4 @@
-"""pkg_templates_v1 off: encoder argv matches c5a72281 except temporary destination names.
+"""pkg_templates_v1 off: Studio render ffmpeg argv matches c5a72281 byte for byte.
 
 Shot, concat, audio and outro argument lists were recorded from that commit.
 ``concat_script`` is the listing body, not the ffmpeg argv. It uses

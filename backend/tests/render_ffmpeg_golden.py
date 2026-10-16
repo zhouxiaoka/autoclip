@@ -3,8 +3,7 @@
 The argv in ``fixtures/render_ffmpeg_c5a72281`` was recorded from c5a72281
 (main after #314, before #315/#316/#317). ``concat_script`` is the one field
 updated later: both render paths use ``concat_quote``, which does not wrap a
-plain path in single quotes. E6 normalizes only the staged branding destination
-filename before comparison. Do not regenerate the argv from a later tree.
+plain path in single quotes. Do not regenerate the argv from a later tree.
 """
 from __future__ import annotations
 
@@ -171,6 +170,33 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         stdout = '' if text else b''
         return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
 
+    class FakePopen:
+        """X1r: unbound ``project_cancellation.run`` spawns via Popen under the shutdown lock."""
+        pid = 0
+
+        def __init__(self, cmd, **kwargs):
+            self._done = fake_run(cmd, **kwargs)
+            self.args = self._done.args
+            self.returncode = self._done.returncode
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def communicate(self, *_a, **_k):
+            return self._done.stdout, self._done.stderr
+
+        def wait(self, *_a, **_k):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            pass
+
     def fake_check_output(cmd, **kwargs):
         argv = [str(part) for part in cmd]
         if not _is_ffprobe(argv):
@@ -206,6 +232,7 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
 
     with patch('tempfile.TemporaryDirectory', _fixed_temp), \
             patch('subprocess.run', fake_run), \
+            patch('subprocess.Popen', FakePopen), \
             patch('subprocess.check_output', fake_check_output), \
             patch('backend.services.render_limits.THREADS', '2'), \
             patch('backend.services.render_limits.sys.platform', 'linux'), \
@@ -236,13 +263,6 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         'outro_script': scripts.get('outro', ''),
         'shots': shots,
     }
-    # E6 stages the branded output until ffprobe validation before publishing.
-    # Only that temporary destination name changed; retain the original golden
-    # encoder/filter/audio contract and never regenerate the baseline fixtures.
-    for commands in (document['audio'], document['outro']):
-        for argv in commands:
-            if argv[-1].endswith('/job.ready.part.branding.part.mp4'):
-                argv[-1] = argv[-1].replace('/job.ready.part.branding.part.mp4', '/job.branding.part.mp4')
     return document, result
 
 

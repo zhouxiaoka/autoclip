@@ -94,7 +94,8 @@ function publishAnonymousId(): void {
 
 /**
  * Tell the backend about an opt-out so backend Sentry (API and worker processes) stops
- * attaching the anonymous user.id. Re-enabling is only sent after an opt-out was sent.
+ * attaching the anonymous user.id. Once the backend is ready the persisted preference is
+ * synced (on or off), so a re-enable whose write failed cannot leave UI=on / backend=off.
  *
  * X2r: mark published only after a successful PUT; retry failures; serialize so a rapid
  * toggle cannot leave UI=off / backend=on (one in-flight request, then sync to latest).
@@ -108,10 +109,10 @@ function publishConsent(): void {
   }
   if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
       && !apiConfigManager.isReady()) return
-  // Already in sync and nothing in flight.
+  // Already in sync and nothing in flight. publishedConsent === undefined means the
+  // backend state is unknown (fresh launch, or a PUT whose response was lost), so the
+  // latest preference is always sent — including "on" (R10: startup sync, lost response).
   if (inflightConsent === undefined && publishedConsent === enabled) return
-  // Never advertise enable until an opt-out has been recorded successfully.
-  if (enabled && publishedConsent === undefined && inflightConsent === undefined) return
   // One in-flight PUT at a time; finish() re-enters with the latest UI value.
   if (inflightConsent !== undefined) return
 
@@ -129,6 +130,9 @@ function publishConsent(): void {
       if (publishedConsent !== isAnalyticsEnabled()) publishConsent()
       return
     }
+    // The backend may or may not have applied the PUT (e.g. written but response lost):
+    // forget what we think it holds so the next intent is never skipped as "in sync".
+    publishedConsent = undefined
     if (consentRetries < 5 && typeof setTimeout === 'function') {
       // Retry against whatever the UI wants now (not a stale mid-toggle value).
       if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
@@ -297,7 +301,8 @@ export function isAnalyticsEnabled(): boolean {
  */
 export function initAnalytics(): void {
   if (initialized) return
-  if (!isAnalyticsEnabled()) publishConsent()
+  // R10 P2: sync the persisted preference (on or off) once the backend is ready.
+  publishConsent()
   if (!POSTHOG_KEY) {
     if (import.meta.env.DEV) {
       console.info('[analytics] 未配置 VITE_PUBLIC_POSTHOG_KEY，埋点已禁用')
