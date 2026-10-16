@@ -121,9 +121,6 @@ async def import_visual(
         host = (parsed.hostname or '').lower()
         if parsed.scheme != 'https' or parsed.username or parsed.password or not any(host == d or host.endswith('.' + d) for d in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')):
             raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
-    if video:
-        # 1.5.8: block before creating a project when local Whisper is required but missing.
-        call(readiness.ensure_local_transcription_for_import, srt_available=bool(subtitle))
     ext = Path(video.filename or '').suffix.lower() if video else '.mp4'
     if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi'):
         raise HTTPException(422, '不支持的视频格式')
@@ -141,6 +138,19 @@ async def import_visual(
                 raise HTTPException(422, '字幕文件为空或超过 2 MB')
         finally:
             await subtitle.close()
+    staged = None
+    if video:
+        # 1.5.8: block before creating a project when local Whisper is required but missing.
+        try:
+            readiness.ensure_local_transcription_for_import(srt_available=subtitle_bytes is not None)
+        except ValueError:
+            staged = await _stage_upload(video, first_chunk, ext)
+            try:
+                readiness.ensure_local_transcription_for_import(srt_available=subtitle_bytes is not None, video=staged)
+            except ValueError as exc:
+                staged.unlink(missing_ok=True)
+                await video.close()
+                raise HTTPException(422, str(exc)) from exc
     prefs = ImportOptions(
         goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
         platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
@@ -156,10 +166,14 @@ async def import_visual(
             (raw / 'input.srt').write_bytes(subtitle_bytes)
         if video:
             path = raw / ('input' + ext)
-            with path.open('wb') as target:
-                target.write(first_chunk)
-                while chunk := await video.read(1024 * 1024):
-                    target.write(chunk)
+            if staged is not None:
+                import shutil
+                shutil.move(str(staged), str(path))
+            else:
+                with path.open('wb') as target:
+                    target.write(first_chunk)
+                    while chunk := await video.read(1024 * 1024):
+                        target.write(chunk)
             project.video_path = str(path)
             db.commit()
         snapshot = None
@@ -179,6 +193,19 @@ async def import_visual(
         if video:
             await video.close()
     return {'project_id': pid, 'analysis_run_id': run_id}
+
+
+
+async def _stage_upload(video: UploadFile, first_chunk: bytes, ext: str) -> Path:
+    """Write the upload outside any project so a refused import leaves no project behind."""
+    staging = store.get_projects_directory().parent / 'import-staging'
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / (uuid.uuid4().hex + ext)
+    with path.open('wb') as target:
+        target.write(first_chunk)
+        while chunk := await video.read(1024 * 1024):
+            target.write(chunk)
+    return path
 
 
 @router.post('/template-recommend')
@@ -301,7 +328,7 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
     if not url:
         from backend.services.studio import readiness
         call(readiness.ensure_local_transcription_for_import,
-             srt_available=(jobs.source(project_id).parent / 'input.srt').is_file())
+             srt_available=(jobs.source(project_id).parent / 'input.srt').is_file(), video=jobs.source(project_id))
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
 

@@ -1,5 +1,8 @@
 """1.5.8: local file + local Whisper selected + runtime missing + no SRT -> import blocked up front.
 Never switches to cloud transcription, never installs anything."""
+import shutil
+import subprocess
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -14,6 +17,17 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     (tmp_path / 'privacy.json').write_text('{"analytics":false,"crash_reports":false}')
+
+
+def _media(path, seconds, audio=True):
+    if not shutil.which('ffmpeg'):
+        pytest.skip('ffmpeg required')
+    cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', f'color=c=gray:s=160x90:d={seconds}']
+    if audio:
+        cmd += ['-f', 'lavfi', '-i', f'sine=frequency=440:duration={seconds}', '-shortest']
+    cmd += ['-pix_fmt', 'yuv420p', str(path)]
+    subprocess.run(cmd, check=True)
+    return path
 
 
 def _settings(provider='whisper_local', mode='subtitle'):
@@ -54,7 +68,7 @@ def test_gate_allows_srt_installed_cloud_or_visual(monkeypatch, kw, status, prov
     readiness.ensure_local_transcription_for_import(**kw)
 
 
-def test_import_endpoint_blocks_before_creating_a_project(monkeypatch):
+def test_import_endpoint_blocks_before_creating_a_project(monkeypatch, tmp_path):
     _settings()
     _whisper(monkeypatch, 'missing')
     monkeypatch.setattr(readiness, 'ensure_analysis_usable', lambda: None)
@@ -64,16 +78,28 @@ def test_import_endpoint_blocks_before_creating_a_project(monkeypatch):
     app = FastAPI()
     app.include_router(api.router)
     with TestClient(app) as client:
-        r = client.post('/import', files={'video': ('a.mp4', b'\x00' * 32, 'video/mp4')}, data={'auto_start': 'true'})
+        blob = _media(tmp_path / 'ok.mp4', 40).read_bytes()
+        r = client.post('/import', files={'video': ('a.mp4', blob, 'video/mp4')}, data={'auto_start': 'true'})
     assert r.status_code == 422 and '需要先安装本地转写' in r.text
     assert created == []
+    assert not any((tmp_path / 'import-staging').glob('*'))  # staged upload removed
 
 
 def test_quick_output_file_path_is_gated(monkeypatch, tmp_path):
     _settings()
     _whisper(monkeypatch, 'missing')
     from backend.services import quick_output_runner
-    video = tmp_path / 'v.mp4'
-    video.write_bytes(b'0')
+    video = _media(tmp_path / 'v.mp4', 40)
     with pytest.raises(ValueError, match='需要先安装本地转写'):
         quick_output_runner.start(str(video), ['douyin'])
+
+
+@pytest.mark.parametrize('seconds,audio', [(2, True), (40, False)])
+def test_source_that_cannot_take_subtitle_route_is_not_gated(monkeypatch, tmp_path, seconds, audio):
+    """Too short / no audio needs no Whisper: the pipeline must report source_too_short / source_no_audio."""
+    _settings()
+    _whisper(monkeypatch, 'missing')
+    video = _media(tmp_path / 'v.mp4', seconds, audio)
+    readiness.ensure_local_transcription_for_import(srt_available=False, video=video)
+    with pytest.raises(ValueError, match='需要先安装本地转写'):
+        readiness.ensure_local_transcription_for_import(srt_available=False, video=_media(tmp_path / 'ok.mp4', 40))

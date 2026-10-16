@@ -54,7 +54,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
     create_tables()
     if not url:
         from backend.services.studio import readiness
-        readiness.ensure_local_transcription_for_import(srt_available=bool(subtitle))
+        readiness.ensure_local_transcription_for_import(srt_available=bool(subtitle), video=video)
     with SessionLocal() as db:
         project = ProjectService(db).create_project(ProjectCreate(
             name=name or (video.stem if not url else 'Quick output'), project_type='default', source_url=url,

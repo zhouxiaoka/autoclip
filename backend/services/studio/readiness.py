@@ -184,7 +184,7 @@ def require_transcription(*, stage: str = 'SUBTITLE', srt_available: bool = Fals
 LOCAL_TRANSCRIPTION_REQUIRED = '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。'
 
 
-def ensure_local_transcription_for_import(*, srt_available: bool) -> None:
+def ensure_local_transcription_for_import(*, srt_available: bool, video=None) -> None:
     """1.5.8 import gate for a local file: local Whisper selected, runtime missing, no SRT -> block.
 
     Never switches provider (no silent cloud fallback) and never installs anything.
@@ -201,5 +201,16 @@ def ensure_local_transcription_for_import(*, srt_available: bool) -> None:
     choice = settings.transcription or ai_models.Transcription()
     if choice.provider != 'whisper_local':
         return
-    if _transcription(settings).get('code') in ('whisper_not_installed', 'whisper_install_failed'):
-        raise ValueError(LOCAL_TRANSCRIPTION_REQUIRED)
+    if _transcription(settings).get('code') not in ('whisper_not_installed', 'whisper_install_failed'):
+        return
+    if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
+        return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code
+    raise ValueError(LOCAL_TRANSCRIPTION_REQUIRED)
+
+
+def _source_cannot_take_subtitle_route(video, srt_available: bool) -> bool:
+    from backend.pipeline import media_precheck
+    try:
+        return media_precheck.subtitle_route_failure(video, srt_available=srt_available) is not None
+    except Exception:  # noqa: BLE001 - unreadable source: let the pipeline classify it
+        return True
