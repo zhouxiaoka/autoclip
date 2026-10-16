@@ -3,6 +3,7 @@ import { t } from '../../i18n'
 import { Row, Segmented } from '../../ui'
 import { packagingLabel, packagingFallbackHint } from './packagingLabel'
 import type { Draft, Packaging } from './types'
+import { effectiveSubtitles } from './subtitleState'
 
 const TITLE_MAX = { zh: 12, en: 36 }
 const STYLES: Record<Packaging['template'], { value: NonNullable<Packaging['style']>; label: string }[]> = {
@@ -17,7 +18,7 @@ const STYLES: Record<Packaging['template'], { value: NonNullable<Packaging['styl
 export default function PackagingSettings({ draft, patch }: { draft: Draft; patch: (changes: Partial<Draft>) => void }) {
   const packaging = draft.packaging
   if (!packaging) return null
-  const fallbackHint = packagingFallbackHint(packaging, [], draft.subtitles)
+  const fallbackHint = packagingFallbackHint(packaging, [], effectiveSubtitles(draft))
   const max = TITLE_MAX[packaging.audience_language]
   const lines = [packaging.title_lines[0] ?? '', packaging.title_lines[1] ?? '']
   const update = (changes: Partial<Packaging>) => patch({ packaging: { ...packaging, ...changes } })
