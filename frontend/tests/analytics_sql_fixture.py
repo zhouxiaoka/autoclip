@@ -130,7 +130,10 @@ process.stdout.write(JSON.stringify(events))
         for i in range(1, hops + 1):
             self.assertIn(f'LEFT JOIN base p{i} ON ', body)
         self.assertNotIn(f'LEFT JOIN base p{hops + 1} ', body)
-        self.assertIn('SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, ts) AS fo', body)
+        # R25 #346: last attempt by the backend sequence (observation time breaks ties only).
+        self.assertEqual(v4['flow_definition']['order_property'], 'attempt_sequence')
+        self.assertIn('argMax(ifNull(toInt(properties.attempt_sequence), 0), timestamp) AS seq', body)
+        self.assertIn('SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, (seq, ts)) AS fo', body)
         for rate in ('overall_attempt_rate', 'product_attempt_rate', 'overall_flow_rate', 'product_flow_rate'):
             self.assertIn(rate, body)
 

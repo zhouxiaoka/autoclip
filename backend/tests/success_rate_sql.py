@@ -9,7 +9,7 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[2]
 SQL = (ROOT / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
 PROPS = ('attempt_id', 'flow_id', 'retry_of', 'outcome', 'error_code', 'upstream_error_type', 'failure_stage',
-         'app_version', 'analytics_environment', 'runtime', 'provider')
+         'app_version', 'analytics_environment', 'runtime', 'provider', 'attempt_sequence')
 COHORT = 641509
 PARAMS = {'date_from': "'2026-10-09 00:00:00'", 'date_to': "'2026-10-16 00:00:00'", 'internal_cohort_id': str(COHORT)}
 
@@ -67,6 +67,8 @@ def to_duckdb(sql):
     sql = _rewrite_calls(sql, 'toDateTime', lambda a: f'CAST({a[0]} AS TIMESTAMP)')
     sql = _rewrite_calls(sql, 'toDate', lambda a: f'CAST({a[0]} AS DATE)')
     sql = _rewrite_calls(sql, 'toString', lambda a: f'CAST({a[0]} AS VARCHAR)')
+    sql = _rewrite_calls(sql, 'toInt', lambda a: f'TRY_CAST({a[0]} AS BIGINT)')  # HogQL toInt: NULL when not a number
+    sql = _rewrite_calls(sql, 'ifNull', lambda a: f'coalesce({a[0]}, {a[1]})')
     sql = sql.replace('count()', 'count(*)')
     sql = re.sub(r'person_id NOT IN COHORT (\d+)', r'person_id NOT IN (SELECT person_id FROM cohort_people WHERE cohort_id = \1)', sql)
     return sql

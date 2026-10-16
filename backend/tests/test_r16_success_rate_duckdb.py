@@ -81,8 +81,8 @@ def test_daily_attempt_and_flow_rates_match_hand_count():
 
 
 MUTATIONS = {
-    'last->any success': ("argMax(o, ts) AS fo", "if(max(o = 'success'), 'success', 'error') AS fo"),
-    'last->first': ("argMax(o, ts) AS fo", "argMin(o, ts) AS fo"),
+    'last->any success': ("argMax(o, (seq, ts)) AS fo", "if(max(o = 'success'), 'success', 'error') AS fo"),
+    'last->first': ("argMax(o, (seq, ts)) AS fo", "argMin(o, (seq, ts)) AS fo"),
     'ignore retry_of': ("b.fid) AS chain_fid", "b.fid) AS chain_fid_unused, b.fid AS chain_fid"),
 }
 
@@ -144,7 +144,7 @@ def test_per_version_query():
 
 def test_per_version_last_any_mutation_is_caught():
     stmt = statements()[4]
-    old = "argMax(o, ts) AS fo"
+    old = "argMax(o, (seq, ts)) AS fo"
     assert old in stmt
     rows = {r['app_version']: r for r in fixture().run(stmt.replace(old, "if(max(o = 'success'), 'success', 'error') AS fo"))}
     assert rows['1.5.8']['flow_ok'] != 2
@@ -398,3 +398,36 @@ def test_203_zero_filling_an_overall_rate_is_caught(column):
     assert mutated != SQL
     with pytest.raises(AssertionError):
         _assert_all_excluded_is_null(statements(mutated))
+
+
+# --- R25 #346: the flow's last attempt is the backend sequence, not the observation time ---
+
+def _out_of_order():
+    """partial -> retry completed, but the retry's terminal is observed BEFORE the partial (offline client, replay)."""
+    e = Events()
+    e.add('S', 9, attempt_id='s1', flow_id='FS', outcome='partial', error_code='timeout', attempt_sequence='1')
+    e.add('S', 1, attempt_id='s2', flow_id='FS', retry_of='s1', outcome='completed', attempt_sequence='2')
+    return e
+
+
+def test_346_out_of_order_observation_keeps_the_flow_successful_in_figure_1_and_5():
+    e = _out_of_order()
+    [day] = e.run(statements()[0])
+    assert (day['flow_ok'], day['fq_all'], day['overall_flow_rate']) == (1, 1, 1.0)
+    [version] = e.run(statements()[4])
+    assert (version['flow_ok'], version['fq_all']) == (1, 1)
+
+
+@pytest.mark.parametrize('figure', [0, 4])
+def test_346_ordering_by_observation_time_is_caught(figure):
+    stmt = statements()[figure]
+    assert stmt.count(', (seq, ts))') >= 3
+    rows = _out_of_order().run(stmt.replace(', (seq, ts))', ', ts)'))
+    assert rows[0]['flow_ok'] == 0  # the old argMax(o, ts): 100% -> 0%
+
+
+def test_346_legacy_rows_without_sequence_still_order_by_time():
+    e = Events()
+    e.add('L', 0, attempt_id='l1', flow_id='FL', outcome='error', error_code='timeout')
+    e.add('L', 5, attempt_id='l2', flow_id='FL', retry_of='l1', outcome='completed')
+    assert e.run(statements()[0])[0]['flow_ok'] == 1
