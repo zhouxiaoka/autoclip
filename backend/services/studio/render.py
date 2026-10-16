@@ -97,6 +97,30 @@ def _decoded_extent(progress_output) -> tuple:
     return (None if out_us is None else max(0, out_us) / 1_000_000), frames
 
 
+def _tolerance(fps) -> float:
+    return max(0.5, 2 / fps if fps and fps > 0 else 0.5)
+
+
+def _decoded_video_seconds(path, fps, expected) -> float:
+    """Fully decode every default stream (video AND audio, R13 #28) and return the decoded video
+    duration (frames / fps), measured separately from the audio-inclusive progress clock.
+    Any decoder error (including a corrupt audio tail) rejects the output. A timeout stays a
+    typed TimeoutExpired (R12 #22, error_code=timeout)."""
+    try:
+        decoded = project_cancellation.run(
+            [get_ffmpeg_path(), '-v', 'error', '-xerror', '-nostats', '-progress', 'pipe:1',
+             '-i', str(path), '-f', 'null', '-'],
+            check=True, capture_output=True, timeout=max(120, (expected or 0) * 2))
+    except (subprocess.CalledProcessError, OSError):
+        raise ValueError('渲染输出无效，请重新导出') from None
+    if (decoded.stderr or b'').strip():
+        raise ValueError('渲染输出无效，请重新导出')
+    _seconds, frames = _decoded_extent(decoded.stdout)
+    if frames <= 0:
+        raise ValueError('渲染输出无效，请重新导出')
+    return frames / (fps if fps and fps > 0 else 30)
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
@@ -307,6 +331,15 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             project_cancellation.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             from backend.services.output_branding import append_outro
+            body_seconds = None
+            if brand_outro:
+                # R13 #27: the outro must not mask a short main body; validate the body alone
+                # (<= tolerance) before it is concatenated with the end card.
+                body_probe = _probe(partial)
+                body_fps = body_probe.get('fps') or 30
+                body_seconds = _decoded_video_seconds(partial, body_fps, sum(durations))
+                if body_seconds < sum(durations) - _tolerance(body_fps):
+                    raise ValueError('渲染输出无效，请重新导出')
             outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
@@ -326,21 +359,12 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         # R12 #21: a clean cut at a packet boundary decodes without errors but short, so the
         # decoded extent must also match the container and the drafted content.
         # R12 #22: a decode timeout stays a typed TimeoutExpired (error_code=timeout).
-        try:
-            decoded = project_cancellation.run(
-                [get_ffmpeg_path(), '-v', 'error', '-xerror', '-nostats', '-progress', 'pipe:1',
-                 '-i', str(ready), '-map', '0:v:0', '-f', 'null', '-'],
-                check=True, capture_output=True, timeout=max(120, duration * 2))
-        except (subprocess.CalledProcessError, OSError):
-            raise ValueError('渲染输出无效，请重新导出') from None
-        if (decoded.stderr or b'').strip():
-            raise ValueError('渲染输出无效，请重新导出')
-        decoded_seconds, decoded_frames = _decoded_extent(decoded.stdout)
         fps = validated.get('fps') or 30
-        tolerance = max(0.5, 2 / fps if fps > 0 else 0.5)
-        if (decoded_frames <= 0 or decoded_seconds is None
-                or decoded_seconds < duration - tolerance
-                or decoded_seconds < sum(durations) - tolerance):
+        tolerance = _tolerance(fps)
+        decoded_seconds = _decoded_video_seconds(ready, fps, duration)
+        if (decoded_seconds < duration - tolerance
+                or decoded_seconds < sum(durations) - tolerance
+                or (outro_applied and body_seconds is not None and decoded_seconds <= body_seconds)):
             raise ValueError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)
         os.replace(ready, output)

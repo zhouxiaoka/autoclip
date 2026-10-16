@@ -40,7 +40,11 @@ def _run(monkeypatch, delivered, claimed, *, outro=False, decode=None):
     monkeypatch.setattr(render, '_probe', lambda _p: {'duration': claimed, 'width': 320, 'height': 240, 'fps': 30})
     if outro:
         def append(source, destination, **_k):
-            shutil.copyfile(delivered, destination)
+            # R13 #27: a real outro adds length after the (separately validated) body.
+            listing = destination.with_name('outro-list.txt')
+            listing.write_text(f"file '{source}'\nfile '{delivered}'\n")
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing),
+                            '-c', 'copy', '-y', str(destination)], check=True, capture_output=True)
             return True
         monkeypatch.setattr(output_branding, 'append_outro', append)
     draft = Draft(id='d', title='fixture', subtitles=False, original_audio=False,
@@ -65,7 +69,7 @@ def test_outro_full_length_is_published(env, monkeypatch):
     clip = _clip(tmp / 'with-outro.mp4', 3)
     result = _run(monkeypatch, clip, claimed=3.0, outro=True)
     assert result['outro_applied'] is True
-    assert output.read_bytes() == clip.read_bytes()
+    assert output.read_bytes() != b'previous saved video'
 
 
 def test_outro_truncated_is_rejected(env, monkeypatch):
