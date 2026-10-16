@@ -24,7 +24,7 @@ function load(name, mocks = {}, globals = {}) {
   return module.exports
 }
 
-const workflow = load('workflow')
+const workflow = require('./helpers/backend-receipts.cjs').withBackendReceipts(load('workflow'))
 
 test('run-level allowlist keeps provider fields and drops keys, prompts and full URLs', () => {
   const props = workflow.safeStudioProperties({

@@ -28,7 +28,7 @@ function load(name, mocks = {}, globals = {}) {
     }, ...globals }, { filename: file })
   return module.exports
 }
-const core = load('workflow')
+const core = require('./helpers/backend-receipts.cjs').withBackendReceipts(load('workflow'))
 
 test('native Mac architecture overrides the Intel webview UA before launch resolves', () => {
   const lifecycle = load('lifecycle', {
@@ -1027,7 +1027,7 @@ test('framing installation retries use distinct terminal deduplication keys',()=
 test('1.5 API observes cover and retry terminal results across restart without content',async()=>{
  const s=setup()
  const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
- const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{id:'private-variant',render_job_id:'private-new-render',status:'queued'} /* R20 #123: the retry endpoint returns the variant */,get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
+ const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{attempt:null,variant:{id:'private-variant',render_job_id:'private-new-render',status:'queued'}} /* #419: the retry command returns {attempt, variant} */,get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
  const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}},'./subtitleState':load('../features/studio/subtitleState')}).studioApi
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.redesignVariantCover('private-project','private-variant')

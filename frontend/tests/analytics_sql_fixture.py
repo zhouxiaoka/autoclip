@@ -47,7 +47,8 @@ class AnalyticsSqlTests(unittest.TestCase):
         result = subprocess.run(['node', '-e', """
 const path = require('node:path')
 const { loadTs } = require('./frontend/tests/load-ts.cjs')
-const workflow = loadTs(path.resolve('frontend/src/analytics/workflow.ts'))
+// #419: terminals are projections of backend receipts; the helper attaches the receipt the backend writes.
+const workflow = require('./frontend/tests/helpers/backend-receipts.cjs').withBackendReceipts(loadTs(path.resolve('frontend/src/analytics/workflow.ts')))
 const events = []
 for (const kind of ['studio-export', 'studio-generation']) {
   for (const status of ['completed', 'failed']) {

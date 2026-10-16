@@ -13,7 +13,7 @@ test('completed variants render the immutable output video directly',()=>{
 test('result page appends platforms and retries only an output variant',()=>{
  assert.match(api,/appendPlatforms: \(pid: string, platforms: string\[\], outroEnabled: boolean\)/)
  assert.match(api,/`\/studio\/\$\{pid\}\/platforms`/)
- assert.match(api,/`\/studio\/\$\{pid\}\/output-variants\/\$\{variantId\}\/retry`/)
+ assert.match(api,/`\/studio\/\$\{pid\}\/retry`, \{ scope: 'variant', variant_id: variantId/)  // #419: one retry command
  assert.match(results,/studioApi\.appendPlatforms\(project\.id, platforms, workspace\.generation\?\.branding\.outro_enabled/)
  assert.match(results,/studioApi\.retryOutputVariant\(project\.id, variant\.id\)/)
  assert.doesNotMatch(results,/studioApi\.import\(/)

@@ -5,11 +5,11 @@ const { renderToStaticMarkup } = require('react-dom/server')
 const { loadTs } = require('../load-ts.cjs')
 const ROOT = path.resolve(__dirname, '..')
 
-function setup() {
+function setup({ post, storage } = {}) {
   const workflow = loadTs(path.resolve(ROOT, '../src/analytics/workflow.ts'))
   const events = []
-  const tracker = new workflow.WorkflowTracker({ getItem: () => null, setItem() {}, removeItem() {} },
-    () => true, (event, props) => { events.push({ event, props }); return true })
+  const capture = (event, props) => { events.push({ event, props }); return true }
+  const tracker = new workflow.WorkflowTracker(storage || { getItem: () => null, setItem() {}, removeItem() {} }, () => true, capture)
   const posts = []
   const api = loadTs(path.resolve(ROOT, '../src/features/studio/api.ts'), {
     '../../analytics/posthog': { captureBusinessEvent() {} },
@@ -19,11 +19,11 @@ function setup() {
       studioImportProperties: () => ({}), studioGoals: () => ({}), observeStudioWorkspace: () => {},
     },
     '../../analytics/observer': { workflow: tracker },
-    '../../services/api': { default: { defaults: { baseURL: '' }, post: async (url) => { posts.push(url); return { id: url.split('/').at(-2), status: 'rendering', render_job_id: 'job-2' } }, put: async () => ({}), get: async () => ({}) }, __esModule: true },
+    '../../services/api': { default: { defaults: { baseURL: '' }, post: async (url, body) => { posts.push(url); return post ? post(url, body) : { id: url.split('/').at(-2), status: 'rendering', render_job_id: 'job-2' } }, put: async () => ({}), get: async () => ({}) }, __esModule: true },
     './noticeRuntime': { noteWorkspaceCompletion() {} },
     './subtitleState': { effectiveSubtitles: x => x },
   })
-  return { tracker, events, posts, studioApi: api.studioApi }
+  return { tracker, events, posts, studioApi: api.studioApi, workflow, capture }
 }
 
 function renderResults(workspace, studioApi, cards) {
@@ -40,6 +40,12 @@ function renderResults(workspace, studioApi, cards) {
     if (name === '../../utils/llmFailure') return loadTs(path.resolve(ROOT, '../src/utils/llmFailure.ts'))
     if (name === './settingsReturn') return loadTs(path.resolve(ROOT, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return loadTs(path.resolve(ROOT, '../src/features/studio/failureAction.ts'))
+    if (name === './FailureActions') {
+      const out = {}
+      const src = fs.readFileSync(path.join(ROOT, '../src/features/studio/FailureActions.tsx'), 'utf8')
+      vm.runInNewContext(ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: out, require: moduleRequire })
+      return out
+    }
     if (name === './platformLabel') return { platformLabel: String }
     if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
     if (name === '../../analytics/studio') return { trackLegacyEntry() {} }
@@ -49,7 +55,7 @@ function renderResults(workspace, studioApi, cards) {
   const exportsObject = {}
   const source = fs.readFileSync(path.join(ROOT, '../src/features/studio/StudioResults.tsx'), 'utf8')
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: exportsObject, require: moduleRequire, console, URLSearchParams })
-  renderToStaticMarkup(React.createElement(exportsObject.default, { project: { id: 'p1', status: 'completed', settings: { smart_import: {} }, clips: [], collections: [] }, onCreateCollection() {}, onReload() {} }))
+  return renderToStaticMarkup(React.createElement(exportsObject.default, { project: { id: 'p1', status: 'completed', settings: { smart_import: {} }, clips: [], collections: [] }, onCreateCollection() {}, onReload() {} }))
 }
 
 

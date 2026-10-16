@@ -129,7 +129,7 @@ multiIf(
 | --- | --- |
 | `flow_id` | 同一项目从导入到出片/下载 |
 | `operation_id` | 一次 API 的 requested 与结果 |
-| `attempt_id` | 一次后台观察（重试换新） |
+| `attempt_id` | 一次业务尝试（v4 终态取后端 AttemptReceipt 的 `attempt_id`；重试换新） |
 | `artifact_id` | 同一导出作业的成片 |
 
 禁止把内部 `project_id` / `run_id` / `job_id` 当作新事件属性。旧 legacy 事件若已带，不回填、不扩散。
@@ -686,4 +686,4 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 
 ### 1.5.8 一键重试
 
-终态事件可带 `retry_of`（上一次 attempt 的 `attempt_id`，`t-` 遥测 id）：失败态「重试」按钮复用 `/studio/{id}/analyze`，新 run 生成新 `attempt_id`。不自动续跑。
+终态事件可带 `retry_of`（被重试 attempt 的 `attempt_id`，`t-` id）。**attempt 归后端所有（#419）**：每个 v4 尝试是项目状态里的一条 AttemptReceipt（`attempt_id, flow_id, sequence, retry_of, kind, state, causes[]`），和业务状态同一次原子写入；失败态「重试」/「继续制作」/「重试这条」都走同一个 `POST /studio/{id}/retry`，后端校验父 attempt（必须是 failed/partial、没被重试过）、同一项目串行（第二个「重试这条」并入正在进行的那次）、幂等键防重复。前端观察器只投影回执：`studio_generation_finished` / `studio_production_finished` 的 `attempt_id`、`retry_of`、主因和 `secondary_*` 都取自回执，`$insert_id` = `studio-v1:{attempt_id}:finished`；顺序看 `sequence`，不看时间戳；重启或清空浏览器存储不改血缘。主因按 catalog 分层确定（产品优先，`failure_attribution`），页面另取第一个用户可修复的原因给「去设置」。不自动续跑。

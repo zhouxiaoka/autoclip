@@ -549,7 +549,7 @@
         ]
       },
       "optional_ids": {
-        "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
+        "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
       }
     },
     "studio_generation_finished": {
@@ -572,7 +572,7 @@
         "outcome": "studio_outcome"
       },
       "optional_ids": {
-        "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
+        "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
       },
       "optional_properties": {
         "secondary_error_codes": {
@@ -605,7 +605,7 @@
         "outcome": "studio_outcome"
       },
       "optional_ids": {
-        "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
+        "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
       },
       "optional_properties": {
         "secondary_error_codes": {

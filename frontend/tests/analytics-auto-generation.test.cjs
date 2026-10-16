@@ -8,7 +8,8 @@ function loadWorkflow(MathImpl=Math){
  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Math:MathImpl,JSON,Number,Array,Object,Map,Set,String,URL})
  return exports
 }
-const workflow=loadWorkflow()
+const {withBackendReceipts}=require('./helpers/backend-receipts.cjs')
+const workflow=withBackendReceipts(loadWorkflow())
 
 function tracker(){
  const events=[],store=new Map()
@@ -181,7 +182,7 @@ test('seeded ids that would spell a secret marker are regenerated and pass catal
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../../docs/analytics/event_catalog.json'),'utf8'))
  assert.equal(SK.toString(36),'0.sk')
  for(const values of [[SK,0.25,0.5,0.75],[SK]]){   // second: RNG stuck on the bad value
-  const wf=loadWorkflow(seededMath(values))
+  const wf=withBackendReceipts(loadWorkflow(seededMath(values)))
   const events=[],store=new Map()
   const t=new wf.WorkflowTracker({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},()=>true,(name,props)=>{events.push({name,props});return true})
   t.watch('studio-generation','p1')

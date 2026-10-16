@@ -9,14 +9,15 @@ function load(file, mocks) {
   return exports
 }
 test('automatic retry enrolls a fresh terminal watch on the same flow and deduplicates completion', async () => {
-  const { WorkflowTracker, safeStudioProperties } = load('analytics/workflow.ts', {})
+  // #419: terminals are projections of backend receipts (helper = what attempts.py writes for this state).
+  const { WorkflowTracker, safeStudioProperties } = require('./helpers/backend-receipts.cjs').withBackendReceipts(load('analytics/workflow.ts', {}))
   const events = [], storage = new Map(), requests = []
   const workflow = new WorkflowTracker({ getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }, () => true, (event, props) => { events.push({ event, props }); return true })
   workflow.rememberProject('p', { material_origin: 'user' })
   workflow.watch('studio-generation', 'p')
   workflow.observeStudio(workflow.list()[0], { generation: { auto_start: true, status: 'failed', error_code: 'whisper_not_installed' }, analysis: { status: 'failed' } })
   const api = load('features/studio/api.ts', {
-    '../../analytics/posthog': {}, '../../analytics/workflow': { safeStudioProperties },
+    '../../analytics/posthog': {}, '../../analytics/workflow': { safeStudioProperties, telemetryId: () => 't-0000000000' },
     '../../analytics/observer': { workflow }, '../../services/api': { default: { post: async url => { requests.push(url); return { analysis_run_id: 'new-run' } } } },
     '../../analytics/studio': { observeStudioOperation: async (_name, action, accepted) => { const result = await action(); accepted(result, {}); return result } },
   }).studioApi

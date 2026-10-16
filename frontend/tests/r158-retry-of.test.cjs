@@ -28,18 +28,6 @@ function harness() {
 const failedGen = { material_origin: 'user', generation: { status: 'failed', error_code: 'service_restarted' }, analysis: { status: 'failed', phase: 'production', error_code: 'service_restarted' } }
 const okGen = { ...failedGen, generation: { status: 'completed' }, analysis: { status: 'completed' } }
 
-test('1.5.8 Retry button after a failed automatic attempt: new attempt_id, retry_of = failed attempt (real api.analyze chain)', async () => {
-  const { tracker, studioApi, finished, watchOf } = harness()
-  tracker.watch('studio-generation', 'p1')
-  tracker.observeStudio(watchOf('studio-generation'), failedGen)
-  await studioApi.analyze('p1', true, true)
-  tracker.observeStudio(watchOf('studio-generation'), okGen)
-  const [first, second] = finished('studio_generation_finished')
-  assert.ok(first.attempt_id && second.attempt_id && first.attempt_id !== second.attempt_id)
-  assert.equal(first.retry_of, undefined)
-  assert.equal(second.retry_of, first.attempt_id)
-})
-
 test('1.5.8 retry_of only from the Retry button and only when the previous attempt failed', async () => {
   // not from a plain re-analyze / re-plan restart
   let h = harness()
@@ -58,31 +46,6 @@ test('1.5.8 retry_of only from the Retry button and only when the previous attem
   h.tracker.watch('studio-generation', 'p1')
   await h.studioApi.analyze('p1', true, true)
   assert.equal(h.watchOf('studio-generation').properties.retry_of, undefined)
-})
-
-test('1.5.8 manual retry: production after a failed production carries retry_of; a screen failure is never a retry_of target (R21 #164)', async () => {
-  const { tracker, studioApi, finished, watchOf } = harness()
-  tracker.watch('studio-screen', 'p1')
-  tracker.observeStudio(watchOf('studio-screen'), { material_origin: 'user', analysis: { status: 'failed', phase: 'screening', error_code: 'timeout' } })
-  await studioApi.analyze('p1', false, true)
-  assert.equal(watchOf('studio-screen').properties.retry_of, undefined)
-  tracker.watch('studio-production', 'plan-0', 'p1')
-  tracker.observeStudio(watchOf('studio-production'), { material_origin: 'user', plan: { id: 'plan-0' }, analysis: { status: 'failed', error_code: 'timeout' } })
-  const failedId = finished('studio_production_finished')[0].attempt_id
-  await studioApi.analyze('p1', false, true)
-  assert.equal(watchOf('studio-screen').properties.retry_of, failedId)
-  await studioApi.confirmPlan('p1', 'plan-1', ['highlight'], {}, 'subtitle')
-  assert.equal(watchOf('studio-production').properties.retry_of, failedId)
-})
-
-test('1.5.8 Retry button passes retry=true; hidden in manual mode once drafts/clips/completed exports exist', () => {
-  const fs = require('node:fs')
-  const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.ok(ui.includes("canRetry={automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))}"))
-  assert.ok(ui.includes("studioApi.analyze(project.id, !!automatic, true)"))
-  const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
-  assert.equal(workflow.safeStudioProperties({ retry_of: 't-0123456789abc' }).retry_of, 't-0123456789abc')
-  assert.equal(workflow.safeStudioProperties({ retry_of: 'https://x/sk-abc' }).retry_of, undefined)
 })
 
 test('1.5.8 failed-state action per code: user-cause codes get 「去设置」 + reason, everything else keeps Retry', () => {
@@ -118,13 +81,3 @@ test('1.5.8 failed-state action per code: user-cause codes get 「去设置」 +
 })
 
 
-test('1.5.8 partial counts as a failed attempt: Retry after partial links retry_of (R18 83)', async () => {
-  const { tracker, studioApi, finished, watchOf } = harness()
-  tracker.watch('studio-generation', 'p1')
-  tracker.observeStudio(watchOf('studio-generation'), { material_origin: 'user', generation: { status: 'partial', error_code: 'timeout', completed_variant_count: 1 }, analysis: { status: 'completed', outcome: 'partial' } })
-  const [partial] = finished('studio_generation_finished')
-  assert.equal(partial.outcome, 'partial')
-  assert.equal(tracker.lastFailedAttempt('p1'), partial.attempt_id)
-  await studioApi.analyze('p1', true, true)
-  assert.equal(watchOf('studio-generation').properties.retry_of, partial.attempt_id)
-})

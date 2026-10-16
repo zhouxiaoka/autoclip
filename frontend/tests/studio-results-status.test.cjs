@@ -24,7 +24,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
       Section: ({ children, description, right }) => React.createElement('section', null, description, right, children),
       Dialog: empty, fmtDuration: String }
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
-    if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args) }, errorText: String }
+    if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args), retry: async (...args) => calls.push(['retry', ...args]) }, errorText: String }
     if (name === '../../utils/llmFailure') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts'))
     if (name === './platformLabel') return { platformLabel: String }
     if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
@@ -70,7 +70,7 @@ test('failed automatic output exposes a retry that reuses the project and automa
   const retry = buttons.find(button => button.children === '重试')
   assert.ok(retry, 'failed automatic output must have a retry entry')
   await retry.onClick()
-  assert.deepEqual(calls, [['test', true, true]])
+  assert.deepEqual(calls, [['retry', 'test']])  // #419: the one backend retry command
 })
 test('active automatic output never offers a second analysis submission', () => {
   const buttons = []
@@ -160,7 +160,7 @@ test('R20 #125 auth failure: 「继续制作」 sits beside 「去设置」 and 
   const cont = buttons.find(b => b.children === '继续制作')
   assert.ok(cont, 'auth failure must offer 继续制作')
   await cont.onClick()
-  assert.deepEqual(calls, [['test', true, true]])  // studioApi.analyze(pid, automatic, retry) -> retry_of + new attempt_id
+  assert.deepEqual(calls, [['retry', 'test']])  // #419: backend retry command -> receipt with retry_of + new attempt_id
 })
 test('R20 #125 back from a successful settings save (?continue=1): 「继续制作」 is the primary action', async () => {
   routeSearch.value = '?continue=1'
@@ -171,7 +171,7 @@ test('R20 #125 back from a successful settings save (?continue=1): 「继续制�
   assert.ok(buttons.some(b => b.children === '去设置'))
   assert.equal(buttons.some(b => b.children === '重试'), false)
   await buttons.find(b => b.children === '继续制作').onClick()
-  assert.deepEqual(calls, [['test', false, true]])
+  assert.deepEqual(calls, [['retry', 'test']])
 })
 test('R20 #125 settings save returns to the project only when opened from one and the id is safe', () => {
   const r = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
