@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
-import { pickSecondary } from './failureAction'
+import { pickSecondary, receiptFailureInfo } from './failureAction'
 import FailureActions from './FailureActions'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
@@ -87,10 +87,10 @@ export default function StudioResults({ project, children, onCreateCollection, o
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={automatic ? (workspace.output_variants?.length || 0) : workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={automatic ? generationDescription : visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions">{automatic && <Btn size="sm" disabled={!!busy} onClick={()=>{setPlatforms([]);setAddingPlatforms(value=>!value)}}>{t('追加平台版本')}</Btn>}<Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {workspace.analysis?.status==='running' && <div className="ac-empty studio-processing"><b><span className="spin"/> {t(workspace.analysis.message||"分析画面中")}{typeof workspace.analysis.percent==='number' && ` · ${workspace.analysis.percent}%`}</b>{workspace.analysis.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}</div>}
       {workspace.analysis?.status==='failed' && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
-        <FailureActions info={{ error: workspace.analysis.error, error_code: workspace.analysis.error_code || workspace.generation?.error_code, upstream_error_type: (workspace.analysis as { upstream_error_type?: string }).upstream_error_type, failure_stage: (workspace.analysis as { failure_stage?: string }).failure_stage, ...pickSecondary(workspace.analysis) }}
+        <FailureActions info={{ error: workspace.analysis.error, ...(receiptFailureInfo(workspace.attempts, workspace.analysis.run_id) || { error_code: workspace.analysis.error_code || workspace.generation?.error_code, upstream_error_type: (workspace.analysis as { upstream_error_type?: string }).upstream_error_type, failure_stage: (workspace.analysis as { failure_stage?: string }).failure_stage, ...pickSecondary(workspace.analysis) }) }}
           canRetry={automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))}
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
-          onRetry={()=>act('retry-analysis', async()=>{await studioApi.analyze(project.id, !!automatic, true)})}
+          onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}
           onSettings={destination=>navigate(settingsReturnUrl(destination, project.id))}>
           <Btn disabled={!!busy} onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}
         </FailureActions></div>}

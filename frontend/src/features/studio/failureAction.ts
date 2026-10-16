@@ -62,3 +62,15 @@ export function pickSecondary(analysis: unknown): Pick<PageFailureInfo, 'seconda
   const a = (analysis || {}) as Record<string, unknown>
   return { secondary_error_codes: strings(a.secondary_error_codes), secondary_upstream_error_types: strings(a.secondary_upstream_error_types), secondary_failure_stages: strings(a.secondary_failure_stages) }
 }
+
+type Receipt = { sequence?: number; state?: string; run_id?: string | null; causes?: { stage?: string; code?: string; upstream?: string }[] }
+/** #419: the page reads the settled backend attempt receipt of the failed run it shows (its structured causes,
+ * primary first). A failure outside any attempt (e.g. screening) has no receipt: null, the caller uses analysis. */
+export function receiptFailureInfo(attempts: readonly Receipt[] | null | undefined, runId?: string | null): PageFailureInfo | null {
+  const settled = (attempts || []).filter(a => ['completed', 'partial', 'failed'].includes(a.state || ''))
+  const latest = settled.reduce<Receipt | null>((best, a) => !best || (a.sequence || 0) > (best.sequence || 0) ? a : best, null)
+  if (!latest || !runId || latest.run_id !== runId || latest.state === 'completed' || !latest.causes?.length) return null
+  const [primary, ...rest] = latest.causes
+  return { error_code: primary.code, upstream_error_type: primary.upstream || null, failure_stage: primary.stage || null,
+    secondary_error_codes: rest.map(c => c.code || ''), secondary_upstream_error_types: rest.map(c => c.upstream || ''), secondary_failure_stages: rest.map(c => c.stage || '') }
+}
