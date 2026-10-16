@@ -9,6 +9,8 @@ from backend.pipeline import media_precheck
 from backend.pipeline.failures import PipelineFailure
 
 
+pytestmark = pytest.mark.real_media_probe  # #418: these tests fake ffprobe/ffmpeg themselves
+
 def _fake_run(probe_out, probe_err, ffmpeg_err):
     def run(cmd, **kwargs):
         if 'ffprobe' in str(cmd[0]):
