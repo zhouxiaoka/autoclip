@@ -1209,3 +1209,58 @@ test('catalog endpoint validation unlocks only the current credentials and keeps
     for (const privateValue of ['https://', 'test-only', 'test-model', 'azure-openai']) assert.equal(telemetry.includes(privateValue), false)
   }
 })
+
+test('R11: unreadable localStorage at startup sends only "off", never "on"', async () => {
+  const puts = []
+  const broken = { getItem() { throw new Error('denied') }, setItem() { throw new Error('denied') }, removeItem() {} }
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: broken, window: {},
+    fetch: (url, opts) => {
+      if (String(url).includes('/settings/analytics-consent')) puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.includes(true), JSON.stringify(puts))
+  assert.deepEqual(puts, [false])
+})
+
+test('R11: an opt-out keeps retrying after the backoff is exhausted until the API recovers', async () => {
+  const puts = []
+  let up = false
+  const timers = []
+  const storage = memory()
+  storage.setItem('autoclip.analytics.optOut', 'true')
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length },
+    clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: up })
+    },
+  })
+  ph.initAnalytics()
+  for (let i = 0; i < 12; i++) {
+    await new Promise(resolve => setImmediate(resolve))
+    const fn = timers.shift()
+    assert.equal(typeof fn, 'function', `retry ${i} was not scheduled (gave up)`)
+    if (i === 11) up = true // API recovers well after the 5 exponential retries
+    fn()
+  }
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(puts.length >= 13)
+  assert.ok(puts.every(v => v === false))
+  const settled = puts.length
+  await new Promise(resolve => setImmediate(resolve))
+  for (const fn of timers.splice(0)) fn()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(puts.length, settled) // once accepted, no more retries
+})

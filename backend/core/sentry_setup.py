@@ -7,6 +7,8 @@ Sentry 崩溃上报。DSN 未配置或用户关闭时全程 no-op，不发网络
 from __future__ import annotations
 
 import json
+import tempfile
+import threading
 import logging
 import os
 import re
@@ -110,22 +112,42 @@ def crash_reports_enabled() -> bool:
         return False
 
 
+_privacy_lock = threading.Lock()
+
+
 def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[bool] = None) -> Path:
+    """R11 #392: atomic (temp file + os.replace) so a concurrent reader never sees a
+    truncated privacy.json; read-modify-write is serialized in-process. An unreadable
+    existing file keeps collection OFF unless this call sets analytics explicitly."""
     path = _privacy_path()
     if path is None:
         raise RuntimeError("未设置 AUTOCLIP_APP_DIR / AUTOCLIP_DATA_DIR，写不了隐私开关")
-    current: dict[str, Any] = {}
-    if path.exists():
+    with _privacy_lock:
+        current: dict[str, Any] = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                current = loaded if isinstance(loaded, dict) else {"analytics": False}
+            except Exception:  # noqa: BLE001
+                current = {"analytics": False}
+        if crash_reports is not None:
+            current["crash_reports"] = bool(crash_reports)
+        if analytics is not None:
+            current["analytics"] = bool(analytics)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".privacy-", suffix=".tmp", dir=str(path.parent))
         try:
-            current = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            current = {}
-    if crash_reports is not None:
-        current["crash_reports"] = bool(crash_reports)
-    if analytics is not None:
-        current["analytics"] = bool(analytics)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(current, ensure_ascii=False, indent=2))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
     return path
 
 

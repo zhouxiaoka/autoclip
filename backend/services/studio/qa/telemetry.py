@@ -38,16 +38,17 @@ def _key() -> str:
 
 
 def _analytics_allowed() -> bool:
-    """Product default is on. privacy.json analytics:false is the opt-out the tests write."""
+    """Product default is on (no privacy.json). privacy.json analytics:false is the opt-out.
+    R11 #392: a file that exists but cannot be read/parsed never allows collection."""
     try:
         from backend.core.sentry_setup import _privacy_path
         path = _privacy_path()
-        if path is None or not path.is_file():
+        if path is None or not path.exists():
             return True
         data = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, TypeError, ValueError):
-        return True
-    if isinstance(data, dict) and data.get('analytics') is False:
+    except Exception:  # noqa: BLE001 - fail closed
+        return False
+    if not isinstance(data, dict) or data.get('analytics') is False:
         return False
     return True
 

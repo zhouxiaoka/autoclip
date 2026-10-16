@@ -100,8 +100,23 @@ function publishAnonymousId(): void {
  * X2r: mark published only after a successful PUT; retry failures; serialize so a rapid
  * toggle cannot leave UI=off / backend=on (one in-flight request, then sync to latest).
  */
+/**
+ * R11 #392: the preference the backend should hold. If the saved preference cannot be
+ * read (localStorage throws) and the user has not chosen in this session, only "off"
+ * may be sent — never "on".
+ */
+function consentIntent(): boolean {
+  if (preferenceOverride !== undefined) return isAnalyticsEnabled()
+  try {
+    localStorage.getItem(OPT_OUT_STORAGE_KEY)
+  } catch {
+    return false
+  }
+  return isAnalyticsEnabled()
+}
+
 function publishConsent(): void {
-  const enabled = isAnalyticsEnabled()
+  const enabled = consentIntent()
   if (typeof fetch !== 'function') return
   if (!watchingConsent) {
     watchingConsent = true
@@ -127,7 +142,7 @@ function publishConsent(): void {
       publishedConsent = sent
       consentRetries = 0
       // UI may have moved while the PUT was in flight — sync to the latest preference.
-      if (publishedConsent !== isAnalyticsEnabled()) publishConsent()
+      if (publishedConsent !== consentIntent()) publishConsent()
       return
     }
     // The backend may or may not have applied the PUT (e.g. written but response lost):
@@ -142,8 +157,17 @@ function publishConsent(): void {
       }, 1000 * 2 ** consentRetries++)
       return
     }
+    if (!consentIntent() && typeof setTimeout === 'function') {
+      // R11: an opt-out never gives up. Keep retrying (capped) until the API recovers.
+      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+      consentRetryTimer = setTimeout(() => {
+        consentRetryTimer = undefined
+        publishConsent()
+      }, 30000)
+      return
+    }
     consentRetries = 0
-    // Exhausted; a later toggle or apiConfig listener will try again.
+    // Exhausted for "on"; a later toggle or apiConfig listener will try again.
   }
   try {
     const base = String(apiConfigManager.getBaseUrl() || '/api/v1').replace(/\/$/, '')
