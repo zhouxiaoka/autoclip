@@ -57,7 +57,15 @@ TS="$(date +%Y%m%d-%H%M%S)"
 OUT="${OUTDIR:-${WINQA_EVIDENCE_ROOT:-${TMPDIR:-/tmp}/autoclip-winqa}/evidence-$TS}"
 mkdir -p "$OUT"
 LOG="$OUT/run.log"
-exec > >(tee -a "$LOG") 2>&1
+# R24 #215: nothing raw is ever kept locally. The live log goes through redact.py line by line before tee;
+# pulled files land in a private staging dir, are scrubbed there and only then copied into $OUT; on any exit
+# (Ctrl-C, ssh drop, set -u error) the trap removes the staging dir and scrubs $OUT once more.
+exec > >(WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 -u "$HERE/redact.py" --lines | tee -a "$LOG") 2>&1
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/winqa-stage.XXXXXX")"; chmod 700 "$STAGE"
+scrub_dir() { WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 "$HERE/redact.py" "$1" --drop-failed >/dev/null 2>&1; }
+final_scrub() { rm -rf "$STAGE"; scrub_dir "$OUT" || true; }
+trap final_scrub EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
 
 ID_OPT=(); [ -n "$IDENTITY" ] && ID_OPT=(-i "$IDENTITY")
 SSH=(ssh ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 "$USER_@$HOST")
@@ -68,8 +76,20 @@ remote() { "${SSH[@]}" "$@"; }
 rps() { "${SSH[@]}" 'powershell -NoProfile -ExecutionPolicy Bypass -Command -'; }  # PowerShell 脚本从 stdin 传，避免远端默认 shell 展开 $
 record() { echo "$1=$2" >> "$OUT/steps.txt"; echo "-> $1: $2"; }  # 追加写，续跑时保留之前步骤的结果
 want() { [ "$FROM" -le "$1" ] && [ "$1" -le "$TO" ]; }
-pull() { "${SCP[@]}" "$USER_@$HOST:C:/winqa/out/$1" "$OUT/" 2>/dev/null || true; }
-pull_all() { "${SCP[@]}" -r "$USER_@$HOST:C:/winqa/out/*" "$OUT/" 2>/dev/null || true; }
+# R24 #215 (Dong): files are scrubbed on the VM first (bundled Python + redact.py, zip members included). If that is
+# not possible app-logs.zip is moved to C:\winqa\raw on the VM and not fetched. What is fetched is scrubbed again
+# in $STAGE (with the real key, failures deleted) before it reaches $OUT.
+pull_in() {
+  rm -rf "$STAGE/in"; mkdir -p "$STAGE/in"
+  if ! remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\redact.py C:\\winqa\\out" >/dev/null 2>&1; then
+    remote "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force C:\\winqa\\raw | Out-Null; Move-Item -Force C:\\winqa\\out\\app-logs.zip C:\\winqa\\raw\\ -ErrorAction SilentlyContinue\"" >/dev/null 2>&1 || true
+  fi
+  "${SCP[@]}" -r "$USER_@$HOST:C:/winqa/out/$1" "$STAGE/in/" 2>/dev/null || true
+  scrub_dir "$STAGE/in" || echo "WARN: 有文件脱敏失败，已丢弃（原件留在验收机）"
+  cp -R "$STAGE/in/." "$OUT/"; rm -rf "$STAGE/in"
+}
+pull() { pull_in "$1"; }
+pull_all() { pull_in '*'; }
 
 step "0. 本地准备  prev=$PREV ($PREV_VERSION)  candidate=$CAND ($VERSION)"
 PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
@@ -217,11 +237,8 @@ if [ -f "$OUT/app-logs.zip" ]; then
   python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$OUT/app-logs.zip" "$OUT/app-logs" && rm -f "$OUT/app-logs.zip"
 fi
 [ -n "$(ls -A "$OUT/app-logs")" ] || echo "WARN: app-logs is empty; see $OUT/collect-logs-final.json"
-# 脱敏：密钥、Bearer、用户目录
-find "$OUT" -type f \( -name '*.log' -o -name '*.json' -o -name '*.err' -o -name '*.txt' \) -print0 | xargs -0 -r sed -i -E \
-  -e 's/(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{6,}/\1sk-***/g' -e 's/(Bearer )[A-Za-z0-9._-]+/\1***/g'
 rm -rf "$OUT/media" "$OUT/real/media"
-WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 "$HERE/redact.py" "$OUT"  # 按环境变量里的真实 key 精确替换，并抹掉应用的打码形式
+scrub_dir "$OUT" || echo "WARN: 证据目录里有文件脱敏失败，已删除"   # redact.py：真实 key、key 形态、用户目录（R24 #216 唯一实现）
 
 step "9. 汇总"
 sort -t= -k1,1 -u "$OUT/steps.txt" -o "$OUT/steps.txt" 2>/dev/null || true

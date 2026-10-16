@@ -588,13 +588,6 @@ def test_redact_undecodable_file_is_reported_left_alone_and_others_continue(tmp_
     assert 'a.log' in capsys.readouterr().err
 
 
-def test_redact_has_one_home_implementation():
-    """R22 code health: no home-directory regex and no per-encoding variants left in redact.py."""
-    src = (ROOT / 'redact.py').read_text(encoding='utf-8')
-    for gone in ('WIN_PATTERN', 'POSIX_PATTERN', 'NAME_GBK', '_mask(', 'gbk=', 'latin-1'):
-        assert gone not in src
-
-
 BOUNDARY_TO_EOL = [("x '/home/kris' y", "x '/home/<user>"), ("open '/home/kris' now\nnext", "open '/home/<user>\nnext"),
                    ("x '/home/D''Arcy' y", "x '/home/<user>"), ("say '/Users/Jane Doe' ok", "say '/Users/<user>"),
                    ("x '/home/D' Artagnan y", "x '/home/<user>"), ("x 'C:\\Users\\D' Artagnan' y", "x 'C:\\Users\\<user>")]
@@ -620,14 +613,6 @@ def test_home_and_users_roots_are_both_case_insensitive():
 
 
 # ---------------- R23 (#179-#193, #154 #184): one boundary rule, union of readings ----------------
-
-def test_r23_code_health_no_per_sample_branches():
-    """R23: no quote rule, no <user>-prefix exemption, no implicit-escape branch, no stop-character sets."""
-    src = (ROOT / 'redact.py').read_text(encoding='utf-8')
-    for gone in ('implicit', '== "\'"', 'startswith(USER', '_WIN_STOP', '_POSIX_STOP', 'URL.sub'):
-        assert gone not in src, gone
-    assert "_WIN_SEPS, _POSIX_SEPS = '\\\\/', '/'" in src
-
 
 @pytest.mark.parametrize('raw,expected', [
     ('C:\\Users\\u0022Alice\\x', 'C:\\Users\\<user>\\x'), ('C:\\Users\\u003aAlice\\x', 'C:\\Users\\<user>\\x'),
@@ -676,7 +661,7 @@ def test_r23_181_shift_jis_halfwidth_names_masked_whole(tmp_path, name):
 
 
 def _layered(text):
-    """Reference: undo escapes by repeated full left-to-right passes (the R22 definition)."""
+    """Reference: undo escapes (\\\\ \\/ \\uXXXX %XX) by repeated full left-to-right passes."""
     hexd = set('0123456789abcdefABCDEF')
     ch = list(text)
     while True:
@@ -686,6 +671,8 @@ def _layered(text):
                 out.append(ch[i + 1]); i += 2; changed = True
             elif ch[i] == '\\' and i + 5 < len(ch) and ch[i + 1] == 'u' and all(x in hexd for x in ch[i + 2:i + 6]):
                 out.append(chr(int(''.join(ch[i + 2:i + 6]), 16))); i += 6; changed = True
+            elif ch[i] == '%' and i + 2 < len(ch) and all(x in hexd for x in ch[i + 1:i + 3]):
+                out.append(chr(int(''.join(ch[i + 1:i + 3]), 16))); i += 3; changed = True
             else:
                 out.append(ch[i]); i += 1
         ch = out
@@ -696,7 +683,7 @@ def _layered(text):
 def test_r23_184_single_pass_decoder_equals_repeated_passes():
     import random
     rnd = random.Random(414)
-    parts = ['\\', 'u', '0', '5', 'c', '2', 'f', '/', 'a', '\\u005c', '\\u0075', '4', '1', '\\\\']
+    parts = ['\\', 'u', '0', '5', 'c', '2', 'f', '/', 'a', '\\u005c', '\\u0075', '4', '1', '\\\\', '%', '%5C', '%25', 'F']
     redact = _module('redact')
     for _ in range(20000):
         t = ''.join(rnd.choice(parts) for _ in range(rnd.randint(0, 16)))
@@ -849,3 +836,239 @@ def test_r23_probe_evidence_uses_redact_py(monkeypatch, tmp_path, raw, leaks):
 def test_r23_run_winqa_uploads_redact_py_next_to_the_probe():
     sh = (ROOT / 'run_winqa.sh').read_text(encoding='utf-8')
     assert '"${SCP[@]}" "$HERE/redact.py" "$USER_@$HOST:C:/winqa/py/"' in sh
+
+
+# ---------------- R24 (#213-#219): property guard with mutation self-proof, one scrubber, nothing raw kept ----------
+
+PROP_NAMES = ['kris', 'Public', 'Default', '张三', 'Jane Doe', "D'Arcy", 'a_b', 'x.y', '<user>alice', 'u0022Al',
+              'u003aBob', '%41nn', 'ｱソAl', 'Ünïco', 'a:b', 'a"b', 'émile', '😀xy', 'qa ']
+PROP_TEMPLATES = ['C:\\Users\\{n}\\AppData\\x', 'c:/users/{n}/a.log', '/home/{n}/x', '/Users/{n}/y z', '/home/{n}',
+                  'C:\\Users\\{n}', '\\\\srv\\c$\\Users\\{n}\\x', '"C:\\\\Users\\\\{n}\\\\a"', '%2Fhome%2F{n}%2Fx',
+                  'C:%5CUsers%5C{n}%5Cx', '\\u002fhome\\u002f{n}\\u002fx', '%252Fhome%252F{n}%252Fx',
+                  'C:\\u005cUsers\\u005c{n}\\u005cx']
+PROP_PREFIXES = ['', ' ', '启动失败', '_', '"', "'", '(', '错误：']
+PROP_POSIX_ONLY = [('/home/{n}/x', 'A\\B'), ('/Users/{n}/x', 'A\\u005cB')]
+
+
+def _leak_tokens(name):
+    return [t for t in re.split(r'[^0-9A-Za-z\u00c0-\uffff]+', name.replace('<user>', ' ')) if len(t) >= 2]
+
+
+def _property_violations(redact):
+    """Any user name, any root spelling, any left context: the path keeps its shape and the name is gone."""
+    bad = []
+    cases = [(t, n, p) for t in PROP_TEMPLATES for n in PROP_NAMES for p in PROP_PREFIXES]
+    cases += [(t, n, p) for t, n in PROP_POSIX_ONLY for p in PROP_PREFIXES]
+    for tpl, name, pre in cases:
+        raw, want = pre + tpl.format(n=name), pre + tpl.format(n='<user>')
+        out = redact.scrub_homes(raw)
+        if tpl.endswith('{n}') or tpl.endswith('{n}"'):
+            ok = out.startswith(pre + tpl.split('{n}')[0]) and '<user>' in out
+        else:
+            ok = out == want
+        leaked = [t for t in _leak_tokens(name) if t in out.replace('<user>', '')]
+        if not ok or leaked or redact.scrub_homes(out) != out:
+            bad.append((raw, out, leaked))
+    return bad
+
+
+def test_r24_217_property_any_name_any_context_is_masked():
+    bad = _property_violations(_module('redact'))
+    assert not bad, bad[:5]
+
+
+REDACT_MUTATIONS = {   # name: (anchor, replacement) — each re-adds a per-sample special case or drops a rule
+    'skip-public': ("        return (max(st[t], s), en[e - 1]) if e > t else None",
+                    "        if ''.join(ch[t:e]).lower() == 'public':\n            return None\n"
+                    "        return (max(st[t], s), en[e - 1]) if e > t else None"),
+    'quote-cut': ("        while e < n and ch[e] not in seps and ch[e] not in _EOL:",
+                  "        while e < n and ch[e] not in seps and ch[e] not in _EOL and ch[e] != \"'\":"),
+    'user-prefix-exempt': ("            seg = _segment(v, s, seps, (s, seps) in own)",
+                           "            if text.startswith(USER, s):\n                continue\n"
+                           "            seg = _segment(v, s, seps, (s, seps) in own)"),
+    'unicode-word-boundary': ("if prev and prev.isascii() and (prev.isalnum() or prev in '.-'):",
+                              "if prev and (prev.isalnum() or prev in '_.-'):"),
+    'no-decoded-view': ("    return out + [dec]", "    return out"),
+    'posix-stops-at-backslash': ("_WIN_SEPS, _POSIX_SEPS = '\\\\/', '/'", "_WIN_SEPS, _POSIX_SEPS = '\\\\/', '/\\\\'"),
+    'no-percent': ("        if ch[i] == '%':", "        if False:"),
+    'no-unc-drive': ("in ':$':", "in ':':"),
+    'colon-stops-name': ("        while e < n and ch[e] not in seps and ch[e] not in _EOL:",
+                         "        while e < n and ch[e] not in seps and ch[e] not in _EOL and ch[e] != ':':"),
+}
+
+
+def _mutant(name):
+    import types
+    src = (ROOT / 'redact.py').read_text(encoding='utf-8')
+    anchor, repl = REDACT_MUTATIONS[name]
+    assert anchor in src, f'mutation anchor moved: {name}'
+    mod = types.ModuleType(f'redact_mut_{name.replace("-", "_")}')
+    exec(compile(src.replace(anchor, repl, 1), mod.__name__, 'exec'), mod.__dict__)
+    return mod
+
+
+@pytest.mark.parametrize('mutation', sorted(REDACT_MUTATIONS))
+def test_r24_217_property_guard_catches_special_case_mutations(mutation):
+    """R24 #217: the guard is behavioural; re-adding a per-sample special case must make it fail."""
+    assert _property_violations(_mutant(mutation)), f'mutation {mutation} survived the property guard'
+
+
+SCRUB_CODE = re.compile(r"""re\.(?:sub|compile|search|findall|match)\(\s*r?['"][^'"\n]*(?:Users|home|sk-|[Bb]earer|api_?key|"""
+                        r"""[Aa]uthorization)|<user>|'\*\*\*'|"\*\*\*"|sk-\*\*\*|USERNAME|sed\s+-[a-zA-Z]*i""")
+
+
+def _scrub_code_outside_redact(root):
+    hits = []
+    for p in sorted(root.rglob('*')):
+        if p.suffix not in ('.py', '.sh', '.ps1') or p.name == 'redact.py' or not p.is_file():
+            continue
+        for i, line in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
+            if SCRUB_CODE.search(line) and not line.lstrip().startswith('#'):
+                hits.append(f'{p.relative_to(root)}:{i}: {line.strip()}')
+    return hits
+
+
+def test_r24_216_only_redact_py_scrubs(tmp_path):
+    """R24 #216: no scrubbing rule anywhere under scripts/winqa except redact.py (the scanner proves itself on a
+    planted copy of the old rules)."""
+    assert _scrub_code_outside_redact(ROOT) == []
+    planted = tmp_path / 'w'
+    (planted / 'py').mkdir(parents=True)
+    for i, line in enumerate(["t = re.sub(r'(?i)(bearer\\s+)[A-Za-z0-9._-]{8,}', r'\\1***', t)",
+                              "p = str(h).replace(os.environ.get('USERNAME', '~'), '<user>')",
+                              "find . | xargs sed -i -E 's/sk-[a-z]+/x/'",
+                              "return re.sub(r'C:\\\\Users\\\\[^\\\\]+', 'X', text)"]):
+        (planted / 'py' / f'm{i}.{"sh" if "sed" in line else "py"}').write_text(line + '\n', encoding='utf-8')
+    assert len(_scrub_code_outside_redact(planted)) == 4
+
+
+def _load(path, monkeypatch, tmp_path, name):
+    pytest.importorskip('requests')
+    import importlib.util
+    monkeypatch.setenv('APPDATA', str(tmp_path))
+    monkeypatch.setenv('WINQA_OUT', str(tmp_path / 'out'))
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+RAW_EVIDENCE = {'body': {'detail': 'open C:\\Users\\kris\\AppData failed', 'cwd': '/Users/kris/x'},
+                'C:\\Users\\kris\\k': ['https://s.invalid/z?sig=SIG1', {'err': 'Authorization: Bearer abcdefgh123'}],
+                'updater_error': "HTTPSConnectionPool: /home/kris/.cache sk-abcdefghijk", 'api_key_masked': 'sk-…xyz'}
+RAW_TOKENS = ('kris', 'SIG1', 'abcdefgh123', 'abcdefghijk', 'xyz')
+
+
+@pytest.mark.parametrize('script', ['winqa_probe.py', 'winqa_real.py'])
+def test_r24_215_216_save_scrubs_the_whole_value_before_writing(monkeypatch, tmp_path, script):
+    mod = _load(ROOT / 'py' / script, monkeypatch, tmp_path, 'r24_' + script[:-3])
+    mod.OUT = tmp_path / 'ev'
+    mod.OUT.mkdir()
+    if script == 'winqa_real.py':
+        mod.SECRETS.append('qa-real-key-1234567890')
+        RAW = dict(RAW_EVIDENCE, echoed='key=qa-real-key-1234567890')
+    else:
+        RAW = RAW_EVIDENCE
+    mod.save('e.json', RAW)
+    text = (mod.OUT / 'e.json').read_text(encoding='utf-8')
+    json.loads(text)
+    for tok in RAW_TOKENS + ('qa-real-key',):
+        assert tok not in text, (tok, text)
+    assert mod.scrub_text('x C:\\Users\\kris\\y') if script == 'winqa_real.py' else True
+
+
+def test_r24_214_mixed_utf8_and_utf16_runs_are_both_masked(tmp_path):
+    """R24 #214: PS 5.1 `>>` appends UTF-16LE to a UTF-8 log (and the reverse); every run is masked."""
+    redact = _module('redact')
+    u8 = 'start 启动 /Users/kris/a\r\n'.encode('utf-8')
+    u16 = 'C:\\Users\\bob\\x\r\n'.encode('utf-16-le')
+    files = {'u8u16.log': u8 + u16, 'u8u16odd.log': u8 + b'!' + u16, 'u16u8.log': u16 * 6 + u8,
+             'u16u8odd.log': u16 * 6 + b'!' + u8 + b'!'}
+    for name, raw in files.items():
+        (tmp_path / name).write_bytes(raw)
+    redact.main(str(tmp_path))
+    for name in files:
+        out = (tmp_path / name).read_bytes()
+        for leak in (b'kris', 'kris'.encode('utf-16-le'), b'bob', 'bob'.encode('utf-16-le'), 'bob'.encode('utf-16-le')[1:]):
+            assert leak not in out, (name, leak, out)
+    p = subprocess.run(SH_REDACT, input=files['u8u16odd.log'], capture_output=True)
+    assert p.returncode == 0 and b'kris' not in p.stdout and 'bob'.encode('utf-16-le') not in p.stdout
+
+
+def test_r24_zip_members_are_scrubbed(tmp_path):
+    redact = _module('redact')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr('backend/app.log', 'C:\\Users\\kris\\AppData\\x\n/home/kris/y\n')
+        z.writestr('desktop/C:\\Users\\kris\\n.json', json.dumps({'p': '/Users/kris/z'}))
+        z.writestr('bin/x.dat', b'\x00\x01')
+    (tmp_path / 'app-logs.zip').write_bytes(buf.getvalue())
+    redact.main(str(tmp_path))
+    with zipfile.ZipFile(tmp_path / 'app-logs.zip') as z:
+        blob = b''.join(z.read(i) for i in z.infolist()) + ''.join(z.namelist()).encode()
+        assert z.read('backend/app.log') == b'C:\\Users\\<user>\\AppData\\x\n/home/<user>/y\n'
+    assert b'kris' not in blob
+
+
+# ---- end to end: run_winqa.sh pull / pull_all, with the VM's Python missing and with an interruption ----
+
+def _winqa_env(tmp_path, mode):
+    """Fake VM: C:\\winqa\\out is tmp/vm/out (raw files incl. app-logs.zip), C:\\winqa\\raw is tmp/vm/raw."""
+    vm, bins, tmpd = tmp_path / 'vm', tmp_path / 'bin', tmp_path / 'tmp'
+    for d in (vm / 'out', vm / 'raw', bins, tmpd):
+        d.mkdir(parents=True, exist_ok=True)
+    (vm / 'out' / 'env.json').write_text(json.dumps({'home': 'C:\\Users\\kris', 'temp': 'C:\\Users\\kris\\AppData\\Local\\Temp'}))
+    (vm / 'out' / 'clean.json').write_text('{"removed": ["C:\\\\Users\\\\kris\\\\AppData\\\\Roaming\\\\AutoClip"]}')
+    (vm / 'out' / 'real').mkdir()
+    (vm / 'out' / 'real' / 'r.log').write_text('err /Users/kris/x Bearer abcdefgh123\n')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr('backend/app.log', 'boot C:\\Users\\kris\\AppData\\Roaming\\AutoClip\n')
+    (vm / 'out' / 'app-logs.zip').write_bytes(buf.getvalue())
+    redact_py = ROOT / 'redact.py'
+    _bin(bins, 'ssh', f'''cmd="$*"
+case "$cmd" in
+  *redact.py*) [ "{mode}" = no-python ] && exit 1; exec "{sys.executable}" "{redact_py}" "{vm / 'out'}";;
+  *Move-Item*app-logs.zip*) mv "{vm / 'out'}/app-logs.zip" "{vm / 'raw'}/" 2>/dev/null; exit 0;;
+  *hostname*) echo vm; exit 0;;
+esac
+echo "remote: C:\\\\Users\\\\kris\\\\Desktop ok"; exit 0''')
+    _bin(bins, 'scp', f'''for a in "$@"; do last2="$last1"; last1="$a"; done
+src="${{last2#*:C:/winqa/out/}}"; dst="$last1"
+cd "{vm / 'out'}" && for f in $src; do [ -e "$f" ] && cp -R "$f" "$dst"; done
+[ "{mode}" = interrupt ] && kill -TERM $PPID
+exit 0''')
+    inst = tmp_path / 'p.exe'
+    inst.write_bytes(b'MZ')
+    env = {**os.environ, 'PATH': f'{bins}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid', 'WINQA_USER': 'qa',
+           'TMPDIR': str(tmpd), 'LANG': UTF8, 'LC_ALL': UTF8, 'WINQA_MODEL_API_KEY': ''}
+    args = ['--prev', str(inst), '--candidate', str(inst), '--version', '1.5.8', '--out', str(tmp_path / 'ev'),
+            '--from-step', '8', '--to-step', '8']
+    return env, args
+
+
+@pytestmark_bash
+@pytest.mark.parametrize('bash', BASHES)
+@pytest.mark.parametrize('mode', ['vm-python', 'no-python', 'interrupt'])
+def test_r24_215_no_raw_file_ever_reaches_the_control_machine(tmp_path, bash, mode):
+    """R24 #215 + Dong: after pull/pull_all (and when interrupted mid-pull) nothing on the control machine holds a raw
+    name; app-logs.zip is scrubbed on the VM or not fetched at all."""
+    env, args = _winqa_env(tmp_path, mode)
+    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
+    local = [p for d in ('ev', 'tmp') for p in (tmp_path / d).rglob('*') if p.is_file()]
+    for p in local:
+        data = p.read_bytes()
+        if p.suffix == '.zip':
+            with zipfile.ZipFile(p) as z:
+                data += b''.join(z.read(i) for i in z.infolist())
+        assert b'kris' not in data and b'abcdefgh123' not in data, (mode, p, data[:300])
+    assert not list((tmp_path / 'tmp').glob('winqa-stage.*')), 'staging dir must be removed on exit'
+    assert b'kris' not in done.stdout + done.stderr
+    ev = tmp_path / 'ev'
+    if mode == 'vm-python':
+        assert (ev / 'env.json').exists() and (ev / 'app-logs' / 'backend' / 'app.log').exists()
+    if mode == 'no-python':
+        assert (tmp_path / 'vm' / 'raw' / 'app-logs.zip').exists() and not (ev / 'app-logs' / 'backend').exists()
+        assert (ev / 'env.json').exists()
+    if mode == 'interrupt':
+        assert done.returncode == 143, done.stdout[-500:]

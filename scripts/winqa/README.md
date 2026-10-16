@@ -84,7 +84,7 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 - `py/winqa_probe.py`：`seed` / `check` / `failure`，用包内 Python 跑，只调 127.0.0.1。
 - `py/winqa_real.py`：`model` / `whisper` / `local` / `link` / `final` 真实场景；key 只从 stdin 读。
 - `summarize.py`：证据目录 → `summary.md` + `windows-rows.draft.json`。
-- `redact.py`：按 `WINQA_MODEL_API_KEY` 精确替换证据里的 key 和应用的打码形式。`py/winqa_probe.py` 写进证据的字段也调用它（`scrub_diagnostic`），第 1 步随 py/ 一起上传。
+- `redact.py`：按 `WINQA_MODEL_API_KEY` 精确替换证据里的 key 和应用的打码形式。它是 scripts/winqa 下唯一的脱敏实现：`py/winqa_probe.py`、`py/winqa_real.py` 的 `save()` 先对整个结果（`scrub_obj`）脱敏再落盘，第 1 步随 py/ 一起上传。控制机本地从不留原文：实时日志逐行经 `redact.py --lines` 再写 run.log；拉回的文件先在验收机上脱敏（含 app-logs.zip 内的文件），再在私有临时目录里带真实 key 脱敏一遍，失败的文件直接丢弃，之后才进证据目录；任何中断都由 trap 删除临时目录并再脱敏一遍证据目录。验收机上没有可用的 Python 时，app-logs.zip 移到 `C:\winqa\raw`、不拉回（原始日志只留在验收机上）。
 
 ## 验收机拉包脚本（E9）
 

@@ -1,5 +1,5 @@
 {
- "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only). Boundary rule (R23): after a home root the name runs from the separator to the next real separator (POSIX /, Windows \\\\ or /) or the end of the line; raw and decoded readings (and, for bytes, every candidate encoding) are masked as a union.",
+ "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only). Boundary rule (R23/R24): after a home root the name runs from the separator to the next real separator (POSIX /, Windows \\\\ or /) or the end of the line; raw and decoded readings (and, for bytes, every candidate encoding) are masked as a union. R24: roots may follow CJK or _ (#213); percent escapes are a decoding layer and X$ (UNC admin share) is a drive (#218); a name starts where any reading puts it and ends at the next separator of every reading that sees that root or cannot split there.",
  "cases": [
   {
    "round": "R16-R20",
@@ -652,6 +652,78 @@
     "stream",
     "pwsh"
    ]
+  },
+  {
+   "round": "R24 #213",
+   "text": "启动失败C:\\Users\\kris\\AppData",
+   "expected": "启动失败C:\\Users\\<user>\\AppData",
+   "id": "c101"
+  },
+  {
+   "round": "R24 #213",
+   "text": "用户目录/Users/kris/x",
+   "expected": "用户目录/Users/<user>/x",
+   "id": "c102"
+  },
+  {
+   "round": "R24 #213",
+   "text": "_C:\\Users\\kris\\x",
+   "expected": "_C:\\Users\\<user>\\x",
+   "id": "c103"
+  },
+  {
+   "round": "R24 #213",
+   "text": "失败：/home/张三/x",
+   "expected": "失败：/home/<user>/x",
+   "id": "c104"
+  },
+  {
+   "round": "R24 #213",
+   "text": "GET /api/home/feed and a/home/x",
+   "expected": "GET /api/home/feed and a/home/x",
+   "id": "c105"
+  },
+  {
+   "round": "R24 #218",
+   "text": "GET /f?p=%2Fhome%2Fkris%2Fx HTTP/1.1",
+   "expected": "GET /f?p=%2Fhome%2F<user>%2Fx HTTP/1.1",
+   "id": "c106"
+  },
+  {
+   "round": "R24 #218",
+   "text": "p=C:%5CUsers%5Ckris%5Cx",
+   "expected": "p=C:%5CUsers%5C<user>%5Cx",
+   "id": "c107"
+  },
+  {
+   "round": "R24 #218",
+   "text": "path=C%3A%5CUsers%5Ckris%5Ca 200",
+   "expected": "path=C%3A%5CUsers%5C<user>%5Ca 200",
+   "id": "c108"
+  },
+  {
+   "round": "R24 #218",
+   "text": "q=%252Fhome%252Fkris%252Fx",
+   "expected": "q=%252Fhome%252F<user>%252Fx",
+   "id": "c109"
+  },
+  {
+   "round": "R24 #218",
+   "text": "\\\\srv\\c$\\Users\\kris\\x",
+   "expected": "\\\\srv\\c$\\Users\\<user>\\x",
+   "id": "c110"
+  },
+  {
+   "round": "R24 #218",
+   "text": "\\\\?\\C:\\Users\\kris\\x",
+   "expected": "\\\\?\\C:\\Users\\<user>\\x",
+   "id": "c111"
+  },
+  {
+   "round": "R24 #218",
+   "text": "//srv/d$/users/kris/x",
+   "expected": "//srv/d$/users/<user>/x",
+   "id": "c112"
   }
  ]
 }

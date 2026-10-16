@@ -53,7 +53,8 @@ def get(path, **kw):
 
 
 def save(name, value):
-    (OUT / name).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
+    # R24 #215: the whole value goes through redact.py before it touches the disk (every string, keys included)
+    (OUT / name).write_text(json.dumps(scrub_obj(value), ensure_ascii=False, indent=2), encoding='utf-8')
     print('saved', OUT / name, flush=True)
 
 
@@ -66,7 +67,7 @@ def body(r, limit=4000):
 
 # R23: one scrubber. redact.py is uploaded next to this file (run_winqa.sh step 1); in the repo it is one level up.
 sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
-from redact import scrub_diagnostic as redact  # noqa: E402
+from redact import scrub_diagnostic as redact, scrub_obj  # noqa: E402
 
 
 # ---------------------------------------------------------------- media

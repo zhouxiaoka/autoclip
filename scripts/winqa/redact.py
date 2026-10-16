@@ -1,45 +1,66 @@
-"""Scrub the real QA key (read from env, never printed), the app's masked key form and personal
-home directories (C:\\Users\\x, /Users/x, /home/x, in any escaped spelling) from evidence text files.
+"""The one scrubber for Windows-QA evidence and diagnostics. Every other script calls it; none has its own rule.
 
-Usage: python3 redact.py EVIDENCE_DIR   (key from WINQA_MODEL_API_KEY, or legacy AUTOCLIP_QA_DASHSCOPE_KEY)
-       python3 redact.py --stdin        (diagnostics: home directories and URLs; pull_run_installer.sh pipes
-                                         everything it prints, stdout and stderr, through it)
+Removes: the real QA key and its app-masked form (exact, from WINQA_MODEL_API_KEY / callers), generic key shapes
+(sk-..., Bearer/Authorization/api_key values, "api_key_masked" values), personal home directories
+(C:\\Users\\x, X$\\Users\\x on UNC shares, /Users/x, /home/x) in any escaped or percent-encoded spelling, and, in
+diagnostic mode, URLs.
 
-Design (R23): one boundary rule, no per-sample branches.
-1. Views. A text is read as its raw characters AND as its decoded characters (every escape layer undone in
-   repeated left-to-right passes, each later pass touching only what the previous one produced: \\\\ -> \\, \\/ -> /, \\uXXXX -> char, so \\u005cu005c -> \\).
-   Bytes are additionally read under every candidate encoding (BOM codec; else utf-8; else gb18030 plus
-   shift_jis / big5 when they decode; UTF-16 without BOM when NUL bytes dominate).
-2. Rule, applied identically to every view. After a home root (X:<sep>Users<sep>, /Users/, /home/; roots
-   case-insensitive) the user name runs from the separator to the next real separator (POSIX: '/',
-   Windows: '\\' or '/') or the end of the line. Nothing else ends a name: no quote, colon or prefix rule.
-   '.' and '..' segments are skipped and the following segment is masked.
-3. Union. Every view yields raw ranges; overlapping ranges of all views are merged and each merged range is
-   replaced by <user> (or <url> for URLs in --stdin mode: http(s):// case-insensitive, up to whitespace, in
-   any view). When views disagree, the union is masked: when in doubt, mask more.
-4. Files are written back in their original encoding, BOM and line endings; a decode/encode round trip
-   that is not exact leaves the file alone and reports it.
+Usage: python3 redact.py DIR [--drop-failed]   evidence files (.json .log .err .txt .md .cmd, and those inside .zip)
+       python3 redact.py --stdin                diagnostics: whole stream (adds URLs)
+       python3 redact.py --lines                diagnostics, line by line (for a live `tee` log)
+
+Design (R24): one boundary rule, applied to every reading, union of the results.
+1. Readings. Text: its raw characters, URL-decoded once, after one escape pass, and fully decoded (escape layers \\\\ \\/ \\uXXXX %XX undone, exactly
+   as repeated left-to-right passes would). Bytes: every plausible encoding (BOM codec; else utf-8, or gb18030 plus
+   shift_jis/big5 when not utf-8; plus UTF-16 LE/BE at both byte alignments whenever a NUL byte is present).
+2. Root: a drive letter followed by ':' or '$' (UNC admin share), separators, 'Users', separators; or '/Users/',
+   '/home/'. Roots are case-insensitive and must not continue an ASCII word or path (a CJK character or '_' right
+   before the root does not protect it).
+3. Name: from the raw offset where the name starts, in EVERY reading, up to that reading's next separator (POSIX
+   '/', Windows '\\' or '/') or the end of the line. '.'/'..' segments are skipped. Nothing else ends a name.
+4. Union: all ranges of all readings are merged and replaced (<url> > <user> > ***). When in doubt, mask more.
+5. Files keep their encoding, BOM and line endings; a reading that does not round-trip leaves the file unchanged
+   and reports it (with --drop-failed the file is deleted instead).
 """
-import json, os, re, sys
+import io, json, os, re, sys, zipfile
+from bisect import bisect_right
 from pathlib import Path
 
-USER, URLMARK = '<user>', '<url>'
+USER, URLMARK, SECRET = '<user>', '<url>', '***'
+_RANK = {URLMARK: 2, USER: 1, SECRET: 0}
 _HEX = set('0123456789abcdefABCDEF')
 _EOL = '\r\n'
 _WIN_SEPS, _POSIX_SEPS = '\\/', '/'
 _SUFFIXES = ('.json', '.log', '.err', '.txt', '.md', '.cmd')
+# value group 2 is masked; the prefix stays readable
+_SECRET_PATTERNS = [re.compile(r'()(sk-[A-Za-z0-9_\-]{6,})'),
+                    re.compile(r'(?i)(authorization["\'=:\s]+)((?:(?:bearer|basic|token)\s+)?(?!\*\*\*)[^\s"\',]+)'),
+                    re.compile(r'(?i)(bearer\s+)((?!\*\*\*)[^\s"\',]+)'),
+                    re.compile(r'(?i)(api[_-]?key["\'=:\s]+)((?!\*\*\*)[^\s"\',]+)'),
+                    re.compile(r'("api_key_masked"\s*:\s*")((?!\*\*\*")[^"]+)')]
 
 
-def _decoded_view(text):
-    """Logical characters with raw spans after undoing every escape layer, exactly as repeated left-to-right
-    passes would (\\\\ -> \\, \\/ -> /, \\uXXXX -> char, then again on the result), in O(n log n):
-    a later pass can only match next to a character the previous pass produced, so each pass after the
-    first only looks at the <= 5 tokens before each produced character (#154, #184)."""
+def _decoded_view(text, first_pass=None):
+    """Logical characters with raw spans after undoing every escape layer (\\\\, \\/, \\uXXXX, %XX), exactly as
+    repeated left-to-right passes would, in O(n log n): a later pass can only match next to a character the
+    previous pass produced, so each later pass only looks at the <= 5 tokens before each produced one."""
     n = len(text)
     ch, st, en = list(text), list(range(n)), list(range(1, n + 1))
     nxt, prv, alive = list(range(1, n + 1)), list(range(-1, n - 1)), [True] * n
 
+    def hexes(k, count):
+        ids = []
+        for _ in range(count):
+            k = nxt[k]
+            if k >= n or ch[k] not in _HEX:
+                return None
+            ids.append(k)
+        return ids
+
     def match(i):
+        if ch[i] == '%':
+            ids = hexes(i, 2)
+            return (ids, chr(int(ch[ids[0]] + ch[ids[1]], 16))) if ids else None
         if ch[i] != '\\':
             return None
         j = nxt[i]
@@ -49,13 +70,8 @@ def _decoded_view(text):
             return [j], ch[j]
         if ch[j] != 'u':
             return None
-        ids, k = [j], j
-        for _ in range(4):
-            k = nxt[k]
-            if k >= n or ch[k] not in _HEX:
-                return None
-            ids.append(k)
-        return ids, chr(int(''.join(ch[x] for x in ids[1:]), 16))
+        ids = hexes(j, 4)
+        return ([j] + ids, chr(int(''.join(ch[x] for x in ids), 16))) if ids else None
 
     def reduce(i, ids, val):
         last = ids[-1]
@@ -67,13 +83,15 @@ def _decoded_view(text):
             prv[nxt[i]] = i
 
     produced, i = [], 0
-    while i < n:                      # pass 1: every position
+    while i < n:
         m = match(i)
         if m:
             reduce(i, *m)
             produced.append(i)
         i = nxt[i]
-    while produced:                   # later passes: only around what the previous pass produced
+    if first_pass is not None:
+        first_pass.append(_walk(ch, st, en, nxt, n))
+    while produced:
         cand = set()
         for t in produced:
             k = t
@@ -89,6 +107,10 @@ def _decoded_view(text):
                 if m:
                     reduce(c, *m)
                     produced.append(c)
+    return _walk(ch, st, en, nxt, n)
+
+
+def _walk(ch, st, en, nxt, n):
     out_c, out_s, out_e, i = [], [], [], 0
     while i < n:
         out_c.append(ch[i]); out_s.append(st[i]); out_e.append(en[i])
@@ -96,15 +118,37 @@ def _decoded_view(text):
     return out_c, out_s, out_e
 
 
-def _raw_view(text):
-    return list(text), range(len(text)), range(1, len(text) + 1)
+def _percent_view(text):
+    """One URL-decoding pass only (%XX), so text escaped inside a query string is read as text."""
+    ch, st, en, i, n = [], [], [], 0, len(text)
+    while i < n:
+        if text[i] == '%' and i + 2 < n and text[i + 1] in _HEX and text[i + 2] in _HEX:
+            ch.append(chr(int(text[i + 1:i + 3], 16))); st.append(i); en.append(i + 3); i += 3
+        else:
+            ch.append(text[i]); st.append(i); en.append(i + 1); i += 1
+    return ch, st, en
 
 
-def _word(c):
-    return c.isalnum() or c == '_'
+def _views(text):
+    """Readings of one text: raw; URL-decoded once; every escape layer undone."""
+    raw = (list(text), list(range(len(text))), list(range(1, len(text) + 1)))
+    out = [raw]
+    if '%' in text:
+        pct = _percent_view(text)
+        if len(pct[0]) != len(text):
+            out.append(pct)
+    first = []
+    dec = _decoded_view(text, first)
+    if len(dec[0]) == len(text):
+        return out
+    if len(first[0][0]) != len(dec[0]):
+        out.append(first[0])      # one decoding pass: "C:\\u005cUsers\\u005cu0022x" has its root only here
+    return out + [dec]
 
 
-def _home_ranges(text, ch, st, en):
+def _roots(view):
+    """-> [(raw offset where the user name starts, separators)] for every home root in this reading."""
+    ch, st, en = view
     n, out = len(ch), []
 
     def word_at(k, w):
@@ -117,47 +161,47 @@ def _home_ranges(text, ch, st, en):
             j += 1
         return j
 
-    def root(k):
+    for k in range(n):
         prev = ch[k - 1] if k else ''
-        if ch[k].isascii() and ch[k].isalpha() and k + 1 < n and ch[k + 1] == ':' and not _word(prev):
-            j = skip(k + 2, _WIN_SEPS)
-            if j is not None and word_at(j, 'users'):
-                j += 5
-                if j < n and ch[j] not in _WIN_SEPS and text[st[j]] == '\\':
-                    return j, _WIN_SEPS   # the root's '\\' also opens an escape ("Users\\u5f20"): both readings
-                j = skip(j, _WIN_SEPS)
-                return None if j is None else (j, _WIN_SEPS)
-            return None
-        if ch[k] == '/' and not (prev and (_word(prev) or prev in '.-\\')):
-            for w in ('users', 'home'):
-                if word_at(k + 1, w):
-                    j = skip(k + 1 + len(w), _POSIX_SEPS)
-                    return None if j is None else (j, _POSIX_SEPS)
-        return None
-
-    k = 0
-    while k < n:
-        r = root(k)
-        if r is None:
-            k += 1
+        if prev and prev.isascii() and (prev.isalnum() or prev in '.-'):
             continue
-        j, seps = r
-        while True:
-            e = j
-            while e < n and ch[e] not in seps and ch[e] not in _EOL:
-                e += 1
-            nxt = skip(e, seps)
-            if ''.join(ch[j:e]) in ('.', '..') and nxt is not None:
-                j = nxt
-                continue
-            break
-        if e > j:
-            out.append((st[j], en[e - 1], USER))
-        k = max(e, k + 1)
+        if ch[k].isascii() and ch[k].isalpha() and k + 1 < n and ch[k + 1] in ':$':
+            j, seps, words = skip(k + 2, _WIN_SEPS), _WIN_SEPS, ('users',)
+        elif ch[k] == '/' and prev != '\\':
+            j, seps, words = k + 1, _POSIX_SEPS, ('users', 'home')
+        else:
+            continue
+        for w in words:
+            if j is not None and word_at(j, w):
+                s = skip(j + len(w), seps)
+                if s is not None and s < n:
+                    out.append((st[s], seps))
     return out
 
 
-def _url_ranges(ch, st, en):
+def _segment(view, s, seps, own):
+    """Raw range of the user name that starts at raw offset s, as this reading sees it: it ends at this
+    reading's next separator. A reading takes part when it found this root itself (own) or when its own
+    token straddles s (it cannot split there, e.g. "Users\\u5f20"). The range always starts at s."""
+    ch, st, en = view
+    n = len(ch)
+    t = bisect_right(en, s)          # token containing raw offset s
+    if t >= n or not (own or st[t] < s):
+        return None
+    while True:
+        e = t
+        while e < n and ch[e] not in seps and ch[e] not in _EOL:
+            e += 1
+        if ''.join(ch[t:e]) in ('.', '..') and e < n and ch[e] in seps:
+            t = e
+            while t < n and ch[t] in seps:
+                t += 1
+            continue
+        return (max(st[t], s), en[e - 1]) if e > t else None
+
+
+def _url_ranges(view):
+    ch, st, en = view
     n, out, k = len(ch), [], 0
     while k < n:
         if ch[k] in 'hH':
@@ -167,41 +211,68 @@ def _url_ranges(ch, st, en):
                     while e < n and not ch[e].isspace():
                         e += 1
                     out.append((st[k], en[e - 1], URLMARK))
-                    k = e
+                    k = e - 1
                     break
         k += 1
     return out
 
 
-def text_ranges(text, urls=False):
-    """Raw ranges to mask in text: union over the raw and the decoded view."""
-    views = [_raw_view(text)]
-    dec = _decoded_view(text)
-    if len(dec[0]) != len(text):
-        views.append(dec)
+def _secret_ranges(view, keys):
+    ch, st, en = view
+    s = ''.join(ch)
     out = []
-    for v in views:
-        for s, e, lab in _home_ranges(text, *v) + (_url_ranges(*v) if urls else []):
-            if lab == USER and s and text[s - 1] not in '\\/':
-                while e - s > 1 and text[s] == '\\':
-                    s += 1   # an escape glued to the root ("Users\\u5f20"): its backslashes stay as the separator
-            out.append((s, e, lab))
+    for key in keys:
+        i = s.find(key)
+        while key and i >= 0:
+            out.append((st[i], en[i + len(key) - 1], SECRET))
+            i = s.find(key, i + 1)
+    for pat in _SECRET_PATTERNS:
+        for m in pat.finditer(s):
+            a, b = m.span(2)
+            if b > a:
+                out.append((st[a], en[b - 1], SECRET))
+    return out
+
+
+def _key_forms(keys):
+    out = []
+    for k in keys or ():
+        if k:
+            out.append(k)
+            if len(k) > 8:
+                out.append(k[:3] + '…' + k[-3:])
+    return out
+
+
+def text_ranges(text, urls=False, keys=()):
+    """Raw ranges to mask in text: the one boundary rule, every reading, union."""
+    views = _views(text)
+    roots = [set(_roots(v)) for v in views]
+    starts = set().union(*roots)
+    out = []
+    for v, own in zip(views, roots):
+        for s, seps in starts:
+            seg = _segment(v, s, seps, (s, seps) in own)
+            if seg:
+                out.append(seg + (USER,))
+        if urls:
+            out += _url_ranges(v)
+        out += _secret_ranges(v, _key_forms(keys))
     return out
 
 
 def _merge(ranges):
     merged = []
-    for s, e, lab in sorted(ranges):
-        if merged and s <= merged[-1][1]:
+    for s, e, lab in sorted(ranges, key=lambda r: (r[0], r[1])):
+        if merged and s < merged[-1][1]:
             ps, pe, pl = merged[-1]
-            merged[-1] = (ps, max(pe, e), URLMARK if URLMARK in (pl, lab) else USER)
+            merged[-1] = (ps, max(pe, e), pl if _RANK[pl] >= _RANK[lab] else lab)
         else:
             merged.append((s, e, lab))
     return merged
 
 
 def _apply(seq, ranges, mark):
-    """seq is str or bytes; mark(label) gives the replacement of the same type."""
     out, last = [], 0
     for s, e, lab in _merge(ranges):
         out.append(seq[last:s]); out.append(mark(lab)); last = e
@@ -209,66 +280,55 @@ def _apply(seq, ranges, mark):
     return seq[:0].join(out)
 
 
+def scrub(text: str, urls: bool = False, keys=()) -> str:
+    """The single text entry point."""
+    return _apply(text, text_ranges(text, urls, keys), str)
+
+
 def scrub_homes(text: str) -> str:
-    return _apply(text, text_ranges(text), str)
-
-
-_SECRETS = [(re.compile(r'sk-[A-Za-z0-9_\-]{6,}'), 'sk-***'),
-            (re.compile(r'(?i)(api[_-]?key|authorization|bearer)(["\'=:\s]+)[^\s"\',]+'), r'\1\2***')]
-
-
-def scrub_diagnostic(text: str) -> str:
-    """winqa_probe.py evidence fields: generic key shapes, then home directories and URLs."""
-    for pat, rep in _SECRETS:
-        text = pat.sub(rep, text)
-    return scrub_stream(text)
+    return scrub(text)
 
 
 def scrub_stream(text: str) -> str:
-    """Diagnostics: home directories and URLs (signed links)."""
-    return _apply(text, text_ranges(text, urls=True), str)
+    return scrub(text, urls=True)
 
 
-def _scrub_text(n: str, key: str) -> str:
-    if key:
-        n = n.replace(key, '***')
-    n = scrub_homes(n)
-    n = re.sub(r'("api_key_masked"\s*:\s*")[^"]*(")', r'\1***\2', n)
-    if key and len(key) > 8:
-        n = n.replace(key[:3] + '…' + key[-3:], '***')
-    return n
+def scrub_diagnostic(text: str, keys=()) -> str:
+    """Everything a QA helper writes or prints (winqa_probe / winqa_real save() and log lines)."""
+    return scrub(text, urls=True, keys=keys)
 
 
 _LONE = re.compile('[\ud800-\udfff]')
 
 
-def _scrub_json(text: str, key: str):
+def scrub_obj(o, keys=(), urls=True, field=None):
+    """Every string of a JSON-like value (dict keys included); the result stays valid JSON."""
+    if isinstance(o, dict):
+        out = {}   # R20 #119: two home paths used as keys may scrub to one key; keep both.
+        for k, v in o.items():
+            ck = scrub_obj(k, keys, urls) if isinstance(k, str) else k
+            if ck in out:
+                i = 2
+                while f'{ck}#{i}' in out:
+                    i += 1
+                ck = f'{ck}#{i}'
+            out[ck] = scrub_obj(v, keys, urls, k)
+        return out
+    if isinstance(o, (list, tuple)):
+        return [scrub_obj(x, keys, urls) for x in o]
+    if isinstance(o, str):
+        return SECRET if field == 'api_key_masked' and o else scrub(o, urls, keys)
+    return o
+
+
+def _scrub_json(text: str, keys, urls=False):
     """R18 #85: parse first so escaped names are seen as text; returns None if not JSON."""
     nl = '\r\n' if '\r\n' in text else '\n'
     try:
         data = json.loads(text)
     except ValueError:
         return None
-
-    def walk(o, field=None):
-        if isinstance(o, dict):
-            out = {}   # R20 #119: two home paths used as keys may scrub to one key; keep both.
-            for k, v in o.items():
-                ck = walk(k)
-                if ck in out:
-                    i = 2
-                    while f'{ck}#{i}' in out:
-                        i += 1
-                    ck = f'{ck}#{i}'
-                out[ck] = walk(v, k)
-            return out
-        if isinstance(o, list):
-            return [walk(x) for x in o]
-        if isinstance(o, str):
-            return '***' if field == 'api_key_masked' else _scrub_text(o, key)
-        return o
-
-    clean = walk(data)
+    clean = scrub_obj(data, keys, urls)
     if clean == data:
         return text
     s = json.dumps(clean, ensure_ascii=False, indent=2 if '\n' in text.strip() else None)
@@ -282,11 +342,10 @@ _BOMS = [(b'\xef\xbb\xbf', 'utf-8', 'surrogateescape'), (b'\xff\xfe\x00\x00', 'u
          (b'\x00\x00\xfe\xff', 'utf-32-be', 'surrogatepass'), (b'\xff\xfe', 'utf-16-le', 'surrogatepass'),
          (b'\xfe\xff', 'utf-16-be', 'surrogatepass')]
 _FALLBACK = ('gb18030', 'surrogateescape')      # reads every byte string; written back 1:1
-_ALTERNATES = ('shift_jis', 'big5')             # extra readings of non-UTF-8 bytes, masked as a union (#181)
+_ALTERNATES = ('shift_jis', 'big5')             # extra readings of non-UTF-8 bytes (#181)
 
 
 def _exact(body, codec, errors):
-    """Decode, refusing (ValueError) anything that does not encode back to the same bytes."""
     try:
         text = body.decode(codec, errors)
     except UnicodeDecodeError as exc:
@@ -304,82 +363,137 @@ def _strict(body, codec):
 
 
 def readings(raw: bytes):
-    """-> (bom, (codec, errors) used for writing back, [(codec, errors), ...] every reading to mask)."""
+    """-> (bom, (codec, errors) for writing back, [(codec, errors, byte offset), ...] every reading to mask)."""
     for bom, codec, errors in _BOMS:
         if raw.startswith(bom):
-            return bom, (codec, errors), [(codec, errors)]
-    if raw and raw.count(0) * 4 >= len(raw) and len(raw) % 2 == 0:   # #190: UTF-16 without BOM
+            return bom, (codec, errors), [(codec, errors, 0)]
+    if raw and raw.count(0) * 4 >= len(raw) and len(raw) % 2 == 0:
         odd = raw[1::2].count(0) >= raw[0::2].count(0)
-        for codec in (('utf-16-le', 'utf-16-be') if odd else ('utf-16-be', 'utf-16-le')):
-            if _strict(raw, codec) is not None:
-                return b'', (codec, 'strict'), [(codec, 'strict')]
-    if _strict(raw, 'utf-8') is not None:
-        return b'', ('utf-8', 'strict'), [('utf-8', 'strict')]
-    return b'', _FALLBACK, [_FALLBACK] + [(c, 'strict') for c in _ALTERNATES if _strict(raw, c) is not None]
+        prim = next((c for c in (('utf-16-le', 'utf-16-be') if odd else ('utf-16-be', 'utf-16-le'))
+                     if _strict(raw, c) is not None), None)
+    else:
+        prim = None
+    if prim:
+        primary = (prim, 'strict')
+    elif _strict(raw, 'utf-8') is not None:
+        primary = ('utf-8', 'strict')
+    else:
+        primary = _FALLBACK
+    reads = [primary + (0,)]
+    if primary[0] != 'utf-8' and not primary[0].startswith('utf-16'):
+        reads += [(c, 'strict', 0) for c in _ALTERNATES if _strict(raw, c) is not None]
+    if b'\x00' in raw:   # R24 #214: a UTF-16 run (PS 5.1 `>>`) inside another encoding, or the reverse
+        reads += [('utf-8', 'surrogateescape', 0)]
+        reads += [(c, 'surrogatepass', off) for c in ('utf-16-le', 'utf-16-be') for off in (0, 1)]
+    return b'', primary, list(dict.fromkeys(reads))
 
 
 def decode(raw: bytes):
-    """-> (bom, codec, errors, text). Raises ValueError when the bytes cannot be mapped back exactly."""
     bom, (codec, errors), _ = readings(raw)
     return bom, codec, errors, _exact(raw[len(bom):], codec, errors)
 
 
-def _byte_ranges(body, codec, errors, urls):
-    text = body.decode(codec, errors)
-    offs, o = [0], 0
+def _width(codec):
+    return 4 if 'utf-32' in codec else 2 if 'utf-16' in codec else 1
+
+
+def _byte_ranges(body, codec, errors, off, urls, keys):
+    part = body[off:]
+    if codec.startswith('utf-16') and errors == 'surrogatepass':
+        part = part[:len(part) // 2 * 2]
+        text = part.decode(codec, errors)
+    else:
+        text = part.decode(codec, errors)
+    offs, o = [off], off
     for c in text:
         o += len(c.encode(codec, errors))
         offs.append(o)
-    return [(offs[s], offs[e], lab) for s, e, lab in text_ranges(text, urls)]
+    # the key is UTF-8 even inside a file in another encoding: also look for its UTF-8 bytes read in this codec
+    forms = _key_forms(keys)
+    keys = forms + [f.encode('utf-8').decode(codec, 'surrogateescape' if 'utf-16' not in codec else 'ignore')
+                    for f in forms if codec != 'utf-8']
+    return [(offs[s], offs[e], (lab, codec, off)) for s, e, lab in text_ranges(text, urls, keys)]
 
 
-def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool = False) -> bytes:
+def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool = False, keys=()) -> bytes:
+    keys = [k for k in ([key] if key else []) + list(keys) if k]
     bom, codec, errors, text = decode(raw)
+    if json_file:
+        scrubbed = _scrub_json(text, keys)
+        if scrubbed is not None:
+            return raw if scrubbed == text else bom + scrubbed.encode(codec, errors)
     body = raw[len(bom):]
-    scrubbed = _scrub_json(text, key) if json_file else None
-    if scrubbed is not None:
-        return raw if scrubbed == text else bom + scrubbed.encode(codec, errors)
     ranges = []
-    for c, e in readings(raw)[2]:
-        ranges += _byte_ranges(body, c, e, stream)
-    body = _apply(body, ranges, lambda lab: lab.encode(codec))
-    werr = errors if errors != 'strict' else 'surrogateescape'
-    out = body.decode(codec, werr)
-    if key:
-        forms = [key] + ([key[:3] + '…' + key[-3:]] if len(key) > 8 else [])
-        for form in forms:
-            out = out.replace(form, '***')
-            if codec != 'utf-8':
-                # the key and its "abc…xyz" form are UTF-8 bytes even inside a GBK file
-                try:
-                    out = out.replace(form.encode('utf-8').decode(codec, werr), '***')
-                except UnicodeDecodeError:
-                    pass
-    out = re.sub(r'("api_key_masked"\s*:\s*")[^"]*(")', r'\1***\2', out)
-    new = bom + out.encode(codec, werr)
+    for c, e, off in readings(raw)[2]:
+        ranges += _byte_ranges(body, c, e, off, stream, keys)
+    # A reading of the same unit width shifted by one byte sees the same characters one byte early; where the
+    # file's own reading already masks there it adds nothing but a widened edge, so it is not used there.
+    own = [(s, t, lab) for s, t, (lab, c, off) in ranges if (c, off) == (codec, 0)]
+    own = [(s, t) for s, t, _ in _merge(own)]
+    starts = [s for s, _ in own]
+
+    def covered(r):
+        i = bisect_right(starts, r[1] - 1) - 1   # last own range starting before r ends
+        return i >= 0 and own[i][1] > r[0]
+    w0 = _width(codec)
+    ranges = [r for r in ranges if not (w0 > 1 and _width(r[2][1]) == w0 and r[2][2] % w0 and covered(r))]
+    merged = []   # [start, end, label, (codec, offset)]: written in the file's own codec when that reading saw it
+    for s, t, (lab, c, off) in sorted(ranges, key=lambda r: (r[0], r[1])):
+        if merged and s < merged[-1][1]:
+            m = merged[-1]
+            m[1] = max(m[1], t)
+            m[2] = m[2] if _RANK[m[2]] >= _RANK[lab] else lab
+            m[3] = (c, off) if (c, off) == (codec, 0) else m[3]
+        else:
+            merged.append([s, t, lab, (c, off)])
+    out, last = [], 0
+    for s, t, lab, (c, off) in merged:
+        w = _width(c)   # whole code units of the codec written: a byte range is widened to the units it touches
+        s, t = max(last, s - (s - off) % w), min(len(body), t + (-(t - off)) % w)
+        out.append(body[last:s]); out.append(lab.encode(c)); last = t
+    out.append(body[last:])
+    new = bom + b''.join(out)
     return raw if new == raw else new
 
 
-def main(folder):
-    return _run(Path(folder))
+def _scrub_zip(raw: bytes, key: str) -> bytes:
+    """Members with an evidence suffix are scrubbed like files; others are kept."""
+    src = zipfile.ZipFile(io.BytesIO(raw))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
+        for info in src.infolist():
+            data = src.read(info)
+            name = scrub(info.filename)
+            if not info.is_dir() and Path(info.filename).suffix.lower() in _SUFFIXES:
+                data = scrub_bytes(data, key, json_file=info.filename.lower().endswith('.json'))
+            dst.writestr(name, data)
+    return buf.getvalue()
 
 
-def _run(folder):
+def main(folder, drop_failed=False):
+    return _run(Path(folder), drop_failed)
+
+
+def _run(folder, drop_failed=False):
     key = os.environ.get('WINQA_MODEL_API_KEY') or os.environ.get('AUTOCLIP_QA_DASHSCOPE_KEY', '')
     hits, failed = 0, []
     for p in sorted(folder.rglob('*')):
-        if not p.is_file() or p.suffix.lower() not in _SUFFIXES:
+        suf = p.suffix.lower()
+        if not p.is_file() or (suf not in _SUFFIXES and suf != '.zip'):
             continue
-        try:   # R23 #188: read, scrub and write per file; one bad file must not stop the rest
+        try:   # R23 #188: read, scrub and write per file
             raw = p.read_bytes()
-            out = scrub_bytes(raw, key, json_file=p.suffix.lower() == '.json')
+            out = _scrub_zip(raw, key) if suf == '.zip' else scrub_bytes(raw, key, json_file=suf == '.json')
             if out != raw:
                 p.write_bytes(out)
                 hits += 1
         except Exception as exc:
-            rel = scrub_homes(str(p.relative_to(folder)))
+            rel = scrub(str(p.relative_to(folder)))
             failed.append(rel)
-            print(f'redact: ERROR {rel}: {type(exc).__name__}; file left unchanged', file=sys.stderr)
+            if drop_failed:
+                p.unlink(missing_ok=True)
+            print(f'redact: ERROR {rel}: {type(exc).__name__}; file ' + ('deleted' if drop_failed else 'left unchanged'),
+                  file=sys.stderr)
     print(f'redact: rewrote {hits} file(s)' + (f', {len(failed)} failed' if failed else ''))
     if failed:
         raise SystemExit(2)
@@ -390,10 +504,14 @@ def scrub_stream_bytes(raw: bytes) -> bytes:
     return scrub_bytes(raw, stream=True)
 
 
+def _env_keys():
+    return [k for k in (os.environ.get('WINQA_MODEL_API_KEY'), os.environ.get('AUTOCLIP_QA_DASHSCOPE_KEY')) if k]
+
+
 def _stdin():
     """R23 #187: on any error print nothing of the input and exit non-zero (no traceback)."""
     try:
-        out = scrub_stream_bytes(sys.stdin.buffer.read())
+        out = scrub_bytes(sys.stdin.buffer.read(), stream=True, keys=_env_keys())
     except Exception as exc:
         print(f'redact: ERROR {type(exc).__name__}; diagnostics withheld', file=sys.stderr)
         return 3
@@ -401,7 +519,23 @@ def _stdin():
     return 0
 
 
+def _lines():
+    """Live logs: each line is scrubbed on its own and flushed; a line that cannot be read is withheld."""
+    keys = _env_keys()
+    for line in sys.stdin.buffer:
+        try:
+            out = scrub_bytes(line, stream=True, keys=keys)
+        except Exception as exc:
+            out = f'[redact: line withheld ({type(exc).__name__})]\n'.encode()
+        sys.stdout.buffer.write(out)
+        sys.stdout.buffer.flush()
+    return 0
+
+
 if __name__ == '__main__':
-    if sys.argv[1:] == ['--stdin']:
+    a = sys.argv[1:]
+    if a == ['--stdin']:
         sys.exit(_stdin())
-    main(sys.argv[1])
+    if a == ['--lines']:
+        sys.exit(_lines())
+    main(a[0], drop_failed='--drop-failed' in a[1:])
