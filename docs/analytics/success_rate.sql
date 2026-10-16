@@ -21,6 +21,9 @@
 --   两个口径都算产品失败（不剔除）：whisper_not_installed、service_restarted、model_not_found、bad_endpoint
 --   （error_code 或 upstream_error_type）。
 -- 只看 analytics_environment = 'production' 且 runtime = 'desktop'，排除内部 cohort。
+--   frame_extract_failed（本地抽帧失败，1.5.8 R11）是产品失败，计入两个口径的分母，不在任何剔除列表里。
+--   frame_extract_subtitle_fallback / source_too_long_subtitle_route / vision_*_subtitle_fallback 是成功出片上的
+--   degrade_reason（降级走字幕），不是失败码，见图 6。
 
 -- 图 1：按日 按次 / 按流程 成功率（全量 + 产品）与 partial-delivery 率
 WITH base AS (
@@ -226,3 +229,25 @@ SELECT v1.v AS app_version, v1.ok AS ok,
   v1.q_all AS q_all, v1.q_prod AS q_prod, v2.flow_ok AS flow_ok, v2.fq_all AS fq_all, v2.fq_prod AS fq_prod
 FROM v1 LEFT JOIN v2 ON v1.v = v2.v
 ORDER BY app_version;
+
+-- 图 6：降级走字幕的成功出片（degrade_reason，不是失败；不进剔除列表），按 attempt 去重
+SELECT degrade_reason, count() AS attempts
+FROM (
+  SELECT
+    toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
+    argMax(toString(properties.outcome), timestamp) AS o_raw,
+    argMax(coalesce(toString(properties.degrade_reason), ''), timestamp) AS degrade_reason
+  FROM events
+  WHERE event IN ('studio_generation_finished', 'studio_production_finished')
+    AND toString(properties.analytics_environment) = 'production'
+    AND toString(properties.runtime) = 'desktop'
+    AND timestamp >= toDateTime({date_from}, 'UTC')
+    AND timestamp < toDateTime({date_to}, 'UTC')
+    AND person_id NOT IN COHORT {internal_cohort_id}
+  GROUP BY aid
+)
+WHERE o_raw IN ('completed', 'success')
+  AND degrade_reason IN ('vision_unavailable_subtitle_fallback', 'vision_invalid_subtitle_fallback',
+                         'frame_extract_subtitle_fallback', 'source_too_long_subtitle_route')
+GROUP BY degrade_reason
+ORDER BY attempts DESC;

@@ -19,6 +19,12 @@ class Recommendation(BaseModel):
 
 
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
+# R11 #406: reason code + i18n key (frontend t()); the text is the zh source string.
+SOURCE_TOO_LONG_CODE = 'source_too_long_subtitle_route'
+VISUAL_SOURCE_TOO_LONG_MESSAGE = '画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。'
+assert VISUAL_MAX_SOURCE_SEC == 120 * 60  # keep the i18n key in sync with the limit
+FRAME_EXTRACT_FALLBACK_CODE = 'frame_extract_subtitle_fallback'
+FRAME_EXTRACT_FALLBACK_MESSAGE = '读取素材画面失败，已改用字幕分析继续制作。'
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
 # E1: AUTO mode, screening answered but the answer could not be parsed.
@@ -96,11 +102,23 @@ def recommend(video: Path, options: ImportOptions):
     duration = media_precheck.duration_or_fail(video, info.get('duration'))
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
+    # R3 (R11 #406): sources over 120 min go to the subtitle route BEFORE any vision config
+    # check or screening, on the same provider, with a structured reason code + hint (auto
+    # and visual alike). Subtitle/transcription readiness is verified up front.
+    overlong = consent.analysis_mode != 'subtitle' and duration > VISUAL_MAX_SOURCE_SEC
     degrade_reason = None
     screening_degrade = False
     invalid_degrade = False
+    frame_degrade = False
+    if overlong:
+        from backend.services.studio import readiness
+        readiness.require_transcription(
+            stage='SUBTITLE',
+            srt_available=(video.parent / 'input.srt').is_file(),
+            analysis_mode='subtitle',
+        )
     try:
-        configured = consent.analysis_mode != 'subtitle' and intelligence.ready()
+        configured = (not overlong and consent.analysis_mode != 'subtitle' and intelligence.ready())
     except ValueError:
         if consent.analysis_mode != 'auto':
             raise
@@ -114,6 +132,9 @@ def recommend(video: Path, options: ImportOptions):
         result = Recommendation(content_type='other', goal=options.goal,
             reason='按你指定的制作方式处理，其他未指定选项使用推荐设置。', confidence=1,
             aspect='portrait' if options.goal == 'promo' else 'original')
+    elif overlong:
+        mode = 'local'
+        local_evidence, result = _local_recommendation(video, duration)
     elif consent.analysis_mode == 'subtitle' or (consent.analysis_mode == 'auto' and (not consent.allow_visual_screening or not configured)) or (configured and not analysis_preferences.visual_screening_allowed(consent, vision_configured=configured)):
         mode = 'local'
         local_evidence, result = _local_recommendation(video, duration)
@@ -173,9 +194,15 @@ def recommend(video: Path, options: ImportOptions):
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError) and not invalid_degrade:
-                screening_degrade = True  # S5: record the fixed reason; keep the screening message first
-            if options.auto_start or screening_degrade or invalid_degrade:
+            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.FrameExtractError):
+                # R11: local frame extraction failed inside sample(): its own code, not a vision outage.
+                frame_degrade = True
+            elif (consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError)
+                    and not invalid_degrade):
+                # S5: only a vision-service failure is "vision unavailable"; a local ffmpeg/OS
+                # error is not a vision outage and records no degrade reason (R10 #406).
+                screening_degrade = True
+            if options.auto_start or screening_degrade or invalid_degrade or frame_degrade:
                 local_evidence, result = _local_recommendation(
                     video, duration, '快速画面判断未完成，已改按字幕制作。')
             else:
@@ -190,6 +217,13 @@ def recommend(video: Path, options: ImportOptions):
     elif invalid_degrade:  # visual mode screening returned an unparseable answer
         degrade_reason = VISION_INVALID_FALLBACK_CODE
         result.reason = (VISION_INVALID_FALLBACK_MESSAGE + result.reason)[:500]
+    elif frame_degrade:
+        degrade_reason = FRAME_EXTRACT_FALLBACK_CODE
+        result.reason = (FRAME_EXTRACT_FALLBACK_MESSAGE + result.reason)[:500]
+    if overlong:
+        degrade_reason = SOURCE_TOO_LONG_CODE
+        if VISUAL_SOURCE_TOO_LONG_MESSAGE not in result.reason:
+            result.reason = (VISUAL_SOURCE_TOO_LONG_MESSAGE + result.reason)[:500]
     explicit_visual = (consent.analysis_mode == 'visual' and not invalid_degrade and configured and mode in ('ai', 'local')
                        and options.goal == 'auto' and duration <= VISUAL_MAX_SOURCE_SEC)
     if explicit_visual and result.goal == 'content':

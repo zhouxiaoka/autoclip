@@ -784,6 +784,8 @@ export interface WhisperModel {
   downloadProgress?: number | null
   localPath?: string | null
   errorMessage?: string | null
+  /** R12: stable code; UI translates by code (8 locales). */
+  errorCode?: 'whisper_download_failed' | string | null
   source?: 'huggingface' | 'hf-mirror' | 'custom' | null
 }
 

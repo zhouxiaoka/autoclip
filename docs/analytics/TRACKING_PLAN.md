@@ -191,9 +191,11 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率 **v
 | --- | --- | --- | --- |
 | `user_both`（`user_hard`） | `outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)` | **剔除** | **剔除** |
 | `user_product_only`（`user_x`） | `error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)` | 计入 | **剔除** |
-| `product` | 其余，**明确包括** `whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`，以及 `unexpected`、`rate_limited`、`timeout`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 等 | 计入 | 计入 |
+| `product` | 其余，**明确包括** `frame_extract_failed`（本地抽帧失败）、`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`，以及 `unexpected`、`rate_limited`、`timeout`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 等 | 计入 | 计入 |
 
 `outcome_canon = success` 一律算成功，忽略错误字段。查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验只用 `event_catalog.json` → `attribution.success_rate_v4`（`overall_excluded_*`、`product_extra_excluded_error_codes`、`product_failure_codes`、`flow_definition`）；同文件的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes` 是 v4 之前的口径，仅留作历史，**不得**再用于成功率。
+
+`degrade_reason`（`enums.degrade_reason`）不是失败码，挂在成功出片上：`vision_unavailable_subtitle_fallback`、`vision_invalid_subtitle_fallback`、`frame_extract_subtitle_fallback`（AUTO 初筛本地抽帧失败，改走字幕）、`source_too_long_subtitle_route`（素材超过 120 分钟，视觉检查前直接走字幕）。它们不进成功率剔除列表，也不算失败；分布见 `success_rate.sql` 图 6。`frame_extract_failed` 列在 `product_error_codes`，计入分母。
 
 ### 4.4 `os` 与 `app_version`（唯一取值）
 
