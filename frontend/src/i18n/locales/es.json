@@ -1917,7 +1917,7 @@
   "已复用密钥": "Clave reutilizada",
   "与上方 AI 服务共用，一般不用改。": "Compartida con el servicio de IA de arriba; normalmente no hace falta cambiarla.",
   "在官网创建后粘贴到这里。": "Créala en el sitio oficial y pégala aquí.",
-  "自建服务可留空": "Opcional para servicios propios",
+  "自建服务可留空": "Opcional para servicios autoalojados",
   "已保存；留空则不改": "Guardada; déjala vacía para mantenerla",
   "本机服务用默认地址即可。": "Los servicios locales pueden usar la dirección predeterminada.",
   "已填默认，可改。": "Valor predeterminado rellenado; puedes cambiarlo.",

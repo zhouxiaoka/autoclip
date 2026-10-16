@@ -1914,7 +1914,7 @@
   "默认已填官方地址，可按需修改。": "The official address is filled in by default; change it if needed.",
   "请填写服务商提供的接口地址，通常以 /v1 结尾。": "Enter the API address from your provider, usually ending in /v1.",
   "API 密钥": "API key",
-  "已复用密钥": "Key reused",
+  "已复用密钥": "Reusing shared key",
   "与上方 AI 服务共用，一般不用改。": "Shared with the AI service above; usually no need to change.",
   "在官网创建后粘贴到这里。": "Create one on the provider’s site and paste it here.",
   "自建服务可留空": "Optional for self-hosted services",
