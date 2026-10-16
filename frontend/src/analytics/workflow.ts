@@ -6,7 +6,13 @@ const TTL = 7 * 86400000
 const LIMIT = 50
 const CONTEXT_KEY = "autoclip.analytics.context.v1"
 export function telemetryId(): string { return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` }
-type Context = { props: Properties; updated: number; artifacts: Record<string, string> }
+/** failedTerminal: attempt_id of the project's latest v4-scoped terminal when it failed/partial (the
+ * only thing retry_of may point at). firstClips: generation identities that already reported first clip.
+ * Both live in the 35-day context, not in the 7-day watches, so a later retry still links (R21 #157). */
+type Context = { props: Properties; updated: number; artifacts: Record<string, string>; failedTerminal?: string; firstClips?: string[] }
+/** Terminal events counted by docs/analytics/success_rate.sql (v4). retry_of must reference one of these (R21 #164). */
+export const SUCCESS_RATE_TERMINALS = ['studio_generation_finished', 'studio_production_finished'] as const
+const TOKEN = /^t-[a-z0-9-]{10,100}$/
 
 const OS_CANON: Record<string, string> = { darwin: 'macos', win32: 'windows' }
 const OUTCOME_CANON: Record<string, string> = { completed: 'success', failed: 'error' }
@@ -158,7 +164,7 @@ export interface StudioSnapshot {
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; finished_at?: string; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
   generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
-  output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
+  output_variants?: { id?: string; draft_id: string; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
 
@@ -259,7 +265,9 @@ export class WorkflowTracker {
       for (const [key, value] of Object.entries(raw).slice(-500)) {
         const c = value as Context
         if (c && Number.isFinite(c.updated) && c.updated > this.now() - 35 * 86400000) {
-          this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && /^t-[a-z0-9-]{10,100}$/.test(v)).slice(-100)) }
+          this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && TOKEN.test(v)).slice(-100)),
+            ...(typeof c.failedTerminal === 'string' && TOKEN.test(c.failedTerminal) ? { failedTerminal: c.failedTerminal } : {}),
+            ...(Array.isArray(c.firstClips) ? { firstClips: c.firstClips.filter((v): v is string => typeof v === 'string' && v.length <= 64).slice(-50) } : {}) }
         }
       }
     } catch { /* unavailable storage */ }
@@ -275,7 +283,7 @@ export class WorkflowTracker {
     if (!this.enabled() || !id) return
     const before = this.contexts[id]
     const props = safeStudioProperties(input)
-    this.contexts[id] = { props: { ...before?.props, ...props, flow_id: before?.props.flow_id || props.flow_id || telemetryId() }, updated: this.now(), artifacts: before?.artifacts || {} }
+    this.contexts[id] = { ...before, props: { ...before?.props, ...props, flow_id: before?.props.flow_id || props.flow_id || telemetryId() }, updated: this.now(), artifacts: before?.artifacts || {} }
     this.persistContexts()
   }
   context(id?: string, artifact?: string): Properties {
@@ -312,17 +320,24 @@ export class WorkflowTracker {
   watch(kind: Watch['kind'], id: string, projectId?: string, since = this.now(), properties: Properties = {}, restart = false, runId?: string): void {
     if (!this.enabled() || !id) return
     this.prune()
-    const existing = this.watches.find(w => w.kind === kind && w.id === id && (!runId || w.runId === runId))
+    // restart = a new attempt of this subject: it supersedes every earlier attempt, whatever run it watched.
+    const existing = this.watches.find(w => w.kind === kind && w.id === id && (restart || !runId || w.runId === runId))
     if (existing && (!existing.settled || kind === 'studio-export') && !restart) return
     if (existing) this.watches = this.watches.filter(w => w !== existing)
     this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
   }
-  /** 1.5.8 one-click retry: attempt_id of the latest settled *failed* studio attempt of this project, else undefined. */
+  /** 1.5.8 one-click retry: attempt_id of the project's latest success-rate terminal if it failed/partial, else undefined.
+   * Only SUCCESS_RATE_TERMINALS are recorded (never screen), and it outlives the watch TTL. */
   lastFailedAttempt(projectId: string): string | undefined {
-    const w = [...this.watches].reverse().find(w => ['studio-screen', 'studio-generation', 'studio-production'].includes(w.kind) && (w.projectId || w.id) === projectId && w.settled)
-    return w?.failed && w.token ? w.token : undefined
+    return this.enabled() ? this.contexts[projectId]?.failedTerminal : undefined
+  }
+  /** The one place a retry becomes a new aggregate attempt: always a fresh studio-generation watch (new
+   * attempt_id) that reaches a terminal; retry_of only when a v4-scoped failed terminal is known. */
+  retryGeneration(projectId: string, properties: Properties = {}): void {
+    const retryOf = this.lastFailedAttempt(projectId)
+    this.watch('studio-generation', projectId, undefined, undefined, { ...properties, ...(retryOf ? { retry_of: retryOf } : {}) }, true)
   }
   /** 1.5.8 「重试这条」: the variant's own last failed attempt, else the project's failed/partial attempt. */
   variantRetryOf(projectId: string, variantId: string): string | undefined {
@@ -347,7 +362,13 @@ export class WorkflowTracker {
     if (!assigned || w.kind !== 'studio-generation') return
     const ready = firstClipReady(snapshot)
     if (!ready) return
+    // Dedupe by the real generation (created_at), not by the watch: a retry's new watch must not re-report it (R21 #159).
+    const pid = w.projectId || w.id, identity = String(snapshot.generation?.created_at || '').slice(0, 64)
+    const c = this.contexts[pid]
+    if (!identity || c?.firstClips?.includes(identity)) return
+    const before = w.seen.length
     this.emitOnce(w, 'first-clip', 'studio_first_clip_ready', safeStudioProperties({ ...this.context(w.projectId || w.id), ...ready }))
+    if (w.seen.length > before && this.contexts[pid]) { this.contexts[pid].firstClips = [...(this.contexts[pid].firstClips || []), identity].slice(-50); this.persistContexts() }
   }
   observeCoverJob(w: Watch, job?: { job_id: string; status: string } | null): void {
     if (w.kind !== 'studio-cover' || w.settled || job?.job_id !== w.id || !['completed', 'failed'].includes(job.status)) return
@@ -373,7 +394,8 @@ export class WorkflowTracker {
       this.observeCoverJob(w, job)
       return
     } else if (w.kind === 'studio-variant') {
-      const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || v.render_job_id === w.runId))
+      // runId is the attempt identity the API returned: render job, render attempt, or preparation run (R21 #158).
+      const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || [v.render_job_id, v.render_attempt_id, v.preparation_run_id].includes(w.runId)))
       const job = snapshot.jobs?.find(j => j.job_id === variant?.render_job_id)
       if (variant && ['completed', 'failed'].includes(variant.status)) {
         event = 'studio_variant_finished'; outcome = variant.status
@@ -426,7 +448,11 @@ export class WorkflowTracker {
     }
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))
-      if (w.seen.includes('finished')) { w.settled = true; w.failed = ['failed', 'error', 'partial'].includes(outcome || ''); this.persist() }
+      if (w.seen.includes('finished')) {
+        w.settled = true; w.failed = ['failed', 'error', 'partial'].includes(outcome || ''); this.persist()
+        const c = this.contexts[w.projectId || w.id]
+        if (c && (SUCCESS_RATE_TERMINALS as readonly string[]).includes(event)) { c.failedTerminal = w.failed && w.token ? w.token : undefined; this.persistContexts() }
+      }
     }
   }
   observeTasks(w: Watch, tasks: TaskSnapshot[]): void {

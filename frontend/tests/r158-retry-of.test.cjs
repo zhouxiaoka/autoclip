@@ -60,11 +60,15 @@ test('1.5.8 retry_of only from the Retry button and only when the previous attem
   assert.equal(h.watchOf('studio-generation').properties.retry_of, undefined)
 })
 
-test('1.5.8 manual retry: the production attempt that follows carries retry_of too', async () => {
+test('1.5.8 manual retry: production after a failed production carries retry_of; a screen failure is never a retry_of target (R21 #164)', async () => {
   const { tracker, studioApi, finished, watchOf } = harness()
   tracker.watch('studio-screen', 'p1')
   tracker.observeStudio(watchOf('studio-screen'), { material_origin: 'user', analysis: { status: 'failed', phase: 'screening', error_code: 'timeout' } })
-  const failedId = finished('studio_screen_finished')[0].attempt_id
+  await studioApi.analyze('p1', false, true)
+  assert.equal(watchOf('studio-screen').properties.retry_of, undefined)
+  tracker.watch('studio-production', 'plan-0', 'p1')
+  tracker.observeStudio(watchOf('studio-production'), { material_origin: 'user', plan: { id: 'plan-0' }, analysis: { status: 'failed', error_code: 'timeout' } })
+  const failedId = finished('studio_production_finished')[0].attempt_id
   await studioApi.analyze('p1', false, true)
   assert.equal(watchOf('studio-screen').properties.retry_of, failedId)
   await studioApi.confirmPlan('p1', 'plan-1', ['highlight'], {}, 'subtitle')
