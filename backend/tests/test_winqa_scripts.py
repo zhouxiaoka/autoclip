@@ -492,9 +492,7 @@ def test_corpus_pwsh_output_through_sh_redact_pipe(tmp_path, case):
     done, _ = _ps(tmp_path, want_zip='', run=case['text'], raw=True)
     assert done.returncode == 4, done.stdout + done.stderr
     piped = subprocess.run(SH_REDACT, input=done.stderr, capture_output=True, check=True).stdout
-    redact = _module('redact')
-    want = 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(case['text'])
-    assert redact.scrub_stream(case['text']) == case['expected'] or not case.get('chains')
+    want = 'artifact digest missing or invalid; refusing to download run ' + case['expected']
     assert piped.decode('utf-8').rstrip('\r\n') == want.rstrip('\r\n')
 
 
@@ -594,3 +592,26 @@ def test_redact_has_one_home_implementation():
     src = (ROOT / 'redact.py').read_text(encoding='utf-8')
     for gone in ('WIN_PATTERN', 'POSIX_PATTERN', 'NAME_GBK', '_mask(', 'gbk=', 'latin-1'):
         assert gone not in src
+
+
+BOUNDARY_KEEP_PROSE = [("x '/home/kris' y", "x '/home/<user>' y"), ("open '/home/kris' now", "open '/home/<user>' now"),
+                       ("x '/home/D''Arcy' y", "x '/home/<user>' y"), ("say '/Users/Jane Doe' ok", "say '/Users/<user>' ok")]
+BOUNDARY_NO_LEAK = [('/home/Jane Doe /x', 'Doe'), ("x '/home/D' Artagnan/x' y", 'Artagnan'),
+                    ('C:\\Users\\Jane Doe \\x', 'Doe'), ("/Users/D' Artagnan/x", 'Artagnan')]
+
+
+@pytest.mark.parametrize('raw,expected', BOUNDARY_KEEP_PROSE)
+def test_boundary_rule_keeps_text_after_a_quoted_path(raw, expected):
+    """R22 Dong: only the user name goes; the closing quote and the prose after it stay."""
+    assert _module('redact').scrub_homes(raw) == expected
+
+
+@pytest.mark.parametrize('raw,leak', BOUNDARY_NO_LEAK)
+def test_boundary_rule_never_leaks_the_rest_of_a_spaced_or_quoted_name(raw, leak):
+    """#151 stays fixed: a run that reaches a separator is one path segment, masked whole."""
+    assert leak not in _module('redact').scrub_homes(raw)
+
+
+def test_home_and_users_roots_are_both_case_insensitive():
+    out = _module('redact').scrub_homes('/HOME/qa\n/Home/bob\n/USERS/kris\n/users/amy')
+    assert out == '/HOME/<user>\n/Home/<user>\n/USERS/<user>\n/users/<user>'

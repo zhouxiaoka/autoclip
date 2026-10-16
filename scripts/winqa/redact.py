@@ -12,7 +12,7 @@ R22 rewrite: one implementation, no regex for home directories.
    Line endings and the original encoding (and BOM) are written back unchanged.
 2. scrub_homes() decodes every escape layer into logical characters (\\\\ -> \\, \\/ -> /, \\uXXXX -> char,
    repeated: \\u005cu5f20 -> 张) and scans them once, left to right (linear time).
-3. After a home root (X:<sep>Users, /Users, /home; "Users" case-insensitive) everything up to the next logical
+3. After a home root (X:<sep>Users, /Users, /home; roots case-insensitive) everything up to the next logical
    separator (/ or \\) is the user name and is replaced whole by <user>. No partial put-back.
    A name also ends at '"' or a line break; Windows names also at : < > | * ? (not allowed in Windows names);
    POSIX names only at ':' besides that (passwd/macOS short names cannot contain ':').
@@ -79,8 +79,8 @@ def scrub_homes(text: str) -> str:
                 return None
             return _after_root(j + 5, _WIN_STOP)
         if ch[k] == '/' and not (prev and (_word(prev) or prev in '.-\\')):
-            for w, ci in (('users', True), ('home', False)):
-                if word_at(k + 1, w, ci):
+            for w in ('users', 'home'):
+                if word_at(k + 1, w, True):
                     return _after_root(k + 1 + len(w), _POSIX_STOP)
         return None
 
@@ -107,6 +107,17 @@ def scrub_homes(text: str) -> str:
         e = j
         while e < n and ch[e] not in '/\\' and ch[e] not in stop:
             e += 1
+        # Boundary rule (R22 Dong): a name run that reaches a separator is a path segment and is masked
+        # whole, spaces and quotes included ("/home/Jane Doe /x", "'/home/D' Artagnan/x'"). A run that
+        # ends without a separator (end of line, '"', ':') after a root opened by a quote ends at the
+        # matching quote when it is followed by whitespace or the end ("x '/home/kris' y").
+        if e < n and ch[e] in '/\\':
+            pass
+        elif k and ch[k - 1] == "'":
+            for t in range(j + 1, e):
+                if ch[t] == "'" and (t + 1 == e or ch[t + 1].isspace()):
+                    e = t
+                    break
         if e == j:
             k = j if j > k else k + 1
             continue

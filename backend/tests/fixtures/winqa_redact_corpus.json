@@ -1,5 +1,5 @@
 {
- "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only).",
+ "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only). Boundary rule: a name run that reaches / or \\ is masked whole (spaces, quotes included); a run that ends without a separator after a root opened by a quote ends at the first quote followed by whitespace or the end.",
  "cases": [
   {
    "round": "R16-R20",
@@ -72,7 +72,7 @@
    "round": "R16-R20",
    "text": "see /home/a and more /x",
    "expected": "see /home/<user>/x",
-   "note": "R22 #151: no put-back after a space; whole segment up to the separator is masked",
+   "note": "R22 boundary rule: the run reaches a separator, so it is one path segment and is masked whole. Same shape as \"/home/Jane Doe /x\" (#151); keeping \" and more\" would leak \"Doe\" there",
    "id": "c011"
   },
   {
@@ -162,8 +162,8 @@
   {
    "round": "R16-R20",
    "text": "open '/home/kris' now",
-   "expected": "open '/home/<user>",
-   "note": "R22 #151: no quote put-back; over-masking accepted",
+   "expected": "open '/home/<user>' now",
+   "note": "R22 boundary rule: run ends without a separator after a quote-opened root -> name ends at the matching quote; prose kept",
    "id": "c026"
   },
   {
@@ -243,15 +243,15 @@
   {
    "round": "R21",
    "text": "x '/home/D''Arcy' y",
-   "expected": "x '/home/<user>",
-   "note": "R22 #151: no quote put-back",
+   "expected": "x '/home/<user>' y",
+   "note": "R22 boundary rule: matching quote = first quote followed by whitespace/end (D''Arcy stays inside)",
    "id": "c039"
   },
   {
    "round": "R21",
    "text": "x '/home/kris' y",
-   "expected": "x '/home/<user>",
-   "note": "R22 #151: no quote put-back",
+   "expected": "x '/home/<user>' y",
+   "note": "R22 boundary rule: matching quote, rest kept",
    "id": "c040"
   },
   {
@@ -309,8 +309,8 @@
   {
    "round": "R18-R20 ps1",
    "text": "/USERS/kris/x and /HOME/qa",
-   "expected": "/USERS/<user>/x and /HOME/qa",
-   "note": "R22 #153: Users is case-insensitive (macOS); /home stays case-sensitive (Linux)",
+   "expected": "/USERS/<user>/x and /HOME/<user>",
+   "note": "R22 Dong: both roots case-insensitive",
    "id": "c049"
   },
   {
@@ -477,6 +477,30 @@
     "shift_jis": "C:\\Users\\<user>"
    },
    "id": "c075"
+  },
+  {
+   "round": "R22 boundary rule",
+   "text": "'/home/kris'",
+   "expected": "'/home/<user>'",
+   "id": "c076"
+  },
+  {
+   "round": "R22 boundary rule: spaced name inside quotes",
+   "text": "say '/Users/Jane Doe' ok",
+   "expected": "say '/Users/<user>' ok",
+   "id": "c077"
+  },
+  {
+   "round": "R22 Dong: /home case-insensitive",
+   "text": "/Home/bob/x and /HOME/qa",
+   "expected": "/Home/<user>/x and /HOME/<user>",
+   "id": "c078"
+  },
+  {
+   "round": "R22 boundary rule + CRLF",
+   "text": "x '/home/kris' y\r\nz",
+   "expected": "x '/home/<user>' y\r\nz",
+   "id": "c079"
   }
  ]
 }
