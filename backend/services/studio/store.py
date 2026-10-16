@@ -521,7 +521,9 @@ def _recover_interrupted_run(data):
         # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
         for key in ('message', 'percent', 'instance'):
             analysis.pop(key, None)
-        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE)
+        phase = analysis.get('phase')
+        stage = phase if phase in ('screening', 'production') else 'render' if phase == 'rendering' else 'other'
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage)
         return True
     return False
 

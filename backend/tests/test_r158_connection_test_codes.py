@@ -253,3 +253,15 @@ def test_restarted_analysis_without_instance_records_code_and_stage(phase, stage
     assert data['analysis']['status'] == 'failed'
     assert data['analysis']['error_code'] == store.RESTART_CODE
     assert data['analysis']['failure_stage'] == stage
+
+
+@pytest.mark.parametrize('phase,stage', [('screening', 'screening'), ('production', 'production'), ('rendering', 'render'), (None, 'other')])
+def test_expired_analysis_restart_branch_records_failure_stage(phase, stage):
+    from backend.services.studio import store
+    analysis = {'status': 'running', 'run_id': 'r1', 'instance': 'previous-process'}
+    if phase:
+        analysis['phase'] = phase
+    data = {'id': 'p158', 'analysis': analysis}
+    assert store._recover_interrupted_run(data) is True
+    assert data['analysis']['error_code'] == store.RESTART_CODE
+    assert data['analysis']['failure_stage'] == stage
