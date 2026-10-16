@@ -53,6 +53,7 @@ def test_vad_failure_is_classified_without_treating_encode_as_vad():
     assert vad_backend_failed(exc.value)
 
 
+@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
 def test_install_error_is_not_reported_as_not_installed(monkeypatch):
     """设置页靠 status=error 显示「重试安装」。轮询不能把它盖成 not_installed。"""
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)
@@ -74,6 +75,7 @@ def test_installed_runtime_still_reports_installed_after_a_previous_error(monkey
         whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
 
 
+@pytest.mark.real_whisper_status  # reads the real Whisper runtime / model state
 def test_install_error_is_remembered_after_the_process_forgets(tmp_path, monkeypatch):
     monkeypatch.setattr(whisper_runtime, "_data_dir", lambda: tmp_path)
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)

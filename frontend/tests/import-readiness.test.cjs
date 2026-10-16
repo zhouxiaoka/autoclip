@@ -39,8 +39,7 @@ function report(overrides = {}) {
 test('submit waits for the probe, then blocks analysis, visual, ffmpeg, and transcription without an srt', () => {
   const { submissionBlock } = readiness
   assert.equal(submissionBlock(null, false, false), 'pending')
-  assert.equal(submissionBlock(null, false, true), 'unavailable')  // R19 #115: failed probe never lets the import through
-  assert.equal(submissionBlock(null, true, true), 'unavailable')
+  assert.equal(submissionBlock(null, false, true), null)  // submit re-probes first, then the backend gate decides
   assert.equal(submissionBlock(report({ analysis: check(false, 'not_configured', 'settings_ai') }), true, true), 'analysis')
   assert.equal(submissionBlock(report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), false, true), 'transcription')
   assert.equal(submissionBlock(report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), true, true), null)
@@ -79,6 +78,8 @@ function render(options = {}) {
   const navigations = []
   const installs = []
   const blocked = []
+  const errors = []
+  const probes = []
   let index = 0
   const value = options.report === undefined ? report() : options.report
   const states = [
@@ -91,7 +92,7 @@ function render(options = {}) {
     [['douyin'], () => {}],
     [false, () => {}],
     [false, () => {}],
-    ['', () => {}],
+    ['', text => errors.push(text)],
     [value, () => {}],
     [options.settled !== false, () => {}],
     [false, () => {}],
@@ -111,10 +112,10 @@ function render(options = {}) {
     './PlatformPicker': { default: 'platform-picker' },
     './api': {
       studioApi: {
-        import: async body => { calls.push(body); return { project_id: 'project-1' } },
-        readiness: async () => value,
+        import: async body => { calls.push(body); if (options.importError) throw options.importError; return { project_id: 'project-1' } },
+        readiness: async () => { probes.push(1); if (options.probeFails) throw new Error('readiness down'); return options.probeValue === undefined ? value : options.probeValue },
       },
-      errorText: String,
+      errorText: e => (e && e.detail) || String(e),
     },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
@@ -140,7 +141,7 @@ function render(options = {}) {
   }
   vm.runInNewContext(code, { FormData: FormDataMock, exports, require: id => { assert.ok(id in mocks, id); return mocks[id] } })
   const tree = nodes(exports.default({ onImported: async () => {}, blocked: !!options.blocked, onBlocked: () => blocked.push('setup') }))
-  return { tree, calls, navigations, installs, blocked }
+  return { tree, calls, navigations, installs, blocked, errors, probes }
 }
 
 function button(tree, label) {
@@ -264,10 +265,29 @@ test('CreativeImport reads readiness transcription with optional chaining at eve
   assert.doesNotMatch(source, /readiness\?\.checks\.|checks\?\.transcription\.code/)
 })
 
-test('R19 #115: a failed readiness probe (null) blocks the start instead of letting it through', async () => {
-  const view = render({ report: null })
+test('R19 #115: a failed readiness probe is re-checked 3 times, then the import goes to the backend gate', async () => {
+  const view = render({ report: null, probeFails: true })
   await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.probes.length, 3)
+  assert.equal(view.calls.length, 1)
+})
+
+test('R19 #115: a re-check that recovers uses the fresh report (blocked by the local gate, no request)', async () => {
+  const view = render({ report: null, probeValue: report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }) })
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.probes.length, 1)
   assert.equal(view.calls.length, 0)
+  assert.equal(view.errors.at(-1), '还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
+})
+
+test('R19 #115: a backend 422 whisper refusal opens the install prompt (and the installing prompt)', async () => {
+  const gate = render({ importError: { detail: '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。' } })
+  await button(gate.tree, '生成成片').props.onClick()
+  assert.equal(gate.calls.length, 1)
+  assert.equal(gate.errors.at(-1), '需要先安装本地转写')
+  const wait = render({ importError: { detail: '等待安装完成：本地 Whisper 正在安装，装好后再开始。' } })
+  await button(wait.tree, '生成成片').props.onClick()
+  assert.equal(wait.errors.at(-1), '等待安装完成')
 })
 
 test('R19 #115: no settings file -> default local Whisper not installed, no SRT: blocked before start', async () => {

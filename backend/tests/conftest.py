@@ -25,6 +25,7 @@ os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autocli
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "stdlib_only: runtime regression without application dependencies")
+    config.addinivalue_line("markers", "real_whisper_status: skip the default simulated installed local Whisper")
 
 
 class _FollowStudioExecutor:
@@ -79,19 +80,18 @@ def _no_framing_install(monkeypatch, request):
     yield
 
 @pytest.fixture(autouse=True)
-def _whisper_gate_only_in_gate_suites(monkeypatch, request):
-    # 1.5.8 R19 #115: with no settings document the import gate assumes the default local Whisper,
-    # which CI never has installed. Suites that are not about that gate keep their old import flow;
-    # the gate itself is covered by test_r158_whisper_* (real gate, no stub).
-    if request.node.get_closest_marker("stdlib_only"):
+def _whisper_installed_by_default(monkeypatch, request):
+    # 1.5.8 R19 #115: with no settings document the import gate assumes the default local Whisper.
+    # CI has no Whisper, so every suite runs with "local Whisper installed, model on disk" simulated;
+    # the gate code itself still runs everywhere and passes because its condition is not met.
+    # test_r158_whisper_* (and any test) override get_status to simulate "not installed".
+    if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("real_whisper_status"):
         yield
         return
-    name = getattr(request.node.module, "__name__", "")
-    if "test_r158_whisper_" in name:
-        yield
-        return
+    from backend.services import whisper_runtime
     from backend.services.studio import readiness
-    monkeypatch.setattr(readiness, "ensure_local_transcription_for_import", lambda **kwargs: None)
+    monkeypatch.setattr(whisper_runtime, "get_status", lambda *a, **k: {"status": "installed"})
+    monkeypatch.setattr(readiness, "_whisper_model", lambda name: {"ok": True, "code": "whisper_installed"})
     yield
 
 @pytest.fixture(scope="session")

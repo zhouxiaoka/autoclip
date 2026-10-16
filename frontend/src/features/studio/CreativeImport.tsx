@@ -16,7 +16,7 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, localTranscriptionGate, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
@@ -56,7 +56,6 @@ function uiLocale() {
 
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
-  if (reason === 'unavailable') return t('暂时无法确认导入条件，请稍后再试。')
   if (reason === 'analysis') return readiness?.checks?.analysis?.code === 'validation_failed'
     ? t('模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
     : t('请先连接 AI 服务，再导入视频。')
@@ -86,6 +85,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [readiness, setReadiness] = useState<ImportReadiness | null>(null)
+  const currentReadiness = readiness
   const [settled, setSettled] = useState(false)
   const [repairing, setRepairing] = useState(false)
   const [platformOpen, setPlatformOpen] = useState(false)
@@ -201,7 +201,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     overridden.current = true
     trackAutoChoiceOverridden({ field: 'platform', stage: 'pre_import' }, true)
   }
-  const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }) => {
+  const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }, readiness: ImportReadiness | null = currentReadiness) => {
     if (blocked) { trackExperience('import_blocked', { reason: 'setup_required', placement: 'home_setup' }); setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return false }
     const nextFile = next && 'file' in next ? next.file : file
     const nextUrl = next?.url ?? url
@@ -209,7 +209,6 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (nextSource === 'file' ? !nextFile : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
     const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
-    if (reason === 'unavailable') { setError(blockMessage(reason, readiness)); studioApi.readiness().then(setReadiness).catch(() => undefined); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
     const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource) : null
     if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }
@@ -232,7 +231,14 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button') => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
-    if (!readyToStart(trigger)) return
+    let report = readiness
+    if (settled && !report) {
+      // R19 #115 (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
+      starting.current = true
+      try { report = await probeReadiness(() => studioApi.readiness()) } finally { starting.current = false }
+      if (report) setReadiness(report)
+    }
+    if (!readyToStart(trigger, undefined, report)) return
     starting.current = true
     setBusy(true); setError('')
     try {
@@ -268,7 +274,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       // Project refresh should never make a successful import look like an upload failure.
       void onImported().catch(() => undefined)
       navigate(`/project/${result.project_id}`)
-    } catch (e) { const text = errorText(e); setError(text.startsWith(LOCAL_TRANSCRIPTION_GATE) ? LOCAL_TRANSCRIPTION_GATE : t(text)) } finally { starting.current = false; setBusy(false) }
+    } catch (e) { const text = errorText(e); setError(text.startsWith(LOCAL_TRANSCRIPTION_GATE) ? LOCAL_TRANSCRIPTION_GATE : text.startsWith(LOCAL_TRANSCRIPTION_INSTALLING) ? LOCAL_TRANSCRIPTION_INSTALLING : t(text)) } finally { starting.current = false; setBusy(false) }
   }
   submitRef.current = submit
   const onDrop = (event: DragEvent<HTMLDivElement>) => {

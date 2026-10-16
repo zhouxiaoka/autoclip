@@ -25,7 +25,7 @@ export interface ReadinessIssue extends ReadinessCheck {
   key: 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
 }
 
-export type BlockReason = 'pending' | 'unavailable' | 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
+export type BlockReason = 'pending' | 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
 export type TranscriptionRoute = 'platform_subs' | 'whisper' | 'cloud' | 'srt'
 
 export interface SubmissionOptions {
@@ -36,11 +36,11 @@ export interface SubmissionOptions {
 
 const ORDER = ['analysis', 'transcription', 'visual', 'ffmpeg'] as const
 
-/** Gate the import button. An attached SRT covers a missing transcriber. A failed probe blocks (retry re-probes). */
+/** Gate the import button. An attached SRT covers a missing transcriber. A failed probe does not trap the user. */
 export function submissionBlock(report: ImportReadiness | null, hasSubtitle: boolean, settled: boolean, options: SubmissionOptions = {}): BlockReason | null {
   if (!settled) return 'pending'
-  // R19 #115: a failed probe (null) is not proof the import can run; block and let the user retry.
-  if (!report) return 'unavailable'
+  // R19 #115 (PM): submit re-probes up to READINESS_RETRIES times first; still null -> let the backend gate decide (422).
+  if (!report) return null
   // A missing check is unknown, not failed: it never traps the user (same as a failed probe).
   const checks = report.checks
   if (checks?.analysis?.ok === false) return 'analysis'
@@ -98,3 +98,16 @@ export function localTranscriptionGate(report: ImportReadiness | null, hasSubtit
 }
 
 export const CLOUD_TRANSCRIPTION_DESTINATION = '/settings?section=speech&provider=cloud'
+
+/** R19 #115: how many times submit re-runs a failed readiness probe before handing the decision to the backend. */
+export const READINESS_RETRIES = 3
+
+export async function probeReadiness(load: () => Promise<ImportReadiness | null>, retries = READINESS_RETRIES): Promise<ImportReadiness | null> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const value = await load()
+      if (value) return value
+    } catch { /* retry */ }
+  }
+  return null
+}
