@@ -369,8 +369,11 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             raise ValueError('渲染输出无效，请重新导出')
         # R14 #33: with the outro, the total must match body + the outro actually used
         # (|decoded - (body + outro)| <= 0.5 s); container metadata alone can look normal.
+        # R15 #36: an applied outro always carries a positive duration; never skip the check.
         outro_seconds = outro_report.get('outro_seconds') if outro_applied else None
-        if (outro_applied and body_seconds is not None and outro_seconds
+        if outro_applied and (not isinstance(outro_seconds, (int, float)) or not math.isfinite(outro_seconds) or outro_seconds <= 0):
+            raise ValueError('渲染输出无效，请重新导出')
+        if (outro_applied and body_seconds is not None
                 and abs(decoded_seconds - (body_seconds + outro_seconds)) > 0.5):
             raise ValueError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)

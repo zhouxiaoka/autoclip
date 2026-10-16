@@ -1468,6 +1468,7 @@
   "排队生成中": "Queued",
   "包含 Made with AutoClip 片尾": "Includes “Made with AutoClip” end card",
   "不含品牌片尾": "No brand end card",
+  "品牌片尾未能添加，已保留成片": "The brand end card could not be added; your video was kept.",
   "这条版本未完成，其他成片不受影响。": "This version did not finish. Your other videos are not affected.",
   "素材没有足够完整的长内容": "the source has no complete segment long enough",
   "YouTube 视频": "YouTube video",

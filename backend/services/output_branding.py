@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import logging
 import os
 import subprocess
@@ -124,15 +125,27 @@ def append_outro(source: Path, destination: Path, *, width: int, height: int, en
         return False
     try:
         seconds = _append(source, partial, width, height)
+        if not (isinstance(seconds, float) and math.isfinite(seconds) and seconds > 0):
+            raise OutroDurationUnavailable('invalid_duration')
         os.replace(partial, destination)
         if report is not None:
             report['outro_seconds'] = seconds
         return True
     except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
-        logging.getLogger(__name__).warning('Outro skipped: %s', type(error).__name__)
+        # R15 #36: no paths or command lines in the log, only the error class and a fixed reason.
+        reason = error.reason if isinstance(error, OutroDurationUnavailable) else type(error).__name__
+        logging.getLogger(__name__).warning('Outro skipped: %s', reason)
         partial.unlink(missing_ok=True)
         os.replace(source, destination)
         return False
+
+
+class OutroDurationUnavailable(ValueError):
+    """R15 #36: the outro's own duration could not be proven, so it is treated as not added."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 def _ffmpeg(cmd: list[str], timeout: float, **kwargs) -> subprocess.CompletedProcess:
@@ -163,7 +176,7 @@ def _media_seconds(path: Path) -> float | None:
     return None
 
 
-def _append(source: Path, partial: Path, width: int, height: int) -> float | None:
+def _append(source: Path, partial: Path, width: int, height: int) -> float:
     with tempfile.TemporaryDirectory(prefix='ac-outro-') as tmp:
         concat = Path(tmp) / 'concat.txt'
         ffmpeg = get_ffmpeg_path()
@@ -177,16 +190,25 @@ def _append(source: Path, partial: Path, width: int, height: int) -> float | Non
         if outro is None:
             outro = Path(tmp) / 'outro.mp4'
             _text_outro(outro, width, height, params)
+        # R15 #36: prove the outro duration before concatenating. A probe timeout, garbage
+        # output or empty duration means the outro is not added (the validated body ships).
+        try:
+            seconds = _media_seconds(outro)
+        except subprocess.TimeoutExpired as error:
+            raise OutroDurationUnavailable('probe_timeout') from error
+        except (OSError, subprocess.SubprocessError) as error:
+            raise OutroDurationUnavailable('probe_failed') from error
+        except ValueError as error:
+            raise OutroDurationUnavailable('probe_unreadable') from error
+        if seconds is None or not math.isfinite(seconds) or seconds <= 0:
+            raise OutroDurationUnavailable('probe_empty_duration')
         quote = lambda path: str(path).replace("'", "'\\''")  # noqa: E731 - concat list syntax for an apostrophe in a path
         concat.write_text(f"file '{quote(source)}'\nfile '{quote(outro)}'\n", encoding='utf-8')
         _ffmpeg([
             ffmpeg, '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-map', '0:a:0?',
             '-c', 'copy', '-movflags', '+faststart', '-y', str(partial),
         ], timeout=120)
-        try:
-            return _media_seconds(outro)
-        except (OSError, subprocess.SubprocessError, ValueError):
-            return None
+        return float(seconds)
 
 
 def _text_outro(outro: Path, width: int, height: int, params: dict) -> None:

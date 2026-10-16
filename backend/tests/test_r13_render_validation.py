@@ -176,10 +176,20 @@ def test_r14_success_is_exactly_body_with_outro_appended(env, monkeypatch):
     assert abs(_seconds(output) - (_seconds(body) + _seconds(outro))) <= 0.1
 
 
-def test_r14_real_append_outro_reports_the_outro_duration_actually_used(tmp_path):
+def test_r14_real_append_outro_reports_the_outro_duration_actually_used(tmp_path, monkeypatch):
+    # R15 #37: keep the outro cache out of the default data directory.
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    monkeypatch.setattr(output_branding, '_cache_dir', lambda: _tmp_cache(tmp_path))
     body = _clip(tmp_path / 'body.mp4', 2, audio=True)
     out = tmp_path / 'out.mp4'
     report = {}
     assert output_branding.append_outro(body, out, width=320, height=240, report=report) is True
     assert report['outro_seconds'] > 0
     assert abs(_seconds(out) - (2 + report['outro_seconds'])) <= 0.5
+    assert list((tmp_path / 'outro-cache').glob('*.mp4')), 'designed outro was cached under tmp_path'
+
+
+def _tmp_cache(tmp_path):
+    path = tmp_path / 'outro-cache'
+    path.mkdir(parents=True, exist_ok=True)
+    return path
