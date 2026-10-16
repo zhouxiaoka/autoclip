@@ -132,10 +132,11 @@ def test_331_failure_without_request_record_falls_back_to_phase_and_says_so():
     _project('pphase', {'status': 'running', 'phase': 'production', 'run_id': 'r'})
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: phase, **GLM})
-        try:
-            raise OSError('local render failure')
-        except OSError:
-            store.change('pphase', lambda d: d['analysis'].update(status='failed', error_code='unexpected'))
+        from backend.pipeline.failures import PipelineFailure
+        try:  # R26 #392: only a MODEL failure without a record falls back to the phase identity
+            raise PipelineFailure('ANALYZE', 'model timed out before a record existed', code='timeout')
+        except PipelineFailure:
+            store.change('pphase', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
     analysis = store.read('pphase')['analysis']
     assert {k: analysis.get(k) for k in phase} == phase
     assert analysis.get('attribution_source') == 'phase' and 'http_status' not in analysis
@@ -269,7 +270,7 @@ def test_335_lock_timeout_raises_a_coded_error(tmp_path, monkeypatch):
     finally:
         child.wait(30)
     assert getattr(caught.value, 'code', None) == 'store_lock_timeout'
-    assert studio_error_code(caught.value) == 'timeout'
+    assert studio_error_code(caught.value) == 'store_lock_timeout'  # R26 #390
 
 
 # --- #336: the settings-page vision test carries the tested connection's identity ---------------

@@ -1813,7 +1813,12 @@ def _produce_selected(project_id, plan):
         if errors:
             result['error'] = '；'.join(errors)
             result['error_code'] = error_codes[0] if len(set(error_codes)) == 1 else 'multiple'
-        store.change(project_id, lambda data:data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **result}))
+        from backend.core.llm_emit import failure_in_hand, record_of
+        # R26 #397: a goal's failed request (GLM 503) stays the attributed failure even though a later
+        # goal's request succeeded (Kimi 200); the final write runs outside that goal's except block.
+        held = next((e for e in reported if record_of(e) is not None), reported[0] if reported else None) if errors else None
+        with failure_in_hand(held):
+            store.change(project_id, lambda data:data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **result}))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         store.raise_owned_read_error(error)

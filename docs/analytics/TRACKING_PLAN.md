@@ -191,7 +191,7 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率口�
 | --- | --- | --- |
 | `user` | `insufficient_quota`；`invalid_key`；`permission_denied`；`model_not_found`；`bad_endpoint`；`llm_not_configured`；`llm_auth_invalid`；`source_too_short`；`source_no_audio`；`source_unreadable`；`whisper_not_installed`（且无字幕） | **剔除** |
 | `environment` | `source_blocked`；`service_restarted` | **剔除** |
-| `product` | 其余（`frame_extract_failed`（本地抽帧失败）、`unexpected`、`rate_limited`、`timeout`、`connection`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 失败等） | **计入** |
+| `product` | 其余（`frame_extract_failed`（本地抽帧失败）、`store_lock_timeout`（本机项目存储锁等待超时，1.5.8 R26：本地原因、用户修不了，不记到服务商，不是模型 `timeout`）、`unexpected`、`rate_limited`、`timeout`、`connection`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 失败等） | **计入** |
 
 查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验用 `event_catalog.json` 的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes`。
 
@@ -754,7 +754,8 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 - 一次 generation 尝试中途换阶段时，失败按失败阶段归因：screening 失败报视觉连接，production 失败报路线连接。
 - 请求：每个模型请求在**发出前**冻结所用连接，结束时生成一条不可变请求记录（provider/config_source 成对，加上同一次请求的 model/host/http_status/upstream_error_type）。失败的记录随异常携带（沿 `__cause__`/`__context__` 链可找回）。
 - 归因（1.5.8 R25）：失败按**出错的那次请求**的记录整条归因（`attribution_source=request`）；找不到请求记录时用阶段开始时冻结的身份（`attribution_source=phase`）；不取"最近一次请求"，运行中不读设置。落盘、run 快照、Sentry 都只读这一条，不逐字段合并。
-- 旧记录：provider/config_source 不成对时整组（provider、config_source、model、base_url_host）当空，不补。
+- 旧记录：provider/config_source 不成对时整组（provider、config_source、model、base_url_host）当空，不补。写盘和读出时都按空处理（R26 #399）。
+- `attribution_source`（1.5.8 R26，闭集 `request`/`phase`/`local`，随三个 studio 终态事件、Sentry tag 和 analysis_history 一起上报）：`request` = 失败请求自己的记录；`phase` = 没有请求记录的**模型类**失败，用阶段冻结的连接；`local` = 非模型失败（存储锁超时 `store_lock_timeout`、ffmpeg、本地渲染、请求发出前的本地校验），可带阶段身份但不带请求状态，不算服务商失败。异常链 `__cause__` 与 `__context__` 两条都查（R26 #398）。analysis_history 另保留 `model`、`base_url_host`（R26 #400）。
 
 `service_restarted` 失败另带 `shutdown_kind`，按上次进程在 `<标记目录>/<instance>` 留下的记录分类（标记目录由桌面壳启动时统一解析为 `<应用目录>/shutdown_markers`，经 `AUTOCLIP_SHUTDOWN_MARKER_DIR` 交给后端，壳写 `unacked` 也写这里；无壳运行时为 `<数据目录>/shutdown_markers`）（每个 instance 一条记录、一个目录、一套修剪规则）：
 

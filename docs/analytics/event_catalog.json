@@ -193,6 +193,11 @@
       "preset",
       "customized"
     ],
+    "attribution_source": [
+      "request",
+      "phase",
+      "local"
+    ],
     "shutdown_kind": [
       "clean",
       "parent_lost",
@@ -232,7 +237,8 @@
       "service_restarted"
     ],
     "product_error_codes": [
-      "frame_extract_failed"
+      "frame_extract_failed",
+      "store_lock_timeout"
     ]
   },
   "privacy": {
@@ -532,6 +538,7 @@
       },
       "enums": {
         "config_source": "config_source",
+        "attribution_source": "attribution_source",
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
         "failure_stage": "failure_stage",
@@ -557,6 +564,7 @@
       "enums": {
         "outcome": "studio_outcome",
         "config_source": "config_source",
+        "attribution_source": "attribution_source",
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
         "failure_stage": "failure_stage",
@@ -578,6 +586,7 @@
       "enums": {
         "outcome": "studio_outcome",
         "config_source": "config_source",
+        "attribution_source": "attribution_source",
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
         "failure_stage": "failure_stage",

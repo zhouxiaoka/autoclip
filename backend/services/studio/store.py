@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import threading
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -13,7 +14,7 @@ from pathlib import Path
 
 from backend.core.path_utils import get_projects_directory
 
-from backend.core.file_lock import ProcessLock  # noqa: E402
+from backend.core.file_lock import LOCK_TIMEOUT_CODE, LOCK_TIMEOUT_MESSAGE, LockTimeout, ProcessLock  # noqa: E402
 
 
 def _lock_path():
@@ -39,6 +40,7 @@ _io_failures = {}
 _read_failures = {}
 _pending_links = {}
 _worker = ContextVar('studio_metadata_worker', default=None)
+_receipt_mutex = threading.Lock()
 
 
 @contextmanager
@@ -56,6 +58,14 @@ def worker_read_scope(project_id, identity):
         except PermissionError as error:
             if error is not receipt.get('read_error'):
                 raise
+        except LockTimeout:
+            # R26 #401: the worker could not even write its failure. Leave a receipt WITHOUT the store
+            # lock (it is what timed out); the next read fails the job instead of leaving it queued.
+            with _receipt_mutex:
+                _read_failures.setdefault(path, []).append(
+                    {'identity': identity, 'pending': {}, 'lock_timeout': True,
+                     'message': LOCK_TIMEOUT_MESSAGE, 'error_code': LOCK_TIMEOUT_CODE})
+            raise
     finally:
         _worker.reset(token)
         if receipt['denied'] or receipt.get('cover_finished_instance'):
@@ -391,6 +401,13 @@ def read(project_id: str, *, recover: bool = True):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
+    for name in ('analysis', 'generation'):
+        # R26 #399: a legacy half identity (provider without its config_source, or the reverse) is
+        # empty on READ too, so no event built from a read (e.g. manual export) carries half of it.
+        record = data.get(name)
+        if isinstance(record, dict) and any(record.get(k) for k in ATTEMPT_IDENTITY_KEYS) and not _paired(record):
+            for key in IDENTITY_FIELDS:
+                record.pop(key, None)
     if not recover or producer_alive(data.get('generation')):
         # CLI status commands are observers in another process, not a server restart.
         # A live CLI / MCP producer owns its run: the desktop list must not fail it.
@@ -807,7 +824,7 @@ def write(project_id, data, *, _recover_previous=True):
             key = terminal['run_id']
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
-                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'provider', 'config_source', 'screening_identity', 'upstream_error_type', 'failure_stage', 'shutdown_kind', 'http_status') if k in terminal}
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'provider', 'config_source', 'screening_identity', 'upstream_error_type', 'failure_stage', 'shutdown_kind', 'http_status', 'model', 'base_url_host', 'attribution_source') if k in terminal}  # R26 #400
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis', 'degrade_reason') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
@@ -879,12 +896,16 @@ def _paired(record):
     return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
 
 
-def _apply_attribution(record, snapshot, failed):
+def _apply_attribution(record, snapshot, failed, same_failure=False):
     """R25 #415: identity is ONE record, written whole or not at all (never merged field by field).
 
     - a stored identity without its provider/config_source pair (legacy) reads as empty;
-    - failed: the failed request's attribution replaces the group whole; a phase attribution never
-      downgrades a request attribution already recorded for this failure;
+    - failed: the failed request's attribution replaces the group whole. A phase attribution keeps a
+      request attribution only while it is the SAME failure (``same_failure``: the stored record was
+      already this failure of this run with this error_code); a new failure replaces it (R26 #394);
+    - failed with ``attribution_source=local`` (no request, not a model error, R26 #392): an older
+      request's status/upstream goes (the job's own status of this error stays), the identity is the phase one (else the stored start identity) and the
+      record says ``local`` so dashboards/Sentry/history never count it as a provider failure;
     - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one;
     - nothing attributed (e.g. a render write): the stored identity is left exactly as it is."""
     if not _paired(record):
@@ -894,10 +915,23 @@ def _apply_attribution(record, snapshot, failed):
         for key in FAILURE_FIELDS:
             record.pop(key, None)
     source = snapshot.get('attribution_source')
+    if failed and source == 'local':
+        if same_failure and record.get('attribution_source') == 'request':
+            return
+        if record.get('attribution_source') == 'request':  # an older request's status is not this failure's
+            for key in ('http_status', 'upstream_error_type'):
+                record.pop(key, None)
+        if snapshot.get('provider') and snapshot.get('config_source'):
+            for key in IDENTITY_FIELDS:
+                record.pop(key, None)
+                if snapshot.get(key) not in (None, ''):
+                    record[key] = snapshot[key]
+        record['attribution_source'] = source
+        return
     if not (source and snapshot.get('provider') and snapshot.get('config_source')):
         return
     if failed:
-        if source != 'request' and record.get('attribution_source') == 'request':
+        if source != 'request' and same_failure and record.get('attribution_source') == 'request':
             return
         # request: that request's identity AND status/upstream, whole. phase: the identity only; the
         # job's own status/upstream of the same error (studio_failure_context) stays.
@@ -943,7 +977,9 @@ def _attach_run_telemetry(data, project_id, previous):
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = record.get('status') in ('failed', 'partial')
-        _apply_attribution(record, snapshot, failed)
+        same_failure = (failed and prior.get('status') in ('failed', 'partial') and prior_identity == identity
+                        and prior.get('error_code') == record.get('error_code'))
+        _apply_attribution(record, snapshot, failed, same_failure)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue

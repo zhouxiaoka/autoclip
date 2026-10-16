@@ -9,6 +9,7 @@
 -- provider_test_* → provider_connection_test_*；publish_export_* → studio_export_*。见 §8.2。
 
 -- 1.5.8 R11：`frame_extract_failed`（本地抽帧失败）是产品失败，计入分母，不在下面的剔除列表里。
+-- 1.5.8 R26：`store_lock_timeout`（本机存储锁超时）同样是产品失败，计入分母。
 -- `frame_extract_subtitle_fallback` / `source_too_long_subtitle_route` / `vision_*_subtitle_fallback`
 -- 是成功出片上的 degrade_reason（降级走字幕），不是失败码，见图 6。
 

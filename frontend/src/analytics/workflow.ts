@@ -91,6 +91,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     route: ['subtitle', 'visual'],
     provider: ['api88', 'infistar', 'deepseek', 'dashscope', 'siliconflow', 'seed', 'glm', 'kimi', 'minimax-cn', 'xiaomi', 'openai', 'gemini', 'whisper', 'sensevoice', 'ollama', 'lmstudio', 'openrouter', 'anthropic', 'grok', 'groq', 'mistral', 'together', 'fireworks', 'huggingface', 'nvidia', 'cerebras', 'baseten', 'azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway', 'vercel-ai-gateway', 'moonshotai', 'minimax', 'ant-ling', 'qianfan', 'hunyuan', 'byteplus-modelark', 'compatible', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
     config_source: ['preset', 'customized'],
+    attribution_source: ['request', 'phase', 'local'],
     shutdown_kind: ['clean', 'parent_lost', 'crash', 'unknown'],
     upstream_error_type: ['invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'timeout', 'connection', 'output_truncated', 'unknown'],
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
@@ -123,7 +124,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     }
   }
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
-  if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|service_restarted)$/.test(input.error_code)) out.error_code = input.error_code
+  if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|store_lock_timeout|service_restarted)$/.test(input.error_code)) out.error_code = input.error_code
   if (typeof input.model === 'string' && /^[\w.\-:/]{1,64}$/.test(input.model) && !input.model.toLowerCase().includes('sk-') && !input.model.includes('://')) out.model = input.model
   if (typeof input.base_url_host === 'string' && (input.base_url_host === 'local' || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/.test(input.base_url_host))) out.base_url_host = input.base_url_host
   for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id']) {
@@ -188,7 +189,7 @@ export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string
   return own.provider ? { provider: own.provider as string, config_source: own.config_source as string } : {}
 }
 
-type Attributed = { provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string } | null | undefined
+type Attributed = { attribution_source?: string; provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string } | null | undefined
 
 /** R25 #415: identity is ONE record. Take the first record carrying the provider/config_source pair,
  * whole (model/host and, for failures, status/upstream of that same record); an unpaired record is empty. */
@@ -197,10 +198,12 @@ export function attributionOf(records: Attributed[], failure: boolean): Record<s
   if (!own) {
     // No identity at all: the failure's own status/upstream still report, attached to no connection.
     if (!failure) return {}
+    // R26 #392: a local failure says so; nothing is attributed to a provider.
+    const local = records.find(r => !!r && r.attribution_source === 'local') ? { attribution_source: 'local' } : {}
     const first = records.find(r => !!r && (r.http_status !== undefined || !!r.upstream_error_type))
-    return first ? { http_status: first.http_status, upstream_error_type: first.upstream_error_type } : {}
+    return first ? { ...local, http_status: first.http_status, upstream_error_type: first.upstream_error_type } : local
   }
-  const out: Record<string, unknown> = { provider: own.provider, config_source: own.config_source, model: own.model, base_url_host: own.base_url_host }
+  const out: Record<string, unknown> = { provider: own.provider, config_source: own.config_source, model: own.model, base_url_host: own.base_url_host, attribution_source: own.attribution_source }
   if (failure) { out.http_status = own.http_status; out.upstream_error_type = own.upstream_error_type }
   return out
 }

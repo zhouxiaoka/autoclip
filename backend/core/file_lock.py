@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 
 LOCK_TIMEOUT_CODE = 'store_lock_timeout'
+# R26 #390: what the user sees. A local busy store, never phrased as a provider/model timeout.
+LOCK_TIMEOUT_MESSAGE = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
 DEFAULT_TIMEOUT = 10.0
 _POLL = 0.05
 logger = logging.getLogger(__name__)
@@ -19,6 +21,9 @@ logger = logging.getLogger(__name__)
 class LockTimeout(TimeoutError):
     """The lock was not acquired in time. ``code`` is the content-free error code."""
     code = LOCK_TIMEOUT_CODE
+
+    def __init__(self, message: str = LOCK_TIMEOUT_MESSAGE):
+        super().__init__(message)
 
 
 def _try_lock(handle) -> bool:
@@ -66,7 +71,7 @@ def acquire(path: Path, timeout: float = DEFAULT_TIMEOUT):
         while not _try_lock(handle):
             if time.monotonic() >= deadline:
                 logger.warning('Exclusive lock not acquired in time (%s)', LOCK_TIMEOUT_CODE)
-                raise LockTimeout(LOCK_TIMEOUT_CODE)
+                raise LockTimeout()
             time.sleep(_POLL)
         return handle
     except BaseException:
@@ -93,11 +98,24 @@ class ProcessLock:
         self._handle = None
 
     def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
-        if not self._thread.acquire(blocking, timeout):
+        # R26 #393: the in-process wait is bounded by the same timeout (and raises the same code) as the
+        # file lock; an explicit ``timeout`` keeps RLock semantics (False), non-blocking never waits.
+        bounded = self.timeout if (blocking and timeout < 0) else timeout
+        if not self._thread.acquire(blocking, bounded if blocking else -1):
+            if blocking and timeout < 0:
+                logger.warning('In-process lock not acquired in time (%s)', LOCK_TIMEOUT_CODE)
+                raise LockTimeout()
             return False
         if self._depth == 0:
+            # R26 #393: non-blocking never waits out the timeout; an explicit timeout caps the wait.
+            wait = 0.0 if not blocking else (min(self.timeout, timeout) if timeout >= 0 else self.timeout)
             try:
-                self._handle = acquire(Path(self._path_fn()), self.timeout)
+                self._handle = acquire(Path(self._path_fn()), wait)
+            except LockTimeout:
+                self._thread.release()
+                if not blocking:
+                    return False
+                raise
             except BaseException:
                 self._thread.release()
                 raise

@@ -105,6 +105,8 @@ class RequestRecord:
 _RECORD_ATTR = "_autoclip_request_record"
 ATTRIBUTION_SOURCE_REQUEST = "request"
 ATTRIBUTION_SOURCE_PHASE = "phase"
+ATTRIBUTION_SOURCE_LOCAL = "local"  # R26 #392: no provider is blamed
+ATTRIBUTION_SOURCES = frozenset({ATTRIBUTION_SOURCE_REQUEST, ATTRIBUTION_SOURCE_PHASE, ATTRIBUTION_SOURCE_LOCAL})
 
 
 def _attach_record(error: BaseException | None, record: RequestRecord) -> None:
@@ -117,16 +119,26 @@ def _attach_record(error: BaseException | None, record: RequestRecord) -> None:
         pass
 
 
+def _chain(error: BaseException | None):
+    """R26 #398: the error, then BOTH its ``__cause__`` and ``__context__`` (breadth-first, cycle-safe)."""
+    seen: set[int] = set()
+    queue = [error]
+    while queue:
+        current = queue.pop(0)
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        queue.extend((current.__cause__, current.__context__))
+
+
 def record_of(error: BaseException | None) -> RequestRecord | None:
     """R25 #415: the record of the request that failed, found on ``error`` or up its
     ``__cause__``/``__context__`` chain (re-wrapped errors keep it). None: no request failed here."""
-    seen: set[int] = set()
-    while error is not None and id(error) not in seen:
-        seen.add(id(error))
-        record = getattr(error, _RECORD_ATTR, None)
+    for link in _chain(error):
+        record = getattr(link, _RECORD_ATTR, None)
         if isinstance(record, RequestRecord):
             return record
-        error = error.__cause__ or error.__context__
     return None
 
 
@@ -495,27 +507,73 @@ def run_usage_checkpoint() -> dict | None:
     return acc.persisted_usage if acc is not None else None
 
 
+_held_failure: contextvars.ContextVar[BaseException | None] = contextvars.ContextVar("autoclip_held_failure", default=None)
+
+
+@contextmanager
+def failure_in_hand(error: BaseException | None):
+    """R26 #397: a failure caught earlier (e.g. one goal's 503 while a later goal succeeded) stays the
+    error that attribution reads for writes inside this block, so its request record is persisted."""
+    token = _held_failure.set(error)
+    try:
+        yield
+    finally:
+        _held_failure.reset(token)
+
+
 def attribution(error: BaseException | None = None) -> dict[str, Any]:
     """R25 #415: THE attribution rule for snapshots, persistence and Sentry.
 
     1. ``error`` (else the exception being handled in this thread) carries the failed request's record
        -> that record, whole (``attribution_source=request``);
-    2. else the identity this run's phase froze from one connection (``attribution_source=phase``);
-    3. else {}. Never the latest/biggest-seq request, never settings."""
+    2. else, when the error is NOT a model call failure (``is_model_error``) -> the phase identity (if
+       any) with ``attribution_source=local`` and never a request status (R26 #390/#392);
+    3. else (model error, or no error) the identity this run's phase froze (``attribution_source=phase``);
+    4. else {}. Never the latest/biggest-seq request, never settings."""
     if error is None:
-        error = sys.exception()
+        error = sys.exc_info()[1] or _held_failure.get()  # R26 #402: 3.10; #397: a failure held past its except
     record = record_of(error)
     if record is not None:
         out = record.attribution()
         return {**out, "attribution_source": ATTRIBUTION_SOURCE_REQUEST} if out else {}
+    # R26 #390/#392: a failure that never reached a provider (store lock timeout, ffmpeg, local render,
+    # a text step failing before its request on a mixed-goals visual route) is ``local``: the phase
+    # identity still says what the attempt ran on, but no request status and no provider blame.
+    local = error is not None and not is_model_error(error)
     acc = _run_acc.get()
-    if acc is None:
-        return {}
-    with acc.lock:
-        phase = dict(acc.phase_identity)
+    phase: dict[str, Any] = {}
+    if acc is not None:
+        with acc.lock:
+            phase = dict(acc.phase_identity)
+    if local:
+        return {**phase, "attribution_source": ATTRIBUTION_SOURCE_LOCAL}
     if not phase:
         return {}
     return {**phase, "attribution_source": ATTRIBUTION_SOURCE_PHASE}
+
+
+# Codes a failed model call carries (PipelineFailure / VisionRequestError). Local codes are absent.
+MODEL_ERROR_CODES = frozenset({"timeout", "connection", "authentication", "rate_limited", "provider_error",
+                               "invalid_response", "output_truncated", "refused", "llm_auth_invalid"})
+
+
+def is_model_error(error: BaseException | None) -> bool:
+    """R26 #392: True only when the error (or its __cause__/__context__ chain) is a model call failure.
+    The outermost decisive link wins (a provider error wrapping its socket OSError stays a model error)."""
+    import subprocess
+    from backend.core.file_lock import LockTimeout
+    try:
+        from openai import APIError
+    except ImportError:  # pragma: no cover
+        APIError = ()
+    for error in _chain(error):
+        if isinstance(error, (LockTimeout, subprocess.TimeoutExpired, subprocess.CalledProcessError)):
+            return False
+        if APIError and isinstance(error, APIError):
+            return True
+        if type(error).__name__ in ("PipelineFailure", "VisionRequestError"):
+            return getattr(error, "code", "") in MODEL_ERROR_CODES
+    return False
 
 
 def run_snapshot(project_id: str | None = None, *, error: BaseException | None = None,
@@ -566,6 +624,8 @@ def run_snapshot(project_id: str | None = None, *, error: BaseException | None =
     if not (out.get("provider") and out.get("config_source")):
         for key in ("provider", "config_source", "model", "base_url_host"):
             out.pop(key, None)  # R25 #415: a pair or nothing
+        if with_source and found.get("attribution_source") == ATTRIBUTION_SOURCE_LOCAL:
+            out["attribution_source"] = ATTRIBUTION_SOURCE_LOCAL  # R26 #392: nobody upstream is blamed
     elif with_source and found.get("attribution_source"):
         out["attribution_source"] = found["attribution_source"]
     return {key: value for key, value in out.items()
@@ -605,8 +665,10 @@ def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, 
     """Allowlisted string tags only. R25 #415: read the failed request's record whole; the exception's
     own status is never pasted onto another request's identity."""
     tags: dict[str, str] = {}
-    snapshot = run_snapshot(error=error)
+    snapshot = run_snapshot(error=error, with_source=True)
     stage = normalize_failure_stage(snapshot.get("failure_stage") or phase)
+    if snapshot.get("attribution_source") in ATTRIBUTION_SOURCES:
+        tags["attribution_source"] = snapshot["attribution_source"]  # R26 #392
     if stage:
         tags["failure_stage"] = stage
     for key in ("provider", "upstream_error_type", "base_url_host", "model"):
