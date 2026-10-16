@@ -8,7 +8,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from backend.core import llm_usage
-from backend.services.studio import audio, intelligence, store
+from backend.services.studio import attempts, audio, intelligence, store
 from backend.services.studio.features import flag_enabled, resolve_features
 from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.project_completion import sync_project_completion
@@ -1449,8 +1449,35 @@ def _produce_on_demand(project_id, variant_id):
             logger.exception('Could not record the on-demand failure')
 
 
-def retry_variant(project_id, variant_id):
+def _retry_parent(data, parent_attempt_id):
+    """The retry command's checks (one place): parent is a failed/partial v4 attempt with no newer attempt;
+    without an explicit parent the latest settled attempt is used when it failed/partial."""
+    if not parent_attempt_id:
+        settled = [a for a in attempts.receipts(data) if a.get('state') in attempts.TERMINAL]
+        latest = max(settled, key=lambda a: a.get('sequence', 0), default=None)
+        parent_attempt_id = latest['attempt_id'] if latest and latest['state'] in attempts.RETRYABLE_PARENT else None
+    if attempts.current(data):
+        raise attempts.RetryRejected('上一次重试还没结束，请稍后再试')
+    return attempts.check_parent(data, parent_attempt_id)
+
+
+def _variant_attempt(data, retry):
+    """「重试这条」 is a new aggregate generation attempt; a second one while it is open joins it (serial)."""
+    open_now = attempts.current(data)
+    if open_now and open_now['kind'] == 'generation' and open_now.get('trigger') == 'variant_retry':
+        receipt = open_now
+    else:
+        parent = _retry_parent(data, (retry or {}).get('parent_attempt_id'))
+        receipt = attempts.open_attempt(data, 'generation', trigger='variant_retry', parent=parent,
+                                        run_id=uuid.uuid4().hex, key=(retry or {}).get('key'), now=store.now())
+    data['generation']['attempt_id'] = receipt['attempt_id']
+    return receipt
+
+
+def retry_variant(project_id, variant_id, retry=None):
     state = store.read(project_id)
+    if retry is not None and attempts.by_key(state, retry.get('key')):
+        return next(item for item in state['output_variants'] if item['id'] == variant_id)
     variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
     if not variant:
         raise FileNotFoundError('成片版本不存在')
@@ -1464,6 +1491,8 @@ def retry_variant(project_id, variant_id):
             item = next(value for value in data['output_variants'] if value['id'] == variant_id)
             if item.get('status') != 'failed':
                 raise ValueError('只有失败的成片版本可以重试')
+            receipt = _variant_attempt(data, retry)
+            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
             return _start_preparing(data, item)
         attempt_id = store.change(project_id, prepare)
         _submit_on_demand(project_id, variant_id, attempt_id)
@@ -1479,7 +1508,8 @@ def retry_variant(project_id, variant_id):
         item.pop('error', None)
         item.pop('error_code', None)
         data['generation'].update(status='rendering')
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        receipt = _variant_attempt(data, retry)
+        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
     _dispatch_pending_variants(project_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
@@ -1513,14 +1543,21 @@ def _finish_generation(data):
     store.settle_generation(data)
 
 
-def inspect_project(project_id, options, url=None, browser=None, *, producer=None, features=None):
-    """Only ingest and screen. Expensive production requires an explicit confirmation."""
+def inspect_project(project_id, options, url=None, browser=None, *, producer=None, features=None, retry=None):
+    """Only ingest and screen. Expensive production requires an explicit confirmation.
+
+    ``retry`` ({'parent_attempt_id', 'key'}) is set only by the retry command (``retry_analysis``)."""
     from backend.services.studio import readiness
     readiness.ensure_analysis_usable()
     # Reserve and dispatch together so another request cannot observe an
     # accepted task before submission succeeds. Preserve existing exports/plan.
     with store.lock:
         previous = store.read(project_id)
+        if retry is not None:
+            again = attempts.by_key(previous, retry.get('key'))
+            if again:  # the same click again: same receipt, nothing dispatched twice
+                return again.get('run_id')
+            parent = _retry_parent(previous, retry.get('parent_attempt_id'))
         if (previous.get('analysis') or {}).get('status') == 'running':
             raise ValueError('当前任务正在运行，请稍后再试')
         state = deepcopy(previous)
@@ -1543,6 +1580,15 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
         }
         state.setdefault('output_variants', [])
         state['analysis'] = {'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        # #419: automatic output is one generation attempt from this run; a manual retry opens the production
+        # attempt now (bound at confirmation) so its retry_of survives the screening step.
+        if options.auto_start or retry is not None:
+            receipt = attempts.open_attempt(
+                state, 'generation' if options.auto_start else 'production', trigger='retry' if retry is not None else 'initial',
+                parent=parent if retry is not None else None, run_id=state['analysis']['run_id'] if options.auto_start else None,
+                key=(retry or {}).get('key'), now=store.now())
+            if options.auto_start:
+                state['generation']['attempt_id'] = receipt['attempt_id']
         store.write(project_id, state)
         try:
             from backend.core.llm_telemetry import emit_asr_readiness_checked
@@ -1561,6 +1607,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
+            previous['attempt_sequence'] = state.get('attempt_sequence')  # sequence never goes back
             store.write(project_id, previous, _recover_previous=False)
             raise ValueError(message) from None
 
@@ -1676,6 +1723,12 @@ def confirm_project(project_id, body):
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
         state['analysis'] = {'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+        # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
+        pending = attempts.current(state)
+        if pending and pending['kind'] == 'production' and not pending.get('run_id'):
+            attempts.bind_run(pending, state['analysis']['run_id'])
+        else:
+            attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
@@ -1685,6 +1738,7 @@ def confirm_project(project_id, body):
             capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
+            previous['attempt_sequence'] = state.get('attempt_sequence')  # sequence never goes back
             store.write(project_id, previous, _recover_previous=False)
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 

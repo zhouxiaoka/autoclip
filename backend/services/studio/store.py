@@ -593,6 +593,8 @@ def write(project_id, data, *, _recover_previous=True):
     previous = read(project_id, recover=_recover_previous) if path.exists() else {}
     _apply_read_receipts(path, data)
     _ensure_failure_identity(data)
+    from backend.services.studio import attempts
+    attempts.reconcile(data, now())  # the one place an attempt receipt settles (same atomic write)
     usage_checkpoint = _attach_run_telemetry(data, project_id, previous)
     analysis = data.get('analysis') or {}
     prior = previous.get('analysis') or {}
