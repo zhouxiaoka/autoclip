@@ -113,17 +113,20 @@ def _designed_outro(width: int, height: int, params: dict) -> Path | None:
         return target
 
 
-def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True) -> bool:
+def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True, report: dict | None = None) -> bool:
     """Append the branded outro atomically. If branding fails, the video is delivered without it:
-    a finished render must never be lost to the end card."""
+    a finished render must never be lost to the end card. ``report['outro_seconds']`` receives the
+    duration of the outro actually used, so the caller can verify body + outro (R13/R14 #33)."""
     partial = destination.with_name(f'{destination.stem}.branding.part.mp4')
     partial.unlink(missing_ok=True)
     if not enabled:
         os.replace(source, destination)
         return False
     try:
-        _append(source, partial, width, height)
+        seconds = _append(source, partial, width, height)
         os.replace(partial, destination)
+        if report is not None:
+            report['outro_seconds'] = seconds
         return True
     except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
         logging.getLogger(__name__).warning('Outro skipped: %s', type(error).__name__)
@@ -143,7 +146,24 @@ def _ffmpeg(cmd: list[str], timeout: float, **kwargs) -> subprocess.CompletedPro
     return project_cancellation.run(cmd, check=True, capture_output=True, timeout=timeout, **kwargs)
 
 
-def _append(source: Path, partial: Path, width: int, height: int) -> None:
+def _media_seconds(path: Path) -> float | None:
+    """Video stream duration of the outro actually concatenated (format duration as fallback)."""
+    raw = _ffmpeg([
+        get_ffprobe_path(), '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration:format=duration',
+        '-of', 'json', str(path),
+    ], timeout=30, text=True).stdout
+    data = json.loads(raw or '{}')
+    for value in [*(s.get('duration') for s in data.get('streams', [])), (data.get('format') or {}).get('duration')]:
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            continue
+        if seconds > 0:
+            return seconds
+    return None
+
+
+def _append(source: Path, partial: Path, width: int, height: int) -> float | None:
     with tempfile.TemporaryDirectory(prefix='ac-outro-') as tmp:
         concat = Path(tmp) / 'concat.txt'
         ffmpeg = get_ffmpeg_path()
@@ -163,6 +183,10 @@ def _append(source: Path, partial: Path, width: int, height: int) -> None:
             ffmpeg, '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-map', '0:a:0?',
             '-c', 'copy', '-movflags', '+faststart', '-y', str(partial),
         ], timeout=120)
+        try:
+            return _media_seconds(outro)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return None
 
 
 def _text_outro(outro: Path, width: int, height: int, params: dict) -> None:

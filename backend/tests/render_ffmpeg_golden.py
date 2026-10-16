@@ -165,7 +165,8 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         argv = [str(part) for part in cmd]
         text = kwargs.get('text') or kwargs.get('universal_newlines')
         if _is_ffprobe(argv):
-            body = json.dumps(PROBE)
+            # R14 #33: the outro-duration probe reports the 1 s outro actually concatenated.
+            body = json.dumps({'format': {'duration': '1.0'}} if 'stream=duration:format=duration' in argv else PROBE)
             stdout = body if text else body.encode()
             return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
         if argv[-3:] == ['-f', 'null', '-']:  # R11/R12 decode validation

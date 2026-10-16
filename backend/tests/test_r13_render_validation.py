@@ -31,7 +31,7 @@ def env(tmp_path, monkeypatch):
     return tmp_path, folder, output
 
 
-def _render(monkeypatch, body, *, seconds, outro_clip=None, decode=None):
+def _render(monkeypatch, body, *, seconds, outro_clip=None, decode=None, appended=None, used_seconds=None):
     """Real ffmpeg for decode validation; render steps copy the prepared body into place."""
     real_run = render.project_cancellation.run
 
@@ -45,9 +45,11 @@ def _render(monkeypatch, body, *, seconds, outro_clip=None, decode=None):
     real_probe = render._probe
     monkeypatch.setattr(render, '_probe', lambda p: {**real_probe(p), 'fps': 30})
     if outro_clip is not None:
-        def append(source, destination, **_k):
+        def append(source, destination, *, report=None, **_k):
             listing = source.with_name('outro-list.txt')
-            listing.write_text(f"file '{source}'\nfile '{outro_clip}'\n")
+            listing.write_text(f"file '{source}'\nfile '{appended or outro_clip}'\n")
+            if report is not None:
+                report['outro_seconds'] = used_seconds if used_seconds is not None else _seconds(outro_clip)
             subprocess.run(['ffmpeg', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing),
                             '-c', 'copy', '-movflags', '+faststart', '-y', str(destination)], check=True, capture_output=True)
             return True
@@ -138,3 +140,46 @@ def test_decode_timeout_recorded_in_isolated_sqlite_auto_start_project(env, monk
         assert project.processing_config['studio_generation_error_code'] == 'timeout'
     assert output.read_bytes() == b'previous saved video'
     engine.dispose()
+
+
+def _concat(listing_dir, parts, out):
+    listing = listing_dir / (out.stem + '-list.txt')
+    listing.write_text(''.join(f"file '{p}'\n" for p in parts))
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing),
+                    '-c', 'copy', '-movflags', '+faststart', '-y', str(out)], check=True, capture_output=True)
+    return out
+
+
+def _seconds(path):
+    return float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(path)],
+                                check=True, capture_output=True, text=True).stdout)
+
+
+def test_r14_body_intact_outro_truncated_with_normal_container_is_rejected(env, monkeypatch):
+    tmp, folder, output = env
+    body = _clip(tmp / 'body.mp4', 3)
+    outro = _clip(tmp / 'outro.mp4', 3)              # the outro actually used: 3 s
+    truncated = _clip(tmp / 'outro-cut.mp4', 1)      # only 1 s of it lands in the output
+    with pytest.raises(ValueError, match='渲染输出'):
+        _render(monkeypatch, body, seconds=3, outro_clip=outro, appended=truncated)
+    assert output.read_bytes() == b'previous saved video'
+
+
+def test_r14_success_is_exactly_body_with_outro_appended(env, monkeypatch):
+    tmp, folder, output = env
+    body = _clip(tmp / 'body.mp4', 3)
+    outro = _clip(tmp / 'outro.mp4', 1)
+    expected = _concat(tmp, [body, outro], tmp / 'expected.mp4')
+    result = _render(monkeypatch, body, seconds=3, outro_clip=outro)
+    assert result['outro_applied'] is True
+    assert output.read_bytes() == expected.read_bytes()
+    assert abs(_seconds(output) - (_seconds(body) + _seconds(outro))) <= 0.1
+
+
+def test_r14_real_append_outro_reports_the_outro_duration_actually_used(tmp_path):
+    body = _clip(tmp_path / 'body.mp4', 2, audio=True)
+    out = tmp_path / 'out.mp4'
+    report = {}
+    assert output_branding.append_outro(body, out, width=320, height=240, report=report) is True
+    assert report['outro_seconds'] > 0
+    assert abs(_seconds(out) - (2 + report['outro_seconds'])) <= 0.5

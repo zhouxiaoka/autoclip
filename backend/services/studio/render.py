@@ -340,7 +340,8 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                 body_seconds = _decoded_video_seconds(partial, body_fps, sum(durations))
                 if body_seconds < sum(durations) - _tolerance(body_fps):
                     raise ValueError('渲染输出无效，请重新导出')
-            outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro)
+            outro_report = {}
+            outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
         if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in ('editorial', 'street'):
@@ -365,6 +366,12 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         if (decoded_seconds < duration - tolerance
                 or decoded_seconds < sum(durations) - tolerance
                 or (outro_applied and body_seconds is not None and decoded_seconds <= body_seconds)):
+            raise ValueError('渲染输出无效，请重新导出')
+        # R14 #33: with the outro, the total must match body + the outro actually used
+        # (|decoded - (body + outro)| <= 0.5 s); container metadata alone can look normal.
+        outro_seconds = outro_report.get('outro_seconds') if outro_applied else None
+        if (outro_applied and body_seconds is not None and outro_seconds
+                and abs(decoded_seconds - (body_seconds + outro_seconds)) > 0.5):
             raise ValueError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)
         os.replace(ready, output)
