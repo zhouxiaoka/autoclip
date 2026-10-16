@@ -1,4 +1,5 @@
-"""R3/R4: manual visual overlong hard-block; AUTO non-parse failures carry tips."""
+"""R3/R4 (R10): overlong sources route to subtitles with a visible tip; only vision-service
+failures are classified as vision unavailable (S5)."""
 import pytest
 
 from backend.services.studio import intelligence, planning
@@ -20,23 +21,17 @@ def _long_probe(monkeypatch, seconds=8000.0):
     })
 
 
-def test_r3_manual_visual_overlong_hard_blocks_auto_start(source, monkeypatch):
+@pytest.mark.parametrize('auto_start', [True, False])
+def test_r3_manual_visual_overlong_routes_to_subtitles_with_tip(source, monkeypatch, auto_start):
+    """>120 min must not hard-block; the explicit visual choice is switched visibly, not silently."""
     configure(monkeypatch, 'unavailable', mode='visual')
     monkeypatch.setattr(intelligence, 'vision_call', lambda *_a, **_k: TALK)
     monkeypatch.setattr(intelligence, 'sample', lambda *_a, **_k: [])
     _long_probe(monkeypatch)
-    with pytest.raises(ValueError, match='画面分析最长支持'):
-        planning.recommend(source, ImportOptions(auto_start=True))
-
-
-def test_r3_manual_visual_overlong_hard_blocks_review(source, monkeypatch):
-    """Review must not silently recommend subtitle for an explicit visual choice."""
-    configure(monkeypatch, 'unavailable', mode='visual')
-    monkeypatch.setattr(intelligence, 'vision_call', lambda *_a, **_k: TALK)
-    monkeypatch.setattr(intelligence, 'sample', lambda *_a, **_k: [])
-    _long_probe(monkeypatch)
-    with pytest.raises(ValueError, match='请改用字幕分析'):
-        planning.recommend(source, ImportOptions(auto_start=False))
+    plan = planning.recommend(source, ImportOptions(auto_start=auto_start))
+    assert plan['recommended_analysis'] == 'subtitle'
+    assert planning.VISUAL_SOURCE_TOO_LONG_MESSAGE in plan['reason']
+    assert '120' in plan['reason']
 
 
 def test_r3_auto_mode_overlong_still_allows_subtitle_route(source, monkeypatch):
@@ -48,7 +43,7 @@ def test_r3_auto_mode_overlong_still_allows_subtitle_route(source, monkeypatch):
     assert plan['recommended_analysis'] == 'subtitle'
 
 
-def test_r4_auto_oserror_falls_back_with_unavailable_tip(source, monkeypatch):
+def test_r4_auto_local_oserror_is_not_vision_unavailable(source, monkeypatch):
     configure(monkeypatch, 'unavailable', mode='auto')
 
     def boom(*_a, **_k):
@@ -58,9 +53,23 @@ def test_r4_auto_oserror_falls_back_with_unavailable_tip(source, monkeypatch):
     monkeypatch.setattr(intelligence, 'sample', lambda *_a, **_k: [])
     plan = planning.recommend(source, ImportOptions(auto_start=True))
     assert plan['recommended_analysis'] == 'subtitle'
+    # S5: a local ffmpeg/OS error is not a vision outage.
+    assert 'degrade_reason' not in plan
+    assert planning.VISION_FALLBACK_MESSAGE not in plan['reason']
+    assert '/secret/path' not in plan['reason']
+
+
+def test_r4_auto_vision_request_error_carries_unavailable_tip(source, monkeypatch):
+    configure(monkeypatch, 'unavailable', mode='auto')
+
+    def down(*_a, **_k):
+        raise intelligence.VisionRequestError('timeout', '视觉模型请求超时')
+
+    monkeypatch.setattr(intelligence, 'vision_call', down)
+    monkeypatch.setattr(intelligence, 'sample', lambda *_a, **_k: [])
+    plan = planning.recommend(source, ImportOptions(auto_start=True))
     assert plan['degrade_reason'] == planning.VISION_FALLBACK_CODE
     assert planning.VISION_FALLBACK_MESSAGE in plan['reason']
-    assert '/secret/path' not in plan['reason']
 
 
 def test_r4_auto_parse_failure_still_uses_invalid_tip(source, monkeypatch):

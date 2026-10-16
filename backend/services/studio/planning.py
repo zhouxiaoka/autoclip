@@ -20,8 +20,7 @@ class Recommendation(BaseModel):
 
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
 VISUAL_SOURCE_TOO_LONG_MESSAGE = (
-    f'画面分析最长支持 {VISUAL_MAX_SOURCE_SEC // 60} 分钟的素材。'
-    '请改用字幕分析，或先裁短素材后再试。'
+    f'画面分析最长支持 {VISUAL_MAX_SOURCE_SEC // 60} 分钟的素材，已改用字幕分析继续制作。'
 )
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
@@ -100,9 +99,9 @@ def recommend(video: Path, options: ImportOptions):
     duration = media_precheck.duration_or_fail(video, info.get('duration'))
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
-    # R3: explicit visual must never silently fall back to subtitles on overlong sources.
-    if consent.analysis_mode == 'visual' and duration > VISUAL_MAX_SOURCE_SEC:
-        raise ValueError(VISUAL_SOURCE_TOO_LONG_MESSAGE)
+    # R3 (R10 #406): overlong sources route to subtitles instead of failing, but an explicit
+    # visual choice is never switched silently: the plan reason carries a visible tip.
+    overlong_visual = consent.analysis_mode == 'visual' and duration > VISUAL_MAX_SOURCE_SEC
     degrade_reason = None
     screening_degrade = False
     invalid_degrade = False
@@ -180,9 +179,10 @@ def recommend(video: Path, options: ImportOptions):
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if consent.analysis_mode == 'auto' and not invalid_degrade:
-                # R4: every AUTO screening failure that falls back to subtitles carries a tip + code
-                # (unavailable for transport/runtime; invalid already set above for parse failures).
+            if (consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError)
+                    and not invalid_degrade):
+                # S5: only a vision-service failure is "vision unavailable"; a local ffmpeg/OS
+                # error is not a vision outage and records no degrade reason (R10 #406).
                 screening_degrade = True
             if options.auto_start or screening_degrade or invalid_degrade:
                 local_evidence, result = _local_recommendation(
@@ -199,6 +199,8 @@ def recommend(video: Path, options: ImportOptions):
     elif invalid_degrade:  # visual mode screening returned an unparseable answer
         degrade_reason = VISION_INVALID_FALLBACK_CODE
         result.reason = (VISION_INVALID_FALLBACK_MESSAGE + result.reason)[:500]
+    if overlong_visual and VISUAL_SOURCE_TOO_LONG_MESSAGE not in result.reason:
+        result.reason = (VISUAL_SOURCE_TOO_LONG_MESSAGE + result.reason)[:500]
     explicit_visual = (consent.analysis_mode == 'visual' and not invalid_degrade and configured and mode in ('ai', 'local')
                        and options.goal == 'auto' and duration <= VISUAL_MAX_SOURCE_SEC)
     if explicit_visual and result.goal == 'content':
