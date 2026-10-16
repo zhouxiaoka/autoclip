@@ -307,7 +307,10 @@ def reconcile(data, now=None):
     if receipt['kind'] == 'generation':
         if generation.get('attempt_id') != receipt['attempt_id'] or generation.get('status') not in TERMINAL:
             return
-        record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS}, **generation}
+        # R27 #376: store.settle_generation counts completed outputs over the whole workspace; the receipt's output
+        # counts come only from the outputs this attempt owns (_owned_summary), so that workspace count is not copied.
+        record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS},
+                  **{k: v for k, v in generation.items() if k != 'completed_variant_count'}}
         settle(receipt, generation['status'], record, now, data.get('plan') if isinstance(data.get('plan'), dict) else None,
                base=_owned_summary(receipt, data))
     elif receipt['kind'] == 'production':

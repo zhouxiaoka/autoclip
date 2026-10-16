@@ -113,3 +113,16 @@ def test_376_real_auto_generate_stamps_the_outputs_it_creates(monkeypatch):
     jobs._auto_generate('p1', {'id': 'plan-a'})
     assert state['output_variants']
     assert {(v['produced_by_attempt'], v.get('produced_by_plan')) for v in state['output_variants']} == {('t-gen', 'plan-a')}
+
+
+def test_376_a_rerun_counts_only_its_own_outputs_next_to_the_previous_ones(monkeypatch):
+    pid = flow.new_project()
+    _plan_a, first = _plan_a_partial(pid, monkeypatch)
+    _screen_and_plan(pid, monkeypatch, PLAN_B, retry={'key': 'r1', 'parent_attempt_id': first['attempt_id']})
+    flow.render_outcome(pid, {'new': ('completed', None, None)})
+    assert len(store.read(pid)['output_variants']) == 3              # plan A's two outputs are still there
+    second = flow.receipts(pid)[1]
+    # counts only: the generation outcome itself is still judged over the workspace by store.settle_generation
+    # (plan A's failed output makes this 'partial') - reported to Dong as a separate finding, not changed here.
+    assert (second['summary']['variant_count'], second['summary']['completed_variant_count'],
+            second['summary']['failed_variant_count']) == (1, 1, 0)
