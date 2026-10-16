@@ -1,7 +1,7 @@
 // R23 #211 / #232: render the real PlanSummary (real React + happy-dom, real importReadiness, real errorText,
 // real TranscriptionGatePrompt). A coded gate 422 on confirm must open the install prompt chosen by code,
 // and the waiting states (installing / model downloading) must show the wait prompt, never "install".
-const { test } = require('node:test')
+const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -9,19 +9,32 @@ const vm = require('node:vm')
 const ts = require('typescript')
 const { Window } = require('happy-dom')
 
-const window = new Window({ url: 'http://localhost/' })
-globalThis.window = window
-globalThis.document = window.document
-globalThis.navigator = window.navigator
-globalThis.HTMLElement = window.HTMLElement
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const React = require('react')
-const { createRoot } = require('react-dom/client')
 const { act } = React
+// DOM is created per file in before(), never at module load (a top-level new Window() leaks into other files).
+let window, createRoot
+function setupDom() {
+  if (window) return
+  window = new Window({ url: 'http://localhost/' })
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.navigator = window.navigator
+  globalThis.HTMLElement = window.HTMLElement
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  ;({ createRoot } = require('react-dom/client'))
+  window.addEventListener('error', e => swallowed.push(e.error || e.message))
+}
+function teardownDom() {
+  if (!window) return
+  window.happyDOM.abort?.(); window.close()
+  for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']) delete globalThis[key]
+  window = undefined
+}
+before(setupDom)
+after(teardownDom)
 
 // happy-dom swallows listener exceptions (#234); collect them so a crash in a click handler fails the test here.
 const swallowed = []
-window.addEventListener('error', e => swallowed.push(e.error || e.message))
 
 const dir = path.resolve(__dirname, '../src/features/studio')
 function load(file, mocks) {
@@ -70,7 +83,7 @@ async function mount(confirmPlan, poll = {}) {
 }
 const dialog = host => host.querySelector('[role=alertdialog]')
 
-test('R24 #281: 一键安装 on the confirm page carries a clean setup through runtime -> model download, then one click confirms again', async () => {
+test('R24 #281: 一键安装 on the confirm page carries a clean setup through runtime -> model download, then confirms again by itself', async () => {
   swallowed.length = 0
   const tc = (code, extra = {}) => ({ analysis_mode: 'subtitle', ready: false, checks: { transcription: { ok: false, code, repair: 'none', ...extra } } })
   const reports = [tc('whisper_installing'), tc('whisper_model_missing', { model: 'base' }), tc('whisper_model_downloading', { model: 'base' }), { analysis_mode: 'subtitle', ready: true, checks: { transcription: { ok: true, code: 'whisper_installed', repair: 'none' } } }]
@@ -89,10 +102,8 @@ test('R24 #281: 一键安装 on the confirm page carries a clean setup through r
   assert.deepEqual(view.installs, ['runtime', 'base'], 'runtime done, model missing -> the model download starts by itself')
   await until(() => /下载转写模型/.test(view.host.textContent))
   assert.match(view.host.textContent, /正在下载转写模型/)
-  await until(() => !!view.button('继续导入'))
-  await act(async () => { view.button('继续导入').click() })
-  await act(async () => {})
-  assert.equal(confirms, 2, 'continue confirms the same plan again')
+  await until(() => confirms === 2)
+  assert.equal(confirms, 2, 'download done -> the same plan is confirmed again by itself, no click (#232)')
   assert.equal(dialog(view.host), null)
   assert.deepEqual(swallowed, [])
   view.unmount()

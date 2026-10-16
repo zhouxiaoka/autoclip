@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRecoveryController, type ControllerOptions, type RecoveryApi, type RecoveryController, type RecoveryState } from './transcriptionRecovery'
 
-/** React binding of the one recovery controller: state + a poll loop while installing / downloading. */
+/** React binding of the one recovery controller: state + a poll loop while installing / downloading.
+ * `onReady` is read through a ref, so the page's latest continue callback runs when a wait finishes. */
 export function useTranscriptionRecovery(api: RecoveryApi, options: ControllerOptions & { pollMs?: number } = {}): [RecoveryState, RecoveryController] {
   const ref = useRef<RecoveryController | null>(null)
-  if (!ref.current) ref.current = createRecoveryController(api, options)
+  const onReady = useRef(options.onReady)
+  onReady.current = options.onReady
+  if (!ref.current) ref.current = createRecoveryController(api, { ...options, onReady: () => onReady.current?.() })
   const controller = ref.current
   const [state, setState] = useState<RecoveryState>(controller.state)
   useEffect(() => controller.subscribe(setState), [controller])

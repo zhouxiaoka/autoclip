@@ -192,9 +192,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (destination) navigate(destination)
   }
   // #418 rewrite: the one install-recovery controller (shared with the confirm page): install -> download ->
-  // ready (one-click continue) / failed / timeout (retry or transcription settings).
-  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) })
+  // ready (continues by itself) / failed / timeout (retry or transcription settings).
+  // Done waiting -> the same import continues by itself (#232); the 继续导入 button is the manual exit.
   const continueAfterRecovery = () => { recover.close(); setError(''); void submitRef.current?.('button') }
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: () => continueAfterRecovery() })
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
     if (remembered) writeRememberedPlatforms(next)

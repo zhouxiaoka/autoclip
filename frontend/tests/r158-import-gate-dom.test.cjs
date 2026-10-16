@@ -1,6 +1,6 @@
 // R20 #166 #167: render the real CreativeImport (real React + happy-dom, real importReadiness, real errorText,
 // real TranscriptionGatePrompt) and assert what the user sees, not the arguments passed to setError.
-const { test } = require('node:test')
+const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -8,15 +8,28 @@ const vm = require('node:vm')
 const ts = require('typescript')
 const { Window } = require('happy-dom')
 
-const window = new Window({ url: 'http://localhost/' })
-globalThis.window = window
-globalThis.document = window.document
-globalThis.navigator = window.navigator
-globalThis.HTMLElement = window.HTMLElement
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const React = require('react')
-const { createRoot } = require('react-dom/client')
 const { act } = React
+// DOM is created per file in before(), never at module load (a top-level new Window() leaks into other files).
+let window, createRoot
+function setupDom() {
+  if (window) return
+  window = new Window({ url: 'http://localhost/' })
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.navigator = window.navigator
+  globalThis.HTMLElement = window.HTMLElement
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  ;({ createRoot } = require('react-dom/client'))
+}
+function teardownDom() {
+  if (!window) return
+  window.happyDOM.abort?.(); window.close()
+  for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']) delete globalThis[key]
+  window = undefined
+}
+before(setupDom)
+after(teardownDom)
 
 const dir = path.resolve(__dirname, '../src/features/studio')
 function load(file, mocks, clock) {
@@ -116,7 +129,8 @@ test('R20 #166: while submit re-probes readiness the form is locked and nothing 
 
 for (const [code, label] of [['whisper_not_installed', '需要先安装本地转写'], ['whisper_installing', '等待安装完成']]) {
   test(`R20 #167: a coded 422 (${code}) renders the ${label} dialog in the page`, async () => {
-    const view = await render({ readiness: async () => READY, importImpl: async () => { throw axios422({ code, message: 'whatever the backend says' }) } })
+    // The backend still reports the refused state on the next poll (a ready poll would continue by itself, #232).
+    const view = await render({ readiness: thenReport(() => check(code)), importImpl: async () => { throw axios422({ code, message: 'whatever the backend says' }) } })
     await typeUrl(view.host, 'https://youtube.com/watch?v=one')
     assert.equal(view.host.querySelector('[role=alertdialog]'), null)
     await act(async () => { startButton(view.host).click() })
@@ -252,7 +266,7 @@ async function openWaiting(view) {
   return dialog
 }
 
-test('R24 #232: the model download dialog shows live progress, then one click continues the same import', async () => {
+test('#232: the model download dialog shows live progress, then continues the same import by itself when done', async () => {
   const clock = fakeClock()
   let report = check('whisper_model_downloading', { model: 'small' })
   let percent = 35
@@ -270,11 +284,8 @@ test('R24 #232: the model download dialog shows live progress, then one click co
   assert.equal(view.host.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '80')
   assert.equal(button(view.host, '继续导入'), undefined, 'no continue while still downloading')
   report = READY
-  await clock.advance(2000)
-  const go = button(view.host, '继续导入')
-  assert.ok(go, 'ready -> one-click continue')
-  await act(async () => { go.click() }); await act(async () => {}); await act(async () => {})
-  assert.equal(imports.length, 2, 'continue re-sends the import')
+  await clock.advance(2000); await act(async () => {}); await act(async () => {})
+  assert.equal(imports.length, 2, 'download done -> the same import is re-sent by itself, no click (#232)')
   assert.equal(imports[1].get('url'), 'https://youtube.com/watch?v=one')
   assert.equal(view.host.querySelector('[role=alertdialog]'), null)
   act(() => view.root.unmount())

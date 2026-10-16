@@ -1,6 +1,6 @@
 // #418 rewrite: the one install-recovery controller (transcriptionRecovery.ts) and its one view
 // (TranscriptionGatePrompt). Install, download, done, failed and timeout are distinct phases; every phase has an exit.
-const { test } = require('node:test')
+const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -8,14 +8,27 @@ const { Window } = require('happy-dom')
 const React = require('react')
 const { loadTs } = require('./load-ts.cjs')
 
-const window = new Window({ url: 'http://localhost/' })
-globalThis.window = window
-globalThis.document = window.document
-globalThis.navigator = window.navigator
-globalThis.HTMLElement = window.HTMLElement
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
-const { createRoot } = require('react-dom/client')
 const { act } = require('react')
+// DOM is created per file in before(), never at module load (a top-level new Window() leaks into other files).
+let window, createRoot
+function setupDom() {
+  if (window) return
+  window = new Window({ url: 'http://localhost/' })
+  globalThis.window = window
+  globalThis.document = window.document
+  globalThis.navigator = window.navigator
+  globalThis.HTMLElement = window.HTMLElement
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  ;({ createRoot } = require('react-dom/client'))
+}
+function teardownDom() {
+  if (!window) return
+  window.happyDOM.abort?.(); window.close()
+  for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']) delete globalThis[key]
+  window = undefined
+}
+before(setupDom)
+after(teardownDom)
 
 const dir = path.resolve(__dirname, '../src/features/studio')
 const recovery = loadTs(path.join(dir, 'transcriptionRecovery.ts'), {}, dir)
@@ -100,6 +113,21 @@ test('waiting codes never open as "not installed"; source codes never open recov
   assert.equal(recovery.phaseOfCode('whisper_model_downloading'), 'downloading')
   assert.equal(recovery.phaseOfCode('whisper_install_failed'), 'failed')
   for (const code of ['source_unreadable', 'source_too_short', 'source_no_audio', 'cloud_not_configured', undefined]) assert.equal(recovery.isRecoveryCode(code), false)
+})
+
+test('#232: a wait that reaches ready continues by itself exactly once; failed / timeout / open(ready) never do', async () => {
+  let report = check('whisper_model_downloading', { model: 'base' })
+  let readyCalls = 0
+  const api = fakeApi({ report: () => report, models: () => [{ name: 'base', status: 'downloading', downloadProgress: 10 }] })
+  const c = recovery.createRecoveryController(api, { onReady: () => readyCalls++ })
+  c.open('whisper_model_downloading', 'base')
+  await c.poll(); assert.equal(readyCalls, 0)
+  report = check('ok')
+  await c.poll(); assert.equal(c.state.phase, 'ready'); assert.equal(readyCalls, 1)
+  await c.poll(); assert.equal(readyCalls, 1, 'once')
+  const failing = recovery.createRecoveryController(fakeApi({ report: () => check('whisper_installing'), runtime: () => ({ status: 'error' }) }), { onReady: () => readyCalls++ })
+  failing.open('whisper_installing'); await failing.poll()
+  assert.equal(failing.state.phase, 'failed'); assert.equal(readyCalls, 1)
 })
 
 function render(props) {

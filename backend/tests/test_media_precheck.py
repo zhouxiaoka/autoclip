@@ -78,17 +78,22 @@ def test_minimum_sentence_matches_the_short_profile():
     assert not media_precheck.too_short(None) and not media_precheck.too_short(0)
 
 
-def test_subtitle_route_failure_codes(tmp_path):
-    short = _video(tmp_path / 'short.mp4', 3)
-    silent = _video(tmp_path / 'silent.mp4', 21, audio=False)
-    failure = media_precheck.subtitle_route_failure(short, srt_available=True)
+def test_one_source_classification_codes(tmp_path):
+    """#418: the only media precheck is preflight.classify_source (the old subtitle_route_failure is gone)."""
+    from backend.services.studio import preflight
+    short = preflight.probe_material(_video(tmp_path / 'short.mp4', 3))
+    silent = preflight.probe_material(_video(tmp_path / 'silent.mp4', 21, audio=False))
+    failure = preflight.classify_source(short, srt_available=True, subtitle_route=True)
     assert failure.code == 'source_too_short' and failure.stage == 'INGEST'
     assert str(failure) == media_precheck.TOO_SHORT_MESSAGE and failure.hint == ''
-    failure = media_precheck.subtitle_route_failure(silent, srt_available=False)
+    failure = preflight.classify_source(silent, srt_available=False, subtitle_route=True)
     assert failure.code == 'source_no_audio' and str(failure) == media_precheck.NO_AUDIO_MESSAGE
-    # An attached SRT replaces transcription: no audio is fine then.
-    assert media_precheck.subtitle_route_failure(silent, srt_available=True) is None
-    assert media_precheck.subtitle_route_failure(tmp_path / 'missing.mp4', srt_available=False) is None
+    # An attached SRT replaces transcription: no audio is fine then; the visual route ignores both.
+    assert preflight.classify_source(silent, srt_available=True, subtitle_route=True) is None
+    assert preflight.classify_source(short, srt_available=False, subtitle_route=False) is None
+    assert preflight.classify_source(preflight.probe_material(tmp_path / 'missing.mp4'), srt_available=True,
+                                     subtitle_route=False).code == 'source_unreadable'
+    assert not hasattr(media_precheck, 'subtitle_route_failure')
 
 
 # ---------------------------------------------------------- screening ---

@@ -28,7 +28,7 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   // #418 rewrite: a coded gate 422 on confirm opens the same recovery controller as the import page (by code, never text).
-  const [recovery,recover]=useTranscriptionRecovery({readiness:()=>studioApi.readiness(),getRuntimeStatus:()=>speechApi.getRuntimeStatus(),getModels:()=>speechApi.getModels(),installRuntime:()=>speechApi.installRuntime(),downloadModel:model=>speechApi.downloadModel(model)})
+  const [recovery,recover]=useTranscriptionRecovery({readiness:()=>studioApi.readiness(),getRuntimeStatus:()=>speechApi.getRuntimeStatus(),getModels:()=>speechApi.getModels(),installRuntime:()=>speechApi.installRuntime(),downloadModel:model=>speechApi.downloadModel(model)},{onReady:()=>{recover.close();void start()}})
   const navigate=useNavigate()
   const running=status==='running'
   const awaiting=status==='awaiting_confirmation'

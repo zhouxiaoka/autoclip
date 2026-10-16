@@ -2,8 +2,9 @@
  *
  * Install, download, done, failed and timeout are distinct phases. The controller is opened from a coded backend
  * refusal (or a readiness check), drives runtime install -> model download itself, and ends in exactly one of:
- * `ready` (one-click continue), `failed` or `timeout` (retry, or open transcription settings). It never switches
- * provider and never continues on its own without the page's continue callback.
+ * `ready`, `failed` or `timeout` (retry, or open transcription settings). When a wait it was polling reaches `ready`
+ * it calls `onReady` once, so the page continues the same import / confirmation by itself (#232); the continue button
+ * stays as the exit for a `ready` that was not reached by waiting. It never switches provider.
  * Polls read enums and numbers only (no model paths, no user content). */
 import type { ReadinessCheck, ImportReadiness } from './importReadiness'
 
@@ -34,7 +35,7 @@ export function phaseOfCode(code: string | null | undefined): RecoveryPhase {
 
 const clamp = (value: unknown) => typeof value === 'number' && isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : null
 
-export interface ControllerOptions { stallMs?: number; now?: () => number }
+export interface ControllerOptions { stallMs?: number; now?: () => number; onReady?: () => void }
 export const STALL_MS = 10 * 60 * 1000
 
 export function createRecoveryController(api: RecoveryApi, options: ControllerOptions = {}) {
@@ -104,7 +105,9 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
         set({ ...next, phase: 'timeout' })
         return state
       }
+      const waited = state.phase === 'installing' || state.phase === 'downloading'
       set(next)
+      if (waited && next.phase === 'ready' && options.onReady) options.onReady()  // #232: continue by itself
       return state
     },
   }

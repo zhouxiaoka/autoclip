@@ -111,23 +111,6 @@ def silent_visual_failure(video, srt_available: bool) -> Optional[PipelineFailur
     return no_audio_failure("ANALYZE", after_visual=True)
 
 
-def subtitle_route_failure(video, *, srt_available: bool, duration: Optional[float] = None,
-                           audio: Optional[bool] = None, stage: str = "INGEST") -> Optional[PipelineFailure]:
-    """The reason the subtitle route cannot work for this source, or None.
-
-    Pass `duration` / `audio` when the caller already probed; otherwise one ffprobe call fills them in.
-    """
-    if duration is None or (audio is None and not srt_available):
-        info = probe(Path(video))
-        duration = duration if duration is not None else info["duration"]
-        audio = audio if audio is not None else info["audio"]
-    if too_short(duration):
-        return too_short_failure(stage)
-    if not srt_available and audio is False:
-        return no_audio_failure(stage)
-    return None
-
-
 def is_no_audio_text(text: str) -> bool:
     return (text or "").startswith("这个视频没有声音")
 
