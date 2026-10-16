@@ -4,9 +4,10 @@ Events come from the real frontend tracker + studio api (node helper). The SQL i
 docs/analytics/success_rate.sql (one copy, no fixture, no keyword fallback). ClickHouse -> DuckDB via sqlglot,
 with toString/toDateTime/toDate/multiIf shims only (no logic rewritten).
 
-Dependency: the v4 file arrives with #416. Until #416 is merged into this branch's base, the repo still holds the
-exact pre-#416 file (git blob PRE_416_BLOB) and these tests skip with that reason; any other content without the
-v4 figures fails loudly.
+Transition until #416 merges (CI forbids skips, so the test must run now): while the repo still holds the exact
+pre-#416 file (git blob PRE_416_BLOB), the SQL comes from tests/fixtures/success_rate_v4_416.sql, a verbatim copy of
+#416's file. No keyword fallback: once the repo file is anything else, the copy must be byte-identical to it or CI
+fails - and the rebase onto #416 deletes the copy and this branch (then only the repo file is read).
 """
 import json
 import shutil
@@ -29,6 +30,7 @@ else:
 ROOT = Path(__file__).resolve().parents[2]
 SQL = ROOT / 'docs' / 'analytics' / 'success_rate.sql'
 PRE_416_BLOB = '3edd5fbdc1a3d25597846932bb6d1c0984bd33a1'  # git blob of the file before #416 (v3, no retry chain)
+COPY_416 = Path(__file__).parent / 'fixtures' / 'success_rate_v4_416.sql'  # transitional; delete on rebase onto #416
 FIELDS = ['attempt_id', 'flow_id', 'outcome', 'error_code', 'upstream_error_type', 'failure_stage', 'app_version',
           'retry_of', 'analytics_environment', 'runtime']
 
@@ -40,8 +42,11 @@ def _blob(data: bytes) -> str:
 
 def _figure(n):
     data = SQL.read_bytes()
-    if _blob(data) == PRE_416_BLOB:
-        pytest.skip('needs #416 (v4 docs/analytics/success_rate.sql); base still has the pre-#416 file')
+    if COPY_416.exists():
+        if _blob(data) == PRE_416_BLOB:
+            data = COPY_416.read_bytes()
+        else:
+            assert data == COPY_416.read_bytes(), 'success_rate.sql changed: delete tests/fixtures/success_rate_v4_416.sql (rebase onto #416)'
     text = data.decode('utf-8')
     assert f'-- 图 {n}' in text, f'success_rate.sql has no figure {n}'
     q = text.split(f'-- 图 {n}')[1]
