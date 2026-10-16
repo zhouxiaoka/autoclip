@@ -1898,6 +1898,7 @@
   "自动": "Auto",
   "hf-mirror 镜像": "hf-mirror (miroir)",
   "保存失败，请重试": "Échec de l'enregistrement. Réessayez.",
+  "连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。": "Impossible de joindre le service de modèles local. Démarrez Ollama (ou LM Studio), vérifiez l'adresse et le port, puis cliquez à nouveau sur Tester.",
   "语言 · 视觉": "Langage · Vision",
   "连接": "Connexion",
   "可用模型": "Modèles disponibles",
