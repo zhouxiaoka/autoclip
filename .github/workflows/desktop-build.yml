@@ -274,6 +274,22 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sig
           retention-days: 30
 
+      # E9: per-run exe sha256 so the Windows acceptance machine can verify what it installs,
+      # on every Windows build (the full internal-desktop-provenance needs macOS + dispatch).
+      - name: Record Windows installer sha256
+        shell: bash
+        run: |
+          python3 scripts/winqa/exe_provenance.py src-tauri/target/release/bundle/nsis \
+            windows-exe-provenance.json --run-id "$GITHUB_RUN_ID" --commit "$GITHUB_SHA"
+
+      - name: Upload Windows installer provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-desktop-provenance-windows-x64
+          path: windows-exe-provenance.json
+          if-no-files-found: error
+          retention-days: 30
+
   # 没有 Windows 真机时的替代冒烟：在干净的 windows-latest 上装上一个正式版，
   # 模拟旧版后端残留锁住 _asyncio.pyd，再静默覆盖安装本次构建，然后用安装目录里的 Python
   # 跑后端 / ffmpeg / 来源守卫。界面和真实链接下载仍需人工或用户验证，见 RELEASE_CHECKLIST.md。
