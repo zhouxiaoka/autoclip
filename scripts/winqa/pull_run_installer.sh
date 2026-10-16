@@ -52,8 +52,10 @@ def walk(o):
         if n.endswith("-setup.exe"):
             raw.append(o.get("sha256", o.get("hash")))
         for k, v in o.items():
-            if k.endswith("-setup.exe") and not isinstance(v, (dict, list)):
-                raw.append(v)
+            # R18 #87: a setup.exe key whose value is {}, [] or {"sha256": null} is an entry too;
+            # it must yield a valid hash or the whole provenance is rejected.
+            if k.endswith("-setup.exe"):
+                raw.append(v.get("sha256", v.get("hash")) if isinstance(v, dict) else v)
             walk(v)
     elif isinstance(o, list):
         for x in o: walk(x)

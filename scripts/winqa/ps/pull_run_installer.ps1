@@ -2,7 +2,10 @@ param([string]$Run,[int64]$Total,[int]$N=16,[string]$WantZip='',[string]$WantExe
 # Exit codes: 4 missing/invalid digest; 6 download (HTTP/curl) failure; 7 hash mismatch; 1 any other error.
 # R16 #51: report on stderr and exit with the code; the Write-Err*r cmdlet under 'Stop' would abort before exit.
 function Fail([int]$Code, [string]$Message) {
-  $clean = $Message -replace '(?i)[a-z]:\\Users\\[^\\\s]+', 'C:\Users\<user>' -replace '(/Users|/home)/[^/\s]+', '$1/<user>' -replace 'https?://\S+', '<url>'
+  # R18 #86: same rules as redact.py (WIN_PATTERN / POSIX_PATTERN, copied verbatim; a test keeps them in sync).
+  $WinPattern = '(?im)\b([a-z]:)((?:\\\\|\\(?!u[0-9a-fA-F]{4})|/)+)users((?:\\\\|\\(?!u[0-9a-fA-F]{4})|/)+)(?!<user>)(?:(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+(?: +(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)*(?=\\|/|["\'':]|$)|(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)'
+  $PosixPattern = '(?m)(?<![\w.-])/(Users|home)/(?!<user>)(?:(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+(?: +(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)*(?=\\|/|["\'':]|$)|(?:\\u[0-9a-fA-F]{4}|[^\\/\s"\''<>|:*?])+)'
+  $clean = $Message -replace $WinPattern, '$1$2Users$3<user>' -replace $PosixPattern, '/$1/<user>' -replace 'https?://\S+', '<url>'
   [Console]::Error.WriteLine($clean); exit $Code
 }
 trap { Fail 1 ("unexpected error: " + $_.Exception.Message) }

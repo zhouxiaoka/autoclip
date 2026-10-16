@@ -90,7 +90,8 @@ def test_no_artifact_exits_2(tmp_path, bash):
 
 @pytestmark_bash
 @pytest.mark.parametrize('bash', BASHES)
-@pytest.mark.parametrize('case', ['download_fails', 'no_json', 'garbage_hash', 'no_hash', 'two_hashes', 'not_json', 'valid_plus_null', 'valid_plus_number', 'only_null'])
+@pytest.mark.parametrize('case', ['download_fails', 'no_json', 'garbage_hash', 'no_hash', 'two_hashes', 'not_json', 'valid_plus_null', 'valid_plus_number', 'only_null',
+                                  'valid_plus_empty_dict', 'valid_plus_empty_list', 'valid_plus_null_sha_dict', 'named_empty_dict_sha'])
 def test_listed_provenance_that_cannot_be_used_aborts_with_5(tmp_path, bash, case):
     prov_download, prov_json = {
         'download_fails': ('fail', None), 'no_json': ('empty', None),
@@ -101,6 +102,11 @@ def test_listed_provenance_that_cannot_be_used_aborts_with_5(tmp_path, bash, cas
         'valid_plus_null': ('ok', {'assets': [{'name': 'a-setup.exe', 'sha256': EXE_SHA}, {'name': 'b-setup.exe', 'sha256': None}]}),
         'valid_plus_number': ('ok', {'assets': {'a-setup.exe': EXE_SHA, 'b-setup.exe': 12345}}),
         'only_null': ('ok', {'assets': [{'name': 'a-setup.exe', 'sha256': None}]}),
+        # R18 #87: unusable entry values next to one valid hash must not pass.
+        'valid_plus_empty_dict': ('ok', {'assets': {'a-setup.exe': EXE_SHA, 'b-setup.exe': {}}}),
+        'valid_plus_empty_list': ('ok', {'assets': {'a-setup.exe': EXE_SHA, 'b-setup.exe': []}}),
+        'valid_plus_null_sha_dict': ('ok', {'assets': {'a-setup.exe': EXE_SHA, 'b-setup.exe': {'sha256': None}}}),
+        'named_empty_dict_sha': ('ok', {'assets': [{'name': 'a-setup.exe', 'sha256': EXE_SHA}, {'name': 'b-setup.exe', 'sha256': {}}]}),
     }[case]
     done, calls = _run(tmp_path, bash, artifacts=('autoclip-desktop-windows-x64', 'internal-desktop-provenance-windows-x64'),
                        prov_download=prov_download, prov_json=prov_json)
@@ -154,7 +160,7 @@ def _zip_with_exe(payload=b'installer'):
     return buf.getvalue()
 
 
-def _ps(tmp_path, *, want_zip, want_exe='', curl_mode='ok', data=b''):
+def _ps(tmp_path, *, want_zip, want_exe='', curl_mode='ok', data=b'', run='9'):
     inst = tmp_path / 'inst'
     inst.mkdir(exist_ok=True)
     (inst / '.url-9').write_text('https://signed.invalid/zip')
@@ -177,7 +183,7 @@ open(a[a.index("-o") + 1], "wb").write(open({str(src)!r}, "rb").read()[lo:hi + 1
         shim = tmp_path / 'fakecurl'
         shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"\n')
         shim.chmod(0o755)
-    args = [PWSH, '-NoProfile', '-File', str(PS1), '-Run', '9', '-Total', str(len(data) or 10), '-N', '2', '-WantZip', want_zip]
+    args = [PWSH, '-NoProfile', '-File', str(PS1), '-Run', run, '-Total', str(len(data) or 10), '-N', '2', '-WantZip', want_zip]
     if want_exe:
         args += ['-WantExe', want_exe]
     env = {**os.environ, 'WINQA_INST': str(inst), 'WINQA_CURL': str(shim)}
@@ -273,6 +279,15 @@ def test_exe_provenance_records_setup_sha256(tmp_path):
     ('/Users/Jane Doe/AutoClipQA', '/Users/<user>/AutoClipQA'),
     ('/home/Jane Doe', '/home/<user>'),
     ('see /home/a and more /x', 'see /home/<user> and more /x'),
+    # R18 #88: a spaced name followed by a colon is masked whole.
+    ('/Users/Jane Doe: Permission denied', '/Users/<user>: Permission denied'),
+    (r'C:\Users\Jane Doe: Access is denied', r'C:\Users\<user>: Access is denied'),
+    ('/home/Jane Doe:/bin/bash', '/home/<user>:/bin/bash'),
+    # R18 #85: \\u-escaped (Chinese) names in non-JSON text, all three platform forms.
+    (r'log /Users/\u5f20\u4e09/a', r'log /Users/<user>/a'),
+    (r'log /home/\u5f20\u4e09', r'log /home/<user>'),
+    (r'log "C:\\Users\\\u5f20\u4e09\\a"', r'log "C:\\Users\\<user>\\a"'),
+    ('/Users/张三/a', '/Users/<user>/a'),
 ])
 def test_redact_scrubs_home_directories(tmp_path, raw, expected):
     redact = _module('redact')
@@ -299,3 +314,54 @@ esac''')
     assert 'GET /api/home/feed' in done.stderr and '<url>' in done.stderr
     assert 'qa' not in done.stderr.replace('qa.invalid', '') and 'Jane' not in done.stderr and 'sig=1' not in done.stderr
     assert 'redact.py' in SH.read_text(encoding='utf-8')
+
+
+ZH_JSON_CASES = ['/Users/张三/AutoClipQA', '/home/张三', 'C:\\Users\\张三\\AppData', 'C:\\Users\\张 三\\x', 'c:/users/张三/a.log']
+
+
+@pytest.mark.parametrize('indent', [None, 2])
+def test_redact_json_with_escaped_chinese_names_stays_valid(tmp_path, indent):
+    """R18 #85: ensure_ascii JSON writes 张三 as \\u5f20\\u4e09; it must be masked and still parse."""
+    redact = _module('redact')
+    doc = {'paths': ZH_JSON_CASES, 'nested': {'cwd': ZH_JSON_CASES[0] + ': denied'}, 'api_key_masked': 'sk-…abc', 'n': 3}
+    raw = json.dumps(doc, indent=indent)   # ensure_ascii=True by default -> \\uXXXX escapes
+    assert '\\u5f20' in raw
+    (tmp_path / 'e.json').write_text(raw, encoding='utf-8')
+    redact.main(str(tmp_path))
+    out = (tmp_path / 'e.json').read_text(encoding='utf-8')
+    data = json.loads(out)
+    assert '张' not in out and '\\u5f20' not in out and '\\u4e09' not in out and '三' not in json.dumps(data, ensure_ascii=False)
+    assert data['paths'] == ['/Users/<user>/AutoClipQA', '/home/<user>', 'C:\\Users\\<user>\\AppData', 'C:\\Users\\<user>\\x', 'c:/Users/<user>/a.log']
+    assert data['nested']['cwd'] == '/Users/<user>/AutoClipQA: denied'
+    assert data['api_key_masked'] == '***' and data['n'] == 3
+
+
+def test_ps1_uses_redact_py_patterns():
+    """R18 #86: the ps1 error exit embeds redact.py's exact WIN_PATTERN / POSIX_PATTERN."""
+    redact = _module('redact')
+    text = PS1.read_text(encoding='utf-8')
+    q = lambda s: "'" + s.replace("'", "''") + "'"
+    assert f'$WinPattern = {q(redact.WIN_PATTERN)}' in text
+    assert f'$PosixPattern = {q(redact.POSIX_PATTERN)}' in text
+
+
+PS1_ERROR_CASES = [
+    ('C:\\Users\\Jane Doe\\x.log', 'C:\\Users\\<user>\\x.log'),
+    ('/Users/Jane Doe: Permission denied', '/Users/<user>: Permission denied'),
+    ('GET /api/home/feed', 'GET /api/home/feed'),
+    ('see /home/qa/y', 'see /home/<user>/y'),
+    ('C:\\Users\\张三\\a', 'C:\\Users\\<user>\\a'),
+    ('"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a"', '"C:\\\\Users\\\\<user>\\\\a"'),
+    ('https://signed.invalid/z?sig=1', '<url>'),
+]
+
+
+@need_pwsh
+@pytest.mark.parametrize('raw,expected', PS1_ERROR_CASES)
+def test_pwsh_error_exit_redacts_like_redact_py(tmp_path, raw, expected):
+    """R18 #86: run the real ps1 error exit (digest guard echoes -Run) and compare with redact.py."""
+    redact = _module('redact')
+    assert redact.scrub_stream(raw) == expected
+    done, _ = _ps(tmp_path, want_zip='', run=raw)
+    assert done.returncode == 4, done.stdout + done.stderr
+    assert done.stderr.strip() == f'artifact digest missing or invalid; refusing to download run {expected}'
