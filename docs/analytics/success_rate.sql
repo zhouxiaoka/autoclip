@@ -8,6 +8,10 @@
 --   app_version   = coalesce(nullIf(app_version, ''), nullIf(version, ''))
 -- provider_test_* → provider_connection_test_*；publish_export_* → studio_export_*。见 §8.2。
 
+-- 1.5.8 R11：`frame_extract_failed`（本地抽帧失败）是产品失败，计入分母，不在下面的剔除列表里。
+-- `frame_extract_subtitle_fallback` / `source_too_long_subtitle_route` / `vision_*_subtitle_fallback`
+-- 是成功出片上的 degrade_reason（降级走字幕），不是失败码，见图 6。
+
 -- 图 1 / 图 3：按次出片成功率（可再 breakdown provider）
 SELECT
   countIf(multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) = 'success') AS completed,
@@ -85,4 +89,19 @@ WHERE event = 'llm_request_finished'
   AND properties.outcome = 'error'
   AND timestamp >= now() - INTERVAL 7 DAY
 GROUP BY provider, upstream_error_type
+ORDER BY events DESC;
+
+-- 图 6：降级走字幕的成功出片（degrade_reason，不是失败；不进剔除列表）
+SELECT
+  properties.degrade_reason AS degrade_reason,
+  count() AS events
+FROM events
+WHERE event IN ('studio_generation_finished', 'studio_production_finished')
+  AND properties.analytics_environment = 'production'
+  AND properties.app_version = {version}
+  AND multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) = 'success'
+  AND properties.degrade_reason IN ('vision_unavailable_subtitle_fallback', 'vision_invalid_subtitle_fallback',
+                                    'frame_extract_subtitle_fallback', 'source_too_long_subtitle_route')
+  AND timestamp >= now() - INTERVAL 7 DAY
+GROUP BY degrade_reason
 ORDER BY events DESC;

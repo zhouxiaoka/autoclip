@@ -85,4 +85,6 @@ run / generation 的 `http_status` 与 `upstream_error_type` 以最近一次请�
 
 S5：仅 AUTO 模式的视觉校验失败或初筛不可用时，方案保存 `degrade_reason=vision_unavailable_subtitle_fallback`，`studio_screen_finished` 与 `studio_generation_finished` 从该方案读取并按尝试去重。此字段只接受这个固定代码，不发送原因正文；不计入同服务商模型候选切换的 `degrade_count`。用户手动选择视觉仍阻断，不切换服务商。
 
+R11：`degrade_reason` 闭集扩为四个固定代码（`event_catalog.json` 的 `enums.degrade_reason`）：上面的 `vision_unavailable_subtitle_fallback`、解析失败的 `vision_invalid_subtitle_fallback`、本地抽帧失败（错误码 `frame_extract_failed`，不算视觉服务不可用）后改走字幕的 `frame_extract_subtitle_fallback`、素材超过 120 分钟直接走字幕的 `source_too_long_subtitle_route`。都使用原分析服务商，都不是失败；均不计入 `degrade_count`。
+
 验收：模拟校验失败和连接不可用，核对 AUTO 使用原分析连接走字幕出片、八语界面显示切换提示、重复观察仅上报一次固定代码，未知代码及正文被丢弃；手动视觉仍被阻断。安装包 validation 收数使用下述 S5 查询，按事件分别核对路线与终态，不把降级本身当成制作失败。
