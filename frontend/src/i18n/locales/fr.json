@@ -1468,6 +1468,7 @@
   "排队生成中": "En file d’attente",
   "包含 Made with AutoClip 片尾": "Avec écran de fin « Made with AutoClip »",
   "不含品牌片尾": "Sans écran de fin de marque",
+  "品牌片尾未能添加，已保留成片": "Impossible d'ajouter l'écran de fin de la marque ; la vidéo a été conservée.",
   "这条版本未完成，其他成片不受影响。": "Cette version n’a pas abouti. Les autres vidéos ne sont pas affectées.",
   "素材没有足够完整的长内容": "la source ne contient pas de passage complet assez long",
   "YouTube 视频": "Vidéo YouTube",
