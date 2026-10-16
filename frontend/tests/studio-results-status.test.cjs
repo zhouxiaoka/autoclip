@@ -16,7 +16,8 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const moduleRequire = (name) => {
     if (name === 'react' || name === 'react/jsx-runtime') return require(name)
     if (name === 'react-i18next') return { useTranslation() {} }
-    if (name === 'react-router-dom') return { useNavigate: () => () => {} }
+    if (name === 'react-router-dom') return { useNavigate: () => to => navigations.push(to) }
+    if (name === './failureAction') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
     if (name === '../../i18n') return { t: value => value }
     if (name === '../../ui') return { Btn: props => { buttons.push(props); return React.createElement('button', null, props.children) },
       Section: ({ children, description, right }) => React.createElement('section', null, description, right, children),
@@ -39,6 +40,8 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     onCreateCollection() {}, onReload() {},
   }))
 }
+
+const navigations = []
 
 test('automatic screening never asks for a manual confirmation', () => {
   assert.doesNotMatch(render(true, 'screening'), /识别完成后，请确认要制作的类型/)
@@ -70,3 +73,25 @@ test('invalid API key renders the new copy instead of missing-key guidance', () 
   assert.match(html, /API Key 无效或已过期，请检查后重试/)
   assert.doesNotMatch(html, /需要你自己的 API Key|自备/)
 })
+
+for (const [code, automatic] of [['llm_auth_invalid', true], ['insufficient_quota', true], ['llm_not_configured', false], ['invalid_key', true]]) {
+  test(`1.5.8 user-cause failure ${code} shows 「去设置」 with reason, no direct retry`, () => {
+    const buttons = []
+    const html = render(automatic, 'production', 'failed', buttons, [], code)
+    assert.equal(buttons.some(b => b.children === '重试'), false)
+    const go = buttons.find(b => b.children === '去设置')
+    assert.ok(go)
+    assert.match(html, /请|余额|模型/)
+    navigations.length = 0
+    go.onClick()
+    assert.deepEqual(navigations, ['/settings?section=analysis'])
+  })
+}
+for (const code of ['service_restarted', 'timeout', 'provider_error', 'model_not_found']) {
+  test(`1.5.8 non-user failure ${code} keeps Retry and no 「去设置」`, () => {
+    const buttons = []
+    render(true, 'production', 'failed', buttons, [], code)
+    assert.ok(buttons.some(b => b.children === '重试'))
+    assert.equal(buttons.some(b => b.children === '去设置'), false)
+  })
+}

@@ -1941,5 +1941,9 @@
   "全部启用": "Ativar todos",
   "全部停用": "Desativar todos",
   "未启用": "Não ativados",
-  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem."
+  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem.",
+  "API Key 无效或已过期，请到设置里更新后再试": "A chave de API é inválida ou expirou. Atualize-a nas Configurações e tente novamente.",
+  "服务商账户余额不足，请充值或换一个服务商": "O saldo da sua conta no provedor é insuficiente. Recarregue ou troque de provedor.",
+  "这个 API Key 没有该模型的使用权限，请到设置里更换": "Esta chave de API não tem acesso ao modelo. Troque-a nas Configurações.",
+  "还没有配置可用的模型，请先到设置里添加": "Ainda não há nenhum modelo utilizável. Adicione um nas Configurações."
 }

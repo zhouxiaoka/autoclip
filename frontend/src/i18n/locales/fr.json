@@ -1941,5 +1941,9 @@
   "全部启用": "Tout activer",
   "全部停用": "Tout désactiver",
   "未启用": "Non activés",
-  "关闭后成片不压字幕，标题和名牌保留。": "Désactivé : aucun sous-titre incrusté ; le titre et les cartons restent."
+  "关闭后成片不压字幕，标题和名牌保留。": "Désactivé : aucun sous-titre incrusté ; le titre et les cartons restent.",
+  "API Key 无效或已过期，请到设置里更新后再试": "La clé API est invalide ou expirée. Mettez-la à jour dans les réglages, puis réessayez.",
+  "服务商账户余额不足，请充值或换一个服务商": "Le solde de votre compte fournisseur est insuffisant. Rechargez-le ou changez de fournisseur.",
+  "这个 API Key 没有该模型的使用权限，请到设置里更换": "Cette clé API n'a pas accès au modèle. Changez-la dans les réglages.",
+  "还没有配置可用的模型，请先到设置里添加": "Aucun modèle utilisable n'est configuré. Ajoutez-en un dans les réglages."
 }

@@ -169,7 +169,22 @@
     "environment_error_codes": [
       "source_blocked",
       "service_restarted"
-    ]
+    ],
+    "user_cause": {
+      "_doc": "Shared user-cause classification (1.5.8). Same set the v4 overall success rate excludes as user cause (minus cancellation). Studio failed-state UI shows 「去设置」 instead of Retry for these; success_rate.sql / contract tests must match.",
+      "error_codes": [
+        "authentication",
+        "llm_auth_invalid",
+        "invalid_key",
+        "insufficient_quota",
+        "llm_not_configured"
+      ],
+      "upstream_types": [
+        "invalid_key",
+        "insufficient_quota",
+        "permission_denied"
+      ]
+    }
   },
   "privacy": {
     "forbidden_keys": [
