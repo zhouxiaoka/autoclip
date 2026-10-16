@@ -5,7 +5,19 @@ export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
 const CONTEXT_KEY = "autoclip.analytics.context.v1"
-export function telemetryId(): string { return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` }
+// Random base36 segments joined by '-' can spell a secret marker (e.g. a segment ending in "sk"
+// followed by '-' gives "sk-"), which the privacy check rightly flags. Ids must never contain one.
+// Keep in sync with event_catalog privacy.forbidden_substrings and backend llm_telemetry markers.
+export const ID_FORBIDDEN_MARKERS = ['sk-', 'xai-', 'aiza', 'apikey', 'token']
+const hasMarker = (id: string) => ID_FORBIDDEN_MARKERS.some(marker => id.includes(marker))
+export function telemetryId(): string {
+  const make = () => `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+  let id = make()
+  for (let tries = 0; tries < 8 && hasMarker(id); tries++) id = make()
+  // Deterministic last resort (e.g. a stuck RNG): break every marker without changing the id shape.
+  while (hasMarker(id)) id = id.replace(/sk-/g, 's0-').replace(/xai-/g, 'xa0-').replace(/aiza/g, 'ai0a').replace(/apikey/g, 'api0ey').replace(/token/g, 't0ken')
+  return id
+}
 /** failedTerminal: attempt_id of the project's latest v4-scoped terminal when it failed/partial (the
  * only thing retry_of may point at). firstClips: generation identities that already reported first clip.
  * Both live in the 35-day context, not in the 7-day watches, so a later retry still links (R21 #157). */
