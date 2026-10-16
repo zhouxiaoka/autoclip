@@ -73,10 +73,11 @@ test('R21 #159: first clip is reported once per real generation, not once per wa
   h.tracker.watch('studio-generation', 'p1')
   h.tracker.noteFirstClip(h.watches('studio-generation')[0], snap, true)
   await h.studioApi.retryOutputVariant('p1', 'v1')
-  h.tracker.noteFirstClip(h.watches('studio-generation')[0], snap, true)
+  // R23 #226: the earlier open attempt keeps its watch, so the retry's watch is the last one.
+  h.tracker.noteFirstClip(h.watches('studio-generation').at(-1), snap, true)
   assert.equal(h.finished('studio_first_clip_ready').length, 1)
   // a genuinely new generation reports its own first clip
-  h.tracker.noteFirstClip(h.watches('studio-generation')[0], { ...snap, generation: { status: 'completed', created_at: '2026-10-11T00:00:00Z' }, jobs: [{ job_id: 'j0', status: 'completed', finished_at: '2026-10-11T00:01:00Z' }] }, true)
+  h.tracker.noteFirstClip(h.watches('studio-generation').at(-1), { ...snap, generation: { status: 'completed', created_at: '2026-10-11T00:00:00Z' }, jobs: [{ job_id: 'j0', status: 'completed', finished_at: '2026-10-11T00:01:00Z' }] }, true)
   assert.equal(h.finished('studio_first_clip_ready').length, 2)
 })
 

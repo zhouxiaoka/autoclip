@@ -1781,8 +1781,13 @@ def _produce_selected(project_id, plan):
             result['diagnostics'] = diagnostics
         if errors:
             result['error'] = '；'.join(errors)
-            result['error_code'] = error_codes[0] if len(set(error_codes)) == 1 else 'multiple'
-            result.update(contexts[0])  # first failure decides where 「去设置」 points (ASR vs analysis)
+            # R23 #228: the primary cause is the first product failure, else the first user one; the rest go along.
+            from backend.core.failure_attribution import rank_failures
+            primary, *others = rank_failures([{'error_code': code, **context} for code, context in zip(error_codes, contexts)])
+            result.update(primary)
+            if others:
+                result['secondary_error_codes'] = [f['error_code'] for f in others]
+                result['secondary_upstream_error_types'] = [f.get('upstream_error_type') or '' for f in others]
         store.change(project_id, lambda data:data.update(analysis=result))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:

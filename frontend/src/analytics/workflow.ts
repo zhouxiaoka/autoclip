@@ -18,10 +18,10 @@ export function telemetryId(): string {
   while (hasMarker(id)) id = id.replace(/sk-/g, 's0-').replace(/xai-/g, 'xa0-').replace(/aiza/g, 'ai0a').replace(/apikey/g, 'api0ey').replace(/token/g, 't0ken')
   return id
 }
-/** failedTerminal: attempt_id of the project's latest v4-scoped terminal when it failed/partial (the
- * only thing retry_of may point at). firstClips: generation identities that already reported first clip.
+/** terminal: the project's latest v4-scoped terminal by attempt start (since), not by arrival order (R23 #227);
+ * failed is its attempt_id when it failed/partial (the only thing retry_of may point at). firstClips: generation identities that already reported first clip.
  * Both live in the 35-day context, not in the 7-day watches, so a later retry still links (R21 #157). */
-type Context = { props: Properties; updated: number; artifacts: Record<string, string>; failedTerminal?: string; firstClips?: string[] }
+type Context = { props: Properties; updated: number; artifacts: Record<string, string>; terminal?: { since: number; failed?: string }; firstClips?: string[] }
 /** Terminal events counted by docs/analytics/success_rate.sql (v4). retry_of must reference one of these (R21 #164). */
 export const SUCCESS_RATE_TERMINALS = ['studio_generation_finished', 'studio_production_finished'] as const
 const TOKEN = /^t-[a-z0-9-]{10,100}$/
@@ -127,7 +127,14 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     }
   }
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
-  if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|service_restarted)$/.test(input.error_code)) out.error_code = input.error_code
+  const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|service_restarted)$/
+  if (typeof input.error_code === 'string' && ERROR_CODE.test(input.error_code)) out.error_code = input.error_code
+  // R23 #228: the other causes of a multi-goal failure, positional, comma-joined (primary is error_code / upstream_error_type).
+  // Arrays from the backend, or the joined string when an already-safe payload is sanitized again.
+  const causes = (v: unknown): unknown[] | undefined => Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : undefined
+  const codes = causes(input.secondary_error_codes), upstreams = causes(input.secondary_upstream_error_types)
+  if (codes) out.secondary_error_codes = codes.slice(0, 3).map(c => typeof c === 'string' && ERROR_CODE.test(c) ? c : 'unknown').join(',')
+  if (upstreams) out.secondary_upstream_error_types = upstreams.slice(0, 3).map(c => typeof c === 'string' && enums.upstream_error_type.includes(c) ? c : '').join(',')
   if (typeof input.model === 'string' && /^[\w.\-:/]{1,64}$/.test(input.model) && !input.model.toLowerCase().includes('sk-') && !input.model.includes('://')) out.model = input.model
   if (typeof input.base_url_host === 'string' && (input.base_url_host === 'local' || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/.test(input.base_url_host))) out.base_url_host = input.base_url_host
   for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id', 'retry_of']) {
@@ -278,7 +285,7 @@ export class WorkflowTracker {
         const c = value as Context
         if (c && Number.isFinite(c.updated) && c.updated > this.now() - 35 * 86400000) {
           this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && TOKEN.test(v)).slice(-100)),
-            ...(typeof c.failedTerminal === 'string' && TOKEN.test(c.failedTerminal) ? { failedTerminal: c.failedTerminal } : {}),
+            ...(c.terminal && Number.isFinite(c.terminal.since) ? { terminal: { since: c.terminal.since, ...(typeof c.terminal.failed === 'string' && TOKEN.test(c.terminal.failed) ? { failed: c.terminal.failed } : {}) } } : {}),
             ...(Array.isArray(c.firstClips) ? { firstClips: c.firstClips.filter((v): v is string => typeof v === 'string' && v.length <= 64).slice(-50) } : {}) }
         }
       }
@@ -336,6 +343,9 @@ export class WorkflowTracker {
     const existing = this.watches.find(w => w.kind === kind && w.id === id && (restart || !runId || w.runId === runId))
     if (existing && (!existing.settled || kind === 'studio-export') && !restart) return
     if (existing) this.watches = this.watches.filter(w => w !== existing)
+    this.add(kind, id, projectId, since, properties, runId)
+  }
+  private add(kind: Watch['kind'], id: string, projectId: string | undefined, since: number, properties: Properties, runId?: string): void {
     this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
@@ -343,13 +353,17 @@ export class WorkflowTracker {
   /** 1.5.8 one-click retry: attempt_id of the project's latest success-rate terminal if it failed/partial, else undefined.
    * Only SUCCESS_RATE_TERMINALS are recorded (never screen), and it outlives the watch TTL. */
   lastFailedAttempt(projectId: string): string | undefined {
-    return this.enabled() ? this.contexts[projectId]?.failedTerminal : undefined
+    return this.enabled() ? this.contexts[projectId]?.terminal?.failed : undefined
   }
   /** The one place a retry becomes a new aggregate attempt: always a fresh studio-generation watch (new
    * attempt_id) that reaches a terminal; retry_of only when a v4-scoped failed terminal is known. */
   retryGeneration(projectId: string, properties: Properties = {}): void {
+    if (!this.enabled() || !projectId) return
     const retryOf = this.lastFailedAttempt(projectId)
-    this.watch('studio-generation', projectId, undefined, undefined, { ...properties, ...(retryOf ? { retry_of: retryOf } : {}) }, true)
+    this.prune()
+    // Concurrent retries are separate attempts (R23 #226): only settled attempts are dropped, open ones keep their watch.
+    this.watches = this.watches.filter(w => !(w.kind === 'studio-generation' && w.id === projectId && w.settled))
+    this.add('studio-generation', projectId, undefined, this.now(), { ...properties, ...(retryOf ? { retry_of: retryOf } : {}) })
   }
   /** 1.5.8 「重试这条」: the variant's own last failed attempt, else the project's failed/partial attempt. */
   variantRetryOf(projectId: string, variantId: string): string | undefined {
@@ -463,7 +477,10 @@ export class WorkflowTracker {
       if (w.seen.includes('finished')) {
         w.settled = true; w.failed = ['failed', 'error', 'partial'].includes(outcome || ''); this.persist()
         const c = this.contexts[w.projectId || w.id]
-        if (c && (SUCCESS_RATE_TERMINALS as readonly string[]).includes(event)) { c.failedTerminal = w.failed && w.token ? w.token : undefined; this.persistContexts() }
+        // Attempt order, not arrival order (R23 #227): a late terminal of an older attempt never overrides a newer one.
+        if (c && (SUCCESS_RATE_TERMINALS as readonly string[]).includes(event) && !(c.terminal && c.terminal.since > w.since)) {
+          c.terminal = { since: w.since, ...(w.failed && w.token ? { failed: w.token } : {}) }; this.persistContexts()
+        }
       }
     }
   }
