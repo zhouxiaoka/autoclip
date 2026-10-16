@@ -160,6 +160,9 @@ def ignore(_dir, names):
     return {n for n in names if n in IGNORED_DIRS or n.endswith(IGNORED_SUFFIXES)}
 
 shutil.copytree(src, dest, ignore=ignore)
+# The docs registry is the source of truth; both desktop platforms ship the
+# generated copy inside backend, without relying on a repository docs folder.
+shutil.copyfile('docs/analytics/event_catalog.json', dest + '/core/event_catalog.json')
 PY
     echo "OK"
 }

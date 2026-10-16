@@ -7,6 +7,8 @@ Sentry 崩溃上报。DSN 未配置或用户关闭时全程 no-op，不发网络
 from __future__ import annotations
 
 import json
+import tempfile
+import threading
 import logging
 import os
 import re
@@ -14,7 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
-_ANONYMOUS_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$")
+_ANONYMOUS_ID = re.compile(r"^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$")
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,9 @@ PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE
 
 
 def studio_error_code(error: Exception) -> str:
+    from backend.core.project_cancellation import ServiceRestarted
+    if isinstance(error, ServiceRestarted):
+        return 'service_restarted'
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
@@ -107,20 +112,46 @@ def crash_reports_enabled() -> bool:
         return False
 
 
-def write_privacy(*, crash_reports: Optional[bool] = None) -> Path:
+_privacy_lock = threading.Lock()
+
+
+def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[bool] = None) -> Path:
+    """Single writer: only the backend API process writes privacy.json (settings endpoints);
+    worker processes only read it.
+    R11 #392: atomic (temp file + os.replace) so a concurrent reader never sees a
+    truncated privacy.json; read-modify-write is serialized in-process. An unreadable
+    existing file keeps collection OFF unless this call sets analytics explicitly."""
     path = _privacy_path()
     if path is None:
         raise RuntimeError("未设置 AUTOCLIP_APP_DIR / AUTOCLIP_DATA_DIR，写不了隐私开关")
-    current: dict[str, Any] = {}
-    if path.exists():
+    with _privacy_lock:
+        current: dict[str, Any] = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                current = loaded if isinstance(loaded, dict) else {"analytics": False, "crash_reports": False}
+            except Exception:  # noqa: BLE001
+                # R12 #18: corrupt file => analytics AND crash reports default off; only the
+                # toggle named in this request changes below.
+                current = {"analytics": False, "crash_reports": False}
+        if crash_reports is not None:
+            current["crash_reports"] = bool(crash_reports)
+        if analytics is not None:
+            current["analytics"] = bool(analytics)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".privacy-", suffix=".tmp", dir=str(path.parent))
         try:
-            current = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            current = {}
-    if crash_reports is not None:
-        current["crash_reports"] = bool(crash_reports)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(current, ensure_ascii=False, indent=2))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
     return path
 
 
@@ -197,6 +228,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "analysis_mode": {"subtitle", "visual"},
         "goal": {"content", "highlight", "promo"},
         "runtime": {"python"}, "app_mode": {"web", "desktop"},
+        "os": {"macos", "windows", "linux", "unknown"},
+        "arch": {"aarch64", "x86_64", "unknown"},
         "build_environment": {"production", "development", "validation", "unknown"},
         "telemetry_test": {"true"},
         "pipeline_stage": PIPELINE_STAGES,
@@ -230,36 +263,51 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     return clean
 
 
+def clear_anonymous_user() -> None:
+    """R12 #17: drop Sentry user.id in this process now, without reading privacy.json."""
+    if not _initialized:
+        return
+    try:
+        import sentry_sdk
+        sentry_sdk.get_global_scope().set_user(None)
+    except Exception:  # noqa: BLE001
+        logger.debug("Sentry anonymous user was not cleared", exc_info=True)
+
+
 def sync_anonymous_user(distinct_id: str | None = None) -> None:
     """Align Sentry user.id with the PostHog anonymous distinct_id. Id only."""
     if not _initialized:
         return
     try:
-        from backend.services.studio.qa.telemetry import _analytics_allowed, _identity_path, _read_id
+        from backend.services.studio.qa.telemetry import _analytics_allowed, stored_distinct_id
         import sentry_sdk
-        value = distinct_id if isinstance(distinct_id, str) else _read_id(_identity_path())
+        value = distinct_id if isinstance(distinct_id, str) else stored_distinct_id()
+        # Identity updates may arrive in an API request. Worker threads need the
+        # process scope, not the transient request/isolation scope.
+        scope = sentry_sdk.get_global_scope()
         if value and _ANONYMOUS_ID.fullmatch(value) and _analytics_allowed():
-            sentry_sdk.set_user({"id": value})
+            scope.set_user({"id": value})
         else:
-            sentry_sdk.set_user(None)
+            scope.set_user(None)
     except Exception:  # noqa: BLE001 - identity sync cannot break crash reporting
         logger.debug("Sentry anonymous user was not updated", exc_info=True)
 
 
 def _event_distinct_id(event: dict) -> str | None:
     try:
-        from backend.services.studio.qa.telemetry import _analytics_allowed, _identity_path, _read_id
+        from backend.services.studio.qa.telemetry import _analytics_allowed, stored_distinct_id
     except Exception:
         return None
     if not _analytics_allowed():
         return None
+    # Also recover identities written after SDK init, including worker processes.
+    stored = stored_distinct_id()
+    if stored:
+        return stored
     user = event.get("user") if isinstance(event.get("user"), dict) else {}
     candidate = user.get("id") if isinstance(user, dict) else None
     if isinstance(candidate, str) and _ANONYMOUS_ID.fullmatch(candidate):
         return candidate
-    stored = _read_id(_identity_path())
-    if stored and _ANONYMOUS_ID.fullmatch(stored):
-        return stored
     return None
 
 
@@ -306,6 +354,9 @@ def init_sentry(mode: str = "web") -> bool:
     scope = sentry_sdk.get_global_scope()
     scope.set_tag("runtime", "python")
     scope.set_tag("app_mode", mode)
+    from backend.core.event_catalog import detect_os, detect_arch
+    scope.set_tag("os", detect_os())
+    scope.set_tag("arch", detect_arch())
     build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
     scope.set_tag("build_environment", build_environment)
     if build_environment == "validation":

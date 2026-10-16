@@ -10,7 +10,7 @@ import sys
 if not sys.dont_write_bytecode:
     raise SystemExit("Run bundled Python with -B to preserve signed resources.")
 
-import os,json,subprocess,time,select
+import os,json,subprocess,time,re
 
 sys.dont_write_bytecode = True
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -30,7 +30,7 @@ if not Path(sys.executable).resolve().is_relative_to(resources / 'python'):
 args.output_parent.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='autoclip-bundle-smoke-', dir=args.output_parent)).resolve()
 print('Isolated evidence directory:', root, flush=True)
-for required in ['backend/desktop_main.py', 'ffmpeg/ffmpeg', 'ffmpeg/ffprobe']:
+for required in ['backend/desktop_main.py', 'backend/core/event_catalog.json', 'ffmpeg/ffmpeg', 'ffmpeg/ffprobe']:
     if not (resources / required).is_file():
         parser.error('Missing bundled runtime file: ' + required)
 os.environ.update(AUTOCLIP_DATA_DIR=str(root/'data'),AUTOCLIP_APP_DIR=str(root/'data'),AUTOCLIP_DESKTOP_MODE='true',AUTOCLIP_MODE='desktop',DATABASE_URL='sqlite:///'+str(root/'isolated.sqlite'),SENTRY_DSN='',AUTOCLIP_FFMPEG_PATH=str(resources/'ffmpeg/ffmpeg'),AUTOCLIP_FFPROBE_PATH=str(resources/'ffmpeg/ffprobe'))
@@ -38,6 +38,9 @@ os.environ.update(AUTOCLIP_DATA_DIR=str(root/'data'),AUTOCLIP_APP_DIR=str(root/'
 os.chdir(resources);sys.path.insert(0,str(resources))
 import backend
 assert Path(backend.__file__).resolve().is_relative_to(resources), "Backend imported outside the app bundle"
+from backend.core.event_catalog import catalog_path, load_catalog
+assert catalog_path() == resources/'backend/core/event_catalog.json'
+assert load_catalog().get('events'), 'Bundled event catalog is unreadable'
 from backend.services.studio.models import Draft,Scene
 from backend.services.studio.render import render_draft
 from backend.services.studio.store import directory
@@ -58,20 +61,41 @@ assert info['width']==1080 and info['height']==1920
 assert .9 <= info['duration'] <= 1.1
 from backend.services.studio.audio import has_audio
 assert has_audio(out), 'Rendered original audio is missing'
-proc=subprocess.Popen([sys.executable,'-m','backend.desktop_main'],cwd=resources,env=os.environ.copy(),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+# Exercise the real init path even when release secrets are absent. No-op
+# transport prevents *all* Sentry network sends (sample rate 0 only stops traces).
+bootstrap = '''
+import functools, runpy
+import sentry_sdk
+from sentry_sdk.transport import Transport
+class DiscardTransport(Transport):
+    def capture_envelope(self, envelope):
+        pass
+sentry_sdk.init = functools.partial(sentry_sdk.init, transport=DiscardTransport)
+runpy.run_module('backend.desktop_main', run_name='__main__')
+'''
+(root/'data/privacy.json').write_text('{"analytics":false,"crash_reports":true}')
+child_env = dict(os.environ, SENTRY_DSN='https://public@example.invalid/0',
+                 AUTOCLIP_EVENT_CATALOG='', AUTOCLIP_PARENT_PID='',
+                 AUTOCLIP_POSTHOG_KEY='', VITE_PUBLIC_POSTHOG_KEY='')
+backend_log = root/'backend-smoke.log'
+log_handle = backend_log.open('w')
+proc=subprocess.Popen([sys.executable,'-B','-c',bootstrap],cwd=resources,env=child_env,stdout=log_handle,stderr=subprocess.STDOUT,text=True)
 try:
  port=None;deadline=time.time()+35
  while time.time()<deadline:
-  ready,_,_=select.select([proc.stdout],[],[],.5)
-  if ready:
-   line=proc.stdout.readline()
-   if line.startswith('PORT='):port=int(line.split('=')[1]);break
+  match=re.search(r'^PORT=(\d+)$',backend_log.read_text(),re.M)
+  if match:port=int(match.group(1));break
   if proc.poll() is not None:break
+  time.sleep(.2)
  assert port,'bundled backend failed to start'
  with urlopen(f'http://127.0.0.1:{port}/health',timeout=5) as r:assert r.status==200
- report={'source':'synthetic offline fixture','backend_sha256':hashlib.sha256((resources/'backend/services/studio/render.py').read_bytes()).hexdigest(),'python':sys.version.split()[0],'six_templates':'passed','original_audio':'passed','portrait_render':info,'desktop_health':'passed','output':str(out)}
+ logs=backend_log.read_text()
+ assert 'Sentry 已启用' in logs, 'Bundled backend did not enable Sentry'
+ assert 'Sentry 初始化失败' not in logs, 'Bundled backend Sentry initialization failed'
+ report={'source':'synthetic offline fixture','backend_sha256':hashlib.sha256((resources/'backend/services/studio/render.py').read_bytes()).hexdigest(),'python':sys.version.split()[0],'six_templates':'passed','original_audio':'passed','portrait_render':info,'desktop_health':'passed','sentry_initialization':'passed (discard transport)','output':str(out)}
  (root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps(report,ensure_ascii=False))
 finally:
  proc.terminate()
  try:proc.wait(timeout=5)
  except subprocess.TimeoutExpired:proc.kill();proc.wait()
+ log_handle.close()

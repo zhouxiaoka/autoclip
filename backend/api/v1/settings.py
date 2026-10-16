@@ -291,6 +291,36 @@ async def put_analytics_identity(body: AnalyticsIdentity):
     return {"ok": True}
 
 
+class AnalyticsConsent(BaseModel):
+    enabled: bool
+
+
+@router.put("/analytics-consent")
+async def put_analytics_consent(body: AnalyticsConsent):
+    """The UI analytics switch. Off: backend Sentry stops attaching user.id in every process
+    (before_send rereads privacy.json); this process's scope user is cleared now."""
+    from backend.core.sentry_setup import clear_anonymous_user, sync_anonymous_user, write_privacy
+    from backend.services.studio.qa.telemetry import set_runtime_analytics_off
+    if not body.enabled:
+        # R12 #17: stop collection in this process (API + worker threads) and drop the Sentry
+        # identity BEFORE touching disk; a failed write leaves it off.
+        # R13 #30 (known limit): the runtime flag is in-process only. Standalone worker
+        # processes (e.g. a separate Celery/CLI worker) learn the preference solely by
+        # re-reading privacy.json, so if the disk write below fails they cannot be reached
+        # and keep the last persisted value until the write succeeds (the UI keeps retrying OFF).
+        set_runtime_analytics_off(True)
+        clear_anonymous_user()
+    try:
+        write_privacy(analytics=body.enabled)
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=500 if isinstance(exc, OSError) else 400,
+                            detail="隐私设置保存失败" if isinstance(exc, OSError) else str(exc)) from exc
+    if body.enabled:
+        set_runtime_analytics_off(False)
+    sync_anonymous_user()
+    return {"enabled": body.enabled}
+
+
 @router.put("/privacy")
 async def put_privacy(body: PrivacySettings):
     from backend.core.sentry_setup import write_privacy, crash_reports_enabled, init_sentry
