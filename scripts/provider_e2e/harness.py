@@ -127,6 +127,19 @@ def import_project(base_url: str, fixture: dict[str, Any]) -> str:
     return str(project_id)
 
 
+def import_refusal_code(exc: HttpError) -> str | None:
+    """The source code of a coded 422 import refusal (``detail.code``), else None."""
+    if getattr(exc, 'status', None) != 422:
+        return None
+    try:
+        body = json.loads(exc.body or '{}')
+    except ValueError:
+        return None
+    detail = body.get('detail') if isinstance(body, dict) else None
+    code = detail.get('code') if isinstance(detail, dict) else None
+    return code if isinstance(code, str) and code.startswith('source_') else None
+
+
 def evaluate_case(
     expect: str,
     workspace: dict[str, Any],
@@ -230,7 +243,18 @@ def run_case(
                 workspace = {'generation': {'status': 'unknown'}, 'analysis': {}}
         else:
             workspace = poll_workspace(base_url, project_id, timeout)
-    except (HttpError, RuntimeError, TimeoutError, OSError) as exc:
+    except HttpError as exc:
+        refused = import_refusal_code(exc) if expect == 'block' else None
+        if refused is not None:
+            # #418: the one preflight refuses a bad source at import with a coded 422 (no project, no state);
+            # that is the earliest possible block, judged like a failed run with that code at INGEST.
+            workspace = {'generation': {'status': 'failed', 'error_code': refused, 'failure_stage': 'INGEST'},
+                         'analysis': {}}
+        else:
+            error = f'{type(exc).__name__}: {exc}'
+            if getattr(exc, 'body', None):
+                error += f' body={exc.body[:400]}'
+    except (RuntimeError, TimeoutError, OSError) as exc:
         error = f'{type(exc).__name__}: {exc}'
         if getattr(exc, 'body', None):
             error += f' body={exc.body[:400]}'

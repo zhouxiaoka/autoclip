@@ -412,6 +412,18 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertTrue(judge.judge_suite(skipped)['skipped'])
         self.assertTrue(judge.judge_reports([report, skipped])['passed'])
 
+    def test_import_refusal_code_only_takes_coded_source_422(self):
+        # #418: the preflight refuses a bad source at import (coded 422, no project) -> a valid block.
+        import json as _json
+        from provider_e2e.harness import import_refusal_code
+        from provider_e2e.http_util import HttpError
+        body = _json.dumps({'error': {'code': 'HTTP_422'}, 'detail': {'code': 'source_no_audio', 'message': 'x'}})
+        self.assertEqual(import_refusal_code(HttpError(422, body)), 'source_no_audio')
+        self.assertIsNone(import_refusal_code(HttpError(500, body)))
+        self.assertIsNone(import_refusal_code(HttpError(422, _json.dumps({'detail': {'code': 'whisper_not_installed'}}))))
+        self.assertIsNone(import_refusal_code(HttpError(422, 'not json')))
+        self.assertIsNone(import_refusal_code(HttpError(422, _json.dumps({'detail': '视频文件为空'}))))
+
     def test_evaluate_block_requires_zero_billable(self):
         from provider_e2e.harness import evaluate_case
         workspace = {
