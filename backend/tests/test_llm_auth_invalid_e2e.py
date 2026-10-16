@@ -45,19 +45,20 @@ def test_real_sdk_wrong_key_through_step1_to_studio(tmp_path, prompt_files, monk
 
 
 def _excluded_per_query(sql):
-    """One (upstream_error_type, error_code) exclusion pair per qualifying query in success_rate.sql."""
-    pattern = r"upstream_error_type, ''\) NOT IN\s*\(([^)]*)\)\s*AND coalesce\(properties\.error_code, ''\) NOT IN\s*\(([^)]*)\)"
-    return [(set(re.findall(r"'(\w+)'", up)), set(re.findall(r"'(\w+)'", code))) for up, code in re.findall(pattern, sql)]
+    """v4: one (error_code, upstream_error_type) user_hard exclusion pair per statement in success_rate.sql."""
+    pattern = r"OR ec IN \(([^)]*)\)\s*OR ue IN \(([^)]*)\)\) AS user_hard"
+    return [(set(re.findall(r"'(\w+)'", code)), set(re.findall(r"'(\w+)'", up))) for code, up in re.findall(pattern, sql)]
 
 
 def test_success_rate_sql_excludes_llm_auth_invalid_and_every_user_caused_code():
     sql = (ROOT / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
     queries = _excluded_per_query(sql)
     assert len(queries) >= 2
-    user_caused = set(event_catalog.load_catalog()['attribution']['user_caused_error_codes'])
-    for upstream, codes in queries:
+    v4 = event_catalog.load_catalog()['attribution']['success_rate_v4']
+    for codes, upstream in queries:
         assert 'llm_auth_invalid' in codes
-        assert user_caused <= upstream | codes
+        assert set(v4['overall_excluded_error_codes']) == codes
+        assert set(v4['overall_excluded_upstream_types']) == upstream
         # legacy rows (<=1.5.7) carried invalid_key / insufficient_quota in error_code itself
         assert {'invalid_key', 'insufficient_quota'} <= codes
-    assert len({frozenset(c) for _, c in queries}) == 1, 'qualifying queries disagree on excluded codes'
+    assert len({frozenset(c) for c, _ in queries}) == 1, 'qualifying queries disagree on excluded codes'

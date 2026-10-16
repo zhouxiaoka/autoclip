@@ -170,6 +170,45 @@
       "source_blocked",
       "service_restarted"
     ],
+    "success_rate_v4": {
+      "_doc": "v4 (2026-10-16): authoritative success-rate attribution; docs/analytics/success_rate.sql must match. Older user_caused_* / environment_* keys are the pre-v4 view, kept for history.",
+      "overall_excluded_outcomes": [
+        "cancelled"
+      ],
+      "overall_excluded_error_codes": [
+        "authentication",
+        "llm_auth_invalid",
+        "invalid_key",
+        "insufficient_quota",
+        "llm_not_configured",
+        "cancelled",
+        "user_cancelled"
+      ],
+      "overall_excluded_upstream_types": [
+        "invalid_key",
+        "insufficient_quota",
+        "permission_denied"
+      ],
+      "product_extra_excluded_error_codes": [
+        "connection",
+        "source_too_short",
+        "source_no_audio",
+        "source_unreadable",
+        "source_blocked"
+      ],
+      "product_failure_codes": [
+        "whisper_not_installed",
+        "service_restarted",
+        "model_not_found",
+        "bad_endpoint"
+      ],
+      "flow_definition": {
+        "key": "flow_id of the retry-chain root (follow retry_of, max 4 hops)",
+        "outcome": "last attempt in the flow / retry chain",
+        "retry_link_property": "retry_of",
+        "max_retry_hops": 4
+      }
+    },
     "user_cause": {
       "_doc": "Shared user-cause classification (1.5.8). Same set the v4 overall success rate excludes as user cause (minus cancellation). Studio failed-state UI shows 「去设置」 instead of Retry for these; success_rate.sql / contract tests must match.",
       "error_codes": [
