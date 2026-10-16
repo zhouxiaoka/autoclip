@@ -350,30 +350,27 @@ app_version = 当前发布版本
 runtime = desktop   -- 主指标；web 可另列
 ```
 
-`partial` 算出片未成功（分子只认 `outcome_canon=success`）。
+`partial` 算出片未成功（分子只认 `outcome_canon=success`），另列 **partial-delivery 率** = `partial` 次数 / 产品口径分母。
 
-### 6.1 按次出片成功率（主指标，目标 ≥95%）
+### 6.1 成功率（v4，2026-10-16；主指标，目标 ≥95%）
 
-**一次尝试** = 一条 `studio_generation_finished` 或 `studio_production_finished`。
+机器可读口径：`event_catalog.json` → `attribution.success_rate_v4`；SQL：[`success_rate.sql`](success_rate.sql)（两者必须一致，有测试）。
 
-- **分母**：上述事件中，`failure_attribution ≠ user` 且 `≠ environment` 的次数。  
-  即：成功 + 产品侧失败。用户原因（余额不足、无音轨、密钥/地址/未配置等）和环境（站点拒绝、服务重启）不进分母。
-- **分子**：分母里 `outcome_canon = 'success'` 的次数。
-- **公式**：`countIf(success) / countIf(qualifying)`（`success` 经 `outcome_canon`，含历史 `completed`）
+- **一次尝试（attempt）** = `studio_generation_finished` / `studio_production_finished` 按 `attempt_id` 去重后取最后一条（缺 `attempt_id` 的历史行按事件 uuid 计）。重试是新的 attempt。
+- **一次流程（flow）** = 同一 `flow_id` 下最后一次 attempt 的结果（最终结果口径）。
+- **一个人** = `person_id`（不是 `distinct_id` / 设备）。
+- **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
+- **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。
+- **全量成功率** 分母只剔除明确的用户行为：`outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)`。
+- **产品成功率** 在全量基础上再剔除：`error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)`。
+- 两个口径都算 **产品失败**（不剔除）：`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`。
+- 每个口径都报 **按次** 与 **按流程** 两个率；`outcome_canon = success` 一律算成功，忽略错误字段。
 
-归因优先级：先看 `upstream_error_type` 是否属于用户原因；否则看 `error_code`。`outcome_canon = 'success'` 一律算成功，忽略错误字段。
-
-按服务商拆分用事件上的 `provider`（本次 run），**禁止**再用「最后保存的 provider」近似。
+按服务商拆分用事件上的 `provider`（本次 run 的目录 slug），**禁止**再用「最后保存的 provider」近似。
 
 ### 6.2 按人首次出片成功率
 
-**一个人** = 一个 `distinct_id`。
-
-1. 取该版本、生产环境里，这个人的 **第一条** 出片终态（generation 与 production 按时间合并，取最早）。
-2. 若这条是用户原因或环境失败：**不计入分母**（配置没配好、素材不能用，不算「首次尝试出片」）。继续看到下一条合格尝试；若一直没有合格尝试，此人不进分母。
-3. 第一条合格尝试若 `outcome_canon = success`（含历史 `completed`），分子 +1；否则 +0。
-
-**公式**：`uniqIf(distinct_id, first_qualifying_is_success) / uniq(distinct_id with ≥1 qualifying attempt)`
+按 `person_id` 取窗口内第一条 **合格** attempt（按对应口径：全量 / 产品），是 `success` 则分子 +1。没有合格 attempt 的人不进分母。
 
 不要用「曾经成功过的人数 / 打开过应用的人数」冒充本指标——那是激活，不是首次出片成功率。
 
@@ -386,7 +383,7 @@ runtime = desktop   -- 主指标；web 可另列
 3. `studio_import_accepted`
 4. `studio_screen_finished` 且 `outcome ∈ (recommended, auto_started, manual)`
 5. 出片终态 `outcome_canon=success`
-6. `studio_download_saved` 或 `studio_export_finished` 且 `outcome_canon=success`
+6. **保存（save）**：`studio_download_saved`（原生下载落盘，带 `artifact_id`）或 `studio_export_finished` 且 `outcome_canon=success`（带 `artifact_id`）。浏览器内下载、`studio_download_failed`、未带 `artifact_id` 的行不算保存。按 `person_id` 计一次。
 
 每步转化用漏斗图，不把诊断事件插进主漏斗。
 
@@ -415,78 +412,7 @@ runtime = desktop   -- 主指标；web 可另列
 | 9 | D7 回访 | Retention | `app_opened` | 起始事件 `app_installed` 或首次出片成功 | 第一列 D1、第七列 D7 |
 | 10 | 收数健康 | Trends | 核心事件列表 | 按 event 分列 | 无收数先查同意/发布，不判产品失败 |
 
-排除用户原因 / 环境（HogQL 条件，图 1–3 共用）：
-
-```sql
--- qualifying = 成功，或失败但不属于用户/环境
--- outcome_canon：1.5.8 发 success/error；历史 completed/failed 一并计入
-(
-  multiIf(
-    properties.outcome IN ('completed', 'success'), 'success',
-    properties.outcome IN ('failed', 'error'), 'error',
-    properties.outcome
-  ) = 'success'
-  OR (
-    multiIf(
-      properties.outcome IN ('completed', 'success'), 'success',
-      properties.outcome IN ('failed', 'error'), 'error',
-      properties.outcome
-    ) IN ('error', 'partial')
-    AND coalesce(properties.upstream_error_type, '') NOT IN
-        ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
-    AND coalesce(properties.error_code, '') NOT IN
-        ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
-         'whisper_not_installed', 'source_blocked', 'service_restarted',
-         'invalid_key', 'insufficient_quota')  -- 若 error_code 复用了上游名
-  )
-)
-```
-
-图 2 HogQL 草案（按人首次合格尝试）：
-
-```sql
-SELECT
-  uniqIf(distinct_id, first_outcome = 'success') AS first_success_users,
-  uniq(distinct_id) AS qualifying_users,
-  first_success_users / qualifying_users AS first_attempt_success_rate
-FROM (
-  SELECT
-    distinct_id,
-    argMin(
-      multiIf(
-        properties.outcome IN ('completed', 'success'), 'success',
-        properties.outcome IN ('failed', 'error'), 'error',
-        properties.outcome
-      ),
-      timestamp
-    ) AS first_outcome
-  FROM events
-  WHERE event IN ('studio_generation_finished', 'studio_production_finished')
-    AND properties.analytics_environment = 'production'
-    AND properties.app_version = {version}
-    AND timestamp >= now() - INTERVAL 7 DAY
-    AND (
-      multiIf(
-        properties.outcome IN ('completed', 'success'), 'success',
-        properties.outcome IN ('failed', 'error'), 'error',
-        properties.outcome
-      ) = 'success'
-      OR (
-        multiIf(
-          properties.outcome IN ('completed', 'success'), 'success',
-          properties.outcome IN ('failed', 'error'), 'error',
-          properties.outcome
-        ) IN ('error', 'partial')
-        AND coalesce(properties.upstream_error_type, '') NOT IN
-            ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
-        AND coalesce(properties.error_code, '') NOT IN
-            ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
-             'whisper_not_installed', 'source_blocked', 'service_restarted')
-      )
-    )
-  GROUP BY distinct_id
-)
-```
+图 1–3 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 最终结果、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率）。本文件不再复制 SQL，避免两份漂移。
 
 可审查 SQL 副本放在 `docs/analytics/success_rate.sql`（与本规范一起落地）。线上看板建好后把 insight 链接回写本节，仿照 [`dashboards-20260930/README.md`](dashboards-20260930/README.md)。
 
