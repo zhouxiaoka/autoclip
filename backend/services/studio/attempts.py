@@ -97,11 +97,34 @@ def check_parent(data, parent_attempt_id):
 
 
 def by_key(data, key):
-    return next((a for a in receipts(data) if key and a.get('idempotency_key') == key), None)
+    return next((a for a in receipts(data) if key and (a.get('idempotency_key') == key or key in (a.get('joined_keys') or ()))), None)
+
+
+def check_join(data, receipt, parent_attempt_id, key=None):
+    """R25 #343/#344: a request joining the open attempt passes the same parent check as the first one (the parent
+    must exist, be a v4 attempt, and be the one the open attempt retries) and registers its own idempotency key,
+    so replaying it after the attempt settled returns this receipt instead of creating another attempt."""
+    if parent_attempt_id:
+        parent = find(data, parent_attempt_id)
+        if not parent or parent.get('kind') not in KINDS:
+            raise RetryRejected('要重试的那次制作不存在')
+        if parent_attempt_id != receipt.get('retry_of'):
+            raise RetryRejected('这次制作已经重试过了')
+    if key and key != receipt.get('idempotency_key') and key not in (receipt.get('joined_keys') or []):
+        receipt.setdefault('joined_keys', []).append(key)
+    return receipt
 
 
 def bind_run(receipt, run_id):
     receipt['run_id'] = run_id
+
+
+def bind_plan(receipt, plan):
+    """R25 #348: the plan this attempt actually runs (auto: written when screening starts production; manual: the
+    confirmed one). Only a bound plan's degrade_reason is frozen at settle - an attempt that fails before its own
+    plan exists must not inherit the previous plan's reason."""
+    if receipt is not None and isinstance(plan, dict) and plan.get('id'):
+        receipt['plan_id'] = plan['id']
 
 
 def _cause(record, goal=None):
@@ -127,15 +150,23 @@ DEGRADE_REASONS = ('vision_unavailable_subtitle_fallback', 'vision_invalid_subti
                    'frame_extract_subtitle_fallback', 'source_too_long_subtitle_route')  # catalog enums.degrade_reason
 
 
-def settle(receipt, state, record, now=None, plan=None):
+def settle(receipt, state, record, now=None, plan=None, base=None):
     """Write the terminal once. Primary cause = failure_attribution over the structured causes. The degrade
     reason is frozen from this attempt's own plan (enum only), so a later re-screen cannot change it."""
     from backend.core.failure_attribution import rank_failures
     causes = causes_of(record) if state in ('failed', 'partial') else []
     ranked = rank_failures([{'error_code': c['code'], 'upstream_error_type': c['upstream'], 'failure_stage': c['stage'], '_c': c} for c in causes])
     receipt.update(state=state, finished_at=now, causes=[r['_c'] for r in ranked])
-    receipt['summary'] = {k: record[k] for k in SUMMARY_KEYS if k in record and record[k] is not None}
-    reason = (plan or {}).get('degrade_reason')
+    own = plan if isinstance(plan, dict) and plan.get('id') and plan.get('id') == receipt.get('plan_id') else {}
+    # R25 #345/#347: everything the terminal event projects is frozen here - the frontend never mixes in the live
+    # workspace or plan for a receipt (a historical receipt must not borrow the current state's numbers).
+    receipt['summary'] = {**(base or {}), **{k: record[k] for k in SUMMARY_KEYS if k in record and record[k] is not None}}
+    for key, value in (('recommendation_mode', own.get('mode')), ('analysis_mode', own.get('confirmed_analysis'))):
+        if isinstance(value, str) and value:
+            receipt['summary'][key] = value
+    if receipt.get('kind') == 'generation' and not receipt['summary'].get('route') and isinstance(own.get('recommended_analysis'), str):
+        receipt['summary']['route'] = own['recommended_analysis']
+    reason = own.get('degrade_reason')
     if reason in DEGRADE_REASONS:
         receipt['degrade_reason'] = reason
     if ranked:
@@ -146,6 +177,73 @@ def settle(receipt, state, record, now=None, plan=None):
             receipt['secondary_error_codes'] = [o['error_code'] for o in others]
             receipt['secondary_upstream_error_types'] = [o['upstream_error_type'] or '' for o in others]
             receipt['secondary_failure_stages'] = [o['failure_stage'] or '' for o in others]
+
+
+def _millis(value):
+    from datetime import datetime, timezone
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return round((parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp() * 1000)
+
+
+def generation_summary(data) -> dict:
+    """R25 #347: the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
+    (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only."""
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
+    all_variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)]
+    variants = [v for v in all_variants if v.get('status') != 'on_demand']
+    templates = {d.get('id'): d.get('packaging') for d in data.get('drafts') or [] if isinstance(d, dict)}
+    packaged = [templates.get(v.get('draft_id')) for v in variants if templates.get(v.get('draft_id'))]
+    jobs = {j.get('job_id'): j for j in data.get('jobs') or [] if isinstance(j, dict)}
+    def report(v):
+        return ((jobs.get(v.get('render_job_id') or '') or {}).get('result') or {}).get('template_render')
+    def classic(v):
+        r = report(v)
+        if r:
+            return r.get('downgraded') is True or r.get('template') == 'classic'
+        return (templates.get(v.get('draft_id')) or {}).get('template') in ('interview_zh', 'podcast_en')
+    completed = [(v, jobs.get(v.get('render_job_id') or '')) for v in variants if v.get('status') == 'completed']
+    count = lambda test: sum(1 for v in variants if test(v))
+    created, finished = _millis(generation.get('created_at')), _millis(generation.get('finished_at'))
+    branding = generation.get('branding') if isinstance(generation.get('branding'), dict) else {}
+    out = {
+        'variant_count': len(all_variants),
+        'completed_variant_count': count(lambda v: v.get('status') == 'completed'),
+        'failed_variant_count': count(lambda v: v.get('status') == 'failed'),
+        'on_demand_variant_count': len(all_variants) - len(variants),
+        'skipped_variant_count': len(generation['skipped']) if isinstance(generation.get('skipped'), list) else 0,
+        'platform_count': len(generation.get('requested_platforms') or []),
+        'interview_count': sum(1 for p in packaged if p.get('template') == 'interview_zh'),
+        'podcast_count': sum(1 for p in packaged if p.get('template') == 'podcast_en'),
+        'landscape_count': len(variants) - len(packaged),
+        'editorial_count': count(lambda v: (report(v) or {}).get('template') == 'editorial' and (report(v) or {}).get('downgraded') is not True),
+        'street_count': count(lambda v: (report(v) or {}).get('template') == 'street' and (report(v) or {}).get('downgraded') is not True),
+        'classic_count': count(classic),
+        'html_downgrade_count': count(lambda v: (report(v) or {}).get('downgraded') is True),
+        'speaker_framed_count': count(lambda v: v.get('framing') == 'speaker'),
+        'full_frame_count': count(lambda v: v.get('framing') == 'full_frame'),
+        'framing_pending_count': count(lambda v: v.get('framing') == 'full_frame_pending'),
+        'framing_captions_count': count(lambda v: v.get('framing') == 'full_frame_captions'),
+        'portrait_style': generation.get('portrait_style'),
+        'brand_outro_enabled': branding.get('outro_enabled'),
+        'outro_applied_count': sum(1 for _v, j in completed if ((j or {}).get('result') or {}).get('outro_applied') is True),
+        'outro_fallback_count': sum(1 for v, j in completed if ((j or {}).get('brand_outro') if (j or {}).get('brand_outro') is not None else (v.get('branding') or {}).get('outro_enabled')) is True
+                                    and ((j or {}).get('result') or {}).get('outro_applied') is False),
+        'outro_unknown_count': sum(1 for _v, j in completed if not isinstance(((j or {}).get('result') or {}).get('outro_applied'), bool)),
+        'packaging_fallback_count': sum(1 for p in packaged if p.get('fallback')),
+        'trimmed_count': count(lambda v: bool(v.get('trimmed_to_sec'))),
+        'burned_captions': bool(generation.get('source_has_burned_subtitles')),
+        'duration_ms': max(0, finished - created) if created is not None and finished is not None else None,
+    }
+    if generation.get('recommended_template'):
+        out['recommended_template'] = generation['recommended_template']
+    if isinstance(generation.get('accepted_recommendation'), bool):
+        out['accepted_recommendation'] = generation['accepted_recommendation']
+    return {k: v for k, v in out.items() if v is not None}
 
 
 def reconcile(data, now=None):
@@ -159,7 +257,8 @@ def reconcile(data, now=None):
         if generation.get('attempt_id') != receipt['attempt_id'] or generation.get('status') not in TERMINAL:
             return
         record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS}, **generation}
-        settle(receipt, generation['status'], record, now, data.get('plan') if isinstance(data.get('plan'), dict) else None)
+        settle(receipt, generation['status'], record, now, data.get('plan') if isinstance(data.get('plan'), dict) else None,
+               base=generation_summary(data))
     elif receipt['kind'] == 'production':
         if not receipt.get('run_id') or analysis.get('run_id') != receipt['run_id'] or analysis.get('phase') != 'production' \
                 or analysis.get('status') not in ('completed', 'failed'):
@@ -170,4 +269,4 @@ def reconcile(data, now=None):
 
 def public(receipt) -> dict:
     """What the API returns: the receipt without the idempotency key."""
-    return {k: v for k, v in receipt.items() if k != 'idempotency_key'}
+    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id')}

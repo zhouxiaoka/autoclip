@@ -465,16 +465,18 @@ export class WorkflowTracker {
         secondary_error_codes: receipt.secondary_error_codes, secondary_upstream_error_types: receipt.secondary_upstream_error_types } : {}
       const link = receipt.retry_of ? { retry_of: receipt.retry_of } : {}
       outcome = receipt.state
+      // R25 #345/#347: receipt only - its summary was frozen by the backend at settle (counts, route, plan modes);
+      // the live workspace / plan never fills a historical receipt, and flow_id is the receipt's, not the browser's.
       if (receipt.kind === 'generation') {
         event = 'studio_generation_finished'
-        details = { ...generationSummary(snapshot), ...sum, http_status: failed ? sum.http_status : undefined,
+        details = { ...sum, analysis_mode: undefined, http_status: failed ? sum.http_status : undefined,
           billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
-          degrade_reason: receipt.degrade_reason, route: sum.route || snapshot.plan?.recommended_analysis, recommendation_mode: snapshot.plan?.mode }
+          degrade_reason: receipt.degrade_reason }
       } else {
         event = 'studio_production_finished'
-        details = { ...sum, ...causes, ...link, analysis_mode: snapshot.plan?.confirmed_analysis, degrade_reason: receipt.degrade_reason }
+        details = { ...sum, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }
       }
-      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome }), receipt.attempt_id)
+      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome, ...(receipt.flow_id ? { flow_id: receipt.flow_id } : {}) }), receipt.attempt_id)
       if (w.seen.includes('finished')) {
         w.settled = true; this.persist()
         const c = this.contexts[pid]

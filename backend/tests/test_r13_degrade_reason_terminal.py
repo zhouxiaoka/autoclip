@@ -70,7 +70,9 @@ def test_degrade_reason_reaches_terminal_event_from_stored_record(project, reaso
 
     def start(data):
         data.update(seed)
-        opened.update(attempts.open_attempt(data, receipt_kind, run_id='run'))
+        receipt = attempts.open_attempt(data, receipt_kind, run_id='run')
+        attempts.bind_plan(receipt, data['plan'])  # R25 #348: what _inspect / confirm_project do for the attempt's own plan
+        opened.update(receipt)
         if auto:
             data['generation']['attempt_id'] = opened['attempt_id']
         return data

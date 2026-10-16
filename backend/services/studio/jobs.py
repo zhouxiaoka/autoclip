@@ -1465,7 +1465,7 @@ def _variant_attempt(data, retry):
     """「重试这条」 is a new aggregate generation attempt; a second one while it is open joins it (serial)."""
     open_now = attempts.current(data)
     if open_now and open_now['kind'] == 'generation' and open_now.get('trigger') == 'variant_retry':
-        receipt = open_now
+        receipt = attempts.check_join(data, open_now, (retry or {}).get('parent_attempt_id'), (retry or {}).get('key'))
     else:
         parent = _retry_parent(data, (retry or {}).get('parent_attempt_id'))
         receipt = attempts.open_attempt(data, 'generation', trigger='variant_retry', parent=parent,
@@ -1630,6 +1630,9 @@ def _inspect(project_id, options, url, browser):
             def start_automatic(data):
                 run_id = (data.get('analysis') or {}).get('run_id')  # observers match the run across phases
                 data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
+                receipt = attempts.current(data)
+                if receipt and receipt.get('attempt_id') == (data.get('generation') or {}).get('attempt_id'):
+                    attempts.bind_plan(receipt, plan)  # R25 #348: this attempt's own plan
                 data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan))
                 return run_id
             run_id = store.change(project_id, start_automatic)
@@ -1727,7 +1730,8 @@ def confirm_project(project_id, body):
         if pending and pending['kind'] == 'production' and not pending.get('run_id'):
             attempts.bind_run(pending, state['analysis']['run_id'])
         else:
-            attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
+            pending = attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
+        attempts.bind_plan(pending, plan)  # R25 #348: the confirmed plan is this attempt's own
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))

@@ -593,14 +593,16 @@ def write(project_id, data, *, _recover_previous=True):
     previous = read(project_id, recover=_recover_previous) if path.exists() else {}
     _apply_read_receipts(path, data)
     _ensure_failure_identity(data)
-    from backend.services.studio import attempts
-    attempts.reconcile(data, now())  # the one place an attempt receipt settles (same atomic write)
     usage_checkpoint = _attach_run_telemetry(data, project_id, previous)
     analysis = data.get('analysis') or {}
     prior = previous.get('analysis') or {}
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
         analysis['run_id'] = prior['run_id']
         analysis.setdefault('phase', prior.get('phase'))
+    # R25 #342: settle only after the terminal identity (run_id/phase) and the run telemetry are complete - the
+    # worker's terminal write inherits run_id/phase above. The one place a receipt settles (same atomic write).
+    from backend.services.studio import attempts
+    attempts.reconcile(data, now())
     history = list(previous.get('analysis_history', []))
     for terminal, state in ((prior, previous), (analysis, data)):
         if terminal.get('run_id') and terminal.get('status') in ('awaiting_confirmation', 'completed', 'failed'):
