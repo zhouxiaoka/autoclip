@@ -30,18 +30,14 @@ CHUNK_ATTEMPTS = 3  # parallel uploads meet rate limits more often: a busy chunk
 
 
 def _retryable(error: Exception) -> bool:
-    if isinstance(error, httpx.HTTPStatusError):
-        return error.response.status_code == 429 or error.response.status_code >= 500
+    """Classified first (R22 #170): only transient upstream types are retried, never a user cause such as
+    insufficient_quota behind a 429; a bare 429 / 5xx without a recognised body stays retryable."""
+    if isinstance(error, CloudTranscriptionError):
+        from backend.core.upstream_errors import is_retryable
+        if error.upstream_error_type:
+            return is_retryable(error.upstream_error_type)
+        return error.http_status is not None and (error.http_status == 429 or error.http_status >= 500)
     return isinstance(error, httpx.RequestError)
-
-
-def _safe_body(response):
-    """Provider body for classification only (R20 #124); never stored, logged or put into the error."""
-    try:
-        response.read()
-        return response.text
-    except Exception:  # noqa: BLE001 - stream already closed / undecodable: classify by status alone
-        return None
 
 
 def _upstream_type(status, body):
@@ -49,6 +45,20 @@ def _upstream_type(status, body):
     from backend.core.upstream_errors import classify_upstream_error
     kind = classify_upstream_error(status, body).error_type.value
     return '' if kind == 'unknown' else kind
+
+
+def _check_status(response):
+    """The one place an HTTP error is classified. Called while the (stream) response is still open, so the
+    body is readable (R22 #169); only the enum and status leave this function, never the body."""
+    if not response.is_error:
+        return
+    try:
+        body = response.read().decode('utf-8', 'replace')
+    except Exception:  # noqa: BLE001 - unreadable body: classify by status alone
+        body = None
+    status = response.status_code
+    raise CloudTranscriptionError(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。',
+                                  http_status=status, upstream_error_type=_upstream_type(status, body))
 
 
 class CloudTranscriptionError(RuntimeError):
@@ -104,7 +114,7 @@ def request_chunk(client, connection, model, audio, language):
         sentences = {}
         with client.stream('POST', base + '/services/aigc/multimodal-generation/generation',
                            headers={**headers, 'X-DashScope-SSE': 'enable'}, json=payload) as response:
-            response.raise_for_status()
+            _check_status(response)
             if 'text/event-stream' in response.headers.get('content-type', ''):
                 events = (json.loads(line[5:].strip()) for line in response.iter_lines()
                           if line.startswith('data:') and line[5:].strip() not in {'', '[DONE]'})
@@ -133,7 +143,7 @@ def request_chunk(client, connection, model, audio, language):
     with audio.open('rb') as stream:
         response = client.post(endpoint['base_url'].rstrip('/') + '/audio/transcriptions', headers=headers,
                                data=data, files={'file': ('audio.wav', stream, 'audio/wav')})
-    response.raise_for_status()
+    _check_status(response)
     payload = response.json()
     segments = payload.get('segments')
     if not isinstance(segments, list):
@@ -185,7 +195,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                         try:
                             items, milliseconds = request_chunk(client, connection, selection.model, chunk, language)
                             break
-                        except (httpx.HTTPStatusError, httpx.RequestError) as error:
+                        except (CloudTranscriptionError, httpx.RequestError) as error:
                             if attempt == CHUNK_ATTEMPTS - 1 or not _retryable(error):
                                 raise
                             time.sleep(2 * 2 ** attempt)
@@ -199,10 +209,6 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                 finally:
                     # On a failure, chunks not yet sent are dropped instead of spending more quota.
                     pool.shutdown(wait=True, cancel_futures=True)
-        except httpx.HTTPStatusError as exc:
-            raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。',
-                                          http_status=exc.response.status_code,
-                                          upstream_error_type=_upstream_type(exc.response.status_code, _safe_body(exc.response))) from None
         except (httpx.RequestError, ValueError) as exc:
             raise CloudTranscriptionError('云端转写连接失败或响应格式无效，请稍后重试。') from None
         if not segments:

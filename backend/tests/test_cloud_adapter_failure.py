@@ -251,7 +251,8 @@ def test_r20_124_asr_429_insufficient_balance_is_quota_not_rate_limit(cloud_adap
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed' and result['http_status'] == 429
     assert result['upstream_error_type'] == 'insufficient_quota'
-    assert result['error_code'] == 'insufficient_quota'
+    assert result['error_code'] == 'provider_error'  # R22 #171: one code vocabulary; the user cause is upstream_error_type
+    assert len(case.requests) == 1                   # R22 #170: no balance is never re-uploaded
     assert 'raw-provider-secret-body' not in str(result) and 'raw-provider-secret-body' not in caplog.text
     assert 'Insufficient balance' not in str(result)
 
@@ -262,3 +263,53 @@ def test_r20_124_plain_429_stays_rate_limited(cloud_adapter, model):
     case.configure(model, lambda request: httpx.Response(429, json={'error': {'message': 'slow down'}}, request=request))
     result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['upstream_error_type'] == 'rate_limited' and result['error_code'] == 'provider_error'
+
+
+class _LiveStream(httpx.SyncByteStream):
+    """R22 #169: a real network-like body - not pre-read, unreadable once the response is closed."""
+    def __init__(self, body: bytes):
+        self.body, self.closed = body, False
+
+    def __iter__(self):
+        if self.closed:
+            raise httpx.StreamClosed()
+        yield self.body
+
+    def close(self):
+        self.closed = True
+
+
+def _live(status, payload, content_type='application/json'):
+    body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+    return lambda request: httpx.Response(status, headers={'content-type': content_type}, stream=_LiveStream(body), request=request)
+
+
+@pytest.mark.parametrize('model', MODELS)
+def test_r22_169_streamed_429_balance_is_read_inside_the_stream(cloud_adapter, model, caplog):
+    case = cloud_adapter
+    case.configure(model, _live(429, {'code': 'Arrearage', 'message': 'Insufficient balance raw-provider-secret-body'}))
+    with caplog.at_level(logging.INFO, logger=pipeline.__name__):
+        result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
+    assert result['http_status'] == 429 and result['upstream_error_type'] == 'insufficient_quota'
+    assert len(case.requests) == 1                       # #170: classified before the retry decision
+    assert 'raw-provider-secret-body' not in str(result) and 'raw-provider-secret-body' not in caplog.text
+
+
+@pytest.mark.parametrize('model', MODELS)
+def test_r22_170_streamed_plain_429_still_retries(cloud_adapter, model):
+    case = cloud_adapter
+    case.configure(model, _live(429, {'code': 'Throttling.RateQuota', 'message': 'slow down'}))
+    result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
+    assert result['upstream_error_type'] == 'rate_limited'
+    assert len(case.requests) == asr.CHUNK_ATTEMPTS
+
+
+@pytest.mark.parametrize('code,upstream', [('Arrearage', 'insufficient_quota'), ('AccessDenied', 'permission_denied'),
+                                           ('AccessDenied.Unpurchased', 'permission_denied'), ('InvalidApiKey', 'invalid_key')])
+def test_r22_172_dashscope_sse_error_event_codes(cloud_adapter, code, upstream):
+    case = cloud_adapter
+    sse = ('data: ' + json.dumps({'code': code, 'message': 'raw-provider-secret-body'}) + '\n\n').encode()
+    case.configure(MODELS[0], _live(200, sse, 'text/event-stream'))
+    result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
+    assert result['status'] == 'failed' and result['upstream_error_type'] == upstream
+    assert len(case.requests) == 1 and 'raw-provider-secret-body' not in str(result)
