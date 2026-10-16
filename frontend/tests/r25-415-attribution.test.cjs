@@ -33,3 +33,8 @@ test('#332 an unpaired legacy screening identity reads as empty, not half an ide
   assert.equal(id.provider, undefined)
   assert.equal(id.config_source, undefined)
 })
+
+test('#332 a half screening_identity is ignored; the paired flat identity is used whole', () => {
+  const id = workflow.screeningIdentity({ analysis: { status: 'failed', phase: 'screening', provider: 'glm', config_source: 'customized', screening_identity: { provider: 'kimi' } } })
+  assert.deepEqual({ ...id }, { provider: 'glm', config_source: 'customized' })
+})

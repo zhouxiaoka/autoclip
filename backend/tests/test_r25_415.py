@@ -347,3 +347,21 @@ def test_331_an_outer_observed_layer_never_replaces_the_failing_requests_record(
             llm_emit.observe_provider_call(_provider('https://glm.fixture.example/v1', 'glm-4'), outer, 'p')
         tags = llm_emit.sentry_tags_for_error(caught.value, 'analyze')
     assert (tags.get('provider'), tags.get('model'), tags.get('http_status')) == ('kimi', 'kimi-k2', '503')
+
+
+def test_335_release_deletes_only_while_holding_the_store_lock(monkeypatch):
+    """R24 m5: the reference scan alone being locked is not enough; the unlink must be too."""
+    root = shutdown_marker._root()
+    _records(root, 1)
+    name = f'{0:032x}'
+    shutdown_marker._consumed[(str(root), name)] = 'unacked'
+    held = []
+    real = Path.unlink
+
+    def spy(self, *a, **k):
+        if self.name == name:
+            held.append(store.lock._is_owned())
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, 'unlink', spy)
+    shutdown_marker.release(name)
+    assert held == [True]
