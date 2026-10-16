@@ -177,10 +177,14 @@ def test_only_the_local_token_is_accepted_and_never_echoed(monkeypatch, caplog, 
     assert _kind_now() == 'crash'
 
 
-def test_intent_router_is_mounted_in_the_app():
+def test_intent_router_is_mounted_in_the_app(monkeypatch):
     from backend.app_factory import create_app
-    paths = {getattr(route, 'path', None) for route in create_app(mode='web').routes}
-    assert '/internal/shutdown-intent' in paths
+    monkeypatch.setenv('AUTOCLIP_SHUTDOWN_TOKEN', TOKEN)
+    client = TestClient(create_app(mode='web'))
+    assert client.post('/internal/shutdown-intent', json={'kind': 'user_quit'}).status_code == 403
+    response = client.post('/internal/shutdown-intent', json={'kind': 'update'}, headers={'X-AutoClip-Local-Token': TOKEN})
+    assert response.status_code == 200
+    assert _kind_now() == 'clean'
 
 
 def test_parent_loss_marks_parent_lost(monkeypatch):
