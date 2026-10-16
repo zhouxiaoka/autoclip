@@ -144,20 +144,25 @@ async def import_visual(
         try:
             readiness.ensure_local_transcription_for_import(srt_available=subtitle_bytes is not None)
         except ValueError:
-            staged = await _stage_upload(video, first_chunk, ext)
+            staged = await stage_upload(video, first_chunk, ext)
             try:
                 readiness.ensure_local_transcription_for_import(srt_available=subtitle_bytes is not None, video=staged)
             except ValueError as exc:
                 staged.unlink(missing_ok=True)
                 await video.close()
                 raise HTTPException(422, str(exc)) from exc
-    prefs = ImportOptions(
-        goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
-        platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
-        recommended_template=recommended_template,
-        branding={'outro_enabled': brand_outro_enabled},
-    )
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+    try:
+        prefs = ImportOptions(
+            goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+            platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
+            recommended_template=recommended_template,
+            branding={'outro_enabled': brand_outro_enabled},
+        )
+        project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+    except BaseException:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+        raise
     pid = str(project.id)
     raw = store.directory(pid) / 'raw'
     raw.mkdir(parents=True, exist_ok=True)
@@ -190,21 +195,27 @@ async def import_visual(
         db.commit()
         raise
     finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)  # no-op once moved into the project
         if video:
             await video.close()
     return {'project_id': pid, 'analysis_run_id': run_id}
 
 
 
-async def _stage_upload(video: UploadFile, first_chunk: bytes, ext: str) -> Path:
+async def stage_upload(video: UploadFile, first_chunk: bytes, ext: str) -> Path:
     """Write the upload outside any project so a refused import leaves no project behind."""
     staging = store.get_projects_directory().parent / 'import-staging'
     staging.mkdir(parents=True, exist_ok=True)
     path = staging / (uuid.uuid4().hex + ext)
-    with path.open('wb') as target:
-        target.write(first_chunk)
-        while chunk := await video.read(1024 * 1024):
-            target.write(chunk)
+    try:
+        with path.open('wb') as target:
+            target.write(first_chunk)
+            while chunk := await video.read(1024 * 1024):
+                target.write(chunk)
+    except BaseException:  # includes client disconnect / cancellation mid-upload
+        path.unlink(missing_ok=True)
+        raise
     return path
 
 
@@ -346,6 +357,9 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             url = (project.project_metadata or {}).get('source_url')
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
+        if not url:
+            from backend.services.studio import readiness
+            call(readiness.ensure_local_transcription_for_paths, jobs.source(project_id))
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()

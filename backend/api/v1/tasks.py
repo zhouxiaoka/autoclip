@@ -181,6 +181,12 @@ async def retry_task(
         task = task_service.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
+        if str(task.task_type.value if hasattr(task.task_type, "value") else task.task_type) == "video_processing":
+            from backend.services.studio import readiness
+            try:  # 1.5.8 gate before resetting the task
+                readiness.ensure_local_transcription_for_paths(_get_task_config_value(task, "input_video_path"), _get_task_config_value(task, "input_srt_path"))
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         
         # 重置任务状态并重新提交
         task_service.update_task(task_id, TaskUpdate(status="pending", progress=0))

@@ -88,11 +88,12 @@ export function asrReadinessProperties(report: ImportReadiness | null, hasSubtit
 
 /** 1.5.8: local file, local Whisper selected but not installed, no SRT -> blocking install prompt.
  * Offers the existing install flow or an explicit switch to cloud; never switches automatically. */
-export function localTranscriptionGate(report: ImportReadiness | null, hasSubtitle: boolean, source: SubmissionOptions['source']): boolean {
-  if (hasSubtitle || source !== 'file') return false
-  if (report?.analysis_mode === 'visual') return false
+export function localTranscriptionGate(report: ImportReadiness | null, hasSubtitle: boolean, source: SubmissionOptions['source']): 'install' | 'installing' | null {
+  if (hasSubtitle || source !== 'file') return null
+  if (report?.analysis_mode === 'visual') return null
   const code = report?.checks?.transcription?.code
-  return code === 'whisper_not_installed' || code === 'whisper_install_failed'
+  if (code === 'whisper_installing') return 'installing'
+  return code === 'whisper_not_installed' || code === 'whisper_install_failed' ? 'install' : null
 }
 
 export const CLOUD_TRANSCRIPTION_DESTINATION = '/settings?section=speech&provider=cloud'

@@ -22,6 +22,11 @@ async def process_project(
     processing_service: ProcessingService = Depends(get_processing_service)
 ):
     """开始处理项目"""
+    from backend.services.studio import readiness
+    try:
+        readiness.ensure_local_transcription_for_project(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         result = processing_service.process_project(project_id)
         return {

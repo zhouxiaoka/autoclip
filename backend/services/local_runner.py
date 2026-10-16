@@ -314,6 +314,9 @@ def prepare_project(req: RunRequest, link: bool = True) -> Path:
         req.srt = req.srt.expanduser().resolve()
         if not req.srt.exists():
             raise FileNotFoundError(f"字幕不存在: {req.srt}")
+    # 1.5.8: CLI / MCP run share the desktop gate (local Whisper missing or installing, no subtitle).
+    from backend.services.studio import readiness
+    readiness.ensure_local_transcription_for_paths(req.video, req.srt)
 
     project_dir = get_project_directory(req.project_id)
     raw_dir = project_dir / "raw"

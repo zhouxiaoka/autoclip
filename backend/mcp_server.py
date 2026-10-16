@@ -162,6 +162,9 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
             _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
                         error_code="none", result=summary)
             return _jobs[req.project_id]
+        except ValueError as e:  # 1.5.8 local-transcription gate (Whisper missing / installing, no subtitle)
+            _job_update(req.project_id, status="failed", error_code="invalid_input", error=str(e)[:500])
+            return _jobs[req.project_id]
         except Exception as e:  # noqa: BLE001
             logger.exception("MCP 任务失败")
             _job_update(req.project_id, status="failed", error_code="failed", error=str(e)[:500])

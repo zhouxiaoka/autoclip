@@ -50,6 +50,7 @@ function repairLabel(item: ReadinessIssue) {
 
 /** Sentinel in the error slot: renders the install prompt instead of plain error text. */
 const LOCAL_TRANSCRIPTION_GATE = '需要先安装本地转写'
+const LOCAL_TRANSCRIPTION_INSTALLING = '等待安装完成'
 
 function uiLocale() {
   try { return getLocale() } catch { return 'en' }
@@ -210,7 +211,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
-    if (reason === 'transcription' && localTranscriptionGate(readiness, !!subtitle, nextSource)) { setError(LOCAL_TRANSCRIPTION_GATE); return false }
+    const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource) : null
+    if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
     if (trigger !== 'button') setError('')
     return true
@@ -315,7 +317,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
           <Btn size="sm" disabled={busy || repairing} onClick={() => navigate(CLOUD_TRANSCRIPTION_DESTINATION)}>{t('改用云端转写')}</Btn>
         </div>
       </div>}
-      {error&&error!==LOCAL_TRANSCRIPTION_GATE&&<p className="studio-error" role="alert">{error}</p>}
+      {error === LOCAL_TRANSCRIPTION_INSTALLING && <div className="studio-readiness" role="alertdialog" aria-label={t('等待安装完成')}>
+        <b>{t('等待安装完成')}</b>
+        <span>{t('本地 Whisper 正在安装，装好后再开始。')}</span>
+      </div>}
+      {error&&error!==LOCAL_TRANSCRIPTION_GATE&&error!==LOCAL_TRANSCRIPTION_INSTALLING&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>
       <ImportPreferences value={options} onChange={setOptions}/>

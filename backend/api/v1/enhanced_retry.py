@@ -261,6 +261,11 @@ async def smart_retry_project(
         
         elif strategy == RetryStrategy.PROCESSING_ONLY:
             # 仅重试处理
+            from backend.services.studio import readiness
+            try:
+                readiness.ensure_local_transcription_for_project(project_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             processing_result = await retry_processing_only(project_id, db)
             return RetryResponse(
                 success=True,

@@ -182,6 +182,7 @@ def require_transcription(*, stage: str = 'SUBTITLE', srt_available: bool = Fals
 
 
 LOCAL_TRANSCRIPTION_REQUIRED = '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。'
+LOCAL_TRANSCRIPTION_INSTALLING = '等待安装完成：本地 Whisper 正在安装，装好后再开始。'
 
 
 def ensure_local_transcription_for_import(*, srt_available: bool, video=None) -> None:
@@ -201,11 +202,28 @@ def ensure_local_transcription_for_import(*, srt_available: bool, video=None) ->
     choice = settings.transcription or ai_models.Transcription()
     if choice.provider != 'whisper_local':
         return
-    if _transcription(settings).get('code') not in ('whisper_not_installed', 'whisper_install_failed'):
+    code = _transcription(settings).get('code')
+    if code not in ('whisper_not_installed', 'whisper_install_failed', 'whisper_installing'):
         return
     if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
         return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code
-    raise ValueError(LOCAL_TRANSCRIPTION_REQUIRED)
+    raise ValueError(LOCAL_TRANSCRIPTION_INSTALLING if code == 'whisper_installing' else LOCAL_TRANSCRIPTION_REQUIRED)
+
+
+def ensure_local_transcription_for_paths(video, srt=None) -> None:
+    """Same gate for legacy entry points that already have files on disk (process / retry / CLI / MCP).
+    A missing video is not gated here: those paths re-download or fail with their own error."""
+    if not video or not Path(video).is_file():
+        return
+    srt_ok = Path(srt).is_file() if srt else (Path(video).parent / 'input.srt').is_file()
+    ensure_local_transcription_for_import(srt_available=srt_ok, video=Path(video))
+
+
+def ensure_local_transcription_for_project(project_id: str) -> None:
+    from backend.core.path_utils import get_project_raw_directory
+    raw = get_project_raw_directory(project_id)
+    video = next((raw / f'input{ext}' for ext in ('.mp4', '.mov', '.mkv', '.webm', '.avi') if (raw / f'input{ext}').is_file()), None)
+    ensure_local_transcription_for_paths(video)
 
 
 def _source_cannot_take_subtitle_route(video, srt_available: bool) -> bool:

@@ -171,7 +171,7 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
     )
     try:
         video_in_raw = prepare_project(req, link=not args.copy)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:  # ValueError: 1.5.8 local-transcription gate
         outcome.update(ok=False, error_code='invalid_input', job_id=req.project_id)
         _err(str(e))
         return 2
