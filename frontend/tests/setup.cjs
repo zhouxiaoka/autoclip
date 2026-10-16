@@ -1,83 +1,73 @@
-// Shared test setup (R22 follow-up): loaded by `npm test` via --require into every test process.
+// Shared strict test setup, loaded by `npm test` and the redline gate via `node --require ./tests/setup.cjs --test`.
+// It only activates inside the per-file test processes the runner spawns, never in the parent runner
+// or in processes a test spawns (#276).
 //
-// 1. vm sandboxes get the standard globals a browser bundle can rely on (URL, HTMLElement, ...). A sandbox
-//    that forgot one turned `new URL()` / `instanceof HTMLElement` into a ReferenceError, which product code
-//    then swallowed in its own try/catch or event handler, so tests passed without the code under test
-//    ever running (#209). Only missing names are filled; whatever a test passes explicitly wins.
-//    `window` / `document` / `navigator` / storage are never added: tests decide on those themselves.
-// 2. Errors that would otherwise vanish fail the test: console.error, an exception thrown inside a
-//    happy-dom event listener (reported on the window), and unhandled rejections.
+// 1. Swallowed errors fail the run: console.error, an exception inside a happy-dom event listener and an
+//    unhandled rejection. A problem is never cleared without being reported (#270): one recorded at module
+//    top level, between tests or in a test's own window fails the next test, and anything left after the
+//    last test fails the file at exit. There is no opt-out (#275).
+// 2. Every happy-dom window is covered, whenever and wherever the test creates it (#271).
+// 3. vm sandboxes only get URL / URLSearchParams when they forgot them (#209). Timers, AbortController and
+//    DOM types are the test's own decision and must be passed explicitly (#272).
 'use strict'
-// Loaded through frontend/.npmrc (node-options) for every npm script: do nothing outside the test runner.
-const testFile = process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
-if (testFile && process.env.NODE_OPTIONS) {
-  // Processes a test spawns (vite build, python fixtures, nested node) must not inherit this setup.
-  process.env.NODE_OPTIONS = process.env.NODE_OPTIONS.replace(/--require[= ]\S*setup\.cjs/g, '').trim()
-}
-if (testFile || (process.execArgv.includes('--test') && !process.env.NODE_TEST_CONTEXT) || /\.test\.c?js$/.test(process.argv[1] || '')) {
-const vm = require('node:vm')
-const util = require('node:util')
-const fs = require('node:fs')
+if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')) {
+  const vm = require('node:vm')
+  const util = require('node:util')
+  const Module = require('node:module')
 
-const JS_GLOBALS = ['URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder', 'AbortController', 'AbortSignal', 'Blob',
-  'structuredClone', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'atob', 'btoa',
-  'console', 'performance', 'Intl']
-const DOM_GLOBALS = ['HTMLElement', 'Element', 'Node', 'Event', 'CustomEvent', 'EventTarget', 'KeyboardEvent', 'MouseEvent',
-  'ClipboardEvent', 'DragEvent', 'File', 'FileList', 'FormData', 'DataTransfer', 'HTMLInputElement', 'HTMLTextAreaElement',
-  'HTMLButtonElement', 'HTMLVideoElement', 'DOMParser', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']
-
-function source(name) {
-  const win = globalThis.window
-  if (DOM_GLOBALS.includes(name)) return win && win.happyDOM ? win[name] : undefined
-  return globalThis[name]
-}
-
-const audit = process.env.AC_SANDBOX_AUDIT
-function fill(context) {
-  if (!context || typeof context !== 'object' || vm.isContext(context)) return context
-  if (context.happyDOM || /node_modules[\\/]/.test(new Error().stack.split('\n').slice(3, 4).join(''))) return context  // libraries' own contexts (happy-dom's Window)
-  for (const name of [...JS_GLOBALS, ...DOM_GLOBALS]) {
-    if (Object.prototype.hasOwnProperty.call(context, name)) continue
-    const value = source(name)
-    if (value === undefined) continue
-    if (!audit) { context[name] = value; continue }
-    Object.defineProperty(context, name, { configurable: true, enumerable: false, get() {
-      if (name !== 'console') fs.appendFileSync(audit, `${process.argv[1] || ''}\t${currentTest() || ''}\t${name}\n`)
-      return value
-    } })
+  // ---- vm sandboxes: only the two URL globals
+  const FILLED = ['URL', 'URLSearchParams']
+  function fill(context) {
+    if (!context || typeof context !== 'object' || vm.isContext(context) || context.happyDOM) return context
+    for (const name of FILLED) if (!Object.prototype.hasOwnProperty.call(context, name)) context[name] = globalThis[name]
+    return context
   }
-  return context
-}
-let testName = ''
-function currentTest() { return testName }
+  const runInNewContext = vm.runInNewContext
+  vm.runInNewContext = function (code, context, ...rest) { return runInNewContext.call(this, code, fill(context ?? {}), ...rest) }
+  const createContext = vm.createContext
+  vm.createContext = function (context, ...rest) { return createContext.call(this, fill(context ?? {}), ...rest) }
 
-const runInNewContext = vm.runInNewContext
-vm.runInNewContext = function (code, context, ...rest) { return runInNewContext.call(this, code, fill(context ?? {}), ...rest) }
-const createContext = vm.createContext
-vm.createContext = function (context, ...rest) { return createContext.call(this, fill(context ?? {}), ...rest) }
+  // ---- strict errors
+  const problems = []
+  const realError = console.error.bind(console)
+  console.error = (...args) => { problems.push('console.error: ' + util.format(...args)); realError(...args) }
+  process.on('unhandledRejection', reason => { problems.push('unhandled rejection: ' + util.inspect(reason)) })
 
-// ---- 2. strict: swallowed errors fail the test
-const problems = []
-const realError = console.error.bind(console)
-console.error = (...args) => { problems.push('console.error: ' + util.format(...args)); realError(...args) }
-process.on('unhandledRejection', reason => { problems.push('unhandled rejection: ' + util.inspect(reason)) })
+  // happy-dom routes every listener / timer exception of every window through
+  // BrowserWindow#[dispatchError], so patching it once covers windows created anywhere (#271).
+  const patched = new WeakSet()
+  function patchHappyDom(exports) {
+    const proto = exports && exports.BrowserWindow && exports.BrowserWindow.prototype
+    const key = exports && exports.PropertySymbol && exports.PropertySymbol.dispatchError
+    if (!proto || typeof key !== 'symbol' || patched.has(proto)) return
+    patched.add(proto)
+    const original = proto[key]
+    proto[key] = function (error) {
+      problems.push('error in a happy-dom event handler: ' + util.inspect(error))
+      return original.call(this, error)
+    }
+  }
+  const load = Module._load
+  Module._load = function (request, parent, ...rest) {
+    const exports = load.call(this, request, parent, ...rest)
+    if (request === 'happy-dom' || /[\\/]happy-dom[\\/]lib[\\/]index\.js$/.test(request)) patchHappyDom(exports)
+    return exports
+  }
 
-let hooked = null
-function hookWindow() {
-  const win = globalThis.window
-  if (!win || !win.happyDOM || hooked === win) return
-  hooked = win
-  win.addEventListener('error', event => { problems.push('error in a DOM event handler: ' + util.inspect(event.error || event.message)) })
-  // happy-dom logs listener exceptions through window.console
-  if (win.console && win.console !== console) win.console.error = (...args) => { problems.push('window.console.error: ' + util.format(...args)) }
-}
-
-const nodeTest = require('node:test')
-nodeTest.beforeEach(t => { testName = t.name; hookWindow(); problems.length = 0 })
-nodeTest.afterEach(() => {
-  hookWindow()
-  if (process.env.AC_SANDBOX_LENIENT || !problems.length) { problems.length = 0; return }
-  const found = problems.splice(0)
-  throw new Error('swallowed error(s) during the test:\n' + found.join('\n'))
-})
+  function take() { return problems.splice(0) }
+  const nodeTest = require('node:test')
+  nodeTest.beforeEach(t => {
+    const found = take()  // recorded before this test (module top level, previous test's late callbacks)
+    if (found.length) throw new Error('swallowed error(s) before the test ' + JSON.stringify(t.name) + ':\n' + found.join('\n'))
+  })
+  nodeTest.afterEach(() => {
+    const found = take()
+    if (found.length) throw new Error('swallowed error(s) during the test:\n' + found.join('\n'))
+  })
+  process.on('exit', () => {
+    const found = take()
+    if (!found.length) return
+    process.stderr.write('swallowed error(s) outside any test:\n' + found.join('\n') + '\n')
+    process.exitCode = 1
+  })
 }
