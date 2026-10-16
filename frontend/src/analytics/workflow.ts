@@ -77,7 +77,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     qa_mode: ['shadow'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'other'],
     route: ['subtitle', 'visual'],
-    provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
+    provider: ['api88', 'infistar', 'deepseek', 'dashscope', 'siliconflow', 'seed', 'glm', 'kimi', 'minimax-cn', 'xiaomi', 'openai', 'gemini', 'whisper', 'sensevoice', 'ollama', 'lmstudio', 'openrouter', 'anthropic', 'grok', 'groq', 'mistral', 'together', 'fireworks', 'huggingface', 'nvidia', 'cerebras', 'baseten', 'azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway', 'vercel-ai-gateway', 'moonshotai', 'minimax', 'ant-ling', 'qianfan', 'hunyuan', 'byteplus-modelark', 'compatible', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
     config_source: ['preset', 'customized'],
     shutdown_kind: ['clean', 'crash', 'unknown'],
     upstream_error_type: ['invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'timeout', 'connection', 'output_truncated', 'unknown'],

@@ -28,10 +28,13 @@ EVENT_PROVIDER_VALIDATION_FINISHED = "provider_validation_finished"
 EVENT_STUDIO_GENERATION_FINISHED = "studio_generation_finished"
 EVENT_STUDIO_PRODUCTION_FINISHED = "studio_production_finished"
 
-TELEMETRY_PROVIDERS: frozenset[str] = frozenset({
-    "dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok",
-    "infistar", "api88", "compatible", "ollama", "lmstudio", "other",
-})
+def _telemetry_providers() -> frozenset[str]:
+    # Single source: backend/presets/provider_presets.json (every preset id) + compatible/other.
+    from backend.core.provider_presets import telemetry_provider_slugs
+    return frozenset(telemetry_provider_slugs())
+
+
+TELEMETRY_PROVIDERS: frozenset[str] = _telemetry_providers()
 ASR_PROVIDERS: frozenset[str] = frozenset({
     "whisper_local", "sensevoice_local", "cloud",
 })
@@ -181,8 +184,13 @@ def sanitize_provider(value: str | None, *, allow_asr: bool = False) -> str | No
     key = value.strip().lower()
     if key in TELEMETRY_PROVIDERS:
         return key
-    if allow_asr and key in ASR_PROVIDERS:
-        return key
+    if key in ASR_PROVIDERS:
+        return key if allow_asr else None
+    if key:
+        from backend.core.provider_presets import resolve_provider_id
+        resolved = resolve_provider_id(key)
+        if resolved in TELEMETRY_PROVIDERS:
+            return resolved
     return None
 
 

@@ -5,10 +5,6 @@ connection uses the catalog base URL and a catalog model id, else ``customized``
 """
 from __future__ import annotations
 
-PROVIDER_SLUGS = frozenset({
-    'dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88',
-    'compatible', 'ollama', 'lmstudio',
-})
 CONFIG_SOURCES = ('preset', 'customized')
 
 
@@ -53,7 +49,8 @@ def provider_identity() -> dict:
         return {}
     if connection is None:
         return {}
-    slug = connection.provider if connection.provider in PROVIDER_SLUGS else 'other'
+    from backend.core.llm_telemetry import sanitize_provider
+    slug = sanitize_provider(connection.provider) or 'other'
     try:
         source = config_source(connection.provider, connection.base_url, binding.model)
     except Exception:  # noqa: BLE001

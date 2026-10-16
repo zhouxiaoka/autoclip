@@ -39,7 +39,7 @@ def test_sanitize_model_and_provider():
     assert telemetry.sanitize_model("a" * 65) == "redacted"
     assert telemetry.sanitize_model(PROMPT) == "redacted"
     assert telemetry.sanitize_provider("API88") == "api88"
-    assert telemetry.sanitize_provider("siliconflow") is None
+    assert telemetry.sanitize_provider("siliconflow") == "siliconflow"  # R16 #41: every preset is its own slug
     assert telemetry.sanitize_provider("whisper_local", allow_asr=True) == "whisper_local"
     assert telemetry.sanitize_provider("whisper_local") is None
 
