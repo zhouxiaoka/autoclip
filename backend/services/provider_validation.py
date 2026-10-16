@@ -47,6 +47,8 @@ PROBE_TIMEOUT = 20.0
 # Local capability miss — not an upstream HTTP class, never stored on connection.validation_error_type.
 VISION_UNSUPPORTED = 'vision_unsupported'
 VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。'
+# E6: local model server (Ollama / LM Studio) not running -> connection refused on a local URL.
+LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。'
 
 
@@ -191,11 +193,45 @@ def vision_follow_issue(settings: ai_models.ModelSettings) -> ValidationResult |
     )
 
 
+def _is_loopback_url(url: str | None) -> bool:
+    """R10 #399: only this machine counts. LAN IPs, link-local and ``.local`` gateways are
+    remote self-hosted services, so "start local Ollama" would mislead there. (Proxy
+    bypass still uses the wider ``is_local_url``.)"""
+    if not url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        import ipaddress
+        host = (urlparse(url).hostname or '').lower().rstrip('.')
+    except Exception:  # noqa: BLE001
+        return False
+    if host == 'localhost' or host.endswith('.localhost'):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _local_service_down(result: ValidationResult, base: str) -> ValidationResult:
+    if not result.ok and result.error_type == UpstreamErrorType.CONNECTION.value and _is_loopback_url(base):
+        result.hint_key = LOCAL_SERVICE_DOWN_HINT_KEY
+    return result
+
+
 def validate_connection(
     connection: ai_models.Connection, model: str,
     *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
 ) -> ValidationResult:
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
+    result = _validate_resolved(resolved, model, purpose=purpose)
+    return _local_service_down(result, result.normalized_base_url)
+
+
+def _validate_resolved(
+    resolved: ai_models.Connection, model: str,
+    *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
+) -> ValidationResult:
     hint = hint_provider_for_key(resolved.api_key)
     if hint == resolved.provider:
         hint = None
