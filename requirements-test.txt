@@ -9,3 +9,6 @@ numpy==2.2.6
 opencv-python-headless==4.13.0.92
 # W157-F7: the real editorial render test launches the system Chrome / Edge through playwright.
 -r requirements-desktop.txt
+# R20 #108: run the real v4 success-rate SQL (ClickHouse) against synthetic events locally.
+duckdb==1.5.6
+sqlglot==30.23.0

@@ -37,10 +37,17 @@ export const studioApi = {
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),
   appendPlatforms: (pid: string, platforms: string[], outroEnabled: boolean): Promise<{ variants: OutputVariant[] }> => observeStudioOperation('studio_platform_append', () => api.post(`/studio/${pid}/platforms`, { platforms, branding: { outro_enabled: outroEnabled, outro_version: 'v1' } }), undefined, { platform_count: platforms.length, brand_outro_enabled: outroEnabled, reused_content_profile: true }),
-  retryOutputVariant: (pid: string, variantId: string): Promise<RenderJob> => {
+  retryOutputVariant: (pid: string, variantId: string): Promise<OutputVariant> => {
     // 1.5.8: 「重试这条」 links the new attempt to the failed/partial one it retries.
     const retryOf = workflow.variantRetryOf(pid, variantId)
-    return observeStudioOperation('studio_variant_retry', () => api.post(`/studio/${pid}/output-variants/${variantId}/retry`), (job: RenderJob, props) => workflow.watch('studio-variant', variantId, pid, undefined, { ...props, ...(retryOf ? { retry_of: retryOf } : {}) }, false, job.job_id), workflow.context(pid))
+    // The generation run this variant belonged to (partial/failed): the retry is a new generation attempt
+    // (new attempt_id) whose terminal studio_generation_finished carries retry_of, so v4 per-flow counts it.
+    const generationRetryOf = workflow.lastFailedAttempt(pid)
+    // The endpoint returns the variant (R20 #123), not a render job.
+    return observeStudioOperation('studio_variant_retry', () => api.post<unknown, OutputVariant>(`/studio/${pid}/output-variants/${variantId}/retry`), (variant: OutputVariant, props) => {
+      workflow.watch('studio-variant', variantId, pid, undefined, { ...props, ...(retryOf ? { retry_of: retryOf } : {}) }, false, variant.render_job_id)
+      if (generationRetryOf) workflow.watch('studio-generation', pid, undefined, undefined, { ...props, retry_of: generationRetryOf }, true)
+    }, workflow.context(pid))
   },
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
