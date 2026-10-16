@@ -107,3 +107,18 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
         assert len(envelopes) >= 1, 'control: a real 5xx must be visible to the counter'
     finally:
         sentry_sdk.init(dsn=None)
+
+
+def test_switch_affects_only_the_model_download(monkeypatch):
+    """Group decision: the switch acts on the model download request only; other routes answer as usual."""
+    class Manager:
+        def get_model_info(self, name):
+            return None
+    monkeypatch.setattr(sr, 'get_model_manager', lambda: Manager())
+    app = FastAPI()
+    app.include_router(sr.router, prefix='/api/v1')
+    http = TestClient(app)
+    monkeypatch.setenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, '1')
+    res = http.delete('/api/v1/whisper-models/base')
+    assert res.status_code == 404, res.text
+    assert sr.QA_MOCK_DOWNLOAD_DETAIL not in res.text
