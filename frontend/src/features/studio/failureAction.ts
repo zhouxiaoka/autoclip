@@ -8,6 +8,9 @@ export const USER_CAUSE_ERROR_CODES = ['authentication', 'llm_auth_invalid', 'in
 export const USER_CAUSE_UPSTREAM_TYPES = ['invalid_key', 'insufficient_quota', 'permission_denied'] as const
 
 export const SETTINGS_DESTINATION = '/settings?section=analysis'
+/** Cloud transcription (ASR) credentials. SettingsPage maps `speech` to the transcription row;
+ * `section=transcription` is not a recognised value there (falls back to the top of AI settings). */
+export const TRANSCRIPTION_SETTINGS_DESTINATION = '/settings?section=speech'
 
 const REASONS: Record<string, string> = {
   authentication: 'API Key 无效或已过期，请到设置里更新后再试',
@@ -20,9 +23,14 @@ const REASONS: Record<string, string> = {
 
 export type FailureAction = { kind: 'retry' } | { kind: 'settings'; reason: string; destination: string }
 
-export function failureAction(errorCode?: string | null, upstreamType?: string | null): FailureAction {
+/** failure_stage 'subtitle' = the transcription step: a user-cause failure there is the ASR connection. */
+export function settingsDestination(failureStage?: string | null): string {
+  return failureStage === 'subtitle' ? TRANSCRIPTION_SETTINGS_DESTINATION : SETTINGS_DESTINATION
+}
+
+export function failureAction(errorCode?: string | null, upstreamType?: string | null, failureStage?: string | null): FailureAction {
   const code = (USER_CAUSE_ERROR_CODES as readonly string[]).includes(errorCode || '') ? errorCode as string
     : (USER_CAUSE_UPSTREAM_TYPES as readonly string[]).includes(upstreamType || '') ? upstreamType as string
     : (USER_CAUSE_UPSTREAM_TYPES as readonly string[]).includes(errorCode || '') ? errorCode as string : ''
-  return code ? { kind: 'settings', reason: REASONS[code], destination: SETTINGS_DESTINATION } : { kind: 'retry' }
+  return code ? { kind: 'settings', reason: REASONS[code], destination: settingsDestination(failureStage) } : { kind: 'retry' }
 }

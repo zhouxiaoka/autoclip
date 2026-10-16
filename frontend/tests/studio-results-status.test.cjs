@@ -4,9 +4,9 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode) {
+function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage) {
   const workspace = {
-    analysis: { status, phase, message: 'screening', error: 'failure', error_code: errorCode },
+    analysis: { status, phase, message: 'screening', error: 'failure', error_code: errorCode, failure_stage: failureStage },
     generation: automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null,
     drafts: [], jobs: [], events: [], output_variants: [],
   }
@@ -95,3 +95,25 @@ for (const code of ['service_restarted', 'timeout', 'provider_error', 'model_not
     assert.equal(buttons.some(b => b.children === '去设置'), false)
   })
 }
+
+for (const [stage, destination] of [['subtitle', '/settings?section=speech'], ['analyze', '/settings?section=analysis'], ['screening', '/settings?section=analysis'], [undefined, '/settings?section=analysis']]) {
+  test(`1.5.8 「去设置」 for a user-cause failure at stage ${stage} opens ${destination}`, () => {
+    const buttons = []
+    render(true, 'production', 'failed', buttons, [], 'invalid_key', stage)
+    navigations.length = 0
+    buttons.find(b => b.children === '去设置').onClick()
+    assert.deepEqual(navigations, [destination])
+  })
+}
+
+test('1.5.8 settings page resolves both 「去设置」 targets to their own rows (no fallback to the top)', () => {
+  const page = fs.readFileSync(path.join(__dirname, '../src/pages/SettingsPage.tsx'), 'utf8')
+  const aliases = page.slice(page.indexOf('const SECTION_ALIASES'), page.indexOf('}\n', page.indexOf('const SECTION_ALIASES')))
+  assert.match(aliases, /analysis: \{ section: 'ai', anchor: 'ai-defaults-analysis' \}/)
+  assert.match(aliases, /speech: \{ section: 'ai', anchor: 'ai-defaults-transcription' \}/)
+  const fa = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
+  for (const dest of [fa.SETTINGS_DESTINATION, fa.TRANSCRIPTION_SETTINGS_DESTINATION]) {
+    const section = new URLSearchParams(dest.split('?')[1]).get('section')
+    assert.ok(new RegExp(`\\n\\s+${section}: \\{ section: 'ai', anchor: '`).test(aliases), dest)
+  }
+})
