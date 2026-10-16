@@ -14,19 +14,42 @@ from backend.core import orphan_reaper
 
 
 class _FakeProc:
-    """Minimal psutil.Process stand-in for find_orphans / reap_orphans."""
+    """psutil.Process stand-in for the real find_orphans / reap_orphans / psutil.wait_procs.
 
-    def __init__(self, pid: int, name: str, environ: dict):
+    kill_outcome: 'exits' (gone after kill), 'denied' (AccessDenied), 'gone' (NoSuchProcess on
+    kill — exited in between), 'survives' (kill sent, still running after the wait).
+    """
+
+    def __init__(self, pid: int, name: str, environ: dict, kill_outcome: str = 'exits'):
         self.pid = pid
         self.info = {'name': name}
         self._environ = dict(environ)
         self.killed = False
+        self.kill_outcome = kill_outcome
 
     def environ(self):
         return dict(self._environ)
 
     def kill(self):
+        if self.kill_outcome == 'denied':
+            raise psutil.AccessDenied(self.pid)
+        if self.kill_outcome == 'gone':
+            raise psutil.NoSuchProcess(self.pid)
         self.killed = True
+
+    def wait(self, timeout=None):
+        if self.kill_outcome == 'survives':
+            raise psutil.TimeoutExpired(timeout, self.pid)
+        return -9
+
+    def is_running(self):
+        return self.kill_outcome == 'survives'
+
+    def __hash__(self):
+        return hash(self.pid)
+
+    def __eq__(self, other):
+        return self is other
 
 
 def _dead_owner_token():
@@ -53,18 +76,13 @@ def test_reaps_only_orphans_of_a_dead_backend(monkeypatch):
         [orphan, orphan_exe, unrelated, same_backend, other_live, other_app])
     assert found == [orphan, orphan_exe]
 
-    waited = []
-
-    def fake_wait(procs, timeout=3.0):
-        waited.extend(procs)
-        return (list(procs), [])
-
-    monkeypatch.setattr(orphan_reaper, 'find_orphans', lambda: [orphan, orphan_exe])
-    monkeypatch.setattr(psutil, 'wait_procs', fake_wait)
-    assert orphan_reaper.reap_orphans() == 2
+    # Reaping goes through the real reap_orphans(); only the process table is mocked.
+    monkeypatch.setattr(psutil, 'process_iter',
+                        lambda *a, **k: iter([orphan, orphan_exe, unrelated, same_backend, other_live, other_app]))
+    assert orphan_reaper.reap_orphans(timeout=0.1) == 2
     assert orphan.killed and orphan_exe.killed
-    assert waited == [orphan, orphan_exe]
-    assert unrelated.killed is False and same_backend.killed is False
+    assert unrelated.killed is False and same_backend.killed is False and other_app.killed is False
+    assert orphan_reaper.LAST_RESULT == {'found': 2, 'exited': 2, 'access_denied': 0, 'still_alive': 0}
 
 
 def test_mark_environment_is_inherited_by_children(monkeypatch):
@@ -139,3 +157,73 @@ def test_unreadable_environment_is_skipped(monkeypatch):
             raise psutil.AccessDenied(self.pid)
 
     assert orphan_reaper.find_orphans([Denied(204, 'ffmpeg.exe', {})]) == []
+
+
+def test_kill_outcomes_are_counted_and_logged_separately(monkeypatch, caplog):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    dead = _dead_owner_token()
+    procs = [
+        _FakeProc(301, 'ffmpeg', {orphan_reaper.ENV: dead}, 'exits'),
+        _FakeProc(302, 'ffmpeg.exe', {orphan_reaper.ENV: dead}, 'denied'),
+        _FakeProc(303, 'ffprobe', {orphan_reaper.ENV: dead}, 'survives'),
+        _FakeProc(304, 'ffmpeg', {orphan_reaper.ENV: dead}, 'gone'),
+    ]
+    monkeypatch.setattr(psutil, 'process_iter', lambda *a, **k: iter(procs))
+    with caplog.at_level('WARNING', logger=orphan_reaper.logger.name):
+        assert orphan_reaper.reap_orphans(timeout=0.05) == 4
+    assert orphan_reaper.LAST_RESULT == {'found': 4, 'exited': 2, 'access_denied': 1, 'still_alive': 1}
+    text = caplog.text
+    assert 'found=4' in text and 'exited=2' in text and 'access_denied=1' in text and 'still_alive=1' in text
+
+
+def test_nothing_to_reap_logs_nothing(monkeypatch, caplog):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    monkeypatch.setattr(psutil, 'process_iter', lambda *a, **k: iter([_FakeProc(401, 'ffmpeg', {})]))
+    with caplog.at_level('WARNING', logger=orphan_reaper.logger.name):
+        assert orphan_reaper.reap_orphans(timeout=0.05) == 0
+    assert orphan_reaper.LAST_RESULT['found'] == 0
+    assert 'Orphaned' not in caplog.text
+
+
+def test_startup_marks_environment_before_starting_services(monkeypatch):
+    """Behavioral: desktop_main.main() reaps, then stamps the owner token, then starts."""
+    from backend import desktop_main
+    from backend.services import child_guard
+    events = []
+
+    class StopStartup(BaseException):
+        pass
+
+    class Manager:
+        is_running = False
+
+        class config:
+            app_version = 'test'
+
+            class paths:
+                data_dir = 'x'
+            host = '127.0.0.1'
+
+        def start(self):
+            events.append(('start', os.environ.get(orphan_reaper.ENV)))
+            raise StopStartup()
+
+        def stop(self):
+            pass
+
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    monkeypatch.setattr(desktop_main, 'get_service_manager', lambda: Manager())
+    monkeypatch.setattr(desktop_main, 'is_desktop_mode', lambda: True)
+    monkeypatch.setattr(desktop_main.signal, 'signal', lambda *a, **k: None)
+    monkeypatch.setattr(child_guard, 'install_hooks', lambda: None)
+    monkeypatch.setattr(orphan_reaper, 'reap_orphans',
+                        lambda *a, **k: events.append(('reap', os.environ.get(orphan_reaper.ENV))) or 0)
+    monkeypatch.setenv('AUTOCLIP_DESKTOP_MODE', 'true')
+    with pytest.raises(StopStartup):
+        desktop_main.main()
+    assert [name for name, _ in events] == ['reap', 'start']
+    assert events[0][1] is None  # reaping happens before our own token exists
+    token = events[1][1]
+    assert token and token == orphan_reaper._owner_token(psutil.Process())

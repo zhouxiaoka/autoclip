@@ -74,20 +74,44 @@ def find_orphans(processes: Optional[Iterable] = None) -> list:
     return orphans
 
 
+LAST_RESULT: dict = {}
+
+
 def reap_orphans(timeout: float = 3.0) -> int:
-    """Kill orphaned AutoClip ffmpeg/ffprobe. Returns how many were found. Never raises."""
+    """Kill orphaned AutoClip ffmpeg/ffprobe. Returns how many were found. Never raises.
+
+    R11: outcomes are counted separately — exited (gone after kill), access_denied (kill
+    refused), still_alive (kill sent but the process outlived the wait) — and logged so a
+    support log tells "nothing to do" from "could not clean up".
+    """
+    global LAST_RESULT
+    result = {'found': 0, 'exited': 0, 'access_denied': 0, 'still_alive': 0}
     try:
         import psutil
         orphans = find_orphans()
+        result['found'] = len(orphans)
+        signalled = []
         for proc in orphans:
             try:
                 proc.kill()
+                signalled.append(proc)
+            except psutil.NoSuchProcess:
+                result['exited'] += 1
+            except psutil.AccessDenied:
+                result['access_denied'] += 1
             except psutil.Error:
-                pass
+                result['still_alive'] += 1
+        if signalled:
+            gone, alive = psutil.wait_procs(signalled, timeout=timeout)
+            result['exited'] += len(gone)
+            result['still_alive'] += len(alive)
         if orphans:
-            psutil.wait_procs(orphans, timeout=timeout)
-            logger.warning('Killed %d orphaned ffmpeg process(es) from a previous backend', len(orphans))
-        return len(orphans)
+            logger.warning(
+                'Orphaned ffmpeg from a previous backend: found=%d exited=%d access_denied=%d still_alive=%d',
+                result['found'], result['exited'], result['access_denied'], result['still_alive'])
+        LAST_RESULT = result
+        return result['found']
     except Exception as error:  # noqa: BLE001
         logger.warning('Orphan reaper unavailable: %s', type(error).__name__)
+        LAST_RESULT = result
         return 0

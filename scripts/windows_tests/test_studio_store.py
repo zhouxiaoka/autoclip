@@ -86,8 +86,3 @@ def test_native_windows_reader_leaves_failed_worker_retryable(state_path, monkey
     assert durable['jobs'][1]['status'] == 'queued'
     assert not list(state_path.parent.glob('*.tmp'))
 
-
-# R10 #393: run the orphan reaper suite on the Windows runner too. The push token cannot
-# edit .github/workflows, so it rides on this already-listed module until the workflow
-# lists backend/tests/test_orphan_reaper.py itself (/workspace/rc158/393-windows-orphan-reaper.patch).
-from backend.tests.test_orphan_reaper import *  # noqa: E402,F401,F403
