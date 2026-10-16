@@ -1254,7 +1254,7 @@ test('R11: an opt-out keeps retrying after the backoff is exhausted until the AP
     opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
     localStorage: storage, window: {},
     // Real browsers have AbortController: the 5 s abort timer is armed and cleared around every PUT.
-    ...fakeTimers(timers),
+    AbortController, ...fakeTimers(timers),
     fetch: (url, opts) => {
       if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
       puts.push(JSON.parse(opts.body).enabled)
@@ -1369,7 +1369,7 @@ test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => 
   const timers = []
   const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
     get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111', opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
-    localStorage: shared, window: {}, ...fakeTimers(timers),
+    localStorage: shared, window: {}, AbortController, ...fakeTimers(timers),
     fetch: (url, opts) => { if (String(url).includes('analytics-consent')) puts.push(JSON.parse(opts.body).enabled); return Promise.resolve({ ok: false }) },
   })
   ph.setAnalyticsEnabled(true); await new Promise(r => setImmediate(r))
