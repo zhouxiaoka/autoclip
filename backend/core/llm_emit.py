@@ -99,6 +99,9 @@ class _RunAcc:
     role: str = ""
     # R22 #223: identity the current phase froze at its start; used until a request has run.
     phase_identity: dict = field(default_factory=dict)
+    # R24 #290: the latest request as ONE record (identity + model/host/status/upstream of that request).
+    last_request: dict = field(default_factory=dict)
+    phase_frozen: bool = False
     # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -294,6 +297,10 @@ def request_finished(
             outcome=outcome, finish_reason=finish_reason, failure_stage=failure_stage,
             error=error,
         )
+        if not identity:
+            # R24 #297: no frozen identity -> the config this request sent (one rule, never settings).
+            from backend.services.studio.failure_identity import sent_identity
+            identity = sent_identity(properties.get("provider"), base_url, properties.get("model"))
         _remember_run(properties, role="vision" if kind == "vision" else "analysis", identity=identity)
         _post_event(schema.EVENT_LLM_REQUEST_FINISHED, properties)
         return properties
@@ -312,6 +319,10 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
     from backend.core.llm_degrade import bound_request_model
     model = bound_request_model(getattr(provider, "model_name", None))
     name = _provider_label(provider, base_url)
+    if not identity:
+        # R24 #297: no frozen identity -> the config this request actually sends; never settings.
+        from backend.services.studio.failure_identity import sent_identity
+        identity = sent_identity(name, base_url, model)
     try:
         response = impl(provider, prompt, input_data, **kwargs)
     except Exception as error:
@@ -356,11 +367,11 @@ def emit_vision_request(
             except (TypeError, IndexError, AttributeError):
                 finish_reason = None
         outcome = "error" if error is not None else "success"
-        fields = _vision_connection_fields(config)
-        identity = identity or config.get("identity") or None
+        # R24 #297: one rule with text: frozen identity, else the config actually sent; never settings.
+        identity = identity or config.get("identity") or sent_vision_identity(config)
         return request_finished(
-            provider=(identity or {}).get("provider") or fields.get("provider"),
-            model=config.get("model") or fields.get("model"),
+            provider=identity.get("provider"),
+            model=config.get("model"),
             base_url=config.get("base_url"),
             kind="vision",
             stage=_current_stage() or "vision",
@@ -446,27 +457,33 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     """Sanitized run-level fields for generation / production / Sentry tags."""
     acc = _run_acc.get()
     # Settings are a last-saved identity, not this run. Only fill gaps inside track_run.
-    configured = configured_connection_fields() if acc is not None else {}
-    # R22 #195/#223: provider and config_source always come from ONE frozen connection: the latest
-    # request's role, else the identity the phase froze at its start, else (no phase) settings.
-    request = acc.identities.get(acc.role) if acc is not None and acc.role else None
-    if request:
-        provider, source = request.get("provider"), request.get("config_source")
-    elif acc is not None and acc.provider:
-        provider, source = acc.provider, None  # a request ran without a start identity: its own provider
-    elif acc is not None and acc.phase_identity:
-        provider, source = acc.phase_identity.get("provider"), acc.phase_identity.get("config_source")
+    # Settings only when this run has nothing frozen at all (no phase start, no request): then the one
+    # saved connection is the only fact, and all its fields come from it together.
+    blank = acc is None or (not acc.last_request and not acc.phase_frozen)
+    configured = configured_connection_fields() if blank else {}
+    # R24 #290/#291: every attribution field comes from ONE record: the latest request (identity,
+    # model, host, status, upstream of that same request), else what the phase froze from one
+    # connection at its start. Inside a run nothing is filled from settings; unknown stays empty.
+    if not blank:
+        with acc.lock:
+            request = dict(acc.last_request)
+            phase = dict(acc.phase_identity)
+        record = request or phase
+        provider, source = record.get("provider"), record.get("config_source")
+        model, host = _safe_model(record.get("model")), record.get("base_url_host")
+        status = request.get("http_status") if request else None
+        upstream = request.get("upstream_error_type") if request else None
     else:
         provider, source = configured.get("provider"), configured.get("config_source")
-    model = _safe_model((acc.model if acc and acc.model else None) or configured.get("model"))
-    host = (acc.host if acc and acc.host else None) or configured.get("base_url_host")
+        model, host = _safe_model(configured.get("model")), configured.get("base_url_host")
+        status = upstream = None
     raw: dict[str, Any] = {
         "provider": provider,
         "model": model,
         "base_url_host": host,
         "config_source": source,
-        "http_status": acc.last_http_status if acc else None,
-        "upstream_error_type": acc.last_upstream if acc else None,
+        "http_status": status,
+        "upstream_error_type": upstream,
         "billable_calls_before_failure": acc.billable if acc else 0,
     }
     # Project usage is historical; track_run's accumulator belongs to this attempt only.
@@ -606,19 +623,30 @@ def freeze_phase_identity(identity: dict | None) -> None:
     acc = _run_acc.get()
     if acc is None:
         return
-    from backend.services.studio.failure_identity import frozen
+    from backend.services.studio.failure_identity import PHASE_KEY, frozen_phase
+    identity = identity if isinstance(identity, dict) else {}
+    # R24 #291: provider/source/model/host of the ONE connection the phase froze; {} when incomplete.
+    whole = frozen_phase(identity.get(PHASE_KEY)) or frozen_phase(identity)
     with acc.lock:
-        acc.phase_identity = frozen(identity)
+        acc.phase_identity = whole
+        acc.phase_frozen = True
 
 
 def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: dict | None = None) -> None:
     acc = _run_acc.get()
     if acc is None:
         return
-    if identity:
-        from backend.services.studio.failure_identity import frozen
-        with acc.lock:
-            acc.identities.setdefault(role, frozen(identity))  # first request of the role wins
+    from backend.services.studio.failure_identity import frozen
+    pair = frozen(identity)
+    # R24 #290: one record per request; the latest request replaces it WHOLE (never field by field).
+    status = properties.get("http_status")
+    record = {
+        **pair,
+        "model": properties.get("model"),
+        "base_url_host": properties.get("base_url_host"),
+        "http_status": status if isinstance(status, int) else None,
+        "upstream_error_type": None if properties.get("outcome") == "success" else properties.get("upstream_error_type"),
+    }
     # E2: retries are counted per logical call. ``retry_count`` on a request is that call's
     # attempt index (text) or its own retry total (vision); only the rise above the peak
     # already counted for this call in this context is new. The peak lives in a contextvar,
@@ -632,6 +660,9 @@ def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: 
     elif retry == 0:
         _retry_peak.set(0)
     with acc.lock:
+        acc.last_request = {k: v for k, v in record.items() if v not in (None, "")}
+        if pair:
+            acc.identities[role] = pair
         acc.calls += 1
         acc.role = role
         acc.provider = properties.get("provider") or acc.provider
@@ -766,16 +797,13 @@ def _provider_label(provider: Any, base_url: str) -> str:
     return "compatible"
 
 
-def _vision_connection_fields(config: dict) -> dict[str, Any]:
-    fields = configured_connection_fields(role="vision")
-    if config.get("model") and not fields.get("model"):
-        model = _safe_model(config.get("model"))
-        if model:
-            fields["model"] = model
-    host = schema.hostname_of_base_url(config.get("base_url") if isinstance(config.get("base_url"), str) else None)
-    if host:
-        fields["base_url_host"] = host
-    return fields
+def sent_vision_identity(config: dict | None) -> dict:
+    """R24 #297: identity of the vision config actually sent (no settings read)."""
+    config = config or {}
+    from backend.services.studio.failure_identity import sent_identity
+    base = config.get("base_url") if isinstance(config.get("base_url"), str) else ""
+    label = config.get("provider") or _provider_label(object(), base)
+    return sent_identity(label, base, config.get("model"))
 
 
 def _transcription_check() -> dict[str, Any]:

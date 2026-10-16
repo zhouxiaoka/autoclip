@@ -42,7 +42,7 @@ ROLES = ('analysis', 'vision')
 IDENTITY_KEYS = ('provider', 'config_source')
 
 
-def connection_identity(connection, model: str | None) -> dict:
+def connection_identity(connection, model: str | None, *, full: bool = False) -> dict:
     """THE identity rule (R22 code health): provider slug + config_source of one saved connection and
     the model bound on it. Phase starts, request starts, run snapshots and Sentry all go through here."""
     if connection is None:
@@ -53,10 +53,43 @@ def connection_identity(connection, model: str | None) -> dict:
         source = config_source(provider, getattr(connection, 'base_url', None), model)
     except Exception:  # noqa: BLE001 - attribution only
         source = 'customized'
-    return {'provider': sanitize_provider(str(provider or '').strip().lower()) or 'other', 'config_source': source}
+    out = {'provider': sanitize_provider(str(provider or '').strip().lower()) or 'other', 'config_source': source}
+    if full:
+        out.update(_connection_fields(connection, model))
+    return out
 
 
-def settings_identity(settings, role: str = 'analysis') -> dict:
+def _connection_fields(connection, model) -> dict:
+    """R24 #291: model + host of the SAME connection, so a phase can freeze its whole identity."""
+    from backend.core.llm_telemetry import hostname_of_base_url
+    out = {}
+    host = None
+    try:
+        from backend.services import ai_model_settings as ai
+        host = hostname_of_base_url((ai.chat_endpoint(connection, model) or {}).get('base_url'))
+    except Exception:  # noqa: BLE001 - attribution only
+        host = None
+    host = host or hostname_of_base_url(getattr(connection, 'base_url', None))
+    if host:
+        out['base_url_host'] = host
+    if isinstance(model, str) and model.strip():
+        out['model'] = model.strip()
+    return out
+
+
+def sent_identity(provider: str | None, base_url: str | None, model: str | None) -> dict:
+    """R24 #297: identity of the config a request ACTUALLY sent, for requests without a frozen
+    connection identity (env / legacy config, unsaved test forms). Never reads settings."""
+    from backend.core.llm_telemetry import sanitize_provider
+    slug = sanitize_provider(str(provider or '').strip().lower()) or 'other'
+    try:
+        source = config_source(slug, base_url, model)
+    except Exception:  # noqa: BLE001 - attribution only
+        source = 'customized'
+    return {'provider': slug, 'config_source': source}
+
+
+def settings_identity(settings, role: str = 'analysis', *, full: bool = False) -> dict:
     """Identity of the connection ``role`` runs on in this settings object (vision falls back to analysis)."""
     if not settings or role not in ROLES:
         return {}
@@ -65,30 +98,43 @@ def settings_identity(settings, role: str = 'analysis') -> dict:
     if not binding:
         return {}
     connection = next((c for c in settings.connections if c.id == binding.connection_id), None)
-    return connection_identity(connection, binding.model)
+    return connection_identity(connection, binding.model, full=full)
 
 
-def provider_identity(role: str = 'analysis') -> dict:
+def provider_identity(role: str = 'analysis', *, full: bool = False) -> dict:
     """Identity of the connection ``role`` runs on right now; {} when unknown. Callers freeze it at the
     START of a phase or request (never re-read at the end)."""
     if role not in ROLES:
         return {}
     try:
         from backend.services import ai_model_settings as ai
-        return settings_identity(ai.load(), role)
+        return settings_identity(ai.load(), role, full=full)
     except Exception:  # noqa: BLE001 - settings must not break a start write
         return {}
 
 
+def _complete(source) -> bool:
+    return isinstance(source, dict) and all(isinstance(source.get(k), str) and source[k] for k in IDENTITY_KEYS)
+
+
 def frozen(*sources) -> dict:
-    """provider + config_source recorded at attempt start; first source that has them wins."""
-    out = {}
+    """provider + config_source recorded at attempt start, as ONE pair (R24 #296): the first source
+    that carries BOTH wins whole; fields are never stitched across sources. None complete -> {}."""
     for source in sources:
-        if isinstance(source, dict):
-            for key in IDENTITY_KEYS:
-                if key not in out and isinstance(source.get(key), str) and source[key]:
-                    out[key] = source[key]
-    return out
+        if _complete(source):
+            return {key: source[key] for key in IDENTITY_KEYS}
+    return {}
+
+
+PHASE_KEYS = (*IDENTITY_KEYS, 'model', 'base_url_host')
+PHASE_KEY = 'phase_connection'
+
+
+def frozen_phase(source) -> dict:
+    """R24 #291: provider/config_source/model/host a phase froze from ONE connection; {} if incomplete."""
+    if not _complete(source):
+        return {}
+    return {key: source[key] for key in PHASE_KEYS if isinstance(source.get(key), str) and source[key]}
 
 
 def role_for(phase: str, plan: dict | None = None, goals=None) -> str:
@@ -111,8 +157,12 @@ def role_for(phase: str, plan: dict | None = None, goals=None) -> str:
 
 
 def phase_identity(phase: str, plan: dict | None = None, goals=None) -> dict:
-    """provider + config_source frozen at a phase start, from the role that phase runs on (#194)."""
-    return provider_identity(role_for(phase, plan, goals))
+    """provider + config_source frozen at a phase start, from the role that phase runs on (#194).
+    R24 #291: also ``phase_connection`` = the same connection's model/host, so a failure before any
+    request names one connection, never today's settings."""
+    identity = provider_identity(role_for(phase, plan, goals), full=True)
+    pair = {key: identity[key] for key in IDENTITY_KEYS if key in identity}
+    return {**pair, PHASE_KEY: frozen_phase(identity)} if pair else {}
 
 
 SCREENING_KEY = 'screening_identity'

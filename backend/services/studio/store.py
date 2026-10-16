@@ -478,29 +478,93 @@ def _refs_path(project_id):
     return directory(project_id) / 'metadata' / REFS_NAME
 
 
-def _write_refs(state_path, data, previous):
-    """R22 #221: a project -> instance reference ledger next to studio.json, rewritten in the same
-    write (before studio.json is replaced) whenever the referenced set changes. Pruning reads it when
-    studio.json itself cannot be read, so it never infers references from file times."""
-    refs = sorted(_instances_referenced(data))
-    path = state_path.with_name(REFS_NAME)
-    if path.exists() and previous is not None and refs == sorted(_instances_referenced(previous)):
+def _fsync_file(path):
+    """R24 #295: the bytes of a file we are about to publish are on disk."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(directory):
+    """R24 #295: a rename inside ``directory`` survives power loss (POSIX; no-op on Windows)."""
+    if os.name == 'nt':
         return
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _publish(path, text, encoding):
+    """Write ``text`` to a temporary sibling, fsync it, atomically replace ``path``, fsync the dir."""
     tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
     try:
-        tmp.write_text(json.dumps(refs), encoding='ascii')
+        tmp.write_text(text, encoding=encoding)
+        _fsync_file(tmp)
         _replace_state(tmp, path)
-    except OSError:
-        logger.warning('Could not update the instance reference ledger')
-        try:
-            path.unlink(missing_ok=True)  # a stale ledger must not outlive the state it described
-        except OSError:
-            pass
+        _fsync_dir(path.parent)
     finally:
         try:
             tmp.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def _ledger_content(path):
+    try:
+        return _read_refs(path)
+    except (OSError, ValueError):
+        return None
+
+
+def _set_refs(path, refs):
+    """Make the ledger hold exactly ``refs``. Skips only when the ledger on disk ALREADY holds them
+    (R24 #293: compare the ledger's real content, never 'references unchanged'). Never deletes it."""
+    refs = set(refs)
+    if _ledger_content(path) == refs:
+        return True
+    try:
+        _publish(path, json.dumps(sorted(refs)), 'ascii')
+        return True
+    except OSError:
+        logger.warning('Could not update the instance reference ledger')
+        return False
+
+
+def _write_refs(state_path, data, previous):
+    """R22 #221 / R24 #293: the project -> instance reference ledger next to studio.json, written as a
+    two-step commit around the studio.json replace:
+
+    1. before: ledger := old ledger ∪ refs(previous) ∪ refs(new) - every reference either version of
+       studio.json can hold is protected while the replace is in flight;
+    2. after: ``commit_refs`` shrinks it to refs(new) once studio.json is durable; on failure
+       ``rollback_refs`` sets it back to what the surviving studio.json needs.
+
+    Returns the context ``commit_refs`` / ``rollback_refs`` take."""
+    path = state_path.with_name(REFS_NAME)
+    old = _ledger_content(path) or set()
+    before = _instances_referenced(previous) if isinstance(previous, dict) else set()
+    after = _instances_referenced(data)
+    _set_refs(path, old | before | after)
+    return path, old | before, after
+
+
+def commit_refs(context):
+    path, _surviving, after = context
+    _set_refs(path, after)
+
+
+def rollback_refs(context):
+    path, surviving, _after = context
+    _set_refs(path, surviving)
 
 
 def _read_refs(path):
@@ -511,6 +575,12 @@ def _read_refs(path):
 
 
 def reference_index():
+    """See ``_reference_index``. R24 #294: the scan holds ``store.lock`` (every writer holds it too)."""
+    with lock:
+        return _reference_index()
+
+
+def _reference_index():
     """R22 #221/#198: ONE scan of every project -> the set of dead instances still referenced.
 
     A project contributes the references in its studio.json AND in its ledger (``instance_refs.json``).
@@ -585,6 +655,7 @@ def interrupted_run(data):
 
 from backend.services.studio.failure_identity import IDENTITY_KEYS as ATTEMPT_IDENTITY_KEYS  # noqa: E402
 from backend.services.studio.failure_identity import frozen as attempt_identity  # noqa: E402,F401 - one rule
+from backend.services.studio.failure_identity import carry_screening  # noqa: E402 - R24 #292
 
 
 def _record_restart_shutdown_kind(data, instance):
@@ -634,7 +705,7 @@ def _recover_interrupted_run(data):
         generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, **identity)
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
                             'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now(),
-                            'failure_stage': stage, 'shutdown_kind': kind, **identity}
+                            'failure_stage': stage, 'shutdown_kind': kind, **identity, **carry_screening(analysis, generation)}
         return True
     if analysis and _stale_analysis(analysis):
         # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
@@ -686,7 +757,8 @@ def settle_generation(data):
         error = data['generation'].get('error') if outcome == 'failed' else None
         identity = attempt_identity(data.get('analysis'), data['generation'])
         data['generation'].update(identity)
-        data['analysis'] = {**identity, 'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'error': error} if error else {})}
+        screening = carry_screening(data.get('analysis'), data['generation'])  # R24 #292
+        data['analysis'] = {**identity, **screening, 'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'error': error} if error else {})}
 
 
 @_serialized
@@ -723,15 +795,21 @@ def write(project_id, data, *, _recover_previous=True):
                 history.append({'run_id': key, 'finished_at': now(), 'plan': plan_summary, 'analysis': summary})
     data['analysis_history'] = history[-100:]
     tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+    refs = None
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-        _write_refs(path, data, previous if path.exists() else None)
+        _fsync_file(tmp)  # R24 #295
+        refs = _write_refs(path, data, previous if path.exists() else None)
         _replace_state(tmp, path)
+        _fsync_dir(path.parent)
+        commit_refs(refs)  # R24 #293: release only after studio.json is durable
         if usage_checkpoint is not None:
             usage_checkpoint[0].update(usage_checkpoint[1])
         _observe_worker_write(path, previous, data)
         _io_failures.pop(path, None)
     except OSError:
+        if refs is not None:
+            rollback_refs(refs)  # R24 #293: the surviving studio.json keeps its references protected
         _remember_io_failure(path, previous, data)
         raise
     finally:

@@ -171,14 +171,17 @@ def test_195_settings_changed_while_a_vision_request_is_in_flight_do_not_move_it
     assert posted[-1][1]['provider'] == 'kimi'                   # the request event too
 
 
-def test_195_a_role_freezes_once_per_run_not_on_every_request(monkeypatch, posted):
+def test_195_each_request_freezes_its_own_identity_and_the_latest_request_is_named(monkeypatch, posted):
+    # R24 #224/#290: this used to assert "first request of the role wins" (EYES), which pinned the bug:
+    # the second request really ran on GLM, so the run names GLM, with GLM's model/host.
     _settings()
     with llm_emit.track_run():
         _vision_request(monkeypatch)
         _settings(vision='other')
-        _vision_request(monkeypatch)                             # mutation 195-refreeze-each
+        _vision_request(monkeypatch)
         snap = llm_emit.run_snapshot()
-    assert _ident(snap) == EYES
+    assert _ident(snap) == OTHER
+    assert snap.get('base_url_host') == 'other.fixture.example' 
 
 
 class _TextProvider:

@@ -70,9 +70,10 @@ def test_194_role_follows_phase_and_route(phase, plan, goals, role):
 
 
 def test_194_screening_and_visual_production_freeze_the_vision_identity(two_connections):
-    assert failure_identity.phase_identity('screening') == EYES
-    assert failure_identity.phase_identity('production', VISUAL_PLAN, ['highlight']) == EYES
-    assert failure_identity.phase_identity('production', VISUAL_PLAN, ['content']) == TEXT
+    pair = failure_identity.frozen  # R24 #291: the phase also freezes model/host under phase_connection
+    assert pair(failure_identity.phase_identity('screening')) == EYES
+    assert pair(failure_identity.phase_identity('production', VISUAL_PLAN, ['highlight'])) == EYES
+    assert pair(failure_identity.phase_identity('production', VISUAL_PLAN, ['content'])) == TEXT
 
 
 def test_194_visual_production_start_request_terminal_all_name_the_vision_connection(two_connections):

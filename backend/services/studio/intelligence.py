@@ -86,8 +86,9 @@ def vision_call(content, config=None, *, allow_event_list=False):
     from backend.services.studio.vision_settings import effective
     config = config or effective()
     key, base, model = config.get('api_key', ''), config['base_url'], config['model']
-    from backend.services.studio.failure_identity import provider_identity
-    identity = config.get('identity') or provider_identity('vision')  # R22 #195: frozen before sending
+    from backend.core.llm_emit import sent_vision_identity
+    # R24 #297: the frozen identity, else the config actually being sent (never re-read settings).
+    identity = config.get('identity') or sent_vision_identity(config)
     if not base or not model:
         raise ValueError('当前模型只能处理文字，不能看画面；请在「设置 → AI 分析」换成多模态模型，或改用字幕分析')
     body = {'model': model, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}

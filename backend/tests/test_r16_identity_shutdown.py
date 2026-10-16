@@ -34,7 +34,8 @@ def _variant(vid, status, code=None):
 
 def test_attempt_identity_prefers_start_and_ignores_junk():
     assert store.attempt_identity({**START, 'x': 1}, LATER) == START
-    assert store.attempt_identity(None, {'provider': ''}, {'config_source': 'preset'}) == {'config_source': 'preset'}
+    # R24 #296: a pair is never stitched from parts; no complete source -> unknown.
+    assert store.attempt_identity(None, {'provider': ''}, {'config_source': 'preset'}) == {}
 
 
 @pytest.mark.parametrize('statuses,outcome', [

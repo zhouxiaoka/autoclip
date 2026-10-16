@@ -1558,10 +1558,10 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'created_at': store.now(),
         }
         state.setdefault('output_variants', [])
-        from backend.services.studio.failure_identity import SCREENING_KEY, phase_identity
+        from backend.services.studio.failure_identity import SCREENING_KEY, frozen, phase_identity
         screening = phase_identity('screening')
-        state['analysis'] = {**screening, **({SCREENING_KEY: screening} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
-        state['generation'].update(store.attempt_identity(state['analysis']), **({SCREENING_KEY: screening} if screening else {}))  # R22 #220: kept for the whole run
+        state['analysis'] = {**screening, **({SCREENING_KEY: frozen(screening)} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['generation'].update(store.attempt_identity(state['analysis']), **({SCREENING_KEY: frozen(screening)} if screening else {}))  # R22 #220: kept for the whole run
         store.write(project_id, state)
         try:
             from backend.core.llm_telemetry import emit_asr_readiness_checked

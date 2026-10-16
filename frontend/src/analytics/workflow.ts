@@ -368,7 +368,8 @@ export class WorkflowTracker {
     const original = snapshot
     if (w.runId && w.kind !== 'studio-variant') {
       const receipt = snapshot.analysis_history?.find(r => r.run_id === w.runId)
-      if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis }
+      // R24 #292: a replayed run reads its OWN receipt; never borrow the current round's screening identity.
+      if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis, generation: snapshot.generation && { ...snapshot.generation, screening_identity: undefined } }
       else if (snapshot.analysis?.run_id !== w.runId && w.kind !== 'studio-export') return
     }
     const context = this.context(w.projectId || w.id)

@@ -117,14 +117,20 @@ def prune(root: Path | None = None) -> int:
     if not candidates:
         return removed
     try:
-        from backend.services.studio.store import index_protects, reference_index
-        index = reference_index()
+        from backend.services.studio import store
     except Exception:  # noqa: BLE001 - cannot tell -> keep everything
         return removed
-    for path, _mtime in candidates:
-        if not index_protects(index, path.name):
-            path.unlink(missing_ok=True)
-            removed += 1
+    # R24 #294: scan, re-check and delete under the SAME lock every project writer holds, so a
+    # reference written after the scan can never land between the check and the unlink.
+    with store.lock:
+        try:
+            index = store.reference_index()
+        except Exception:  # noqa: BLE001 - cannot tell -> keep everything
+            return removed
+        for path, _mtime in candidates:
+            if not store.index_protects(index, path.name):
+                path.unlink(missing_ok=True)
+                removed += 1
     return removed
 
 
@@ -178,7 +184,8 @@ def release(instance: str | None) -> None:
         return
     try:
         root = _root()
-        with _lock:
+        from backend.services.studio import store
+        with store.lock, _lock:  # R24 #294: lock order store -> marker, same as read()/prune
             record = root / instance
             if (str(root), instance) in _consumed and record.exists() and not _referenced(instance):
                 record.unlink(missing_ok=True)
