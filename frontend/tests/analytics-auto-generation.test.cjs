@@ -190,7 +190,7 @@ test('seeded ids that would spell a secret marker are regenerated and pass catal
   assert.ok(finished,'event emitted')
   assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'')
   const id=wf.telemetryId()
-  assert.match(id,/^t-[a-z0-9-]{10,100}$/)
+  assert.match(id,/^t-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/,'three segments after t-')
   for(const marker of wf.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(marker),id)
  }
 })
@@ -200,6 +200,16 @@ test('id markers cover the catalog forbidden substrings (detector not weakened)'
  for(const marker of catalog.privacy.forbidden_substrings) assert.ok(workflow.ID_FORBIDDEN_MARKERS.includes(marker.toLowerCase()),marker)
  const {loadTs}=require('./load-ts.cjs')
  const catalogApi=loadTs(path.resolve(__dirname,'../src/analytics/eventCatalog.ts'))
- assert.notEqual(catalogApi.validateEvent('studio_generation_finished',{flow_id:'t-abc-sk-123'},catalog).join(';'),'', 'a real sk- value must still be flagged')
- for(let i=0;i<20000;i++){const id=workflow.telemetryId();for(const m of workflow.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(m),id)}
+ // #92: start from a complete, otherwise-valid event so the only possible error is the privacy check.
+ const events=[],store=new Map()
+ const t=new workflow.WorkflowTracker({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},()=>true,(name,props)=>{events.push({name,props});return true})
+ t.watch('studio-generation','p1')
+ t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:'llm_auth_invalid',http_status:401,failure_stage:'analyze'}})
+ const finished=events.find(e=>e.name==='studio_generation_finished')
+ assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'','baseline event is fully valid')
+ const tainted={...finished.props,flow_id:'t-abc-sk-123'}
+ assert.equal(catalogApi.validateEvent(finished.name,tainted,catalog).join(';'),'studio_generation_finished.flow_id looks like a secret','a real sk- value must still be flagged')
+ // #93: shape is t-<seg>-<seg>-<seg>, three non-empty base36 segments.
+ const SHAPE=/^t-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/
+ for(let i=0;i<20000;i++){const id=workflow.telemetryId();assert.match(id,SHAPE);for(const m of workflow.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(m),id)}
 })
