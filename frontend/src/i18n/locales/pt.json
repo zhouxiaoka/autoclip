@@ -1898,7 +1898,7 @@
   "自动": "Automático",
   "hf-mirror 镜像": "hf-mirror (espelho)",
   "保存失败，请重试": "Falha ao salvar. Tente novamente.",
-  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem.",
+  "连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。": "Não foi possível conectar ao serviço de modelos local. Inicie o Ollama (ou LM Studio), confirme o endereço e a porta e toque em Testar novamente.",
   "语言 · 视觉": "Linguagem · Visão",
   "连接": "Conexão",
   "可用模型": "Modelos disponíveis",
@@ -1940,5 +1940,6 @@
   "视觉": "Visão",
   "全部启用": "Ativar todos",
   "全部停用": "Desativar todos",
-  "未启用": "Não ativados"
+  "未启用": "Não ativados",
+  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem."
 }
