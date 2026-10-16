@@ -172,7 +172,10 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
             # R11 #413 decode-only validation of the staged output: not an encoder argv.
             decodes.append(argv)
             seconds = float(PROBE.get('format', {}).get('duration') or 0)
-            body = f'frame=999\nout_time_us={int(seconds * 1_000_000)}\nprogress=end\n'
+            # R13 #27: the body (.part.mp4) is decoded alone before the outro; the final
+            # .ready.part.mp4 carries one extra outro second, so it must decode longer.
+            frames = 999 + (30 if _input_after(argv, '-i').endswith('.ready.part.mp4') else 0)
+            body = f'frame={frames}\nout_time_us={int(seconds * 1_000_000)}\nprogress=end\n'
             return subprocess.CompletedProcess(argv, 0, stdout=body if text else body.encode(), stderr='' if text else b'')
         remember(argv)
         stdout = '' if text else b''
