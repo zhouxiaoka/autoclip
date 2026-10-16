@@ -39,7 +39,7 @@ const Btn = ({ children, onClick, disabled, loading }) => h('button', { type: 'b
 const okCheck = { ok: true, code: 'ok', repair: 'none' }
 const READY = { analysis_mode: 'auto', ready: true, checks: { analysis: okCheck, transcription: okCheck, visual: okCheck, ffmpeg: okCheck } }
 
-function mount({ readiness, importImpl }) {
+function mount({ readiness, importImpl, dropZone = false }) {
   const calls = []
   const realErrorText = load('errorText.ts', {})
   const mocks = {
@@ -52,7 +52,7 @@ function mount({ readiness, importImpl }) {
     './api': { studioApi: { readiness, import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
-    '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
+    '../../analytics/flags': { useFlag: () => false, flagEnabled: name => dropZone && name === 'import_drop_zone', flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
     '../../analytics/experience': { trackExperience() {} },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
@@ -62,7 +62,7 @@ function mount({ readiness, importImpl }) {
     '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}) } },
     './platformLabel': { platformLabel: id => id },
     './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, writeRememberedPlatforms() {} },
-    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: () => null, isVideoFile: () => false, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000 },
+    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000 },
     './importPreferencesStore': { readImportPreferences: () => null },
     './studio.css': {}, './quick-output.css': {},
   }
@@ -135,5 +135,66 @@ test('R20 #167: an ordinary 422 shows the error line, not the gate dialog', asyn
   await act(async () => {})
   assert.equal(view.host.querySelector('[role=alertdialog]'), null)
   assert.equal(view.host.querySelector('[role=alert]').textContent, '视频文件为空，请重新选择')
+  act(() => view.root.unmount())
+})
+
+function dropFile(host, name) {
+  const zone = host.querySelector('.ac-dropzone')
+  const file = new window.File(['x'], name, { type: 'video/mp4' })
+  const event = new window.Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: { files: [file], getData: () => '' } })
+  return act(async () => { zone.dispatchEvent(event) })
+}
+function pasteText(text) {
+  const event = new window.Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: { getData: () => text } })
+  return act(async () => { window.dispatchEvent(event) })
+}
+function hangingProbe() {
+  let probes = 0
+  const pending = []
+  const readiness = () => { probes++; if (probes === 1) return Promise.reject(new Error('down')); return new Promise((_, reject) => pending.push(reject)) }
+  return { readiness, pending, count: () => probes }
+}
+const removeButton = host => [...host.querySelectorAll('button')].find(b => b.textContent === '移除')
+
+test('R21 #166: drop and global paste during the re-probe cannot swap the source; the shown file is the uploaded one', async () => {
+  const probe = hangingProbe()
+  const view = await render({ readiness: probe.readiness, importImpl: async () => ({ project_id: 'p' }), dropZone: true })
+  await dropFile(view.host, 'first.mp4')
+  assert.match(view.host.textContent, /first\.mp4/)
+  await act(async () => { startButton(view.host).click() })
+  assert.equal(probe.pending.length, 1)
+  await dropFile(view.host, 'second.mp4')
+  await pasteText('https://youtube.com/watch?v=other')
+  assert.match(view.host.textContent, /first\.mp4/)
+  assert.doesNotMatch(view.host.textContent, /second\.mp4/)
+  assert.equal(view.host.querySelector('textarea').value, '')
+  for (let i = 0; i < 3; i++) await act(async () => { probe.pending.shift()(new Error('down')) })
+  await act(async () => {})
+  assert.equal(view.calls.length, 1)
+  assert.equal(view.calls[0].get('video').name, 'first.mp4')
+  assert.equal(view.calls[0].get('url'), null)
+  act(() => view.root.unmount())
+})
+
+test('R21 #177: 移除 is locked while waiting, and a failed import releases the lock', async () => {
+  const probe = hangingProbe()
+  const view = await render({ readiness: probe.readiness, importImpl: async () => { throw axios422('视频文件为空，请重新选择') }, dropZone: true })
+  await dropFile(view.host, 'first.mp4')
+  assert.equal(removeButton(view.host).disabled, false)
+  await act(async () => { startButton(view.host).click() })
+  assert.equal(removeButton(view.host).disabled, true)
+  assert.equal(view.host.querySelector('textarea').disabled, true)
+  for (let i = 0; i < 3; i++) await act(async () => { probe.pending.shift()(new Error('down')) })
+  await act(async () => {})
+  assert.equal(view.calls.length, 1)
+  assert.equal(view.host.querySelector('[role=alert]').textContent, '视频文件为空，请重新选择')
+  assert.equal(removeButton(view.host).disabled, false, 'lock released after the failure')
+  assert.equal(view.host.querySelector('textarea').disabled, false)
+  assert.equal(startButton(view.host).disabled, false)
+  // and a new source is accepted again
+  await dropFile(view.host, 'second.mp4')
+  assert.match(view.host.textContent, /second\.mp4/)
   act(() => view.root.unmount())
 })

@@ -112,6 +112,8 @@ def test_missing_settings_file_still_gates_content_route_like_runtime(monkeypatc
 
 def test_visual_mode_still_gates_content_route_but_not_studio(monkeypatch, tmp_path):
     settings('visual'); whisper(monkeypatch)
+    from backend.services.studio import intelligence
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)  # visual route needs a vision model (R21 #174)
     video = media(tmp_path / 'v.mp4')
     readiness.ensure_local_transcription_for_import(srt_available=False, video=video)  # studio honours visual
     with pytest.raises(readiness.TranscriptionNotReady, match=GATE):

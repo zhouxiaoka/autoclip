@@ -14,7 +14,10 @@ test('1.5.8 local file without SRT and missing local Whisper opens the install g
   assert.equal(gate.localTranscriptionGate(report('whisper_installing'), true, 'file'), null)
   assert.equal(gate.localTranscriptionGate(report('whisper_not_installed'), true, 'file'), null)
   assert.equal(gate.localTranscriptionGate(report('whisper_not_installed'), false, 'link'), null)
-  assert.equal(gate.localTranscriptionGate(report('whisper_not_installed', 'visual'), false, 'file'), null)
+  // R21: visual mode is decided by the backend (skippable flag), not inferred from analysis_mode
+  const visual = report('whisper_not_installed', 'visual')
+  assert.equal(gate.localTranscriptionGate(visual, false, 'file'), 'install')
+  assert.equal(gate.localTranscriptionGate({ ...visual, checks: { transcription: { ...visual.checks.transcription, skippable: true } } }, false, 'file'), null)
   assert.equal(gate.localTranscriptionGate(report('cloud_not_configured'), false, 'file'), null)
   assert.equal(gate.submissionBlock(report('whisper_not_installed'), false, true, { source: 'file' }), 'transcription')
   assert.equal(gate.CLOUD_TRANSCRIPTION_DESTINATION, '/settings?section=speech&provider=cloud')

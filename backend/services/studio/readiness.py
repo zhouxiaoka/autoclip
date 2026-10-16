@@ -138,9 +138,14 @@ def _ffmpeg() -> dict:
 
 def report() -> dict:
     settings = ai_models.for_editing()
+    from backend.services.studio import planning
+    transcription = _transcription(settings)
+    if not transcription.get('ok') and planning.transcription_may_be_skipped(settings.analysis_mode):
+        # Visual route possible: the desktop does not block; the import gate decides per file (R21 code health).
+        transcription = {**transcription, 'skippable': True}
     checks = {
         'analysis': _analysis(settings),
-        'transcription': _transcription(settings),
+        'transcription': transcription,
         'visual': _visual(settings),
         'ffmpeg': _ffmpeg(),
     }
@@ -214,22 +219,11 @@ def _gate_settings():
     return settings or ai_models.ModelSettings()
 
 
-def _source_duration(video):
-    if video is None:
-        return None
-    from backend.pipeline import media_precheck
-    try:
-        return media_precheck.probe(Path(video)).get('duration')
-    except Exception:  # noqa: BLE001 - unknown duration never earns the visual route
-        return None
-
-
 def ensure_local_transcription_for_import(*, srt_available: bool, video=None, route: str = 'studio', goal: str | None = 'auto') -> None:
     """1.5.8 import gate for a local file: local Whisper selected, runtime missing/installing, no SRT -> block.
 
-    ``route='studio'`` asks planning which route the job really takes (R20 #144): visual only when the
-    saved mode is visual, the goal is not ``content`` and the source is within the visual length limit
-    (the duration needs ``video``; without it the gate refuses so the caller stages and asks again).
+    ``route='studio'`` asks planning (``planning.route_before_screening``) which route the job will take;
+    that needs the file, so without ``video`` the gate refuses and the caller stages and asks again.
     ``route='content'`` is the CLI / MCP / legacy content pipeline, which always transcribes without an SRT.
     Never switches provider (no silent cloud fallback) and never installs anything.
     Links are not gated here: platform captions are tried first after download.
@@ -243,9 +237,9 @@ def ensure_local_transcription_for_import(*, srt_available: bool, video=None, ro
     code = _transcription(settings).get('code')
     if code not in GATE_CODES:
         return
-    if route == 'studio' and settings.analysis_mode == 'visual' and goal != 'content' and video is not None:
+    if route == 'studio' and video is not None:
         from backend.services.studio import planning
-        if planning.takes_visual_route(settings.analysis_mode, goal, _source_duration(video)):
+        if planning.route_before_screening(settings.analysis_mode, goal, Path(video)) == 'visual':
             return
     if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
         return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code

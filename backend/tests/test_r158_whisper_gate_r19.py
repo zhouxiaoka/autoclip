@@ -146,7 +146,9 @@ def quick(monkeypatch):
     return quick_output_runner, created, inspected
 
 
-def test_113_visual_quick_output_is_not_rejected_by_inner_content_gate(quick, tmp_path):
+def test_113_visual_quick_output_is_not_rejected_by_inner_content_gate(quick, tmp_path, monkeypatch):
+    from backend.services.studio import intelligence
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)  # visual route needs a vision model (R21 #174)
     runner, created, inspected = quick
     settings('visual')  # Studio visual analysis needs no ASR
     pid = runner.start(str(media(tmp_path / 'v.mp4')), ['douyin'])
@@ -165,6 +167,8 @@ def test_113_rejected_quick_output_leaves_no_project(quick, tmp_path):
 
 
 def test_113_quick_output_checks_the_gate_once(quick, tmp_path, monkeypatch):
+    from backend.services.studio import intelligence
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)  # visual route needs a vision model (R21 #174)
     runner, created, inspected = quick
     settings('visual')
     seen = []

@@ -5,6 +5,7 @@ from backend.services import whisper_runtime
 from backend.services.studio import readiness
 
 
+@pytest.mark.reads_whisper_stand_in
 def test_conftest_simulates_installed_whisper_not_a_disabled_gate():
     assert whisper_runtime.get_status()['status'] == 'installed'
     assert readiness.ensure_local_transcription_for_import.__module__ == 'backend.services.studio.readiness'

@@ -66,7 +66,9 @@ def test_gate_allows_srt_installed_cloud_or_visual(monkeypatch, kw, status, prov
     _settings(provider, mode)
     _whisper(monkeypatch, status)
     monkeypatch.setattr(readiness, '_whisper_model', lambda model: {'ok': True, 'code': 'whisper_installed'})
-    monkeypatch.setattr(readiness, '_source_duration', lambda video: 60.0)
+    from backend.services.studio import intelligence, planning
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)
+    monkeypatch.setattr(planning, 'source_duration', lambda video, info=None: 60.0)
     readiness.ensure_local_transcription_for_import(**kw)
 
 

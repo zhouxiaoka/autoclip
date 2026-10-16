@@ -3,6 +3,7 @@
 """
 
 from typing import List, Optional
+from backend.api.v1.gate_errors import gate_refusal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ...core.database import get_db
@@ -26,7 +27,7 @@ async def process_project(
     try:
         readiness.ensure_local_transcription_for_project(project_id)
     except readiness.TranscriptionNotReady as exc:
-        raise HTTPException(status_code=422, detail=exc.detail) from exc
+        raise gate_refusal(exc) from exc
     try:
         result = processing_service.process_project(project_id)
         return {

@@ -207,16 +207,19 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const nextUrl = next?.url ?? url
     const nextSource = next?.file ? 'file' : next?.url ? 'link' : source
     if (nextSource === 'file' ? !nextFile : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
-    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink, goal: options.goal })
+    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
-    const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource, options.goal) : null
+    const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource) : null
     if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
     if (trigger !== 'button') setError('')
     return true
   }
   const arm = (trigger: 'paste' | 'drop', next: { url?: string; file?: File }) => {
+    // R21 #166: drop, global paste and the file picker all come through here; while a submit is running
+    // (including its readiness re-check) the source is locked, so what is shown is what gets uploaded.
+    if (starting.current) return
     if (next.file) { setFile(next.file); setUrl(''); setSource('file') }
     else if (next.url) { setUrl(next.url); setFile(null); setSource('link') }
     if (!shouldAutoStart(pasteFlag, trigger)) return

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Q
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
+from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
@@ -44,11 +45,6 @@ def call(fn, *args, **kwargs):
 def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
-
-def gate_refusal(exc) -> HTTPException:
-    """The one HTTP shape of a 1.5.8 gate refusal: 422 with a stable ``code`` (R20 #168)."""
-    return HTTPException(422, exc.detail)
-
 
 async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
     """Run the import gate; stage the upload only when the gate needs the file to decide.

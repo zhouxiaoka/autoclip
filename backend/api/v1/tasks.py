@@ -2,6 +2,7 @@
 任务管理API路由
 """
 import logging
+from backend.api.v1.gate_errors import gate_refusal
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -149,7 +150,7 @@ async def submit_task(
                 # Only the SRT the queue receives counts; input.srt beside the video is not passed on (R19 #114).
                 readiness.ensure_local_transcription_for_paths(input_video_path, input_srt_path, sibling_srt=False)
             except readiness.TranscriptionNotReady as exc:
-                raise HTTPException(status_code=422, detail=exc.detail) from exc
+                raise gate_refusal(exc) from exc
             result = queue_service.submit_video_processing_task(
                 project_id=task.project_id,
                 input_video_path=input_video_path,
@@ -192,7 +193,7 @@ async def retry_task(
             try:  # 1.5.8 gate before resetting the task
                 readiness.ensure_local_transcription_for_paths(_get_task_config_value(task, "input_video_path"), _get_task_config_value(task, "input_srt_path"), sibling_srt=False)
             except readiness.TranscriptionNotReady as exc:
-                raise HTTPException(status_code=422, detail=exc.detail) from exc
+                raise gate_refusal(exc) from exc
         
         # 重置任务状态并重新提交
         task_service.update_task(task_id, TaskUpdate(status="pending", progress=0))

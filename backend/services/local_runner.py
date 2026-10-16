@@ -310,7 +310,7 @@ def prepare_project(req: RunRequest, link: bool = True) -> Path:
     # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
     # source does not count; the content route always transcribes, whatever the global analysis mode.
     readiness.ensure_local_transcription_for_paths(req.video, req.srt, sibling_srt=False, route='content')
-    return place_video(req, link)
+    return _place_resolved(req, link)
 
 
 def _resolve_inputs(req: RunRequest) -> None:
@@ -328,9 +328,12 @@ def place_video(req: RunRequest, link: bool = True) -> Path:
     建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。不做门禁：
     调用方（prepare_project、quick output）各自在建项入口判一次（R20 #148）。
     """
-    from backend.core.path_utils import get_project_directory
     _resolve_inputs(req)
+    return _place_resolved(req, link)
 
+
+def _place_resolved(req: RunRequest, link: bool) -> Path:
+    from backend.core.path_utils import get_project_directory
     project_dir = get_project_directory(req.project_id)
     raw_dir = project_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)

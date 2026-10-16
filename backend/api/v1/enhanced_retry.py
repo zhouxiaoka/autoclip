@@ -8,6 +8,7 @@ import uuid
 from enum import Enum
 from typing import Dict, Any, Optional
 from pathlib import Path
+from backend.api.v1.gate_errors import gate_refusal
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -265,7 +266,7 @@ async def smart_retry_project(
             try:
                 readiness.ensure_local_transcription_for_project(project_id)
             except readiness.TranscriptionNotReady as exc:
-                raise HTTPException(status_code=422, detail=exc.detail) from exc
+                raise gate_refusal(exc) from exc
             processing_result = await retry_processing_only(project_id, db)
             return RetryResponse(
                 success=True,

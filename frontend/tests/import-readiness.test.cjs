@@ -306,14 +306,17 @@ test('R20 #168: the prompt is never chosen from the Chinese text; an uncoded 422
   assert.doesNotMatch(source, /startsWith\(LOCAL_TRANSCRIPTION/)
 })
 
-test('R20 #145: visual mode with a non-content goal is not blocked by the desktop; goal content still is', () => {
-  const r = { ...report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), analysis_mode: 'visual' }
-  assert.equal(readiness.submissionBlock(r, false, true, { source: 'file', goal: 'auto' }), null)
-  assert.equal(readiness.localTranscriptionGate(r, false, 'file', 'auto'), null)
-  assert.equal(readiness.submissionBlock(r, false, true, { source: 'file', goal: 'content' }), 'transcription')
-  assert.equal(readiness.localTranscriptionGate(r, false, 'file', 'content'), 'install')
-  const sub = { ...r, analysis_mode: 'subtitle' }
-  assert.equal(readiness.submissionBlock(sub, false, true, { source: 'file', goal: 'auto' }), 'transcription')
+test('R21: the desktop follows the backend skippable flag instead of inferring the visual route', () => {
+  const missing = check(false, 'whisper_not_installed', 'install_whisper')
+  const skippable = { ...report({ transcription: { ...missing, skippable: true } }), analysis_mode: 'visual' }
+  assert.equal(readiness.submissionBlock(skippable, false, true, { source: 'file' }), null)
+  assert.equal(readiness.localTranscriptionGate(skippable, false, 'file'), null)
+  // visual mode without the flag (e.g. no vision model): blocked like any other missing transcriber
+  const visualOnly = { ...report({ transcription: missing }), analysis_mode: 'visual' }
+  assert.equal(readiness.submissionBlock(visualOnly, false, true, { source: 'file' }), 'transcription')
+  assert.equal(readiness.localTranscriptionGate(visualOnly, false, 'file'), 'install')
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/importReadiness.ts'), 'utf8')
+  assert.doesNotMatch(source, /analysis_mode === 'visual'/)
 })
 
 test('R19 #115: no settings file -> default local Whisper not installed, no SRT: blocked before start', async () => {

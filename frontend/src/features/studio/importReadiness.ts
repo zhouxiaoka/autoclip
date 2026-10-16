@@ -7,6 +7,8 @@ export interface ReadinessCheck {
   repair: RepairAction
   /** whisper_model_* checks name the model the import needs. */
   model?: string
+  /** Transcription only: the backend says this setup may run without ASR (visual route); its import gate decides per file. */
+  skippable?: boolean
 }
 
 export interface ImportReadiness {
@@ -32,15 +34,6 @@ export interface SubmissionOptions {
   source?: 'link' | 'file'
   /** Link imports can use captions the platform already published. Files still need a transcriber or an SRT. */
   allowLinkWithoutWhisper?: boolean
-  /** Requested goal. Visual analysis keeps the visual route (no transcription) unless the goal is content. */
-  goal?: string
-}
-
-/** R20 #145: same rule as the backend gate (planning.takes_visual_route). Visual mode with a non-content goal
- * may run without transcription; only the backend knows the source length, so the desktop does not block it
- * and the backend gate answers with a coded 422 when the source is too long for the visual route. */
-function visualRouteLikely(report: ImportReadiness | null, goal: string | undefined): boolean {
-  return report?.analysis_mode === 'visual' && goal !== 'content'
 }
 
 const ORDER = ['analysis', 'transcription', 'visual', 'ffmpeg'] as const
@@ -53,7 +46,7 @@ export function submissionBlock(report: ImportReadiness | null, hasSubtitle: boo
   // A missing check is unknown, not failed: it never traps the user (same as a failed probe).
   const checks = report.checks
   if (checks?.analysis?.ok === false) return 'analysis'
-  if (checks?.transcription?.ok === false && !hasSubtitle && !(options.allowLinkWithoutWhisper && options.source !== 'file') && !visualRouteLikely(report, options.goal)) return 'transcription'
+  if (checks?.transcription?.ok === false && !hasSubtitle && !(options.allowLinkWithoutWhisper && options.source !== 'file') && !checks.transcription.skippable) return 'transcription'
   if (checks?.visual?.ok === false) return 'visual'
   if (checks?.ffmpeg?.ok === false) return 'ffmpeg'
   return null
@@ -98,9 +91,9 @@ export function asrReadinessProperties(report: ImportReadiness | null, hasSubtit
 
 /** 1.5.8: local file, local Whisper selected but not installed, no SRT -> blocking install prompt.
  * Offers the existing install flow or an explicit switch to cloud; never switches automatically. */
-export function localTranscriptionGate(report: ImportReadiness | null, hasSubtitle: boolean, source: SubmissionOptions['source'], goal?: string): 'install' | 'installing' | null {
+export function localTranscriptionGate(report: ImportReadiness | null, hasSubtitle: boolean, source: SubmissionOptions['source']): 'install' | 'installing' | null {
   if (hasSubtitle || source !== 'file') return null
-  if (visualRouteLikely(report, goal)) return null
+  if (report?.checks?.transcription?.skippable) return null  // the backend gate decides (R21)
   return gateKind(report?.checks?.transcription?.code)
 }
 
