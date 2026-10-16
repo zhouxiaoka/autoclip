@@ -52,7 +52,7 @@ const Btn = ({ children, onClick, disabled, loading }) => h('button', { type: 'b
 const okCheck = { ok: true, code: 'ok', repair: 'none' }
 const READY = { analysis_mode: 'auto', ready: true, checks: { analysis: okCheck, transcription: okCheck, visual: okCheck, ffmpeg: okCheck } }
 
-function mount({ readiness, importImpl, dropZone = false, autostart = false, speech = {}, clock, navigate = () => {} }) {
+function mount({ readiness, importImpl, dropZone = false, autostart = false, speech = {}, clock, navigate = () => {}, pasteStart = {} }) {
   const calls = []
   const realErrorText = load('errorText.ts', {})
   const mocks = {
@@ -75,7 +75,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}), getRuntimeStatus: async () => ({ status: 'installing', progress: 0 }), getModels: async () => [], ...speech } },
     './platformLabel': { platformLabel: id => id },
     './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, writeRememberedPlatforms() {} },
-    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000 },
+    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000, ...pasteStart },
     './importPreferencesStore': { readImportPreferences: () => null },
     './studio.css': {}, './quick-output.css': {},
   }
@@ -369,5 +369,69 @@ test('#353: the readiness list install button runs through the one recovery cont
   await clock.advance(2000)
   assert.equal(view.host.querySelector('[role=alertdialog]').getAttribute('aria-label'), '等待安装完成', 'the controller dialog waits with progress')
   assert.match(view.host.textContent, /已完成 30%/)
+  act(() => view.root.unmount())
+})
+
+test('#370: 下载转写模型 from the list without 生成成片 does not send an import when the download finishes', async () => {
+  const clock = fakeClock()
+  let report = check('whisper_model_missing', { model: 'small', repair: 'install_whisper' })
+  const imports = []
+  const view = await render({ clock, dropZone: true, readiness: async () => report,
+    speech: { getModels: async () => [{ name: 'small', status: 'downloading', downloadProgress: 50 }], downloadModel: async model => { report = check('whisper_model_downloading', { model }); return {} } },
+    importImpl: async body => { imports.push(body); return { project_id: 'p' } } })
+  await dropFile(view.host, 'talk.mp4')
+  const listButton = [...view.host.querySelectorAll('button')].find(b => b.textContent === '下载转写模型')
+  assert.ok(listButton)
+  await act(async () => { listButton.click() }); await act(async () => {}); await act(async () => {})
+  await clock.advance(2000)
+  report = READY
+  await clock.advance(2000); await act(async () => {}); await act(async () => {}); await act(async () => {})
+  assert.equal(imports.length, 0, 'no submit was blocked, so nothing is imported by itself')
+  assert.equal(view.host.querySelector('[role=alertdialog]'), null)
+  await act(async () => { startButton(view.host).click() }); await act(async () => {}); await act(async () => {})
+  assert.equal(imports.length, 1, 'the user can still start it')
+  act(() => view.root.unmount())
+})
+
+test('#371: link_import_without_whisper background install runs through the controller and does not stay on 正在安装本地转写', async () => {
+  const clock = fakeClock()
+  let report = check('whisper_not_installed', { repair: 'install_whisper' })
+  const installs = []
+  const view = await render({ clock, readiness: async () => report,
+    pasteStart: { shouldBackgroundInstallWhisper: (allow, code) => code === 'whisper_not_installed', claimBackgroundWhisperInstall: () => installs.length === 0 },
+    speech: { installRuntime: async () => { installs.push('runtime'); report = check('whisper_installing'); return {} }, getRuntimeStatus: async () => ({ status: 'installing', progress: 10 }) },
+    importImpl: async () => ({ project_id: 'p' }) })
+  await act(async () => {}); await act(async () => {})
+  assert.deepEqual(installs, ['runtime'])
+  await clock.advance(2000); await act(async () => {})
+  assert.match(view.host.textContent, /正在安装本地转写/)
+  assert.equal(view.host.querySelector('[role=alertdialog]'), null, 'background install stays inline')
+  report = READY
+  await clock.advance(2000); await act(async () => {}); await act(async () => {})
+  assert.doesNotMatch(view.host.textContent, /正在安装本地转写/, 'readiness was refreshed by the controller (was stuck)')
+  assert.deepEqual(installs, ['runtime'])
+  act(() => view.root.unmount())
+})
+
+test('#372: model download 500 on the page shows failed with retry; polling does not resend', async () => {
+  const clock = fakeClock()
+  let report = check('whisper_model_missing', { model: 'small' })
+  const downloads = []
+  let fail = true
+  const view = await render({ clock, dropZone: true, readiness: async () => report,
+    speech: { downloadModel: async model => { downloads.push(model); if (fail) throw Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } }); report = check('whisper_model_downloading', { model }); return {} } },
+    importImpl: async () => ({ project_id: 'p' }) })
+  await dropFile(view.host, 'talk.mp4')
+  await act(async () => { startButton(view.host).click() }); await act(async () => {})
+  await act(async () => { button(view.host, '一键安装').click() }); await act(async () => {}); await act(async () => {})
+  await clock.advance(2000); await clock.advance(2000)
+  assert.deepEqual(downloads, ['small'], 'not resent by polling')
+  assert.doesNotMatch(view.host.textContent, /正在下载转写模型/)
+  assert.ok(button(view.host, '重试'), 'failed offers retry')
+  fail = false
+  await act(async () => { button(view.host, '重试').click() }); await act(async () => {}); await act(async () => {})
+  assert.deepEqual(downloads, ['small', 'small'])
+  await clock.advance(2000)
+  assert.match(view.host.textContent, /正在下载转写模型/)
   act(() => view.root.unmount())
 })

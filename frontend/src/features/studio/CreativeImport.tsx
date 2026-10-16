@@ -22,7 +22,7 @@ import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRemember
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
-import { isRecoveryCode } from './transcriptionRecovery'
+import { isRecoveryCode, type RecoveryController } from './transcriptionRecovery'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import './studio.css'
 import './quick-output.css'
@@ -95,6 +95,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const platformSource = useRef<PlatformSource>(initialPlatforms.current.source)
   const overridden = useRef(false)
   const starting = useRef(false)
+  const recoverRef = useRef<RecoveryController>(null as unknown as RecoveryController)
   const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button', fresh?: ImportReadiness | null) => Promise<void>>(async () => {})
   const allowLink = flagEnabled('link_import_without_whisper')
   const dropZone = flagEnabled('import_drop_zone')
@@ -120,10 +121,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   }, [hidePreferences])
   useEffect(() => {
     if (!shouldBackgroundInstallWhisper(allowLink, readiness?.checks?.transcription?.code)) return
+    if (recoverRef.current.state.phase !== 'idle') return
     if (!claimBackgroundWhisperInstall()) return
-    void speechApi.installRuntime()
-      .then(() => studioApi.readiness().then(setReadiness).catch(() => undefined))
-      .catch(() => undefined)
+    // #371: the background install is the controller's install too, so its polls refresh readiness and the page
+    // never stays on 正在安装本地转写; the dialog stays closed unless a submit is blocked on it.
+    void recoverRef.current.install({ background: true })
   }, [allowLink, readiness?.checks?.transcription?.code])
   useEffect(() => {
     if (!pending) return
@@ -150,7 +152,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const issues = visibleIssues(readiness, !!subtitle, blockOptions)
   const repair = async (item: ReadinessIssue) => {
     // #353: the readiness list's install button goes through the one recovery controller (no second install flow).
-    if (item.repair === 'install_whisper') { setError(''); recover.open(item.code || 'whisper_not_installed', item.model); await recover.install(); return }
+    if (item.repair === 'install_whisper') { resumeSubmit.current = false; setError(''); recover.open(item.code || 'whisper_not_installed', item.model); await recover.install(); return }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
     const destination = repairDestination(item.repair)
     if (destination) navigate(destination)
@@ -159,8 +161,16 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   // ready (continues by itself) / failed / timeout (retry or transcription settings).
   // Done waiting -> the same import continues by itself (#232); the 继续导入 button is the manual exit.
   // #349: continue with the report the controller just read, never the page's cached readiness.
-  const continueAfterRecovery = (report: ImportReadiness | null) => { recover.close(); setError(''); if (report) setReadiness(report); void submitRef.current?.('button', report) }
-  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: report => continueAfterRecovery(report), onReport: report => setReadiness(report) })
+  // #370: only a submit that was blocked on the install continues by itself; a download started from the list
+  // (or in the background) just refreshes readiness when it finishes.
+  const resumeSubmit = useRef(false)
+  const recoveryDone = (report: ImportReadiness | null) => {
+    if (resumeSubmit.current) { continueAfterRecovery(report); return }
+    recover.close(); if (report) setReadiness(report)
+  }
+  const continueAfterRecovery = (report: ImportReadiness | null) => { resumeSubmit.current = false; recover.close(); setError(''); if (report) setReadiness(report); void submitRef.current?.('button', report) }
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: report => recoveryDone(report), onReport: report => setReadiness(report) })
+  recoverRef.current = recover
   const repairing = recovery.phase === 'installing' || recovery.phase === 'downloading'
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
@@ -185,7 +195,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
     const check = readiness?.checks?.transcription
     if (reason === 'transcription' && nextSource === 'file' && !subtitle && !check?.skippable && isRecoveryCode(check?.code)) {
-      setError(''); recover.open(check!.code, check!.model); return false
+      setError(''); resumeSubmit.current = true; recover.open(check!.code, check!.model); return false
     }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
     if (trigger !== 'button') setError('')
@@ -257,7 +267,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     } catch (e) {
       // R20 #168: the backend gate sends a stable code; the prompt is chosen from it, never from the text.
       const code = errorCode(e)
-      if (isRecoveryCode(code)) { setError(''); recover.open(code as string, readiness?.checks?.transcription?.model) }
+      if (isRecoveryCode(code)) { setError(''); resumeSubmit.current = true; recover.open(code as string, readiness?.checks?.transcription?.model) }
       else setError(t(errorText(e)))  // includes coded source refusals (source_unreadable ...): shown at once
     } finally { starting.current = false; setBusy(false) }
   }

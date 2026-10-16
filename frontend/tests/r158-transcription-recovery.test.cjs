@@ -191,3 +191,55 @@ test('install prompt copy exists in all 8 languages', () => {
     for (const key of keys) assert.ok(typeof data[key] === 'string' && data[key].length > 0, `${lang}: ${key}`)
   }
 })
+
+test('#372: runtime in, model download request 500 -> failed (not downloading); polls never resend; retry sends once', async () => {
+  let stage = 'installing'
+  const log = []
+  let fail = true
+  const api = { readiness: async () => stage === 'installing' ? check('whisper_installing') : check('whisper_model_missing', { model: 'base' }),
+    getRuntimeStatus: async () => ({ status: 'installing', progress: 50 }), getModels: async () => [],
+    installRuntime: async () => { log.push('runtime') }, downloadModel: async m => { log.push('model:' + m); if (fail) throw new Error('500') } }
+  const c = recovery.createRecoveryController(api)
+  c.open('whisper_not_installed'); await c.install()
+  assert.equal(c.state.phase, 'installing')
+  stage = 'model'
+  await c.poll()
+  assert.equal(c.state.phase, 'failed', 'a refused download request is failed, never downloading')
+  await c.poll(); await c.poll()
+  assert.deepEqual(log, ['runtime', 'model:base'], 'no resend by polling')
+  fail = false
+  await c.retry()
+  assert.equal(c.state.phase, 'downloading')
+  await c.poll(); await c.poll()
+  assert.deepEqual(log, ['runtime', 'model:base', 'model:base'], 'accepted download is not resent while readiness lags')
+})
+
+test('#372 offline: install request network error -> failed -> retry works', async () => {
+  let online = false
+  const log = []
+  const api = { readiness: async () => { if (!online) throw new TypeError('Failed to fetch'); return check('whisper_installing') },
+    getRuntimeStatus: async () => ({ status: 'installing', progress: 5 }), getModels: async () => [],
+    installRuntime: async () => { log.push('runtime'); if (!online) throw new TypeError('Network Error') }, downloadModel: async () => { throw new TypeError('Network Error') } }
+  const c = recovery.createRecoveryController(api)
+  c.open('whisper_not_installed'); await c.install()
+  assert.equal(c.state.phase, 'failed')
+  online = true
+  await c.retry()
+  assert.equal(c.state.phase, 'installing')
+})
+
+test('#372 offline: backend unreachable while waiting -> failed after OFFLINE_POLLS, then retryable', async () => {
+  let online = true
+  const api = { readiness: async () => { if (!online) throw new TypeError('Failed to fetch'); return check('whisper_installing') },
+    getRuntimeStatus: async () => ({ status: 'installing', progress: 5 }), getModels: async () => [],
+    installRuntime: async () => {}, downloadModel: async () => {} }
+  const c = recovery.createRecoveryController(api)
+  c.open('whisper_not_installed'); await c.install()
+  online = false
+  for (let i = 0; i < recovery.OFFLINE_POLLS - 1; i++) { await c.poll(); assert.equal(c.state.phase, 'installing') }
+  await c.poll()
+  assert.equal(c.state.phase, 'failed')
+  online = true
+  await c.retry(); await c.poll()
+  assert.equal(c.state.phase, 'installing')
+})

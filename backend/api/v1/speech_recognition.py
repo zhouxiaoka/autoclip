@@ -412,8 +412,21 @@ async def test_speech_service(request: TestSpeechServiceRequest):
             message=f"测试失败: {str(e)}"
         )
 
+# #418 R26: QA switch for on-device acceptance of #372 (download request 500 -> failed, retry, no resend).
+# Off unless this exact env var is "1" when the app starts; release builds never set it (locked by a test).
+QA_FAIL_MODEL_DOWNLOAD_ENV = "AUTOCLIP_QA_FAIL_MODEL_DOWNLOAD"
+
+
+def qa_fail_model_download() -> bool:
+    import os
+    return os.environ.get(QA_FAIL_MODEL_DOWNLOAD_ENV) == "1"
+
+
 @router.post("/whisper-models/download")
 async def download_whisper_model(request: DownloadModelRequest):
+    if qa_fail_model_download():
+        logger.warning("QA switch %s=1: model download request answered 500", QA_FAIL_MODEL_DOWNLOAD_ENV)
+        raise HTTPException(status_code=500, detail="qa_mock_model_download_500")
     """开始下载 Whisper 模型（后台）。
 
     200 status=installed：本地已有完整模型。202 status=downloading：已开始或正在下载，

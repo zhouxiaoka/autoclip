@@ -11,7 +11,9 @@ Invariants (each has an acceptance test in ``backend/tests/test_r158_preflight.p
   confused with "we looked and could not read it".
 - An unreadable source is decided before any install prompt and blocks before any paid call, SRT or not.
 - Too short / no audio block only when the actual route is the subtitle route.
-- At most one ffprobe per preflight; the ffmpeg decode fallback reuses that ffprobe's answer.
+- The material probe runs one ffprobe; its ffmpeg decode fallback reuses that answer (no second ffprobe for the
+  duration). This is not "one ffprobe in total": planning's subtitle-route ``has_audio`` check may run one more
+  ffprobe for the audio stream (#374).
 - A refusal is raised before the caller creates a project, changes state or keeps a staged file.
 """
 from __future__ import annotations

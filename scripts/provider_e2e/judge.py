@@ -35,14 +35,15 @@ def _injected(row: dict[str, Any]) -> bool:
     }
 
 
-def billable_calls_before_failure(row: dict[str, Any]) -> int:
+def billable_calls_before_failure(row: dict[str, Any]) -> int | None:
+    """The row's paid-call count, or None when it is missing or not a non-negative integer (#373: "oops", 0.9,
+    True are not counts and never pass as 0)."""
     value = row.get('billable_calls_before_failure')
     if value is None:
         value = row.get('billable_calls')
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def success_rate(cases: list[dict[str, Any]]) -> float:
@@ -256,8 +257,7 @@ def judge_suite(report: dict[str, Any], *, library: list[dict[str, Any]] | None 
     succeed_rate = success_rate(succeed)
     block_ok = all(row.get('passed') for row in blocked) if blocked else True
     # #353: a should-block row passes only with a counted zero; an unknown count (None) is not zero.
-    billable_ok = all(row.get('billable_calls_before_failure', row.get('billable_calls')) is not None
-                      and billable_calls_before_failure(row) == 0 for row in blocked)
+    billable_ok = all(billable_calls_before_failure(row) == 0 for row in blocked)
     fault_ok = all(row.get('passed') and _fault_contract_ok(row) for row in faults) if faults else True
     window = report.get('window')
     live_like = _live_like(report)

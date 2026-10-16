@@ -19,7 +19,7 @@ export interface TranscriptionGatePromptProps {
  * Every phase has an exit: install, wait with progress, continue, or retry / transcription settings. */
 export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetry, onContinue, navigate }: TranscriptionGatePromptProps) {
   const settings = () => navigate(repairDestination('settings_transcription') as string)
-  if (state.phase === 'idle') return null
+  if (state.phase === 'idle' || state.background) return null  // #371: a background install stays inline
   if (state.phase === 'install_required') return <div className="studio-readiness" role="alertdialog" aria-label={t('需要先安装本地转写')}>
     <b>{t('需要先安装本地转写')}</b>
     <span>{t('视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。')}</span>

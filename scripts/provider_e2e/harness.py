@@ -18,20 +18,48 @@ from .mock_openai import MockServer
 from .settings import write_data_dir
 
 
-def billable_calls_before_failure(data_dir: Path, project_id: str) -> int:
+def billable_calls_before_failure(data_dir: Path, project_id: str) -> int | None:
+    """Paid calls in the project's ledger. #373: a missing ledger file or an unparsable line is unknown (None),
+    never 0; only a complete, readable ledger is a count."""
     path = data_dir / 'projects' / project_id / 'metadata' / 'llm_usage.jsonl'
     if not path.is_file():
-        return 0
+        return None
     count = 0
-    for line in path.read_text(encoding='utf-8').splitlines():
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in lines:
+        if not line.strip():
+            continue
         try:
             row = json.loads(line)
         except ValueError:
-            continue
+            return None
+        if not isinstance(row, dict):
+            return None
         if row.get('kind') == 'timing':
             continue
         count += 1
     return count
+
+
+def project_ids(data_dir: Path) -> frozenset[str] | None:
+    """Ids of the projects on disk; None when the listing cannot be read (then nothing is proven)."""
+    root = data_dir / 'projects'
+    try:
+        return frozenset(entry.name for entry in root.iterdir() if entry.is_dir()) if root.exists() else frozenset()
+    except OSError:
+        return None
+
+
+def import_rejected_count(refused_code: str | None, before: frozenset[str] | None,
+                          after: frozenset[str] | None) -> tuple[int | None, str | None]:
+    """#369: 0 paid calls only when BOTH hold: the import answered a coded source_* 422, and the project list is
+    the same set of ids before and after (compared by id, not by count). Otherwise unknown."""
+    if refused_code and before is not None and after is not None and before == after:
+        return 0, 'import_rejected'
+    return None, None
 
 
 billable_calls = billable_calls_before_failure
@@ -249,8 +277,11 @@ def run_case(
     started = time.monotonic()
     observer = mock_server or kill_after_request
     events_before = len(observer.state.snapshot()['events']) if observer is not None else 0
+    ids_before = None
+    refused_code = None
     try:
         base_url = backend.start()
+        ids_before = project_ids(data_dir)
         project_id = import_project(base_url, fixture)
         if kill_after_request is not None:
             deadline = time.time() + min(45, timeout)
@@ -272,6 +303,7 @@ def run_case(
         refused = refusal_workspace(expect, exc)
         if refused is not None:
             workspace = refused
+            refused_code = refused['generation']['error_code']
         else:
             error = f'{type(exc).__name__}: {exc}'
             if getattr(exc, 'body', None):
@@ -284,8 +316,12 @@ def run_case(
         backend.stop()
     # #353: paid calls are counted, never inferred from "no project": the request observer (mock suites) counts
     # every chat request since this case started; otherwise the project's ledger; with neither it is unknown.
-    billable = paid_calls(observed_chat_calls(observer, events_before),
-                          billable_calls_before_failure(data_dir, project_id) if project_id else None)
+    seen = observed_chat_calls(observer, events_before)
+    ledger = billable_calls_before_failure(data_dir, project_id) if project_id else None
+    rejected, rejected_source = import_rejected_count(refused_code, ids_before, project_ids(data_dir)) if not project_id else (None, None)
+    billable = paid_calls(seen, ledger if ledger is not None else rejected)
+    count_source = ('observer' if seen is not None and (billable == seen) else
+                    'ledger' if ledger is not None else rejected_source) if billable is not None else None
     prompt_tokens, completion_tokens = (0, 0)
     if project_id:
         prompt_tokens, completion_tokens = usage_tokens(usage_rows(data_dir, project_id))
@@ -317,6 +353,7 @@ def run_case(
         'reason': judged.get('reason'),
         'billable_calls_before_failure': billable,
         'billable_calls': billable,
+        'count_source': count_source,
         'prompt_tokens': prompt_tokens,
         'completion_tokens': completion_tokens,
         'duration_ms': int((time.monotonic() - started) * 1000),

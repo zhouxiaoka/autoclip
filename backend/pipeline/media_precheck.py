@@ -169,59 +169,7 @@ def _ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
     return None, stderr
 
 
-def probe_duration(video, *, probed: bool = False) -> tuple[Optional[float], str]:
-    """Duration in seconds or None, plus diagnostics (ffprobe/ffmpeg stderr) when unreadable.
-
-    Tries ffprobe format=duration first, then decodes with ffmpeg (#345: some Windows
-    sources report no container duration to ffprobe).
-    """
-    probe_err = ""
-    if probed:
-        # R24 #282: ffprobe already ran and found no duration; do not run it a second time.
-        value, decode_err = _ffmpeg_decode_duration(video)
-        if value:
-            return value, ""
-        return None, sanitize_tool_output(f"ffprobe: no duration\nffmpeg: {decode_err}", video)
-    try:
-        from backend.utils.ffmpeg_utils import get_ffprobe_path
-        result = subprocess.run(
-            [get_ffprobe_path(), "-v", "error", "-show_entries", "format=duration", "-of", "json", str(video)],
-            capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=30,
-        )
-        probe_err = result.stderr or ""
-        try:
-            value = float(((json.loads(result.stdout or "{}") or {}).get("format") or {}).get("duration"))
-        except (TypeError, ValueError, AttributeError):
-            value = None
-        if value and value > 0:
-            return round(value, 2), ""
-        if not probe_err:
-            probe_err = f"ffprobe exit {result.returncode}: no duration"
-    except Exception as error:  # noqa: BLE001
-        probe_err = f"ffprobe unavailable: {type(error).__name__}"
-    logger.warning("ffprobe could not read duration: %s", sanitize_tool_output(probe_err, video, 300))
-    value, decode_err = _ffmpeg_decode_duration(video)
-    if value:
-        logger.info("source duration recovered by ffmpeg decode fallback: %.2fs", value)
-        return value, ""
-    return None, sanitize_tool_output(f"ffprobe: {probe_err}\nffmpeg: {decode_err}", video)
-
-
 class SourceUnreadable(PipelineFailure):
     def __init__(self, detail: str, stage: str = "INGEST"):
         super().__init__(stage, UNREADABLE_MESSAGE, code=SOURCE_UNREADABLE)
         self.probe_detail = detail
-
-
-def duration_or_fail(video, info_duration=None, stage: str = "INGEST", *, probed: bool = False) -> float:
-    """Readable duration ≥ 1 s, else SourceUnreadable / source_too_short.
-    ``probed``: the caller's ffprobe already ran (its duration is ``info_duration``), so only ffmpeg decodes."""
-    duration = float(info_duration or 0)
-    if duration <= 0:
-        found, detail = probe_duration(video, probed=probed)
-        if found is None:
-            raise SourceUnreadable(detail, stage)
-        duration = found
-    if duration < 1:
-        raise PipelineFailure(stage, TOO_SHORT_1S_MESSAGE, code=SOURCE_TOO_SHORT)
-    return duration
