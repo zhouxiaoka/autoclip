@@ -7,6 +7,7 @@ import {
   connectKind, customCatalogId, displayNameOf, filterCatalog, groupCatalog, initialLetter,
   isCatalogConfigured, isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections, type LocalAsrReady,
 } from './providerCatalogView'
+import { providerIcon } from './providerIcons'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
   all: 'settings.providers.filter.all',
@@ -68,6 +69,16 @@ function CustomCard({
   )
 }
 
+function ProviderMark({ presetId, letter }: { presetId: string; letter: string }) {
+  const icon = providerIcon(presetId)
+  if (!icon) return <span className="ac-provider-mark" aria-hidden>{letter}</span>
+  return (
+    <span className={`ac-provider-mark has-icon is-${icon.tone}`} aria-hidden>
+      <img src={icon.src} alt="" />
+    </span>
+  )
+}
+
 function ProviderCard({
   preset, settings, asrReady, selected, onOpen,
 }: {
@@ -88,7 +99,7 @@ function ProviderCard({
       aria-current={selected || undefined}
       onClick={() => onOpen(preset.id)}
     >
-      <span className="ac-provider-mark" aria-hidden>{initialLetter(preset)}</span>
+      <ProviderMark presetId={preset.id} letter={initialLetter(preset)} />
       <span className="ac-provider-card-body">
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
@@ -112,7 +123,7 @@ function ProviderCard({
 }
 
 export default function ProviderCatalog({
-  settings, query, filter, moreOpen, selectedId, asrReady = {}, onQuery, onFilter, onToggleMore, onOpen,
+  settings, query, filter, moreOpen, selectedId, asrReady = {}, onQuery, onFilter, onToggleMore, onOpen, onAdd,
 }: {
   settings: ModelSettings
   query: string
@@ -124,6 +135,7 @@ export default function ProviderCatalog({
   onFilter: (value: CapabilityFilter) => void
   onToggleMore: () => void
   onOpen: (id: string) => void
+  onAdd?: () => void
 }) {
   const visible = filterCatalog(query, filter)
   const groups = groupCatalog(visible)
@@ -144,6 +156,7 @@ export default function ProviderCatalog({
             onChange={event => onQuery(event.target.value)}
           />
         </label>
+        {onAdd && <Btn size="sm" onClick={onAdd}>{t('添加服务商')}</Btn>}
       </div>
       <div className="ac-chips ac-provider-filters" role="radiogroup" aria-label={t('settings.providers.filter.all')}>
         {CAPABILITY_FILTERS.map(value => (
@@ -188,7 +201,40 @@ export default function ProviderCatalog({
       {CATALOG_GROUPS.map(group => {
         const rows = groups[group]
         if (!rows.length) return null
-        const collapsed = group === 'more' && !expandMore
+        // OhMyGame models-settings.tsx 175–182：「更多服务商 (N)」是独立折叠条，默认收起，展开后才渲染列表。
+        if (group === 'more') {
+          return (
+            <section key={group} className="ac-provider-group" data-provider-group={group} data-expanded={expandMore ? '1' : '0'}>
+              <button
+                type="button"
+                className="ac-provider-more"
+                aria-expanded={expandMore}
+                aria-controls="ac-provider-more-list"
+                onClick={onToggleMore}
+              >
+                <span className="ac-provider-more-label">
+                  {t(GROUP_KEY[group])}
+                  <small>({rows.length})</small>
+                </span>
+                <svg className="ac-provider-more-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {expandMore && (
+                <div id="ac-provider-more-list" className="ac-provider-grid">
+                  {rows.map(preset => (
+                    <ProviderCard
+                      key={preset.id}
+                      preset={preset}
+                      settings={settings}
+                      asrReady={asrReady}
+                      selected={selectedId === preset.id}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )
+        }
         return (
           <section key={group} className="ac-provider-group" data-provider-group={group}>
             <header className="ac-provider-group-head">
@@ -196,13 +242,8 @@ export default function ProviderCatalog({
                 {t(GROUP_KEY[group])}
                 <span className="count">{rows.length}</span>
               </h3>
-              {group === 'more' && (
-                <Btn variant="text" size="sm" onClick={onToggleMore}>
-                  {expandMore ? t('settings.providers.collapse') : t('settings.providers.expand')}
-                </Btn>
-              )}
             </header>
-            {!collapsed && (
+            {(
               <div className={`ac-provider-grid${group === 'recommended' ? ' ac-provider-grid--recommended' : ''}`}>
                 {rows.map(preset => (
                   <ProviderCard

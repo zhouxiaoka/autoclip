@@ -8,6 +8,7 @@
  */
 import { connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
 export { modelHasVision } from './modelSettingsLogic'
+import { enabledModelIds } from './modelVisibility'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
 import { syncFollowingCover } from './modelDefaults'
 import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
@@ -18,8 +19,9 @@ export type SlotKind = 'smart' | 'fixed' | 'local' | 'follow' | 'off' | 'empty'
 export type VisionWarning = 'follow' | 'selected'
 
 export const PURPOSE_SLOTS = [
-  { id: 'analysis' as const, titleKey: '精彩片段分析', kindKey: '语言模型' },
-  { id: 'vision' as const, titleKey: '画面理解', kindKey: '带视觉的语言模型' },
+  // kindKey 与目录筛选词对齐（语言 / 语音识别 / 图像生成）；「视觉」仅为标签。
+  { id: 'analysis' as const, titleKey: '精彩片段分析', kindKey: '语言' },
+  { id: 'vision' as const, titleKey: '画面理解', kindKey: '语言 · 视觉' },
   { id: 'transcription' as const, titleKey: '语音转字幕', kindKey: '语音识别' },
   { id: 'cover' as const, titleKey: '封面生成', kindKey: '图像生成' },
 ]
@@ -91,7 +93,11 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
     const list = lists[connection.id]
-    const live = (list?.models || []).filter(entry => entryFits(purpose, entry))
+    const fitting = (list?.models || []).filter(entry => entryFits(purpose, entry))
+    // Visibility applies to account lists only. Explicit user choice is strict; the recommendation never empties a purpose.
+    const enabled = list && isAccountList(list) ? enabledModelIds(settings, connection, list.models) : null
+    const picked = enabled ? fitting.filter(entry => enabled.has(entry.id)) : fitting
+    const live = !enabled || Array.isArray(connection.enabled_model_ids) || picked.length ? picked : fitting
     for (const entry of live) {
       addOffer(byId, {
         modelId: entry.id, provider, connectionId: connection.id,

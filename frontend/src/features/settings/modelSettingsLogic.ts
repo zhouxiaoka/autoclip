@@ -5,6 +5,7 @@
 import { endpointProviderReady } from './endpointProvider'
 export { endpointProviderReady } from './endpointProvider'
 import { PROVIDERS, type ProviderKey } from './providers'
+import { getProvider } from './providerPresets'
 import type { Assignment, Connection, ModelList, ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults, coverFollowsAnalysis, defaultModel, syncFollowingCover } from './modelDefaults'
 import { normalizeCompatibleUrl, passed, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
@@ -57,11 +58,13 @@ export function coverFallback(s: ModelSettings, lists: Record<string, ModelList>
   return s
 }
 
-export const newConnection = (provider: ProviderKey, id: string = crypto.randomUUID()): Connection =>
-  ({
-    id, name: PROVIDERS[provider].name, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '',
-    base_url_source: provider === 'compatible' ? 'user' : 'preset', preset_version: 0,
-  })
+export const newConnection = (provider: ProviderKey, id: string = crypto.randomUUID()): Connection => {
+  const presetUrl = (getProvider(provider)?.base_url || PROVIDERS[provider]?.cloud?.baseUrl || '').trim()
+  return {
+    id, name: PROVIDERS[provider].name, provider, base_url: presetUrl, api_key: '', image_api: 'auto', image_base_url: '',
+    base_url_source: provider === 'compatible' ? 'user' : (presetUrl ? 'preset' : 'user'), preset_version: 0,
+  }
+}
 
 /** Merge a field edit; changing the address invalidates a stored key so one service's key never reaches another. */
 export function editConnection(s: ModelSettings, id: string, patch: Partial<Connection>): ModelSettings {

@@ -30,15 +30,17 @@ test('sponsor selection, offer, registration link and attribution follow the cho
       const preset = providers.PROVIDERS[provider]
       const nodes = flatten(Fields({ connection: { provider, api_key: '' }, placement, onChoose() {}, onEdit() {} }))
       const text = nodes.filter(n => typeof n === 'string').join(' ')
-      assert.ok(text.includes(preset.sponsor.description))
-      assert.equal(text.includes('$5'), provider === 'infistar')
+      // Detail/fields keep one CTA「一键获取」; no commission / long sponsor prose.
+      assert.equal(text.includes(preset.sponsor.description), false)
+      assert.equal(text.includes('推广分成'), false)
+      assert.equal(text.includes('注册并领取体验额度'), false)
+      assert.equal(text.includes('接入说明'), false)
+      assert.ok(text.includes('settings.providers.one_click') || text.includes('一键获取'))
       const buttons = nodes.filter(n => n?.type === 'button')
+      assert.equal(buttons.length, 1)
       buttons[0].props.onClick()
       assert.equal(links.at(-1), preset.sponsor.registerUrl)
       assert.deepEqual(events.at(-1), { sponsor: provider, target: 'register', placement })
-      buttons[1].props.onClick()
-      assert.equal(links.at(-1), preset.sponsor.guideUrl)
-      assert.deepEqual(events.at(-1), { sponsor: provider, target: 'guide', placement })
     }
   }
   assert.equal(providers.PROVIDERS.api88.sponsor.registerUrl, 'https://88api.ai/sign-up?aff=2PIc')
