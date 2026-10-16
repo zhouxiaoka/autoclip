@@ -39,12 +39,16 @@ def _run(monkeypatch, delivered, claimed, *, outro=False, decode=None):
     monkeypatch.setattr(render.project_cancellation, 'run', fake)
     monkeypatch.setattr(render, '_probe', lambda _p: {'duration': claimed, 'width': 320, 'height': 240, 'fps': 30})
     if outro:
-        def append(source, destination, **_k):
+        def append(source, destination, *, report=None, **_k):
             # R13 #27: a real outro adds length after the (separately validated) body.
             listing = destination.with_name('outro-list.txt')
             listing.write_text(f"file '{source}'\nfile '{delivered}'\n")
             subprocess.run(['ffmpeg', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing),
                             '-c', 'copy', '-y', str(destination)], check=True, capture_output=True)
+            if report is not None:  # R15 #36: an applied outro always reports its proven duration
+                report['outro_seconds'] = float(subprocess.run(
+                    ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(delivered)],
+                    check=True, capture_output=True, text=True).stdout)
             return True
         monkeypatch.setattr(output_branding, 'append_outro', append)
     draft = Draft(id='d', title='fixture', subtitles=False, original_audio=False,
