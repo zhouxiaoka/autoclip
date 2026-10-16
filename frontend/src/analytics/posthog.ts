@@ -109,7 +109,11 @@ function consentIntent(): boolean {
   if (!POSTHOG_KEY) return false
   // R12 #19: re-read the shared storage on every send/retry. Another window may have turned
   // analytics off since this one queued an "on"; storage OFF always wins over a stale intent.
+  // R13 #26: an explicit session OFF wins even when the storage write failed and storage
+  // still reads the old "on" — otherwise "off" would never be sent.
+  if (preferenceOverride === false) return false
   try {
+    // Shared storage OFF still vetoes a stale session/queued "on" (R12 #19).
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
     return false

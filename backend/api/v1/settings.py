@@ -304,6 +304,10 @@ async def put_analytics_consent(body: AnalyticsConsent):
     if not body.enabled:
         # R12 #17: stop collection in this process (API + worker threads) and drop the Sentry
         # identity BEFORE touching disk; a failed write leaves it off.
+        # R13 #30 (known limit): the runtime flag is in-process only. Standalone worker
+        # processes (e.g. a separate Celery/CLI worker) learn the preference solely by
+        # re-reading privacy.json, so if the disk write below fails they cannot be reached
+        # and keep the last persisted value until the write succeeds (the UI keeps retrying OFF).
         set_runtime_analytics_off(True)
         clear_anonymous_user()
     try:

@@ -1320,3 +1320,51 @@ test('R12 #19: two windows interleave — storage OFF from another window drops 
   assert.ok(!puts.slice(before).includes(true), JSON.stringify(puts))
   assert.equal(puts[puts.length - 1], false)
 })
+
+test('R13 #26: storage readable but write fails — session OFF is sent on close and every retry', async () => {
+  const store = { ['autoclip.analytics.optOut']: 'false' }
+  const readable = { getItem: (k) => (k in store ? store[k] : null), setItem() { throw new Error('quota') }, removeItem() {} }
+  const puts = []
+  const timers = []
+  let ok = true
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {}, reloadFeatureFlags() {} }, './workflow': core }, {
+    localStorage: readable, window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok })
+    },
+  })
+  const tick = () => new Promise(resolve => setImmediate(resolve))
+  ph.initAnalytics(); await tick()
+  assert.deepEqual(puts, [true])
+  ok = false
+  ph.setAnalyticsEnabled(false) // close: storage write throws, storage still reads "on"
+  await tick()
+  assert.equal(puts.at(-1), false, 'close must send off')
+  assert.equal(ph.isAnalyticsEnabled(), false)
+  for (let i = 0; i < 7 && timers.length; i++) { timers.shift()(); await tick() }
+  assert.ok(puts.length >= 4)
+  assert.ok(puts.slice(1).every(v => v === false), `retries must stay off: ${puts}`)
+  ok = true; if (timers.length) { timers.shift()(); await tick() }
+  assert.equal(puts.at(-1), false)
+})
+
+test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => {
+  const shared = memory()
+  const puts = []
+  const timers = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111', opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: shared, window: {}, setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    fetch: (url, opts) => { if (String(url).includes('analytics-consent')) puts.push(JSON.parse(opts.body).enabled); return Promise.resolve({ ok: false }) },
+  })
+  ph.setAnalyticsEnabled(true); await new Promise(r => setImmediate(r))
+  shared.setItem('autoclip.analytics.optOut', 'true') // another window turned it off
+  assert.ok(timers.length)
+  timers.shift()(); await new Promise(r => setImmediate(r)) // queued retry of the stale session ON
+  assert.equal(puts.at(-1), false)
+})
