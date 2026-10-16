@@ -29,7 +29,8 @@ def test_409a_previous_round_failure_does_not_taint_an_all_successful_rerun(monk
     _plan_a, first = _plan_a_partial(pid, monkeypatch)                    # round A: ok + bad (timeout)
     data, receipt = _rerun(pid, monkeypatch, first, {'new': OK})
     g = data['generation']
-    assert (g['status'], g['completed_variant_count'], g.get('error_code'), g['not_redone_failed_count']) == ('completed', 1, None, 1)
+    assert (g['status'], g['completed_variant_count'], g.get('error_code')) == ('completed', 1, None)
+    assert g['not_redone_failed_count'] == 1
     assert data['analysis']['outcome'] == 'completed' and 'error_code' not in data['analysis']
     assert receipt['state'] == 'completed' and 'error_code' not in receipt
     assert len(data['output_variants']) == 3                              # the page still lists every output
@@ -40,8 +41,8 @@ def test_409a_a_rerun_with_its_own_failure_is_partial(monkeypatch):
     _plan_a, first = _plan_a_partial(pid, monkeypatch)
     data, receipt = _rerun(pid, monkeypatch, first, {'new': OK, 'new2': ('failed', 'service_restarted', None)})
     g = data['generation']
-    assert (g['status'], g['error_code'], g['not_redone_failed_count'], receipt['state'], receipt['error_code']) == ('partial', 'service_restarted', 1, 'partial', 'service_restarted')
-    assert 'secondary_error_codes' not in g                               # A's timeout is not a secondary cause
+    assert (g['status'], g['error_code'], receipt['state'], receipt['error_code']) == ('partial', 'service_restarted', 'partial', 'service_restarted')
+    assert 'secondary_error_codes' not in g and g['not_redone_failed_count'] == 1                               # A's timeout is not a secondary cause
 
 
 def test_409b_retrying_one_of_two_failures_stays_partial(monkeypatch):
@@ -163,3 +164,17 @@ def test_413_joined_variant_retries_from_two_plans_keep_the_first_plan(monkeypat
     receipt = attempts.current(store.read(pid))
     assert receipt['plan_id'] == plan_a and receipt['plan_id'] != plan_b
     assert receipt['inherited']['recommendation_mode'] == 'local'
+
+
+def test_409b_variant_retry_is_judged_on_the_round_it_redid(monkeypatch):
+    """A partial -> re-run B partial -> 「重试这条」 on A's failed output succeeds: the retry is judged on A's outputs
+    (owners = the retry + its source attempt A), so A is now complete; B's failure is not this round's."""
+    pid = flow.new_project()
+    _plan_a, first = _plan_a_partial(pid, monkeypatch)
+    _screen_and_plan(pid, monkeypatch, PLAN_B, retry={'key': 'r1', 'parent_attempt_id': first['attempt_id']})
+    flow.render_outcome(pid, {'b-ok': OK, 'b-bad': BAD})
+    flow.retry_variant(pid, 'bad', 'v1')
+    flow.render_outcome(pid, {'bad': OK})
+    data, receipt = store.read(pid), flow.receipts(pid)[-1]
+    assert (data['generation']['status'], receipt['state'], receipt['summary']['variant_count']) == ('completed', 'completed', 2)
+    assert data['generation']['not_redone_failed_count'] == 1          # B's failed output, still listed
