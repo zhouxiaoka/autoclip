@@ -406,7 +406,7 @@ export class WorkflowTracker {
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status
-      details = { ...snapshot.analysis, analysis_mode: snapshot.plan.confirmed_analysis }
+      details = { ...snapshot.analysis, analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }
     }
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))

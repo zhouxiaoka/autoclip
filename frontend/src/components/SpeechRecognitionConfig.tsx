@@ -1,6 +1,7 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { pipInstallErrorText } from '../utils/pipInstallError'
+import { whisperModelErrorText } from '../utils/whisperModelError'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Popconfirm, Select, message } from 'antd'
 import { speechApi, WhisperRuntimeStatus, WhisperModel, WhisperModelSource } from '../services/api'
@@ -141,7 +142,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
       ready={ready}
       preparing={installing || downloading || preparing}
       progress={installing ? runtime?.progress ?? 5 : selected?.downloadProgress ?? 0}
-      hint={runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? selected.errorMessage : t('首次使用需下载模型和必要组件，之后可在本机转写。')}
+      hint={runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? whisperModelErrorText(t, selected) : t('首次使用需下载模型和必要组件，之后可在本机转写。')}
       busyHint={installing ? t('正在准备组件…') : t('正在下载模型…')}
       disabled={runtime?.platform_supported === false || loading || !runtime}
       onPrepare={() => void prepare()} />
