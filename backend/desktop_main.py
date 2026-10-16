@@ -333,6 +333,11 @@ def main():
     from backend.services import child_guard
     child_guard.install_hooks()
     
+    # Kill ffmpeg left by a previous backend that was kill -9'd, then stamp our own children.
+    from backend.core import orphan_reaper
+    orphan_reaper.reap_orphans()
+    orphan_reaper.mark_environment()
+
     try:
         # 启动服务
         manager.start()
