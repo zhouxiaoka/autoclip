@@ -136,6 +136,8 @@ class ModelStatus(str, Enum):
     NOT_FOUND = "not_found"
 
 
+# R11: stable reason code; the message below is also the zh i18n key (8 locales).
+WHISPER_DOWNLOAD_ERROR_CODE = "whisper_download_failed"
 # User-facing download failure (R2): status API must never echo raw exception text
 # (URLs, query tokens, auth). Full detail stays in logs only.
 WHISPER_DOWNLOAD_USER_ERROR = (
@@ -157,6 +159,7 @@ class ModelInfo:
     download_progress: Optional[int] = None
     local_path: Optional[str] = None
     error_message: Optional[str] = None
+    error_code: Optional[str] = None
     source: Optional[str] = None  # 实际下载用的源：huggingface / hf-mirror / custom
 
 
@@ -267,6 +270,7 @@ class WhisperModelManager:
             download_progress=st.get("progress"),
             local_path=str(self._model_cache_dir(model_name)) if status == ModelStatus.DOWNLOADED else None,
             error_message=st.get("error"),
+            error_code=st.get("error_code"),
             source=st.get("source"),
         )
 
@@ -387,6 +391,7 @@ class WhisperModelManager:
             with self._lock:
                 self._download_state[model_name] = {
                     "status": "error", "progress": 0, "error": WHISPER_DOWNLOAD_USER_ERROR,
+                    "error_code": WHISPER_DOWNLOAD_ERROR_CODE,
                 }
 
     def download_status(self, model_name: str) -> Optional[str]:
