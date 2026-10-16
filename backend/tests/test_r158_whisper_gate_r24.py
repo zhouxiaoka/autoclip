@@ -95,3 +95,90 @@ def test_r24_285_broken_video_with_valid_srt_fails_before_the_text_model(monkeyp
     result = asyncio.run(spa.SimplePipelineAdapter('r24-285', task_id='t-r24-285').process_project_sync(str(broken), str(srt)))
     assert result.get('error_code') == 'source_unreadable', result
     assert paid == [], paid
+
+
+# ---- #282: a probed source without a duration does not run ffprobe again
+def test_r24_282_unreadable_source_runs_ffprobe_once_then_ffmpeg(monkeypatch, tmp_path):
+    import subprocess as sp
+    from backend.pipeline import media_precheck
+    broken = tmp_path / 'broken.mp4'
+    broken.write_bytes(b'not a video at all' * 64)
+    seen = []
+    real = sp.run
+
+    def run(cmd, *a, **k):
+        seen.append(Path(str(cmd[0])).name.split('.')[0])
+        return real(cmd, *a, **k)
+    monkeypatch.setattr(media_precheck.subprocess, 'run', run)
+    failure = media_precheck.subtitle_source_failure(broken, srt_available=True)
+    assert failure is not None and failure.code == 'source_unreadable'
+    assert seen == ['ffprobe', 'ffmpeg'], seen
+
+
+def test_r24_282_planning_duration_with_a_probe_does_not_reprobe(monkeypatch, tmp_path):
+    from backend.pipeline import media_precheck
+    from backend.services.studio import planning
+    calls = []
+    monkeypatch.setattr(media_precheck, '_ffmpeg_decode_duration', lambda v: calls.append('ffmpeg') or (42.0, ''))
+    import subprocess as sp
+    monkeypatch.setattr(media_precheck.subprocess, 'run', lambda *a, **k: calls.append('ffprobe') or sp.CompletedProcess(a, 1, '', ''))
+    assert planning.source_duration(tmp_path / 'x.mp4', {'duration': None, 'audio': None}) == 42.0
+    assert calls == ['ffmpeg']
+
+
+# ---- one precheck: confirm and the Celery import use the same classification as the gate and pipeline
+def test_r24_one_precheck_every_caller_uses_subtitle_source_failure():
+    for rel in ('backend/services/simple_pipeline_adapter.py', 'backend/services/studio/jobs.py',
+                'backend/tasks/import_processing.py', 'backend/services/studio/readiness.py'):
+        text = (ROOT / rel).read_text(encoding='utf-8')
+        assert 'subtitle_route_failure' not in text, f'{rel} still calls the old precheck'
+        assert 'subtitle_source_failure' in text, rel
+
+
+# ---- #283: the first (file-less) upload gate runs in the threadpool too
+def test_r24_283_first_upload_gate_runs_off_the_event_loop(monkeypatch):
+    import asyncio
+    from backend.api.v1 import studio as api
+    seen = []
+
+    def gate(**kw):
+        try:
+            asyncio.get_running_loop()
+            seen.append('event-loop')
+        except RuntimeError:
+            seen.append('worker')
+    monkeypatch.setattr(readiness, 'ensure_local_transcription_for_import', gate)
+    assert asyncio.run(api._stage_for_gate(None, b'', '.mp4', srt_available=False)) is None
+    assert seen == ['worker']
+
+
+# ---- #284: CLI and MCP keep source_unreadable instead of folding it into "failed"
+def test_r24_284_mcp_job_keeps_source_unreadable(monkeypatch, tmp_path):
+    from backend import mcp_server
+    from backend.services import local_runner
+    monkeypatch.setattr(local_runner, 'configure_llm', lambda o: {})
+    monkeypatch.setattr(local_runner, 'prepare_project', lambda req, link: tmp_path / 'v.mp4')
+    monkeypatch.setattr(local_runner, 'run_pipeline', lambda *a, **k: {'status': 'failed', 'error_code': 'source_unreadable', 'error': 'x'})
+    req = local_runner.RunRequest(video=tmp_path / 'v.mp4', register_db=False, project_id='mcp-r24-284')
+    job = mcp_server._run_job(req, None, True)
+    assert job['status'] == 'failed' and job['error_code'] == 'source_unreadable'
+
+
+def test_r24_284_cli_run_reports_and_records_source_unreadable(monkeypatch, tmp_path, capsys):
+    import argparse
+    import json as _json
+    from backend import cli
+    from backend.services import local_runner, mcp_telemetry
+    recorded = []
+    monkeypatch.setattr(mcp_telemetry, 'record', lambda *a, **k: recorded.append(k))
+    monkeypatch.setattr(local_runner, 'configure_llm', lambda o: {})
+    monkeypatch.setattr(local_runner, 'prepare_project', lambda req, link: tmp_path / 'v.mp4')
+    monkeypatch.setattr(local_runner, 'run_pipeline', lambda *a, **k: {'status': 'failed', 'error_code': 'source_unreadable', 'error': 'x'})
+    monkeypatch.setattr(cli, '_llm_override', lambda args: None)
+    args = argparse.Namespace(video=str(tmp_path / 'v.mp4'), srt=None, name=None, category='default', min_score=None,
+                              no_db=True, copy=True, json=True)
+    assert cli.cmd_run(args) == 1
+    out = _json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out['error_code'] == 'source_unreadable'
+    assert recorded[-1]['error_code'] == 'source_unreadable'
+    assert mcp_telemetry.normalize_error('source_unreadable', ok=False) == 'source_unreadable'
