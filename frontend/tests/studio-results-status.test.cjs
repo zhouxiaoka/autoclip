@@ -117,3 +117,17 @@ test('1.5.8 settings page resolves both 「去设置」 targets to their own row
     assert.ok(new RegExp(`\\n\\s+${section}: \\{ section: 'ai', anchor: '`).test(aliases), dest)
   }
 })
+
+test('1.5.8 manual failed run hides Retry once a collection exists (R18 82)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
+  assert.ok(src.includes('project.collections?.length || workspace.jobs?.some'))
+})
+for (const [code, stage, destination] of [['authentication', 'subtitle', '/settings?section=speech'], ['provider_error', 'subtitle', null]]) {
+  test(`1.5.8 cloud ASR ${code} at ${stage} -> ${destination || 'Retry'} (R18 80)`, () => {
+    const buttons = []
+    render(true, 'production', 'failed', buttons, [], code, stage)
+    const go = buttons.find(b => b.children === '去设置')
+    if (!destination) { assert.equal(go, undefined); assert.ok(buttons.some(b => b.children === '重试')); return }
+    navigations.length = 0; go.onClick(); assert.deepEqual(navigations, [destination])
+  })
+}

@@ -485,7 +485,8 @@ def run_content(project_id, video):
         status = status if type(status) is int and 400 <= status <= 599 else None
         if failure.get('error_code') or failure.get('stage'):
             from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '', http_status=status)
+            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '', http_status=status,
+                                  upstream_error_type=failure.get('upstream_error_type') or '')
         error = RuntimeError(message)
         if status is not None:
             error.http_status = status
@@ -1161,7 +1162,8 @@ def _auto_generate(project_id, plan):
         def fail(data):
             if data.get('generation'):
                 data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
+            # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
 
@@ -1616,7 +1618,8 @@ def _inspect(project_id, options, url, browser):
         context = studio_failure_context(error, 'screening')
         try:
             def fail_screening(data):
-                data['analysis'] = failure
+                # 1.5.8: history keeps failure_stage / http_status / upstream_error_type (ASR vs analysis).
+                data['analysis'] = {**failure, **context}
                 if (data.get('generation') or {}).get('auto_start'):
                     data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
             store.change(project_id, fail_screening)

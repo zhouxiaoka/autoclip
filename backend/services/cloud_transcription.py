@@ -36,7 +36,15 @@ def _retryable(error: Exception) -> bool:
 
 
 class CloudTranscriptionError(RuntimeError):
-    pass
+    """Safe public text only. ``http_status`` / ``upstream_error_type`` are enums/ints, never provider bodies."""
+
+    def __init__(self, message: str = '', *, http_status: int | None = None, upstream_error_type: str = ''):
+        super().__init__(message)
+        self.http_status = http_status if type(http_status) is int and 400 <= http_status <= 599 else None
+        if not upstream_error_type and self.http_status is not None:
+            from backend.core.upstream_errors import classify_upstream_error
+            upstream_error_type = classify_upstream_error(self.http_status).error_type.value
+        self.upstream_error_type = upstream_error_type if upstream_error_type != 'unknown' else ''
 
 
 def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
@@ -120,7 +128,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
     selection = settings.transcription
     connection = next(c for c in settings.connections if c.id == selection.connection_id)
     if not connection.api_key and connection.provider != 'compatible':
-        raise CloudTranscriptionError('请先在字幕转写设置中填写 API Key。')
+        raise CloudTranscriptionError('请先在字幕转写设置中填写 API Key。', upstream_error_type='invalid_key')
     output = Path(output) if output else video.with_suffix('.srt')
     from backend.utils.speech_recognizer import SpeechRecognizer, srt_has_cue_text
     if output.exists() and srt_has_cue_text(output):
@@ -175,7 +183,8 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                     # On a failure, chunks not yet sent are dropped instead of spending more quota.
                     pool.shutdown(wait=True, cancel_futures=True)
         except httpx.HTTPStatusError as exc:
-            raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。') from None
+            raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。',
+                                          http_status=exc.response.status_code) from None
         except (httpx.RequestError, ValueError) as exc:
             raise CloudTranscriptionError('云端转写连接失败或响应格式无效，请稍后重试。') from None
         if not segments:

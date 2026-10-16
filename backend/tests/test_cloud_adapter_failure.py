@@ -81,7 +81,10 @@ def test_real_cloud_http_failure_keeps_provider_status(cloud_adapter, model, sta
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    assert result['error_code'] == 'provider_error'
+    # 1.5.8 R18 80: a rejected ASR key is a user cause (authentication), status + upstream type kept.
+    assert result['error_code'] == ('authentication' if status == 401 else 'provider_error')
+    assert result['http_status'] == status
+    assert result.get('upstream_error_type') == {401: 'invalid_key', 500: 'upstream_unavailable'}.get(status, result.get('upstream_error_type'))
     assert f'HTTP {status}' in result['error']
     assert '云端转写' in result['error']
     assert 'Whisper' not in result['error']

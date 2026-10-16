@@ -74,7 +74,7 @@ test('1.5.8 manual retry: the production attempt that follows carries retry_of t
 test('1.5.8 Retry button passes retry=true; hidden in manual mode once drafts/clips/completed exports exist', () => {
   const fs = require('node:fs')
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.ok(ui.includes("(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn"))
+  assert.ok(ui.includes("(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn"))
   assert.ok(ui.includes("studioApi.analyze(project.id, !!automatic, true)"))
   const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
   assert.equal(workflow.safeStudioProperties({ retry_of: 't-0123456789abc' }).retry_of, 't-0123456789abc')
@@ -113,4 +113,16 @@ test('1.5.8 failed-state action per code: user-cause codes get 「去设置」 +
   // UI wiring: settings branch replaces Retry
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
   assert.ok(ui.includes(`action.kind==='settings' ? <><span className="studio-muted">{t(action.reason)}</span><Btn variant="cta" disabled={!!busy} onClick={()=>navigate(action.destination)}>{t("去设置")}</Btn></> : (automatic ? `))
+})
+
+
+test('1.5.8 partial counts as a failed attempt: Retry after partial links retry_of (R18 83)', async () => {
+  const { tracker, studioApi, finished, watchOf } = harness()
+  tracker.watch('studio-generation', 'p1')
+  tracker.observeStudio(watchOf('studio-generation'), { material_origin: 'user', generation: { status: 'partial', error_code: 'timeout', completed_variant_count: 1 }, analysis: { status: 'completed', outcome: 'partial' } })
+  const [partial] = finished('studio_generation_finished')
+  assert.equal(partial.outcome, 'partial')
+  assert.equal(tracker.lastFailedAttempt('p1'), partial.attempt_id)
+  await studioApi.analyze('p1', true, true)
+  assert.equal(watchOf('studio-generation').properties.retry_of, partial.attempt_id)
 })
