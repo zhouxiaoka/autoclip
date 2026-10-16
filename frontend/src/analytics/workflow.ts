@@ -1,6 +1,6 @@
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
-export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; failed?: boolean; properties?: Properties; token?: string; runId?: string }
+export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; failed?: boolean; properties?: Properties; token?: string; runId?: string; seq?: number }
 export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
@@ -21,7 +21,7 @@ export function telemetryId(): string {
 /** terminal: the project's latest v4-scoped terminal by attempt start (since), not by arrival order (R23 #227);
  * failed is its attempt_id when it failed/partial (the only thing retry_of may point at). firstClips: generation identities that already reported first clip.
  * Both live in the 35-day context, not in the 7-day watches, so a later retry still links (R21 #157). */
-type Context = { props: Properties; updated: number; artifacts: Record<string, string>; terminal?: { since: number; failed?: string }; firstClips?: string[] }
+type Context = { props: Properties; updated: number; artifacts: Record<string, string>; terminal?: { since: number; seq?: number; failed?: string }; firstClips?: string[] }
 /** Terminal events counted by docs/analytics/success_rate.sql (v4). retry_of must reference one of these (R21 #164). */
 export const SUCCESS_RATE_TERMINALS = ['studio_generation_finished', 'studio_production_finished'] as const
 const TOKEN = /^t-[a-z0-9-]{10,100}$/
@@ -285,7 +285,7 @@ export class WorkflowTracker {
         const c = value as Context
         if (c && Number.isFinite(c.updated) && c.updated > this.now() - 35 * 86400000) {
           this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && TOKEN.test(v)).slice(-100)),
-            ...(c.terminal && Number.isFinite(c.terminal.since) ? { terminal: { since: c.terminal.since, ...(typeof c.terminal.failed === 'string' && TOKEN.test(c.terminal.failed) ? { failed: c.terminal.failed } : {}) } } : {}),
+            ...(c.terminal && Number.isFinite(c.terminal.since) ? { terminal: { since: c.terminal.since, ...(Number.isInteger(c.terminal.seq) && c.terminal.seq > 0 ? { seq: c.terminal.seq } : {}), ...(typeof c.terminal.failed === 'string' && TOKEN.test(c.terminal.failed) ? { failed: c.terminal.failed } : {}) } } : {}),
             ...(Array.isArray(c.firstClips) ? { firstClips: c.firstClips.filter((v): v is string => typeof v === 'string' && v.length <= 64).slice(-50) } : {}) }
         }
       }
@@ -346,7 +346,9 @@ export class WorkflowTracker {
     this.add(kind, id, projectId, since, properties, runId)
   }
   private add(kind: Watch['kind'], id: string, projectId: string | undefined, since: number, properties: Properties, runId?: string): void {
-    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
+    // R24 #266: stable attempt order key - since ties within one ms, so a monotonic sequence breaks them (persisted).
+    const seq = Math.max(0, ...this.watches.map(w => w.seq || 0), ...Object.values(this.contexts).map(c => c.terminal?.seq || 0)) + 1
+    this.watches.push({ kind, id, runId, projectId, since, seq, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
   }
@@ -478,8 +480,8 @@ export class WorkflowTracker {
         w.settled = true; w.failed = ['failed', 'error', 'partial'].includes(outcome || ''); this.persist()
         const c = this.contexts[w.projectId || w.id]
         // Attempt order, not arrival order (R23 #227): a late terminal of an older attempt never overrides a newer one.
-        if (c && (SUCCESS_RATE_TERMINALS as readonly string[]).includes(event) && !(c.terminal && c.terminal.since > w.since)) {
-          c.terminal = { since: w.since, ...(w.failed && w.token ? { failed: w.token } : {}) }; this.persistContexts()
+        if (c && (SUCCESS_RATE_TERMINALS as readonly string[]).includes(event) && !(c.terminal && (c.terminal.since > w.since || (c.terminal.since === w.since && (c.terminal.seq || 0) > (w.seq || 0))))) {
+          c.terminal = { since: w.since, ...(w.seq ? { seq: w.seq } : {}), ...(w.failed && w.token ? { failed: w.token } : {}) }; this.persistContexts()
         }
       }
     }

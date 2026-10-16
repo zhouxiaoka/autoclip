@@ -89,3 +89,25 @@ test('#228: the production terminal carries the secondary causes, positional and
   assert.equal(p.secondary_error_codes, 'authentication,unknown')
   assert.equal(p.secondary_upstream_error_types, 'invalid_key,')
 })
+
+// R24 #266: attempts started in the same millisecond are ordered by a stable sequence, not by arrival.
+function sameMs() {
+  const h = harness()
+  h.tracker.watch('studio-production', 'plan1', 'p1')
+  h.tracker.watch('studio-generation', 'p1')           // same clock: newer attempt, same since
+  return { h, a: h.watches('studio-production')[0], b: h.watches('studio-generation')[0] }
+}
+test('#266: same-ms older success arriving after the newer failure keeps retry_of on the newer', () => {
+  const { h, a, b } = sameMs()
+  h.tracker.observeStudio(b, gen('failed'))
+  h.tracker.observeStudio(a, prod('completed'))
+  assert.equal(h.tracker.lastFailedAttempt('p1'), b.token)
+})
+test('#266: same-ms order survives a reload', () => {
+  const { h, a, b } = sameMs()
+  h.tracker.observeStudio(b, gen('failed'))
+  const again = new h.workflow.WorkflowTracker(h.storage, () => true, () => true, () => Date.parse('2026-10-10T00:00:00Z'))
+  const [late] = again.list().filter(w => w.kind === 'studio-production')
+  again.observeStudio(late, prod('failed'))
+  assert.equal(again.lastFailedAttempt('p1'), b.token)
+})
