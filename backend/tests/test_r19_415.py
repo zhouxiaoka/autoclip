@@ -28,9 +28,10 @@ def isolated(tmp_path, monkeypatch):
 
 
 def _snapshot(monkeypatch, snap):
-    from backend.core import llm_emit, llm_telemetry
+    # Patch only llm_emit: llm_telemetry resolves run_snapshot lazily via __getattr__ (patching it too
+    # would pin the fake there for the rest of the session).
+    from backend.core import llm_emit
     monkeypatch.setattr(llm_emit, 'run_snapshot', lambda project_id=None: dict(snap))
-    monkeypatch.setattr(llm_telemetry, 'run_snapshot', lambda project_id=None: dict(snap), raising=False)
 
 
 def _project(pid, data):
