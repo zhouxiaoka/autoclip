@@ -3,7 +3,8 @@
 The argv in ``fixtures/render_ffmpeg_c5a72281`` was recorded from c5a72281
 (main after #314, before #315/#316/#317). ``concat_script`` is the one field
 updated later: both render paths use ``concat_quote``, which does not wrap a
-plain path in single quotes. Do not regenerate the argv from a later tree.
+plain path in single quotes. E6 normalizes only the staged branding destination
+filename before comparison. Do not regenerate the argv from a later tree.
 """
 from __future__ import annotations
 
@@ -143,6 +144,7 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
     video = ROOT / 'input.mp4'
 
     recorded: list[list[str]] = []
+    decodes: list[list[str]] = []
     scripts: dict[str, str] = {}
 
     def remember(argv: list[str]) -> None:
@@ -163,9 +165,20 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         argv = [str(part) for part in cmd]
         text = kwargs.get('text') or kwargs.get('universal_newlines')
         if _is_ffprobe(argv):
-            body = json.dumps(PROBE)
+            # R14 #33 / R15 #38: simulated value. The fake outro-duration probe returns 1.0 s; no real
+            # outro is measured here (real media is covered in test_r15_outro_probe.py).
+            body = json.dumps({'format': {'duration': '1.0'}} if 'stream=duration:format=duration' in argv else PROBE)
             stdout = body if text else body.encode()
             return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
+        if argv[-3:] == ['-f', 'null', '-']:  # R11/R12 decode validation
+            # R11 #413 decode-only validation of the staged output: not an encoder argv.
+            decodes.append(argv)
+            seconds = float(PROBE.get('format', {}).get('duration') or 0)
+            # R13 #27 / R15 #38: simulated values. The body (.part.mp4) is decoded alone before the
+            # outro; the fake decode of .ready.part.mp4 reports 30 extra frames (the simulated 1 s outro).
+            frames = 999 + (30 if _input_after(argv, '-i').endswith('.ready.part.mp4') else 0)
+            body = f'frame={frames}\nout_time_us={int(seconds * 1_000_000)}\nprogress=end\n'
+            return subprocess.CompletedProcess(argv, 0, stdout=body if text else body.encode(), stderr='' if text else b'')
         remember(argv)
         stdout = '' if text else b''
         return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
@@ -263,6 +276,13 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         'outro_script': scripts.get('outro', ''),
         'shots': shots,
     }
+    # E6 stages the branded output until ffprobe validation before publishing.
+    # Only that temporary destination name changed; retain the original golden
+    # encoder/filter/audio contract and never regenerate the baseline fixtures.
+    for commands in (document['audio'], document['outro']):
+        for argv in commands:
+            if argv[-1].endswith('/job.ready.part.branding.part.mp4'):
+                argv[-1] = argv[-1].replace('/job.ready.part.branding.part.mp4', '/job.branding.part.mp4')
     return document, result
 
 

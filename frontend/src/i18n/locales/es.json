@@ -1468,6 +1468,7 @@
   "排队生成中": "En cola",
   "包含 Made with AutoClip 片尾": "Incluye cierre “Made with AutoClip”",
   "不含品牌片尾": "Sin cierre de marca",
+  "品牌片尾未能添加，已保留成片": "No se pudo añadir el cierre de marca; se conservó el vídeo.",
   "这条版本未完成，其他成片不受影响。": "Esta versión no se completó. Los demás videos no se ven afectados.",
   "素材没有足够完整的长内容": "el material no tiene un segmento completo lo bastante largo",
   "YouTube 视频": "Video de YouTube",
@@ -1957,5 +1958,8 @@
   "已完成 {{percent}}%": "{{percent}}% completado",
   "这个素材无法使用": "Este archivo no se puede usar",
   "换一个视频": "Usar otro vídeo",
-  "正在下载转写模型，下载完成后即可继续。": "Descargando el modelo de transcripción. Podrás continuar cuando termine."
+  "正在下载转写模型，下载完成后即可继续。": "Descargando el modelo de transcripción. Podrás continuar cuando termine.",
+  "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "El análisis visual admite fuentes de hasta 120 minutos. Se cambió al análisis de subtítulos para continuar.",
+  "读取素材画面失败，已改用字幕分析继续制作。": "No se pudieron leer fotogramas del material. Se cambió al análisis de subtítulos para continuar.",
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Error al descargar el modelo Whisper. Revisa la red y vuelve a descargarlo en Ajustes → Transcripción, o cambia la fuente al espejo hf-mirror."
 }

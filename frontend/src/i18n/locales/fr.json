@@ -1468,6 +1468,7 @@
   "排队生成中": "En file d’attente",
   "包含 Made with AutoClip 片尾": "Avec écran de fin « Made with AutoClip »",
   "不含品牌片尾": "Sans écran de fin de marque",
+  "品牌片尾未能添加，已保留成片": "Impossible d'ajouter l'écran de fin de la marque ; la vidéo a été conservée.",
   "这条版本未完成，其他成片不受影响。": "Cette version n’a pas abouti. Les autres vidéos ne sont pas affectées.",
   "素材没有足够完整的长内容": "la source ne contient pas de passage complet assez long",
   "YouTube 视频": "Vidéo YouTube",
@@ -1957,5 +1958,8 @@
   "已完成 {{percent}}%": "{{percent}} % terminé",
   "这个素材无法使用": "Cette source est inutilisable",
   "换一个视频": "Utiliser une autre vidéo",
-  "正在下载转写模型，下载完成后即可继续。": "Téléchargement du modèle de transcription. Vous pourrez continuer ensuite."
+  "正在下载转写模型，下载完成后即可继续。": "Téléchargement du modèle de transcription. Vous pourrez continuer ensuite.",
+  "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "L'analyse visuelle prend en charge les sources jusqu'à 120 minutes. Passage à l'analyse des sous-titres pour continuer.",
+  "读取素材画面失败，已改用字幕分析继续制作。": "Impossible de lire les images de la source. Passage à l'analyse des sous-titres pour continuer.",
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Échec du téléchargement du modèle Whisper. Vérifiez le réseau puis relancez-le dans Réglages → Transcription, ou passez la source au miroir hf-mirror."
 }

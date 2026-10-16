@@ -72,3 +72,28 @@ test('S5 telemetry accepts only the fixed degrade reason code',()=>{
  assert.equal(workflow.safeStudioProperties({degrade_reason:'synthetic-unrecognized-reason'}).degrade_reason,undefined)
  assert.equal(workflow.safeStudioProperties({degrade_reason:MESSAGE}).degrade_reason,undefined)
 })
+
+// R12 #14: the new R11 reasons reach the terminal event on both auto and manual-confirm entries.
+for(const reason of ['frame_extract_subtitle_fallback','source_too_long_subtitle_route']){
+ for(const entry of ['auto','manual']){
+  test(`R12 ${entry} entry: terminal event carries ${reason} once`,()=>{
+   const events=[],storage=new Map()
+   const tracker=new workflow.WorkflowTracker({
+    getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key),
+   },()=>true,(name,props)=>{events.push({name,props});return true})
+   const kind=entry==='auto'?'studio-generation':'studio-production'
+   tracker.watch(kind,entry==='auto'?'fixture':'plan',undefined,undefined,{},false,'run')
+   const watch=tracker.list().find(item=>item.kind===kind)
+   const snapshot={
+    plan:{id:'plan',mode:'local',recommended_analysis:'subtitle',confirmed_analysis:'subtitle',degrade_reason:reason},
+    analysis:{status:'completed',outcome:'completed',phase:'production',run_id:'run'},
+    generation:{auto_start:entry==='auto',status:'completed',route:'subtitle'},
+   }
+   tracker.observeStudio(watch,snapshot)
+   tracker.observeStudio(watch,snapshot)
+   const finished=events.filter(event=>event.name===kind.replaceAll('-','_')+'_finished')
+   assert.equal(finished.length,1)
+   assert.equal(finished[0].props.degrade_reason,reason)
+  })
+ }
+}

@@ -73,3 +73,5 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 没有发布新安装包。原生桌面保存已验证代码与回归桩，未在本轮重打 macOS/Windows 正式包；多目标部分成功、隐私关闭与重复观察通过离线回归。未向真实社交账号投稿，也未进行付费模型验收。Sentry 页面首次加载报错，重试后恢复；已保存工程异常与配置/素材警告两个 Issue View，排除 telemetry_test=true。未创建通知规则。
 
 自动制作在生成任何版本之前失败时，结果页的「重试」重新使用该项目已保存的导入选项和原素材；已有版本失败继续使用单条重试。恢复尝试沿用 flow_id，但重新登记 studio_generation_finished 的 attempt_id，终态按尝试去重。验收必须先看到真实失败码，再修正前置条件、从页面重试成功，并在 validation 查询中看到同一 flow 的失败与成功；不能把两个事件计成两个独立流程。
+
+1.5.8 R11：画面采样（`intelligence.sample()` 及其时长探测）里 ffmpeg 抽帧失败或超时，统一为 `FrameExtractError`，错误码 `frame_extract_failed`（属 `STUDIO_ERROR_CODES`，产品失败，计入成功率分母），阶段 `sample`；不再记为视觉服务不可用。AUTO 初筛遇到它时改走字幕，方案记 `degrade_reason=frame_extract_subtitle_fallback`；素材超过 120 分钟时在视觉配置检查和初筛之前就走字幕，记 `degrade_reason=source_too_long_subtitle_route`。这两个是成功出片上的降级原因，不是失败码。

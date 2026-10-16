@@ -1468,6 +1468,7 @@
   "排队生成中": "Queued",
   "包含 Made with AutoClip 片尾": "Includes “Made with AutoClip” end card",
   "不含品牌片尾": "No brand end card",
+  "品牌片尾未能添加，已保留成片": "The brand end card could not be added; your video was kept.",
   "这条版本未完成，其他成片不受影响。": "This version did not finish. Your other videos are not affected.",
   "素材没有足够完整的长内容": "the source has no complete segment long enough",
   "YouTube 视频": "YouTube video",
@@ -1957,5 +1958,8 @@
   "已完成 {{percent}}%": "{{percent}}% done",
   "这个素材无法使用": "This source can't be used",
   "换一个视频": "Use another video",
-  "正在下载转写模型，下载完成后即可继续。": "Downloading the transcription model. You can continue once it finishes."
+  "正在下载转写模型，下载完成后即可继续。": "Downloading the transcription model. You can continue once it finishes.",
+  "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "Visual analysis supports sources up to 120 minutes. Switched to subtitle analysis to continue.",
+  "读取素材画面失败，已改用字幕分析继续制作。": "Could not read frames from the source. Switched to subtitle analysis to continue.",
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Whisper model download failed. Check your network and download again in Settings → Transcription, or switch the download source to the hf-mirror mirror."
 }
