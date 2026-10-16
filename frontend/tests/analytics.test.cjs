@@ -20,6 +20,7 @@ function load(name, mocks = {}, globals = {}) {
       if (id in mocks) return mocks[id]
       if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
       if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))
+      if (id === './runtime') return load('runtime', {}, globals)
       if (id === '../utils/apiConfig') {
         return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       }
@@ -28,6 +29,283 @@ function load(name, mocks = {}, globals = {}) {
   return module.exports
 }
 const core = load('workflow')
+
+test('native Mac architecture overrides the Intel webview UA before launch resolves', () => {
+  const lifecycle = load('lifecycle', {
+    '@tauri-apps/api/app': { getVersion: () => new Promise(() => {}) },
+    './posthog': {},
+  }, {
+    window: { __AUTOCLIP_RUNTIME__: { os: 'macos', arch: 'aarch64' } },
+    navigator: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)', language: 'en' },
+    document: { documentElement: { lang: 'en' } },
+  })
+  assert.equal(lifecycle.getRuntimeInfo().arch, 'aarch64')
+})
+
+test('first capture has native os/arch without waiting for trackLaunch', () => {
+  const registered = {}; const events = []
+  const sdk = {
+    init(_key, config) { config.loaded(sdk) },
+    register(props) { Object.assign(registered, props) },
+    capture(name, props) { events.push({ ...registered, ...props }); return {} },
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: memory(), window: { __TAURI_INTERNALS__: {}, __AUTOCLIP_RUNTIME__: { os: 'macos', arch: 'arm64' } },
+    navigator: { userAgent: 'Macintosh; Intel Mac OS X', language: 'en' },
+  })
+  ph.initAnalytics()
+  assert.equal(registered.os, 'macos')
+  assert.equal(registered.arch, 'aarch64')
+  ph.captureBusinessEvent('setup_presented')
+  assert.equal(events[0].os, 'macos')
+  assert.equal(events[0].arch, 'aarch64')
+})
+
+test('identity waits for the desktop port, retries failure and cancels retries on opt-out', async () => {
+  const id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  let ready = false, listener, timer, config
+  const requests = []; const cancelled = []
+  const sdk = {
+    init(_key, options) { config = options; options.loaded(sdk) },
+    register() {}, get_distinct_id: () => id,
+    opt_in_capturing() {}, opt_out_capturing() {},
+  }
+  const ph = load('posthog', {
+    'posthog-js': sdk, './workflow': core,
+    '../utils/apiConfig': { apiConfigManager: {
+      getBaseUrl: () => ready ? 'http://127.0.0.1:8123/api/v1' : '/api/v1',
+      isReady: () => ready, addListener: fn => { listener = fn },
+    } },
+  }, {
+    localStorage: memory(),
+    window: { __TAURI_INTERNALS__: {}, __AUTOCLIP_RUNTIME__: { os: 'windows', arch: 'amd64', distinct_id: id } },
+    setTimeout: fn => { timer = fn; return 1 }, clearTimeout: id => { cancelled.push(id); timer = undefined },
+    fetch: (url, options) => { requests.push({ url, options }); return Promise.resolve({ ok: false }) },
+  })
+  ph.initAnalytics()
+  assert.equal(config.bootstrap.distinctID, id)
+  assert.equal(config.bootstrap.isIdentifiedID, false)
+  assert.equal(requests.length, 0)
+  ready = true; listener()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, 'http://127.0.0.1:8123/api/v1/settings/analytics-identity')
+  assert.deepEqual(JSON.parse(requests[0].options.body), { distinct_id: id })
+  assert.equal(typeof timer, 'function')
+  timer()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(requests.length, 2)
+  ph.setAnalyticsEnabled(false)
+  assert.equal(timer, undefined)
+  assert.ok(cancelled.length > 0)
+  listener()
+  const identityPuts = requests.filter(r => r.url.endsWith('/settings/analytics-identity'))
+  assert.equal(identityPuts.length, 2)
+})
+
+test('X2: opting out tells the backend so Sentry drops user.id; startup syncs the saved preference', async () => {
+  const storage = memory()
+  const puts = []
+  const sdk = { init() {}, capture() { return {} }, get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => { puts.push({ url, body: JSON.parse(opts.body) }); return Promise.resolve({ ok: true }) },
+  })
+  const consent = () => puts.filter(p => p.url === '/api/v1/settings/analytics-consent').map(p => p.body.enabled)
+  ph.initAnalytics()
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  // R10 P2: the backend state is unknown at launch, so the saved "on" is synced once.
+  assert.deepEqual(consent(), [true])
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [true, false])
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [true, false, true])
+})
+
+test('R10 P1: off→on written but response lost, then off again still reaches the backend', async () => {
+  const puts = []
+  let lose = false
+  const timers = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: memory(), window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length },
+    clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      // Backend applied the write, but the response never arrives.
+      return lose ? Promise.reject(new Error('response lost')) : Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  const base = puts.length
+  assert.equal(puts[base - 1], false)
+  lose = true
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts.slice(base), [true])
+  lose = false
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  // The opt-out must be sent even though the last confirmed state was also "off".
+  assert.deepEqual(puts.slice(base), [true, false])
+  // A pending retry from the lost PUT must not resend "on" over the newer opt-out.
+  for (const fn of timers.splice(0)) fn()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.slice(base + 2).includes(true))
+})
+
+test('R10 P2: re-enable write failed, restart syncs the persisted "on" to the backend', async () => {
+  const storage = memory()
+  storage.setItem('autoclip.analytics.optOut', 'false')
+  const puts = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => {
+      if (String(url).includes('/settings/analytics-consent')) puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts, [true])
+})
+
+
+test('X2r: consent is marked sent only after success and failed PUTs retry', async () => {
+  const storage = memory()
+  const puts = []
+  let respondOk = false
+  let timer
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    setTimeout: (fn) => { timer = fn; return 1 },
+    clearTimeout: () => { timer = undefined },
+    fetch: (url, opts) => {
+      const body = JSON.parse(opts.body)
+      if (String(url).includes('/settings/analytics-consent')) puts.push(body.enabled)
+      return Promise.resolve({ ok: respondOk || !String(url).includes('/settings/analytics-consent') })
+    },
+  })
+  const consent = () => puts.slice()
+  respondOk = true
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts.splice(0), [true]) // R10 P2 startup sync
+  respondOk = false
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false])
+  // Failure must not stick: a retry should fire with the same opt-out.
+  assert.equal(typeof timer, 'function')
+  respondOk = true
+  timer()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false, false])
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false, false, true])
+})
+
+test('X2r: rapid toggle serializes so the backend ends on the latest UI value', async () => {
+  const storage = memory()
+  const puts = []
+  const pending = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => {
+      const body = JSON.parse(opts.body)
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      return new Promise(resolve => {
+        puts.push(body.enabled)
+        pending.push(resolve)
+      })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts.splice(0), [true]) // R10 P2 startup sync
+  pending.splice(0)[0]({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  ph.setAnalyticsEnabled(false) // in-flight: false
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts, [false])
+  ph.setAnalyticsEnabled(true)
+  ph.setAnalyticsEnabled(false) // UI settles on false while first PUT still open
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(puts.length, 1) // second intent waits for the in-flight PUT
+  pending[0]({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  // publishedConsent already false and UI is false → no need to send true mid-flight
+  assert.equal(puts.filter(v => v === true).length, 0)
+  assert.equal(puts[puts.length - 1], false)
+  for (let i = 1; i < pending.length; i++) pending[i]({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(puts[puts.length - 1], false)
+})
+
+test('X2: an opted-out launch reports the opt-out even without a PostHog key', async () => {
+  const storage = memory()
+  storage.setItem('autoclip.analytics.optOut', 'true')
+  const puts = []
+  const ph = load('posthog', { 'posthog-js': { init() { throw Error('must not init') } }, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => { puts.push({ url, body: JSON.parse(opts.body) }); return Promise.resolve({ ok: true }) },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts, [{ url: '/api/v1/settings/analytics-consent', body: { enabled: false } }])
+})
+
+test('architecture aliases and untrusted native facts stay within the telemetry enum', () => {
+  const runtime = load('runtime')
+  for (const arch of ['arm64', 'aarch64', 'ARM64']) assert.equal(runtime.normalizeArch(arch), 'aarch64')
+  for (const arch of ['amd64', 'x86_64', 'x64', 'AMD64']) assert.equal(runtime.normalizeArch(arch), 'x86_64')
+  const untrusted = load('runtime', {}, {
+    window: { __AUTOCLIP_RUNTIME__: { os: 'private title', arch: 'sk-secret' } },
+    navigator: { userAgent: 'Macintosh Intel Mac OS X' },
+  })
+  assert.equal(JSON.stringify(untrusted.runtimeProperties()), '{"os":"macos","arch":"unknown"}')
+})
+
+test('reset identity waits for the previous PUT and cannot be overwritten by it', async () => {
+  let id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  const next = '018f6b2a-7c3d-7b2a-8c11-222222222222'
+  let finish
+  const ids = []
+  const ph = load('posthog', { 'posthog-js': {
+    init() {}, get_distinct_id: () => id, reset() { id = next },
+  }, './workflow': core }, {
+    localStorage: memory(), window: {},
+    fetch: (url, options) => {
+      if (String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      ids.push(JSON.parse(options.body).distinct_id); return new Promise(resolve => { finish = resolve })
+    },
+  })
+  ph.initAnalytics()
+  ph.resetUser()
+  assert.deepEqual(ids, ['018f6b2a-7c3d-7b2a-8c11-111111111111'])
+  finish({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(ids, ['018f6b2a-7c3d-7b2a-8c11-111111111111', next])
+  finish({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+})
 function memory() {
   const data = new Map()
   return { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }
@@ -165,14 +443,14 @@ test('the anonymous distinct id is stored once for backend events', async () => 
       return Promise.resolve({ ok: true })
     },
   })
+  const identity = () => puts.filter(p => p.url === '/api/v1/settings/analytics-identity')
   ph.initAnalytics()
   await new Promise(resolve => setTimeout(resolve, 0))
-  assert.equal(puts.length, 1)
-  assert.equal(puts[0].url, '/api/v1/settings/analytics-identity')
-  assert.equal(JSON.parse(puts[0].body).distinct_id, id)
+  assert.equal(identity().length, 1)
+  assert.equal(JSON.parse(identity()[0].body).distinct_id, id)
   ph.setAnalyticsEnabled(true)
   await new Promise(resolve => setTimeout(resolve, 0))
-  assert.equal(puts.length, 1)
+  assert.equal(identity().length, 1)
 })
 test('turning analytics off pauses flag reloads and never asks for flags while opted out', () => {
   const storage = memory()
@@ -238,6 +516,10 @@ test('SDK exceptions and unavailable storage cannot break business or override o
   const blocked = { getItem() { throw Error('blocked') }, setItem() { throw Error('blocked') } }
   const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: blocked, window: {} })
   ph.initAnalytics(); ph.trackPageview('/project/private?key=secret')
+  // R12 #16: unreadable preference => nothing initialised or captured until the user opts in.
+  assert.equal(config, undefined)
+  assert.equal(captured.length, 0)
+  ph.setAnalyticsEnabled(true); ph.trackPageview('/project/private?key=secret')
   assert.equal(captured[0].props.route, '/project/:id')
   assert.equal(config.autocapture, false)
   assert.equal(config.disable_session_recording, true)
@@ -818,6 +1100,7 @@ test('every flag evaluation carries app_version as a semver flag person property
     require: (id) => {
       if (id === 'posthog-js') return { __esModule: true, default: sdk }
       if (id === './workflow') return core
+      if (id === './runtime') return load('runtime', {}, { window: {} })
       if (id === '../utils/apiConfig') return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       throw new Error(`Unexpected dependency: ${id}`)
     } }, { filename: file })
@@ -929,4 +1212,159 @@ test('catalog endpoint validation unlocks only the current credentials and keeps
     const telemetry = JSON.stringify(s.events)
     for (const privateValue of ['https://', 'test-only', 'test-model', 'azure-openai']) assert.equal(telemetry.includes(privateValue), false)
   }
+})
+
+test('R11: unreadable localStorage at startup sends only "off", never "on"', async () => {
+  const puts = []
+  const broken = { getItem() { throw new Error('denied') }, setItem() { throw new Error('denied') }, removeItem() {} }
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: broken, window: {},
+    fetch: (url, opts) => {
+      if (String(url).includes('/settings/analytics-consent')) puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.includes(true), JSON.stringify(puts))
+  assert.deepEqual(puts, [false])
+})
+
+test('R11: an opt-out keeps retrying after the backoff is exhausted until the API recovers', async () => {
+  const puts = []
+  let up = false
+  const timers = []
+  const storage = memory()
+  storage.setItem('autoclip.analytics.optOut', 'true')
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length },
+    clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: up })
+    },
+  })
+  ph.initAnalytics()
+  for (let i = 0; i < 12; i++) {
+    await new Promise(resolve => setImmediate(resolve))
+    const fn = timers.shift()
+    assert.equal(typeof fn, 'function', `retry ${i} was not scheduled (gave up)`)
+    if (i === 11) up = true // API recovers well after the 5 exponential retries
+    fn()
+  }
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(puts.length >= 13)
+  assert.ok(puts.every(v => v === false))
+  const settled = puts.length
+  await new Promise(resolve => setImmediate(resolve))
+  for (const fn of timers.splice(0)) fn()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(puts.length, settled) // once accepted, no more retries
+})
+
+test('R12 #16: unreadable preference keeps SDK init, capture, flags and identity OFF', async () => {
+  const calls = { init: 0, capture: 0, identity: 0, flags: 0 }
+  const broken = { getItem() { throw new Error('denied') }, setItem() { throw new Error('denied') }, removeItem() {} }
+  const ph = load('posthog', { 'posthog-js': {
+    init() { calls.init++ }, capture() { calls.capture++; return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {}, reloadFeatureFlags() { calls.flags++ },
+  }, './workflow': core }, {
+    localStorage: broken, window: {},
+    fetch: (url) => { if (String(url).includes('/settings/analytics-identity')) calls.identity++; return Promise.resolve({ ok: true }) },
+  })
+  ph.initAnalytics()
+  assert.equal(ph.isAnalyticsEnabled(), false)
+  assert.equal(ph.captureBusinessEvent('studio_import_started', {}), false)
+  ph.trackPageview('/')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(calls, { init: 0, capture: 0, identity: 0, flags: 0 })
+  assert.equal(ph.readLoadedFlag('pkg_templates_v1'), undefined)
+})
+
+test('R12 #19: two windows interleave — storage OFF from another window drops a queued ON retry', async () => {
+  const shared = memory()
+  const puts = []
+  let ok = false
+  const timers = []
+  const make = () => load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: shared, window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok })
+    },
+  })
+  const a = make()
+  a.initAnalytics()
+  a.setAnalyticsEnabled(true) // A wants ON; the PUT fails and a retry is queued
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(timers.length > 0)
+  const b = make()
+  b.setAnalyticsEnabled(false) // B (another window) turns analytics OFF in shared storage
+  ok = true
+  await new Promise(resolve => setImmediate(resolve))
+  const before = puts.length
+  for (const fn of timers.splice(0)) fn() // A's queued retry fires
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.slice(before).includes(true), JSON.stringify(puts))
+  assert.equal(puts[puts.length - 1], false)
+})
+
+test('R13 #26: storage readable but write fails — session OFF is sent on close and every retry', async () => {
+  const store = { ['autoclip.analytics.optOut']: 'false' }
+  const readable = { getItem: (k) => (k in store ? store[k] : null), setItem() { throw new Error('quota') }, removeItem() {} }
+  const puts = []
+  const timers = []
+  let ok = true
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {}, reloadFeatureFlags() {} }, './workflow': core }, {
+    localStorage: readable, window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok })
+    },
+  })
+  const tick = () => new Promise(resolve => setImmediate(resolve))
+  ph.initAnalytics(); await tick()
+  assert.deepEqual(puts, [true])
+  ok = false
+  ph.setAnalyticsEnabled(false) // close: storage write throws, storage still reads "on"
+  await tick()
+  assert.equal(puts.at(-1), false, 'close must send off')
+  assert.equal(ph.isAnalyticsEnabled(), false)
+  for (let i = 0; i < 7 && timers.length; i++) { timers.shift()(); await tick() }
+  assert.ok(puts.length >= 4)
+  assert.ok(puts.slice(1).every(v => v === false), `retries must stay off: ${puts}`)
+  ok = true; if (timers.length) { timers.shift()(); await tick() }
+  assert.equal(puts.at(-1), false)
+})
+
+test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => {
+  const shared = memory()
+  const puts = []
+  const timers = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111', opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: shared, window: {}, setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    fetch: (url, opts) => { if (String(url).includes('analytics-consent')) puts.push(JSON.parse(opts.body).enabled); return Promise.resolve({ ok: false }) },
+  })
+  ph.setAnalyticsEnabled(true); await new Promise(r => setImmediate(r))
+  shared.setItem('autoclip.analytics.optOut', 'true') // another window turned it off
+  assert.ok(timers.length)
+  timers.shift()(); await new Promise(r => setImmediate(r)) // queued retry of the stale session ON
+  assert.equal(puts.at(-1), false)
 })

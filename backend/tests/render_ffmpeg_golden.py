@@ -170,6 +170,33 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         stdout = '' if text else b''
         return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
 
+    class FakePopen:
+        """X1r: unbound ``project_cancellation.run`` spawns via Popen under the shutdown lock."""
+        pid = 0
+
+        def __init__(self, cmd, **kwargs):
+            self._done = fake_run(cmd, **kwargs)
+            self.args = self._done.args
+            self.returncode = self._done.returncode
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def communicate(self, *_a, **_k):
+            return self._done.stdout, self._done.stderr
+
+        def wait(self, *_a, **_k):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            pass
+
     def fake_check_output(cmd, **kwargs):
         argv = [str(part) for part in cmd]
         if not _is_ffprobe(argv):
@@ -205,6 +232,7 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
 
     with patch('tempfile.TemporaryDirectory', _fixed_temp), \
             patch('subprocess.run', fake_run), \
+            patch('subprocess.Popen', FakePopen), \
             patch('subprocess.check_output', fake_check_output), \
             patch('backend.services.render_limits.THREADS', '2'), \
             patch('backend.services.render_limits.sys.platform', 'linux'), \
