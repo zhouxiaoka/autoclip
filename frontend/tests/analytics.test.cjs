@@ -7,6 +7,16 @@ const ts = require('typescript')
 const { loadTs } = require('./load-ts.cjs')
 
 // Compile the actual source in memory. No new runner dependency or network calls.
+// Pending timers in `queue`, in order; clearTimeout really removes one (the PUT abort timer is cleared on reply).
+function fakeTimers(queue) {
+  const ids = new Map()
+  let next = 0
+  return {
+    setTimeout: fn => { const id = ++next; ids.set(id, fn); queue.push(fn); return id },
+    clearTimeout: id => { const fn = ids.get(id); ids.delete(id); const at = queue.indexOf(fn); if (at >= 0) queue.splice(at, 1) },
+  }
+}
+
 function load(name, mocks = {}, globals = {}) {
   const file = path.join(__dirname, '../src/analytics', `${name}.ts`)
   const source = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env', '__env')
@@ -1243,8 +1253,8 @@ test('R11: an opt-out keeps retrying after the backoff is exhausted until the AP
     get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
     opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
     localStorage: storage, window: {},
-    setTimeout: (fn) => { timers.push(fn); return timers.length },
-    clearTimeout: () => {},
+    // Real browsers have AbortController: the 5 s abort timer is armed and cleared around every PUT.
+    ...fakeTimers(timers),
     fetch: (url, opts) => {
       if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
       puts.push(JSON.parse(opts.body).enabled)
@@ -1359,7 +1369,7 @@ test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => 
   const timers = []
   const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
     get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111', opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
-    localStorage: shared, window: {}, setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    localStorage: shared, window: {}, ...fakeTimers(timers),
     fetch: (url, opts) => { if (String(url).includes('analytics-consent')) puts.push(JSON.parse(opts.body).enabled); return Promise.resolve({ ok: false }) },
   })
   ph.setAnalyticsEnabled(true); await new Promise(r => setImmediate(r))

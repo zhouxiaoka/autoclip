@@ -15,7 +15,7 @@ test('sponsor selection, offer, registration link and attribution follow the cho
   const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers })
   const Fields = load('ProviderFields.tsx', {
     react: { useState: () => [false, () => {}] },
-    antd: { Input: { Password: 'password' }, Select: 'select' },
+    antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
     '../../i18n': { t: text => text }, '../../ui': { Btn: 'button', Row: 'row' },
     '../../utils/externalLinks': { openExternalLink: url => links.push(url) },
     '../../analytics/events': { trackSponsorLinkOpened: event => events.push(plain(event)) },
