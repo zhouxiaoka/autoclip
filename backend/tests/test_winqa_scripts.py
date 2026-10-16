@@ -2,6 +2,7 @@
 PowerShell exit codes and HTTP/hash handling, provenance helper, evidence redaction."""
 import hashlib
 import io
+import time
 import json
 import os
 import re
@@ -842,11 +843,30 @@ def test_r23_run_winqa_uploads_redact_py_next_to_the_probe():
 
 PROP_NAMES = ['kris', 'Public', 'Default', '张三', 'Jane Doe', "D'Arcy", 'a_b', 'x.y', '<user>alice', 'u0022Al',
               'u003aBob', '%41nn', 'ｱソAl', 'Ünïco', 'a:b', 'a"b', 'émile', '😀xy', 'qa ']
+PROP_ACCOUNTS = ['Administrator', 'Guest', 'DefaultAccount', 'WDAGUtilityAccount', 'runneradmin', 'root', 'ubuntu']
+_NAME_POOLS = ['abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', '0123456789', " '-_.~!@#$&()+,;=[]{}`^", ':"<>|',
+               '张三李四王五赵六钱孙', 'éüñçøåßÉÖ', 'ｱｲｳソﾄ', '😀🎉', 'абвгдежзЖЯ']
+
+
+def _random_names(seed, count=40):
+    """R25 #246: user names are generated, not picked: any characters except separators, '%', CR/LF."""
+    import random
+    rnd = random.Random(seed)
+    out = []
+    while len(out) < count:
+        n = ''.join(rnd.choice(rnd.choice(_NAME_POOLS)) for _ in range(rnd.randint(1, 24)))
+        if n.strip('.') and n.strip() and n not in out:
+            out.append(n)
+    return out
+
+
+PROP_SEED = int(os.environ.get('WINQA_PROP_SEED', '20261016'))
+PROP_NAMES = PROP_NAMES + PROP_ACCOUNTS + _random_names(PROP_SEED)
 PROP_TEMPLATES = ['C:\\Users\\{n}\\AppData\\x', 'c:/users/{n}/a.log', '/home/{n}/x', '/Users/{n}/y z', '/home/{n}',
                   'C:\\Users\\{n}', '\\\\srv\\c$\\Users\\{n}\\x', '"C:\\\\Users\\\\{n}\\\\a"', '%2Fhome%2F{n}%2Fx',
                   'C:%5CUsers%5C{n}%5Cx', '\\u002fhome\\u002f{n}\\u002fx', '%252Fhome%252F{n}%252Fx',
                   'C:\\u005cUsers\\u005c{n}\\u005cx']
-PROP_PREFIXES = ['', ' ', '启动失败', '_', '"', "'", '(', '错误：']
+PROP_PREFIXES = ['', ' ', '启动失败', '_', '"', "'", '(', '错误：', 'x.', 'a-', '-']
 PROP_POSIX_ONLY = [('/home/{n}/x', 'A\\B'), ('/Users/{n}/x', 'A\\u005cB')]
 
 
@@ -854,8 +874,9 @@ def _leak_tokens(name):
     return [t for t in re.split(r'[^0-9A-Za-z\u00c0-\uffff]+', name.replace('<user>', ' ')) if len(t) >= 2]
 
 
-def _property_violations(redact):
-    """Any user name, any root spelling, any left context: the path keeps its shape and the name is gone."""
+def _property_violations(redact, first=False):
+    """Generated and listed user names, the listed root spellings and left contexts: the path keeps its shape and
+    the name is gone."""
     bad = []
     cases = [(t, n, p) for t in PROP_TEMPLATES for n in PROP_NAMES for p in PROP_PREFIXES]
     cases += [(t, n, p) for t, n in PROP_POSIX_ONLY for p in PROP_PREFIXES]
@@ -869,6 +890,8 @@ def _property_violations(redact):
         leaked = [t for t in _leak_tokens(name) if t in out.replace('<user>', '')]
         if not ok or leaked or redact.scrub_homes(out) != out:
             bad.append((raw, out, leaked))
+            if first:
+                break
     return bad
 
 
@@ -886,8 +909,19 @@ REDACT_MUTATIONS = {   # name: (anchor, replacement) — each re-adds a per-samp
     'user-prefix-exempt': ("            seg = _segment(v, s, seps, (s, seps) in own)",
                            "            if text.startswith(USER, s):\n                continue\n"
                            "            seg = _segment(v, s, seps, (s, seps) in own)"),
-    'unicode-word-boundary': ("if prev and prev.isascii() and (prev.isalnum() or prev in '.-'):",
+    'unicode-word-boundary': ("if prev and prev.isascii() and prev.isalnum():",
                               "if prev and (prev.isalnum() or prev in '_.-'):"),
+    'skip-administrator': ("        return (max(st[t], s), en[e - 1]) if e > t else None",
+                           "        if ''.join(ch[t:e]).lower() == 'administrator':\n            return None\n"
+                           "        return (max(st[t], s), en[e - 1]) if e > t else None"),
+    'skip-long-names': ("        return (max(st[t], s), en[e - 1]) if e > t else None",
+                        "        if e - t > 16:\n            return None\n"
+                        "        return (max(st[t], s), en[e - 1]) if e > t else None"),
+    'skip-digits': ("        return (max(st[t], s), en[e - 1]) if e > t else None",
+                    "        if any(c.isdigit() for c in ch[t:e]):\n            return None\n"
+                    "        return (max(st[t], s), en[e - 1]) if e > t else None"),
+    'dot-dash-exempt': ("if prev and prev.isascii() and prev.isalnum():",
+                        "if prev and prev.isascii() and (prev.isalnum() or prev in '.-'):"),
     'no-decoded-view': ("    return out + [dec]", "    return out"),
     'posix-stops-at-backslash': ("_WIN_SEPS, _POSIX_SEPS = '\\\\/', '/'", "_WIN_SEPS, _POSIX_SEPS = '\\\\/', '/\\\\'"),
     'no-percent': ("        if ch[i] == '%':", "        if False:"),
@@ -910,36 +944,55 @@ def _mutant(name):
 @pytest.mark.parametrize('mutation', sorted(REDACT_MUTATIONS))
 def test_r24_217_property_guard_catches_special_case_mutations(mutation):
     """R24 #217: the guard is behavioural; re-adding a per-sample special case must make it fail."""
-    assert _property_violations(_mutant(mutation)), f'mutation {mutation} survived the property guard'
+    assert _property_violations(_mutant(mutation), first=True), f'mutation {mutation} survived the property guard'
 
 
-SCRUB_CODE = re.compile(r"""re\.(?:sub|compile|search|findall|match)\(\s*r?['"][^'"\n]*(?:Users|home|sk-|[Bb]earer|api_?key|"""
-                        r"""[Aa]uthorization)|<user>|'\*\*\*'|"\*\*\*"|sk-\*\*\*|USERNAME|sed\s+-[a-zA-Z]*i""")
+SCRUB_CODE = re.compile(
+    r"""(?i)(?:\bre\.(?:sub|subn|compile|search|findall|finditer|match|fullmatch|split)\(|-c?replace\b|\bsed\b|"""
+    r"""\.replace\(|\btr\s).*(?:users|home|userprofile|username|sk-|bearer|api_?key|authorization|\btokens?\b|"""
+    r"""\\\?|\?\.\*)|<user>|<url>|['"]\*\*\*['"]|sk-\*\*\*|r['"][^'"\n]*(?:Users|home)[^'"\n]*(?:\[\^|\\\\\[|\+|\*)""")
+CODE_SUFFIXES = ('.py', '.sh', '.ps1', '.psm1', '.bat', '.cmd', '.js', '')
+REDACT_EXEMPT = 'redact.py'   # the one exempt file, as an exact path relative to the scanned tree
 
 
 def _scrub_code_outside_redact(root):
+    """Lines that look like a scrubbing rule (regex/-replace/sed/replace with a home, key or query token, a mask
+    literal, or a home regex in a raw string) in any code file of the tree, except the exact path redact.py."""
     hits = []
     for p in sorted(root.rglob('*')):
-        if p.suffix not in ('.py', '.sh', '.ps1') or p.name == 'redact.py' or not p.is_file():
+        rel = p.relative_to(root).as_posix()
+        if not p.is_file() or rel == REDACT_EXEMPT or p.suffix not in CODE_SUFFIXES or '__pycache__' in rel:
             continue
-        for i, line in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
+        for i, line in enumerate(p.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
             if SCRUB_CODE.search(line) and not line.lstrip().startswith('#'):
-                hits.append(f'{p.relative_to(root)}:{i}: {line.strip()}')
+                hits.append(f'{rel}:{i}: {line.strip()}')
     return hits
 
 
+PLANTED_SCRUBBERS = ["t = re.sub(r'(?i)(bearer\\s+)[A-Za-z0-9._-]{8,}', r'\\1***', t)",
+                     "p = str(h).replace(os.environ.get('USERNAME', '~'), '<user>')",
+                     "find . | xargs sed -i -E 's/sk-[a-z]+/x/'",
+                     "return re.sub(r'C:\\\\Users\\\\[^\\\\]+', 'X', text)",
+                     "'final_url': re.sub(r'\\?.*', '', u.url)",                       # R25 #247: probe:209
+                     "HOME_RX = r'/home/[^/]+'",                                         # variable regex ...
+                     "t = HOME_RX.sub('x', t); u = re.sub(home_rx, 'x', u)",              # ... and its use
+                     "$t = $t -replace [regex]::Escape($env:USERPROFILE), '~'",           # PowerShell -replace
+                     "$s = $s -creplace 'Bearer \\S+', 'x'"]
+
+
 def test_r24_216_only_redact_py_scrubs(tmp_path):
-    """R24 #216: no scrubbing rule anywhere under scripts/winqa except redact.py (the scanner proves itself on a
-    planted copy of the old rules)."""
+    """R24 #216 / R25 #247: no scrubbing rule anywhere under scripts/winqa except the exact file redact.py; the
+    scanner proves itself on planted samples, including in a file that is merely named redact.py elsewhere."""
     assert _scrub_code_outside_redact(ROOT) == []
     planted = tmp_path / 'w'
     (planted / 'py').mkdir(parents=True)
-    for i, line in enumerate(["t = re.sub(r'(?i)(bearer\\s+)[A-Za-z0-9._-]{8,}', r'\\1***', t)",
-                              "p = str(h).replace(os.environ.get('USERNAME', '~'), '<user>')",
-                              "find . | xargs sed -i -E 's/sk-[a-z]+/x/'",
-                              "return re.sub(r'C:\\\\Users\\\\[^\\\\]+', 'X', text)"]):
-        (planted / 'py' / f'm{i}.{"sh" if "sed" in line else "py"}').write_text(line + '\n', encoding='utf-8')
-    assert len(_scrub_code_outside_redact(planted)) == 4
+    for i, line in enumerate(PLANTED_SCRUBBERS):
+        ext = 'sh' if 'sed' in line else 'ps1' if line.startswith('$') else 'py'
+        (planted / 'py' / f'm{i}.{ext}').write_text(line + '\n', encoding='utf-8')
+    (planted / 'py' / 'redact.py').write_text(PLANTED_SCRUBBERS[0] + '\n', encoding='utf-8')   # name is not enough
+    (planted / REDACT_EXEMPT).write_text(PLANTED_SCRUBBERS[0] + '\n', encoding='utf-8')
+    hits = _scrub_code_outside_redact(planted)
+    assert len(hits) == len(PLANTED_SCRUBBERS) + 1, hits
 
 
 def _load(path, monkeypatch, tmp_path, name):
@@ -1013,63 +1066,91 @@ def test_r24_zip_members_are_scrubbed(tmp_path):
 # ---- end to end: run_winqa.sh pull / pull_all, with the VM's Python missing and with an interruption ----
 
 def _winqa_env(tmp_path, mode):
-    """Fake VM: C:\\winqa\\out is tmp/vm/out (raw files incl. app-logs.zip), C:\\winqa\\raw is tmp/vm/raw."""
-    vm, bins, tmpd = tmp_path / 'vm', tmp_path / 'bin', tmp_path / 'tmp'
-    for d in (vm / 'out', vm / 'raw', bins, tmpd):
+    """Fake VM: C:\\winqa\\out is tmp/vm/out (raw files incl. app-logs.zip), C:\\winqa\\out-scrubbed is
+    tmp/vm/out-scrubbed. Modes: vm-python, no-python (VM-side scrub fails), interrupt (TERM during scp),
+    local-crash (the control machine's redact.py crashes on the staging dir)."""
+    vm, bins, tmpd, home = tmp_path / 'vm', tmp_path / 'bin', tmp_path / 'tmp', tmp_path / 'home'
+    for d in (vm / 'out', bins, tmpd, home):
         d.mkdir(parents=True, exist_ok=True)
     (vm / 'out' / 'env.json').write_text(json.dumps({'home': 'C:\\Users\\kris', 'temp': 'C:\\Users\\kris\\AppData\\Local\\Temp'}))
     (vm / 'out' / 'clean.json').write_text('{"removed": ["C:\\\\Users\\\\kris\\\\AppData\\\\Roaming\\\\AutoClip"]}')
     (vm / 'out' / 'real').mkdir()
     (vm / 'out' / 'real' / 'r.log').write_text('err /Users/kris/x Bearer abcdefgh123\n')
+    (vm / 'out' / 'real' / 'app.log.1').write_text('rotated C:\\Users\\kris\\a https://h.invalid/q?sig=SIG1\n')
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w') as z:
         z.writestr('backend/app.log', 'boot C:\\Users\\kris\\AppData\\Roaming\\AutoClip\n')
+        z.writestr('backend/app.log.2', 'old /home/kris/x\n')
     (vm / 'out' / 'app-logs.zip').write_bytes(buf.getvalue())
-    redact_py = ROOT / 'redact.py'
-    _bin(bins, 'ssh', f'''cmd="$*"
+    redact_py, real_py = ROOT / 'redact.py', sys.executable
+    _bin(bins, 'ssh', f"""cmd="$*"
 case "$cmd" in
-  *redact.py*) [ "{mode}" = no-python ] && exit 1; exec "{sys.executable}" "{redact_py}" "{vm / 'out'}";;
-  *Move-Item*app-logs.zip*) mv "{vm / 'out'}/app-logs.zip" "{vm / 'raw'}/" 2>/dev/null; exit 0;;
+  *Copy-Item*out-scrubbed*) rm -rf "{vm / 'out-scrubbed'}"; cp -R "{vm / 'out'}" "{vm / 'out-scrubbed'}"; exit 0;;
+  *redact.py*out-scrubbed*) [ "{mode}" = no-python ] && exit 1; exec "{real_py}" "{redact_py}" "{vm / 'out-scrubbed'}" --drop-failed;;
+  *redact.py*) echo "VM original touched" >&2; exit 9;;
   *hostname*) echo vm; exit 0;;
 esac
-echo "remote: C:\\\\Users\\\\kris\\\\Desktop ok"; exit 0''')
-    _bin(bins, 'scp', f'''for a in "$@"; do last2="$last1"; last1="$a"; done
-src="${{last2#*:C:/winqa/out/}}"; dst="$last1"
-cd "{vm / 'out'}" && for f in $src; do [ -e "$f" ] && cp -R "$f" "$dst"; done
+echo "remote: C:\\\\Users\\\\kris\\\\Desktop ok"; exit 0""")
+    _bin(bins, 'scp', f"""for a in "$@"; do last2="$last1"; last1="$a"; done
+case "$last2" in *out-scrubbed*) ;; *) exit 0;; esac
+src="${{last2#*:C:/winqa/out-scrubbed/}}"; dst="$last1"
+cd "{vm / 'out-scrubbed'}" && for f in $src; do [ -e "$f" ] && cp -R "$f" "$dst"; done
 [ "{mode}" = interrupt ] && kill -TERM $PPID
-exit 0''')
+exit 0""")
+    if mode == 'local-crash':   # redact.py on the staging dir dies; everything else uses the real interpreter
+        _bin(bins, 'python3', f"""case "$*" in *redact.py*/in" "--drop-failed*) exit 1;; esac
+exec "{real_py}" "$@"
+""")
     inst = tmp_path / 'p.exe'
     inst.write_bytes(b'MZ')
-    env = {**os.environ, 'PATH': f'{bins}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid', 'WINQA_USER': 'qa',
-           'TMPDIR': str(tmpd), 'LANG': UTF8, 'LC_ALL': UTF8, 'WINQA_MODEL_API_KEY': ''}
+    env = {k: v for k, v in os.environ.items() if k not in ('XDG_CACHE_HOME', 'WINQA_STAGE_ROOT')}
+    env.update({'PATH': f'{bins}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid', 'WINQA_USER': 'qa', 'HOME': str(home),
+                'TMPDIR': str(tmpd), 'LANG': UTF8, 'LC_ALL': UTF8, 'WINQA_MODEL_API_KEY': ''})
     args = ['--prev', str(inst), '--candidate', str(inst), '--version', '1.5.8', '--out', str(tmp_path / 'ev'),
             '--from-step', '8', '--to-step', '8']
     return env, args
 
 
+def _stage_root(tmp_path):
+    return tmp_path / 'home' / '.cache' / 'autoclip-winqa-stage'
+
+
+def _tree_hashes(folder):
+    return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(folder.rglob('*')) if p.is_file()}
+
+
 @pytestmark_bash
 @pytest.mark.parametrize('bash', BASHES)
-@pytest.mark.parametrize('mode', ['vm-python', 'no-python', 'interrupt'])
+@pytest.mark.parametrize('mode', ['vm-python', 'no-python', 'interrupt', 'local-crash'])
 def test_r24_215_no_raw_file_ever_reaches_the_control_machine(tmp_path, bash, mode):
-    """R24 #215 + Dong: after pull/pull_all (and when interrupted mid-pull) nothing on the control machine holds a raw
-    name; app-logs.zip is scrubbed on the VM or not fetched at all."""
+    """R24 #215 + R25 #240/#241/#245: nothing on the control machine holds a raw name (also when interrupted); the
+    VM's C:\\winqa\\out (app-logs.zip included) is byte-for-byte unchanged; a failed scrub on either side copies
+    nothing into the evidence dir and fails the run; rotated logs (app.log.1, zip member app.log.2) are scrubbed."""
     env, args = _winqa_env(tmp_path, mode)
+    before = _tree_hashes(tmp_path / 'vm' / 'out')
     done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
-    local = [p for d in ('ev', 'tmp') for p in (tmp_path / d).rglob('*') if p.is_file()]
+    assert _tree_hashes(tmp_path / 'vm' / 'out') == before, 'VM originals must not be modified'
+    assert b'VM original touched' not in done.stderr + done.stdout
+    local = [p for d in ('ev', 'tmp', 'home') for p in (tmp_path / d).rglob('*') if p.is_file()]
     for p in local:
         data = p.read_bytes()
         if p.suffix == '.zip':
             with zipfile.ZipFile(p) as z:
                 data += b''.join(z.read(i) for i in z.infolist())
-        assert b'kris' not in data and b'abcdefgh123' not in data, (mode, p, data[:300])
-    assert not list((tmp_path / 'tmp').glob('winqa-stage.*')), 'staging dir must be removed on exit'
+        assert b'kris' not in data and b'abcdefgh123' not in data and b'SIG1' not in data, (mode, p, data[:300])
+    assert not list(_stage_root(tmp_path).glob('winqa-stage.*')), 'staging dir must be removed on exit'
     assert b'kris' not in done.stdout + done.stderr
     ev = tmp_path / 'ev'
+    steps = (ev / 'steps.txt').read_text() if (ev / 'steps.txt').exists() else ''
     if mode == 'vm-python':
         assert (ev / 'env.json').exists() and (ev / 'app-logs' / 'backend' / 'app.log').exists()
-    if mode == 'no-python':
-        assert (tmp_path / 'vm' / 'raw' / 'app-logs.zip').exists() and not (ev / 'app-logs' / 'backend').exists()
-        assert (ev / 'env.json').exists()
+        assert (ev / 'app-logs' / 'backend' / 'app.log.2').read_text() == 'old /home/<user>/x\n'
+        assert (ev / 'real' / 'app.log.1').read_text() == 'rotated C:\\Users\\<user>\\a <url>\n'
+        assert 'pull_final=ok' in steps
+    if mode in ('no-python', 'local-crash'):
+        assert not (ev / 'env.json').exists() and not (ev / 'app-logs' / 'backend').exists()
+        assert 'pull_final=FAIL' in steps and done.returncode == 1, (steps, done.stdout[-600:])
     if mode == 'interrupt':
         assert done.returncode == 143, done.stdout[-500:]
 
@@ -1077,23 +1158,146 @@ def test_r24_215_no_raw_file_ever_reaches_the_control_machine(tmp_path, bash, mo
 @pytestmark_bash
 @pytest.mark.parametrize('bash', BASHES)
 def test_r24_stale_stage_from_killed_run_is_removed_and_stage_is_700(tmp_path, bash):
-    """Dong: a run killed with -9 leaves its private staging dir; the next run deletes it before starting, and the
-    staging dir is mode 700 (seen from inside the run)."""
+    """Dong + R25 #248: leftovers of a killed run are deleted before starting: dead pid, old unnumbered form, pid
+    reused by a program that is not run_winqa, older than 24 h, and legacy dirs under $TMPDIR. The staging root does
+    not depend on $TMPDIR (changed here between runs); the staging dir is mode 700 (seen from inside the run)."""
     env, args = _winqa_env(tmp_path, 'vm-python')
-    tmpd = tmp_path / 'tmp'
+    tmpd, root = tmp_path / 'tmp', _stage_root(tmp_path)
+    root.mkdir(parents=True)
     dead = subprocess.Popen(['true']); dead.wait()
-    stale = [tmpd / f'winqa-stage.{dead.pid}.abcdef', tmpd / 'winqa-stage.Xy12ab']   # dead pid; old unnumbered form
-    for d in stale:
-        d.mkdir()
-        (d / 'env.json').write_text('{"home": "C:\\\\Users\\\\kris"}')
-    live = tmpd / f'winqa-stage.{os.getpid()}.keep12'   # a run that is still alive is left alone
-    live.mkdir()
-    modes = tmp_path / 'modes.txt'
-    scp = tmp_path / 'bin' / 'scp'
-    scp.write_text(scp.read_text().replace('exit 0', f'st="$(dirname "$dst")"; stat -c %a "$st" 2>/dev/null >> "{modes}" || stat -f %Lp "$st" >> "{modes}"\nexit 0', 1))
-    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
-    assert all(not d.exists() for d in stale), done.stdout[-400:]
-    assert live.exists()
-    got = modes.read_text().split()
-    assert got and set(got) == {'700'}, got   # $STAGE itself (dst is $STAGE/in)
-    assert not [p for p in tmpd.glob(f'winqa-stage.*') if p != live]
+    other = subprocess.Popen(['sleep', '60'])                                   # alive, but not run_winqa
+    live_run = subprocess.Popen(['bash', '-c', 'exec -a run_winqa.sh sleep 60'])
+    try:
+        stale = [root / f'winqa-stage.{dead.pid}.abcdef', root / 'winqa-stage.Xy12ab',
+                 root / f'winqa-stage.{other.pid}.reused', root / f'winqa-stage.{live_run.pid}.old24h',
+                 tmpd / f'winqa-stage.{dead.pid}.legacy']
+        for d in stale:
+            d.mkdir()
+            (d / 'env.json').write_text('{"home": "C:\\\\Users\\\\kris"}')
+        old = time.time() - 25 * 3600
+        os.utime(root / f'winqa-stage.{live_run.pid}.old24h', (old, old))
+        live = root / f'winqa-stage.{live_run.pid}.keep12'   # a run that is still alive is left alone
+        live.mkdir()
+        modes = tmp_path / 'modes.txt'
+        scp = tmp_path / 'bin' / 'scp'
+        txt = scp.read_text()
+        i = txt.rindex('exit 0')
+        scp.write_text(txt[:i] + f'st="$(dirname "$dst")"; stat -c %a "$st" 2>/dev/null >> "{modes}" || stat -f %Lp "$st" >> "{modes}"\nexit 0' + txt[i + 6:])
+        env['TMPDIR'] = str(tmp_path / 'tmp2')
+        (tmp_path / 'tmp2').mkdir()
+        env_old = dict(env, TMPDIR=str(tmpd))
+        done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
+        assert [d for d in stale if d.exists() and d.parent == root] == [], done.stdout[-400:]
+        assert live.exists()
+        got = modes.read_text().split()
+        assert got and set(got) == {'700'}, got   # $STAGE itself (dst is $STAGE/in)
+        assert not [p for p in root.glob('winqa-stage.*') if p != live]
+        subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env_old, capture_output=True, timeout=120)
+        assert not stale[-1].exists(), 'legacy dir under $TMPDIR is swept too'
+    finally:
+        other.kill(); live_run.kill()
+
+
+# ---------------- R25 (#242-#250) ----------------
+
+def test_r25_242_bom_file_also_gets_mixed_encoding_readings(tmp_path):
+    """R25 #242: a UTF-8 BOM file with an appended UTF-16LE run (PS 5.1 `>>`) leaks nothing; same for a UTF-16 BOM
+    file with a UTF-8 run."""
+    redact = _module('redact')
+    u16 = 'C:\\Users\\bob\\x\r\n'.encode('utf-16-le')
+    files = {'bom8.log': b'\xef\xbb\xbf' + 'start /Users/kris/a\r\n'.encode() + u16,
+             'bom8odd.log': b'\xef\xbb\xbf' + b'start!' + u16,
+             'bom16.log': b'\xff\xfe' + 'C:\\Users\\amy\\y\r\n'.encode('utf-16-le') + b'tail /home/kris/z\n'}
+    for name, raw in files.items():
+        (tmp_path / name).write_bytes(raw)
+    redact.main(str(tmp_path))
+    for name in files:
+        out = (tmp_path / name).read_bytes()
+        for w in ('kris', 'bob', 'amy'):
+            for leak in (w.encode(), w.encode('utf-16-le'), w.encode('utf-16-le')[1:]):
+                assert leak not in out, (name, leak, out)
+        assert out[:2] in (b'\xef\xbb', b'\xff\xfe')
+
+
+R25_SECRET_JSON = {'api_key': 'qa-plain-value-1', 'Authorization': 'Token abc-def-ghi', 'access_token': 'at.1.2',
+                   'refresh_token': 'rt-xyz', 'token': 'tok-777', 'client_secret': 'cs-888', 'password': 'pw-999',
+                   'Cookie': 'sid=s3ss10n', 'x-api-key': 'xk-111', 'nested': [{'apiKey': 'ak-222'}],
+                   'note': 'plain text stays', 'tokens_used': 42}
+
+
+def test_r25_243_json_values_masked_by_field_name(tmp_path):
+    """R25 #243: credential fields are masked by name whatever their value looks like (structured save and file
+    mode); other fields keep their values; the result stays valid JSON."""
+    redact = _module('redact')
+    obj = redact.scrub_obj(R25_SECRET_JSON)
+    (tmp_path / 'e.json').write_text(json.dumps(R25_SECRET_JSON), encoding='utf-8')
+    redact.main(str(tmp_path))
+    from_file = json.loads((tmp_path / 'e.json').read_text(encoding='utf-8'))
+    for got in (obj, from_file):
+        text = json.dumps(got)
+        for v in ('qa-plain-value-1', 'abc-def-ghi', 'at.1.2', 'rt-xyz', 'tok-777', 'cs-888', 'pw-999', 's3ss10n',
+                  'xk-111', 'ak-222'):
+            assert v not in text, (v, text)
+        assert got['note'] == 'plain text stays' and got['tokens_used'] == 42
+
+
+def test_r25_244_directory_mode_masks_urls(tmp_path):
+    """R25 #244: one rule table: file/directory mode masks URLs like the stream modes."""
+    redact = _module('redact')
+    (tmp_path / 'a.log').write_text('GET https://oss.invalid/f?Signature=SIG1&x=1 done\n', encoding='utf-8')
+    (tmp_path / 'b.json').write_text(json.dumps({'u': 'http://h.invalid/p?t=SIG2'}), encoding='utf-8')
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'a.log').read_text(encoding='utf-8') == 'GET <url> done\n'
+    assert json.loads((tmp_path / 'b.json').read_text(encoding='utf-8')) == {'u': '<url>'}
+    assert redact.scrub('see https://x.invalid/?k=1') == 'see <url>'
+
+
+def test_r25_245_no_suffix_allow_list(tmp_path):
+    """R25 #245: rotated logs, unknown suffixes and the same inside zips are scrubbed; images are kept; unknown
+    binary is refused (deleted with --drop-failed) instead of passed through."""
+    redact = _module('redact')
+    (tmp_path / 'app.log.1').write_text('C:\\Users\\kris\\a\n')
+    (tmp_path / 'trace.out').write_text('/home/kris/b\n')
+    (tmp_path / 'noext').write_text('/Users/kris/c\n')
+    png = b'\x89PNG\r\n\x1a\n' + b'\x00' * 32
+    (tmp_path / 'shot.png').write_bytes(png)
+    (tmp_path / 'blob.bin').write_bytes(b'\x00\x01\x02\x03kris\x00\x00\x00\xff\xfe\x00\x00' * 8)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr('backend/app.log.3', 'x /home/kris/y\n')
+        z.writestr('desktop/main.out', 'C:\\Users\\kris\\z\n')
+    (tmp_path / 'logs.zip').write_bytes(buf.getvalue())
+    redact.main(str(tmp_path), drop_failed=True)
+    assert (tmp_path / 'app.log.1').read_text() == 'C:\\Users\\<user>\\a\n'
+    assert (tmp_path / 'trace.out').read_text() == '/home/<user>/b\n'
+    assert (tmp_path / 'noext').read_text() == '/Users/<user>/c\n'
+    assert (tmp_path / 'shot.png').read_bytes() == png
+    assert not (tmp_path / 'blob.bin').exists()
+    with zipfile.ZipFile(tmp_path / 'logs.zip') as z:
+        assert z.read('backend/app.log.3') == b'x /home/<user>/y\n' and z.read('desktop/main.out') == b'C:\\Users\\<user>\\z\n'
+
+
+def test_r25_241_crash_is_non_zero_and_failed_files_deleted_is_zero(tmp_path):
+    """R25 #241: with --drop-failed the CLI exits 0 only when every unscrubbable file is gone; without it a failure
+    is exit 2 (callers treat any non-zero as "copy nothing")."""
+    (tmp_path / 'blob.bin').write_bytes(b'\x00\x01\x02\x03\x00\x00\x00\xff\xfe\x00\x00' * 8)
+    p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), str(tmp_path)], capture_output=True)
+    assert p.returncode == 2 and (tmp_path / 'blob.bin').exists()
+    p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), str(tmp_path), '--drop-failed'], capture_output=True)
+    assert p.returncode == 0 and not (tmp_path / 'blob.bin').exists()
+
+
+@pytest.mark.parametrize('raw,want', [
+    ('x.C:\\Users\\kris\\a', 'x.C:\\Users\\<user>\\a'), ('a-/home/kris/b', 'a-/home/<user>/b'),
+    ('v1.0-/Users/kris/c', 'v1.0-/Users/<user>/c'), ('-C:/Users/kris/d', '-C:/Users/<user>/d'),
+    ('.C:\\Users\\kris', '.C:\\Users\\<user>'), ('see ./home/kris/x', 'see ./home/kris/x'),
+    ('cd ../home/kris', 'cd ../home/kris'), ('api/home/kris', 'api/home/kris')])
+def test_r25_250_dot_dash_before_root(raw, want):
+    """R25 #250: '.' or '-' right before a root does not protect it; only POSIX relative ./ ../ paths (and a root
+    continuing an ASCII word/path) are not roots."""
+    assert _module('redact').scrub(raw) == want
+
+
+def test_r25_247_probe_keeps_no_own_query_stripping():
+    src = (ROOT / 'py' / 'winqa_probe.py').read_text(encoding='utf-8')
+    assert "re.sub(r'\\?.*'" not in src

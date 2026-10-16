@@ -84,7 +84,7 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 - `py/winqa_probe.py`：`seed` / `check` / `failure`，用包内 Python 跑，只调 127.0.0.1。
 - `py/winqa_real.py`：`model` / `whisper` / `local` / `link` / `final` 真实场景；key 只从 stdin 读。
 - `summarize.py`：证据目录 → `summary.md` + `windows-rows.draft.json`。
-- `redact.py`：按 `WINQA_MODEL_API_KEY` 精确替换证据里的 key 和应用的打码形式。它是 scripts/winqa 下唯一的脱敏实现：`py/winqa_probe.py`、`py/winqa_real.py` 的 `save()` 先对整个结果（`scrub_obj`）脱敏再落盘，第 1 步随 py/ 一起上传。控制机本地从不留原文：实时日志逐行经 `redact.py --lines` 再写 run.log；拉回的文件先在验收机上脱敏（含 app-logs.zip 内的文件），再在私有临时目录里带真实 key 脱敏一遍，失败的文件直接丢弃，之后才进证据目录；任何中断都由 trap 删除临时目录并再脱敏一遍证据目录。验收机上没有可用的 Python 时，app-logs.zip 移到 `C:\winqa\raw`、不拉回（原始日志只留在验收机上）。
+- `redact.py`：Windows QA 证据和诊断输出的脱敏实现，其它 winqa 脚本都调用它，不另写规则（测试 test_r25_247 扫描整个 scripts/）。规则表在所有模式下相同：真实 key 及应用打码形式、常见 key 形态、按字段名识别的凭据字段值（api_key*、authorization、*token、secret、password、cookie）、URL、用户主目录（覆盖文件头说明里列出的几种读法）。目录模式按内容处理所有文件（zip 内成员同规则，截图原样保留，认不出的二进制拒收）。`py/winqa_probe.py`、`py/winqa_real.py` 的 `save()` 先对整个结果（`scrub_obj`）脱敏再落盘。验收机上 `C:\winqa\out` 里的原件（含 app-logs.zip）从不改动：每次拉取先复制到 `C:\winqa\out-scrubbed`，在副本上脱敏后只拉副本；验收机上脱敏失败就不拉，本地临时目录里再脱敏失败（崩溃）就不写入证据目录，最后一次拉取记为 FAIL。控制机本地的实时日志逐行经 `redact.py --lines` 再写 run.log；临时目录在固定的私有目录（`~/.cache/autoclip-winqa-stage`，700）下，进程已退出、pid 被别的程序复用或超过 24 小时的残留在启动时删除。已知限制：三层及以上混合嵌套转义（且中间层只露出部分路径）可能识别不到。
 
 ## 验收机拉包脚本（E9）
 

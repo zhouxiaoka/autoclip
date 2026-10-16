@@ -206,7 +206,7 @@ def check(args):
         verdict = judge_updater_manifest(u.status_code, uj, 'windows-x86_64')
         uj = uj if isinstance(uj, dict) else {}
         plats = uj.get('platforms') if isinstance(uj.get('platforms'), dict) else {}
-        out['updater_fetch'] = {'status': u.status_code, 'final_url': re.sub(r'\?.*', '', u.url), 'seconds': round(time.monotonic() - t0, 1),
+        out['updater_fetch'] = {'status': u.status_code, 'final_url': u.url, 'seconds': round(time.monotonic() - t0, 1),
                                 'version': uj.get('version'), 'pub_date': uj.get('pub_date'), 'platforms': sorted(plats.keys()),
                                 'windows_url': (plats.get('windows-x86_64') or {}).get('url'), 'verdict': verdict}
         A['updater_manifest_readable'] = verdict == 'ok'

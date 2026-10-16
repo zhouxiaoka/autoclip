@@ -61,14 +61,23 @@ LOG="$OUT/run.log"
 # pulled files land in a private staging dir, are scrubbed there and only then copied into $OUT; on any exit
 # (Ctrl-C, ssh drop, set -u error) the trap removes the staging dir and scrubs $OUT once more.
 exec > >(WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 -u "$HERE/redact.py" --lines | tee -a "$LOG") 2>&1
-# A run killed with -9 cannot clean up: leftover winqa-stage.<pid>.* dirs whose run is gone are deleted first.
-for d in "${TMPDIR:-/tmp}"/winqa-stage.*; do
+# A run killed with -9 cannot clean up. R25 #248: staging dirs live under one fixed private root (not $TMPDIR, which
+# can change between runs); a leftover is deleted when its run is gone, its pid now belongs to another program, or
+# it is older than 24 h. Legacy winqa-stage.* dirs under $TMPDIR and /tmp get the same check.
+STAGE_ROOT="${WINQA_STAGE_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/autoclip-winqa-stage}"
+mkdir -p "$STAGE_ROOT"; chmod 700 "$STAGE_ROOT"
+stage_is_live() {   # $1 = dir named winqa-stage.<pid>.<rand>
+  local p="${1##*/winqa-stage.}"; p="${p%%.*}"
+  case "$p" in ''|*[!0-9]*) return 1;; esac
+  [ -n "$(find "$1" -maxdepth 0 -mmin +1440 2>/dev/null)" ] && return 1
+  kill -0 "$p" 2>/dev/null || return 1
+  ps -o args= -p "$p" 2>/dev/null | grep -q run_winqa
+}
+for d in "$STAGE_ROOT"/winqa-stage.* "${TMPDIR:-/tmp}"/winqa-stage.* /tmp/winqa-stage.*; do
   [ -d "$d" ] || continue
-  p="${d##*/winqa-stage.}"; p="${p%%.*}"
-  case "$p" in ''|*[!0-9]*) rm -rf "$d"; continue;; esac
-  kill -0 "$p" 2>/dev/null || rm -rf "$d"
+  stage_is_live "$d" || rm -rf "$d"
 done
-STAGE="$(mktemp -d "${TMPDIR:-/tmp}/winqa-stage.$$.XXXXXX")"; chmod 700 "$STAGE"
+STAGE="$(mktemp -d "$STAGE_ROOT/winqa-stage.$$.XXXXXX")"; chmod 700 "$STAGE"
 scrub_dir() { WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 "$HERE/redact.py" "$1" --drop-failed >/dev/null 2>&1; }
 final_scrub() { rm -rf "$STAGE"; scrub_dir "$OUT" || true; }
 trap final_scrub EXIT
@@ -83,20 +92,24 @@ remote() { "${SSH[@]}" "$@"; }
 rps() { "${SSH[@]}" 'powershell -NoProfile -ExecutionPolicy Bypass -Command -'; }  # PowerShell 脚本从 stdin 传，避免远端默认 shell 展开 $
 record() { echo "$1=$2" >> "$OUT/steps.txt"; echo "-> $1: $2"; }  # 追加写，续跑时保留之前步骤的结果
 want() { [ "$FROM" -le "$1" ] && [ "$1" -le "$TO" ]; }
-# R24 #215 (Dong): files are scrubbed on the VM first (bundled Python + redact.py, zip members included). If that is
-# not possible app-logs.zip is moved to C:\winqa\raw on the VM and not fetched. What is fetched is scrubbed again
-# in $STAGE (with the real key, failures deleted) before it reaches $OUT.
+# R25 #240/#241: C:\winqa\out on the VM is never modified (app-logs.zip and every original stay as they are). Each
+# pull copies it to C:\winqa\out-scrubbed, scrubs the copy there and fetches only the copy. If the VM-side scrub
+# fails nothing is fetched; if the local scrub in $STAGE fails (crash, not "failed files deleted") nothing is
+# copied into $OUT. Either way pull_in returns 1 and the final pull is recorded as FAIL.
 pull_in() {
   rm -rf "$STAGE/in"; mkdir -p "$STAGE/in"
-  if ! remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\redact.py C:\\winqa\\out" >/dev/null 2>&1; then
-    remote "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force C:\\winqa\\raw | Out-Null; Move-Item -Force C:\\winqa\\out\\app-logs.zip C:\\winqa\\raw\\ -ErrorAction SilentlyContinue\"" >/dev/null 2>&1 || true
+  if ! remote "powershell -NoProfile -Command \"Remove-Item -Recurse -Force C:\\winqa\\out-scrubbed -ErrorAction SilentlyContinue; Copy-Item -Recurse -Force C:\\winqa\\out C:\\winqa\\out-scrubbed -ErrorAction Stop\"" >/dev/null 2>&1 ||
+     ! remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\redact.py C:\\winqa\\out-scrubbed --drop-failed" >/dev/null 2>&1; then
+    echo "WARN: 验收机上脱敏失败，本次不拉取（原件留在验收机 C:\\winqa\\out）"; return 1
   fi
-  "${SCP[@]}" -r "$USER_@$HOST:C:/winqa/out/$1" "$STAGE/in/" 2>/dev/null || true
-  scrub_dir "$STAGE/in" || echo "WARN: 有文件脱敏失败，已丢弃（原件留在验收机）"
+  "${SCP[@]}" -r "$USER_@$HOST:C:/winqa/out-scrubbed/$1" "$STAGE/in/" 2>/dev/null || true
+  if ! scrub_dir "$STAGE/in"; then
+    rm -rf "$STAGE/in"; echo "FAIL: 本地脱敏失败，本次拉回的文件未写入证据目录"; return 1
+  fi
   cp -R "$STAGE/in/." "$OUT/"; rm -rf "$STAGE/in"
 }
-pull() { pull_in "$1"; }
-pull_all() { pull_in '*'; }
+pull() { pull_in "$1" || true; }
+pull_all() { pull_in '*' || true; }
 
 step "0. 本地准备  prev=$PREV ($PREV_VERSION)  candidate=$CAND ($VERSION)"
 PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
@@ -238,14 +251,14 @@ remote "powershell -NoProfile -Command \"Remove-Item -Recurse -Force C:\\winqa\\
 # 最可能的原因），错误又被 catch/2>/dev/null 吞掉，app-logs 回来是空的。
 # 改成 -File 跑 ps/collect_logs.ps1（共享读方式复制后端与桌面壳日志，打包成 app-logs.zip，并写 collect-logs-final.json）
 remote "$PS C:\\winqa\\ps\\collect_logs.ps1 -Label final" || echo "WARN: collect_logs.ps1 failed"
-pull_all
+pull_in '*' && record pull_final ok || record pull_final FAIL
 mkdir -p "$OUT/app-logs"
 if [ -f "$OUT/app-logs.zip" ]; then
   python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$OUT/app-logs.zip" "$OUT/app-logs" && rm -f "$OUT/app-logs.zip"
 fi
 [ -n "$(ls -A "$OUT/app-logs")" ] || echo "WARN: app-logs is empty; see $OUT/collect-logs-final.json"
 rm -rf "$OUT/media" "$OUT/real/media"
-scrub_dir "$OUT" || echo "WARN: 证据目录里有文件脱敏失败，已删除"   # redact.py：真实 key、key 形态、用户目录（R24 #216 唯一实现）
+scrub_dir "$OUT" && record scrub_final ok || record scrub_final FAIL   # redact.py：真实 key、key 形态、用户目录（R24 #216 唯一实现）
 
 step "9. 汇总"
 sort -t= -k1,1 -u "$OUT/steps.txt" -o "$OUT/steps.txt" 2>/dev/null || true

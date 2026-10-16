@@ -1,26 +1,33 @@
-"""The one scrubber for Windows-QA evidence and diagnostics. Every other script calls it; none has its own rule.
+"""The one scrubber for Windows-QA evidence and diagnostics. The other winqa scripts call it instead of keeping
+their own rules (scanned by test_r25_247).
 
-Removes: the real QA key and its app-masked form (exact, from WINQA_MODEL_API_KEY / callers), generic key shapes
-(sk-..., Bearer/Authorization/api_key values, "api_key_masked" values), personal home directories
-(C:\\Users\\x, X$\\Users\\x on UNC shares, /Users/x, /home/x) in any escaped or percent-encoded spelling, and, in
-diagnostic mode, URLs.
+Removes, with one rule table in every mode: the real QA key and its app-masked form (exact, from
+WINQA_MODEL_API_KEY / callers), generic key shapes (sk-..., Bearer/Authorization/api_key values), values of
+credential-named JSON fields (api_key*, authorization, *token, secret, password, cookie), URLs, and personal home
+directories (C:\\Users\\x, X$\\Users\\x on UNC shares, /Users/x, /home/x) in the spellings listed below.
 
-Usage: python3 redact.py DIR [--drop-failed]   evidence files (.json .log .err .txt .md .cmd, and those inside .zip)
-       python3 redact.py --stdin                diagnostics: whole stream (adds URLs)
-       python3 redact.py --lines                diagnostics, line by line (for a live `tee` log)
+Usage: python3 redact.py DIR [--drop-failed]   all files under DIR, by content (zip members too; images kept;
+                                               unreadable binary refused)
+       python3 redact.py --stdin                whole stream
+       python3 redact.py --lines                line by line (for a live `tee` log)
 
-Design (R24): one boundary rule, applied to every reading, union of the results.
-1. Readings. Text: its raw characters, URL-decoded once, after one escape pass, and fully decoded (escape layers \\\\ \\/ \\uXXXX %XX undone, exactly
-   as repeated left-to-right passes would). Bytes: every plausible encoding (BOM codec; else utf-8, or gb18030 plus
-   shift_jis/big5 when not utf-8; plus UTF-16 LE/BE at both byte alignments whenever a NUL byte is present).
-2. Root: a drive letter followed by ':' or '$' (UNC admin share), separators, 'Users', separators; or '/Users/',
-   '/home/'. Roots are case-insensitive and must not continue an ASCII word or path (a CJK character or '_' right
-   before the root does not protect it).
-3. Name: from the raw offset where the name starts, in EVERY reading, up to that reading's next separator (POSIX
-   '/', Windows '\\' or '/') or the end of the line. '.'/'..' segments are skipped. Nothing else ends a name.
-4. Union: all ranges of all readings are merged and replaced (<url> > <user> > ***). When in doubt, mask more.
-5. Files keep their encoding, BOM and line endings; a reading that does not round-trip leaves the file unchanged
-   and reports it (with --drop-failed the file is deleted instead).
+Design (R24/R25): one boundary rule, applied to each reading below, union of the results.
+1. Readings. Text: raw; URL-decoded once; after one escape pass; fully decoded (escape layers \\\\ \\/ \\uXXXX %XX
+   undone, as repeated left-to-right passes would). Bytes: BOM codec, or utf-8 / gb18030 plus shift_jis and big5;
+   plus utf-8 and UTF-16 LE/BE at both byte alignments when a NUL byte is present or a BOM names UTF-16 (R25 #242).
+2. Root: a drive letter followed by ':' or '$', separators, 'Users', separators; or '/Users/', '/home/'.
+   Case-insensitive. A root right after an ASCII letter or digit continues a word or path and is not one; a POSIX
+   root right after '\\' or as a relative './' '../' path is not one either. Anything else before it ('.', '-',
+   '_', CJK, quotes) does not protect it (R25 #250).
+3. Name: from the raw offset where the name starts, in each participating reading, up to that reading's next
+   separator or the end of the line. '.'/'..' segments are skipped.
+4. Union: all ranges are merged and replaced (<url> > <user> > ***). When in doubt, mask more.
+5. Files keep their encoding, BOM and line endings; a file that cannot be scrubbed is left unchanged and reported
+   (with --drop-failed it is deleted, and the exit code is 0 only if every such file was deleted).
+
+Known limitation: a home path hidden under three or more mixed escape layers whose intermediate layer is itself
+only a partial root (for example a JSON string of a URL-encoded JSON string of a path) may not be recognised; the
+readings cover raw, one URL decode, one escape pass and the fully decoded text.
 """
 import io, json, os, re, sys, zipfile
 from bisect import bisect_right
@@ -31,7 +38,6 @@ _RANK = {URLMARK: 2, USER: 1, SECRET: 0}
 _HEX = set('0123456789abcdefABCDEF')
 _EOL = '\r\n'
 _WIN_SEPS, _POSIX_SEPS = '\\/', '/'
-_SUFFIXES = ('.json', '.log', '.err', '.txt', '.md', '.cmd')
 # value group 2 is masked; the prefix stays readable
 _SECRET_PATTERNS = [re.compile(r'()(sk-[A-Za-z0-9_\-]{6,})'),
                     re.compile(r'(?i)(authorization["\'=:\s]+)((?:(?:bearer|basic|token)\s+)?(?!\*\*\*)[^\s"\',]+)'),
@@ -146,6 +152,16 @@ def _views(text):
     return out + [dec]
 
 
+def _relative_dot(ch, k):
+    """'./home/x' or '../home/x': a POSIX relative path, not a home root (R25 #250: 'x.C:', 'a-/home' are roots)."""
+    if k < 1 or ch[k - 1] != '.':
+        return False
+    j = k - 1
+    while j > 0 and ch[j - 1] == '.':
+        j -= 1
+    return k - j <= 2 and (j == 0 or not (ch[j - 1].isascii() and ch[j - 1].isalnum()) and ch[j - 1] not in '-_')
+
+
 def _roots(view):
     """-> [(raw offset where the user name starts, separators)] for every home root in this reading."""
     ch, st, en = view
@@ -163,11 +179,11 @@ def _roots(view):
 
     for k in range(n):
         prev = ch[k - 1] if k else ''
-        if prev and prev.isascii() and (prev.isalnum() or prev in '.-'):
-            continue
+        if prev and prev.isascii() and prev.isalnum():
+            continue                  # continues an ASCII word or path ("api/home", "xC:")
         if ch[k].isascii() and ch[k].isalpha() and k + 1 < n and ch[k + 1] in ':$':
             j, seps, words = skip(k + 2, _WIN_SEPS), _WIN_SEPS, ('users',)
-        elif ch[k] == '/' and prev != '\\':
+        elif ch[k] == '/' and prev != '\\' and not _relative_dot(ch, k):
             j, seps, words = k + 1, _POSIX_SEPS, ('users', 'home')
         else:
             continue
@@ -244,7 +260,7 @@ def _key_forms(keys):
     return out
 
 
-def text_ranges(text, urls=False, keys=()):
+def text_ranges(text, keys=()):
     """Raw ranges to mask in text: the one boundary rule, every reading, union."""
     views = _views(text)
     roots = [set(_roots(v)) for v in views]
@@ -255,8 +271,7 @@ def text_ranges(text, urls=False, keys=()):
             seg = _segment(v, s, seps, (s, seps) in own)
             if seg:
                 out.append(seg + (USER,))
-        if urls:
-            out += _url_ranges(v)
+        out += _url_ranges(v)
         out += _secret_ranges(v, _key_forms(keys))
     return out
 
@@ -280,9 +295,9 @@ def _apply(seq, ranges, mark):
     return seq[:0].join(out)
 
 
-def scrub(text: str, urls: bool = False, keys=()) -> str:
-    """The single text entry point."""
-    return _apply(text, text_ranges(text, urls, keys), str)
+def scrub(text: str, keys=()) -> str:
+    """The single text entry point: one rule table (keys, key shapes, home directories, URLs) for every caller."""
+    return _apply(text, text_ranges(text, keys), str)
 
 
 def scrub_homes(text: str) -> str:
@@ -290,45 +305,51 @@ def scrub_homes(text: str) -> str:
 
 
 def scrub_stream(text: str) -> str:
-    return scrub(text, urls=True)
+    return scrub(text)
 
 
 def scrub_diagnostic(text: str, keys=()) -> str:
     """Everything a QA helper writes or prints (winqa_probe / winqa_real save() and log lines)."""
-    return scrub(text, urls=True, keys=keys)
+    return scrub(text, keys=keys)
 
 
 _LONE = re.compile('[\ud800-\udfff]')
 
 
-def scrub_obj(o, keys=(), urls=True, field=None):
-    """Every string of a JSON-like value (dict keys included); the result stays valid JSON."""
+_SECRET_FIELD = re.compile(r'(?i)^(?:x-)?(?:api[_-]?key(?:[_-]?masked)?|authorization|proxy-authorization|'
+                           r'(?:access|refresh|id|auth)[_-]?token|token|secret|client[_-]?secret|password|passwd|'
+                           r'cookie|set-cookie)$')
+
+
+def scrub_obj(o, keys=(), field=None):
+    """Every string of a JSON-like value (dict keys included); values of credential fields (R25 #243) are masked
+    whole. The result stays valid JSON."""
     if isinstance(o, dict):
         out = {}   # R20 #119: two home paths used as keys may scrub to one key; keep both.
         for k, v in o.items():
-            ck = scrub_obj(k, keys, urls) if isinstance(k, str) else k
+            ck = scrub_obj(k, keys) if isinstance(k, str) else k
             if ck in out:
                 i = 2
                 while f'{ck}#{i}' in out:
                     i += 1
                 ck = f'{ck}#{i}'
-            out[ck] = scrub_obj(v, keys, urls, k)
+            out[ck] = scrub_obj(v, keys, k if isinstance(k, str) else None)
         return out
     if isinstance(o, (list, tuple)):
-        return [scrub_obj(x, keys, urls) for x in o]
+        return [scrub_obj(x, keys, field) for x in o]
     if isinstance(o, str):
-        return SECRET if field == 'api_key_masked' and o else scrub(o, urls, keys)
+        return SECRET if o and field and _SECRET_FIELD.match(field) else scrub(o, keys)
     return o
 
 
-def _scrub_json(text: str, keys, urls=False):
+def _scrub_json(text: str, keys):
     """R18 #85: parse first so escaped names are seen as text; returns None if not JSON."""
     nl = '\r\n' if '\r\n' in text else '\n'
     try:
         data = json.loads(text)
     except ValueError:
         return None
-    clean = scrub_obj(data, keys, urls)
+    clean = scrub_obj(data, keys)
     if clean == data:
         return text
     s = json.dumps(clean, ensure_ascii=False, indent=2 if '\n' in text.strip() else None)
@@ -366,7 +387,12 @@ def readings(raw: bytes):
     """-> (bom, (codec, errors) for writing back, [(codec, errors, byte offset), ...] every reading to mask)."""
     for bom, codec, errors in _BOMS:
         if raw.startswith(bom):
-            return bom, (codec, errors), [(codec, errors, 0)]
+            body = raw[len(bom):]
+            reads = [(codec, errors, 0)]
+            if b'\x00' in body or not codec.startswith('utf-8'):   # R25 #242: mixed runs after a BOM too
+                reads += [('utf-8', 'surrogateescape', 0)]
+                reads += [(c, 'surrogatepass', off) for c in ('utf-16-le', 'utf-16-be') for off in (0, 1)]
+            return bom, (codec, errors), list(dict.fromkeys(reads))
     if raw and raw.count(0) * 4 >= len(raw) and len(raw) % 2 == 0:
         odd = raw[1::2].count(0) >= raw[0::2].count(0)
         prim = next((c for c in (('utf-16-le', 'utf-16-be') if odd else ('utf-16-be', 'utf-16-le'))
@@ -397,7 +423,7 @@ def _width(codec):
     return 4 if 'utf-32' in codec else 2 if 'utf-16' in codec else 1
 
 
-def _byte_ranges(body, codec, errors, off, urls, keys):
+def _byte_ranges(body, codec, errors, off, keys):
     part = body[off:]
     if codec.startswith('utf-16') and errors == 'surrogatepass':
         part = part[:len(part) // 2 * 2]
@@ -412,7 +438,7 @@ def _byte_ranges(body, codec, errors, off, urls, keys):
     forms = _key_forms(keys)
     keys = forms + [f.encode('utf-8').decode(codec, 'surrogateescape' if 'utf-16' not in codec else 'ignore')
                     for f in forms if codec != 'utf-8']
-    return [(offs[s], offs[e], (lab, codec, off)) for s, e, lab in text_ranges(text, urls, keys)]
+    return [(offs[s], offs[e], (lab, codec, off)) for s, e, lab in text_ranges(text, keys)]
 
 
 def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool = False, keys=()) -> bytes:
@@ -425,7 +451,7 @@ def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool
     body = raw[len(bom):]
     ranges = []
     for c, e, off in readings(raw)[2]:
-        ranges += _byte_ranges(body, c, e, off, stream, keys)
+        ranges += _byte_ranges(body, c, e, off, keys)
     # A reading of the same unit width shifted by one byte sees the same characters one byte early; where the
     # file's own reading already masks there it adds nothing but a widened edge, so it is not used there.
     own = [(s, t, lab) for s, t, (lab, c, off) in ranges if (c, off) == (codec, 0)]
@@ -456,18 +482,39 @@ def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool
     return raw if new == raw else new
 
 
-def _scrub_zip(raw: bytes, key: str) -> bytes:
-    """Members with an evidence suffix are scrubbed like files; others are kept."""
-    src = zipfile.ZipFile(io.BytesIO(raw))
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
-        for info in src.infolist():
-            data = src.read(info)
-            name = scrub(info.filename)
-            if not info.is_dir() and Path(info.filename).suffix.lower() in _SUFFIXES:
-                data = scrub_bytes(data, key, json_file=info.filename.lower().endswith('.json'))
-            dst.writestr(name, data)
-    return buf.getvalue()
+_KEEP_BINARY = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')   # screenshots: no text to scrub
+
+
+def _looks_binary(data: bytes) -> bool:
+    """NUL bytes and no reading (utf-8, UTF-16 LE/BE at either alignment) that is mostly text."""
+    if b'\x00' not in data or any(data.startswith(b) for b, _, _ in _BOMS):
+        return False
+    for codec, off in (('utf-8', 0), ('utf-16-le', 0), ('utf-16-le', 1), ('utf-16-be', 0), ('utf-16-be', 1)):
+        t = data[off:].decode(codec, 'replace')
+        bad = sum(1 for c in t if (ord(c) < 32 and c not in '\t\n\r\f') or c == '\ufffd' or 0xd800 <= ord(c) < 0xe000)
+        if bad * 10 <= len(t):
+            return False
+    return True
+
+
+def scrub_file(name: str, data: bytes, key: str = '') -> bytes:
+    """R25 #245: every file is handled by content, not by a suffix allow-list. Zip members get the same rule;
+    images are kept; anything else is scrubbed as text, and binary data that is not text in a known encoding is
+    refused (ValueError) instead of being passed through."""
+    suf = Path(name).suffix.lower()
+    if suf in _KEEP_BINARY:
+        return data
+    if data[:4] == b'PK\x03\x04' or suf == '.zip':
+        src = zipfile.ZipFile(io.BytesIO(data))
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
+            for info in src.infolist():
+                if not info.is_dir():
+                    dst.writestr(scrub(info.filename), scrub_file(info.filename, src.read(info), key))
+        return buf.getvalue()
+    if _looks_binary(data):
+        raise ValueError('binary data of unknown type')
+    return scrub_bytes(data, key, json_file=suf == '.json')
 
 
 def main(folder, drop_failed=False):
@@ -475,15 +522,16 @@ def main(folder, drop_failed=False):
 
 
 def _run(folder, drop_failed=False):
+    """Exit 0 when every file is scrubbed (or, with --drop-failed, every file that could not be is deleted);
+    any other outcome (crash included) is non-zero and callers must not use the directory."""
     key = os.environ.get('WINQA_MODEL_API_KEY') or os.environ.get('AUTOCLIP_QA_DASHSCOPE_KEY', '')
     hits, failed = 0, []
     for p in sorted(folder.rglob('*')):
-        suf = p.suffix.lower()
-        if not p.is_file() or (suf not in _SUFFIXES and suf != '.zip'):
+        if not p.is_file():
             continue
         try:   # R23 #188: read, scrub and write per file
             raw = p.read_bytes()
-            out = _scrub_zip(raw, key) if suf == '.zip' else scrub_bytes(raw, key, json_file=suf == '.json')
+            out = scrub_file(p.name, raw, key)
             if out != raw:
                 p.write_bytes(out)
                 hits += 1
@@ -491,11 +539,11 @@ def _run(folder, drop_failed=False):
             rel = scrub(str(p.relative_to(folder)))
             failed.append(rel)
             if drop_failed:
-                p.unlink(missing_ok=True)
+                p.unlink()
             print(f'redact: ERROR {rel}: {type(exc).__name__}; file ' + ('deleted' if drop_failed else 'left unchanged'),
                   file=sys.stderr)
     print(f'redact: rewrote {hits} file(s)' + (f', {len(failed)} failed' if failed else ''))
-    if failed:
+    if failed and not drop_failed:
         raise SystemExit(2)
     return hits
 
