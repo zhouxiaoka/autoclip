@@ -163,7 +163,11 @@ def test_shell_shutdown_intent_marks_clean_and_does_not_shut_down(monkeypatch, k
     from backend.services.studio.shutdown_marker import _root
     assert (_root() / store.INSTANCE).read_text() == kind
     assert _kind_now() == 'clean'
-    assert not (_root() / store.INSTANCE).exists()  # read once and deleted
+    # R19 #99: classifying does not delete; only release() after the terminal is written does.
+    assert (_root() / store.INSTANCE).exists()
+    from backend.services.studio.shutdown_marker import release
+    release(store.INSTANCE)
+    assert not (_root() / store.INSTANCE).exists()
 
 
 @pytest.mark.parametrize('kind', ['parent_lost', 'clean', 'crash', '', 'USER_QUIT', '../x'])

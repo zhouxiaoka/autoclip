@@ -15,7 +15,8 @@ from pathlib import Path
 from backend.core.path_utils import get_projects_directory
 
 lock = threading.RLock()
-INSTANCE = uuid.uuid4().hex
+from backend.core.launch_token import instance_id as _shell_instance_id  # noqa: E402
+INSTANCE = _shell_instance_id() or uuid.uuid4().hex  # R19 #98: shell-assigned when launched by the desktop app
 
 logger = logging.getLogger(__name__)
 IO_FAILURE_MESSAGE = '无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留'
@@ -386,6 +387,10 @@ def read(project_id: str, *, recover: bool = True):
         # A live CLI / MCP producer owns its run: the desktop list must not fail it.
         return data
     interrupted = set()
+    # R19 #97/#99: classify how a dead owner ended BEFORE anything settles the render (settling replaces
+    # the analysis and drops its instance); the marker is released only after the terminal is written.
+    prior_analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+    dead_instance = prior_analysis.get('instance') if _stale_analysis(prior_analysis) else None
     cover_finished = _apply_finished_covers(path, data)
     for job in data['jobs']:
         if job['status'] == 'completed' and job.get('cover_pending') and job.get('instance') != INSTANCE:
@@ -418,6 +423,7 @@ def read(project_id: str, *, recover: bool = True):
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
+        _record_restart_shutdown_kind(data, dead_instance)
     patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished or settle or bool(interrupted)
     patched = _apply_read_receipts(path, data) or patched
     patched = _recover_interrupted_run(data) or patched
@@ -433,6 +439,9 @@ def read(project_id: str, *, recover: bool = True):
         else:
             _read_failures.pop(path, None)
             _pending_links.pop(path, None)
+            if dead_instance:
+                from backend.services.studio.shutdown_marker import release
+                release(dead_instance)
     else:
         # Stale receipts cannot affect later attempts or already saved terminals.
         _read_failures.pop(path, None)
@@ -501,6 +510,20 @@ def attempt_identity(*sources):
     return out
 
 
+def _record_restart_shutdown_kind(data, instance):
+    """R16 #43 / R19 #97: a render settled because of a restart records how the previous process ended."""
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+    if not instance or not generation or generation.get('status') == 'rendering':
+        return
+    variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)]
+    if generation.get('error_code') == RESTART_CODE or any(v.get('error_code') == RESTART_CODE for v in variants):
+        from backend.services.studio.shutdown_marker import shutdown_kind
+        kind = shutdown_kind(instance)
+        generation['shutdown_kind'] = kind
+        if isinstance(data.get('analysis'), dict):
+            data['analysis']['shutdown_kind'] = kind
+
+
 def _recover_interrupted_run(data):
     """Close a screening/production/rendering run whose worker died with the previous process.
 
@@ -523,10 +546,7 @@ def _recover_interrupted_run(data):
                     variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
         settle_generation(data)
         if generation.get('status') != 'rendering':
-            if generation.get('error_code') == RESTART_CODE or any(v.get('error_code') == RESTART_CODE for v in variants):
-                # R16 #43: a restart midway through rendering records how the previous process ended.
-                generation['shutdown_kind'] = kind
-                data['analysis']['shutdown_kind'] = kind
+            _record_restart_shutdown_kind(data, (analysis or {}).get('instance'))
             return True
     if generation and generation.get('status') in ('screening', 'production', 'rendering') and not (generation['status'] == 'rendering' and variants):
         owned = isinstance(analysis, dict) and analysis.get('status') == 'running' and analysis.get('instance') == INSTANCE
@@ -717,6 +737,11 @@ def _attach_run_telemetry(data, project_id, previous):
                 record[key] = base + value - counted.get(key, 0)
             elif key == 'retry_count' and not snapshot.get('llm_calls') and prior_identity == identity:
                 record[key] = prior.get(key) or value
+            elif key in ATTEMPT_IDENTITY_KEYS and isinstance(record.get(key), str) and record[key]:
+                # R19 #95 (R16 #40): the identity recorded at attempt start is final; the provider the
+                # snapshot saw (settings may have changed mid-run) is kept apart, never in its place.
+                if key == 'provider' and value != record[key]:
+                    record['called_provider'] = value
             else:
                 record[key] = value
         persisted[usage_id] = {key: snapshot[key] for key in usage_keys if key in snapshot}

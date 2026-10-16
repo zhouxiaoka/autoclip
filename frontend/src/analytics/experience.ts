@@ -2,7 +2,7 @@
 import { captureBusinessEvent } from './posthog'
 import { isConnectionTestErrorCode, safeHttpStatus } from './connectionTestCode'
 import { workflow } from './observer'
-import { sanitizeProviderValidationProperties, SuccessRateEvent } from './successRateContract'
+import { sanitizeProviderValidationProperties, SuccessRateEvent, TELEMETRY_PROVIDERS } from './successRateContract'
 import { canonOutcome, errorCode, telemetryId, type Properties } from './workflow'
 
 export type Placement = 'home_setup' | 'settings_model'
@@ -13,7 +13,7 @@ const enums: Record<string, readonly string[]> = {
   trigger: ['initial', 'import_blocked', 'auto', 'manual', 'provider_change', 'load', 'edit', 'portrait_preset'],
   section: ['ai', 'publish', 'app', 'feedback'], role: ['analysis', 'vision', 'cover', 'transcription'],
   reason: ['setup_required', 'provider', 'model', 'key'], config_source: ['preset', 'customized'], mode: ['initial', 'update'],
-  provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other'],
+  provider: TELEMETRY_PROVIDERS, // R19 #96: same generated enum as success-rate events (every preset)
   source: ['live', 'cache', 'catalog'], outcome: ['success', 'error', 'blocked', 'unknown'],
   resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
   analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'sensevoice_local', 'cloud', 'unknown'],

@@ -9,9 +9,14 @@ as service_restarted.
   overwrites a user_quit/update marker and is never reported as clean.
 - begin_shutdown() writes nothing: it runs on both paths.
 
-On the next start the dead run's instance marker is read once and deleted:
+On the next start the dead run's instance marker is classified once (cached per process) and only
+deleted by release() after the recovered terminal is on disk (R19 #99), so a failed write followed by
+another restart still reads the same classification:
 user_quit/update -> ``clean``, parent_lost -> ``parent_lost``, missing -> ``crash``,
 unreadable or invalid content -> ``unknown`` (also for a missing/invalid instance id).
+R19 #98: when the shell's intent got no 200 in time (slow disk, busy backend) it writes
+``<AUTOCLIP_APP_DIR>/shutdown_unacked/<instance>`` before killing; a missing marker with that record is
+``unknown`` (we cannot tell), never ``crash``. A marker that did land in time still wins.
 Enum only; nothing else leaves the box.
 """
 from __future__ import annotations
@@ -65,8 +70,19 @@ def mark(kind: str, instance: str | None = None) -> bool:
         return False
 
 
+def _unacked(instance: str) -> Path | None:
+    app_dir = os.getenv('AUTOCLIP_APP_DIR')
+    return Path(app_dir).expanduser() / 'shutdown_unacked' / instance if app_dir else None
+
+
 def _classify(path: Path) -> str:
     if not path.exists():
+        unacked = _unacked(path.name)
+        try:
+            if unacked is not None and unacked.exists():
+                return 'unknown'
+        except OSError:
+            return 'unknown'
         return 'crash'
     try:
         content = path.read_text(encoding='ascii').strip()
@@ -90,11 +106,22 @@ def shutdown_kind(instance: str | None) -> str:
     with _lock:
         if key in _consumed:  # several projects can share one dead instance
             return _consumed[key]
-        path = root / instance
-        kind = _classify(path)
+        kind = _classify(root / instance)
         _consumed[key] = kind
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
     return kind
+
+
+def release(instance: str | None) -> None:
+    """R19 #99: delete a dead instance's marker; call only after its terminal state was written."""
+    if not instance or not re.fullmatch(r'[0-9a-f]{32}', str(instance)):
+        return
+    try:
+        root = _root()
+        with _lock:
+            if (str(root), instance) in _consumed:
+                (root / instance).unlink(missing_ok=True)
+                unacked = _unacked(instance)
+                if unacked is not None:
+                    unacked.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001 - cleanup only; _KEEP pruning bounds leftovers
+        pass

@@ -8,7 +8,7 @@ const experience = loadTs(path.join(__dirname, '../src/analytics/experience.ts')
   './posthog': { captureBusinessEvent() {} },
   './observer': { workflow: { generation() { return 1 }, active() { return false } } },
   './workflow': loadTs(path.join(__dirname, '../src/analytics/workflow.ts')),
-  './successRateContract': { sanitizeProviderValidationProperties: x => x, SuccessRateEvent: { ProviderValidationFinished: 'provider_validation_finished' } },
+  './successRateContract': { sanitizeProviderValidationProperties: x => x, SuccessRateEvent: { ProviderValidationFinished: 'provider_validation_finished' }, TELEMETRY_PROVIDERS: loadTs(path.join(__dirname, '../src/analytics/successRateContract.ts')).TELEMETRY_PROVIDERS },
 }, path.join(__dirname, '../src/analytics'))
 
 test('first-run defaults to 88API and maps choices to later / one-click / settings', () => {

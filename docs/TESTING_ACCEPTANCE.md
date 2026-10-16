@@ -27,7 +27,7 @@
 
 ## 3. 源码检查：一个入口
 
-在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci`；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
+在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci`（必装：后端测试 `test_r16_history_terminal.py` 会调用 node 和 `frontend/node_modules/typescript`，缺了直接失败，不会 skip）；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
 
 ```bash
 python scripts/quality_gate.py --report /absolute/local/evidence/quality.json

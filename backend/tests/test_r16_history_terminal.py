@@ -43,7 +43,9 @@ def project(tmp_path, monkeypatch):
 
 def _capture(kind, watch_id, snapshot):
     if not shutil.which('node') or not (FRONTEND / 'node_modules' / 'typescript').is_dir():
-        pytest.skip('frontend toolchain not installed')
+        # R19 #102: never skip (quality_gate treats an unexpected skip as BLOCKED). The frontend toolchain
+        # is a required test dependency: `cd frontend && npm ci` (docs/TESTING_ACCEPTANCE.md).
+        pytest.fail('frontend toolchain missing: run `cd frontend && npm ci` (node + frontend/node_modules/typescript are required)')
     done = subprocess.run(['node', '-e', SCRIPT, kind, watch_id, 'run', str(PRESETS)], input=json.dumps(snapshot),
                           cwd=FRONTEND, capture_output=True, text=True, check=True, timeout=60)
     return json.loads(done.stdout)

@@ -125,6 +125,11 @@ export function sanitizeProvider(value?: string | null, allowAsr = false): strin
   return undefined
 }
 
+/** R19 #96 (R16 #41): the one provider enum for every event; unknown/custom ids collapse to 'other'. */
+export function telemetryProvider(value?: string | null): string {
+  return sanitizeProvider(value) ?? 'other'
+}
+
 export function sanitizeUpstreamErrorType(value?: string | null): UpstreamErrorType | undefined {
   if (typeof value === 'string' && (UPSTREAM_ERROR_TYPES as readonly string[]).includes(value)) {
     return value as UpstreamErrorType

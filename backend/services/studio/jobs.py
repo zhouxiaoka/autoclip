@@ -285,7 +285,7 @@ def _analyze(project_id, prefs, url, browser):
         message = str(error)[:700]
         diagnostics = [error.diagnostics()] if isinstance(error, VisionRequestError) else None
         def failed(data):
-            data['analysis'] = {'status': 'failed', 'error': message}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'failed', 'error': message}
             if diagnostics:
                 data['analysis']['diagnostics'] = diagnostics
         try:
@@ -1788,7 +1788,7 @@ def _produce_selected(project_id, plan):
         if errors:
             result['error'] = '；'.join(errors)
             result['error_code'] = error_codes[0] if len(set(error_codes)) == 1 else 'multiple'
-        store.change(project_id, lambda data:data.update(analysis=result))
+        store.change(project_id, lambda data:data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **result}))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         store.raise_owned_read_error(error)
@@ -1798,7 +1798,7 @@ def _produce_selected(project_id, plan):
             'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
             'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}
         try:
-            store.change(project_id, lambda data:data.update(analysis=failure))
+            store.change(project_id, lambda data:data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **failure}))
             mark_project(project_id,'failed')
         except FileNotFoundError:
             pass

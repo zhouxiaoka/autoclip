@@ -32,6 +32,10 @@ pub struct BackendManager {
     process: Arc<Mutex<Option<Child>>>,
     /// R16 #42: per-launch secret for POST /internal/shutdown-intent; never logged.
     local_token: Mutex<String>,
+    /// R19 #98: per-launch backend instance id (not secret) and the app dir the backend was given,
+    /// so an unacknowledged shutdown intent can be recorded for exactly this backend.
+    instance_id: Mutex<String>,
+    app_dir: Mutex<Option<PathBuf>>,
     #[cfg(windows)]
     job: Mutex<Option<crate::windows_job::BackendJob>>,
 }
@@ -48,6 +52,8 @@ impl BackendManager {
             status: Arc::new(Mutex::new(BackendStatus::default())),
             process: Arc::new(Mutex::new(None)),
             local_token: Mutex::new(String::new()),
+            instance_id: Mutex::new(String::new()),
+            app_dir: Mutex::new(None),
             #[cfg(windows)]
             job: Mutex::new(None),
         }
@@ -83,6 +89,9 @@ impl BackendManager {
         let token = new_local_token()?;
         cmd.env("AUTOCLIP_SHUTDOWN_TOKEN", &token); // env only: never argv, never logged
         *self.local_token.lock().unwrap() = token;
+        let instance_id = new_instance_id()?;
+        cmd.env("AUTOCLIP_INSTANCE_ID", &instance_id);
+        *self.instance_id.lock().unwrap() = instance_id;
 
         // 崩溃上报：构建时若注入了 SENTRY_DSN，传给 Python 后端（未配置则为空，sentry_setup no-op）
         if let Some(dsn) = option_env!("SENTRY_DSN") {
@@ -121,6 +130,7 @@ impl BackendManager {
         // their data.
         let app_dir = crate::telemetry_runtime::app_dir(app_handle.path().data_dir().ok());
         crate::telemetry_runtime::configure_backend(&mut cmd, app_dir.as_deref());
+        *self.app_dir.lock().unwrap() = app_dir.clone();
 
         #[cfg(target_os = "windows")]
         {
@@ -189,7 +199,15 @@ impl BackendManager {
         let mut process = self.process.lock().unwrap();
         if status.port != 0 && process.as_mut().map_or(false, |c| matches!(c.try_wait(), Ok(None))) {
             let token = self.local_token.lock().unwrap().clone();
-            let _ = notify_shutdown_intent(status.port, &token, intent, Duration::from_secs(3));
+            let result = notify_shutdown_intent(status.port, &token, intent, Duration::from_secs(3));
+            // R19 #98: no 200 in time (timeout, refused, non-200) -> leave a record so the next start
+            // reads this exit as unknown instead of crash. Best effort; never blocks the kill.
+            if !intent_acknowledged(&result) {
+                let instance = self.instance_id.lock().unwrap().clone();
+                if let Some(dir) = self.app_dir.lock().unwrap().as_deref() {
+                    let _ = record_unacknowledged_intent(dir, &instance);
+                }
+            }
         }
         #[cfg(windows)]
         let terminated_tree = {
@@ -522,6 +540,27 @@ fn new_local_token() -> Result<String, String> {
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// 16 bytes from the OS CSPRNG, hex (32 chars): the backend's per-launch instance id.
+fn new_instance_id() -> Result<String, String> {
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).map_err(|_| "无法生成实例标识".to_string())?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+pub(crate) fn intent_acknowledged(result: &std::io::Result<bool>) -> bool {
+    matches!(result, Ok(true))
+}
+
+/// R19 #98: `<app_dir>/shutdown_unacked/<instance>`; the backend maps "no marker + this record" to unknown.
+pub(crate) fn record_unacknowledged_intent(app_dir: &std::path::Path, instance: &str) -> std::io::Result<()> {
+    if instance.len() != 32 || !instance.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "instance"));
+    }
+    let dir = app_dir.join("shutdown_unacked");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(instance), b"unacked")
+}
+
 /// R16 #42: POST /internal/shutdown-intent on loopback and wait (bounded by `budget`) for 200.
 pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownIntent, budget: Duration) -> std::io::Result<bool> {
     use std::io::{Read, Write};
@@ -551,10 +590,11 @@ pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownInt
 
 #[cfg(test)]
 mod shutdown_intent_tests {
-    use super::{new_local_token, notify_shutdown_intent, ShutdownIntent};
+    use super::{intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_unacknowledged_intent, ShutdownIntent};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
+    use std::thread;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -625,5 +665,44 @@ mod shutdown_intent_tests {
         assert_eq!(a.len(), 64); // 32 bytes
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b);
+    }
+
+    // --- R19 #98 ---------------------------------------------------------------------------
+    #[test]
+    fn timeout_or_non_200_is_not_acknowledged_and_leaves_an_unacked_record() {
+        let silent = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = silent.local_addr().unwrap().port();
+        let _hold = thread::spawn(move || { let (_s, _) = silent.accept().unwrap(); thread::sleep(Duration::from_secs(2)); });
+        let timed_out = notify_shutdown_intent(port, "t", ShutdownIntent::UserQuit, Duration::from_millis(300));
+        assert!(!intent_acknowledged(&timed_out));
+        assert!(!intent_acknowledged(&Ok(false)));
+        assert!(!intent_acknowledged(&Err(std::io::Error::from(std::io::ErrorKind::ConnectionRefused))));
+        assert!(intent_acknowledged(&Ok(true)));
+        let dir = std::env::temp_dir().join(format!("acr19-{}", new_instance_id().unwrap()));
+        let instance = new_instance_id().unwrap();
+        record_unacknowledged_intent(&dir, &instance).unwrap();
+        assert_eq!(std::fs::read(dir.join("shutdown_unacked").join(&instance)).unwrap(), b"unacked");
+        assert!(record_unacknowledged_intent(&dir, "../../etc/passwd").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instance_ids_are_32_hex_and_fresh() {
+        let a = new_instance_id().unwrap();
+        assert_eq!(a.len(), 32);
+        assert!(a.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
+        assert_ne!(a, new_instance_id().unwrap());
+    }
+
+    #[test]
+    fn stop_records_unacked_only_when_the_intent_was_not_acknowledged() {
+        let src = include_str!("backend_manager.rs");
+        let stop = &src[src.find("pub fn stop_with_intent").unwrap()..src.find("pub fn restart").unwrap()];
+        let notify = stop.find("notify_shutdown_intent(").unwrap();
+        let record = stop.find("record_unacknowledged_intent(").unwrap();
+        let kill = stop.find("child.kill()").unwrap();
+        assert!(notify < record && record < kill, "record before kill, after notify");
+        assert!(stop.contains("if !intent_acknowledged(&result)"));
+        assert!(!stop.contains("let _ = notify_shutdown_intent"), "result must not be discarded");
     }
 }
