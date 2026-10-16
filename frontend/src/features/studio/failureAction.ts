@@ -23,14 +23,23 @@ const REASONS: Record<string, string> = {
 
 export type FailureAction = { kind: 'retry' } | { kind: 'settings'; reason: string; destination: string }
 
-/** failure_stage 'subtitle' = the transcription step: a user-cause failure there is the ASR connection. */
+/** Which settings row fixes a user-cause failure, keyed by failure_stage (one table):
+ * subtitle = cloud transcription (ASR), vision = visual-understanding binding; everything else
+ * is the text-analysis binding. Values are SettingsPage SECTION_ALIASES keys. */
+const STAGE_SECTION: Record<string, string> = { subtitle: 'speech', vision: 'vision' }
+export const VISION_SETTINGS_DESTINATION = '/settings?section=vision'
+
 export function settingsDestination(failureStage?: string | null): string {
-  return failureStage === 'subtitle' ? TRANSCRIPTION_SETTINGS_DESTINATION : SETTINGS_DESTINATION
+  const section = STAGE_SECTION[failureStage || '']
+  return section ? `/settings?section=${section}` : SETTINGS_DESTINATION
 }
 
+const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
+
+/** One classification: the controlled upstream type is the most precise signal and wins; the
+ * coarse error_code is only used when upstream says nothing user-attributable. */
 export function failureAction(errorCode?: string | null, upstreamType?: string | null, failureStage?: string | null): FailureAction {
-  const code = (USER_CAUSE_ERROR_CODES as readonly string[]).includes(errorCode || '') ? errorCode as string
-    : (USER_CAUSE_UPSTREAM_TYPES as readonly string[]).includes(upstreamType || '') ? upstreamType as string
-    : (USER_CAUSE_UPSTREAM_TYPES as readonly string[]).includes(errorCode || '') ? errorCode as string : ''
+  const code = isIn(USER_CAUSE_UPSTREAM_TYPES, upstreamType) ? upstreamType
+    : isIn(USER_CAUSE_ERROR_CODES, errorCode) || isIn(USER_CAUSE_UPSTREAM_TYPES, errorCode) ? errorCode : ''
   return code ? { kind: 'settings', reason: REASONS[code], destination: settingsDestination(failureStage) } : { kind: 'retry' }
 }
