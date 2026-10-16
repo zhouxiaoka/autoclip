@@ -16,7 +16,8 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const moduleRequire = (name) => {
     if (name === 'react' || name === 'react/jsx-runtime') return require(name)
     if (name === 'react-i18next') return { useTranslation() {} }
-    if (name === 'react-router-dom') return { useNavigate: () => to => navigations.push(to) }
+    if (name === 'react-router-dom') return { useNavigate: () => to => navigations.push(to), useLocation: () => ({ search: routeSearch.value }) }
+    if (name === './settingsReturn') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
     if (name === '../../i18n') return { t: value => value }
     if (name === '../../ui') return { Btn: props => { buttons.push(props); return React.createElement('button', null, props.children) },
@@ -34,7 +35,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
   vm.runInNewContext(ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { exports: exportsObject, require: moduleRequire })
+  }).outputText, { exports: exportsObject, require: moduleRequire, URLSearchParams })
   return renderToStaticMarkup(React.createElement(exportsObject.default, {
     project: { id: 'test', status: 'processing', settings: { smart_import: {} }, clips: [], collections: [] },
     onCreateCollection() {}, onReload() {},
@@ -42,6 +43,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
 }
 
 const navigations = []
+const routeSearch = { value: '' }
 
 test('automatic screening never asks for a manual confirmation', () => {
   assert.doesNotMatch(render(true, 'screening'), /识别完成后，请确认要制作的类型/)
@@ -84,7 +86,7 @@ for (const [code, automatic] of [['llm_auth_invalid', true], ['insufficient_quot
     assert.match(html, /请|余额|模型/)
     navigations.length = 0
     go.onClick()
-    assert.deepEqual(navigations, ['/settings?section=analysis'])
+    assert.deepEqual(navigations, ['/settings?section=analysis&return_project=test'])
   })
 }
 for (const code of ['service_restarted', 'timeout', 'provider_error', 'model_not_found']) {
@@ -102,7 +104,7 @@ for (const [stage, destination] of [['subtitle', '/settings?section=speech'], ['
     render(true, 'production', 'failed', buttons, [], 'invalid_key', stage)
     navigations.length = 0
     buttons.find(b => b.children === '去设置').onClick()
-    assert.deepEqual(navigations, [destination])
+    assert.deepEqual(navigations, [destination + '&return_project=test'])
   })
 }
 
@@ -128,7 +130,7 @@ for (const [code, stage, destination] of [['authentication', 'subtitle', '/setti
     render(true, 'production', 'failed', buttons, [], code, stage)
     const go = buttons.find(b => b.children === '去设置')
     if (!destination) { assert.equal(go, undefined); assert.ok(buttons.some(b => b.children === '重试')); return }
-    navigations.length = 0; go.onClick(); assert.deepEqual(navigations, [destination])
+    navigations.length = 0; go.onClick(); assert.deepEqual(navigations, [destination + '&return_project=test'])
   })
 }
 test('R19 #106 manual mode: transcription 401 (authentication @ subtitle) -> 「去设置」 opens speech', () => {
@@ -137,5 +139,46 @@ test('R19 #106 manual mode: transcription 401 (authentication @ subtitle) -> 「
   assert.equal(buttons.some(b => b.children === '重试'), false)
   navigations.length = 0
   buttons.find(b => b.children === '去设置').onClick()
-  assert.deepEqual(navigations, ['/settings?section=speech'])
+  assert.deepEqual(navigations, ['/settings?section=speech&return_project=test'])
+})
+
+// R20 #125: after an auth failure the user fixes the key; there must be a way to continue the same project.
+test('R20 #125 auth failure: 「继续制作」 sits beside 「去设置」 and reuses the retry API (retry=true)', async () => {
+  routeSearch.value = ''
+  const buttons = [], calls = []
+  render(true, 'production', 'failed', buttons, calls, 'invalid_key', 'subtitle')
+  assert.equal(buttons.find(b => b.variant === 'cta').children, '去设置')
+  const cont = buttons.find(b => b.children === '继续制作')
+  assert.ok(cont, 'auth failure must offer 继续制作')
+  await cont.onClick()
+  assert.deepEqual(calls, [['test', true, true]])  // studioApi.analyze(pid, automatic, retry) -> retry_of + new attempt_id
+})
+test('R20 #125 back from a successful settings save (?continue=1): 「继续制作」 is the primary action', async () => {
+  routeSearch.value = '?continue=1'
+  const buttons = [], calls = []
+  render(false, 'production', 'failed', buttons, calls, 'authentication', 'subtitle')
+  routeSearch.value = ''
+  assert.equal(buttons.find(b => b.variant === 'cta').children, '继续制作')
+  assert.ok(buttons.some(b => b.children === '去设置'))
+  assert.equal(buttons.some(b => b.children === '重试'), false)
+  await buttons.find(b => b.children === '继续制作').onClick()
+  assert.deepEqual(calls, [['test', false, true]])
+})
+test('R20 #125 settings save returns to the project only when opened from one and the id is safe', () => {
+  const r = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
+  assert.equal(r.settingsReturnUrl('/settings?section=speech', 'p-1'), '/settings?section=speech&return_project=p-1')
+  assert.equal(r.returnAfterSave('?section=speech&return_project=p-1'), '/project/p-1?continue=1')
+  assert.equal(r.returnAfterSave('?section=speech'), null)
+  assert.equal(r.returnAfterSave('?return_project=..%2F..%2Fx'), null)
+  const fired = []
+  r.notifySettingsSaved({ dispatchEvent: e => { fired.push(e.type); return true } })
+  assert.deepEqual(fired, [r.SETTINGS_SAVED_EVENT])
+})
+test('R20 #125 wiring: only a validated save notifies; App mounts the listener', () => {
+  const hook = fs.readFileSync(path.join(__dirname, '../src/features/settings/useModelSettings.ts'), 'utf8')
+  const r = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
+  assert.ok(hook.includes('if (!failed && !visionFailed) notifySaved()'))
+  assert.ok(hook.includes(`window.dispatchEvent(new Event('${r.SETTINGS_SAVED_EVENT}'))`))
+  const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8')
+  assert.ok(app.includes('<SettingsReturnListener />'))
 })

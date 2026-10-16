@@ -1945,5 +1945,6 @@
   "API Key 无效或已过期，请到设置里更新后再试": "La clave API no es válida o ha caducado. Actualízala en Ajustes y vuelve a intentarlo.",
   "服务商账户余额不足，请充值或换一个服务商": "Tu cuenta del proveedor no tiene saldo. Recarga o cambia de proveedor.",
   "这个 API Key 没有该模型的使用权限，请到设置里更换": "Esta clave API no tiene acceso al modelo. Cámbiala en Ajustes.",
-  "还没有配置可用的模型，请先到设置里添加": "Aún no hay ningún modelo utilizable. Añade uno en Ajustes."
+  "还没有配置可用的模型，请先到设置里添加": "Aún no hay ningún modelo utilizable. Añade uno en Ajustes.",
+  "继续制作": "Continuar"
 }

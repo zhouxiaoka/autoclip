@@ -11,10 +11,18 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import os
+
 import pytest
 
-duckdb = pytest.importorskip('duckdb')
-sqlglot = pytest.importorskip('sqlglot')
+# In CI (requirements-test.txt pins both) a missing dependency is a failure, never a silent skip.
+IN_CI = bool(os.environ.get('CI'))
+if IN_CI:
+    import duckdb
+    import sqlglot
+else:
+    duckdb = pytest.importorskip('duckdb')
+    sqlglot = pytest.importorskip('sqlglot')
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).parent / 'fixtures' / 'success_rate_v4_416.sql'
@@ -59,6 +67,8 @@ def _db(events):
 def _flow_events():
     node = shutil.which('node')
     if not node or not (ROOT / 'frontend' / 'node_modules').exists():
+        if IN_CI:
+            pytest.fail('node + frontend deps are installed in CI; refusing to skip the v4 SQL flow test')
         pytest.skip('node + frontend deps required')
     out = subprocess.run([node, 'tests/helpers/variant-retry-flow.cjs'], cwd=ROOT / 'frontend',
                          capture_output=True, text=True, timeout=120, check=True)

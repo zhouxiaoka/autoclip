@@ -74,7 +74,8 @@ test('1.5.8 manual retry: the production attempt that follows carries retry_of t
 test('1.5.8 Retry button passes retry=true; hidden in manual mode once drafts/clips/completed exports exist', () => {
   const fs = require('node:fs')
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.ok(ui.includes("(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn"))
+  assert.ok(ui.includes("const canRetry = automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))"))
+  assert.ok(ui.includes(": canRetry && <Btn"))
   assert.ok(ui.includes("studioApi.analyze(project.id, !!automatic, true)"))
   const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
   assert.equal(workflow.safeStudioProperties({ retry_of: 't-0123456789abc' }).retry_of, 't-0123456789abc')
@@ -108,11 +109,12 @@ test('1.5.8 failed-state action per code: user-cause codes get 「去设置」 +
   // reasons + button copy in all 8 locales
   for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
-    for (const key of ['去设置', ...new Set([...Object.values(settings), '这个 API Key 没有该模型的使用权限，请到设置里更换'])]) assert.ok(data[key], `${lang}: ${key}`)
+    for (const key of ['去设置', '继续制作', ...new Set([...Object.values(settings), '这个 API Key 没有该模型的使用权限，请到设置里更换'])]) assert.ok(data[key], `${lang}: ${key}`)
   }
-  // UI wiring: settings branch replaces Retry
+  // UI wiring: settings branch replaces Retry with 「去设置」 (+ R20 #125 「继续制作」); rendered behaviour in studio-results-status
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.ok(ui.includes(`action.kind==='settings' ? <><span className="studio-muted">{t(action.reason)}</span><Btn variant="cta" disabled={!!busy} onClick={()=>navigate(action.destination)}>{t("去设置")}</Btn></> : (automatic ? `))
+  assert.ok(ui.includes(`return action.kind==='settings' ? <><span className="studio-muted">{t(action.reason)}</span>`))
+  assert.ok(ui.includes(`onClick={()=>navigate(settingsReturnUrl(action.destination, project.id))}>{t("去设置")}</Btn>`))
 })
 
 

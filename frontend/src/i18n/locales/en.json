@@ -1945,5 +1945,6 @@
   "API Key 无效或已过期，请到设置里更新后再试": "The API key is invalid or expired. Update it in Settings, then try again.",
   "服务商账户余额不足，请充值或换一个服务商": "Your provider account is out of balance. Top up or switch providers.",
   "这个 API Key 没有该模型的使用权限，请到设置里更换": "This API key doesn't have access to the model. Change it in Settings.",
-  "还没有配置可用的模型，请先到设置里添加": "No usable model is set up yet. Add one in Settings first."
+  "还没有配置可用的模型，请先到设置里添加": "No usable model is set up yet. Add one in Settings first.",
+  "继续制作": "Continue"
 }

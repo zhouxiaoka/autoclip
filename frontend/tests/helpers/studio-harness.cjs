@@ -31,13 +31,14 @@ function renderResults(workspace, studioApi, cards) {
   const moduleRequire = (name) => {
     if (name === 'react' || name === 'react/jsx-runtime') return require(name)
     if (name === 'react-i18next') return { useTranslation() {} }
-    if (name === 'react-router-dom') return { useNavigate: () => () => {} }
+    if (name === 'react-router-dom') return { useNavigate: () => () => {}, useLocation: () => ({ search: '' }) }
     if (name === '../../i18n') return { t: v => v }
     if (name === '../../ui') return { Btn: p => React.createElement('button', null, p.children), Section: ({ children }) => React.createElement('section', null, children), Dialog: empty, fmtDuration: String }
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi, errorText: String }
     if (name === './OutputVariantCard') return { default: props => { cards.push(props); return null } }
     if (name === '../../utils/llmFailure') return loadTs(path.resolve(ROOT, '../src/utils/llmFailure.ts'))
+    if (name === './settingsReturn') return loadTs(path.resolve(ROOT, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return loadTs(path.resolve(ROOT, '../src/features/studio/failureAction.ts'))
     if (name === './platformLabel') return { platformLabel: String }
     if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
@@ -47,7 +48,7 @@ function renderResults(workspace, studioApi, cards) {
   }
   const exportsObject = {}
   const source = fs.readFileSync(path.join(ROOT, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: exportsObject, require: moduleRequire, console })
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: exportsObject, require: moduleRequire, console, URLSearchParams })
   renderToStaticMarkup(React.createElement(exportsObject.default, { project: { id: 'p1', status: 'completed', settings: { smart_import: {} }, clips: [], collections: [] }, onCreateCollection() {}, onReload() {} }))
 }
 

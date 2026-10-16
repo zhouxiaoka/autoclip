@@ -228,7 +228,8 @@ def cloud_transcription_failure(message, http_status: int | None = None, upstrea
     return PipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
         "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
-        code="authentication" if upstream_error_type in CLOUD_ASR_AUTH_TYPES else "provider_error",
+        code=("authentication" if upstream_error_type in CLOUD_ASR_AUTH_TYPES
+              else "insufficient_quota" if upstream_error_type == "insufficient_quota" else "provider_error"),
         http_status=http_status, upstream_error_type=upstream_error_type,
     )
 

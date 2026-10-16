@@ -35,6 +35,22 @@ def _retryable(error: Exception) -> bool:
     return isinstance(error, httpx.RequestError)
 
 
+def _safe_body(response):
+    """Provider body for classification only (R20 #124); never stored, logged or put into the error."""
+    try:
+        response.read()
+        return response.text
+    except Exception:  # noqa: BLE001 - stream already closed / undecodable: classify by status alone
+        return None
+
+
+def _upstream_type(status, body):
+    """Enum only: e.g. HTTP 429 + "insufficient balance" -> insufficient_quota (user cause), not rate_limited."""
+    from backend.core.upstream_errors import classify_upstream_error
+    kind = classify_upstream_error(status, body).error_type.value
+    return '' if kind == 'unknown' else kind
+
+
 class CloudTranscriptionError(RuntimeError):
     """Safe public text only. ``http_status`` / ``upstream_error_type`` are enums/ints, never provider bodies."""
 
@@ -97,7 +113,8 @@ def request_chunk(client, connection, model, audio, language):
                 events = [response.json()]
             for event in events:
                 if event.get('code') and event['code'] not in {'Success', '200'}:
-                    raise CloudTranscriptionError('云端转写失败，请检查账号权限、额度和模型。')
+                    raise CloudTranscriptionError('云端转写失败，请检查账号权限、额度和模型。',
+                                                  upstream_error_type=_upstream_type(None, event))
                 output = event.get('output') or {}
                 items = output.get('sentences') or [output.get('sentence') or {}]
                 for item in items:
@@ -184,7 +201,8 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                     pool.shutdown(wait=True, cancel_futures=True)
         except httpx.HTTPStatusError as exc:
             raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。',
-                                          http_status=exc.response.status_code) from None
+                                          http_status=exc.response.status_code,
+                                          upstream_error_type=_upstream_type(exc.response.status_code, _safe_body(exc.response))) from None
         except (httpx.RequestError, ValueError) as exc:
             raise CloudTranscriptionError('云端转写连接失败或响应格式无效，请稍后重试。') from None
         if not segments:

@@ -238,3 +238,27 @@ def test_legacy_import_preserves_typed_cloud_failure(cloud_adapter, model, monke
     assert project.status == 'failed'
     assert project.project_metadata['last_error_code'] == 'provider_error'
     assert 'HTTP 409' in project.project_metadata['last_error']
+
+
+@pytest.mark.parametrize('model', MODELS)
+@pytest.mark.parametrize('body', [{'error': {'message': 'Insufficient balance raw-provider-secret-body'}},
+                                  {'error': {'code': 'insufficient_quota', 'message': 'raw-provider-secret-body'}}])
+def test_r20_124_asr_429_insufficient_balance_is_quota_not_rate_limit(cloud_adapter, model, body, caplog):
+    """R20 #124: HTTP 429 + 'insufficient balance' is a user cause (insufficient_quota), never rate_limited; no raw text."""
+    case = cloud_adapter
+    case.configure(model, lambda request: httpx.Response(429, json=body, request=request))
+    with caplog.at_level(logging.INFO, logger=pipeline.__name__):
+        result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
+    assert result['status'] == 'failed' and result['http_status'] == 429
+    assert result['upstream_error_type'] == 'insufficient_quota'
+    assert result['error_code'] == 'insufficient_quota'
+    assert 'raw-provider-secret-body' not in str(result) and 'raw-provider-secret-body' not in caplog.text
+    assert 'Insufficient balance' not in str(result)
+
+
+@pytest.mark.parametrize('model', MODELS)
+def test_r20_124_plain_429_stays_rate_limited(cloud_adapter, model):
+    case = cloud_adapter
+    case.configure(model, lambda request: httpx.Response(429, json={'error': {'message': 'slow down'}}, request=request))
+    result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
+    assert result['upstream_error_type'] == 'rate_limited' and result['error_code'] == 'provider_error'
