@@ -27,3 +27,8 @@ test('R11: captions switched off never claims captions were kept, even when reco
  assert.equal(m.exports.packagingFallbackHint({...pack,burned_captions:true},[],false),'')
  assert.equal(m.exports.packagingFallbackHint({...pack,cues:[{text:'字幕',original:''}]},[],false),'')
 })
+test('bilingual label respects captions_enabled (r12 #23): same packaging on/off',()=>{
+ const p={...pack,cues:[{text:'译文',original:'Original source'}]}
+ assert.equal(m.exports.packagingLabel({...p,captions_enabled:true}),'访谈式 · 中英字幕')
+ assert.equal(m.exports.packagingLabel({...p,captions_enabled:false}),'访谈式')
+})
