@@ -1059,3 +1059,14 @@ class ProviderE2EPaidCallCountTests(unittest.TestCase):
             self.assertFalse(judge.judge_suite({'status': 'ok', 'cases': [row]})['should_block_passed'], repr(bad))
         good = {'id': 'b', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0}
         self.assertTrue(judge.judge_suite({'status': 'ok', 'cases': [good]})['should_block_passed'])
+
+    def test_mock_observer_zero_does_not_rescue_a_created_project(self):
+        obs = self._observer([])
+        def effect(d, E):
+            (d / 'projects' / 'leaked').mkdir(parents=True)
+            raise E(422, self.SOURCE_422)
+        row = self._run(import_effect=effect, observer=obs)
+        self.assertIsNone(row['billable_calls_before_failure'])
+        self.assertFalse(row['passed'])
+        ok = self._run(import_effect=lambda d, E: (_ for _ in ()).throw(E(422, self.SOURCE_422)), observer=self._observer([]))
+        self.assertEqual((ok['billable_calls_before_failure'], ok['count_source']), (0, 'import_rejected'))

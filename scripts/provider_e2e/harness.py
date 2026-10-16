@@ -319,9 +319,15 @@ def run_case(
     seen = observed_chat_calls(observer, events_before)
     ledger = billable_calls_before_failure(data_dir, project_id) if project_id else None
     rejected, rejected_source = import_rejected_count(refused_code, ids_before, project_ids(data_dir)) if not project_id else (None, None)
-    billable = paid_calls(seen, ledger if ledger is not None else rejected)
-    count_source = ('observer' if seen is not None and (billable == seen) else
-                    'ledger' if ledger is not None else rejected_source) if billable is not None else None
+    if refused_code is not None and rejected is None:
+        # #369 (live and mock alike): a refused import that cannot be proven project-free is unknown, even when
+        # the observer saw no chat call.
+        billable, count_source = None, None
+    else:
+        billable = paid_calls(seen, ledger if ledger is not None else rejected)
+        count_source = (rejected_source if rejected is not None and billable == 0 else
+                        'observer' if seen is not None and billable == seen else
+                        'ledger' if ledger is not None else None) if billable is not None else None
     prompt_tokens, completion_tokens = (0, 0)
     if project_id:
         prompt_tokens, completion_tokens = usage_tokens(usage_rows(data_dir, project_id))
