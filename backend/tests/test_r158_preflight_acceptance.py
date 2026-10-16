@@ -10,6 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.real_media_probe
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

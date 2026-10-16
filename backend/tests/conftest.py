@@ -27,6 +27,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "stdlib_only: runtime regression without application dependencies")
     config.addinivalue_line("markers", "own_whisper_status: the test simulates its own Whisper runtime state; skip the default simulated installed Whisper")
     config.addinivalue_line("markers", "reads_whisper_stand_in: the test asserts the conftest stand-in itself")
+    config.addinivalue_line("markers", "real_media_probe: run the real preflight material probe (ffprobe / ffmpeg) instead of the placeholder stand-in")
 
 
 class _FollowStudioExecutor:
@@ -120,6 +121,24 @@ def _whisper_installed_by_default(monkeypatch, request):
     if direct:
         pytest.fail(f"{request.node.nodeid} calls {sorted(set(direct))} directly but reads the conftest stand-in; "
                     "mark it @pytest.mark.own_whisper_status and simulate the state it needs (R21 #176)", pytrace=False)
+
+@pytest.fixture(autouse=True)
+def _placeholder_media_is_readable(monkeypatch, request):
+    # #418 rewrite: every entry now probes the source before anything else. Most suites use placeholder bytes
+    # as "a video"; they get a readable 60 s source with audio. Tests about the source itself (and the #418
+    # acceptance tests) carry @pytest.mark.real_media_probe and run the real ffprobe / ffmpeg probe.
+    if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("real_media_probe"):
+        yield
+        return
+    try:
+        from backend.services.studio import preflight
+    except Exception:  # noqa: BLE001
+        yield
+        return
+    monkeypatch.setattr(preflight, "probe_material",
+                        lambda video: preflight.MaterialProbe(preflight.ProbeState.READABLE, video, 60.0, True, ffprobe_runs=1))
+    yield
+
 
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):

@@ -173,7 +173,7 @@ def snapshot_settings() -> SettingsSnapshot:
     from backend.services.studio import planning, readiness
     settings = readiness._gate_settings()  # missing / unreadable -> defaults, same view as the runtime check
     choice = settings.transcription or ai_models.Transcription()
-    check = readiness._transcription(settings)
+    check = readiness.transcription_check()  # the one runtime check the pipeline also reads
     mode = planning.preferred_analysis_mode()
     return SettingsSnapshot(
         transcription_provider=choice.provider,
@@ -195,7 +195,9 @@ def _route(inputs: ResolvedInputs, probe: MaterialProbe, settings: SettingsSnaps
     mode = settings.analysis_mode
     goal = planning.final_goal(inputs.goal, mode, settings.vision_configured)
     before = planning.resolve_route(mode, goal, probe.duration)
-    after = planning.resolve_route(mode, goal, probe.duration, ai_screened=settings.vision_configured)
+    # What screening could still change: a configured vision model may pick a visual goal for goal=auto.
+    screened = planning.final_goal(inputs.goal, mode, settings.vision_configured, screened='highlight')
+    after = planning.resolve_route(mode, screened, probe.duration, ai_screened=settings.vision_configured)
     return before, before == after
 
 
@@ -207,10 +209,7 @@ def preflight(inputs: ResolvedInputs, *, probe: MaterialProbe = NOT_PROBED,
     if not probe.probed:
         if inputs.video is None:
             raise FileNotFoundError('视频不存在')
-        if not Path(inputs.video).is_file():
-            probe = MaterialProbe(ProbeState.UNREADABLE, Path(inputs.video), diagnostics='missing')
-        else:
-            probe = probe_material(inputs.video)
+        probe = probe_material(inputs.video)  # a missing file is simply unreadable here
     route, certain = _route(inputs, probe, settings)
     srt = inputs.srt_available
     # 1. the source: decided before any install prompt, on every entry, SRT or not.

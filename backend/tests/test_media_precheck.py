@@ -11,6 +11,8 @@ import subprocess
 
 import pytest
 
+pytestmark = pytest.mark.real_media_probe  # #418: these tests are about the source itself
+
 from backend.pipeline import media_precheck
 from backend.pipeline.failures import PipelineFailure, failure_from_speech_error
 from backend.pipeline.quality import profile_for
@@ -185,11 +187,10 @@ def test_import_of_a_silent_video_without_vision_fails_fast(client, monkeypatch)
     monkeypatch.setattr(jobs, 'run_content', lambda *a: pytest.fail('content pipeline must not start'))
     response = client.post('/studio/import', data={'auto_start': 'true'},
                            files={'video': ('silent.mp4', silent.read_bytes(), 'video/mp4')})
-    assert response.status_code == 200, response.text
-    state = store.read(response.json()['project_id'])
-    assert state['analysis']['error_code'] == 'source_no_audio'
-    assert state['analysis']['error'] == media_precheck.NO_AUDIO_MESSAGE
-    assert 'IndexError' not in state['analysis']['error']
+    # #418 rewrite: the subtitle route is certain (subtitle mode, no vision), so the one preflight refuses the
+    # import itself with the coded source failure: no project, nothing staged, the page shows it at once.
+    assert response.status_code == 422, response.text
+    assert response.json()['detail'] == {'code': 'source_no_audio', 'message': media_precheck.NO_AUDIO_MESSAGE}
 
 
 def test_confirm_refuses_the_subtitle_route_for_a_short_source(client, monkeypatch):
