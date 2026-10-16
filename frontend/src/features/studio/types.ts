@@ -43,7 +43,7 @@ export interface Packaging {
   title_lines: string[]; title_accent_line: number
   cues: { start: number; end: number; text: string; original: string }[]
   speakers: { at: number; name: string; role: string }[]
-  tags: { at: number; text: string }[]; tags_enabled: boolean
+  tags: { at: number; text: string }[]; tags_enabled: boolean; captions_enabled?: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null

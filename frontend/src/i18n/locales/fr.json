@@ -1941,6 +1941,7 @@
   "全部启用": "Tout activer",
   "全部停用": "Tout désactiver",
   "未启用": "Non activés",
+  "关闭后成片不压字幕，标题和名牌保留。": "Désactivé : aucun sous-titre incrusté ; le titre et les cartons restent.",
   "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "L'analyse visuelle prend en charge les sources jusqu'à 120 minutes. Passage à l'analyse des sous-titres pour continuer.",
   "读取素材画面失败，已改用字幕分析继续制作。": "Impossible de lire les images de la source. Passage à l'analyse des sous-titres pour continuer.",
   "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Échec du téléchargement du modèle Whisper. Vérifiez le réseau puis relancez-le dans Réglages → Transcription, ou passez la source au miroir hf-mirror."

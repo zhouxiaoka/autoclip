@@ -48,7 +48,7 @@ def _needs_translation(language, hook, entries):
 
 def recover_empty_packaging(project_id, draft: Draft, warnings: list[str]) -> Draft:
     pack = draft.packaging
-    if not (draft.subtitles and pack and pack.fallback and not pack.cues and not pack.burned_captions):
+    if not (draft.subtitles and pack and pack.captions_enabled and pack.fallback and not pack.cues and not pack.burned_captions):
         return draft
     # Previously saved fallbacks have no cues. Re-rendering them must recover the source
     # track too; changing only new packaging would leave upgraded projects captionless.
