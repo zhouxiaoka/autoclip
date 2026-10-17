@@ -322,7 +322,12 @@ test('R24 #232: a stalled download times out into retry (model download again) o
   await openWaiting(view)
   for (let i = 0; i < 5; i++) await clock.advance(2000)
   assert.equal(button(view.host, '重试'), undefined, 'not a timeout yet')
-  // R27c I483: 10 awake minutes of 2s polls without progress (one 10-minute jump with no polls is a sleep, not counted)
+  // R28 I515: the clock jumps 10 minutes at once (no polls in between: unobserved) -> NO timeout, polling goes on
+  await clock.advance(10 * 60 * 1000)
+  await clock.advance(2000)
+  assert.doesNotMatch(view.host.textContent, /长时间没有进展/, 'a 10-minute jump is not 10 observed minutes')
+  assert.equal(button(view.host, '重试'), undefined)
+  // ...and the stall time keeps counting afterwards: 10 awake minutes of 2s polls without progress are a timeout
   for (let i = 0; i < 301; i++) await clock.advance(2000)
   assert.match(view.host.textContent, /长时间没有进展/)
   assert.ok(button(view.host, '打开转写设置'))

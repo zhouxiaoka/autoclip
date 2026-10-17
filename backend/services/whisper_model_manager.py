@@ -359,11 +359,12 @@ class WhisperModelManager:
                     _disable_xet()
                 logger.info("开始下载 Whisper 模型 %s (%s, 源 %s)", model_name, repo_id, source)
                 try:
-                    snapshot = snapshot_download(
-                        repo_id=repo_id,
-                        cache_dir=str(whisper_runtime.get_models_dir() / "hub"),
-                        endpoint=endpoint,
-                    )
+                    args = dict(repo_id=repo_id, cache_dir=str(whisper_runtime.get_models_dir() / "hub"), endpoint=endpoint)
+                    snapshot = snapshot_download(**args)
+                    if not _snapshot_is_complete(Path(snapshot)):
+                        # #418 R28 I519: HF keeps a file that is already in the snapshot (it only resumes *.incomplete
+                        # blobs), so a truncated / empty snapshot file would be returned on every retry: fetch it again.
+                        snapshot = snapshot_download(**args, force_download=True)
                     if not _snapshot_is_complete(Path(snapshot)):
                         raise RuntimeError("Whisper 模型文件不完整，请重新下载模型后再试。")
                 except Exception as e:  # noqa: BLE001

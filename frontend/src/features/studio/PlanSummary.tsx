@@ -8,7 +8,7 @@ import { studioApi, errorText, errorCode } from './api'
 import { useNavigate } from 'react-router-dom'
 import { speechApi } from '../../services/api'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
-import { isRecoveryCode } from './transcriptionRecovery'
+import { isRecoveryCode, probeConfig } from './transcriptionRecovery'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 
 const contentLabels: Record<string,string> = {gameplay:'游戏录屏',talk:'讲解 / 访谈',sport:'运动内容',vlog:'生活记录',mixed:'混合内容',other:'视频内容'}
@@ -28,7 +28,7 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   // #418 rewrite: a coded gate 422 on confirm opens the same recovery controller as the import page (by code, never text).
-  const [recovery,recover]=useTranscriptionRecovery({readiness:signal=>studioApi.readinessProbe(signal),getRuntimeStatus:()=>speechApi.getRuntimeStatus(),getModels:()=>speechApi.getModels(),installRuntime:()=>speechApi.installRuntime(),downloadModel:model=>speechApi.downloadModel(model)},{onReady:()=>{recover.close();void start()}})
+  const [recovery,recover]=useTranscriptionRecovery({readiness:signal=>studioApi.readinessProbe(signal),getRuntimeStatus:signal=>speechApi.getRuntimeStatus(probeConfig(signal)),getModels:signal=>speechApi.getModels(probeConfig(signal)),installRuntime:()=>speechApi.installRuntime(),downloadModel:model=>speechApi.downloadModel(model)},{onReady:()=>{recover.close();void start()}})
   const navigate=useNavigate()
   const running=status==='running'
   const awaiting=status==='awaiting_confirmation'

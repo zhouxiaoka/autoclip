@@ -1,6 +1,6 @@
 import { projectProperties } from '../analytics/workflow'
 import { t } from '../i18n'
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
 import { apiConfigManager } from '../utils/apiConfig'
@@ -130,7 +130,9 @@ const filenameFromDisposition = (contentDisposition: string | undefined, fallbac
 api.interceptors.request.use(
   async (config) => {
     if (isTauriRuntime() && !apiConfigManager.isReady()) {
-      await apiConfigManager.waitForReady()
+      // #418 R28 I514: a cancelled request stops waiting for the desktop backend config at once.
+      await apiConfigManager.waitForReady(undefined, config.signal as AbortSignal | undefined)
+      if (config.signal?.aborted) throw new axios.CanceledError(undefined, undefined, config)
     }
 
     config.baseURL = apiConfigManager.getBaseUrl()
@@ -178,7 +180,7 @@ api.interceptors.response.use(
       const message = error.response?.data?.detail || t("系统正在处理其他项目，请稍后再试")
       error.userMessage = message
     }
-    else if (error.config?.retry !== false && (error.code === 'ECONNABORTED' || error.message?.includes('timeout'))) {
+    else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       error.userMessage = t("请求超时，项目可能仍在后台处理中，请稍后查看项目状态")
     }
     else if (error.code === 'NETWORK_ERROR' || !error.response) {
@@ -815,10 +817,10 @@ export type WhisperModelSource = 'auto' | 'huggingface' | 'hf-mirror'
 
 // 语音识别 / Whisper 运行时与模型管理
 export const speechApi = {
-  getRuntimeStatus: (): Promise<WhisperRuntimeStatus> => api.get('/whisper/runtime-status'),
+  getRuntimeStatus: (config?: AxiosRequestConfig): Promise<WhisperRuntimeStatus> => api.get('/whisper/runtime-status', config),
   installRuntime: (): Promise<{ started: boolean; message: string }> => api.post('/whisper/install'),
   uninstallRuntime: (): Promise<{ success: boolean; message: string }> => api.post('/whisper/uninstall'),
-  getModels: (): Promise<WhisperModel[]> => api.get('/whisper-models'),
+  getModels: (config?: AxiosRequestConfig): Promise<WhisperModel[]> => api.get('/whisper-models', config),
   downloadModel: (model: string): Promise<WhisperModelDownload> => api.post('/whisper-models/download', { model }),
   deleteModel: (model: string): Promise<unknown> => api.delete(`/whisper-models/${model}`),
   /** E3: where Whisper models download from. auto probes huggingface.co and switches to hf-mirror when blocked. */

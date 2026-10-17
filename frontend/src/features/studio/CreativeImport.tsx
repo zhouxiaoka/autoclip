@@ -22,7 +22,7 @@ import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRemember
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
-import { isRecoveryCode, type RecoveryController } from './transcriptionRecovery'
+import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import './studio.css'
 import './quick-output.css'
@@ -169,7 +169,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     recover.close(); if (report) setReadiness(report)
   }
   const continueAfterRecovery = (report: ImportReadiness | null) => { resumeSubmit.current = false; recover.close(); setError(''); if (report) setReadiness(report); void submitRef.current?.('button', report) }
-  const [recovery, recover] = useTranscriptionRecovery({ readiness: signal => studioApi.readinessProbe(signal), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: report => recoveryDone(report), onReport: report => setReadiness(report) })
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: signal => studioApi.readinessProbe(signal), getRuntimeStatus: signal => speechApi.getRuntimeStatus(probeConfig(signal)), getModels: signal => speechApi.getModels(probeConfig(signal)), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: report => recoveryDone(report), onReport: report => setReadiness(report) })
   recoverRef.current = recover
   const repairing = recovery.phase === 'installing' || recovery.phase === 'downloading'
   const changePlatforms = (next: string[]) => {

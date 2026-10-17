@@ -472,3 +472,35 @@ def test_r2_status_api_never_echoes_raw_download_exception(monkeypatch, tmp_path
     assert secret not in status["errorMessage"]
     assert url not in status["errorMessage"]
 
+
+
+def test_r28_i519_retry_after_interrupted_download_repairs_a_partial_snapshot(monkeypatch, tmp_path):
+    """The network drops mid-download and leaves an empty model.bin in the snapshot. Like huggingface_hub, the fake
+    keeps a file already in the snapshot unless force_download; one retry must still end with a complete model."""
+    calls = []
+
+    def hub_like(**kwargs):
+        calls.append(kwargs.get("force_download", False))
+        snapshot = tmp_path / "hub/models--Systran--faster-whisper-base/snapshots/complete"
+        if len(calls) == 1:
+            snapshot.mkdir(parents=True)
+            (snapshot / "config.json").write_bytes(b"data")
+            (snapshot / "model.bin").write_bytes(b"")  # the interrupted part
+            raise ConnectionError("network dropped")
+        for name in ("model.bin", "config.json", "tokenizer.json", "vocabulary.json"):
+            path = snapshot / name
+            if kwargs.get("force_download") or not path.exists():
+                path.write_bytes(b"data")
+        return str(snapshot)
+
+    _install_fake_hub(monkeypatch, hub_like)
+    monkeypatch.setattr("backend.services.whisper_model_manager.download_plan", lambda: [("official", "https://huggingface.co")])
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert manager.get_model_info("base").status == ModelStatus.ERROR
+
+    manager._download_blocking("base")  # Retry
+
+    assert manager.get_model_info("base").status == ModelStatus.DOWNLOADED
+    assert manager.get_local_model_path("base") is not None
+    assert (manager.get_local_model_path("base") / "model.bin").stat().st_size > 0

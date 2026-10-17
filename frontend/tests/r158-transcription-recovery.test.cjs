@@ -541,8 +541,15 @@ test('R27c readiness timeout is 5s, the controller races nothing itself and call
   assert.match(src, /api\.readiness\(signal\)/)
   assert.doesNotMatch(src, /setTimer|clearTimer|setTimeout|Promise\.race/, 'no timer race in the controller: axios times the probe out and aborts it')
   const studioApi = fs.readFileSync(path.join(dir, 'api.ts'), 'utf8')
-  assert.match(studioApi, /readinessProbe: \(signal: AbortSignal\)[^\n]*api\.get\('\/studio\/readiness', \{ signal, timeout: 5000[^\n]*retry: false \}\)/)
-  for (const page of ['CreativeImport.tsx', 'PlanSummary.tsx']) assert.match(fs.readFileSync(path.join(dir, page), 'utf8'), /readiness: ?signal ?=> ?studioApi\.readinessProbe\(signal\)/, page)
+  assert.match(studioApi, /readinessProbe: \(signal: AbortSignal\)[^\n]*api\.get\('\/studio\/readiness', probeConfig\(signal\)\)/)
+  assert.equal(JSON.stringify(recovery.probeConfig('S')), JSON.stringify({ signal: 'S', timeout: 5000, retry: false }), 'I517: one definition of the read config')
+  for (const page of ['CreativeImport.tsx', 'PlanSummary.tsx']) {
+    const src = fs.readFileSync(path.join(dir, page), 'utf8')
+    assert.match(src, /readiness: ?signal ?=> ?studioApi\.readinessProbe\(signal\)/, page)
+    assert.match(src, /getRuntimeStatus: ?signal ?=> ?speechApi\.getRuntimeStatus\(probeConfig\(signal\)\)/, `I513 ${page}`)
+    assert.match(src, /getModels: ?signal ?=> ?speechApi\.getModels\(probeConfig\(signal\)\)/, `I513 ${page}`)
+  }
+  assert.match(fs.readFileSync(path.join(dir, 'useTranscriptionRecovery.ts'), 'utf8'), /options\.pollMs \?\? POLL_MS/, 'I517')
 })
 
 test('R27c state is phase + offlineSince + ownsInstall: no link enum, no round counter, no flags', () => {
@@ -630,8 +637,9 @@ test('R27c I482 S1: the machine sleeps 60s with a probe in flight and wakes to a
   assert.notEqual(c.state.phase, 'failed', 'a timeout around a sleep is not 60s of unreachability')
   assert.equal(c.state.offline, undefined)
   assert.equal(t.st.timeouts, 1)
-  assert.equal(t.st.calls - before, 2, 'the late timeout is followed at once by a re-probe in the same poll')
-  assert.equal(c.state.unreachable, undefined, 're-probe answered')
+  assert.equal(t.st.calls - before, 1, 'R28: no re-probe; the late timeout counts at most 2 x 5s')
+  await drive(c, clock, clock.t + 2000)
+  assert.equal(c.state.unreachable, undefined, 'the next poll is answered')
 })
 
 test('R27c I482: a sleep between polls with the backend down is not counted toward the 30s', async () => {
@@ -642,7 +650,8 @@ test('R27c I482: a sleep between polls with the backend down is not counted towa
   await clock.wake(5 * 60 * 1000)
   const seen = await drive(c, clock, clock.t + 10000)
   assert.ok(!seen.some(([, p]) => p === 'failed'), `10s + 10s awake, the 5 min asleep do not count: ${JSON.stringify(seen)}`)
-  const after = await drive(c, clock, clock.t + 14000)
+  const after = await drive(c, clock, clock.t + 22000)
+  // R28: unobserved time restarts the streak, so the 30s count from the wake: 32s after it (16 polls) it is failed
   assert.ok(after.some(([, p]) => p === 'failed'), `30s of awake unreachability still fails: ${JSON.stringify(after)}`)
 })
 
@@ -874,4 +883,195 @@ test('I426 hook: leaving offline and coming back continues once, with one readin
     await clock.advance(12000)
     assert.equal(h.last.phase, 'ready'); assert.equal(readyCalls, 1, 'continued exactly once'); assert.equal(t.st.max, 1)
   } finally { await h.unmount() }
+})
+
+// ---- #418 R28 (Dong's R27c review I490-I499 -> I510-I519) ----
+/** Runs `fn` after `hops` microtasks once `p` settled (the timing of Dong's n2probe / i491 scripts). */
+const afterHops = (p, hops, fn) => { let q = p.then(() => {}, () => {}); for (let i = 0; i < hops; i++) q = q.then(() => {}); q.then(fn) }
+
+test('R28 I510 (N2): close() in the microtasks between a settled request and the commit writes nothing, no onReport / onReady', async () => {
+  for (const kind of ['poll-ready', 'install-download']) {
+    for (let hops = 0; hops <= 6; hops++) {
+      const events = []; let c, closed = false
+      const note = name => () => { if (closed) events.push(name) }
+      const answer = kind === 'poll-ready' ? check('ok') : check('whisper_model_missing', { model: 'base' })
+      const api = { ...fakeApi({ report: () => answer }),
+        readiness: () => { const p = Promise.resolve(answer); if (kind === 'poll-ready') afterHops(p, hops, () => { closed = true; c.close() }); return p },
+        downloadModel: () => { const p = Promise.resolve({}); afterHops(p, hops, () => { closed = true; c.close() }); return p } }
+      c = recovery.createRecoveryController(api, { now: () => 0, onReady: note('onReady'), onReport: note('onReport') })
+      c.open(kind === 'poll-ready' ? 'whisper_installing' : 'whisper_model_missing', 'base')
+      c.subscribe(s => { if (closed && s.phase !== 'idle') events.push('state:' + s.phase) })
+      if (kind === 'poll-ready') await c.poll(); else await c.install()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+      assert.ok(closed, `${kind} hops ${hops}: closed`)
+      assert.equal(c.state.phase, 'idle', `${kind} hops ${hops}`)
+      assert.deepEqual(events, [], `${kind} hops ${hops}: nothing after close`)
+    }
+  }
+})
+
+test('R28 I511: close() right after the probe answered never sends the install / download request', async () => {
+  for (const code of ['whisper_not_installed', 'whisper_model_missing']) {
+    for (let hops = 0; hops <= 5; hops++) {
+      const order = []; let c
+      const api = { ...fakeApi({ report: () => check(code, { model: 'base' }) }),
+        readiness: () => { const p = Promise.resolve(check(code, { model: 'base' })); afterHops(p, hops, () => { order.push('close'); c.close() }); return p },
+        installRuntime: async () => { order.push('request') }, downloadModel: async () => { order.push('request') } }
+      c = recovery.createRecoveryController(api, { now: () => 0 })
+      c.open(code, 'base'); await c.install()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+      assert.ok(!order.includes('close') || order.indexOf('request') === -1 || order.indexOf('request') < order.indexOf('close'), `${code} hops ${hops}: ${order}`)
+      assert.equal(c.state.phase, 'idle')
+    }
+  }
+})
+
+test('R28 I512: a 15-minute sleep inside getModels / getRuntimeStatus is not a stall', async () => {
+  for (const stage of ['downloading', 'installing']) {
+    let t = 0; let sleepNext = false
+    const sleepy = () => { if (sleepNext) { t += 15 * 60 * 1000; sleepNext = false } }
+    const api = { ...fakeApi({ report: () => stage === 'downloading' ? check('whisper_model_downloading', { model: 'base' }) : check('whisper_installing') }),
+      getModels: async () => { sleepy(); return [{ name: 'base', status: 'downloading', downloadProgress: 40 }] },
+      getRuntimeStatus: async () => { sleepy(); return { status: 'installing', progress: 40 } } }
+    const c = recovery.createRecoveryController(api, { now: () => t })
+    c.open(stage === 'downloading' ? 'whisper_model_downloading' : 'whisper_installing', 'base')
+    t += 2000; await c.poll(); t += 2000; await c.poll()
+    sleepNext = true; t += 2000; await c.poll()
+    assert.equal(c.state.phase, stage, `${stage}: the sleep inside the follow-up read is not counted`)
+  }
+})
+
+test('R28 I513: follow-up reads take the round signal; a hung read ends after the 5s timeout and close cancels it', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  const reads = { live: 0, aborted: 0, signals: [] }
+  const hung = signal => new Promise((resolve, reject) => {
+    reads.live++; reads.signals.push(signal)
+    let done = false
+    const end = err => { if (done) return; done = true; reads.live--; reject(err) }
+    const timer = clock.setTimeout(() => end(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' })), recovery.READINESS_TIMEOUT_MS)
+    signal.addEventListener('abort', () => { if (done) return; clock.clearTimeout(timer); reads.aborted++; end(new Error('canceled')) })
+  })
+  t.api.getModels = hung; t.api.getRuntimeStatus = hung
+  t.st.stage = 'downloading'; t.st.progress = 5
+  const c = recovery.createRecoveryController(t.api, { now: () => clock.t })
+  c.open('whisper_model_downloading', 'base')
+  const p = c.poll(); await clock.advance(5000); await p
+  assert.equal(c.state.phase, 'downloading', 'the hung read timed out; the wait goes on'); assert.equal(reads.live, 0)
+  assert.ok(reads.signals.every(s => s instanceof AbortSignal))
+  const q = c.poll(); await clock.advance(1000)
+  assert.equal(reads.live, 1)
+  c.close(); await q
+  assert.equal(reads.aborted, 1, 'close cancels the follow-up read'); assert.equal(reads.live, 0)
+})
+
+test('R28 I514: waitForReady takes a signal and ends at once on abort', async () => {
+  const cfgDir = path.resolve(__dirname, '../src/utils')
+  const { apiConfigManager } = loadTs(path.join(cfgDir, 'apiConfig.ts'), {}, cfgDir)
+  apiConfigManager.config = { ...apiConfigManager.config, isReady: false }
+  const ctrl = new AbortController()
+  let settled = null
+  const p = apiConfigManager.waitForReady(30000, ctrl.signal).then(v => { settled = v })
+  await Promise.resolve(); assert.equal(settled, null)
+  ctrl.abort(); await p
+  assert.equal(settled, false)
+  const api = fs.readFileSync(path.resolve(__dirname, '../src/services/api.ts'), 'utf8')
+  assert.match(api, /waitForReady\(undefined, config\.signal/)
+})
+
+/** Drives polls with explicit gaps (ms before each poll), returns [[time since start, phase]]. */
+async function gaps(c, clock, list) {
+  const t0 = clock.t; const seen = []
+  for (const g of list) {
+    await clock.advance(g)
+    let done = false; const p = c.poll().then(() => { done = true })
+    await clock.advance(0)
+    for (let i = 0; i < 200 && !done; i++) await clock.advance(100)
+    await p; seen.push([clock.t - t0, c.state.phase])
+  }
+  return seen
+}
+const downloadingOn = (clock, t) => {
+  t.st.stage = 'downloading'; t.st.progress = 5
+  const c = recovery.createRecoveryController(t.api, { now: () => clock.t })
+  c.open('whisper_model_downloading', 'base')
+  return c
+}
+
+test('R28 I515: awake 10 minutes of on-time 2s polls without progress (answered or 500) time out at 10 minutes', async () => {
+  for (const mode of ['ok', '500']) {
+    const clock = fakeClock(); const t = fakeTransport(clock)
+    const c = downloadingOn(clock, t)
+    await gaps(c, clock, [2000]) // percent null -> 5: the last progress
+    t.st.mode = mode
+    const seen = await gaps(c, clock, Array(310).fill(2000))
+    const first = seen.find(([, p]) => p === 'timeout')
+    assert.ok(first, `${mode}: the stall is reported (not suppressed)`)
+    assert.equal(first[0], recovery.STALL_MS, `${mode}: exactly at 10 minutes of polls`)
+    assert.ok(seen.filter(([at]) => at < recovery.STALL_MS).every(([, p]) => p === 'downloading'), `${mode}: not earlier`)
+  }
+})
+
+test('R28 I515: jittered polls (2s +- 1.5s) are all observed time: timeout within one poll of 10 minutes', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  const c = downloadingOn(clock, t)
+  await gaps(c, clock, [2000])
+  const list = []; for (let i = 0; i < 400; i++) list.push([3500, 500, 3000, 1000][i % 4])
+  const seen = await gaps(c, clock, list)
+  const first = seen.find(([, p]) => p === 'timeout')
+  assert.ok(first && first[0] >= recovery.STALL_MS && first[0] <= recovery.STALL_MS + 3500, JSON.stringify(first))
+})
+
+test('R28 I515: the clock jumping 10 minutes at once is not a timeout; the stall keeps counting after it', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  const c = downloadingOn(clock, t)
+  await gaps(c, clock, [2000, 2000])
+  const seen = await gaps(c, clock, [10 * 60 * 1000, 2000])
+  assert.ok(seen.every(([, p]) => p === 'downloading'), JSON.stringify(seen))
+  const after = await gaps(c, clock, Array(300).fill(2000))
+  assert.ok(after.some(([, p]) => p === 'timeout'), 'observed minutes after the jump still count')
+})
+
+test('R28 I515: 9m55s observed without progress, then a 15-minute sleep: the first poll after waking is not a timeout', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  const c = downloadingOn(clock, t)
+  await gaps(c, clock, [2000])
+  const before = await gaps(c, clock, Array(297).fill(2000)) // 594s observed
+  assert.equal(before[before.length - 1][1], 'downloading')
+  const wake = await gaps(c, clock, [15 * 60 * 1000]) // counts at most 2 x 2s -> 598s
+  assert.equal(wake[0][1], 'downloading', 'the sleep counts at most 2 poll intervals')
+  const more = await gaps(c, clock, [2000])
+  assert.equal(more[0][1], 'timeout', '600s observed')
+})
+
+test('R28 I515: offline 26s, then a 60s sleep: waking is not a failure (backend back, or still down)', async () => {
+  for (const back of [true, false]) {
+    const clock = fakeClock(); const t = fakeTransport(clock)
+    const c = await waitingOn(clock, t)
+    t.st.mode = 'down'
+    const down = await gaps(c, clock, Array(13).fill(2000)) // 26s unreachable
+    assert.ok(down.every(([, p]) => p === 'installing'))
+    assert.equal(c.state.unreachable, true)
+    if (back) t.st.mode = 'ok'
+    const wake = await gaps(c, clock, [60000])
+    assert.equal(wake[0][1], 'installing', `back=${back}: no failure on wake`)
+    if (back) assert.equal(c.state.unreachable, undefined)
+    else {
+      const later = await gaps(c, clock, Array(16).fill(2000))
+      assert.ok(later.some(([, p]) => p === 'failed'), 'still down: 30 observed seconds after the wake fail it')
+    }
+  }
+})
+
+test('R28 I516: a closed own install reopened from whisper_installing does not inherit ownsInstall (#372/#281)', async () => {
+  let report = check('whisper_not_installed')
+  const api = fakeApi({ report: () => report })
+  const c = recovery.createRecoveryController(api, { now: () => 0 })
+  c.open('whisper_not_installed'); await c.install()
+  assert.deepEqual(api.log, ['runtime'])
+  c.close()
+  c.open('whisper_installing')
+  report = check('whisper_model_missing', { model: 'base' })
+  await c.poll()
+  assert.deepEqual(api.log, ['runtime'], 'no automatic model download for an install this round did not start')
+  assert.equal(c.state.phase, 'install_required')
 })
