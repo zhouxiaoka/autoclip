@@ -266,7 +266,7 @@ _PASS_LITERAL = re.compile(r'''(?<![A-Za-z_])(['"])pass\1''')
 def test_b13_no_pass_literal_outside_winqa_chain_tests_included():
     hits = []
     for p in sorted(ROOT.rglob('*')):
-        if p.suffix not in ('.py', '.sh', '.ps1') or '__pycache__' in p.parts:
+        if p.suffix not in ('.py', '.sh', '.ps1', '.json') or '__pycache__' in p.parts:
             continue
         if p == ROOT / 'py' / 'winqa_chain.py':
             continue

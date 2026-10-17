@@ -373,8 +373,8 @@ def test_a16_killed_logpipe_leaves_a_record_that_says_killed(tmp_path, bash):
 
 
 def test_a16_classifier_covers_bash_crash_and_wrapper_loss():
-    assert classify_a2(-9, None).startswith('bash_crashed') and 'signal=9' in classify_a2(-9, None)
-    assert classify_a2(139, None) == 'bash_crashed rc=139 signal=11'
+    assert classify_a2(-9, None).startswith('no_close_record') and 'signal=9' in classify_a2(-9, None)
+    assert classify_a2(139, None) == 'no_close_record rc=139 signal=11'
     assert classify_a2(70, 'script_rc_before_close 0\nreason wrapper_gone\nREADY 1\n').startswith('logpipe_wrapper_gone')
     assert classify_a2(70, 'reason drain_timeout\n').startswith('logpipe_hung_killed_by_script')
     assert classify_a2(0, 'reason none\nRC 0\n').startswith('logpipe_ok')

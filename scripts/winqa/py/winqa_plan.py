@@ -8,7 +8,7 @@
 
 Commands (run_winqa.sh calls them; the shell never prints JSON itself):
     winqa_plan.py create  --out OUT --run-id ID --from N --to N [--flags smoke,asr,failure,real,bili,hf]
-    winqa_plan.py record  --out OUT --run-id ID --step S --status ok|FAIL --exit-code N [--retry-of SEQ]
+    winqa_plan.py record  --out OUT --run-id ID --step S --status ok|FAIL --exit-code N [--retry-of SEQ] [--reason R]
     winqa_plan.py due     --out OUT --run-id ID --upto N       comma list of the required files due by step N
     winqa_plan.py steps   --out OUT --dest FILE               steps.json view (every receipt, every run)
     winqa_plan.py migrate --out OUT                           legacy evidence -> runs/legacy (idempotent)
@@ -41,8 +41,10 @@ TABLE = {
     12: [('real_local', ['real/local.json'], 'real', [])],
     13: [('real_link', ['real/link.json'], 'bili', [])],
     14: [('real_final', ['real/final.json'], 'real', [])],
-    8: [('collect_logs', ['collect-logs-final.json'], None, []), ('pull_final', [], None, [])],   # always runs
+    8: [('collect_logs', ['collect-logs-final.json'], None, []), ('pull_final', [], None, []),   # always runs
+        ('log_channel', [], None, [])],   # R31 I438: the log channel's final state, after logpipe_close (required)
 }
+LOG_CHANNEL = 'log_channel'
 NO_RECEIPT = frozenset({'smoke_asr', 'real_whisper_hfmirror'})   # covered by smoke / only after a failed real_whisper
 RETRYABLE = frozenset()     # no step may be retried inside one run today; see winqa_verdict (failure latches)
 
@@ -177,8 +179,21 @@ def _tree_artifacts(folder: Path):
     return out
 
 
+def _same_tree(zp: Path, bd: Path):
+    """I436: the ZIP really is a ZIP and its members are exactly the files of the unpacked dir, byte for byte."""
+    import io, zipfile
+    data = zp.read_bytes()
+    if not zipfile.is_zipfile(io.BytesIO(data)):
+        raise ValueError('bundle is not a ZIP')
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        members = {n: hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if not n.endswith('/')}
+    files = {p.relative_to(bd).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in bd.rglob('*') if p.is_file()}
+    if members != files or 'manifest.json' not in members:
+        raise ValueError('bundle ZIP and its unpacked dir differ')
+
+
 def record(out: Path, run_id: str, step: str, status: str, exit_code: int, retry_of=None, bundle_zip=None,
-           bundle_dir=None):
+           bundle_dir=None, reason=None):
     """The only receipt writer. With a bundle (export steps) the verified members move to
     runs/<id>/a<attempt>/<step>/ and the ZIP is kept in bundles/; the receipt binds both by hash (#384, #386, M8, M9)."""
     import winqa_chain
@@ -192,9 +207,15 @@ def record(out: Path, run_id: str, step: str, status: str, exit_code: int, retry
            'at': time.strftime('%Y-%m-%dT%H:%M:%S%z')}
     if retry_of is not None:
         row['retry_of'] = int(retry_of)
+    if reason is not None:
+        import re
+        if not re.fullmatch(r'[A-Za-z0-9_=.,-]{1,64}', reason):
+            raise ValueError('bad reason')
+        row['reason'] = reason
     if bundle_zip:
         import shutil
         zp, bd = Path(bundle_zip), Path(bundle_dir)
+        _same_tree(zp, bd)
         adir = runs_dir(out) / run_id / f'a{attempt}' / step
         if adir.exists():
             raise ValueError('attempt dir exists')
@@ -312,7 +333,7 @@ def main(a):
             try:
                 row = record(out, _arg(a, '--run-id'), _arg(a, '--step'), _arg(a, '--status'),
                              int(_arg(a, '--exit-code')), _arg(a, '--retry-of'), _arg(a, '--bundle-zip'),
-                             _arg(a, '--bundle-dir'))
+                             _arg(a, '--bundle-dir'), _arg(a, '--reason'))
                 if '--print-attempt-dir' in a:
                     print(runs_dir(out) / row['run_id'] / f"a{row['attempt']}" / row['step'])
             except Exception as exc:

@@ -339,15 +339,17 @@ __all__ = [n for n in dir() if not n.startswith('__')]
 
 
 def classify_a2(rc, final_text):
-    """#414 a2 (Dong): which of the three it was. final_text is ev/logpipe-final.txt, written by logpipe_close;
-    no file means the script never reached the close, i.e. bash itself died (killed or crashed)."""
+    """#414 a2 (Dong): which of the three it was. final_text is ev/logpipe-final.txt, written by logpipe_close or
+    by the handshake branch. R31 I439: no file only means no close record (bash died, or the script exited before
+    the logpipe started, e.g. mktemp failed); a signal is named only for rc > 128 or a negative rc."""
     if final_text is None:
         sig = -rc if rc < 0 else (rc - 128 if rc > 128 else None)
-        return f'bash_crashed rc={rc}' + (f' signal={sig}' if sig else '')
+        return f'no_close_record rc={rc}' + (f' signal={sig}' if sig else '')
     reason = next((l.split(' ', 1)[1] for l in final_text.splitlines() if l.startswith('reason ')), 'none')
     kind = reason.split('=', 1)[0]
     return {'killed': 'logpipe_killed', 'exited': 'logpipe_exited_itself', 'exit': 'logpipe_exited_itself',
             'wrapper_gone': 'logpipe_wrapper_gone', 'drain_timeout': 'logpipe_hung_killed_by_script',
+            'handshake_timeout': 'logpipe_no_handshake', 'died_before_ready': 'logpipe_died_before_ready',
             'none': 'logpipe_ok'}.get(kind, 'unknown') + f' ({reason}) rc={rc}'
 
 
@@ -390,17 +392,23 @@ def _wpwc():
     return wp, wc
 
 
+def default_result(name):
+    """A passing result file for every judge of winqa_chain.RESULT_FILES (smoke.json: every run exit 0)."""
+    return b'{"runs": [{"name": "a", "exit_code": 0}]}' if name == 'smoke.json' else b'{"ok": true}'
+
+
 def make_run(out, run_id='r1', frm=8, to=8, flags=(), receipts=(('collect_logs', 'ok'),), files=None,
-             manifest_edit=None, bundle_status='ok', inputs=None):
+             manifest_edit=None, bundle_status='ok', inputs=None, log_channel='ok'):
     """A real run directory written only through winqa_plan.create/record: the receipts given, then a final export
-    (pull_final) whose bundle (ZIP + members + manifest) is bound by its receipt, exactly as run_winqa.sh does."""
+    (pull_final) whose bundle (ZIP + members + manifest) is bound by its receipt, then the log_channel receipt
+    (R31 I438), exactly as run_winqa.sh does. log_channel=None leaves that receipt out."""
     wp, _ = _wpwc()
     out = Path(out)
     plan = wp.create(out, run_id, frm, to, set(flags), dict(INPUTS if inputs is None else inputs))
     for step, st in receipts:
         wp.record(out, run_id, step, st, 0 if st == 'ok' else 1)
     if files is None:
-        files = {f: b'{"ok": true}' for f in plan['required'] if f != 'steps.json'}
+        files = {f: default_result(f) for f in plan['required'] if f != 'steps.json'}
     files = dict(files)
     files.setdefault('steps.json', json.dumps(wp.all_receipts(out)).encode())
     files = {k: v for k, v in files.items() if v is not None}     # None = leave that file out of the bundle
@@ -430,6 +438,8 @@ def make_run(out, run_id='r1', frm=8, to=8, flags=(), receipts=(('collect_logs',
             t.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(p, t)
     shutil.rmtree(stage)
+    if log_channel:
+        wp.record(out, run_id, 'log_channel', log_channel, 0 if log_channel == 'ok' else 70)
     return plan
 
 

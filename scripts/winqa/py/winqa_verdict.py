@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """#414 v5: writes the verdict that winqa_chain.verify_chain decided. This file judges nothing (M6).
 
-    winqa_verdict.py final --out OUT --run-id ID --dest FILE      exit 0 only when the chain passed
-    winqa_verdict.py downgrade --dest FILE --reason R             I-C1 (delegates to winqa_chain)
+    winqa_verdict.py final --out OUT --run-id ID --dest FILE      exit 0 only when the chain passed; 70 when the
+                                                                  log_channel step failed; 1 otherwise
+R31 I438: run once, after logpipe_close and the log_channel receipt. Nothing rewrites the verdict afterwards: the
+same evidence gives the same verdict.json and steps.txt, byte for byte.
 """
 import json, sys
 from pathlib import Path
@@ -29,8 +31,6 @@ def check_binding(out: Path, verdict) -> bool:
 
 
 def main(a):
-    if a and a[0] == 'downgrade':
-        return wc.main(a)
     if not a or a[0] != 'final':
         print(__doc__, file=sys.stderr); return 2
     out = Path(wp._arg(a, '--out'))
@@ -39,7 +39,9 @@ def main(a):
     dest = Path(wp._arg(a, '--dest'))
     dest.write_text(json.dumps(v, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (out / 'steps.txt').write_text(''.join(f'{k}={v_}\n' for k, v_ in sorted(v['steps'].items())), encoding='utf-8')
-    return 0 if R.passed else 1
+    if R.passed:
+        return 0
+    return 70 if v['steps'].get(wc.LOG_CHANNEL) == 'FAIL' else 1
 
 
 if __name__ == '__main__':

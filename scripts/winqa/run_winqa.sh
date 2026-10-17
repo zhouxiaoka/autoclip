@@ -76,63 +76,85 @@ exec 3>&1 4>&2
 # status>" (137 after SIGKILL). The exit code comes only from that line, never from logpipe's own "EXIT" claim.
 exec 5> >(python3 -u "$HERE/logpipe.py" --log "$LOG" --status "$LP_STATUS" --keys-fd 6 6< <(printf '%s\n' "$MODEL_API_KEY") 1>&3 2>&4; echo "RC $?" >> "$LP_STATUS")
 LP_SPAWN="${!:-}"   # pid of the process substitution where bash reports it; READY carries logpipe's own pid
-# handshake bound (hardening, #389 not reproduced): WINQA_LOGPIPE_HANDSHAKE_S, default 30 s, 1..600
-HS="${WINQA_LOGPIPE_HANDSHAKE_S:-30}"
-case "$HS" in ''|*[!0-9]*) echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S" >&4; exit 70;; esac
-{ [ "$HS" -ge 1 ] && [ "$HS" -le 600 ]; } || { echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S" >&4; exit 70; }
-LP_PID=""; i=0
-while [ $i -lt $((HS * 10)) ]; do
+# handshake and drain bounds (hardening, #389 not reproduced): WINQA_LOGPIPE_HANDSHAKE_S (default 30) and
+# WINQA_LOGPIPE_DRAIN_S (default 10), 1..600 s. R31 I433: real-time deadlines on bash's own $SECONDS (Bash 3.2 has
+# it; no `date` fork per pass). $SECONDS counts whole seconds, so a deadline of N+1 waits at least N s.
+HS="${WINQA_LOGPIPE_HANDSHAKE_S:-30}"; DRAIN="${WINQA_LOGPIPE_DRAIN_S:-10}"
+for v in "$HS" "$DRAIN"; do
+  case "$v" in ''|*[!0-9]*) echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S/WINQA_LOGPIPE_DRAIN_S" >&4; exit 70;; esac
+  { [ "$v" -ge 1 ] && [ "$v" -le 600 ]; } || { echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S/WINQA_LOGPIPE_DRAIN_S" >&4; exit 70; }
+done
+LP_PID=""; hs_end=$((SECONDS + HS + 1))
+while [ "$SECONDS" -lt "$hs_end" ]; do
   LP_PID="$(sed -n 's/^READY \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null)"
   [ -n "$LP_PID" ] && break
   grep -q '^RC ' "$LP_STATUS" 2>/dev/null && break
-  sleep 0.1; i=$((i + 1))
+  sleep 0.1
 done
 if [ -z "$LP_PID" ]; then
   # the reason is decided BEFORE stopping it (stopping it writes an RC line of its own)
-  if grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then why="died before READY ($(sed -n 's/^RC //p' "$LP_STATUS"))"; else why="handshake_timeout after ${HS}s"; fi
+  if grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then why=died_before_ready; detail="($(sed -n 's/^RC //p' "$LP_STATUS"))"
+  else why=handshake_timeout; detail="after ${HS}s"; fi
   exec 5>&-
   # no handshake: stop logpipe (a child of the waiting subshell) and the subshell; never wait on them
   case "$LP_SPAWN" in ''|*[!0-9]*) ;; *) pkill -TERM -P "$LP_SPAWN" 2>/dev/null; kill -TERM "$LP_SPAWN" 2>/dev/null;; esac
-  echo "WINQA_E_LOGPIPE 70 $why" >&4; rm -rf "$LP_DIR"; exit 70
+  # R31 I474: this exit leaves its close record too
+  { echo "script_rc_before_close 70"; echo "reason $why"; grep -E '^(READY|EXIT|RC) ' "$LP_STATUS" 2>/dev/null; } \
+    > "$OUT/logpipe-final.txt" 2>/dev/null || :
+  echo "WINQA_E_LOGPIPE 70 $why $detail" >&4; rm -rf "$LP_DIR"; exit 70
 fi
 exec 1>&5 2>&5 5>&-
 logpipe_alive() { kill -0 "$LP_PID" 2>/dev/null && ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; }
-# close order: give the terminal back, close the only write end, bounded wait (10 s) for the "RC" line written by the
-# waiting subshell. Not there -> TERM, KILL, wait 1 s more. The external exit code then follows that real status, and
-# a verdict already written is downgraded through winqa_chain so the two always agree (I-C1).
-LP_REASON=""
+lp_wrapper_alive() {   # the waiting subshell (writes the RC line); where bash 3.2 gives no $!, logpipe itself
+  case "$LP_SPAWN" in ''|*[!0-9]*) kill -0 "$LP_PID" 2>/dev/null;; *) kill -0 "$LP_SPAWN" 2>/dev/null;; esac
+}
+# close order: give the terminal back, close the only write end, wait up to WINQA_LOGPIPE_DRAIN_S for the "RC" line
+# of the waiting subshell. At the deadline, check first, then decide (R31 I439): subshell gone without an RC line ->
+# wrapper_gone (a logpipe left behind is killed: orphan=1); subshell alive -> drain_timeout, TERM, KILL. With an RC
+# line: killed=SIGn (RC>128 not matching its own EXIT), exited=n (EXIT == RC), exit=n. The result is a fact for the
+# log_channel receipt (R31 I438); nothing here touches a verdict.
+LP_REASON=""; LP_CLOSED=0; STAGE=""
 logpipe_close() {
-  local rc="$1" n=0 lp ex
+  local rc="$1" lp ex end orphan=""
+  LP_CLOSED=1
   exec 1>&3 2>&4
-  while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ $n -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+  end=$((SECONDS + DRAIN + 1))
+  while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ "$SECONDS" -lt "$end" ]; do sleep 0.1; done
   if ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then
-    LP_REASON=drain_timeout; kill -TERM "$LP_PID" 2>/dev/null; sleep 0.2; kill -KILL "$LP_PID" 2>/dev/null
-    n=0; while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ $n -lt 10 ]; do sleep 0.1; n=$((n + 1)); done
+    if lp_wrapper_alive; then
+      LP_REASON=drain_timeout; kill -TERM "$LP_PID" 2>/dev/null; sleep 0.2; kill -KILL "$LP_PID" 2>/dev/null
+      end=$((SECONDS + 2)); while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ "$SECONDS" -lt "$end" ]; do sleep 0.1; done
+    else
+      LP_REASON=wrapper_gone
+      if kill -0 "$LP_PID" 2>/dev/null; then kill -KILL "$LP_PID" 2>/dev/null; orphan=" orphan=1"; fi
+    fi
   fi
   lp="$(sed -n 's/^RC \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
   ex="$(sed -n 's/^EXIT \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
-  # #414 a2 (Dong): the reason tells apart killed (signal, RC>128 not matching its own EXIT), exited on its own
-  # (EXIT == RC), and the waiting subshell gone (no RC at all). A bash crash leaves no logpipe-final.txt.
   if [ -z "$LP_REASON" ] && [ "${lp:-x}" != 0 ]; then
-    if [ -z "$lp" ]; then LP_REASON=wrapper_gone
-    elif [ "$lp" -gt 128 ] && [ "${ex:-x}" != "$lp" ]; then LP_REASON="killed=SIG$((lp - 128))"
+    if [ "$lp" -gt 128 ] && [ "${ex:-x}" != "$lp" ]; then LP_REASON="killed=SIG$((lp - 128))"
     elif [ "${ex:-x}" = "$lp" ]; then LP_REASON="exited=$lp"
     else LP_REASON="exit=$lp"; fi
   fi
-  { echo "script_rc_before_close $rc"; echo "reason ${LP_REASON:-none}"; grep -E '^(READY|EXIT|RC) ' "$LP_STATUS" 2>/dev/null; } \
+  { echo "script_rc_before_close $rc"; echo "reason ${LP_REASON:-none}$orphan"; grep -E '^(READY|EXIT|RC) ' "$LP_STATUS" 2>/dev/null; } \
     > "$OUT/logpipe-final.txt" 2>/dev/null || :
   if [ -n "$LP_REASON" ]; then
     # #414 test_a2: a channel that died mid-run (the script then stops on SIGPIPE, rc 141) is announced once
     echo "WINQA_E_LOGPIPE 70 $LP_REASON" >&4
     [ "$rc" = 0 ] && rc=70
-    if [ -n "${VERDICT:-}" ] && [ -f "$VERDICT" ]; then
-      python3 "$CHAIN_PY" downgrade --dest "$VERDICT" --reason "logpipe_${LP_REASON%%=*}" >/dev/null 2>&1 \
-        || rm -f "$VERDICT"
-    fi
   fi
   rm -rf "$LP_DIR"
   return "$rc"
 }
+# R31 I474: the trap is set right after the handshake, before migrate / create (exits 71) and everything else, so
+# every exit this script makes on its own leaves logpipe-final.txt.
+cleanup() {
+  local rc=$?; trap - EXIT; [ -n "$STAGE" ] && rm -rf "$STAGE"
+  [ "$LP_CLOSED" = 1 ] && exit "$rc"
+  logpipe_close "$rc"; exit $?
+}
+trap cleanup EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE   # #311: the log channel died -> stop, clean up
 python3 "$PLAN_PY" migrate --out "$OUT" || { echo "FAIL: 旧证据迁移失败"; exit 71; }
 PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
 # v5 #385: the plan names the candidate installer; a resume for another candidate is refused (exit 71)
@@ -157,9 +179,6 @@ for d in "$STAGE_ROOT"/winqa-stage.* "${TMPDIR:-/tmp}"/winqa-stage.* /tmp/winqa-
   stage_is_live "$d" || rm -rf "$d"
 done
 STAGE="$(mktemp -d "$STAGE_ROOT/winqa-stage.$$.XXXXXX")"; chmod 700 "$STAGE"
-cleanup() { local rc=$?; trap - EXIT; rm -rf "$STAGE"; logpipe_close "$rc"; exit $?; }
-trap cleanup EXIT
-trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE   # #311: the log channel died -> stop, clean up
 
 ID_OPT=(); [ -n "$IDENTITY" ] && ID_OPT=(-i "$IDENTITY")
 SSH=(ssh ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 "$USER_@$HOST")
@@ -361,12 +380,23 @@ rcall ps collect_logs Label=final; rec collect_logs $?
 export_bundle pull_final 99
 
 step "9. 汇总"
-# R29 point 3: ONE function decides (py/winqa_verdict.py); summarize.py only renders that verdict. steps.txt is a
-# view the verdict writes. The exit code is the verdict's.
+# R31 I438, in this order: (1) the steps are done; (2) logpipe_close; (3) the log channel's final state becomes the
+# log_channel receipt; (4) winqa_verdict final runs verify_chain ONCE and writes verdict-final.json and steps.txt;
+# (5) summarize.py renders summary.md from that verdict only; (6) the exit code is the verdict's. Nothing rewrites
+# the verdict afterwards. After (2) there is no log channel: every remaining line goes synchronously through
+# `redact.py --lines` and is appended to run.log.
+logpipe_close 0
+say() { python3 "$HERE/redact.py" --lines --keys-fd 6 6< <(printf '%s\n' "$MODEL_API_KEY") | tee -a "$LOG"; }
+if [ -n "$LP_REASON" ]; then LC_ST=FAIL; LC_RC=70; else LC_ST=ok; LC_RC=0; fi
+python3 "$PLAN_PY" record --out "$OUT" --run-id "$RUN_ID" --step log_channel --status "$LC_ST" --exit-code "$LC_RC" \
+  --reason "$(printf '%s' "${LP_REASON:-none}" | tr -c 'A-Za-z0-9_=.,\n-' '_')" 2>&1 | say
+[ "${PIPESTATUS[0]}" = 0 ] || { echo "FAIL: 回执写入失败（log_channel）" | say; exit 72; }
+echo "-> log_channel: $LC_ST (rc=${LC_RC})" | say
 VERDICT="$OUT/runs/$RUN_ID/verdict-final.json"
-python3 "$HERE/py/winqa_verdict.py" final --out "$OUT" --run-id "$RUN_ID" --dest "$VERDICT"; V_RC=$?
-[ -f "$VERDICT" ] || { echo "FAIL: 没有生成最终裁决"; exit 1; }
-python3 "$HERE/summarize.py" "$OUT" --verdict "$VERDICT" > "$OUT/summary.md"; S_RC=$?
-cat "$OUT/summary.md" || S_RC=1
-[ "$S_RC" = 0 ] || { echo "FAIL: 汇总渲染失败（rc=${S_RC}）"; exit 1; }
-[ "$V_RC" = 0 ] && exit 0 || exit 1   # the verdict alone decides (I-C1; logpipe_close may still downgrade both)
+python3 "$HERE/py/winqa_verdict.py" final --out "$OUT" --run-id "$RUN_ID" --dest "$VERDICT" 2>&1 | say; V_RC=${PIPESTATUS[0]}
+[ -f "$VERDICT" ] || { echo "FAIL: 没有生成最终裁决" | say; exit 1; }
+python3 "$HERE/summarize.py" "$OUT" --verdict "$VERDICT" > "$OUT/summary.md" 2> "$STAGE/summarize.err"; S_RC=$?
+say < "$STAGE/summarize.err"
+say < "$OUT/summary.md" || S_RC=1
+[ "$S_RC" = 0 ] || { echo "FAIL: 汇总渲染失败（rc=${S_RC}）" | say; exit 1; }
+exit "$V_RC"   # the verdict alone decides: 0 pass, 70 log channel failed, 1 otherwise
