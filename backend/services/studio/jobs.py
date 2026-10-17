@@ -1068,8 +1068,10 @@ def _fit_platform_limit(project_id, value, strategy):
 
 
 @_tracked('production')
-def _auto_generate(project_id, plan):
-    """Produce and render platform variants after the cheap screening pass."""
+def _auto_generate(project_id, plan, *, append_attempt=None):
+    """Produce and render platform variants after the cheap screening pass.
+    R31 #419: appending platforms runs here too (append_attempt = its attempt id): the same worker entry, persist and
+    failure branch; only the derive step differs and reads nothing but the input frozen at the request (I531/I533)."""
     started = monotonic()
     state = store.read(project_id)
     generation = state.get('generation') or {}
@@ -1077,96 +1079,121 @@ def _auto_generate(project_id, plan):
     branding = generation.get('branding') or {'outro_enabled': True, 'outro_version': 'v1'}
     video = source(project_id)
     skipped = []
+    snapshot = None
     try:
-        produced = _content_drafts(project_id, plan, video)
-        if isinstance(produced, tuple):
-            base_drafts, events, coverage = produced
+        if append_attempt is not None:
+            snapshot = _frozen_input(state, append_attempt)
+            derived_drafts, variants = _append_prepare(project_id, snapshot, video)
+            events = None
         else:
-            base_drafts, events, coverage = produced, [], None
-        variants = []
-        derived_drafts = []
-        from backend.services.platform_strategy import platform_strategy
-        burned = _source_has_burned_subtitles(project_id, video)
-        framing_cache = {}
-        packaging_cache = {}
-        # Platform eligibility must precede the score limit: otherwise ten short clips
-        # can exclude the only valid YouTube long clip and leave nothing to render.
-        limit = _render_limit(generation.get('features'))
-        scores = {draft['id']: draft[SCORE_KEY] for draft in base_drafts if SCORE_KEY in draft}
-        automatic = {
-            strategy_id: _automatic_drafts([base for base in base_drafts
-                if _eligible_for_platform(base, platform_strategy(strategy_id))], limit)
-            for strategy_id in platforms
-        }
-        from backend.services.studio.template_choice import html_candidate_ids, selected_template
-        chosen = selected_template(generation)
-        html_ids = html_candidate_ids(base_drafts) if chosen else set()
-        planned = []
-        for base in base_drafts:
-            source_id = base['id']
-            base = {key: item for key, item in base.items() if key != SCORE_KEY}
-            for strategy_id in platforms:
-                strategy = platform_strategy(strategy_id)
-                if not _eligible_for_platform(base, strategy):
-                    skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
-                    continue
-                value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                now = source_id in automatic[strategy_id]
-                use_html = bool(chosen) and now and strategy.aspect == 'portrait' and source_id in html_ids
-                rank_fallback = bool(chosen) and now and strategy.aspect == 'portrait' and source_id not in html_ids
-                framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
-                if now:
-                    with llm_usage.timed('framing'):
-                        value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-                planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id))
-        with llm_usage.timed('packaging'):
-            _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], burned, packaging_cache)
-        with llm_usage.timed('post_copy'):
-            posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], packaging_cache)
-        for strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id in planned:
-            if now:
-                value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
-                value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
-            layout = 'crop' if use_html and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
-            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
-            derived_drafts.append(draft.model_dump())
-            variants.append({
-                'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': draft.revision,
-                'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
-                'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
-                **({SCORE_KEY: scores[source_id]} if source_id in scores else {}),
-                **({'trimmed_to_sec': trimmed} if trimmed else {}),
-                **({'framing': framed} if framed else {}),
-                **({'post': posts[_content_key(value), strategy_id]} if (_content_key(value), strategy_id) in posts else {}),
-                **({'html_template': chosen} if use_html else {}),
-                **({'html_fallback': 'rank', 'requested_template': chosen} if rank_fallback else {}),
-            })
-        _queue_best_first(variants)
-        if not variants:
-            raise ValueError('所选平台没有可生成的完整内容版本')
+            derived_drafts, variants, events = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
         def persist(data):
+            if snapshot is not None:
+                _check_append_current(data, append_attempt, snapshot)
             data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
             if events:
                 data['events'] = events
             attempts.own_outputs(data, variants)  # R27 #376: produced by this run's attempt and its plan
             data['output_variants'].extend(variants)
-            data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
+            route = {'route': snapshot['route']} if snapshot is not None and snapshot.get('route') else ({} if snapshot is not None else _generation_route(data.get('plan')))
+            data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **route)
             data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
         _dispatch_pending_variants(project_id)
     except Exception as error:
-        store.raise_owned_read_error(error)
-        capture_studio_exception(error, 'production')
-        code = studio_error_code(error)
-        context = studio_failure_context(error, 'production')
-        error_text = str(error)[:700]
-        def fail(data):
-            if data.get('generation'):
-                data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
-            # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context}
-        store.change(project_id, fail)
+        _fail_generation(project_id, error, started, skipped, append_attempt)
+
+
+def _fail_generation(project_id, error, started, skipped, attempt_id=None):
+    """THE failure branch of a generation run (initial and appended platforms, R31 I535): attribution snapshot
+    (studio_failure_context, #415), run_id kept, duration_ms, mark_project. With attempt_id, a round that took over
+    the generation since is left alone (its own terminal decides)."""
+    store.raise_owned_read_error(error)
+    capture_studio_exception(error, 'production')
+    code = studio_error_code(error)
+    context = studio_failure_context(error, 'production')
+    error_text = str(error)[:700]
+    def fail(data):
+        if attempt_id is not None and (data.get('generation') or {}).get('attempt_id') != attempt_id:
+            return False
+        if data.get('generation'):
+            data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
+        # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
+        data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context}
+        return True
+    if store.change(project_id, fail):
         mark_project(project_id, 'failed')
+
+
+def _initial_derive(project_id, plan, video, generation, platforms, branding, skipped):
+    """The first generation's derive step: content drafts -> platform variants (unchanged R30 loop)."""
+    produced = _content_drafts(project_id, plan, video)
+    if isinstance(produced, tuple):
+        base_drafts, events, coverage = produced
+    else:
+        base_drafts, events, coverage = produced, [], None
+    variants = []
+    derived_drafts = []
+    from backend.services.platform_strategy import platform_strategy
+    burned = _source_has_burned_subtitles(project_id, video)
+    framing_cache = {}
+    packaging_cache = {}
+    # Platform eligibility must precede the score limit: otherwise ten short clips
+    # can exclude the only valid YouTube long clip and leave nothing to render.
+    limit = _render_limit(generation.get('features'))
+    scores = {draft['id']: draft[SCORE_KEY] for draft in base_drafts if SCORE_KEY in draft}
+    automatic = {
+        strategy_id: _automatic_drafts([base for base in base_drafts
+            if _eligible_for_platform(base, platform_strategy(strategy_id))], limit)
+        for strategy_id in platforms
+    }
+    from backend.services.studio.template_choice import html_candidate_ids, selected_template
+    chosen = selected_template(generation)
+    html_ids = html_candidate_ids(base_drafts) if chosen else set()
+    planned = []
+    for base in base_drafts:
+        source_id = base['id']
+        base = {key: item for key, item in base.items() if key != SCORE_KEY}
+        for strategy_id in platforms:
+            strategy = platform_strategy(strategy_id)
+            if not _eligible_for_platform(base, strategy):
+                skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
+                continue
+            value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
+            now = source_id in automatic[strategy_id]
+            use_html = bool(chosen) and now and strategy.aspect == 'portrait' and source_id in html_ids
+            rank_fallback = bool(chosen) and now and strategy.aspect == 'portrait' and source_id not in html_ids
+            framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
+            if now:
+                with llm_usage.timed('framing'):
+                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+            planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id))
+    with llm_usage.timed('packaging'):
+        _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], burned, packaging_cache)
+    with llm_usage.timed('post_copy'):
+        posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], packaging_cache)
+    for strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id in planned:
+        if now:
+            value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+            value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
+        layout = 'crop' if use_html and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
+        derived_drafts.append(draft.model_dump())
+        variants.append({
+            'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': draft.revision,
+            'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
+            'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
+            **({SCORE_KEY: scores[source_id]} if source_id in scores else {}),
+            **({'trimmed_to_sec': trimmed} if trimmed else {}),
+            **({'framing': framed} if framed else {}),
+            **({'post': posts[_content_key(value), strategy_id]} if (_content_key(value), strategy_id) in posts else {}),
+            **({'html_template': chosen} if use_html else {}),
+            **({'html_fallback': 'rank', 'requested_template': chosen} if rank_fallback else {}),
+        })
+    _queue_best_first(variants)
+    if not variants:
+        raise ValueError('所选平台没有可生成的完整内容版本')
+    return derived_drafts, variants, events
 
 
 def _signature(draft):
@@ -1174,86 +1201,41 @@ def _signature(draft):
 
 
 def _append_targets(data, selected):
-    """R30 I492: what an append would derive, read from the locked state (cheap: no media, no model). Returns the
-    (base draft, strategy_id, automatic) targets and, per moment, the output that new versions derive from (I491)."""
+    """R30 I492 / R31 I532: what an append would derive, read from the locked state (cheap: no media, no model).
+    Each target is ONE choice of (source output, its draft): per moment the newest output stamped by an attempt, and
+    the draft that output was rendered from. Preparation, stamping and plan inheritance all use this same pair. A
+    moment without any stamped output (old projects) uses its first draft and has no source output."""
     from backend.services.platform_strategy import platform_strategy
     draft_by_id = {draft['id']: draft for draft in data.get('drafts', [])}
-    existing, automatic, sources = set(), set(), {}
+    existing, automatic, source_of = set(), set(), {}
     for item in data.get('output_variants', []):
-        signature = _signature(draft_by_id.get(item.get('draft_id')))
+        draft = draft_by_id.get(item.get('draft_id'))
+        signature = _signature(draft)
         existing.add((item['strategy_id'], signature))
         if item.get('status') != 'on_demand':
             automatic.add(signature)
-        if item.get('produced_by_attempt') and signature:
-            sources[signature] = item  # I491: the latest output of this moment is what the new version derives from
+        if item.get('produced_by_attempt') and signature and draft is not None:
+            source_of[signature] = (item, draft)
     targets, seen, duplicate = [], set(), False
     for base in data.get('drafts', []):
         signature = _signature(base)
         if not signature or signature in seen:
             continue
         seen.add(signature)
+        output, draft = source_of.get(signature, (None, base))
         for strategy_id in selected:
             if (strategy_id, signature) in existing:
                 duplicate = True
-            elif _eligible_for_platform(base, platform_strategy(strategy_id)):
-                targets.append((base, strategy_id, signature in automatic))
-    return targets, duplicate, sources
+            elif _eligible_for_platform(draft, platform_strategy(strategy_id)):
+                targets.append({'draft': draft, 'output': output, 'strategy_id': strategy_id, 'automatic': signature in automatic})
+    return targets, duplicate
 
 
-def append_platform_variants(project_id, platforms, branding):
-    """Derive only new platform versions from saved drafts; never reanalyze source media. R30 I490/I492: the append
-    is one attempt lifecycle like generation and retry - inside the lock check and open the attempt first, then
-    prepare (framing / packaging / copy), then persist the outputs or settle the attempt failed. Returns the receipt."""
-    from backend.services.platform_strategy import normalize_platform_ids, platform_strategy
-    selected = normalize_platform_ids(platforms)
-
-    def start(data):
-        if not (data.get('generation') or {}).get('auto_start'):
-            raise ValueError('这个项目尚未使用自动生成流程')
-        targets, duplicate, sources = _append_targets(data, selected)
-        if not targets:
-            if duplicate:
-                raise attempts.AppendRejected('该平台已有版本', 'append_platform_exists')
-            raise ValueError('没有可追加的平台版本；素材不满足所选平台要求')
-        first = next((t for t in targets if t[2]), None)
-        if first is None:  # I494: nothing would be produced automatically -> no attempt
-            raise attempts.AppendRejected('没有可自动生成的平台版本', 'append_no_auto_output', status=400)
-        receipt = attempts.open_append(data, sources.get(_signature(first[0])), now=store.now())
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
-        return receipt['attempt_id'], [(base['id'], strategy_id, now) for base, strategy_id, now in targets]
-
-    attempt_id, targets = store.change(project_id, start)
-    try:
-        derived, variants = _append_prepare(project_id, targets, branding, platform_strategy)
-    except Exception as error:  # noqa: BLE001 - the attempt settles failed and its terminal is observed (I490)
-        logger.warning('Platform append preparation failed: %s', type(error).__name__)
-        capture_studio_exception(error, 'production')
-        code, text = studio_error_code(error), str(error)[:700]
-
-        def fail(data):
-            if (data.get('generation') or {}).get('attempt_id') == attempt_id:
-                data['generation'].update(status='failed', error=text, error_code=code, failure_stage='production', finished_at=store.now())
-                data['analysis'] = {'status': 'failed', 'phase': 'rendering', 'error': text, 'error_code': code, 'failure_stage': 'production'}
-        store.change(project_id, fail)
-        derived, variants = [], []
-    if variants:
-        def persist(data):
-            data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
-            attempts.own_outputs(data, variants)
-            data['output_variants'].extend(variants)
-        store.change(project_id, persist)
-        _dispatch_pending_variants(project_id)
-    state = store.read(project_id)
-    return {'variants': variants, 'attempt': attempts.public(attempts.find(state, attempt_id) or {})}
-
-
-def _append_prepare(project_id, targets, branding, platform_strategy):
-    state = store.read(project_id)
-    draft_by_id = {draft['id']: draft for draft in state.get('drafts', [])}
-    html_by_signature = {}
-    requested_by_signature = {}
-    rank_signatures = set()
-    for item in state.get('output_variants', []):
+def _append_template_inheritance(data):
+    """Template inheritance per moment, computed once inside the lock (R31 I533: preparation never re-reads it)."""
+    draft_by_id = {draft['id']: draft for draft in data.get('drafts', [])}
+    html_by_signature, requested_by_signature, rank_signatures = {}, {}, set()
+    for item in data.get('output_variants', []):
         signature = _signature(draft_by_id.get(item.get('draft_id')))
         if item.get('html_template'):
             html_by_signature[signature] = item['html_template']
@@ -1262,18 +1244,114 @@ def _append_prepare(project_id, targets, branding, platform_strategy):
             rank_signatures.add(signature)
             if item.get('requested_template') in ('editorial', 'street'):
                 requested_by_signature.setdefault(signature, item['requested_template'])
-    chosen = (state.get('generation') or {}).get('html_template')
+    chosen = (data.get('generation') or {}).get('html_template')
     if chosen in ('editorial', 'street'):
         for signature in rank_signatures:
             requested_by_signature.setdefault(signature, chosen)
+    return html_by_signature, requested_by_signature, rank_signatures
+
+
+def _freeze_append_input(data, targets, branding, receipt):
+    """R31 I532/I533: the explicit input of this append, frozen with the attempt (studio.json, same atomic write)."""
+    html_by_signature, requested_by_signature, rank_signatures = _append_template_inheritance(data)
+    first = next(t for t in targets if t['automatic'])
+    source = first['output'] or {}
+    frozen = []
+    for target in targets:
+        draft, signature = target['draft'], _signature(target['draft'])
+        frozen.append({
+            'strategy_id': target['strategy_id'], 'automatic': target['automatic'],
+            'base_draft_id': draft['id'], 'base_draft_revision': draft.get('revision'),
+            'base_draft': deepcopy({k: v for k, v in draft.items() if k != SCORE_KEY}),
+            'source_output_id': (target['output'] or {}).get('id'),
+            'inherited_html_template': html_by_signature.get(signature),
+            'requested_template': requested_by_signature.get(signature),
+            'rank_fallback': signature in rank_signatures,
+        })
+    return {
+        'source_plan_id': source.get('produced_by_plan'), 'source_attempt_id': source.get('produced_by_attempt'),
+        'source_output_ids': [t['source_output_id'] for t in frozen if t['source_output_id']],
+        'route': (receipt.get('inherited') or {}).get('route'), 'branding': branding, 'targets': frozen,
+    }
+
+
+def append_platform_variants(project_id, platforms, branding):
+    """Derive only new platform versions from saved drafts; never reanalyze source media.
+    R31 #419: an ordinary generation with trigger=append_platform. Inside the lock: validate, open the attempt and
+    freeze its input; return the receipt at once. Preparation runs in the background through _auto_generate (the
+    same worker entry and failure branch as the first generation)."""
+    from backend.services.platform_strategy import normalize_platform_ids
+    selected = normalize_platform_ids(platforms)
+
+    def start(data):
+        if not (data.get('generation') or {}).get('auto_start'):
+            raise ValueError('这个项目尚未使用自动生成流程')
+        targets, duplicate = _append_targets(data, selected)
+        if not targets:
+            if duplicate:
+                raise attempts.AppendRejected('该平台已有版本', 'append_platform_exists')
+            raise ValueError('没有可追加的平台版本；素材不满足所选平台要求')
+        first = next((t for t in targets if t['automatic']), None)
+        if first is None:  # I494: nothing would be produced automatically -> no attempt
+            raise attempts.AppendRejected('没有可自动生成的平台版本', 'append_no_auto_output', status=400)
+        receipt = attempts.open_append(data, first['output'], now=store.now())
+        receipt['input'] = _freeze_append_input(data, targets, branding, receipt)
+        run_id = uuid.uuid4().hex
+        data['generation']['started_at'] = store.now()
+        data['analysis'] = {'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        return receipt['attempt_id'], run_id
+
+    attempt_id, run_id = store.change(project_id, start)
+    mark_project(project_id, 'processing')
+    _submit_production(project_id, run_id, None, append_attempt=attempt_id)
+    return {'variants': [], 'attempt': attempts.public(attempts.find(store.read(project_id), attempt_id) or {})}
+
+
+def _submit_production(project_id, run_id, plan, **kwargs):
+    """Hand a generation run to the worker (first generation and appended platforms). A refused hand-off settles
+    the run failed at the dispatch stage instead of leaving it in production."""
+    try:
+        executor.submit(_auto_generate, project_id, plan, _io_receipt=('analysis', run_id, 'production'), **kwargs)
+    except Exception as error:
+        store.analysis_handoff_rejected(project_id, run_id)
+        store.remember_submission_rejection(project_id, ('analysis', run_id, 'production'), error_code=studio_error_code(error))
+        capture_studio_exception(error, 'dispatch')
+        message = '自动制作任务未能启动，请重试；原素材已保留'
+        code = studio_error_code(error)
+        def fail_automatic(data):
+            data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code}
+        store.change(project_id, fail_automatic)
+        mark_project(project_id, 'failed')
+
+
+def _frozen_input(state, attempt_id):
+    receipt = attempts.find(state, attempt_id)
+    if not receipt or receipt.get('state') != 'open' or not isinstance(receipt.get('input'), dict):
+        raise store.ConflictError('这次追加已结束，请重新追加')
+    return receipt['input']
+
+
+def _check_append_current(data, attempt_id, snapshot):
+    """R31 I530/I533: persist only into the still-open append attempt, from drafts that have not changed since."""
+    receipt = attempts.current(data)
+    if not receipt or receipt['attempt_id'] != attempt_id or (data.get('generation') or {}).get('attempt_id') != attempt_id:
+        raise store.ConflictError('这次追加已结束，请重新追加')
+    revisions = {draft['id']: draft.get('revision') for draft in data.get('drafts', [])}
+    if any(revisions.get(t['base_draft_id'], object()) != t['base_draft_revision'] for t in snapshot['targets']):
+        raise store.ConflictError('草稿已修改，请重新追加')
+
+
+def _append_prepare(project_id, snapshot, video):
+    """Frame / package / write copy for the frozen targets. Reads only the snapshot (R31 I533)."""
+    from backend.services.platform_strategy import platform_strategy
+    branding = snapshot['branding']
     variants, derived = [], []
     burned = _source_has_burned_subtitles(project_id)
-    video = source(project_id)
     framing_cache = {}
     packaging_cache = {}
-    for base_id, strategy_id, now in targets:
-        base = draft_by_id[base_id]
-        signature = _signature(base)
+    for target in snapshot['targets']:
+        base, strategy_id, now = target['base_draft'], target['strategy_id'], target['automatic']
         strategy = platform_strategy(strategy_id)
         value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
         framed = None
@@ -1283,8 +1361,9 @@ def _append_prepare(project_id, targets, branding, platform_strategy):
             value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
             post = _posts_for(project_id, [(strategy_id, value)], packaging_cache).get((_content_key(value), strategy_id))
             value = _audience_title(value, strategy_id, post)
-        inherited = html_by_signature.get(signature) if now and strategy.aspect == 'portrait' else None
-        rank_fallback = signature in rank_signatures and now and strategy.aspect == 'portrait' and not inherited
+        inherited = target['inherited_html_template'] if now and strategy.aspect == 'portrait' else None
+        rank_fallback = target['rank_fallback'] and now and strategy.aspect == 'portrait' and not inherited
+        requested = target['requested_template']
         layout = 'crop' if inherited and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
         derived.append(draft.model_dump())
@@ -1296,7 +1375,7 @@ def _append_prepare(project_id, targets, branding, platform_strategy):
             **({'framing': framed} if framed else {}),
             **({'post': post} if post else {}),
             **({'html_template': inherited} if inherited else {}),
-            **({'html_fallback': 'rank', 'requested_template': requested_by_signature.get(signature)} if rank_fallback and requested_by_signature.get(signature) else {'html_fallback': 'rank'} if rank_fallback else {}),
+            **({'html_fallback': 'rank', 'requested_template': requested} if rank_fallback and requested else {'html_fallback': 'rank'} if rank_fallback else {}),
         })
     return derived, variants
 
@@ -1518,6 +1597,7 @@ def _variant_attempt(data, retry, variant):
                                         run_id=uuid.uuid4().hex, key=(retry or {}).get('key'), now=store.now())
     # R27 #377: the plan and outputs come from the attempt that produced THIS variant, not the retry parent
     attempts.inherit_plan(receipt, data, variant)
+    variant['redone_by_attempt'] = receipt['attempt_id']  # R31 I541: this round is judged on what it redid
     data['generation']['attempt_id'] = receipt['attempt_id']
     return receipt
 
@@ -1685,19 +1765,7 @@ def _inspect(project_id, options, url, browser):
                 return run_id
             run_id = store.change(project_id, start_automatic)
             mark_project(project_id, 'processing', creative=plan['preferences'], awaiting_confirmation=False, import_staging=False)
-            try:
-                executor.submit(_auto_generate, project_id, plan, _io_receipt=('analysis', run_id, 'production'))
-            except Exception as error:
-                store.analysis_handoff_rejected(project_id, run_id)
-                store.remember_submission_rejection(project_id, ('analysis', run_id, 'production'), error_code=studio_error_code(error))
-                capture_studio_exception(error, 'dispatch')
-                message = '自动制作任务未能启动，请重试；原素材已保留'
-                code = studio_error_code(error)
-                def fail_automatic(data):
-                    data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
-                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code}
-                store.change(project_id, fail_automatic)
-                mark_project(project_id, 'failed')
+            _submit_production(project_id, run_id, plan)
             return
         def awaiting_confirmation(data):
             data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
@@ -1796,6 +1864,12 @@ def confirm_project(project_id, body):
 
 
 @_tracked('production')
+def _add_confirmed_drafts(data, drafts):
+    rows = [{**d, 'updated_at': store.now()} for d in drafts]
+    attempts.own_drafts(data, rows)  # R31 I540: owned by this confirmation's attempt
+    data['drafts'].extend(rows)
+
+
 def _produce_selected(project_id, plan):
     from backend.services.studio import intelligence
     started = monotonic()
@@ -1832,11 +1906,11 @@ def _produce_selected(project_id, plan):
                     if goal == 'highlight':
                         from backend.services.studio.subtitle_highlights import make_highlights
                         drafts = make_highlights(subtitle_clips, prefs, intelligence._probe(video).get('duration'))
-                        store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
+                        store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                     if goal == 'promo':
                         from backend.services.studio.subtitle_promo import make_promos
                         drafts = make_promos(project_id, subtitle_clips, prefs, intelligence._probe(video).get('duration'), instruction)
-                        store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
+                        store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                     mark_project(project_id, 'processing')
                     result_count += len(subtitle_clips) if goal == 'content' else len(drafts)
                     succeeded_goals.append(goal)
@@ -1860,7 +1934,7 @@ def _produce_selected(project_id, plan):
                 if (video.parent / 'input.srt').exists():
                     for draft in drafts:
                         draft['subtitles'] = True
-                store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
+                store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                 result_count += len(drafts)
                 succeeded_goals.append(goal)
             except Exception as error:

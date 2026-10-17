@@ -531,6 +531,8 @@ def settle_generation(data):
     attempt record / no stamped output in scope -> the whole workspace, as before."""
     from backend.services.studio import attempts
     scope = attempts.round_outputs(data)
+    if scope == []:
+        return  # R31 I530: the open attempt is still preparing; other rounds' renders never settle it
     pool = data['output_variants'] if scope is None else scope
     variants = [item for item in pool if item['status'] != 'on_demand']
     if all(item['status'] in ('completed', 'failed') for item in variants):

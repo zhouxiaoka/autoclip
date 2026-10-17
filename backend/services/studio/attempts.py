@@ -146,6 +146,17 @@ def own_outputs(data, variants):
             variant['produced_by_plan'] = receipt['plan_id']
 
 
+def own_drafts(data, drafts):
+    """R31 I540: drafts a manual confirmation creates are owned by the open (production) attempt, stored when they
+    are written - same rule as own_outputs. The stamp lives in the attempt record (draft_ids): the Draft schema is
+    closed (extra='forbid') and drafts are copied into derived drafts, which must not inherit another run's stamp."""
+    receipt = current(data)
+    if not receipt:
+        return
+    ids = receipt.setdefault('draft_ids', [])
+    ids.extend(d['id'] for d in drafts if isinstance(d, dict) and d.get('id') and d['id'] not in ids)
+
+
 def inherit_plan(receipt, data, variant):
     """R26 #364 / R27 #377: a variant retry re-renders an output, so it belongs to the plan that produced that
     output (the variant's own stamp) and reports the outputs of the attempt that produced it - not the retry
@@ -181,11 +192,13 @@ ROUND_TERMINAL = ('error', 'error_code', 'failure_stage', 'upstream_error_type',
 
 
 def start_round(data, receipt):
-    """Bind the generation to a newly opened attempt and clear the previous round's terminal fields."""
+    """Bind the generation to a newly opened attempt and clear the previous round's terminal fields. R31 I530: the
+    round starts in production (preparing, nothing stamped yet): no render callback or restart recovery can settle it
+    on other rounds' outputs, and a dead worker is closed as service_restarted by the production recovery."""
     generation = data['generation']
     for key in ROUND_TERMINAL:
         generation.pop(key, None)
-    generation.update(attempt_id=receipt['attempt_id'], status='rendering')
+    generation.update(attempt_id=receipt['attempt_id'], status='production')
 
 
 def open_append(data, source_variant, now=None):
@@ -242,6 +255,7 @@ def settle(receipt, state, record, now=None, plan=None, base=None):
     causes = causes_of(record) if state in ('failed', 'partial') else []
     ranked = rank_failures([{'error_code': c['code'], 'upstream_error_type': c['upstream'], 'failure_stage': c['stage'], '_c': c} for c in causes])
     receipt.update(state=state, finished_at=now, causes=[r['_c'] for r in ranked])
+    receipt.pop('input', None)  # R31: an append's frozen input is only needed while it runs
     own = plan if isinstance(plan, dict) and plan.get('id') and plan.get('id') == receipt.get('plan_id') else {}
     # R25 #345/#347: everything the terminal event projects is frozen here - the frontend never mixes in the live
     # workspace or plan for a receipt (a historical receipt must not borrow the current state's numbers).
@@ -335,26 +349,26 @@ def generation_summary(data, variants=None, started=None) -> dict:
     return {k: v for k, v in out.items() if v is not None}
 
 
-def owners_of(data):
-    """R28 #409: the attempts whose outputs this round is judged on - the current generation attempt, plus (for a
-    variant retry) the attempts that produced the outputs it redid. None when the round has no attempt record."""
-    attempt_id = (data.get('generation') or {}).get('attempt_id') if isinstance(data.get('generation'), dict) else None
-    receipt = find(data, attempt_id)
-    if receipt is None:  # R29 #440: only the id is left (record trimmed / lost) -> whole workspace
-        return None
-    return {attempt_id, *(receipt.get('sources') or ())}
-
-
 def round_outputs(data):
-    """R28 #409: THE one scope rule, shared by store.settle_generation (status, counts, error code, wording, the
-    'all done' gate) and the receipt summary. Outputs (on_demand included) produced by owners_of(data). None means
-    "fall back to the whole workspace": no attempt record, or no stamped output in scope (old projects, a retry of
-    an old output) - never an empty scope, which settle would turn into a validation failure."""
-    owners = owners_of(data)
-    if owners is None:
+    """THE one scope rule, shared by store.settle_generation (status, counts, error code, wording, the 'all done'
+    gate) and the receipt summary. R31 I541: only outputs stamped by THIS attempt - produced by it, or redone by it
+    (「重试这条」 stamps redone_by_attempt) - never older rounds' outputs. Returns:
+    - the stamped outputs (on_demand included);
+    - [] while the attempt is open and still preparing (generation in production, nothing stamped yet): nothing to
+      settle on (R31 I530);
+    - None (whole workspace) only for data without an attempt record, or a closed/old round that stamped nothing."""
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
+    attempt_id = generation.get('attempt_id')
+    receipt = find(data, attempt_id)
+    if receipt is None:  # R29 #440: no attempt record (trimmed / lost / pre-receipt data) -> whole workspace
         return None
-    owned = [v for v in data.get('output_variants') or [] if isinstance(v, dict) and v.get('produced_by_attempt') in owners]
-    return owned or None
+    owned = [v for v in data.get('output_variants') or [] if isinstance(v, dict)
+             and attempt_id in (v.get('produced_by_attempt'), v.get('redone_by_attempt'))]
+    if owned:
+        return owned
+    if receipt.get('state') == 'open' and generation.get('status') == 'production':
+        return []
+    return None
 
 
 def _owned_summary(data):
@@ -362,9 +376,10 @@ def _owned_summary(data):
     judges the status on). With no stamped output in scope the receipt keeps the request fields but no counts -
     unstamped outputs are not attributed by inference."""
     owned = round_outputs(data)
-    if owned is None:
-        return {k: v for k, v in generation_summary(data).items() if k in OUTPUT_FREE}
-    return generation_summary(data, variants=owned, started=(find(data, data['generation'].get('attempt_id')) or {}).get('created_at'))
+    started = (find(data, data['generation'].get('attempt_id')) or {}).get('created_at')
+    if not owned:  # R31 I534: no counts by inference, but the duration never depends on the output scope
+        return {k: v for k, v in generation_summary(data, started=started).items() if k in OUTPUT_FREE + ('duration_ms',)}
+    return generation_summary(data, variants=owned, started=started)
 
 
 def reconcile(data, now=None):
@@ -393,4 +408,4 @@ def reconcile(data, now=None):
 
 def public(receipt) -> dict:
     """What the API returns: the receipt without the idempotency key."""
-    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id', 'inherited', 'sources')}
+    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id', 'inherited', 'sources', 'input', 'draft_ids')}
