@@ -25,6 +25,69 @@ VISUAL_SOURCE_TOO_LONG_MESSAGE = '画面分析最长支持 120 分钟的素材�
 assert VISUAL_MAX_SOURCE_SEC == 120 * 60  # keep the i18n key in sync with the limit
 FRAME_EXTRACT_FALLBACK_CODE = 'frame_extract_subtitle_fallback'
 FRAME_EXTRACT_FALLBACK_MESSAGE = '读取素材画面失败，已改用字幕分析继续制作。'
+
+
+def source_duration(video: Path, info: dict | None = None) -> float:
+    """Planning's duration from the caller's own ffprobe ``info`` (#351: no second ffprobe; a missing duration
+    gets one ffmpeg decode). Raises the preflight's source failure when unreadable or under 1 s."""
+    from backend.services.studio import preflight
+    probe = preflight.probe_from_info(video, info)
+    failure = preflight.classify_source(probe, srt_available=True, subtitle_route=False)
+    if failure is not None:
+        raise failure
+    return float(probe.duration)
+
+
+def vision_configured(analysis_mode: str) -> bool:
+    """Same answer recommend() uses: a vision model is ready (never for subtitle mode)."""
+    if analysis_mode == 'subtitle':
+        return False
+    try:
+        return bool(intelligence.ready())
+    except ValueError:
+        return False
+
+
+def final_goal(requested: str | None, analysis_mode: str, configured: bool, screened: str | None = None) -> str:
+    """The goal recommend() ends with. ``screened`` is the screening answer; before screening it is unknown.
+    Visual mode with auto: a configured vision model keeps a non-content goal (E2); without one the fallback is content.
+    Auto/subtitle mode with auto: unknown before screening, so content (the subtitle-safe answer)."""
+    requested = requested or 'auto'
+    if requested != 'auto':
+        return requested
+    if analysis_mode == 'visual':
+        if not configured:
+            return 'content'
+        return screened if screened and screened != 'content' else 'highlight'
+    return screened or 'content'
+
+
+def resolve_route(analysis_mode: str, goal: str, duration: float | None, *, ai_screened: bool = False, degraded: bool = False) -> str:
+    """The one route rule (R21 code health): 'visual' or 'subtitle'. recommend() and the import gate both call it."""
+    if degraded or duration is None or duration > VISUAL_MAX_SOURCE_SEC or goal == 'content':
+        return 'subtitle'
+    if analysis_mode == 'visual' or (analysis_mode == 'auto' and ai_screened):
+        return 'visual'
+    return 'subtitle'
+
+
+def preferred_analysis_mode() -> str | None:
+    """The analysis mode recommend() will read (``analysis_preferences.load``: new settings, else the legacy
+    analysis-preferences.json). None when the saved preference is unreadable: recommend() then refuses on its
+    own before any paid call (R22 #208)."""
+    try:
+        return analysis_preferences.load().analysis_mode
+    except ValueError:
+        return None
+
+
+def transcription_may_be_skipped(analysis_mode: str | None = None) -> bool:
+    """For the readiness report: visual mode with a vision model can run without ASR (the backend gate decides per file).
+    ``analysis_mode`` is the caller's ``preferred_analysis_mode()`` so the report reads it once (R23 #233)."""
+    if analysis_mode is None:
+        analysis_mode = preferred_analysis_mode()
+    return analysis_mode == 'visual' and vision_configured(analysis_mode)
+
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
 # E1: AUTO mode, screening answered but the answer could not be parsed.
@@ -64,9 +127,15 @@ def _subtitle_blockers(video: Path, duration: float, options: ImportOptions, con
     attached SRT, used to spend screening and clip-finding calls before failing.
     """
     from backend.pipeline import media_precheck
+    from backend.services.studio import preflight
     srt_attached = (video.parent / 'input.srt').is_file()
-    short = media_precheck.too_short(duration)
-    no_audio = not srt_attached and media_precheck.has_audio(video) is False
+    # #351: the subtitle-route verdict is the one classify_source; audio is only looked up when it matters.
+    audio = None if srt_attached or media_precheck.too_short(duration) else media_precheck.has_audio(video)
+    probe = preflight.MaterialProbe(preflight.ProbeState.READABLE, Path(video), duration, audio)
+    verdict = preflight.classify_source(probe, srt_available=srt_attached, subtitle_route=True)
+    code = verdict.code if verdict is not None else None
+    short = code == media_precheck.SOURCE_TOO_SHORT
+    no_audio = code == media_precheck.SOURCE_NO_AUDIO
     if not (short or no_audio):
         return False, False
     vision = duration <= VISUAL_MAX_SOURCE_SEC and configured
@@ -96,10 +165,9 @@ def recommend(video: Path, options: ImportOptions):
     from backend.pipeline.concurrency import reset_limiter
     reset_limiter()
     info = intelligence._probe(video)
-    from backend.pipeline import media_precheck
     # #345: "unreadable" and "under 1 s" are different failures with their own codes;
     # an unreadable probe is retried with an ffmpeg decode before failing.
-    duration = media_precheck.duration_or_fail(video, info.get('duration'))
+    duration = source_duration(video, info)
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
     # R3 (R11 #406): sources over 120 min go to the subtitle route BEFORE any vision config
@@ -214,7 +282,7 @@ def recommend(video: Path, options: ImportOptions):
     elif screening_degrade:  # vision request failed during auto screening
         degrade_reason = VISION_FALLBACK_CODE
         result.reason = (result.reason + VISION_FALLBACK_MESSAGE)[:500]
-    elif invalid_degrade:  # visual mode screening returned an unparseable answer
+    elif invalid_degrade:  # auto mode screening returned an unparseable answer (E1; visual mode raises)
         degrade_reason = VISION_INVALID_FALLBACK_CODE
         result.reason = (VISION_INVALID_FALLBACK_MESSAGE + result.reason)[:500]
     elif frame_degrade:
@@ -235,7 +303,7 @@ def recommend(video: Path, options: ImportOptions):
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    route = 'subtitle' if invalid_degrade else 'visual' if duration <= VISUAL_MAX_SOURCE_SEC and result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
+    route = resolve_route(consent.analysis_mode, result.goal, duration, ai_screened=mode == 'ai', degraded=invalid_degrade)
     if short or no_audio:
         from backend.pipeline import media_precheck
         if route == 'subtitle' and options.auto_start:

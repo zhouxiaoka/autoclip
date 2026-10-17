@@ -23,7 +23,7 @@ _ANONYMOUS_ID = re.compile(r"^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4
 
 logger = logging.getLogger(__name__)
 
-STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted", "frame_extract_failed"}
+STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted", "frame_extract_failed", "network", "disk", "corrupt"}
 # Expected failures caused by the environment or by the user's own source (too short,
 # no audio track): never sent to Sentry, still recorded locally with their code.
 UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_too_short", "source_no_audio", "service_restarted"}
@@ -40,6 +40,12 @@ def studio_error_code(error: Exception) -> str:
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
+    # Whisper model download (whisper_model_manager.ModelDownloadFailed). Duck-typed so
+    # crash reporting does not import the downloader. The code is network / disk / corrupt / unexpected.
+    if type(error).__name__ == "ModelDownloadFailed":
+        code = getattr(error, "code", None)
+        if isinstance(code, str) and code in STUDIO_ERROR_CODES:
+            return code
     # Local render, frame sampling and optional-runtime preparation use typed subprocess timeouts.
     if isinstance(error, subprocess.TimeoutExpired):
         return "timeout"
@@ -334,7 +340,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
     allowed = {
         "area": {"studio"}, "error_code": STUDIO_ERROR_CODES,
-        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install", "qa", "packaging_html", "packaging_runtime"},
+        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install", "qa", "packaging_html", "packaging_runtime", "model_download"},
         "analysis_mode": {"subtitle", "visual"},
         "goal": {"content", "highlight", "promo"},
         "runtime": {"python"}, "app_mode": {"web", "desktop"},
@@ -586,7 +592,7 @@ def init_sentry(mode: str = "web") -> bool:
     return True
 
 
-def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None, goal=None):
+def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None, goal=None, http_status: int | None = None):
     """Report caught worker errors without allowing monitoring to fail the worker.
 
     Consent is checked both here and in before_send. Scope is isolated so worker
@@ -613,6 +619,8 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
                 scope.set_tag("analysis_mode", analysis_mode)
             if goal:
                 scope.set_tag("goal", goal)
+            if http_status is not None:
+                scope.set_tag("http_status", str(http_status))  # before_send keeps 400-599 only
             try:
                 from backend.core.llm_telemetry import sentry_tags_for_error
                 for key, value in sentry_tags_for_error(error, phase).items():

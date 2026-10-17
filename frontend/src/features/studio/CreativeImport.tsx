@@ -6,7 +6,7 @@ import { Select } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
 import PlatformPicker from './PlatformPicker'
-import { studioApi, errorText } from './api'
+import { studioApi, errorText, errorCode } from './api'
 import { trackAsrReadiness, trackAutoChoiceOverridden, trackOneClickStarted, trackOneClickUndone, trackQuickOutputPlatforms } from '../../analytics/studio'
 import { telemetryId } from '../../analytics/workflow'
 import { featureSnapshot, flagAssigned, flagEnabled, flagValue, useFlag } from '../../analytics/flags'
@@ -16,11 +16,14 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
+import TranscriptionGatePrompt from './TranscriptionGatePrompt'
+import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
+import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import './studio.css'
 import './quick-output.css'
 
@@ -47,6 +50,7 @@ function repairLabel(item: ReadinessIssue) {
   if (item.repair === 'settings_vision') return t('视觉设置')
   return ''
 }
+
 
 function uiLocale() {
   try { return getLocale() } catch { return 'en' }
@@ -83,17 +87,16 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [readiness, setReadiness] = useState<ImportReadiness | null>(null)
+  const currentReadiness = readiness
   const [settled, setSettled] = useState(false)
-  const [repairing, setRepairing] = useState(false)
   const [platformOpen, setPlatformOpen] = useState(false)
   const [pending, setPending] = useState<{ trigger: 'paste' | 'drop' } | null>(null)
   const [dragging, setDragging] = useState(false)
   const platformSource = useRef<PlatformSource>(initialPlatforms.current.source)
   const overridden = useRef(false)
   const starting = useRef(false)
-  const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button') => Promise<void>>(async () => {})
-  // Installing the runtime is only half of local transcription: download the model right after.
-  const modelAfterRuntime = useRef(false)
+  const recoverRef = useRef<RecoveryController>(null as unknown as RecoveryController)
+  const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button', fresh?: ImportReadiness | null) => Promise<void>>(async () => {})
   const allowLink = flagEnabled('link_import_without_whisper')
   const dropZone = flagEnabled('import_drop_zone')
   const hidePreferences = flagEnabled('hide_legacy_entrypoints')
@@ -117,25 +120,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (stored) setOptions(current => ({ ...stored, instruction: current.instruction }))
   }, [hidePreferences])
   useEffect(() => {
-    const check = readiness?.checks?.transcription
-    if (check?.code === 'whisper_model_missing' && check.model && modelAfterRuntime.current) {
-      modelAfterRuntime.current = false
-      void downloadModel(check.model)
-      return
-    }
-    if (check?.code === 'whisper_install_failed') modelAfterRuntime.current = false
-    if (check?.code !== 'whisper_installing' && check?.code !== 'whisper_model_downloading') return
-    const timer = window.setInterval(() => {
-      studioApi.readiness().then(setReadiness).catch(() => undefined)
-    }, 2000)
-    return () => window.clearInterval(timer)
-  }, [readiness?.checks?.transcription?.code])
-  useEffect(() => {
     if (!shouldBackgroundInstallWhisper(allowLink, readiness?.checks?.transcription?.code)) return
+    if (recoverRef.current.state.phase !== 'idle') return
     if (!claimBackgroundWhisperInstall()) return
-    void speechApi.installRuntime()
-      .then(() => studioApi.readiness().then(setReadiness).catch(() => undefined))
-      .catch(() => undefined)
+    // #371: the background install is the controller's install too, so its polls refresh readiness and the page
+    // never stays on 正在安装本地转写; the dialog stays closed unless a submit is blocked on it.
+    void recoverRef.current.install({ background: true })
   }, [allowLink, readiness?.checks?.transcription?.code])
   useEffect(() => {
     if (!pending) return
@@ -160,32 +150,28 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     return () => window.removeEventListener('paste', onPaste)
   }, [pasteFlag, dropZone, busy, settled, allowLink, source])
   const issues = visibleIssues(readiness, !!subtitle, blockOptions)
-  const downloadModel = async (model: string) => {
-    setRepairing(true)
-    setError('')
-    try {
-      await speechApi.downloadModel(model)
-      setReadiness(await studioApi.readiness())
-      setSettled(true)
-    } catch (e) { setError(t(errorText(e))) } finally { setRepairing(false) }
-  }
   const repair = async (item: ReadinessIssue) => {
-    if (item.repair === 'install_whisper' && item.model) { await downloadModel(item.model); return }
-    if (item.repair === 'install_whisper') {
-      modelAfterRuntime.current = true
-      setRepairing(true)
-      setError('')
-      try {
-        await speechApi.installRuntime()
-        setReadiness(await studioApi.readiness())
-        setSettled(true)
-      } catch (e) { modelAfterRuntime.current = false; setError(t(errorText(e))) } finally { setRepairing(false) }
-      return
-    }
+    // #353: the readiness list's install button goes through the one recovery controller (no second install flow).
+    if (item.repair === 'install_whisper') { resumeSubmit.current = false; setError(''); recover.open(item.code || 'whisper_not_installed', item.model); await recover.install(); return }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
     const destination = repairDestination(item.repair)
     if (destination) navigate(destination)
   }
+  // #418 rewrite: the one install-recovery controller (shared with the confirm page): install -> download ->
+  // ready (continues by itself) / failed / timeout (retry or transcription settings).
+  // Done waiting -> the same import continues by itself (#232); the 继续导入 button is the manual exit.
+  // #349: continue with the report the controller just read, never the page's cached readiness.
+  // #370: only a submit that was blocked on the install continues by itself; a download started from the list
+  // (or in the background) just refreshes readiness when it finishes.
+  const resumeSubmit = useRef(false)
+  const recoveryDone = (report: ImportReadiness | null) => {
+    if (resumeSubmit.current) { continueAfterRecovery(report); return }
+    recover.close(); if (report) setReadiness(report)
+  }
+  const continueAfterRecovery = (report: ImportReadiness | null) => { resumeSubmit.current = false; recover.close(); setError(''); if (report) setReadiness(report); void submitRef.current?.('button', report) }
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: signal => studioApi.readinessProbe(signal), getRuntimeStatus: signal => speechApi.getRuntimeStatus(probeConfig(signal)), getModels: signal => speechApi.getModels(probeConfig(signal)), installRuntime: signal => speechApi.installRuntime({ signal }), downloadModel: (model, signal) => speechApi.downloadModel(model, { signal }) }, { onReady: report => recoveryDone(report), onReport: report => setReadiness(report) })
+  recoverRef.current = recover
+  const repairing = recovery.phase === 'installing' || recovery.phase === 'downloading'
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
     if (remembered) writeRememberedPlatforms(next)
@@ -198,7 +184,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     overridden.current = true
     trackAutoChoiceOverridden({ field: 'platform', stage: 'pre_import' }, true)
   }
-  const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }) => {
+  const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }, readiness: ImportReadiness | null = currentReadiness) => {
     if (blocked) { trackExperience('import_blocked', { reason: 'setup_required', placement: 'home_setup' }); setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return false }
     const nextFile = next && 'file' in next ? next.file : file
     const nextUrl = next?.url ?? url
@@ -207,11 +193,18 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
+    const check = readiness?.checks?.transcription
+    if (reason === 'transcription' && nextSource === 'file' && !subtitle && !check?.skippable && isRecoveryCode(check?.code)) {
+      setError(''); resumeSubmit.current = true; recover.open(check!.code, check!.model); return false
+    }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
     if (trigger !== 'button') setError('')
     return true
   }
   const arm = (trigger: 'paste' | 'drop', next: { url?: string; file?: File }) => {
+    // R21 #166: drop, global paste and the file picker all come through here; while a submit is running
+    // (including its readiness re-check) the source is locked, so what is shown is what gets uploaded.
+    if (starting.current) return
     if (next.file) { setFile(next.file); setUrl(''); setSource('file') }
     else if (next.url) { setUrl(next.url); setFile(null); setSource('link') }
     if (!shouldAutoStart(pasteFlag, trigger)) return
@@ -223,13 +216,22 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     setPending(null)
     if (trigger) trackOneClickUndone({ trigger }, flagAssigned('one_click_paste_start'))
   }
-  const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button') => {
+  const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null) => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
-    if (!readyToStart(trigger)) return
+    // R20 #166: one busy state from the click on. The re-probe below can wait, and the inputs stay locked
+    // (busy disables them) so the request carries exactly what the user saw when they clicked.
     starting.current = true
-    setBusy(true); setError('')
+    setBusy(true)
     try {
+      let report = fresh ?? readiness
+      if (settled && !report) {
+        // R19 #115 (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
+        report = await probeReadiness(() => studioApi.readiness())
+        if (report) setReadiness(report)
+      }
+      if (!readyToStart(trigger, undefined, report)) return
+      setError('')
       const flowId = telemetryId()
       const body = new FormData()
       body.append('goal', options.goal); body.append('language', options.language); body.append('instruction', options.instruction)
@@ -262,7 +264,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       // Project refresh should never make a successful import look like an upload failure.
       void onImported().catch(() => undefined)
       navigate(`/project/${result.project_id}`)
-    } catch (e) { setError(t(errorText(e))) } finally { starting.current = false; setBusy(false) }
+    } catch (e) {
+      // R20 #168: the backend gate sends a stable code; the prompt is chosen from it, never from the text.
+      const code = errorCode(e)
+      if (isRecoveryCode(code)) { setError(''); resumeSubmit.current = true; recover.open(code as string, readiness?.checks?.transcription?.model) }
+      else setError(t(errorText(e)))  // includes coded source refusals (source_unreadable ...): shown at once
+    } finally { starting.current = false; setBusy(false) }
   }
   submitRef.current = submit
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -282,7 +289,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
         <p className="ac-dropzone-title">{t('把链接或视频放在这里')}</p>
         <p className="ac-dropzone-hint">{t('粘贴链接，或拖入一个视频文件。')}</p>
         <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} disabled={busy}/></label>
-        {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" onClick={() => setFile(null)}>{t('移除')}</button></p>}
+        {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
         <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
       </div> : <>
         <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>!busy&&setSource(v)} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
@@ -303,6 +310,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       </div>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
+      <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
       {error&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>

@@ -1631,7 +1631,10 @@ def _inspect(project_id, options, url, browser):
         store.raise_owned_read_error(error)
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
-        failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
+        # A PipelineFailure keeps its hint (e.g. "到「设置 → 转写」安装 Whisper"), not only str(error) (R22 #212).
+        from backend.pipeline.failures import PipelineFailure
+        text = error.user_message() if isinstance(error, PipelineFailure) else str(error)
+        failure = {'status':'failed','phase':'screening','error':text[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         if getattr(error, 'probe_detail', None):
             failure['probe_detail'] = error.probe_detail
         context = studio_failure_context(error, 'screening')
@@ -1664,21 +1667,11 @@ def confirm_project(project_id, body):
                 raise ValueError('视觉模型不可用，请配置后重新确认；原素材已保留')
         if route == 'subtitle' or 'content' in body.goals:
             # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
-            from backend.pipeline import media_precheck
-            from backend.pipeline.failures import PipelineFailure
+            # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
+            # prompt (coded 422, waiting codes kept as is), before production spends any model call.
+            from backend.services.studio import preflight
             video = source(project_id)
-            srt_available = (video.parent / 'input.srt').is_file()
-            blocked = media_precheck.subtitle_route_failure(
-                video, srt_available=srt_available, duration=plan.get('source_duration'))
-            if blocked:
-                raise ValueError(str(blocked))
-            if not srt_available:
-                from backend.services.studio import readiness
-                try:
-                    readiness.require_transcription(
-                        stage='SUBTITLE', srt_available=False, analysis_mode='subtitle')
-                except PipelineFailure as missing:
-                    raise ValueError(missing.user_message()) from missing
+            preflight.check(preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', route='subtitle'))
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals

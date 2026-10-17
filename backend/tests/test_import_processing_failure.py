@@ -475,6 +475,7 @@ def test_unexpected_and_key_messages_do_not_share_a_type():
     assert key.kind == "missing-key"
 
 
+@pytest.mark.real_media_probe
 def test_silent_or_short_source_fails_before_transcription_and_is_not_a_crash(memory_backend, project_service, tmp_path, monkeypatch):
     """RC156 Win QA #10/#11 on the legacy import task: no transcription, no pipeline, own exception kind."""
     import shutil

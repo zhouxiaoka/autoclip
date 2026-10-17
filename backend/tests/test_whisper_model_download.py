@@ -472,3 +472,53 @@ def test_r2_status_api_never_echoes_raw_download_exception(monkeypatch, tmp_path
     assert secret not in status["errorMessage"]
     assert url not in status["errorMessage"]
 
+
+
+def test_r28_i520_background_download_failure_is_reported_once_without_text_url_or_path(monkeypatch, tmp_path):
+    """A failure in the background download thread reaches Sentry exactly once through capture_studio_exception
+    (phase=model_download, an error_code), with no exception text, URL or path in the event."""
+    import sentry_sdk
+    from backend.core import sentry_setup
+
+    events = []
+
+    class Transport(sentry_sdk.transport.Transport):
+        def capture_envelope(self, envelope):
+            events.extend(item.payload.json for item in envelope.items if item.type == "event")
+
+    real_init = sentry_sdk.init
+    monkeypatch.setattr(sentry_sdk, "init", lambda *a, **k: real_init(*a, transport=Transport(), **k))
+    monkeypatch.setattr(sentry_setup, "_initialized", False)
+    monkeypatch.setattr(sentry_setup, "crash_reports_enabled", lambda: True)
+    monkeypatch.setattr(sentry_setup, "sync_anonymous_user", lambda *a, **k: None)
+    monkeypatch.setenv("SENTRY_DSN", "https://k@o0.ingest.sentry.io/0")  # memory transport: nothing leaves the box
+    # I652 refuses pytest and a source checkout. Stub only those two refusals.
+    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.8")
+    monkeypatch.setenv("AUTOCLIP_BUILD_ENVIRONMENT", "production")
+    monkeypatch.setattr(sentry_setup, "_under_pytest", lambda: False)
+    monkeypatch.setattr(sentry_setup, "_running_from_source_tree", lambda: False)
+
+    def drop(**kwargs):
+        raise ConnectionError("Connection reset fetching https://huggingface.co/Systran/x/model.bin into /Users/someone/whisper-models/hub/blobs/abc.incomplete")
+
+    _install_fake_hub(monkeypatch, drop)
+    monkeypatch.setattr("backend.services.whisper_model_manager.download_plan", lambda: [("official", "https://huggingface.co")])
+    manager = _manager(monkeypatch, tmp_path)
+    try:
+        assert sentry_setup.init_sentry("desktop") is True
+        manager._download_blocking("base")
+        sentry_sdk.flush()
+        assert manager.get_model_info("base").status == ModelStatus.ERROR
+        assert len(events) == 1, f"background download failure reported exactly once, got {len(events)}"
+        tags = events[0].get("tags", {})
+        assert tags.get("phase") == "model_download" and tags.get("area") == "studio", tags
+        assert tags.get("error_code") == "network", tags
+        assert "http_status" not in tags
+        text = str(events[0])
+        for leaked in ("Connection reset", "huggingface.co", "/Users/", "model.bin", ".incomplete", str(tmp_path)):
+            assert leaked not in text, leaked
+    finally:
+        sentry_sdk.flush(timeout=0)
+        sentry_sdk.get_client().close(timeout=0)
+        sentry_setup._initialized = False
+        real_init(dsn="")

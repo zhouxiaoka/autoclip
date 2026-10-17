@@ -25,6 +25,10 @@ os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autocli
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "stdlib_only: runtime regression without application dependencies")
+    config.addinivalue_line("markers", "own_whisper_status: the test simulates its own Whisper runtime state; skip the default simulated installed Whisper")
+    config.addinivalue_line("markers", "reads_whisper_stand_in: the test asserts the conftest stand-in itself")
+    config.addinivalue_line("markers", "real_media_probe: run the real preflight material probe (ffprobe / ffmpeg) instead of the placeholder stand-in")
+    config.addinivalue_line("markers", "real_hf: compare the snapshot-cache fake with an installed huggingface_hub; skipped when it is not installed")
 
 
 class _FollowStudioExecutor:
@@ -111,6 +115,69 @@ def _no_framing_install(monkeypatch, request):
         from backend.services.studio import framing
         monkeypatch.setattr(framing, "start_install", lambda index_url=None: {"started": False, "message": "test"})
     yield
+
+def _called_from_test_code(depth: int = 2) -> bool:
+    """True when the stand-in was called directly by test code (a tests/ module), not by product code."""
+    filename = Path(sys._getframe(depth).f_code.co_filename).resolve()
+    return _TESTS_DIR in filename.parents
+
+
+_TESTS_DIR = Path(__file__).resolve().parent
+
+
+@pytest.fixture(autouse=True)
+def _whisper_installed_by_default(monkeypatch, request):
+    # 1.5.8 R19 #115: with no settings document the import gate assumes the default local Whisper.
+    # CI has no Whisper, so every suite runs with "local Whisper installed, model on disk" simulated;
+    # the gate code itself still runs everywhere and passes because its condition is not met.
+    # Tests that exercise the Whisper state functions themselves carry @pytest.mark.own_whisper_status.
+    # R21 #176: detected at runtime, whatever the import style or directory: if test code calls the
+    # stand-in directly and the test is not marked, the test fails here instead of passing on the stand-in.
+    if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("own_whisper_status"):
+        yield
+        return
+    from backend.services import whisper_runtime
+    from backend.services.studio import readiness
+    direct = []
+    allowed = request.node.get_closest_marker("reads_whisper_stand_in") is not None
+
+    def get_status(*a, **k):
+        if not allowed and _called_from_test_code():
+            direct.append("whisper_runtime.get_status")
+        return {"status": "installed"}
+
+    def whisper_model(name):
+        if not allowed and _called_from_test_code():
+            direct.append("readiness._whisper_model")
+        return {"ok": True, "code": "whisper_installed"}
+    monkeypatch.setattr(whisper_runtime, "get_status", get_status)
+    monkeypatch.setattr(readiness, "_whisper_model", whisper_model)
+    yield
+    if direct:
+        pytest.fail(f"{request.node.nodeid} calls {sorted(set(direct))} directly but reads the conftest stand-in; "
+                    "mark it @pytest.mark.own_whisper_status and simulate the state it needs (R21 #176)", pytrace=False)
+
+@pytest.fixture(autouse=True)
+def _placeholder_media_is_readable(monkeypatch, request):
+    # #418 rewrite: every entry now probes the source before anything else. Most suites use placeholder bytes
+    # as "a video"; they get a readable 60 s source with audio. Tests about the source itself (and the #418
+    # acceptance tests) carry @pytest.mark.real_media_probe and run the real ffprobe / ffmpeg probe.
+    if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("real_media_probe"):
+        yield
+        return
+    try:
+        from backend.services.studio import preflight
+    except Exception:  # noqa: BLE001
+        yield
+        return
+    monkeypatch.setattr(preflight, "probe_material",
+                        lambda video: preflight.MaterialProbe(preflight.ProbeState.READABLE, video, 60.0, True, ffprobe_runs=1))
+    # A caller's own ffprobe that found no duration (fake bytes) finishes as the same readable stand-in (#351).
+    monkeypatch.setattr(preflight, "_after_ffprobe",
+                        lambda path, duration, audio, width, height, stderr='': preflight.MaterialProbe(
+                            preflight.ProbeState.READABLE, path, duration or 60.0, True if audio is None else audio, width, height, ffprobe_runs=1))
+    yield
+
 
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):

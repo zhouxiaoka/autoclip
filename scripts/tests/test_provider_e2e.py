@@ -412,6 +412,51 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertTrue(judge.judge_suite(skipped)['skipped'])
         self.assertTrue(judge.judge_reports([report, skipped])['passed'])
 
+    def test_import_refusal_code_only_takes_coded_source_422(self):
+        # #418: the preflight refuses a bad source at import (coded 422, no project) -> a valid block.
+        import json as _json
+        from provider_e2e.harness import import_refusal_code
+        from provider_e2e.http_util import HttpError
+        body = _json.dumps({'error': {'code': 'HTTP_422'}, 'detail': {'code': 'source_no_audio', 'message': 'x'}})
+        self.assertEqual(import_refusal_code(HttpError(422, body)), 'source_no_audio')
+        self.assertIsNone(import_refusal_code(HttpError(500, body)))
+        self.assertIsNone(import_refusal_code(HttpError(422, _json.dumps({'detail': {'code': 'whisper_not_installed'}}))))
+        self.assertIsNone(import_refusal_code(HttpError(422, 'not json')))
+        self.assertIsNone(import_refusal_code(HttpError(422, _json.dumps({'detail': '视频文件为空'}))))
+
+    def test_refusal_counts_only_for_should_block_cases(self):
+        import json as _json
+        from provider_e2e.harness import refusal_workspace
+        from provider_e2e.http_util import HttpError
+        exc = HttpError(422, _json.dumps({'detail': {'code': 'source_too_short', 'message': 'x'}}))
+        self.assertEqual(refusal_workspace('block', exc)['generation']['error_code'], 'source_too_short')
+        for expect in ('succeed', 'service_restarted'):
+            self.assertIsNone(refusal_workspace(expect, exc), expect)
+
+    def test_unknown_paid_call_count_never_passes_a_block(self):
+        # #353: "no project" is not "zero calls"; a call seen by the observer before the 422 fails the case.
+        from provider_e2e.harness import evaluate_case, observed_chat_calls
+        refused = {'generation': {'status': 'failed', 'error_code': 'source_no_audio', 'failure_stage': 'INGEST'}, 'analysis': {}}
+        self.assertFalse(evaluate_case('block', refused, None, 'source_no_audio')['passed'])
+        self.assertTrue(evaluate_case('block', refused, 0, 'source_no_audio')['passed'])
+
+        class Observer:
+            class state:
+                @staticmethod
+                def snapshot():
+                    return {'events': [{'path': '/v1/models'}, {'path': '/v1/chat/completions'}]}
+        self.assertEqual(observed_chat_calls(Observer, 0), 1)
+        self.assertEqual(observed_chat_calls(Observer, 2), 0)
+        self.assertIsNone(observed_chat_calls(None, 0))
+        from provider_e2e.harness import paid_calls
+        self.assertIsNone(paid_calls(None, None), 'no project and no observer: unknown, not 0')
+        self.assertEqual(paid_calls(1, None), 1)
+        self.assertEqual(paid_calls(None, 2), 2)
+        self.assertEqual(paid_calls(1, 0), 1, 'a call the observer saw counts even if the ledger missed it')
+        from provider_e2e import judge
+        row = {'id': 'mock:no_audio', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': None, 'billable_calls': None}
+        self.assertFalse(judge.judge_suite({'status': 'ok', 'cases': [row]})['passed'])
+
     def test_evaluate_block_requires_zero_billable(self):
         from provider_e2e.harness import evaluate_case
         workspace = {
@@ -902,3 +947,148 @@ class ProviderE2EFailClosedTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ProviderE2EPaidCallCountTests(unittest.TestCase):
+    """#369 / #373: run_case counts paid calls from the observer, the ledger, or a proven import rejection;
+    anything else is unknown and a should-block case with an unknown count fails."""
+
+    SOURCE_422 = json.dumps({'detail': {'code': 'source_too_short', 'message': 'x'}})
+
+    def _run(self, *, import_effect, observer=None, poll=None, expect='block'):
+        from provider_e2e import harness
+        from provider_e2e.http_util import HttpError
+        data_dir = Path(tempfile.mkdtemp(prefix='pe2e-count-'))
+
+        class FakeBackend:
+            log_path = None
+            def __init__(self, *a, **k): pass
+            def start(self): return 'http://backend'
+            def stop(self): pass
+            def kill(self): pass
+
+        def do_import(base_url, fixture):
+            return import_effect(data_dir, HttpError)
+        with patch.object(harness, 'DesktopBackend', FakeBackend), patch.object(harness, 'write_data_dir', lambda *a, **k: None), \
+                patch.object(harness, 'import_project', do_import), \
+                patch.object(harness, 'poll_workspace', poll or (lambda *a, **k: {'generation': {'status': 'failed', 'error_code': 'source_too_short', 'failure_stage': 'INGEST'}, 'analysis': {}})):
+            return harness.run_case(case_id='c', label='c', expect=expect, fixture={'id': 'too_short', 'block_code': 'source_too_short'},
+                                    data_dir=data_dir, connection={'base_url': 'u', 'api_key': 'k', 'provider': 'p', 'model': 'm'},
+                                    python=sys.executable, timeout=5, mock_server=observer)
+
+    @staticmethod
+    def _observer(events):
+        class Obs:
+            class state:
+                @staticmethod
+                def snapshot():
+                    return {'events': list(events)}
+        return Obs
+
+    def test_live_source_422_without_new_project_is_zero_import_rejected(self):
+        row = self._run(import_effect=lambda d, E: (_ for _ in ()).throw(E(422, self.SOURCE_422)))
+        self.assertEqual((row['billable_calls_before_failure'], row['count_source']), (0, 'import_rejected'))
+        self.assertTrue(row['passed'])
+        self.assertTrue(judge.judge_suite({'status': 'ok', 'cases': [row]})['should_block_passed'])
+
+    def test_project_created_but_422_is_unknown_and_fails(self):
+        def effect(d, E):
+            (d / 'projects' / 'leaked').mkdir(parents=True)
+            raise E(422, self.SOURCE_422)
+        row = self._run(import_effect=effect)
+        self.assertIsNone(row['billable_calls_before_failure'])
+        self.assertFalse(row['passed'])
+
+    def test_project_swapped_same_count_is_unknown(self):
+        def effect(d, E):
+            (d / 'projects' / 'old').rename(d / 'projects' / 'new')
+            raise E(422, self.SOURCE_422)
+        from provider_e2e import harness
+        before = harness.project_ids
+        def seeded(data_dir):
+            (data_dir / 'projects' / 'old').mkdir(parents=True, exist_ok=True) if not (data_dir / 'projects' / 'new').exists() else None
+            return before(data_dir)
+        with patch.object(harness, 'project_ids', seeded):
+            row = self._run(import_effect=effect)
+        self.assertIsNone(row['billable_calls_before_failure'], 'compared by id, not by count')
+
+    def test_project_removed_after_import_is_unknown(self):
+        """#407: fewer projects after the import (one deleted) is not a proven rejection; a subset check fails this."""
+        from provider_e2e import harness
+        self.assertEqual(harness.import_rejected_count('source_too_short', frozenset({'a', 'b'}), frozenset({'a'})), (None, None))
+        self.assertEqual(harness.import_rejected_count('source_too_short', frozenset({'a', 'b'}), frozenset({'a', 'b'})), (0, 'import_rejected'))
+
+        def effect(d, E):
+            (d / 'projects' / 'gone').rmdir()
+            raise E(422, self.SOURCE_422)
+        before = harness.project_ids
+        seeded_once = []
+        def seeded(data_dir):
+            if not seeded_once:
+                seeded_once.append(1)
+                (data_dir / 'projects' / 'kept').mkdir(parents=True, exist_ok=True)
+                (data_dir / 'projects' / 'gone').mkdir(parents=True, exist_ok=True)
+            return before(data_dir)
+        with patch.object(harness, 'project_ids', seeded):
+            row = self._run(import_effect=effect)
+        self.assertIsNone(row['billable_calls_before_failure'], 'a project disappeared: unknown, not 0')
+        self.assertFalse(row['passed'])
+
+    def test_422_without_source_code_is_not_a_block(self):
+        row = self._run(import_effect=lambda d, E: (_ for _ in ()).throw(E(422, json.dumps({'detail': {'code': 'whisper_not_installed'}}))))
+        self.assertFalse(row['passed'])
+        self.assertIsNone(row['billable_calls_before_failure'])
+
+    def test_observer_wiring_counts_a_call_before_the_422(self):
+        obs = self._observer([{'path': '/v1/chat/completions'}])
+        events = obs.state.snapshot
+        calls = {'n': 0}
+        def snap():
+            calls['n'] += 1
+            return {'events': [] if calls['n'] == 1 else [{'path': '/v1/chat/completions'}]}
+        obs.state.snapshot = staticmethod(snap)
+        row = self._run(import_effect=lambda d, E: (_ for _ in ()).throw(E(422, self.SOURCE_422)), observer=obs)
+        self.assertEqual(row['billable_calls_before_failure'], 1)
+        self.assertEqual(row['count_source'], 'observer')
+        self.assertFalse(row['passed'])
+        del events
+
+    def test_ledger_wiring_counts_the_project_ledger(self):
+        def effect(d, E):
+            meta = d / 'projects' / 'p1' / 'metadata'; meta.mkdir(parents=True)
+            (meta / 'llm_usage.jsonl').write_text('{"kind":"chat"}\n{"kind":"timing"}\n{"kind":"chat"}\n')
+            return 'p1'
+        row = self._run(import_effect=effect)
+        self.assertEqual((row['billable_calls_before_failure'], row['count_source']), (2, 'ledger'))
+        self.assertFalse(row['passed'])
+
+    def test_missing_or_broken_ledger_is_unknown(self):
+        from provider_e2e.harness import billable_calls_before_failure
+        d = Path(tempfile.mkdtemp())
+        self.assertIsNone(billable_calls_before_failure(d, 'p'))
+        meta = d / 'projects' / 'p' / 'metadata'; meta.mkdir(parents=True)
+        (meta / 'llm_usage.jsonl').write_text('{"kind":"chat"}\nnot json\n')
+        self.assertIsNone(billable_calls_before_failure(d, 'p'))
+        (meta / 'llm_usage.jsonl').write_text('')
+        self.assertEqual(billable_calls_before_failure(d, 'p'), 0)
+        row = self._run(import_effect=lambda dd, E: (dd / 'projects' / 'p2').mkdir(parents=True) or 'p2')
+        self.assertIsNone(row['billable_calls_before_failure'], 'project exists, ledger missing -> unknown')
+        self.assertFalse(row['passed'])
+
+    def test_judge_rejects_non_integer_counts(self):
+        for bad in ('oops', 0.9, 0.0, True, -1, None, '0'):
+            row = {'id': 'b', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': bad, 'billable_calls': bad}
+            self.assertFalse(judge.judge_suite({'status': 'ok', 'cases': [row]})['should_block_passed'], repr(bad))
+        good = {'id': 'b', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0}
+        self.assertTrue(judge.judge_suite({'status': 'ok', 'cases': [good]})['should_block_passed'])
+
+    def test_mock_observer_zero_does_not_rescue_a_created_project(self):
+        obs = self._observer([])
+        def effect(d, E):
+            (d / 'projects' / 'leaked').mkdir(parents=True)
+            raise E(422, self.SOURCE_422)
+        row = self._run(import_effect=effect, observer=obs)
+        self.assertIsNone(row['billable_calls_before_failure'])
+        self.assertFalse(row['passed'])
+        ok = self._run(import_effect=lambda d, E: (_ for _ in ()).throw(E(422, self.SOURCE_422)), observer=self._observer([]))
+        self.assertEqual((ok['billable_calls_before_failure'], ok['count_source']), (0, 'import_rejected'))
