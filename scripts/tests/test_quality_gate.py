@@ -84,6 +84,10 @@ class QualityGateTests(unittest.TestCase):
             path.write_text('<testsuite><testcase classname="backend.tests.test_windows_asyncio" name="test_windows_real_reset_and_subprocess"><skipped/></testcase></testsuite>')
             with patch('quality_gate.os.name', 'nt'):
                 self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
+            path.write_text('<testsuite><testcase classname="backend.tests.test_whisper_snapshot_repair" name="test_real_hub_copy_layout_does_not_replace_an_existing_file"><skipped message="could not import huggingface_hub"/></testcase></testsuite>')
+            self.assertEqual(quality_gate.pytest_skips(path), [{'test': 'test_real_hub_copy_layout_does_not_replace_an_existing_file', 'allowed': True}])
+            path.write_text('<testsuite><testcase classname="backend.tests.test_whisper_snapshot_repair" name="test_corrupt_file_is_deleted_and_redownloaded_without_force"><skipped/></testcase></testsuite>')
+            self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
 
 
 if __name__ == '__main__':
