@@ -102,7 +102,7 @@ logpipe_alive() { kill -0 "$LP_PID" 2>/dev/null && ! grep -q '^RC ' "$LP_STATUS"
 # a verdict already written is downgraded through winqa_chain so the two always agree (I-C1).
 LP_REASON=""
 logpipe_close() {
-  local rc="$1" n=0 lp
+  local rc="$1" n=0 lp ex
   exec 1>&3 2>&4
   while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ $n -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
   if ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then
@@ -110,9 +110,17 @@ logpipe_close() {
     n=0; while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ $n -lt 10 ]; do sleep 0.1; n=$((n + 1)); done
   fi
   lp="$(sed -n 's/^RC \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
+  ex="$(sed -n 's/^EXIT \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
+  # #414 a2 (Dong): the reason tells apart killed (signal, RC>128 not matching its own EXIT), exited on its own
+  # (EXIT == RC), and the waiting subshell gone (no RC at all). A bash crash leaves no logpipe-final.txt.
   if [ -z "$LP_REASON" ] && [ "${lp:-x}" != 0 ]; then
-    case "$lp" in '') LP_REASON=died;; 1[2-9][0-9]) LP_REASON=died;; *) LP_REASON="exit=$lp";; esac
+    if [ -z "$lp" ]; then LP_REASON=wrapper_gone
+    elif [ "$lp" -gt 128 ] && [ "${ex:-x}" != "$lp" ]; then LP_REASON="killed=SIG$((lp - 128))"
+    elif [ "${ex:-x}" = "$lp" ]; then LP_REASON="exited=$lp"
+    else LP_REASON="exit=$lp"; fi
   fi
+  { echo "script_rc_before_close $rc"; echo "reason ${LP_REASON:-none}"; grep -E '^(READY|EXIT|RC) ' "$LP_STATUS" 2>/dev/null; } \
+    > "$OUT/logpipe-final.txt" 2>/dev/null || :
   if [ -n "$LP_REASON" ]; then
     # #414 test_a2: a channel that died mid-run (the script then stops on SIGPIPE, rc 141) is announced once
     echo "WINQA_E_LOGPIPE 70 $LP_REASON" >&4

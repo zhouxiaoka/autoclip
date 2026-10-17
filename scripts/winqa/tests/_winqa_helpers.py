@@ -338,6 +338,19 @@ def _verify(tmp_path, data, dg=None):
 __all__ = [n for n in dir() if not n.startswith('__')]
 
 
+def classify_a2(rc, final_text):
+    """#414 a2 (Dong): which of the three it was. final_text is ev/logpipe-final.txt, written by logpipe_close;
+    no file means the script never reached the close, i.e. bash itself died (killed or crashed)."""
+    if final_text is None:
+        sig = -rc if rc < 0 else (rc - 128 if rc > 128 else None)
+        return f'bash_crashed rc={rc}' + (f' signal={sig}' if sig else '')
+    reason = next((l.split(' ', 1)[1] for l in final_text.splitlines() if l.startswith('reason ')), 'none')
+    kind = reason.split('=', 1)[0]
+    return {'killed': 'logpipe_killed', 'exited': 'logpipe_exited_itself', 'exit': 'logpipe_exited_itself',
+            'wrapper_gone': 'logpipe_wrapper_gone', 'drain_timeout': 'logpipe_hung_killed_by_script',
+            'none': 'logpipe_ok'}.get(kind, 'unknown') + f' ({reason}) rc={rc}'
+
+
 def _save_failure_evidence(tmp_path, done, label):
     """#414 a2: everything needed to place a one-off failure. Written under $WINQA_A2_EVIDENCE (or tmp_path) and
     returned as a path for the assertion message. Contents are already scrubbed/fake (no real key in this harness)."""
@@ -354,11 +367,13 @@ def _save_failure_evidence(tmp_path, done, label):
         p = pid.read_text().strip()
         alive = subprocess.run(['kill', '-0', p], capture_output=True).returncode == 0
         (root / 'logpipe-pid.txt').write_text(f'{p} alive_after_run={alive}\n')
-    for rel in ('ev/run.log', 'ev/steps.txt', 'reqs.jsonl', 'cmds.txt'):
+    for rel in ('ev/run.log', 'ev/steps.txt', 'ev/logpipe-final.txt', 'reqs.jsonl', 'cmds.txt'):
         if (tmp_path / rel).exists():
             shutil.copy(tmp_path / rel, root / rel.replace('/', '_'))
     for f in (tmp_path / 'ev' / 'runs').glob('*/receipts.jsonl'):
         shutil.copy(f, root / 'receipts.jsonl')
+    final = tmp_path / 'ev' / 'logpipe-final.txt'
+    (root / 'classify.txt').write_text(classify_a2(done.returncode, final.read_text() if final.exists() else None) + '\n')
     (root / 'tree.txt').write_text('\n'.join(sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))))
     return str(root)
 

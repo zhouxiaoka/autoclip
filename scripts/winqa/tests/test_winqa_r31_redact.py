@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from _winqa_helpers import KEY, ROOT, BASHES, _env, _assert_no_raw_on_control, _wpwc
+from _winqa_helpers import KEY, ROOT, BASHES, _env, _assert_no_raw_on_control, _wpwc, classify_a2
 
 REDACT = [sys.executable, str(ROOT / 'redact.py')]
 CODECS = ('utf-8', 'utf-16-le', 'utf-16-be')
@@ -282,7 +282,7 @@ def test_a13_logpipe_that_says_exit_0_then_is_killed_fails_the_run(tmp_path, bas
         "    os.kill(os.getpid(), signal.SIGKILL)"))
     done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
     assert done.returncode == 70, (done.returncode, done.stderr[-300:])
-    assert b'WINQA_E_LOGPIPE 70 died\n' in done.stderr, done.stderr[-300:]
+    assert b'WINQA_E_LOGPIPE 70 killed=SIG9\n' in done.stderr, done.stderr[-300:]
     v = _verdict(tmp_path)
     assert v is None or not _wpwc()[1].is_pass(v), v
 
@@ -330,3 +330,50 @@ def test_a11_handshake_bound_is_configurable_and_names_the_reason(tmp_path, bash
     env['WINQA_LOGPIPE_HANDSHAKE_S'] = 'x'
     done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=60)
     assert done.returncode == 70 and b'====' not in done.stdout
+
+
+# ---------------------------------------------------------------- #414 a2 (Dong): killed vs exited itself vs bash crashed
+@pytest.mark.parametrize('bash', BASHES)
+def test_a16_logpipe_that_exits_by_itself_is_told_apart_from_a_kill(tmp_path, bash):
+    env, args = _env(tmp_path)
+    _fake_logpipe(tmp_path, (
+        "    import runpy\n"
+        "    sys.argv = a[1:]\n"
+        "    try:\n"
+        "        runpy.run_path(a[1], run_name='__main__')\n"
+        "    except SystemExit:\n"
+        "        pass\n"
+        "    st = a[a.index('--status') + 1]\n"
+        "    open(st, 'a').write('EXIT 5\\n')\n"
+        "    sys.exit(5)"))
+    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
+    assert done.returncode == 70, (done.returncode, done.stderr[-300:])
+    assert b'WINQA_E_LOGPIPE 70 exited=5\n' in done.stderr, done.stderr[-300:]
+    final = (tmp_path / 'ev' / 'logpipe-final.txt').read_text()
+    assert 'reason exited=5' in final and 'RC 5' in final
+    assert classify_a2(done.returncode, final).startswith('logpipe_exited_itself')
+
+
+@pytest.mark.parametrize('bash', BASHES)
+def test_a16_killed_logpipe_leaves_a_record_that_says_killed(tmp_path, bash):
+    env, args = _env(tmp_path)
+    _fake_logpipe(tmp_path, (
+        "    import runpy, signal\n"
+        "    sys.argv = a[1:]\n"
+        "    try:\n"
+        "        runpy.run_path(a[1], run_name='__main__')\n"
+        "    except SystemExit:\n"
+        "        pass\n"
+        "    os.kill(os.getpid(), signal.SIGKILL)"))
+    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
+    final = (tmp_path / 'ev' / 'logpipe-final.txt').read_text()
+    assert 'reason killed=SIG9' in final and 'RC 137' in final, final
+    assert classify_a2(done.returncode, final).startswith('logpipe_killed')
+
+
+def test_a16_classifier_covers_bash_crash_and_wrapper_loss():
+    assert classify_a2(-9, None).startswith('bash_crashed') and 'signal=9' in classify_a2(-9, None)
+    assert classify_a2(139, None) == 'bash_crashed rc=139 signal=11'
+    assert classify_a2(70, 'script_rc_before_close 0\nreason wrapper_gone\nREADY 1\n').startswith('logpipe_wrapper_gone')
+    assert classify_a2(70, 'reason drain_timeout\n').startswith('logpipe_hung_killed_by_script')
+    assert classify_a2(0, 'reason none\nRC 0\n').startswith('logpipe_ok')
