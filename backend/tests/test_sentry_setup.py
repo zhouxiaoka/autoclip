@@ -161,11 +161,12 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
     assert 'private' not in json.dumps(timeout)
 
 
-class _ProviderStatusError(Exception):
-    """Mimics openai.APIStatusError: the HTTP status lives on `status_code`."""
+class _ProviderStatusError(__import__("openai").APIStatusError):
+    """A provider answer (openai.APIStatusError): the HTTP status lives on `status_code`."""
+    # R28 (Dong R27 I450): a status alone no longer means 'model'; a provider answer is an openai.APIError.
 
     def __init__(self, message, status_code):
-        super().__init__(message)
+        Exception.__init__(self, message)
         self.status_code = status_code
 
 
@@ -187,18 +188,22 @@ def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
     assert context == {'failure_stage': 'analyze', 'http_status': 500, 'upstream_error_type': 'upstream_unavailable'}
     assert 'private' not in json.dumps(context)
 
-    # Two levels deep (provider error re-wrapped by a client layer), explicit and implicit chaining.
-    def client_layer():
+    # Two levels deep (provider error re-wrapped by a client layer): explicit chaining is followed.
+    # R29 I500: an implicit __context__ is not this failure's cause and is never walked.
+    def client_layer(explicit):
         try:
             raise _ProviderStatusError('private body', 502)
-        except _ProviderStatusError:
+        except _ProviderStatusError as provider:
+            if explicit:
+                raise RuntimeError('client wrapper') from provider
             raise RuntimeError('client wrapper')  # implicit __context__
-    try:
-        client_layer()
-    except RuntimeError as inner:
-        failure = wrapped(inner)
-    assert sentry_setup.studio_failure_context(failure, 'production') == {
-        'failure_stage': 'analyze', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}
+    for explicit, expected in ((True, {'failure_stage': 'analyze', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}),
+                               (False, {'failure_stage': 'analyze'})):
+        try:
+            client_layer(explicit)
+        except RuntimeError as inner:
+            failure = wrapped(inner)
+        assert sentry_setup.studio_failure_context(failure, 'production') == expected, explicit
 
     # The nearest valid status wins; non-HTTP and out-of-range values are ignored.
     outer = _ProviderStatusError('proxy', 503)
@@ -263,8 +268,8 @@ def test_auto_frame_phase_survives_scrubbing_without_content(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize('kind,code,status', [
-    ('AuthenticationError', 'authentication', 401),
-    ('PermissionDeniedError', 'authentication', 403),
+    ('AuthenticationError', 'llm_auth_invalid', 401),
+    ('PermissionDeniedError', 'llm_auth_invalid', 403),
     ('RateLimitError', 'rate_limited', 429),
     ('InternalServerError', 'provider_error', 503),
     ('APITimeoutError', 'timeout', None),
@@ -291,7 +296,7 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         clean = sentry_setup.before_send({'level': 'error', 'tags': captured[-1],
             'exception': {'values': [{'type': kind, 'value': str(error)}]}})
         assert 'private-provider-body' not in str(clean) and 'synthetic-key' not in str(clean)
-        assert clean['level'] == ('warning' if code in ('authentication', 'rate_limited') else 'error')
+        assert clean['level'] == ('warning' if code in ('llm_auth_invalid', 'rate_limited') else 'error')
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
     assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
 
@@ -320,6 +325,50 @@ def test_before_send_keeps_anonymous_user_id_and_allowlisted_tags(monkeypatch, t
     assert 'email' not in clean['user']
     assert 'private' not in clean['tags']
     assert 'sk-secret' not in json.dumps(clean)
+
+
+def test_launcher_identity_fallback_and_late_file_override(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', '018f6b2a-7c3d-7b2a-8c11-111111111111')
+    event = {'exception': {'values': [{'type': 'RuntimeError', 'value': 'private'}]}}
+    assert sentry_setup.before_send(event)['user']['id'] == '018f6b2a-7c3d-7b2a-8c11-111111111111'
+    # A reset/migration in the UI supersedes the immutable launch environment.
+    (tmp_path / 'analytics.json').write_text('{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-222222222222"}')
+    event['user'] = {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+    assert sentry_setup.before_send(event)['user']['id'].endswith('222222222222')
+    (tmp_path / 'privacy.json').write_text('{"analytics":false}')
+    assert 'user' not in sentry_setup.before_send(event)
+
+
+def test_identity_update_in_request_survives_in_worker(monkeypatch, tmp_path):
+    import sentry_sdk
+    from backend.services.studio.qa.telemetry import remember_distinct_id
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    scope = sentry_sdk.get_global_scope()
+    previous = scope._user
+    try:
+        scope.set_user(None)
+        with sentry_sdk.isolation_scope():
+            with sentry_sdk.new_scope():
+                assert remember_distinct_id('018f6b2a-7c3d-7b2a-8c11-111111111111')
+        assert scope._user == {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+    finally:
+        scope.set_user(previous)
+
+
+@pytest.mark.parametrize('value', ['sk-live-secret', 'private-title', 'a@b.com',
+    '/Users/private/video.mp4', 'https://private.example/a', 'private user content'])
+def test_launch_identity_rejects_content_and_credentials(monkeypatch, tmp_path, value):
+    from backend.services.studio.qa.telemetry import remember_distinct_id
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', value)
+    event = {'user': {'id': value, 'email': 'private@example.invalid'},
+             'exception': {'values': [{'type': 'RuntimeError', 'value': value}]}}
+    clean = sentry_setup.before_send(event)
+    assert 'user' not in clean
+    assert value not in json.dumps(clean)
+    assert remember_distinct_id(value) is False
 
 
 def test_source_blocked_is_classified_and_never_sent(monkeypatch, tmp_path):

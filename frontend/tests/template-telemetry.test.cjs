@@ -2,13 +2,13 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function loadWorkflow() {
   const source = fs.readFileSync(path.join(__dirname, '../src/analytics/workflow.ts'), 'utf8')
   const exports = {}
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
+  runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
   return exports
 }
 
@@ -17,7 +17,7 @@ const workflow = loadWorkflow()
 test('template render facts stay enumerable and drop captions and paths', () => {
   const props = workflow.safeStudioProperties({
     template: 'classic', requested_template: 'editorial', encoder: 'h264_nvenc', downgraded: false, downgrade_reason: 'rank',
-    os: 'darwin', cpu_count: 8, duration_ms: 90000, failure_reason: 'none', outcome: 'skipped',
+    os: 'macos', cpu_count: 8, duration_ms: 90000, failure_reason: 'none', outcome: 'skipped',
     strategy_id: 'douyin', flow_id: 't-abc123def456', title: '秘密标题', caption: '原话', path: '/Users/a/v.mp4',
   })
   assert.equal(props.template, 'classic')
@@ -26,7 +26,9 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(props.downgraded, false)
   assert.equal(props.downgrade_reason, 'rank')
   assert.equal(props.outcome, 'skipped')
-  assert.equal(props.os, 'darwin')
+  assert.equal(props.os, 'macos')
+  assert.equal(workflow.safeStudioProperties({ os: 'darwin', outcome: 'completed' }).os, 'macos')
+  assert.equal(workflow.safeStudioProperties({ os: 'win32', outcome: 'failed' }).outcome, 'error')
   assert.equal(props.cpu_count, 8)
   assert.equal(props.duration_ms, 90000)
   const blob = JSON.stringify(props)
@@ -35,22 +37,8 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(blob.includes('/Users'), false)
 })
 
-test('a rank skip is classic and is not a downgrade', () => {
-  const summary = workflow.generationSummary({
-    output_variants: [
-      { draft_id: 'a', render_job_id: 'j1', strategy_id: 'douyin', status: 'completed' },
-      { draft_id: 'b', render_job_id: 'j2', strategy_id: 'douyin', status: 'completed' },
-    ],
-    jobs: [
-      { job_id: 'j1', status: 'completed', result: { template_render: { template: 'classic', requested_template: 'editorial', downgraded: false, downgrade_reason: 'rank', outcome: 'skipped' } } },
-      { job_id: 'j2', status: 'completed', result: { template_render: { template: 'classic', requested_template: 'editorial', downgraded: true, downgrade_reason: 'over_budget', outcome: 'downgraded' } } },
-    ],
-    drafts: [],
-  })
-  assert.equal(summary.html_downgrade_count, 1)
-  assert.equal(summary.classic_count, 2)
-  assert.equal(summary.editorial_count, 0)
-})
+// R26 #367: the rank-skip summary rule is asserted on backend attempts.generation_summary
+// (backend/tests/test_r26_419_generation_summary.py); the frontend no longer derives summaries.
 
 test('override event helper keeps enums and drops free text', () => {
   const studio = fs.readFileSync(path.join(__dirname, '../src/analytics/studio.ts'), 'utf8')
@@ -58,9 +46,10 @@ test('override event helper keeps enums and drops free text', () => {
   const events = []
   const source = fs.readFileSync(path.join(__dirname, '../src/analytics/studio.ts'), 'utf8')
   const exports = {}
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, {
+  runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, {
     exports, console,
     require: (id) => {
+      if (id === './flags') return { flagAssigned: () => false }
       if (id === './posthog') return { captureBusinessEvent: (name, props) => { events.push({ name, props }); return false } }
       if (id === './observer') return { workflow: { context: () => ({ flow_id: 't-abc123def456' }), active: () => false } }
       if (id === './workflow') return workflow

@@ -1,8 +1,8 @@
 """
 大模型客户端 - 兼容性包装器，使用新的LLM管理器
 """
+from backend.core.failure_attribution import ModelResponseInvalid  # R29
 import json
-import logging
 import os
 import re
 from typing import Dict, Any, List
@@ -32,7 +32,10 @@ except ImportError:
         sys.path.insert(0, str(backend_path))
     from core.llm_manager import get_llm_manager
 
-logger = logging.getLogger(__name__)
+from backend.core.llm_telemetry import sanitize_exception_text, log_safe_exception
+from backend.core.failure_logging import failure_logger
+
+logger = failure_logger(__name__)
 
 class LLMClient:
     """LLM客户端 - 兼容性包装器"""
@@ -55,8 +58,8 @@ class LLMClient:
         try:
             return self.llm_manager.call(prompt, input_data)
         except Exception as e:
-            logger.error(f"LLM调用失败: {str(e)}")
-            raise
+            logger.error("LLM调用失败: %s", sanitize_exception_text(e))
+            raise log_safe_exception(e) from None
     
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3) -> str:
         """
@@ -73,8 +76,8 @@ class LLMClient:
         try:
             return self.llm_manager.call_with_retry(prompt, input_data, max_retries)
         except Exception as e:
-            logger.error(f"LLM重试调用失败: {str(e)}")
-            raise
+            logger.error("LLM重试调用失败: %s", sanitize_exception_text(e))
+            raise log_safe_exception(e) from None
     
     def _preprocess_llm_response(self, response: str) -> str:
         """
@@ -137,7 +140,7 @@ class LLMClient:
                             logger.error(f"第{i}个元素缺少必需字段: {field}")
                             return False
         except Exception as e:
-            logger.error(f"验证JSON结构时出错: {e}")
+            logger.error("验证JSON结构时出错: %s", sanitize_exception_text(e))
             return False
         
         return True
@@ -204,8 +207,8 @@ class LLMClient:
             
             # 记录修复过程
             if json_str != original_str:
-                logger.debug(f"JSON修复前: {original_str[:100]}...")
-                logger.debug(f"JSON修复后: {json_str[:100]}...")
+                logger.debug("JSON修复前 length=%s", len(original_str))
+                logger.debug("JSON修复后 length=%s", len(json_str))
             
             return json_str
 
@@ -213,7 +216,7 @@ class LLMClient:
         
         # 0. 预处理响应，移除非JSON内容
         response = self._preprocess_llm_response(response)
-        logger.debug(f"预处理后的响应: {response[:200]}...")
+        logger.debug("预处理后的响应 length=%s", len(response))
         
         # 1. 优先尝试从Markdown代码块中提取
         match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response, re.DOTALL)
@@ -222,14 +225,9 @@ class LLMClient:
             try:
                 return json.loads(json_str)
             except json.JSONDecodeError as e:
-                # 记录具体的错误位置和上下文
-                error_pos = e.pos if hasattr(e, 'pos') else 0
-                context_start = max(0, error_pos - 50)
-                context_end = min(len(json_str), error_pos + 50)
-                context = json_str[context_start:context_end]
-                logger.error(f"JSON解析失败在位置{error_pos}，上下文: ...{context}...")
-                logger.warning(f"从Markdown提取的内容解析失败: {e}。将尝试修复后解析。")
-                
+                logger.error("JSON解析失败: %s length=%s", sanitize_exception_text(e), len(json_str))
+                logger.warning("从Markdown提取的内容解析失败，将尝试修复后解析。")
+
                 # 尝试修复常见错误后再解析
                 try:
                     fixed_json = fix_common_json_errors(json_str)
@@ -255,16 +253,12 @@ class LLMClient:
                         fixed_json = fix_common_json_errors(json_str)
                         return json.loads(fixed_json)
                     except json.JSONDecodeError as final_e:
-                        logger.error(f"最终尝试解析失败: {final_e}")
-                        # 保存原始响应以便调试
-                        import tempfile
-                        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-                            f.write(response)
-                            logger.error(f"原始响应已保存到 {f.name} 以便调试")
-                        raise ValueError(f"无法从响应中解析出有效的JSON: {response[:200]}...") from final_e
+                        logger.error("最终尝试解析失败: %s length=%s", sanitize_exception_text(final_e), len(response))
+                        # R29: the model answered (200) with content that is not JSON: a model failure.
+                        raise ModelResponseInvalid(f"无法从响应中解析出有效的JSON length={len(response)}") from None
             
             # 如果连通用正则都找不到，就彻底失败
-            raise ValueError(f"无法从响应中解析出有效的JSON: {response[:200]}...")
+            raise ModelResponseInvalid(f"无法从响应中解析出有效的JSON length={len(response)}") from None
     
     def get_current_provider_info(self) -> Dict[str, Any]:
         """获取当前提供商信息"""

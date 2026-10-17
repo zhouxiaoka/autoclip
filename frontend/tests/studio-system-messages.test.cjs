@@ -1,6 +1,7 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
+const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{createInstance}=require('i18next')
 const langs=['zh','en','ja','ko','es','pt','ru','fr']
 const catalogs=Object.fromEntries(langs.map(l=>[l,require('../src/i18n/locales/'+l+'.json')]))
@@ -15,7 +16,7 @@ function history(i18n){
   'react-router-dom':{Link:p=>React.createElement('a',null,p.children)},
   './StudioDownloadLink':{default:()=>null},
  }
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
+ runInSandbox(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
  return exports.default
 }
 test('export history renders localized server warnings/restart errors in all eight languages, retaining source titles and unknown errors',async()=>{
@@ -63,7 +64,7 @@ test('Studio progress messages, including transcription progress, are translated
  const transcribing=src.match(/^STUDIO_TRANSCRIBING_MESSAGE = '([^']+)'$/m)[1]
  const production=src.match(/^STUDIO_PRODUCTION_MESSAGE = '([^']+)'$/m)[1]
  const jobs=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/jobs.py'),'utf8')
- const keys=[transcribing,production,'正在生成可发布成片','正在追加平台版本','正在重试成片版本']
+ const keys=[transcribing,production,'正在生成可发布成片','正在重试成片版本']
  for(const key of keys.slice(1))assert.ok(jobs.includes(`'${key}'`),key)
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
 })
@@ -71,6 +72,6 @@ test('model-call environment failures are one fixed sentence translated in eight
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/failures.py'),'utf8')
  const block=src.match(/MODEL_CALL_MESSAGES = \{([\s\S]*?)\n\}/)[1]
  const messages=[...block.matchAll(/"[a-z_]+": "([^"]+)"/g)].map(m=>m[1])
- assert.equal(messages.length,3)
+ assert.equal(messages.length,4)
  for(const lang of langs)for(const key of messages){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key);assert.ok(!/Connection error|timed out/i.test(catalogs[lang][key]),lang)}
 })

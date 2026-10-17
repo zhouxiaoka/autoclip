@@ -82,26 +82,14 @@ class TrackingInventoryTests(unittest.TestCase):
         self.assertIn("§12.1", plan)
         self.assertIn("single_os_enum", plan)
 
-    def test_current_version_defers_producer_gates(self) -> None:
+    def test_current_version_enables_producer_gates(self) -> None:
         version = check.app_version(ROOT)
-        self.assertEqual(version, "1.5.7")
-        self.assertFalse(check.transition_due(version))
-        gaps = check.producer_transition_errors(ROOT)
-        self.assertTrue(gaps)
-        self.assertTrue(any(item.startswith("T1 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T2 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T3 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T4 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T5 ") for item in gaps))
+        self.assertEqual(version, "1.5.8")
+        self.assertTrue(check.transition_due(version))
+        self.assertEqual(check.producer_transition_errors(ROOT), [])
 
     def test_1_5_8_enforces_producer_acceptance(self) -> None:
-        errors = check.check(ROOT, version="1.5.8")
-        joined = "\n".join(errors)
-        self.assertTrue(errors)
-        for prefix in ("T1 ", "T2 ", "T3 ", "T4 ", "T5 "):
-            self.assertIn(prefix, joined)
-        self.assertIn("feedback path missing envelope fields", joined)
-        self.assertIn("publish_export_*", joined)
+        self.assertEqual(check.check(ROOT, version="1.5.8"), [])
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { Btn } from '../../ui'
 import type { Capability, Connection, ModelEntry, ModelList, ModelSettings } from './modelSettingsApi'
 import { analysisModels } from './modelDefaults'
+import { endpointProviderReady } from './endpointProvider'
 import { connectionReady, type Role } from './modelSettingsLogic'
 
 export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSettings['analysis_mode']) {
@@ -16,7 +17,7 @@ export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSett
  * Searchable model list for one role. Custom IDs are allowed where the service cannot enumerate them.
  * Refresh appears only when the list is not the live account list; a discovery error sits next to the field.
  */
-export default function ModelPicker({ role, model, capability, connection, list, busy, listError, mode, actions, onChange, onCapability, onRefresh }: {
+export default function ModelPicker({ role, model, capability, connection, list, busy, listError, mode, actions, invalid, onChange, onCapability, onRefresh }: {
   role: Role
   model: string
   capability?: Capability
@@ -26,15 +27,17 @@ export default function ModelPicker({ role, model, capability, connection, list,
   listError?: string
   mode: ModelSettings['analysis_mode']
   actions?: ReactNode
+  invalid?: boolean
   onChange: (model: string) => void
   onCapability?: (capability: Capability) => void
   onRefresh: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const models = list ? eligibleModels(role, list.models, mode) : []
+  const endpointReady = !connection || endpointProviderReady(connection)
+  const models = list && endpointReady ? eligibleModels(role, list.models, mode) : []
   const custom = search.trim()
-  const allowCustom = role !== 'transcription' || connection?.provider === 'compatible'
+  const allowCustom = endpointReady && (role !== 'transcription' || connection?.provider === 'compatible')
   const customOption = allowCustom && custom && !models.some(m => m.id === custom) ? [{ value: custom, label: `${t('使用自定义型号')}：${custom}` }] : []
   const tag = (m: ModelEntry) => role === 'analysis' || role === 'vision'
     ? (m.capability ? ` · ${m.capability === 'multimodal' ? t('多模态') : t('仅文字')}` : '')
@@ -44,7 +47,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
   // The generic preview warning is already covered by the row hint; account-specific warnings stay visible.
   const warning = list?.warning && list.warning !== '公开目录预览，填写 API Key 后确认账号可用模型。' ? t(list.warning) : ''
   return <div style={{ width: '100%' }}>
-    <Select aria-label={t(role === 'cover' ? '生图模型' : role === 'transcription' ? '转写模型' : '模型')} disabled={!connection} showSearch value={model || undefined} style={{ width: '100%' }}
+    <Select aria-label={t(role === 'cover' ? '生图模型' : role === 'transcription' ? '转写模型' : '模型')} disabled={!connection || !endpointReady} showSearch value={model || undefined} status={invalid ? 'error' : undefined} style={{ width: '100%' }}
       open={open} onDropdownVisibleChange={o => { setOpen(o); if (!o) setSearch('') }} onSearch={setSearch}
       placeholder={busy ? t('正在获取可用模型…') : t(role === 'transcription' && connection?.provider !== 'compatible' ? '选择转写模型' : '选择或搜索模型，也可手动输入模型名')}
       loading={busy} optionFilterProp="value"

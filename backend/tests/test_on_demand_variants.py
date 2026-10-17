@@ -38,6 +38,11 @@ def test_the_top_scored_clips_render_now_and_unscored_ones_always_do():
     assert automatic == {f'd{n}' for n in range(5, 15)}  # ten highest scores
     few = [_base(n, .1) for n in range(3)] + [{'id': 'visual', 'scenes': []}]
     assert jobs._automatic_drafts(few) == {'d0', 'd1', 'd2', 'visual'}
+    top3 = jobs._automatic_drafts(drafts, 3)
+    assert top3 == {f'd{n}' for n in range(12, 15)}
+    assert jobs._render_limit(None) == jobs.AUTO_RENDER_LIMIT
+    assert jobs._render_limit({'render_top_first': 'limit10'}) == jobs.AUTO_RENDER_LIMIT
+    assert jobs._render_limit({'render_top_first': 'top3'}) == 3
 
 
 def test_on_demand_variants_do_not_keep_the_generation_open(monkeypatch):
@@ -122,9 +127,13 @@ def test_a_failed_preparation_settles_the_generation_and_retry_prepares_again(mo
     submitted = []
     monkeypatch.setattr(jobs.executor, 'submit', lambda fn, *args, **kwargs: submitted.append(fn))
     monkeypatch.setattr(jobs, '_dispatch_pending_variants', lambda _pid: submitted.append('dispatch'))
-    jobs.retry_variant('p1', 'v1')
+    returned = jobs.retry_variant('p1', 'v1')
     variant = state['output_variants'][0]
     assert submitted == [jobs._produce_on_demand] and variant['status'] == 'preparing' and 'needs_prepare' not in variant
+    # R21 #158 contract with frontend api.ts: needs_prepare returns no render_job_id; the attempt identity
+    # is the fresh preparation_run_id, which store.variant_identity carries on into the render.
+    assert 'render_job_id' not in returned and 'render_attempt_id' not in returned
+    assert returned['preparation_run_id'] and returned['preparation_run_id'] == variant['preparation_run_id']
 
 
 def test_a_variant_left_preparing_by_a_previous_run_can_be_retried(tmp_path, monkeypatch):
@@ -180,6 +189,32 @@ def test_long_platform_queues_its_only_eligible_clip_below_global_top_ten(monkey
     assert state['generation']['status'] == 'completed'
     from backend.services.quick_output_runner import status
     assert status('p1')['status'] == 'completed', 'CLI and MCP observers see a terminal outcome'
+
+
+def test_top3_renders_the_highest_scores_first_and_keeps_the_score_local(monkeypatch):
+    drafts = [_base(n, n / 20) for n in range(6)] + [{'id': 'visual', 'title': 'v', 'scenes': [{'id': 'sv', 'label': 'x', 'start': 900, 'end': 930}]}]
+    state, exports = _auto_fixture(monkeypatch, drafts, ['douyin'])
+    state['generation']['features'] = {'render_top_first': 'top3'}
+    jobs._auto_generate('p1', {})
+    by_scene = {}
+    for draft in state['drafts']:
+        by_scene[draft['id']] = draft['scenes'][0]['id']
+    queued = [by_scene[item['draft_id']] for item in state['output_variants'] if item['status'] == 'queued']
+    assert queued[:3] == ['s5', 's4', 's3']
+    assert 'sv' in queued  # unscored drafts still render, after the scored ones
+    assert exports[0].scenes[0].id == 's5'
+    assert all(jobs.SCORE_KEY not in item for item in state['output_variants'])
+    assert sum(item['status'] == 'on_demand' for item in state['output_variants']) == 3
+
+
+def test_a_finished_render_records_a_backend_timestamp(monkeypatch):
+    state = {'generation': {'status': 'rendering'}, 'analysis': {'run_id': 'run'}, 'jobs': [{'job_id': 'j1', 'status': 'running'}],
+             'output_variants': [{'id': 'v1', 'render_job_id': 'j1', 'status': 'running'}]}
+    _patch_store(monkeypatch, state)
+    monkeypatch.setattr(jobs, 'sync_project_completion', lambda *_: None)
+    jobs._sync_variant_status('p1', 'j1', 'completed')
+    assert state['jobs'][0]['finished_at']
+    assert state['output_variants'][0]['status'] == 'completed'
 
 
 def test_each_platform_ranks_its_eligible_candidates_and_retains_backups(monkeypatch):
@@ -239,7 +274,7 @@ def test_dispatch_missing_draft_is_terminal_without_render_callback(monkeypatch)
     assert state['generation']['status'] == 'failed'
 
 
-@pytest.mark.parametrize('codes,expected', [(['timeout'], 'timeout'), (['rate_limited', 'timeout'], 'multiple'), (['private/path'], 'unexpected'), ([{'private': 'path'}], 'unexpected')])
+@pytest.mark.parametrize('codes,expected', [(['timeout'], 'timeout'), (['rate_limited', 'timeout'], 'rate_limited'), (['private/path'], 'unexpected'), ([{'private': 'path'}], 'unexpected')])
 def test_render_failures_keep_controlled_generation_codes(codes, expected):
     state = {'generation': {'status': 'rendering'}, 'analysis': {'run_id': 'run'},
              'jobs': [{'job_id': f'j{i}', 'error_code': code} for i, code in enumerate(codes)],
@@ -304,8 +339,11 @@ def test_render_dispatch_rejection_settles_and_can_retry(monkeypatch):
     assert state['generation']['status'] == 'failed'
     assert state['output_variants'][0]['status'] == 'failed'
     assert 'private' not in state['output_variants'][0]['error']
-    jobs.retry_variant('p1', 'v1')
+    returned = jobs.retry_variant('p1', 'v1')
+    # R21 #158: the queued retry carries its fresh render_attempt_id (render_job_id may not exist yet)
+    assert returned['render_attempt_id']
     assert state['output_variants'][0]['render_job_id'] == 'retry-job'
+    assert state['output_variants'][0]['render_attempt_id'] == returned['render_attempt_id']
     assert len(calls) == 2
 
 

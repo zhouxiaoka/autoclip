@@ -1,3 +1,4 @@
+import type { AttemptReceipt } from '../../analytics/workflow'
 export type Goal = 'content' | 'highlight' | 'promo'
 export type Language = 'source' | 'zh' | 'en' | 'ja'
 export type SubtitleStyle = 'clean' | 'bold' | 'box' | 'accent'
@@ -43,7 +44,7 @@ export interface Packaging {
   title_lines: string[]; title_accent_line: number
   cues: { start: number; end: number; text: string; original: string }[]
   speakers: { at: number; name: string; role: string }[]
-  tags: { at: number; text: string }[]; tags_enabled: boolean
+  tags: { at: number; text: string }[]; tags_enabled: boolean; captions_enabled?: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
@@ -72,7 +73,7 @@ export interface RenderJob {
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
   branding: { outro_enabled: boolean; outro_version: string }
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; created_at: string; error?: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; created_at: string; error?: string
   trimmed_to_sec?: number
   framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
   /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
@@ -84,8 +85,8 @@ export interface OutputVariant {
 export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
-  auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
-  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
+  auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
+  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
   html_template?: 'editorial' | 'street' | 'classic'
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean
@@ -99,7 +100,9 @@ export interface PlatformStrategySummary {
 export interface Workspace {
   schema_version?: number; plan?: ImportPlan
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
+  /** Backend attempt receipts (#419), oldest first. */
+  attempts?: AttemptReceipt[]
+  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; error_code?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
@@ -146,6 +149,7 @@ export interface ImportOptions {
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
 export interface ImportPlan {
+  degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback' | 'frame_extract_subtitle_fallback' | 'source_too_long_subtitle_route'
   aspect?: Draft['aspect']
   recommended_analysis?: AnalysisMode; confirmed_analysis?: AnalysisMode
 

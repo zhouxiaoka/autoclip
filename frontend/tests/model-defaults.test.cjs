@@ -1,9 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), path = require('node:path')
-const exportsForTest = {}
-vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/features/settings/modelDefaults.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: exportsForTest })
-const { defaultModel, applyModelDefaults, analysisModels } = exportsForTest
+const { defaultModel, applyModelDefaults, analysisModels } = require('./load-ts.cjs').loadTs('modelDefaults.ts')
 const connection = { id: 'main', provider: 'dashscope' }
 const models = [
   { id: 'qwen3.8-max', capability: 'multimodal', analysis: true, image: false },
@@ -14,10 +11,12 @@ const blank = () => ({ analysis: { connection_id: 'main', model: '', capability:
 test('first setup chooses the analysis model; covers stay on the free local design', () => {
   const value = applyModelDefaults(blank(), connection, models, true)
   assert.equal(value.analysis.model, 'qwen3.8-flash')
+  assert.equal(value.analysis.model_source, 'preset')
   assert.equal(value.cover, null, 'no image service is assumed')
   assert.equal(value.cover_enabled, false)
   const chosen = applyModelDefaults({ ...blank(), cover_enabled: true }, connection, models, false)
   assert.equal(chosen.cover.model, 'wanx2.1-t2i-turbo', 'once the user switches to AI covers, the recommended image model is filled')
+  assert.equal(chosen.cover.model_source, 'preset')
 })
 test('refresh never overrides explicit model or frame-only choice', () => {
   const state = blank(); state.analysis.model = 'my-custom-model'

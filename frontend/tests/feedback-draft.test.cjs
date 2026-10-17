@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function loadDraft() {
@@ -11,7 +11,7 @@ function loadDraft() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports, URLSearchParams })
+  runInSandbox(code, { module, exports: module.exports, URLSearchParams })
   return module.exports
 }
 
@@ -35,6 +35,11 @@ test('capture keeps the email and github links do not', () => {
   const draft = buildFeedbackDraft(draftInput)
   const props = captureProperties(draft)
   assert.equal(props.contact, 'person@example.com')
+  assert.equal(props.app_version, '1.3.1')
+  assert.equal(props.os, 'windows')
+  assert.equal(props.analytics_environment, 'production')
+  assert.equal(props.runtime, 'desktop')
+  assert.equal(props.schema_version, 2)
   assert.equal(props.llm_base_url, undefined)
   assert.ok(!props.text.includes('sk-test-abc1234567890'))
   const url = githubFallbackUrl(draft)

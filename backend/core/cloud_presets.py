@@ -3,11 +3,15 @@
 
 底层仍是 openai + 官方 base_url，和 Ollama 预设同一套路，但必须带各家自己的 key，
 不能复用用户的 OpenAI key。设置页、CLI、MCP 都用 `--provider deepseek` 这种名字。
+
+产品语义（地址、默认模型、显示名）来自 ``backend/presets/provider_presets.json``。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
+
+from backend.core.provider_presets import get_catalog, get_provider, resolve_provider_id
 
 
 @dataclass(frozen=True)
@@ -21,96 +25,28 @@ class CloudPreset:
     hint: str
 
 
-CLOUD_PRESETS: Dict[str, CloudPreset] = {
-    "deepseek": CloudPreset(
-        key="deepseek",
-        display_name="DeepSeek",
-        base_url="https://api.deepseek.com",
-        default_model="deepseek-flash",
-        api_key_setting="deepseek_api_key",
-        docs_url="https://platform.deepseek.com/api_keys",
-        hint="DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。",
-    ),
-    "seed": CloudPreset(
-        key="seed",
-        display_name="Seed（火山方舟）",
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
-        default_model="doubao-seed-2-1-lite-260915",
-        api_key_setting="seed_api_key",
-        docs_url="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-        hint="火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。",
-    ),
-    "kimi": CloudPreset(
-        key="kimi",
-        display_name="Kimi（月之暗面）",
-        base_url="https://api.moonshot.cn/v1",
-        default_model="kimi-k2.6",
-        api_key_setting="kimi_api_key",
-        docs_url="https://platform.moonshot.cn/console/api-keys",
-        hint="月之暗面 Kimi。国内直连，适合长字幕分析。",
-    ),
-    "glm": CloudPreset(
-        key="glm",
-        display_name="智谱 GLM",
-        base_url="https://open.bigmodel.cn/api/paas/v4",
-        default_model="glm-5.3",
-        api_key_setting="glm_api_key",
-        docs_url="https://open.bigmodel.cn/usercenter/apikeys",
-        hint="智谱开放平台。国内直连，glm-5.3 是当前旗舰。",
-    ),
-    "grok": CloudPreset(
-        key="grok",
-        display_name="Grok（xAI）",
-        base_url="https://api.x.ai/v1",
-        default_model="grok-4.6",
-        api_key_setting="grok_api_key",
-        docs_url="https://console.x.ai",
-        hint="xAI Grok。需要 xAI 账号。",
-    ),
-    # 赞助合作伙伴。多模型网关，可用型号随账号而定，所以不预设默认模型，填好 key 后从 /v1/models 拉取。
-    # docs_url 是 AutoClip 专属注册链接（新用户可领体验额度），说明见 docs/INFISTAR_SETUP.md。
-    "infistar": CloudPreset(
-        key="infistar",
-        display_name="Infistar 无限星河",
-        base_url="https://infistar.cc/v1",
-        default_model="",
-        api_key_setting="infistar_api_key",
-        docs_url="https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
-        hint="赞助合作伙伴。一个 Key 调 Claude / GPT / Gemini / DeepSeek 等模型，专属链接注册可领体验额度。",
-    ),
-    "api88": CloudPreset(
-        key="api88", display_name="88API Token聚合平台", base_url="https://api.88api.ai/v1",
-        default_model="", api_key_setting="api88_api_key",
-        docs_url="https://88api.ai/sign-up?aff=2PIc",
-        hint="赞助合作伙伴。新用户注册赠送体验额度，站内提供人工客服。",
-    ),
-}
+def _cloud_presets() -> Dict[str, CloudPreset]:
+    return {
+        item.id: CloudPreset(
+            key=item.id,
+            display_name=item.display_name,
+            base_url=item.base_url,
+            default_model=item.default_model,
+            api_key_setting=item.api_key_setting,
+            docs_url=item.docs_url,
+            hint=item.cloud_hint,
+        )
+        for item in get_catalog().providers.values()
+        if item.openai_compat_remap
+    }
 
-# Current official OpenAI-compatible host is api.88api.ai. Saved configs may still
-# use 88api.ai; both stay valid. Do not rewrite a stored URL to the new host.
-API88_HOSTS = frozenset({"88api.ai", "api.88api.ai"})
 
-_ALIASES = {
-    "88api": "api88",
-    "88api.ai": "api88",
-    "api.88api.ai": "api88",
-    "deepseek-ai": "deepseek",
-    "moonshot": "kimi",
-    "moonshotai": "kimi",
-    "kimi-k2": "kimi",
-    "zhipu": "glm",
-    "zhipuai": "glm",
-    "bigmodel": "glm",
-    "xai": "grok",
-    "x-ai": "grok",
-    "doubao": "seed",
-    "volcengine": "seed",
-    "ark": "seed",
-    "bytedance": "seed",
-    "volces": "seed",
-    "infistar.cc": "infistar",
-    "wuxianxinghe": "infistar",
-}
+CLOUD_PRESETS: Dict[str, CloudPreset] = _cloud_presets()
+
+# Official 88API host lives in the JSON catalog. Saved configs may still use the
+# previous host; both stay valid. Do not rewrite a stored URL to the new host.
+_api88 = get_provider("api88")
+API88_HOSTS = frozenset(_api88.accepted_hosts if _api88 else ())
 
 
 def is_api88_host(host: Optional[str]) -> bool:
@@ -118,10 +54,7 @@ def is_api88_host(host: Optional[str]) -> bool:
 
 
 def normalize_cloud_preset_key(name: Optional[str]) -> Optional[str]:
-    if not name:
-        return None
-    key = name.strip().lower()
-    key = _ALIASES.get(key, key)
+    key = resolve_provider_id(name)
     return key if key in CLOUD_PRESETS else None
 
 

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
 import { trackOutputShare, type VariantProperties } from '../../analytics/studio'
+import { flagAssigned, useFlag } from '../../analytics/flags'
+import { clipReason } from './clipReason'
 import StudioDownloadLink from './StudioDownloadLink'
 import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, RenderJob } from './types'
@@ -13,6 +15,7 @@ import { platformLabel } from './platformLabel'
 import { packagingLabel, packagingFallbackHint } from './packagingLabel'
 import PublishKit from './PublishKit'
 import './quick-output.css'
+import { effectiveSubtitles } from './subtitleState'
 
 const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
   speaker: '已按说话人重新取景',
@@ -25,6 +28,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
   const [coverStamp, setCoverStamp] = useState(0)
+  const showReason = useFlag('clip_reasons') === true
+  const reason = showReason ? clipReason({ evidence: draft?.scenes[0]?.evidence, framing: variant.framing }) : null
   const packaging = draft?.packaging
   const rendered = job?.result?.template_render?.template
   const template = rendered === 'editorial' || rendered === 'street' || rendered === 'classic' ? rendered : packaging?.template
@@ -40,7 +45,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const failed = variant.status === 'failed'
   const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
-  const packagingHint = packaging ? packagingFallbackHint(packaging, job?.result?.warnings, draft?.subtitles !== false) : ''
+  const packagingHint = packaging ? packagingFallbackHint(packaging, job?.result?.warnings, effectiveSubtitles(draft)) : ''
   const productionDetails = [outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾'), packaging && packagingLabel(packaging), variant.framing && t(framingHints[variant.framing])].filter(Boolean).join(' · ')
   const downloaded = () => {
     if (!shouldAskRating(projectId)) return
@@ -53,7 +58,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       {!variant.post && <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>}
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
       {packagingHint && <p className="studio-output-hint">{packagingHint}</p>}
-      <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })}/>
+      {reason && <p className="studio-clip-reason">{reason.kind === 'evidence' ? reason.evidence : t(reason.key)}</p>}
+      <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
       {failed && <p className="studio-output-hint studio-error">{t(variant.error || job?.error || '这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}

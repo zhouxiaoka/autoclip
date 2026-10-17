@@ -67,6 +67,7 @@ export default defineConfig(({ mode, command }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@provider-presets': fileURLToPath(new URL('../backend/presets/provider_presets.json', import.meta.url)),
       },
     },
     server: {

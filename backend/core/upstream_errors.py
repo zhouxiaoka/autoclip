@@ -66,6 +66,7 @@ _CODE_QUOTA = frozenset({
     "insufficient_quota", "insufficient_user_quota", "insufficient_balance",
     "billing_not_active", "billing_quota_exceeded", "quota_exceeded",
     "allocationquota", "allocationquota.freetieronly", "throttling.allocationquota",
+    "arrearage",  # DashScope: account in arrears
 })
 _CODE_KEY = frozenset({
     "invalid_api_key", "invalid_key", "invalid_token", "authentication_error",
@@ -78,7 +79,7 @@ _CODE_RATE = frozenset({
 })
 _CODE_PERMISSION = frozenset({
     "permission_denied", "access_denied", "model_not_supported",
-    "forbidden",
+    "forbidden", "accessdenied", "accessdenied.unpurchased",  # DashScope
 })
 _CODE_RESOURCE = frozenset({"resource_exhausted"})
 
@@ -425,3 +426,25 @@ def _parse_type(value: str) -> UpstreamErrorType:
         return UpstreamErrorType(value)
     except ValueError:
         return UpstreamErrorType.UNKNOWN
+
+
+_DNS_MARKERS = ('name or service not known', 'nodename nor servname', 'getaddrinfo', 'temporary failure in name resolution',
+                'no address associated', 'name resolution', 'failed to resolve', 'no such host', '11001')
+
+
+def network_kind_of(exc: BaseException | None) -> str:
+    """'dns' when a transport error is a name-resolution failure, '' otherwise.
+    Only the kind leaves this function; the exception text (may hold a host) never does.
+    R31 (Dong 8f0e155c #3, the I563 rule): only the explicit ``__cause__`` chain is walked; an exception
+    that was merely being handled (an earlier DNS failure) never decides this one."""
+    import socket
+    seen = 0
+    while exc is not None and seen < 8:
+        if isinstance(exc, socket.gaierror):
+            return 'dns'
+        text = str(exc).lower()
+        if any(marker in text for marker in _DNS_MARKERS):
+            return 'dns'
+        exc = exc.__cause__
+        seen += 1
+    return ''

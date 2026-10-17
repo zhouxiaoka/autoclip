@@ -275,17 +275,19 @@ class SimplePipelineAdapter:
             checkpoint(self.project_id)
             emit_progress(self.project_id, "INGEST", "素材准备完成")
             # 源视频比最短片段还短、或没有音轨又没带字幕：字幕路线注定失败，先拦下，不调用任何模型（RC156 #10/#11）
-            from backend.pipeline import media_precheck
-            blocked = media_precheck.subtitle_route_failure(
-                input_video_path, srt_available=bool(input_srt_path and Path(input_srt_path).exists()))
-            if blocked:
-                raise blocked
-            from backend.pipeline.concurrency import reset_limiter
-            reset_limiter()
-            srt_available = bool(input_srt_path and Path(input_srt_path).exists())
-            if not srt_available:
+            # The one preflight (#418 rewrite), before any paid call, SRT attached or not: the source is decided
+            # first (unreadable / under 1 s / too short / no audio without SRT), then transcription.
+            from backend.services.studio import preflight
+            checked = preflight.preflight(preflight.ResolvedInputs(
+                Path(input_video_path), Path(input_srt_path) if input_srt_path else None, entry='content'))
+            if checked.source_failure is not None:
+                raise checked.source_failure
+            if not checked.ok:
                 from backend.services.studio import readiness
                 readiness.require_transcription(stage="SUBTITLE", srt_available=False)
+                raise checked.asr_failure or PipelineFailure("SUBTITLE", "转写不可用", code="asr_not_ready")
+            from backend.pipeline.concurrency import reset_limiter
+            reset_limiter()
             self._preflight_llm()
             checkpoint(self.project_id)
 
@@ -303,7 +305,7 @@ class SimplePipelineAdapter:
                     with llm_usage.timed("transcribe"):
                         srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 except CloudTranscriptionError as e:
-                    raise cloud_transcription_failure(str(e)) from e
+                    raise cloud_transcription_failure(e) from e
                 except SpeechRecognitionError as e:
                     raise failure_from_speech_error(str(e)) from e
                 if not (srt_path and srt_path.exists()):
@@ -465,6 +467,12 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
+            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
+            _carry_attribution(failed, e)
+            upstream = getattr(e, "upstream_error_type", "") or (failed.get("attribution") or {}).get("upstream_error_type")
+            if upstream:
+                failed["upstream_error_type"] = upstream
             return failed
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"
@@ -483,7 +491,17 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
+            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
+            _carry_attribution(failed, e)
             return failed
+
+
+def _carry_attribution(failed: dict, error: BaseException) -> None:
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(error)
+    if snap is not None:
+        failed["attribution"] = snap.to_fields()
 
 
 def create_simple_pipeline_adapter(project_id: str, task_id: str) -> SimplePipelineAdapter:

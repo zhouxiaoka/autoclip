@@ -2,6 +2,8 @@
 import asyncio
 import json
 import os
+from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -55,6 +57,121 @@ def test_same_provider_multiple_accounts_and_separate_vision():
     assert ai.vision_endpoint(ai.load()) == {'base_url': 'https://two.example/v1', 'api_key': 'sk-second-secret', 'model': 'vision-b'}
 
 
+@pytest.mark.parametrize('binding_id', ['old', 'independent', None])
+@pytest.mark.parametrize('cover_enabled', [True, False])
+def test_b2_analysis_switch_and_visual_toggle_http_save_round_trip(binding_id, cover_enabled):
+    """Persist the frontend's switch/toggle contract through HTTP, disk and runtime routing."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio'), ('independent', 'ollama')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis', capability='multimodal'),
+        vision=ai.Assignment(connection_id=binding_id, model='my-vision', capability='multimodal', model_source='user') if binding_id else None,
+        cover=ai.Assignment(connection_id=binding_id or 'old', model='my-cover', model_source='user'),
+        cover_enabled=cover_enabled,
+        cover_follows_analysis=False,  # explicit independent cover, even on the analysis connection
+    )
+    switched = config.model_copy(update={
+        'analysis': ai.Assignment(connection_id='new', model='new-analysis'),
+    })
+    off = switched.model_copy(update={'analysis_mode': 'subtitle', 'allow_visual_screening': False})
+    on = off.model_copy(update={'analysis_mode': 'auto', 'allow_visual_screening': True})
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        for index, document in enumerate([config, switched, off, on]):
+            response = client.put('/settings/ai-models', json=document.model_dump())
+            assert response.status_code == 200
+            public = response.json()
+            loaded = ai.load()
+            assert loaded.vision == config.vision
+            assert loaded.cover == config.cover
+            assert loaded.cover_enabled == cover_enabled
+            assert loaded.analysis.connection_id == ('old' if index == 0 else 'new')
+            assert loaded.analysis_mode == ('subtitle' if index == 2 else 'auto')
+            assert loaded.allow_visual_screening == (index != 2)
+            assert public['vision'] == config.model_dump()['vision']
+            assert public['cover'] == config.model_dump()['cover']
+            assert client.get('/settings/ai-models').json()['vision'] == public['vision']
+            assert client.get('/settings/ai-models').json()['cover'] == public['cover']
+            routed = ai.vision_follow_binding(loaded)
+            assert routed.connection_id == (binding_id or loaded.analysis.connection_id)
+            assert routed.model == ('my-vision' if binding_id else loaded.analysis.model)
+            assert ai.connection_for(loaded, loaded.cover).id == (binding_id or 'old')
+            # Re-save the public editing document, just as reopening settings does.
+            assert client.put('/settings/ai-models', json=public).status_code == 200
+            assert ai.load().vision == config.vision
+            assert ai.load().cover == config.cover
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+@pytest.mark.parametrize('binding_id', ['old', 'independent'])
+@pytest.mark.parametrize('cover_enabled', [True, False])
+def test_x1_smart_own_provider_survives_analysis_switch_round_trip(entry, binding_id, cover_enabled):
+    """Run the real frontend switch, then save/reopen through HTTP, disk and runtime."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio'), ('independent', 'ollama')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis'),
+        vision=ai.Assignment(connection_id=binding_id, model='own-vision', capability='multimodal', model_source='preset'),
+        cover=ai.Assignment(connection_id=binding_id, model='own-cover', model_source='preset'),
+        cover_enabled=cover_enabled,
+        cover_follows_analysis=False,  # explicit independent cover, even on the analysis connection
+    )
+    script = """
+const fs = require('node:fs')
+const { loadTs } = require('./tests/load-ts.cjs')
+const mocks = { '../../i18n': { t: text => text } }
+const logic = loadTs('modelSettingsLogic.ts', mocks)
+const defaults = loadTs('modelDefaults.ts', mocks)
+const view = loadTs('providerCatalogView.ts', mocks)
+const slots = loadTs('defaultModelSlots.ts', mocks)
+const state = logic.prepareLoaded(JSON.parse(fs.readFileSync(0, 'utf8')))
+const connection = state.connections.find(c => c.id === 'new')
+const models = [{ id: 'new-analysis', analysis: true }, { id: 'new-cover', image: true }]
+const lists = { new: { models, source: 'live', preview: false } }
+const entry = process.argv[1]
+let switched = entry === 'legacy'
+  ? logic.chooseProvider(state, 'analysis', 'lmstudio', lists, false).settings
+  : entry === 'catalog' ? view.assignAnalysis(state, connection)
+  : slots.applySmartSelection(state, 'analysis', 'new-analysis', 'new')
+switched = defaults.applyModelDefaults(switched, connection, models, false)
+process.stdout.write(JSON.stringify(logic.forSave(switched)))
+"""
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=config.model_dump()).status_code == 200
+        result = subprocess.run(
+            ['node', '-e', script, entry], cwd=Path(__file__).resolve().parents[2] / 'frontend',
+            input=json.dumps(client.get('/settings/ai-models').json()),
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        response = client.put('/settings/ai-models', json=json.loads(result.stdout))
+        assert response.status_code == 200
+        reopened = client.get('/settings/ai-models').json()
+        loaded = ai.load()
+        assert reopened['analysis']['connection_id'] == 'new'
+        for role in ('vision', 'cover'):
+            assert reopened[role] == getattr(config, role).model_dump()
+            assert getattr(loaded, role) == getattr(config, role)
+        assert reopened['cover_enabled'] == cover_enabled
+        assert ai.connection_for(loaded, ai.vision_follow_binding(loaded)).id == binding_id
+        assert ai.connection_for(loaded, loaded.cover).id == binding_id
+        # Reopening and saving the public editing document keeps the same routing.
+        assert client.put('/settings/ai-models', json=reopened).status_code == 200
+        assert ai.load().vision == config.vision
+        assert ai.load().cover == config.cover
+
+
 def test_api_key_strips_surrounding_whitespace_on_construct_and_save():
     connection = ai.Connection(id='c', name='k', provider='openai', api_key='  sk-live-secret  \n')
     assert connection.api_key == 'sk-live-secret'
@@ -101,19 +218,25 @@ def test_changed_endpoint_cannot_reuse_hidden_key():
     assert ai.path().read_bytes() == before
 
 
-def test_invalid_binding_and_visual_choice_do_not_partially_save():
+def test_invalid_binding_does_not_partially_save():
     ai.save(example())
     before = ai.path().read_bytes()
-    config = example()
-    config.analysis.capability = 'text'
-    config.analysis_mode = 'visual'
-    with pytest.raises(ValueError, match='多模态'):
-        ai.save(config)
-    assert ai.path().read_bytes() == before
     raw = example().model_dump()
     raw['connections'].pop()
     with pytest.raises(ValidationError, match='引用的服务'):
         ai.ModelSettings.model_validate(raw)
+    assert ai.path().read_bytes() == before
+
+
+def test_visual_mode_without_vision_saves():
+    config = example()
+    config.analysis.capability = 'text'
+    config.analysis_mode = 'visual'
+    ai.save(config)
+    loaded = ai.load()
+    assert loaded.analysis_mode == 'visual'
+    assert loaded.analysis.capability == 'text'
+    assert ai.vision_follow_lacks_capability(loaded) is True
 
 
 def test_atomic_write_failure_leaves_old_config(monkeypatch):
@@ -245,16 +368,16 @@ def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch, cover_pro
     assert ai.image_endpoint(ai.connection_for(config, config.cover)) == {
         'provider': cover_provider, 'api_key': 'image-key', 'base_url': 'https://image.example/v1'}
     assert config.analysis_mode == 'subtitle'
+    assert config.analysis.model_source == 'user'
+    assert config.vision.model_source == 'user'
+    assert config.cover.model_source == 'user'
+    assert config.connections[0].base_url_source == 'user'
+    assert config.connections[1].base_url_source == 'user'
+    assert config.connections[2].base_url_source == 'user'
     assert not ai.path().exists()
 
 
-@pytest.mark.parametrize('invalid', [
-    {'base_url': 'https://image.example/v1?api_key=synthetic-secret'},
-    {'base_url': 'not-an-endpoint'},
-    {'api_key': 'x' * 2001},
-    {'model': 'm' * 201},
-])
-def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeypatch, invalid):
+def _legacy_cover_client(monkeypatch, invalid):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from backend.api.v1.settings import router
@@ -273,17 +396,55 @@ def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeyp
     legacy_path.write_text('{"legacy": "preserved"}')
     app = FastAPI()
     app.include_router(router)
-    with TestClient(app) as client:
+    return TestClient(app), legacy_path
+
+
+def test_unmigratable_legacy_cover_keeps_key_and_resets_to_recommended(monkeypatch):
+    from backend.services.model_settings_source import NOTICE_PURPOSE_RESET, recommended_model
+    client, legacy_path = _legacy_cover_client(monkeypatch, {'base_url': 'https://image.example/v1?api_key=synthetic-secret'})
+    with client:
         response = client.get('/settings/ai-models')
         assert response.status_code == 200
         value = response.json()
         assert value['analysis']['model'] == 'main-model'
-        assert value['connections'][0]['has_key']
-        assert value['cover'] is None and not value['cover_enabled']
-        assert value['migration_warnings'] == ['cover_configuration_invalid']
+        assert value['analysis']['model_source'] == 'user'
+        assert any(c['has_key'] for c in value['connections'])
+        assert value['cover']['model'] == recommended_model('openai', 'cover')
+        assert value['cover']['model_source'] == 'preset'
+        assert value['cover_enabled'] is True
+        assert NOTICE_PURPOSE_RESET in value['migration_warnings']
         assert 'synthetic-secret' not in response.text and 'main-key' not in response.text
     assert legacy_path.read_text() == '{"legacy": "preserved"}'
     assert not ai.path().exists()
+
+
+def test_oversized_legacy_cover_key_does_not_block_settings(monkeypatch):
+    client, legacy_path = _legacy_cover_client(monkeypatch, {'api_key': 'x' * 2001})
+    with client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        value = response.json()
+        assert value['analysis']['model'] == 'main-model'
+        assert value['cover'] is None and not value['cover_enabled']
+        assert value['migration_warnings'] == ['cover_configuration_invalid']
+        assert 'main-key' not in response.text
+    assert legacy_path.read_text() == '{"legacy": "preserved"}'
+    assert not ai.path().exists()
+
+
+def test_oversized_legacy_cover_model_resets_to_recommended(monkeypatch):
+    from backend.services.model_settings_source import NOTICE_PURPOSE_RESET, recommended_model
+    client, legacy_path = _legacy_cover_client(monkeypatch, {'model': 'm' * 201, 'api_key': 'image-key', 'base_url': 'https://image.example/v1'})
+    with client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        value = response.json()
+        assert value['cover']['model'] == recommended_model('openai', 'cover')
+        assert value['cover']['model_source'] == 'preset'
+        assert NOTICE_PURPOSE_RESET in value['migration_warnings']
+        assert value['connections'][-1]['has_key']
+        assert 'image-key' not in response.text and 'm' * 20 not in response.text
+    assert legacy_path.read_text() == '{"legacy": "preserved"}'
 
 
 @pytest.mark.parametrize('role', ['analysis', 'vision'])
@@ -302,9 +463,14 @@ def test_invalid_legacy_role_preserves_other_connections(monkeypatch, role):
     monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(model='image-model', api_key='image-key', base_url='https://image.example/v1'))
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences())
     config = legacy_migrate()
-    assert getattr(config, role) is None
+    from backend.services.model_settings_source import NOTICE_PURPOSE_RESET, recommended_model
+    assert getattr(config, role) is not None
+    assert getattr(config, role).model_source == 'preset'
+    assert getattr(config, role).model == recommended_model(
+        'openai' if role == 'analysis' else 'openai', role)
     assert config.cover.model == 'image-model'
-    assert config._migration_warnings == [role + '_configuration_invalid']
+    assert NOTICE_PURPOSE_RESET in config._migration_warnings
+    assert next(c for c in config.connections if c.id == ('legacy-analysis' if role == 'analysis' else 'legacy-vision')).api_key
     assert 'synthetic-secret' not in json.dumps(ai.public(config))
     assert not ai.path().exists()
 
@@ -436,7 +602,7 @@ def test_transcription_model_is_saved_and_used_without_overriding_explicit_call(
     config = example()
     config.transcription = ai.Transcription(model='large-v3')
     saved = ai.save(config)
-    assert saved['transcription'] == {'provider': 'whisper_local', 'model': 'large-v3', 'connection_id': None}
+    assert saved['transcription'] == {'provider': 'whisper_local', 'model': 'large-v3', 'connection_id': None, 'model_source': 'user'}
     calls = []
     class FakeRecognizer:
         def __init__(self, config=None):
@@ -563,3 +729,321 @@ def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monk
     config.connections[0].provider = 'compatible'
     config.connections[0].base_url = 'https://gateway.example/v1'
     assert ai.vision_endpoint(config) is None
+
+
+def test_custom_base_url_rejects_console_host_and_embedded_credentials():
+    with pytest.raises(ValidationError):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://user:pass@gw.example/v1')
+    with pytest.raises(ValidationError):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://user@gw.example/v1')
+    with pytest.raises(ValidationError, match='控制台或官网'):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://platform.openai.com/v1')
+    with pytest.raises(ValidationError, match='控制台或官网'):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://bailian.console.aliyun.com')
+    ok = ai.Connection(id='c', name='x', provider='compatible', base_url='https://gw.example/v1', api_key='k')
+    assert ok.base_url == 'https://gw.example/v1'
+
+
+def test_custom_models_survive_save_reopen_and_are_not_overwritten_by_discover(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(
+            id='gw', name='Office gateway', provider='compatible',
+            base_url='https://gw.example/v1', api_key='sk-custom-secret',
+            custom_models=[ai.CustomModelOffer(
+                id='office-llm', display_name='Office LLM', types=['language'],
+                vision=True, scenarios=['analysis', 'vision'], enabled=True,
+            )],
+        )],
+        analysis=ai.Assignment(connection_id='gw', model='office-llm', capability='multimodal'),
+    )
+    public = ai.save(settings)
+    assert public['connections'][0]['custom_models'][0]['display_name'] == 'Office LLM'
+    assert public['connections'][0]['custom_models'][0]['vision'] is True
+
+    loaded = ai.load()
+    offer = loaded.connections[0].custom_models[0]
+    assert offer.id == 'office-llm'
+    assert offer.display_name == 'Office LLM'
+    assert offer.vision is True
+    assert registry.lookup_capability(loaded.connections[0], 'office-llm') == 'multimodal'
+
+    async def metadata():
+        return None
+
+    async def fetch(*args, **kwargs):
+        return {'data': [{'id': 'other-live', 'architecture': {
+            'input_modalities': ['text'], 'output_modalities': ['text'],
+        }}]}
+
+    monkeypatch.setattr(registry, '_ensure_metadata', metadata)
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', fetch)
+    result = asyncio.run(registry.discover(loaded.connections[0], refresh=True))
+    listed = {item['id']: item for item in result['models']}
+    assert 'office-llm' in listed
+    assert 'other-live' in listed
+    assert listed['office-llm']['capability'] == 'multimodal'
+    assert listed['office-llm']['analysis'] is True
+    reopened = ai.load()
+    assert reopened.connections[0].custom_models[0].display_name == 'Office LLM'
+    assert reopened.connections[0].custom_models[0].vision is True
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        body = client.get('/settings/ai-models').json()
+        assert body['connections'][0]['custom_models'][0]['id'] == 'office-llm'
+        assert body['connections'][0]['custom_models'][0]['display_name'] == 'Office LLM'
+        listing = client.post('/settings/ai-models/discover', json={
+            'connection': body['connections'][0], 'refresh': True,
+        })
+        assert listing.status_code == 200
+        http_listed = {item['id']: item for item in listing.json()['models']}
+        assert http_listed['office-llm']['capability'] == 'multimodal'
+        again = client.get('/settings/ai-models').json()['connections'][0]['custom_models']
+        assert again[0]['id'] == 'office-llm'
+        assert again[0]['display_name'] == 'Office LLM'
+        assert again[0]['vision'] is True
+
+
+def test_fetch_list_returns_ids_without_secrets(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    assert len([route for route in router.routes
+                if route.path == '/settings/ai-models/fetch-list' and 'POST' in route.methods]) == 1
+
+    from backend.core import provider_model_fetch
+
+    def fetch(url, *, headers, **kwargs):
+        assert headers['Authorization'] == 'Bearer sk-custom-secret'
+        assert url == 'https://gw.example/v1/models'
+        return SimpleNamespace(status_code=200, text='', headers={},
+            json=lambda: {'data': [{'id': 'relay-a'}, {'id': 'office-llm'}]})
+
+    monkeypatch.setattr(provider_model_fetch, '_default_http_get', fetch)
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(
+            id='gw', name='Office', provider='compatible',
+            base_url='https://gw.example/v1', api_key='sk-custom-secret',
+        )],
+        analysis=ai.Assignment(connection_id='gw', model='office-llm'),
+    )
+    ai.save(settings)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        public = client.get('/settings/ai-models').json()['connections'][0]
+        response = client.post('/settings/ai-models/fetch-list', json={'connection': public})
+    assert response.status_code == 200
+    body = response.json()
+    assert body['ok'] is True
+    assert body['models'] == ['relay-a', 'office-llm']
+    assert body['base_url_host'] == 'gw.example'
+    assert 'sk-custom-secret' not in response.text
+    assert 'https://gw.example' not in response.text
+
+
+def test_custom_models_persist_without_exposing_keys():
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(
+            id='gw', name='Office gateway', provider='compatible',
+            base_url='https://gw.example/v1', api_key='sk-custom-secret',
+            custom_models=[ai.CustomModelOffer(
+                id='office-llm', display_name='Office', types=['language'],
+                vision=True, scenarios=['analysis', 'vision'], enabled=True,
+            )],
+        )],
+        analysis=ai.Assignment(connection_id='gw', model='office-llm', capability='multimodal'),
+    )
+    public = ai.save(settings)
+    dumped = json.dumps(public)
+    assert 'sk-custom-secret' not in dumped
+    assert public['connections'][0]['custom_models'][0]['id'] == 'office-llm'
+    loaded = ai.load()
+    offer = loaded.connections[0].custom_models[0]
+    assert offer.id == 'office-llm'
+    assert offer.vision is True
+    assert offer.scenarios == ['analysis', 'vision']
+    illegal = ai.CustomModelOffer(id='img', types=['image'], vision=True, scenarios=['analysis', 'cover', 'vision'])
+    assert illegal.vision is False
+    assert illegal.scenarios == ['cover']
+    blank = ai.CustomModelOffer(id='x', types=[], scenarios=['analysis'])
+    assert blank.types == ['language']
+    assert blank.scenarios == ['analysis']
+
+
+@pytest.mark.parametrize('provider,model,supported', [
+    ('openai', 'gpt-4o-transcribe', False),
+    ('compatible', 'gpt-4o-mini-transcribe', False),
+    ('openai', 'whisper-1', True),
+    ('compatible', 'whisper-1', True),
+    ('dashscope', 'paraformer-v2', False),
+])
+def test_custom_asr_support_requires_timestamp_adapter(provider, model, supported):
+    from backend.core.asr_model_catalog import adapter
+    connection = ai.Connection(id='asr', name='ASR', provider=provider,
+        base_url='https://gw.example/v1', custom_models=[ai.CustomModelOffer(id=model, types=['asr'])])
+    record = registry._merge_custom_models(connection, {'models': []})['models'][0]
+    assert record['asr'] is True
+    assert record['asr_supported'] is bool(adapter(provider, model)) is supported
+
+
+_X1_SWITCH_SCRIPT = """
+const fs = require('node:fs')
+const { loadTs } = require('./tests/load-ts.cjs')
+const mocks = { '../../i18n': { t: text => text } }
+const logic = loadTs('modelSettingsLogic.ts', mocks)
+const defaults = loadTs('modelDefaults.ts', mocks)
+const view = loadTs('providerCatalogView.ts', mocks)
+const slots = loadTs('defaultModelSlots.ts', mocks)
+let state = logic.prepareLoaded(JSON.parse(fs.readFileSync(0, 'utf8')))
+const [entry, target] = process.argv.slice(1)
+const connection = state.connections.find(c => c.id === target)
+const models = [{ id: 'new-analysis', analysis: true, capability: 'multimodal' }, { id: 'new-cover', image: true }]
+const lists = { [target]: { models, source: 'live', preview: false } }
+let switched = entry === 'legacy'
+  ? logic.chooseProvider(state, 'analysis', connection.provider, lists, false).settings
+  : entry === 'catalog' ? view.assignAnalysis(state, connection)
+  : slots.applySmartSelection(state, 'analysis', 'new-analysis', target)
+switched = defaults.applyModelDefaults(switched, connection, models, false)
+process.stdout.write(JSON.stringify(logic.forSave(switched)))
+"""
+
+
+def _x1_switch(client, entry, target):
+    result = subprocess.run(
+        ['node', '-e', _X1_SWITCH_SCRIPT, entry, target], cwd=Path(__file__).resolve().parents[2] / 'frontend',
+        input=json.dumps(client.get('/settings/ai-models').json()), capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert client.put('/settings/ai-models', json=json.loads(result.stdout)).status_code == 200
+    return client.get('/settings/ai-models').json()
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+def test_x1_only_explicit_follow_migrates_vision(entry):
+    """Explicit follow (vision=None) moves with analysis; nothing else is rewritten."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis'),
+        vision=None,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=config.model_dump()).status_code == 200
+        reopened = _x1_switch(client, entry, 'new')
+        assert reopened['vision'] is None, 'follow must stay follow, not be frozen to a connection'
+        loaded = ai.load()
+        assert ai.connection_for(loaded, ai.vision_follow_binding(loaded)).id == 'new'
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+@pytest.mark.parametrize('source', ['preset', 'user'])
+def test_x1_independent_binding_survives_two_switches_and_switch_back(entry, source):
+    """independent(+preset) keeps its connection through A->B->A analysis switches and reopen."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio'), ('own', 'ollama')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis'),
+        vision=ai.Assignment(connection_id='own', model='own-vision', capability='multimodal', model_source=source),
+        cover=ai.Assignment(connection_id='own', model='own-cover', model_source=source),
+        cover_enabled=True,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=config.model_dump()).status_code == 200
+        before = client.get('/settings/ai-models').json()
+        for target in ('new', 'old'):
+            reopened = _x1_switch(client, entry, target)
+            assert reopened['analysis']['connection_id'] == target
+            for role in ('vision', 'cover'):
+                assert reopened[role]['connection_id'] == 'own'
+                assert reopened[role]['model_source'] == before[role]['model_source']
+        loaded = ai.load()
+        assert ai.connection_for(loaded, ai.vision_follow_binding(loaded)).id == 'own'
+        assert ai.connection_for(loaded, loaded.cover).id == 'own'
+
+
+# ---- cover follow flag (Kris round 6): explicit cover_follows_analysis ----
+
+def _cover_doc(cover_conn, flag='absent'):
+    doc = {
+        'version': 1,
+        'connections': [{'id': i, 'name': i, 'provider': p, 'api_key': ''}
+                        for i, p in [('old', 'ollama'), ('new', 'lmstudio'), ('own', 'ollama')]],
+        'analysis': {'connection_id': 'old', 'model': 'old-analysis'},
+        'cover': {'connection_id': cover_conn, 'model': 'own-cover', 'model_source': 'preset'},
+        'cover_enabled': True, 'cover_choice_version': 1,
+    }
+    if flag != 'absent':
+        doc['cover_follows_analysis'] = flag
+    return doc
+
+
+@pytest.mark.parametrize('cover_conn,expected', [('old', True), ('own', False)])
+def test_cover_follow_legacy_inference_written_back_once(cover_conn, expected):
+    target = ai.path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(_cover_doc(cover_conn)), encoding='utf-8')
+    original = target.read_bytes()
+    loaded = ai.load()
+    assert loaded.cover_follows_analysis is expected
+    assert target.read_bytes() == original, 'runtime reads never rewrite the settings file'
+    ai.for_editing()  # opening settings migrates once
+    assert json.loads(target.read_text(encoding='utf-8'))['cover_follows_analysis'] is expected
+    migrated = target.read_bytes()
+    ai.for_editing()
+    assert target.read_bytes() == migrated
+    assert ai.public(loaded)['cover_follows_analysis'] is expected
+
+
+def test_cover_follow_flag_beats_inference_and_must_match_analysis():
+    assert ai.ModelSettings.model_validate(_cover_doc('old', False)).cover_follows_analysis is False
+    with pytest.raises(ValidationError):
+        ai.ModelSettings.model_validate(_cover_doc('own', True))
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+@pytest.mark.parametrize('follow', [True, False])
+def test_cover_follow_flag_drives_analysis_switch_round_trip(entry, follow):
+    """Following cover moves to the new analysis connection; independent cover on the same connection stays."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.services import cover
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=_cover_doc('old', follow)).status_code == 200
+        reopened = _x1_switch(client, entry, 'new')
+        assert reopened['analysis']['connection_id'] == 'new'
+        assert reopened['cover_follows_analysis'] is follow
+        if follow:
+            assert reopened['cover']['connection_id'] == 'new'
+            assert reopened['cover']['model'] == 'new-cover'
+        else:
+            assert reopened['cover']['connection_id'] == 'old'
+            assert reopened['cover']['model'] == 'own-cover'
+        # Reopen and save again: unchanged.
+        assert client.put('/settings/ai-models', json=reopened).status_code == 200
+        loaded = ai.load()
+        assert loaded.cover_follows_analysis is follow
+        assert ai.connection_for(loaded, loaded.cover).id == ('new' if follow else 'old')
+        assert cover.load_config().model == ('new-cover' if follow else 'own-cover')

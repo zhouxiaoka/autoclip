@@ -23,11 +23,18 @@ def checks(group: str, python: str):
             ('tracking_inventory', [python, 'scripts/check_tracking_inventory.py'], ROOT),
             ('release_gate_tests', [python, '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py'], ROOT),
         ],
+        'redline': [
+            ('redline_backend', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests/redline', '-q', '-r', 's'], ROOT),
+            # Same strict setup as `npm test` (#273): swallowed errors fail the redline tests too.
+            ('redline_frontend', ['node', '--require', './frontend/tests/setup.cjs', '--test', *[str(path.relative_to(ROOT)) for path in sorted((ROOT / 'frontend/tests').glob('redline-*.test.cjs'))]], ROOT),
+        ],
         'backend': [
             ('media_test_dependencies', [python, '-c', "import cv2, numpy, shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required'"], ROOT),
             # Correctness rules are blocking; existing style debt is reported separately in CI.
             ('python_correctness', [python, '-m', 'ruff', 'check', '--no-cache', '--select', 'E9,F63,F7,F82', 'backend', 'scripts/quality_gate.py', 'scripts/release_acceptance.py', 'scripts/internal_acceptance.py', 'scripts/provider_e2e', 'scripts/tests'], ROOT),
-            ('backend_tests', [python, '-m', 'pytest', 'backend/tests', '-q', '-r', 's'], ROOT),
+            # Run the order-sensitive regression in a fresh process as well as the full suite.
+            ('llm_hot_reload_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests/test_llm_hot_reload.py', '-q', '-r', 's'], ROOT),
+            ('backend_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests', '-q', '-r', 's'], ROOT),
             ('editorial_fixtures', [python, '-m', 'backend.eval'], ROOT),
         ],
         'frontend': [
@@ -39,7 +46,7 @@ def checks(group: str, python: str):
 
 
 def pytest_skips(path: Path):
-    """Only an external opt-in probe and a foreign-platform test may skip."""
+    """Only an external opt-in probe, a foreign-platform test, and the optional hub comparison may skip."""
     rows = []
     for case in ET.parse(path).iter('testcase'):
         if case.find('skipped') is None:
@@ -47,9 +54,26 @@ def pytest_skips(path: Path):
         name = case.get('name', '').split('[', 1)[0]
         module = case.get('classname', '')
         allowed = (module.endswith('test_upload_post_publisher') and name == 'test_live_upload_post_rejects_unknown_key') or (
-            module.endswith('test_windows_asyncio') and name == 'test_windows_real_reset_and_subprocess' and os.name != 'nt')
+            module.endswith('test_windows_asyncio') and name == 'test_windows_real_reset_and_subprocess' and os.name != 'nt') or (
+            module.endswith('test_whisper_snapshot_repair') and name == 'test_real_hub_copy_layout_does_not_replace_an_existing_file')
         rows.append({'test': name, 'allowed': allowed})
     return rows
+
+
+def pytest_coverage(path: Path, expected_modules: set[str]):
+    """Require execution evidence for every backend test module and both reload cases."""
+    cases = list(ET.parse(path).iter('testcase'))
+    modules = {part for case in cases for part in case.get('classname', '').split('.')}
+    reload_names = {case.get('name') for case in cases
+                    if 'test_llm_hot_reload' in case.get('classname', '').split('.')}
+    required = {
+        'test_reload_pins_connection_model_and_candidates[False]',
+        'test_reload_pins_connection_model_and_candidates[True]',
+        'test_reload_false_then_true_with_coarse_write_times',
+    }
+    return {'test_count': len(cases), 'module_count': len(expected_modules & modules),
+            'missing_modules': sorted(expected_modules - modules),
+            'missing_reload_cases': sorted(required - reload_names)}
 
 
 def run(group: str, report_path: Path, python: str) -> int:
@@ -64,6 +88,9 @@ def run(group: str, report_path: Path, python: str) -> int:
         data.mkdir()
         (data / 'privacy.json').write_text('{"analytics":false,"crash_reports":false}', encoding='utf-8')
         env = os.environ.copy()
+        # Developer selectors/plugins must not silently narrow the blocking suite.
+        env.pop('PYTEST_ADDOPTS', None)
+        env.pop('PYTEST_PLUGINS', None)
         # Empty inherited credentials and known dotenv keys before application imports.
         # Fixtures may set their own fake credentials inside individual tests.
         for key in tuple(env):
@@ -86,17 +113,33 @@ def run(group: str, report_path: Path, python: str) -> int:
             print(f'Running {name}', flush=True)
             started = time.monotonic()
             skipped = []
-            if name == 'backend_tests':
-                command = [*command, '--junitxml=' + str(Path(temp) / 'backend-tests.xml')]
+            coverage = None
+            is_pytest = name in ('backend_tests', 'llm_hot_reload_tests', 'redline_backend')
+            if is_pytest:
+                junit_path = Path(temp) / (name + '.xml')
+                command = [*command, '--junitxml=' + str(junit_path)]
             try:
                 result = subprocess.run(command, cwd=cwd, env=env, timeout=1800, check=False)
                 code = result.returncode
             except (OSError, subprocess.TimeoutExpired) as error:
                 print(f'{name}: {type(error).__name__}', file=sys.stderr)
                 code = 1
-            if name == 'backend_tests':
+            if is_pytest:
                 try:
-                    skipped = pytest_skips(Path(temp) / 'backend-tests.xml')
+                    skipped = pytest_skips(junit_path)
+                    if name == 'redline_backend':
+                        expected = {p.stem for p in (ROOT / 'backend/tests/redline').glob('test_*.py')}
+                        cases = list(ET.parse(junit_path).iter('testcase'))
+                        executed = {part for case in cases for part in case.get('classname', '').split('.')}
+                        coverage = {'test_count': len(cases), 'module_count': len(expected & executed),
+                                    'missing_modules': sorted(expected - executed), 'missing_reload_cases': []}
+                    else:
+                        expected = ({p.stem for p in (ROOT / 'backend/tests').rglob('test_*.py')}
+                                    if name == 'backend_tests' else {'test_llm_hot_reload'})
+                        coverage = pytest_coverage(junit_path, expected)
+                    if coverage['missing_modules'] or coverage['missing_reload_cases']:
+                        print('BLOCKED: backend test execution evidence incomplete', file=sys.stderr)
+                        code = 1
                     if any(not row['allowed'] for row in skipped):
                         print('BLOCKED: unexpected skipped regression; inspect local pytest output', file=sys.stderr)
                         code = 1
@@ -105,8 +148,9 @@ def run(group: str, report_path: Path, python: str) -> int:
                     code = 1
             entry = {'name': name, 'status': 'passed' if code == 0 else 'failed',
                      'exit_code': code, 'duration_sec': round(time.monotonic() - started, 2)}
-            if name == 'backend_tests':
+            if is_pytest:
                 entry['skipped_tests'] = skipped
+                entry['coverage'] = coverage
             report['checks'].append(entry)
             failed = failed or code != 0
             report['status'] = 'failed' if failed else 'running'
@@ -118,7 +162,7 @@ def run(group: str, report_path: Path, python: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--group', choices=('all', 'contracts', 'backend', 'frontend'), default='all')
+    parser.add_argument('--group', choices=('all', 'contracts', 'redline', 'backend', 'frontend'), default='all')
     parser.add_argument('--python', default=sys.executable)
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()

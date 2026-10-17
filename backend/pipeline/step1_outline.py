@@ -2,7 +2,6 @@
 Step 1: 大纲提取 - 从转写文本中提取结构性大纲
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -17,7 +16,10 @@ from .failures import (
     http_status_of, model_call_error_code,
 )
 
-logger = logging.getLogger(__name__)
+from backend.core.llm_telemetry import sanitize_exception_text, log_safe_exception
+from backend.core.failure_logging import failure_logger, chunk_failure_context
+
+logger = failure_logger(__name__)
 
 class OutlineExtractor:
     """大纲提取器（重构版）"""
@@ -62,8 +64,8 @@ class OutlineExtractor:
         try:
             srt_data = self.text_processor.parse_srt(srt_path)
         except Exception as e:
-            logger.error(f"解析SRT文件失败: {e}")
-            raise PipelineFailure("SUBTITLE", f"字幕文件无法解析：{e}", HINT_SUBTITLE) from e
+            logger.error(f"解析SRT文件失败: {sanitize_exception_text(e)}")
+            raise PipelineFailure("SUBTITLE", f"字幕文件无法解析：{sanitize_exception_text(e)}", HINT_SUBTITLE) from e
         if not srt_data:
             logger.warning("SRT文件为空或解析失败")
             raise PipelineFailure("SUBTITLE", "字幕文件为空，没有可分析的文本。", HINT_SUBTITLE)
@@ -91,41 +93,49 @@ class OutlineExtractor:
         last_error: Optional[BaseException] = None
         
         # 4. 每个文本块独立调用模型（并行，结果按块顺序）
+        from backend.core.llm_degrade import chunk_call_budget
+
+        @chunk_call_budget()
+        @chunk_failure_context("step1_outline")
         def outline_chunk(item):
             from backend.core.result_retry import MAX_ATTEMPTS, classify_for_retry
 
             i, chunk_file = item
-            logger.info(f"处理第{i+1}/{len(chunks)}个文本块: {chunk_file.name}")
+            logger.info(f"处理第{i+1}/{len(chunks)}个文本块")
             last_error: Exception | None = None
             try:
                 with open(chunk_file, 'r', encoding='utf-8') as f:
                     chunk_text = f.read()
             except Exception as e:
-                logger.error(f"处理第{i+1}个文本块失败: {e}")
+                e = log_safe_exception(e)
+                logger.error(f"处理第{i+1}个文本块失败: {sanitize_exception_text(e)}")
                 return [], e
-            for attempt in range(MAX_ATTEMPTS):
-                try:
-                    response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
-                except Exception as e:
-                    last_error = e
-                    _kind, retryable = classify_for_retry(e)
-                    logger.error(f"处理第{i+1}个文本块失败: {e}")
-                    if not retryable:
-                        return [], e
-                    if attempt >= MAX_ATTEMPTS - 1:
-                        return [], e
-                    continue
-                if not response:
-                    logger.warning(f"处理第{i+1}个文本块时返回空响应")
+            from backend.core.llm_degrade import chunk_call_budget
+            with chunk_call_budget():
+                for attempt in range(MAX_ATTEMPTS):
+                    try:
+                        response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
+                    except Exception as e:
+                        e = log_safe_exception(e)
+                        last_error = e
+                        _kind, retryable = classify_for_retry(e)
+                        logger.error(f"处理第{i+1}个文本块失败: {sanitize_exception_text(e)}")
+                        if not retryable:
+                            return [], e
+                        if attempt >= MAX_ATTEMPTS - 1:
+                            return [], e
+                        continue
+                    if not response:
+                        logger.warning(f"处理第{i+1}个文本块时返回空响应")
+                        if attempt >= MAX_ATTEMPTS - 1:
+                            return [], None
+                        continue
+                    parsed = self._parse_outline_response(response, i)
+                    if parsed:
+                        return parsed, None
                     if attempt >= MAX_ATTEMPTS - 1:
                         return [], None
-                    continue
-                parsed = self._parse_outline_response(response, i)
-                if parsed:
-                    return parsed, None
-                if attempt >= MAX_ATTEMPTS - 1:
-                    return [], None
-            return [], last_error
+                return [], last_error
 
         from .concurrency import map_chunks
         for parsed_outlines, error in map_chunks(outline_chunk, enumerate(chunk_files)):
@@ -138,10 +148,9 @@ class OutlineExtractor:
 
         total_chunks = len(chunk_files)
         if total_chunks and failed_chunks == total_chunks:
-            # The provider's raw text (often English, sometimes echoing a key prefix) goes to
-            # the log only; the user sees fixed, translatable wording (RC156 Win QA c5).
+            # Logs and user messages must both exclude the provider's raw text.
             logger.warning("大纲提取失败：%s/%s 个文本块调用模型都失败了。最后一次错误：%s: %s",
-                           failed_chunks, total_chunks, type(last_error).__name__, last_error)
+                           failed_chunks, total_chunks, type(last_error).__name__, sanitize_exception_text(last_error))
             detail = f"大纲提取失败：{failed_chunks}/{total_chunks} 个文本块调用模型都失败了。"
             from backend.core.llm_retry import studio_code_for
             from backend.core.upstream_errors import (
@@ -157,12 +166,12 @@ class OutlineExtractor:
                 kind = info.error_type.value
             if info is not None and info.error_type is not UpstreamErrorType.UNKNOWN:
                 raise PipelineFailure(
-                    "ANALYZE", info.hint_key, "",
+                    "ANALYZE", MODEL_CALL_MESSAGES["llm_auth_invalid"] if info.error_type is UpstreamErrorType.INVALID_KEY else info.hint_key, "",
                     code=studio_code_for(info.error_type, status),
                     http_status=status or http_status_of(last_error),
                     upstream_error_type=kind,
                 ) from last_error
-            if looks_like_llm_setup_error(str(last_error)):
+            if looks_like_llm_setup_error(str(http_error_parts(last_error)[1])):
                 raise llm_key_failure("ANALYZE", detail) from last_error
             code = studio_code_for(info.error_type, status) if info is not None else model_call_error_code(last_error)
             fixed = MODEL_CALL_MESSAGES.get(code)
@@ -176,7 +185,7 @@ class OutlineExtractor:
                 http_status=status, upstream_error_type=kind,
             ) from last_error
         if failed_chunks:
-            logger.warning(f"{failed_chunks}/{total_chunks} 个文本块失败，用其余块继续。最后一次错误：{last_error}")
+            logger.warning(f"{failed_chunks}/{total_chunks} 个文本块失败，用其余块继续。最后一次错误：{sanitize_exception_text(last_error)}")
         
         # 5. 合并和去重
         final_outlines = self._merge_outlines(all_outlines)
@@ -203,7 +212,7 @@ class OutlineExtractor:
                 f.write(text_content)
             chunk_files.append(file_path)
         
-        logger.info(f"所有文本块已保存到: {self.chunks_dir}")
+        logger.info("所有文本块已保存")
         return chunk_files
 
     def _save_srt_chunks(self, chunks: List[Dict]):
@@ -219,7 +228,7 @@ class OutlineExtractor:
         (self.srt_chunks_dir / "manifest.json").write_text(
             json.dumps([f"chunk_{chunk['chunk_index']}.json" for chunk in chunks]), encoding="utf-8"
         )
-        logger.info(f"所有SRT块已保存到: {self.srt_chunks_dir}")
+        logger.info("所有SRT块已保存")
 
     def _parse_outline_response(self, response: str, chunk_index: int) -> List[Dict]:
         """
@@ -298,7 +307,7 @@ class OutlineExtractor:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(outlines, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"大纲已保存到: {output_path}")
+        logger.info("大纲已保存")
         return output_path
     
     def load_outline(self, input_path: Path) -> List[Dict]:

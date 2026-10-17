@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load() {
@@ -11,7 +11,7 @@ function load() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, URL }, { filename: file })
+  runInSandbox(js, { exports: module.exports, module, URL }, { filename: file })
   return module.exports
 }
 
@@ -28,6 +28,16 @@ test('hostname helper keeps domain only and never returns a key or path', () => 
   assert.equal(JSON.stringify(contract.hostnameOfBaseUrl(`https://88api.ai/v1?api_key=${SECRET}`)).includes('sk-'), false)
 })
 
+test('sanitizeModel keeps real ids and redacts secrets disguised as models', () => {
+  assert.equal(contract.sanitizeModel('gpt-4o-mini'), 'gpt-4o-mini')
+  assert.equal(contract.sanitizeModel('Qwen/Qwen2.5-7B-Instruct'), 'Qwen/Qwen2.5-7B-Instruct')
+  assert.equal(contract.sanitizeModel('https://api.openai.com/v1'), 'redacted')
+  assert.equal(contract.sanitizeModel(SECRET), 'redacted')
+  assert.equal(contract.sanitizeModel('api.openai.com/v1/models'), 'redacted')
+  assert.equal(contract.sanitizeModel('用户口播把这段广告词发到抖音'), 'redacted')
+  assert.equal(contract.sanitizeModel(''), undefined)
+})
+
 test('request sanitizer drops secrets, prompts and full URLs', () => {
   const props = contract.sanitizeLlmRequestProperties({
     provider: 'api88',
@@ -39,6 +49,7 @@ test('request sanitizer drops secrets, prompts and full URLs', () => {
     upstream_error_type: 'permission_denied',
     prompt_tokens: 80,
     retry_count: 0,
+    degrade_count: 1,
     duration_ms: 12,
     outcome: 'error',
     api_key: SECRET,
@@ -50,6 +61,7 @@ test('request sanitizer drops secrets, prompts and full URLs', () => {
   assert.equal(props.provider, 'api88')
   assert.equal(props.base_url_host, '88api.ai')
   assert.equal(props.upstream_error_type, 'permission_denied')
+  assert.equal(props.degrade_count, 1)
   assert.equal(dumped.includes(SECRET), false)
   assert.equal(dumped.includes(PROMPT), false)
   assert.equal(dumped.includes('/v1'), false)
@@ -64,6 +76,7 @@ test('run sanitizer rejects unknown enums and success HTTP statuses', () => {
     upstream_error_type: 'authentication',
     billable_calls_before_failure: 0,
     retry_count: 2,
+    degrade_count: 3,
   })
   assert.equal(props.provider, undefined)
   assert.equal(props.model, 'ok-model')
@@ -72,6 +85,7 @@ test('run sanitizer rejects unknown enums and success HTTP statuses', () => {
   assert.equal(props.upstream_error_type, undefined)
   assert.equal(props.billable_calls_before_failure, 0)
   assert.equal(props.retry_count, 2)
+  assert.equal(props.degrade_count, 3)
 })
 
 test('validation sanitizer maps ok to success and never keeps secrets', () => {

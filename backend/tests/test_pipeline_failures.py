@@ -76,6 +76,34 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
     assert "测试连接" in exc.value.hint
 
 
+@pytest.mark.parametrize('status', [401, 403])
+def test_auth_failure_survives_outline_and_generation_result(adapter, tmp_path, prompt_files, monkeypatch, status):
+    from backend.core import sentry_setup
+    from backend.services import simple_pipeline_adapter as mod
+
+    srt = tmp_path / 'input.srt'
+    srt.write_text(SRT, encoding='utf-8')
+    error = RuntimeError('invalid api key')
+    error.status_code = status
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
+    with pytest.raises(PipelineFailure) as caught:
+        extractor.extract_outline(srt)
+    failure = caught.value
+    assert failure.code == 'llm_auth_invalid'
+    assert sentry_setup.studio_error_code(failure) == 'llm_auth_invalid'
+    assert failure.http_status == status
+    assert '自备' not in failure.user_message()
+
+    _fake_manager(monkeypatch, available=True)
+    def fail(*args, **kwargs):
+        raise failure
+    monkeypatch.setattr(mod, 'run_step1_outline', fail)
+    result = asyncio.run(adapter.process_project_sync(str(tmp_path / 'input.mp4'), str(srt)))
+    assert result['status'] == 'failed'
+    assert result['error_code'] == 'llm_auth_invalid'
+    assert result['http_status'] == status
+
+
 def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt_files, monkeypatch):
     srt = tmp_path / "a.srt"
     srt.write_text(SRT, encoding="utf-8")
@@ -97,7 +125,7 @@ def test_outline_quota_failure_uses_classified_user_copy(tmp_path, prompt_files,
     extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
     with pytest.raises(PipelineFailure) as caught:
         extractor.extract_outline(srt)
-    assert caught.value.code == 'authentication'
+    assert caught.value.code == 'llm_auth_invalid'
     assert caught.value.upstream_error_type == 'insufficient_quota'
     assert caught.value.user_message() == HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA]
     assert 'insufficient_user_quota' not in caught.value.user_message()
@@ -117,7 +145,9 @@ def test_outline_provider_failure_retains_recoverable_code(tmp_path, prompt_file
         extractor.extract_outline(srt)
     assert caught.value.stage == 'ANALYZE'
     assert caught.value.code == expected_code
-    assert caught.value.__cause__ is error
+    from backend.core.upstream_errors import classify_exception
+    assert classify_exception(caught.value.__cause__) == classify_exception(error)
+    assert str(error) not in str(caught.value.__cause__)
 
 
 def test_step1_partial_chunk_failure_still_returns_outline(tmp_path, prompt_files, monkeypatch):
@@ -154,6 +184,9 @@ def adapter(tmp_path, monkeypatch):
     events = []
     monkeypatch.setattr(mod, "emit_progress", lambda pid, stage, message="", subpercent=None: events.append((stage, message)))
     monkeypatch.setattr(mod.SimplePipelineAdapter, "_prompt_files", lambda self, project_dir: {})
+    # Fixture videos are placeholders: treat them as readable (R23 #231 classifies real unreadable sources).
+    from backend.pipeline import media_precheck
+    from backend.services.studio import preflight as _pf; monkeypatch.setattr(_pf, 'probe_material', lambda v: _pf.MaterialProbe(_pf.ProbeState.READABLE, v, 60.0, True))
     a = mod.SimplePipelineAdapter("proj-1", "task-1")
     a._events = events
     return a
@@ -586,4 +619,5 @@ def test_offline_failure_shows_one_fixed_translatable_sentence(tmp_path, prompt_
     assert caught.value.code == code
     assert caught.value.user_message() == MODEL_CALL_MESSAGES[code]
     assert str(error) not in caught.value.user_message()
-    assert str(error) in caplog.text  # detail kept in the log
+    assert str(error) not in caplog.text
+    assert code in caplog.text  # only the stable error type is retained

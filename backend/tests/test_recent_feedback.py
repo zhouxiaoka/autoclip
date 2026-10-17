@@ -208,7 +208,7 @@ def run_prepared_step2(obj, monkeypatch):
     (TimeoutError('private-url secret-key'), 'timeout'),
     (ConnectionError('private-url secret-key'), 'connection'),
     (RuntimeError('API调用失败 - Status: 429, Message: secret-key'), 'rate_limited'),
-    (RuntimeError('API调用失败 - Status: 401, Message: secret-key'), 'authentication'),
+    (RuntimeError('API调用失败 - Status: 401, Message: secret-key'), 'llm_auth_invalid'),
     (RuntimeError('API调用失败 - Status: 503, Message: secret-key'), 'provider_error'),
 ])
 def test_step2_call_failure_is_not_reported_as_short_content(tmp_path, monkeypatch, error, code):

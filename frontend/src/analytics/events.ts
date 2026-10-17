@@ -26,11 +26,19 @@ export type AnalyticsEventName =
   (typeof AnalyticsEvent)[keyof typeof AnalyticsEvent]
 
 /** 通用埋点入口。posthog 未初始化或已 opt-out 时为 no-op（内部已处理）。 */
+const LEGACY_EVENTS = new Set<AnalyticsEventName>([
+  AnalyticsEvent.VideoImported,
+  AnalyticsEvent.ClipsExported,
+  AnalyticsEvent.ProcessingFailed,
+  AnalyticsEvent.ApiKeyConfigured,
+  AnalyticsEvent.ExampleProjectOpened,
+])
+
 function trackEvent(
   name: AnalyticsEventName,
   properties?: Record<string, string | number | boolean | undefined>,
 ): void {
-  captureBusinessEvent(name, properties)
+  captureBusinessEvent(name, LEGACY_EVENTS.has(name) ? { ...properties, legacy: true } : properties)
 }
 
 export function trackVideoImported(props?: {

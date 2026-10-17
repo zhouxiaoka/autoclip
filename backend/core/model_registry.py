@@ -136,7 +136,68 @@ def _cap(inputs):
     return None
 
 
+def _custom_offers(connection):
+    offers = list(getattr(connection, 'custom_models', None) or [])
+    if offers:
+        return offers
+    try:
+        from backend.services import ai_model_settings as ai_models
+        previous = ai_models.load()
+    except Exception:
+        return []
+    ident = getattr(connection, 'id', None)
+    old = next((item for item in previous.connections if item.id == ident), None) if previous and ident else None
+    return list(old.custom_models) if old else []
+
+
+def _record_from_offer(connection, offer):
+    name = str(getattr(offer, 'id', '') or '').strip()
+    if not name:
+        return None
+    types = set(getattr(offer, 'types', None) or ['language'])
+    scenarios = set(getattr(offer, 'scenarios', None) or [])
+    vision = bool(getattr(offer, 'vision', False) and 'language' in types)
+    asr_metadata = asr_catalog.metadata(connection.provider, name)
+    asr = 'asr' in types or 'transcription' in scenarios or asr_metadata['asr']
+    return {
+        'id': name,
+        'capability': 'multimodal' if vision else ('text' if 'language' in types else None),
+        'capability_source': 'custom',
+        'analysis': 'analysis' in scenarios or 'language' in types,
+        'image': 'image' in types or 'cover' in scenarios,
+        'asr': asr,
+        'asr_supported': asr_metadata['asr_supported'],
+        'asr_preview': False,
+        'asr_note': asr_metadata['asr_note'],
+    }
+
+
+def _merge_custom_models(connection, value):
+    """Keep user-authored custom_models in the picker. Live IDs are additive."""
+    models = [item for item in (value.get('models') or []) if isinstance(item, dict)]
+    by_id = {item.get('id'): index for index, item in enumerate(models)}
+    for offer in _custom_offers(connection):
+        if getattr(offer, 'enabled', True) is False:
+            continue
+        record = _record_from_offer(connection, offer)
+        if not record:
+            continue
+        existing = by_id.get(record['id'])
+        if existing is None:
+            by_id[record['id']] = len(models)
+            models.append(record)
+        else:
+            models[existing] = {**models[existing], **record}
+    return {**value, 'models': models}
+
+
 def lookup_capability(connection, model):
+    for offer in _custom_offers(connection):
+        if getattr(offer, 'id', None) != model or getattr(offer, 'enabled', True) is False:
+            continue
+        record = _record_from_offer(connection, offer)
+        if record:
+            return record.get('capability')
     data = _read()
     entry = next((m for m in data.get(_scope(connection), {}).get('models', []) if m['id'] == model), None)
     if entry and entry.get('capability_source') == 'provider' and entry.get('capability'):
@@ -198,6 +259,24 @@ async def _ensure_metadata():
     await asyncio.shield(_remote_task)
 
 
+def _model_kind(item, name, *, analysis, image, asr):
+    """One display group per model: provider type metadata first, then capability flags."""
+    endpoints = [str(e) for e in (item.get('supported_endpoint_types') or [])]
+    outputs = item.get('output_modalities') or (item.get('architecture') or {}).get('output_modalities') or []
+    lowered = name.lower()
+    if any('video' in e for e in endpoints) or 'video' in outputs:
+        return 'video'
+    if asr:
+        return 'asr'
+    if any('audio' in e or 'speech' in e for e in endpoints) or 'audio' in outputs or any(t in lowered for t in ('tts', '-stt', 'speech', 'audio')):
+        return 'audio'
+    if image:
+        return 'image'
+    if analysis:
+        return 'language'
+    return 'other'
+
+
 def _records(connection, raw, data):
     result = []
     seen = set()
@@ -236,18 +315,28 @@ def _records(connection, raw, data):
             analysis = image = False
         if 'supported_endpoint_types' in item:
             # Provider routing metadata distinguishes generation from editing.
-            endpoints = item['supported_endpoint_types']
+            endpoints = item['supported_endpoint_types'] or []
             image = 'image-generation' in endpoints or '/v1/images/generations' in endpoints
-            analysis = 'openai' in endpoints or '/v1/chat/completions' in endpoints
+            # new-api style gateways: video routes and async "task plugin" models are not chat models,
+            # even when they also list the generic "openai" endpoint. The name guard drops TTS/STT/embedding.
+            video = any('video' in str(e) for e in endpoints)
+            task = str(item.get('owned_by') or '').lower() == 'task plugin'
+            analysis = (('openai' in endpoints or '/v1/chat/completions' in endpoints) and not image and not video and not task
+                        and model_catalog.is_chat_model(name, '', official=False))
         asr = asr_catalog.metadata(connection.provider, name, item.get('supported_endpoint_types', []))
         if asr['asr']:
             analysis = False
+        kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'])
         result.append({**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
-                       'analysis': analysis, 'image': image, 'asr_preview': bool(item.get('asr_preview'))})
+                       'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))})
     return result
 
 
 async def discover(connection, refresh=False):
+    return _merge_custom_models(connection, await _discover_from_provider(connection, refresh))
+
+
+async def _discover_from_provider(connection, refresh=False):
     from backend.services.ai_model_settings import chat_endpoint
     from backend.core.llm_providers import is_local_url
     endpoint = chat_endpoint(connection, '')

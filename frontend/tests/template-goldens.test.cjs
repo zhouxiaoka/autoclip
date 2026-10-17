@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 
 const root = path.join(__dirname, '../../backend/assets/templates')
 const goldenPath = path.join(__dirname, 'fixtures/template-goldens.json')
@@ -24,7 +24,7 @@ function load(template) {
   }
   const sandbox = { window: {}, document, console }
   sandbox.window = sandbox
-  vm.runInNewContext(fs.readFileSync(path.join(root, template, 'template.js'), 'utf8'), sandbox, { filename: template + '.js' })
+  runInSandbox(fs.readFileSync(path.join(root, template, 'template.js'), 'utf8'), sandbox, { filename: template + '.js' })
   return sandbox
 }
 

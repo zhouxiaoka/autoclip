@@ -7,8 +7,6 @@ on:
     branches:
       - main
       - master
-      # Draft #364: pull_request events did not start CI for this branch; run on push instead.
-      - cursor/normalize-provider-url-aa38
 
 permissions:
   contents: read
@@ -60,11 +58,21 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-test.txt
 
+      - name: Set up Node for model settings round-trip tests and source launcher
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Required red-line contracts (RL)
+        run: python scripts/quality_gate.py --group redline --report quality/redline.json
+
       - name: Report existing Python style debt (advisory)
         continue-on-error: true
         run: ruff check backend
 
-      - name: Blocking correctness lint, all backend tests and editorial fixtures
+      - name: Blocking correctness, ordered hot reload and complete backend suite
         env:
           DASHSCOPE_API_KEY: test_api_key
           LOG_FORMAT: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -74,7 +82,9 @@ jobs:
         if: always()
         with:
           name: quality-backend
-          path: quality/backend.json
+          path: |
+            quality/backend.json
+            quality/redline.json
           if-no-files-found: error
 
       - name: Installed wheel portrait framing smoke
@@ -88,14 +98,9 @@ jobs:
           python3 scripts/test_community_board.py
           python3 scripts/test_ingest_feedback.py
 
-      - name: Set up Node for source launcher
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
       - name: Source launcher and scoped shutdown smoke
         run: |
           python -m venv --system-site-packages venv
-          (cd frontend && npm ci)
           cp env.example .env
           docker run -d --name autoclip-source-redis -p 6379:6379 redis:7-alpine
           for i in $(seq 1 30); do

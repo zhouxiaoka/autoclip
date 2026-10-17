@@ -1,9 +1,11 @@
 """
 LLM管理器 - 统一管理多个模型提供商
 """
+import hashlib
 import json
-import logging
 import os
+import threading
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
@@ -12,8 +14,24 @@ from .llm_providers import (
     ModelInfo, LLMResponse
 )
 from ..services.config_sync_service import config_sync_service
+from .llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
+from .failure_logging import failure_logger
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
+
+# Serialize refresh/snapshot only; network calls remain concurrent.
+_settings_lock = threading.RLock()
+
+
+@dataclass(frozen=True, repr=False)
+class _CallRoute:
+    provider: Optional[LLMProvider]
+    settings: Dict[str, Any]
+    info: Dict[str, Any]
+    # R23 #415: provider + config_source of the connection this route was resolved from
+    # (failure_identity.connection_identity), frozen with the route; never re-read from settings.
+    identity: Dict[str, Any] = field(default_factory=dict)
+
 
 class LLMManager:
     """LLM管理器"""
@@ -25,6 +43,7 @@ class LLMManager:
         self.settings_file = settings_file or self._get_default_settings_file()
         self.current_provider: Optional[LLMProvider] = None
         self._settings_mtime: Optional[float] = None
+        self._settings_hash = None
         self.settings = self._load_settings()
         self._initialize_provider()
 
@@ -37,14 +56,38 @@ class LLMManager:
                 return None
         return (stamp(self.settings_file), stamp(ai_path()))
 
+    def _current_settings_hash(self):
+        from backend.services.ai_model_settings import path as ai_path
+        def digest(path):
+            try:
+                return hashlib.sha256(path.read_bytes()).digest()
+            except OSError:
+                return None
+        return (digest(self.settings_file), digest(ai_path()))
+
     def _reload_if_settings_changed(self) -> None:
         """设置页保存后 settings.json 会变；API 进程与 Celery worker 都要在下一次调用时拿到新配置，
         而不是等重启。"""
-        mtime = self._current_settings_mtime()
-        if mtime != self._settings_mtime:
-            logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
-            self.settings = self._load_settings()
-            self._initialize_provider()
+        with _settings_lock:
+            mtime = self._current_settings_mtime()
+            content_hash = self._current_settings_hash()
+            if mtime != self._settings_mtime or content_hash != self._settings_hash:
+                logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
+                self.current_provider = None
+                self.settings = self._load_settings()
+                self._initialize_provider()
+
+    def _snapshot_call_route(self) -> _CallRoute:
+        """Refresh before candidate selection, then pin this run's connection."""
+        with _settings_lock:
+            self._reload_if_settings_changed()
+            try:
+                info = self.get_current_provider_info() or {}
+            except Exception:  # identity is optional; a configured provider can still run
+                info = {}
+            settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
+            identity = dict(getattr(self, "_route_identity", None) or {})
+            return _CallRoute(getattr(self, "current_provider", None), dict(settings), dict(info), identity)
     
     def _get_default_settings_file(self) -> Path:
         """获取默认设置文件路径"""
@@ -59,7 +102,7 @@ class LLMManager:
             from .path_utils import get_data_directory
             return get_data_directory() / "settings.json"
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"无法通过 path_utils 定位 settings.json，回退到旧逻辑: {e}")
+            logger.warning(f"无法通过 path_utils 定位 settings.json，回退到旧逻辑: {sanitize_exception_text(e)}")
         
         # 优先使用默认的用户目录（macOS）- 客户端配置位置
         default_app_dir = Path.home() / "Library" / "Application Support" / "AutoClip"
@@ -86,7 +129,7 @@ class LLMManager:
                 else:
                     logger.warning("配置同步失败")
         except Exception as e:
-            logger.error(f"配置同步检查失败: {e}")
+            logger.error(f"配置同步检查失败: {sanitize_exception_text(e)}")
     
     def _load_settings(self) -> Dict[str, Any]:
         """加载设置"""
@@ -113,7 +156,6 @@ class LLMManager:
             "max_clips_per_collection": 5
         }
         
-        self._settings_mtime = self._current_settings_mtime()
         if self.settings_file.exists():
             try:
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
@@ -158,23 +200,37 @@ class LLMManager:
                         default_settings.update(saved_settings)
                         
             except Exception as e:
-                logger.warning(f"加载设置文件失败: {e}")
+                logger.warning(f"加载设置文件失败: {sanitize_exception_text(e)}")
         
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
+        route_identity: Dict[str, Any] = {}
         from backend.services import ai_model_settings as ai
-        configured = ai.load()
-        if configured and configured.analysis:
-            binding = configured.analysis
+        try:
+            configured = ai.load()
+        except Exception:
+            raise ValueError('已保存的模型配置需要修复，请到「设置 → 模型」修复并保存后再生成。') from None
+        if configured is not None:
+            binding = ai.require_analysis(configured)
             connection = ai.connection_for(configured, binding)
             endpoint = ai.chat_endpoint(connection, binding.model)
+            from backend.services.studio.failure_identity import connection_identity
+            route_identity = connection_identity(connection, binding.model)
+            source = getattr(binding, 'model_source', None) or getattr(binding, 'source', None)
+            if source not in ('preset', 'user'):
+                source = 'user'
             default_settings.update(llm_provider='openai', cloud_preset=None, llm_provider_preset=None,
                                     openai_api_key=endpoint['api_key'], openai_base_url=endpoint['base_url'],
                                     model_name=binding.model, connection_provider=connection.provider,
-                                    connection_name=connection.name, chunk_size=configured.chunk_size,
+                                    connection_name=connection.name, model_source=source,
+                                    chunk_size=configured.chunk_size,
                                     min_score_threshold=configured.min_score_threshold,
                                     max_clips_per_collection=configured.max_clips_per_collection)
+        self._route_identity = route_identity  # kept off settings: settings.json is saved verbatim
+        # Failed loads must remain retryable; never mark a broken assignment as loaded.
+        self._settings_mtime = self._current_settings_mtime()
+        self._settings_hash = self._current_settings_hash()
         return default_settings
 
     def _apply_local_preset(self, settings: Dict[str, Any]) -> None:
@@ -269,7 +325,7 @@ class LLMManager:
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"保存设置失败: {e}")
+            logger.error(f"保存设置失败: {sanitize_exception_text(e)}")
             raise
     
     def _initialize_provider(self):
@@ -295,14 +351,15 @@ class LLMManager:
                 self.current_provider = LLMProviderFactory.create_provider(
                     provider_type, api_key or "", model_name, **provider_kwargs
                 )
-                logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}"
-                            + (f", base_url: {provider_kwargs['base_url']}" if provider_kwargs.get("base_url") else ""))
+                logger.info("已初始化%s提供商，模型: %s, base_url_host: %s",
+                            provider_type.value, sanitize_model(model_name),
+                            hostname_of_base_url(provider_kwargs.get("base_url")))
             else:
                 logger.warning(f"未找到{provider_type.value}的API密钥")
                 self.current_provider = None
                 
         except Exception as e:
-            logger.error(f"初始化提供商失败: {e}")
+            logger.error("初始化提供商失败: %s", sanitize_exception_text(e))
             self.current_provider = None
 
     def _get_provider_kwargs(self, provider_type: ProviderType) -> Dict[str, Any]:
@@ -351,7 +408,8 @@ class LLMManager:
             base = normalize_base_url(s.get("dashscope_base_url")) or DASHSCOPE_CN_COMPATIBLE_BASE_URL
         elif provider == "gemini":
             key = s.get("gemini_api_key", "")
-            base = "https://generativelanguage.googleapis.com/v1beta/openai"
+            from backend.core.provider_endpoint import official_chat_url
+            base = official_chat_url('gemini')
         elif provider == "siliconflow":
             from backend.core.model_catalog import SILICONFLOW_BASE_URL
             key = s.get("siliconflow_api_key", "")
@@ -378,9 +436,10 @@ class LLMManager:
     
     def update_settings(self, new_settings: Dict[str, Any]):
         """更新设置"""
-        self.settings.update(new_settings)
-        self._save_settings()
-        self._initialize_provider()
+        with _settings_lock:
+            self.settings.update(new_settings)
+            self._save_settings()
+            self._initialize_provider()
     
     def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str,
                      base_url: Optional[str] = None):
@@ -409,105 +468,185 @@ class LLMManager:
             # update_settings 会保存并重新初始化 current_provider
             self.update_settings(provider_settings)
             
-            logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}")
+            logger.info("已切换到%s提供商，模型: %s", provider_type.value, sanitize_model(model_name))
             
         except Exception as e:
-            logger.error(f"设置提供商失败: {e}")
-            raise
+            logger.error("设置提供商失败: %s", sanitize_exception_text(e))
+            raise log_safe_exception(e) from None
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
-        """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。"""
+        """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。
+
+        ``model`` is per-call candidate state. It is not written to
+        ``settings`` or ``current_provider.model_name``.
+        """
+        from backend.core.llm_degrade import bind_request_model, bound_request_model
         from backend.core.project_cancellation import checkpoint
+        override = kwargs.pop("model", None)
+        route = kwargs.pop("_route", None)
         checkpoint()  # 项目已删除：不再为它花钱（RC156 #12）
-        self._reload_if_settings_changed()
+        route = route or self._snapshot_call_route()
+        provider, settings, info = route.provider, route.settings, route.info
         cache_path = _llm_cache_path(prompt, input_data)
         if cache_path is not None and cache_path.exists():
-            logger.info(f"LLM 缓存命中: {cache_path.name}")
+            logger.info("LLM 缓存命中")
             return cache_path.read_text(encoding="utf-8")
-        if not self.current_provider:
+        if not provider:
             raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
         
         try:
             from backend.core import llm_telemetry
-            try:
-                info = self.get_current_provider_info() or {}
-            except Exception:  # noqa: BLE001 - identity is optional; the call still runs
-                info = {}
-            settings = self.settings if isinstance(getattr(self, 'settings', None), dict) else {}
-            with llm_telemetry.bind_context(
-                provider=str(info.get('provider') or ''),
-                model=str(info.get('model') or getattr(self.current_provider, 'model_name', '') or ''),
-                base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
-                kind='text',
-            ):
-                response = self.current_provider.call(prompt, input_data, **kwargs)
+            with bind_request_model(override):
+                chosen = bound_request_model(
+                    str(info.get('model') or getattr(provider, 'model_name', '') or '')
+                )
+                with llm_telemetry.bind_context(
+                    provider=str(info.get('provider') or ''),
+                    model=chosen,
+                    base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
+                    kind='text',
+                    identity=route.identity,
+                ):
+                    response = provider.call(prompt, input_data, **kwargs)
             content = response.content
             from backend.core import llm_usage
-            llm_usage.record(response.model or getattr(self.current_provider, 'model_name', None), response.usage,
-                             prompt_chars=len(self.current_provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
+            llm_usage.record(response.model or chosen, response.usage,
+                             prompt_chars=len(provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(content, encoding="utf-8")
             return content
         except Exception as e:
-            logger.error(f"LLM调用失败: {e}")
-            raise
-    
-    def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
-        """Retry result-quality failures and transient HTTP errors, at most twice each.
+            from backend.core.llm_telemetry import sanitize_exception_text
+            logger.error("LLM调用失败: %s", sanitize_exception_text(e))
+            raise log_safe_exception(e) from None
 
-        Result codes: only ``invalid_response`` / ``timeline_empty`` (#365).
-        HTTP: ``rate_limited`` / ``upstream_unavailable`` / ``timeout`` / ``connection``.
-        401/402/403/404 and quota/key/model errors do not retry.
-        429 honors Retry-After (capped) and otherwise uses equal-jitter 2/4/8/16/32s.
-        A 429 also halves process-wide chunk concurrency. Each attempt records
-        ``retry_count`` for ``llm_request_finished``.
+    def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
+        """Retry, then fall back to the next same-provider preset candidate.
+
+        #358 / #365 budget is shared across candidates (not reset per model):
+        at most 3 manager ``call()`` for a retryable type. Each ``call()``
+        reserves ``1 + LLM_SDK_MAX_RETRIES`` HTTP attempts against the
+        per-chunk cap of 6. OpenAI compatibility resends reserve their own
+        attempts. An enclosing chunk keeps this budget across result-repair
+        rounds. Candidate model is per-call state only.
         """
         from backend.core import llm_telemetry
+        from backend.core.llm_degrade import (
+            call_note_same_provider_degrade,
+            candidates_for_call,
+            chunk_call_budget,
+            chunk_http_remaining,
+            chunk_last_error,
+            consume_chunk_call,
+            http_attempts_per_call,
+            remember_chunk_error,
+            resolve_model_source,
+            should_degrade_to_next,
+        )
         from backend.core.llm_retry import (
             backoff_seconds,
             classify_for_retry as classify_http,
             max_attempts_for,
         )
+        from backend.core.llm_telemetry import sanitize_model
         from backend.core.result_retry import classify_for_retry as classify_result
         from backend.core.upstream_errors import UpstreamErrorType
         import time
 
+        route = self._snapshot_call_route()
+        settings = route.settings
+        source = resolve_model_source(settings)
+        candidates = candidates_for_call(settings)
+        last_error: Exception | None = None
         attempt = 0
-        while True:
-            token = llm_telemetry.set_retry_count(attempt)
-            try:
-                return self.call(prompt, input_data, **kwargs)
-            except Exception as error:
-                info, status, retry_after = classify_http(error)
-                result_kind, result_retryable = classify_result(error)
-                if info.error_type is UpstreamErrorType.RATE_LIMITED:
-                    from backend.pipeline.concurrency import note_rate_limited
-                    note_rate_limited()
-                retryable = bool(info.retryable or result_retryable)
-                kind = result_kind if result_retryable else info.error_type.value
-                if result_retryable and not info.retryable:
-                    from backend.core.result_retry import MAX_ATTEMPTS
-                    budget = min(MAX_ATTEMPTS, max(1, max_retries))
-                else:
-                    budget = max_attempts_for(info.error_type, max(1, max_retries))
-                if not retryable or attempt >= budget - 1:
-                    if attempt:
-                        logger.error(
-                            "LLM调用在%s次后失败（%s，retryable=%s）。",
-                            attempt + 1, kind, retryable,
+        from backend.core.llm_emit import begin_logical_call
+        begin_logical_call()  # E2: all attempts of this call share one retry peak
+        with chunk_call_budget():
+            for index, model in enumerate(candidates):
+                while True:
+                    if not consume_chunk_call():
+                        raise last_error or chunk_last_error() or RuntimeError(
+                            "llm chunk call budget exhausted"
                         )
-                    raise
-                delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
-                logger.warning(
-                    "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
-                    attempt + 1, kind, status, delay, error,
-                )
-                time.sleep(delay)
-                attempt += 1
-            finally:
-                llm_telemetry.reset_retry_count(token)
+                    token = llm_telemetry.set_retry_count(attempt)
+                    try:
+                        return self.call(prompt, input_data, model=model, _route=route, **kwargs)
+                    except Exception as error:
+                        last_error = error
+                        remember_chunk_error(error)
+                        info, status, retry_after = classify_http(error)
+                        result_kind, result_retryable = classify_result(error)
+                        if info.error_type is UpstreamErrorType.RATE_LIMITED:
+                            from backend.pipeline.concurrency import note_rate_limited
+                            note_rate_limited()
+                        retryable = bool(info.retryable or result_retryable)
+                        kind = result_kind if result_retryable else info.error_type.value
+                        if result_retryable and not info.retryable:
+                            from backend.core.result_retry import MAX_ATTEMPTS
+                            budget = min(MAX_ATTEMPTS, max(1, max_retries))
+                        else:
+                            budget = max_attempts_for(info.error_type, max(1, max_retries))
+                        more = index + 1 < len(candidates)
+                        can_degrade = (
+                            source == "preset"
+                            and more
+                            and should_degrade_to_next(error)
+                            and chunk_http_remaining() >= http_attempts_per_call()
+                        )
+                        if can_degrade:
+                            if retryable and attempt >= budget - 1:
+                                if attempt:
+                                    logger.error(
+                                        "LLM调用在%s次后失败（%s，retryable=%s）。",
+                                        attempt + 1, kind, retryable,
+                                    )
+                                raise
+                            logger.warning(
+                                "frequency rate limit on %s, trying next same-provider candidate",
+                                sanitize_model(str(model or "")) or "model",
+                            )
+                            call_note_same_provider_degrade(self)
+                            if retryable:
+                                delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
+                                logger.warning(
+                                    "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
+                                    attempt + 1, kind, status, delay,
+                                    llm_telemetry.sanitize_exception_text(error),
+                                )
+                                time.sleep(delay)
+                                attempt += 1
+                            break
+                        if not retryable or attempt >= budget - 1:
+                            if attempt:
+                                logger.error(
+                                    "LLM调用在%s次后失败（%s，retryable=%s）。",
+                                    attempt + 1, kind, retryable,
+                                )
+                            raise
+                        delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
+                        logger.warning(
+                            "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
+                            attempt + 1, kind, status, delay,
+                            llm_telemetry.sanitize_exception_text(error),
+                        )
+                        time.sleep(delay)
+                        attempt += 1
+                    finally:
+                        llm_telemetry.reset_retry_count(token)
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("LLM candidate loop exhausted")
     
+    def note_same_provider_degrade(self) -> int:
+        """R1 hook: increment ``degrade_count`` when switching to the next candidate.
+
+        Isolated from ``call`` / ``call_with_retry`` so the fallback loop can
+        rebase without touching emit plumbing. Only a non-negative count is
+        recorded — no model name, URL, path, or user text.
+        """
+        return note_same_provider_degrade()
+
     def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str,
                                  **provider_kwargs) -> bool:
         """测试提供商连接"""
@@ -515,7 +654,7 @@ class LLMManager:
             provider = LLMProviderFactory.create_provider(provider_type, api_key, model_name, **provider_kwargs)
             return provider.test_connection()
         except Exception as e:
-            logger.error(f"测试{provider_type.value}连接失败: {e}")
+            logger.error(f"测试{provider_type.value}连接失败: {sanitize_exception_text(e)}")
             return False
     
     def get_current_provider_info(self) -> Dict[str, Any]:
@@ -590,6 +729,15 @@ class LLMManager:
         from ..utils.llm_client import LLMClient
         temp_client = LLMClient()
         return temp_client.parse_json_response(response)
+
+def note_same_provider_degrade() -> int:
+    """Increment the run/request ``degrade_count``. Safe if telemetry is absent."""
+    try:
+        from backend.core import llm_telemetry
+        return llm_telemetry.increment_degrade_count()
+    except Exception:  # noqa: BLE001 - telemetry must not break fallback
+        return 0
+
 
 def _llm_cache_path(prompt: str, input_data: Any) -> Optional[Path]:
     """AUTOCLIP_LLM_CACHE_DIR 设了才启用；CI / eval 回放用。"""

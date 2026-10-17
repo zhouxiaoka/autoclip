@@ -1,18 +1,19 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
+const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 class FormDataMock { constructor(){this.rows=[]} append(key,value){this.rows.push([key,String(value)])} get(key){const row=this.rows.find(item=>item[0]===key);return row&&row[1]} entries(){return this.rows.values()} }
 
 function loadReadiness(){
  const exports={}
  const source=fs.readFileSync(path.join(__dirname,'../src/features/studio/importReadiness.ts'),'utf8')
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require(){throw new Error('importReadiness')}})
+ runInSandbox(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require(){throw new Error('importReadiness')}})
  return exports
 }
 function load(mocks){
  const exports={}
  const source=fs.readFileSync(path.join(__dirname,'../src/features/studio/CreativeImport.tsx'),'utf8')
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,{FormData:FormDataMock,exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}})
+ runInSandbox(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,{FormData:FormDataMock,exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}})
  return exports.default
 }
 function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(value)?value.flatMap(nodes):[value,...nodes(value.props?.children)]}
@@ -20,20 +21,23 @@ function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(va
 test('quick import submits platform targets, branding and auto-starts to results',async()=>{
  const calls=[],navigations=[];let index=0
  const ready={analysis_mode:'auto',ready:true,checks:{analysis:{ok:true,code:'configured',repair:'none'},transcription:{ok:true,code:'whisper_installed',repair:'none'},visual:{ok:true,code:'optional',repair:'none'},ffmpeg:{ok:true,code:'available',repair:'none'}}}
- const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}]]
+ const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[false,()=>{}],[null,()=>{}],[false,()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
   react:{useState:()=>states[index++],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog',StatusDot:'status'},'./PlatformPicker':{default:'platform-picker'},
-  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){},trackAsrReadiness(){}},'../../analytics/experience':{trackExperience(){}},
-  '../../analytics/flags':{useFlag:()=>false,featureSnapshot:()=>({pkg_templates_v1:false})},
+  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){},trackAsrReadiness(){},trackOneClickStarted(){},trackOneClickUndone(){},trackAutoChoiceOverridden(){}},'../../analytics/workflow':{telemetryId:()=>'t-importflow-aaaaaaaa'},'../../analytics/experience':{trackExperience(){}},
+  '../../analytics/flags':{useFlag:()=>false,flagEnabled:()=>false,flagValue:()=>'button',flagAssigned:()=>false,featureSnapshot:()=>({pkg_templates_v1:false})},
   './TemplatePicker':{default:'template-picker',templateImportFields:()=>({})},
   './StyleProbeLine':{default:'style-probe'},
   './editingStyleSession':{readStyle:()=>({key:'',status:'idle',result:null,latencyMs:0})},
+  './platformLabel':{platformLabel:id=>id},'./platformMemory':{readRememberedPlatforms:()=>null,resolvePlatforms:()=>({platforms:['douyin'],source:'user'}),samePlatforms:()=>true,writeRememberedPlatforms(){}},
+  './pasteStart':{claimBackgroundWhisperInstall:()=>false,importUrlKind:()=>null,isVideoFile:()=>false,shouldAutoStart:()=>false,shouldBackgroundInstallWhisper:()=>false,UNDO_MS:3000},
+  './importPreferencesStore':{readImportPreferences:()=>null},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
-  './importReadiness':loadReadiness(),'./studio.css':{},'./quick-output.css':{},
+  './importReadiness':loadReadiness(),'./TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},'./studio.css':{},'./quick-output.css':{},
  })
  const tree=nodes(component({onImported:async()=>{}}))
  await tree.find(node=>node.type==='button'&&node.props?.variant==='cta').props.onClick()

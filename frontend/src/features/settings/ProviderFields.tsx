@@ -17,8 +17,8 @@ const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
 
 /**
- * Provider picker + credentials for one connection. Local presets need no key; only
- * 自定义兼容 / local expose the address. Locked presets hide the URL.
+ * Provider picker + credentials for one connection. Local presets need no key.
+ * 「接口地址」is always editable when the preset has (or needs) a Base URL.
  */
 export default function ProviderFields({ connection, ariaPrefix = '', hideProvider, sharedKey, placement, keyHint, onChoose, onEdit }: {
   connection?: Connection
@@ -42,40 +42,55 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   </Row>
   if (!connection) return <>{picker}</>
   const failed = connection.validation_status === 'failed'
+  const transient = connection.validation_status === 'transient'
   const errorType = connection.validation_error_type || ''
   const urlInfo = key === 'compatible' ? normalizeCompatibleUrl(connection.base_url) : null
   const liveHint = hintProviderForKey(connection.api_key) || (keyHint as ProviderKey | undefined)
   const showHint = liveHint && liveHint !== key
-  const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || (failed && errorType) || ''
+  const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || ((failed || transient) && errorType) || ''
   const keyLink = sponsorKeyLink(key)
   const addressEditable = canEditAddress(key)
   return <>
     {picker}
-    {preset?.sponsor && <div className="ac-sponsor">
-      <div className="ac-sponsor-text"><b>{preset.name}<span className="ac-badge">{t('赞助')}</span></b>
-        <span>{preset.sponsor.description}</span>
-        <small>{t('该链接含推广分成，用于支持项目维护；领取条件以活动页面为准。')}</small></div>
-      <div className="ac-sponsor-actions">
-        <Btn variant="cta" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement }); openExternalLink(preset.sponsor!.registerUrl) }}>{t('注册并领取体验额度')}</Btn>
-        <Btn variant="text" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'guide', placement }); openExternalLink(preset.sponsor!.guideUrl) }}>{t('接入说明')}</Btn>
-      </div>
-    </div>}
     {!preset?.local && (sharedKey && !editShared
-      ? <Row wide label={t('服务密钥（API Key）')} hint={t('共用 API Key，无需重复填写。')}>
-          <span className="ac-hint">{t('已复用 AI 服务的密钥')}</span>
+      ? <Row wide label={t('API 密钥')} hint={t('与上方 AI 服务共用，一般不用改。')}>
+          <span className="ac-hint">{t('已复用密钥')}</span>
           <Btn variant="text" size="sm" onClick={() => setEditShared(true)}>{t('修改密钥')}</Btn>
         </Row>
-      : <Row wide label={t('服务密钥（API Key）')} hint={preset?.keyUrl
-          ? <>{t('在供应商网站创建密钥，复制后粘贴到右侧。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
-            {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}</>
-          : t('sk-…（自建服务可留空）')}>
-          <Input.Password aria-label={label('API Key')} autoComplete="new-password" value={connection.api_key ?? ''}
+      : <Row wide label={t('API 密钥')} hint={
+          preset?.sponsor
+            ? undefined
+            : preset?.keyUrl
+              ? <>{t('在官网创建后粘贴到这里。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
+                {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}</>
+              : t('自建服务可留空')
+        }>
+          <Input.Password aria-label={label(t('API 密钥'))} autoComplete="new-password" value={connection.api_key ?? ''}
             status={failed && KEY_ERRORS.has(errorType) ? 'error' : undefined}
-            placeholder={connection.has_key ? t('已配置；留空保留已有密钥') : preset?.placeholder || 'sk-…'}
+            placeholder={connection.has_key ? t('已保存；留空则不改') : preset?.placeholder || 'sk-…'}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
+          {preset?.sponsor && (
+            <span className="ac-sponsor-inline" data-sponsor={preset.sponsor.id}>
+              <Btn
+                size="sm"
+                className="ac-btn--pill"
+                onClick={() => {
+                  trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement })
+                  openExternalLink(preset.sponsor!.registerUrl)
+                }}
+              >
+                {t('settings.providers.one_click')}<span aria-hidden>↗</span>
+              </Btn>
+            </span>
+          )}
         </Row>)}
-    {addressEditable && <Row wide label={t('接口地址')} hint={[preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : key === 'dashscope' ? t('使用百炼专属接入地址时填写，留空用默认地址。') : '', contextHintFor(key, connection.base_url)].filter(Boolean).join(' ') || undefined}>
+    {addressEditable && <Row wide label={t('接口地址')} hint={[
+      preset?.local ? t('本机服务用默认地址即可。')
+        : connection.base_url ? t('已填默认，可改。')
+        : t('请填写，一般以 /v1 结尾。'),
+      contextHintFor(key, connection.base_url),
+    ].filter(Boolean).join(' ') || undefined}>
       <Input aria-label={label(t('接口地址'))} value={connection.base_url}
         status={(urlInfo?.warnings.includes('console_host') || (failed && ENDPOINT_ERRORS.has(errorType))) ? 'error' : undefined}
         placeholder={preset?.local?.baseUrl || (key === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : 'https://example.com/v1')}
@@ -87,7 +102,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
         }} />
     </Row>}
     {showHint && <p className="ac-note">{keyHintCopy(liveHint)}</p>}
-    {shownError && <p className="ac-note ac-note--error" role="alert">{validationCopy(shownError)}</p>}
+    {shownError && <p className={transient ? 'ac-note' : 'ac-note ac-note--error'} role={transient ? 'status' : 'alert'}>{validationCopy(shownError)}</p>}
     {failed && keyLink && KEY_ERRORS.has(errorType) && <p className="ac-note">
       <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a>
     </p>}

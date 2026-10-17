@@ -190,8 +190,8 @@ def test_every_type_has_hint_and_closed_set():
 
 
 @pytest.mark.stdlib_only
-def test_existing_model_call_error_code_behavior_is_unchanged():
-    """本契约不得改写旧分类：401/403 仍是 authentication，402 仍是 provider_error。"""
+def test_model_call_error_code_separates_auth_from_missing_configuration():
+    """401/403 使用独立鉴权失败码；402 仍是 provider_error。"""
     from backend.pipeline.failures import model_call_error_code
 
     def _err(status: int) -> Exception:
@@ -199,8 +199,8 @@ def test_existing_model_call_error_code_behavior_is_unchanged():
         error.status_code = status  # type: ignore[attr-defined]
         return error
 
-    assert model_call_error_code(_err(401)) == "authentication"
-    assert model_call_error_code(_err(403)) == "authentication"
+    assert model_call_error_code(_err(401)) == "llm_auth_invalid"
+    assert model_call_error_code(_err(403)) == "llm_auth_invalid"
     assert model_call_error_code(_err(402)) == "provider_error"
     assert model_call_error_code(_err(429)) == "rate_limited"
     assert model_call_error_code(_err(503)) == "provider_error"
@@ -232,7 +232,7 @@ def test_frontend_contract_lists_stay_aligned():
     def const_list(name: str) -> list[str]:
         match = __import__("re").search(rf"export const {name} = \[((?:.|\n)*?)\] as const", text)
         assert match, name
-        return __import__("re").findall(r"'([a-z0-9_]+)'", match.group(1))
+        return __import__("re").findall(r"'([a-z0-9_-]+)'", match.group(1))
 
     assert set(const_list("UPSTREAM_ERROR_TYPES")) == UPSTREAM_ERROR_TYPES
     assert set(const_list("RETRYABLE_UPSTREAM_ERROR_TYPES")) == {item.value for item in RETRYABLE_TYPES}

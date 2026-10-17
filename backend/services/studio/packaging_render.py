@@ -214,7 +214,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         hook = '\\N'.join(_esc(line) for line in lines)
         out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\fs{size}\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{hook}')
 
-    for cue in packaging.cues:
+    for cue in (packaging.cues if packaging.captions_enabled else []):
         start, end = cue.start, cue.end
         if end <= source_scene.start or start >= source_scene.end:
             continue

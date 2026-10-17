@@ -1,16 +1,22 @@
-"""Settings-page provider access check: GET /models then a tiny real chat call.
+"""Settings-page provider access check: GET /models, plus a tiny call for chat models.
 
-Save may persist a failed result (marked red). Generation reads the stored
-status and blocks. Never returns keys, full URLs, or provider error text.
+Image/audio connections check account model access without paid generation. They
+must list the selected model; a public catalog is never proof of account access.
+
+Save may persist a failed result (marked red). Generation blocks failed checks,
+but permits transient errors. Never returns keys or provider error text.
 
 HTTP failures go through ``classify_upstream_error``; the returned
 ``hint_key`` is the official catalog sentence. Local remaps (console host,
 HTML, GET /models 404) use ``hint_key_for`` of the same enum.
+
+A followed visual-understanding model without vision is a local capability
+miss (``vision_unsupported``), not an upstream class: save stays allowed.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import is_local_url, uses_max_completion_tokens
@@ -31,10 +37,19 @@ from backend.core.upstream_errors import (
 )
 from backend.services import ai_model_settings as ai_models
 
+from backend.core.provider_model_fetch import AccountModelList, list_account_models
+from backend.core.provider_model_fetch import get_models as fetch_account_models
+
 PROBE_MAX_TOKENS = 16
 PROBE_REASONING_MAX_TOKENS = 256
-MODELS_TIMEOUT = 12.0
 PROBE_TIMEOUT = 20.0
+
+# Local capability miss — not an upstream HTTP class, never stored on connection.validation_error_type.
+VISION_UNSUPPORTED = 'vision_unsupported'
+VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。'
+# E6: local model server (Ollama / LM Studio) not running -> connection refused on a local URL.
+LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。'
+VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。'
 
 
 @dataclass
@@ -47,9 +62,27 @@ class ValidationResult:
     normalized_base_url: str = ''
     base_url_host: str = ''
     model_ids: list[str] = field(default_factory=list)
+    recommended: dict[str, list[str]] = field(default_factory=dict)
+    truncated: bool = False
+    message_key: str = ''
+    # Telemetry: closed-set code and integer upstream status only (no URL/key/body).
+    http_status: Optional[int] = None
+    network_kind: str = ''
+    empty_key: bool = False
+
+    @property
+    def error_code(self) -> str:
+        if self.ok:
+            return ''
+        from backend.core.connection_test_codes import connection_test_error_code
+        return connection_test_error_code(self.error_type, http_status=self.http_status,
+                                          network_kind=self.network_kind, empty_key=self.empty_key)
 
     def as_api(self) -> dict:
+        from backend.core.connection_test_codes import safe_http_status
         return {
+            'error_code': self.error_code,
+            'http_status': safe_http_status(self.http_status),
             'success': self.ok,
             'ok': self.ok,
             'result': self.result,
@@ -59,6 +92,9 @@ class ValidationResult:
             'normalized_base_url': self.normalized_base_url,
             'base_url_host': self.base_url_host,
             'models': self.model_ids,
+            'recommended': {key: list(value) for key, value in self.recommended.items()},
+            'truncated': self.truncated,
+            'message_key': self.message_key,
         }
 
 
@@ -86,44 +122,39 @@ def _failed(
     base: str,
     key_hint: Optional[str],
     models: Optional[list[str]] = None,
+    *,
+    recommended: Optional[dict[str, list[str]]] = None,
+    truncated: bool = False,
+    message_key: str = '',
+    http_status: Optional[int] = None,
+    network_kind: str = '',
 ) -> ValidationResult:
     if not isinstance(classified, ClassifiedUpstreamError):
         classified = _as_type(classified)
     return ValidationResult(
-        ok=False, result='failed',
+        http_status=http_status, network_kind=network_kind,
+        ok=False, result='transient' if classified.retryable else 'failed',
         error_type=classified.error_type.value,
         hint_key=classified.hint_key,
         key_hint=key_hint, normalized_base_url=base, base_url_host=_host(base), model_ids=models or [],
+        recommended=recommended or {}, truncated=truncated, message_key=message_key,
     )
 
 
-def _ok(base: str, key_hint: Optional[str], models: list[str]) -> ValidationResult:
+def _ok(
+    base: str,
+    key_hint: Optional[str],
+    models: list[str],
+    *,
+    recommended: Optional[dict[str, list[str]]] = None,
+    truncated: bool = False,
+    message_key: str = '',
+) -> ValidationResult:
     return ValidationResult(
         ok=True, result='ok', key_hint=key_hint,
         normalized_base_url=base, base_url_host=_host(base), model_ids=models,
+        recommended=recommended or {}, truncated=truncated, message_key=message_key,
     )
-
-
-def _extract_ids(payload) -> list[str]:
-    raw = payload.get('data', payload) if isinstance(payload, dict) else payload
-    if not isinstance(raw, list):
-        return []
-    ids = []
-    for item in raw:
-        if isinstance(item, str) and item.strip():
-            ids.append(item.strip())
-        elif isinstance(item, dict):
-            name = str(item.get('id') or item.get('name') or '').removeprefix('models/').strip()
-            if name:
-                ids.append(name)
-    return ids
-
-
-def _classify_response(status: int, text: str, *, models_path: bool) -> ClassifiedUpstreamError:
-    classified = _classify(status, text)
-    if models_path and status == 404:
-        return _as_type(UpstreamErrorType.BAD_ENDPOINT)
-    return classified
 
 
 def _html_or_classify(status: int, text: str, content_type: str) -> ClassifiedUpstreamError | None:
@@ -133,29 +164,21 @@ def _html_or_classify(status: int, text: str, content_type: str) -> ClassifiedUp
     return None
 
 
-def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[ClassifiedUpstreamError]]:
-    import httpx
-    url = base.rstrip('/') + '/models'
-    try:
-        with httpx.Client(timeout=MODELS_TIMEOUT, trust_env=not is_local_url(base)) as client:
-            response = client.get(url, headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY')})
-    except httpx.TimeoutException:
-        return [], _classify(None, '', error_name='TimeoutError')
-    except httpx.RequestError:
-        return [], _classify(None, '', error_name='ConnectionError')
-    text = response.text or ''
-    content_type = (response.headers.get('content-type') or '').lower()
-    html = _html_or_classify(response.status_code, text[:4000], content_type)
-    if html:
-        return [], html
-    if response.status_code >= 400:
-        return [], _classify_response(response.status_code, text[:4000], models_path=True)
-    try:
-        payload = response.json()
-    except ValueError:
-        return [], _as_type(UpstreamErrorType.BAD_ENDPOINT)
-    ids = _extract_ids(payload)
-    return ids, None
+def _get_models(base: str, api_key: str, provider: str = 'compatible'):
+    models, error, fetched = fetch_account_models(base, api_key, provider)
+    return models, error, fetched
+
+
+@dataclass(frozen=True)
+class _ProbeClassified(ClassifiedUpstreamError):
+    """Classified probe failure plus telemetry-only integer status / network kind."""
+    http_status: Optional[int] = None
+    network_kind: str = ''
+
+
+def _with_detail(classified: ClassifiedUpstreamError, http_status=None, network_kind='') -> ClassifiedUpstreamError:
+    return _ProbeClassified(error_type=classified.error_type, retryable=classified.retryable,
+                            hint_key=classified.hint_key, http_status=http_status, network_kind=network_kind)
 
 
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
@@ -175,43 +198,144 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
                 headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'},
             )
     except httpx.TimeoutException:
-        return _classify(None, '', error_name='TimeoutError')
-    except httpx.RequestError:
-        return _classify(None, '', error_name='ConnectionError')
+        return _with_detail(_classify(None, '', error_name='TimeoutError'))
+    except httpx.RequestError as exc:
+        from backend.core.upstream_errors import network_kind_of
+        return _with_detail(_classify(None, '', error_name='ConnectionError'), network_kind=network_kind_of(exc))
+    status = response.status_code
     text = response.text or ''
+    if response.status_code == 429 or 500 <= response.status_code <= 599:
+        return _with_detail(_as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE), status)
     content_type = (response.headers.get('content-type') or '').lower()
     html = _html_or_classify(response.status_code, text[:4000], content_type)
     if html:
-        return html
+        return _with_detail(html, status)
     if response.status_code >= 400:
-        return _classify(response.status_code, text[:4000])
+        return _with_detail(_classify(response.status_code, text[:4000]), status)
     return None
 
 
-def validate_connection(connection: ai_models.Connection, model: str) -> ValidationResult:
+def vision_follow_issue(settings: ai_models.ModelSettings) -> ValidationResult | None:
+    """Failed result when the followed vision model lacks vision. Save remains allowed."""
+    if not ai_models.vision_follow_lacks_capability(settings):
+        return None
+    return ValidationResult(
+        ok=False, result='failed',
+        error_type=VISION_UNSUPPORTED, hint_key=VISION_HINT_KEY,
+    )
+
+
+def _is_loopback_url(url: str | None) -> bool:
+    """R10 #399: only this machine counts. LAN IPs, link-local and ``.local`` gateways are
+    remote self-hosted services, so "start local Ollama" would mislead there. (Proxy
+    bypass still uses the wider ``is_local_url``.)"""
+    if not url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        import ipaddress
+        host = (urlparse(url).hostname or '').lower().rstrip('.')
+    except Exception:  # noqa: BLE001
+        return False
+    if host == 'localhost' or host.endswith('.localhost'):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _local_service_down(result: ValidationResult, base: str) -> ValidationResult:
+    if not result.ok and result.error_type == UpstreamErrorType.CONNECTION.value and _is_loopback_url(base):
+        result.hint_key = LOCAL_SERVICE_DOWN_HINT_KEY
+    return result
+
+
+def validate_connection(
+    connection: ai_models.Connection, model: str,
+    *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
+) -> ValidationResult:
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
+    result = _validate_resolved(resolved, model, purpose=purpose)
+    result.empty_key = not (resolved.api_key or '').strip()
+    return _local_service_down(result, result.normalized_base_url)
+
+
+def _validate_resolved(
+    resolved: ai_models.Connection, model: str,
+    *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
+) -> ValidationResult:
     hint = hint_provider_for_key(resolved.api_key)
     if hint == resolved.provider:
         hint = None
     if resolved.provider == 'compatible' and resolved.base_url:
-        normalized = normalize_provider_base_url(resolved.base_url)
+        normalized = normalize_provider_base_url(resolved.base_url, resolved.provider)
         base = normalized.url
         if 'console_host' in normalized.warnings:
             return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     else:
         base = ai_models.chat_endpoint(resolved, model or 'unused')['base_url']
+    if purpose == 'cover' and resolved.image_base_url:
+        base = ai_models.image_endpoint(resolved)['base_url']
     host = urlparse(base).hostname or ''
     if is_console_host(host):
         return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     if resolved.provider == 'compatible' and not base:
         return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     api_key = resolved.api_key or ''
-    models, models_error = _get_models(base, api_key)
+    models, models_error, fetched = _get_models(base, api_key, resolved.provider)
+    extras = dict(recommended=fetched.recommended, truncated=fetched.truncated, message_key=fetched.message_key)
     if models_error:
-        return _failed(models_error, base, hint, models)
+        return _failed(models_error, base, hint, models, **extras,
+                       http_status=getattr(fetched, 'http_status', 0) or None, network_kind=getattr(fetched, 'network_kind', ''))
     if not (model or '').strip():
-        return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models)
+        return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
+    if purpose in ('cover', 'transcription'):
+        # Check authenticated account access, not paid image/audio generation. Never
+        # send non-chat models to chat/completions or infer access from a catalog.
+        if model.strip() not in models:
+            return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
+        return _ok(base, hint, models, **extras)
     probe_error = _probe(base, api_key, model.strip())
     if probe_error:
-        return _failed(probe_error, base, hint, models)
-    return _ok(base, hint, models)
+        return _failed(probe_error, base, hint, models, **extras,
+                       http_status=getattr(probe_error, 'http_status', None),
+                       network_kind=getattr(probe_error, 'network_kind', ''))
+    return _ok(base, hint, models, **extras)
+
+
+def resolve_fetch_base(connection: ai_models.Connection) -> tuple[str, Optional[ClassifiedUpstreamError]]:
+    """Same address rules as ``validate_connection``, without the chat probe."""
+    if connection.provider == 'compatible' and connection.base_url:
+        normalized = normalize_provider_base_url(connection.base_url)
+        if 'console_host' in normalized.warnings:
+            return normalized.url, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+        return normalized.url, None
+    base = ai_models.chat_endpoint(connection, 'unused')['base_url']
+    if is_console_host(urlparse(base).hostname or ''):
+        return base, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    if connection.provider == 'compatible' and not base:
+        return base, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    return base, None
+
+
+def fetch_list_for_connection(connection: ai_models.Connection, *, http=None) -> AccountModelList:
+    """Custom-provider / settings 'fetch list': ``/models`` + preset intersection."""
+    resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
+    base, pre = resolve_fetch_base(resolved)
+    if pre:
+        from backend.core.provider_model_fetch import FETCH_LIST_FAILED
+        return AccountModelList(
+            ok=False,
+            source='empty',
+            error_type=pre.error_type.value,
+            hint_key=pre.hint_key,
+            message_key=FETCH_LIST_FAILED,
+            base_url_host=_host(base),
+        )
+    return list_account_models(
+        base_url=base,
+        api_key=resolved.api_key or '',
+        provider=resolved.provider,
+        http=http,
+    )

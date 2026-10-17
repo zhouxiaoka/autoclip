@@ -12,7 +12,7 @@ import StudioResults from '../features/studio/StudioResults'
 import { needsImportConfirmation } from '../features/studio/importRouting'
 import { studioApi, errorText } from '../features/studio/api'
 import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
-import { classifyLlmKeyFailure } from '../utils/llmFailure'
+import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifyTimelineEmpty } from '../utils/timelineFailure'
 import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
 import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
@@ -25,6 +25,8 @@ import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
+import { flagAssigned } from '../analytics/flags'
+import { trackLegacyEntry } from '../analytics/studio'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
@@ -351,7 +353,7 @@ const ProjectDetailPage: React.FC = () => {
             <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布")}</Btn>
           )}
           {!isVisual && currentProject.status === 'pending' && (
-            <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>{t("开始处理")}</Btn>
+            <Btn variant="cta" onClick={() => { trackLegacyEntry({ legacy_action: 'start_processing' }, flagAssigned('hide_legacy_entrypoints')); void handleStartProcessing() }} loading={statusLoading}>{t("开始处理")}</Btn>
           )}
           {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -392,7 +394,7 @@ const ProjectDetailPage: React.FC = () => {
           <b>{t("这次处理没有成功")}</b>
           {currentProject.error_message ? (
             <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-word' }}>
-              {currentProject.error_message}
+              {t(llmFailureText(currentProject.error_message, currentProject.error_code))}
             </span>
           ) : (
             t("可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。")

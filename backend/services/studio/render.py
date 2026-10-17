@@ -1,5 +1,7 @@
 """Render immutable draft snapshots using the existing ffmpeg layout/subtitle code."""
+from backend.core.failure_attribution import ModelResponseInvalid  # R29
 import os
+import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -48,7 +50,7 @@ def _needs_translation(language, hook, entries):
 
 def recover_empty_packaging(project_id, draft: Draft, warnings: list[str]) -> Draft:
     pack = draft.packaging
-    if not (draft.subtitles and pack and pack.fallback and not pack.cues and not pack.burned_captions):
+    if not (draft.subtitles and pack and pack.captions_enabled and pack.fallback and not pack.cues and not pack.burned_captions):
         return draft
     # Previously saved fallbacks have no cues. Re-rendering them must recover the source
     # track too; changing only new packaging would leave upgraded projects captionless.
@@ -80,6 +82,46 @@ def _template_report(job, encoder: str) -> dict | None:
     }
 
 
+def _decoded_extent(progress_output) -> tuple:
+    """(seconds, frames) from ``ffmpeg -progress pipe:1``; end time = last pts + one frame."""
+    text = progress_output.decode('utf-8', 'ignore') if isinstance(progress_output, bytes) else str(progress_output or '')
+    out_us, frames = None, 0
+    for line in text.splitlines():
+        key, _, value = line.partition('=')
+        try:
+            if key == 'out_time_us' and value.strip().lstrip('-').isdigit():
+                out_us = int(value)
+            elif key == 'frame':
+                frames = int(value)
+        except ValueError:
+            continue
+    return (None if out_us is None else max(0, out_us) / 1_000_000), frames
+
+
+def _tolerance(fps) -> float:
+    return max(0.5, 2 / fps if fps and fps > 0 else 0.5)
+
+
+def _decoded_video_seconds(path, fps, expected) -> float:
+    """Fully decode every default stream (video AND audio, R13 #28) and return the decoded video
+    duration (frames / fps), measured separately from the audio-inclusive progress clock.
+    Any decoder error (including a corrupt audio tail) rejects the output. A timeout stays a
+    typed TimeoutExpired (R12 #22, error_code=timeout)."""
+    try:
+        decoded = project_cancellation.run(
+            [get_ffmpeg_path(), '-v', 'error', '-xerror', '-nostats', '-progress', 'pipe:1',
+             '-i', str(path), '-f', 'null', '-'],
+            check=True, capture_output=True, timeout=max(120, (expected or 0) * 2))
+    except (subprocess.CalledProcessError, OSError):
+        raise ValueError('渲染输出无效，请重新导出') from None
+    if (decoded.stderr or b'').strip():
+        raise ValueError('渲染输出无效，请重新导出')
+    _seconds, frames = _decoded_extent(decoded.stdout)
+    if frames <= 0:
+        raise ValueError('渲染输出无效，请重新导出')
+    return frames / (fps if fps and fps > 0 else 30)
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
@@ -102,11 +144,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
         translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
         rows = translated.get('subtitles', [])
-        if len(rows) != len(entries) or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str):
-            raise ValueError('字幕翻译格式不完整，请重试')
+        # null / a non-list is the model's shape, same as [] when rows were expected: invalid_response.
+        if (not isinstance(rows, list) or len(rows) != len(entries)
+                or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str)):
+            raise ModelResponseInvalid('字幕翻译格式不完整，请重试')
         hook = translated['title']
         if len(hook) > 500:
-            raise ValueError('翻译后的开头文字过长')
+            raise ModelResponseInvalid('翻译后的开头文字过长')
         for e, t in zip(entries, rows):
             e['text'] = t
     font = resolve_cjk_font()
@@ -144,6 +188,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f'{job_id}.mp4'
     partial = out_dir / f'{job_id}.part.mp4'
+    ready = out_dir / f'{job_id}.ready.part.mp4'
     try:
         with tempfile.TemporaryDirectory(prefix='ac-studio-render-') as temp:
             folder = Path(temp)
@@ -289,7 +334,17 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             project_cancellation.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             from backend.services.output_branding import append_outro
-            outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
+            body_seconds = None
+            if brand_outro:
+                # R13 #27: the outro must not mask a short main body; validate the body alone
+                # (<= tolerance) before it is concatenated with the end card.
+                body_probe = _probe(partial)
+                body_fps = body_probe.get('fps') or 30
+                body_seconds = _decoded_video_seconds(partial, body_fps, sum(durations))
+                if body_seconds < sum(durations) - _tolerance(body_fps):
+                    raise ValueError('渲染输出无效，请重新导出')
+            outro_report = {}
+            outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
         if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in ('editorial', 'street'):
@@ -297,7 +352,36 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             hint = downgrade_warning(overlay_job.downgrade_reason)
             if hint and hint not in warnings:
                 warnings.append(hint)
-        result = {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
+        validated = _probe(ready)
+        duration = validated.get('duration') or 0
+        if (not ready.is_file() or ready.stat().st_size == 0 or
+                not math.isfinite(duration) or duration <= 0 or
+                not validated.get('width') or not validated.get('height')):
+            raise ValueError('渲染输出无效，请重新导出')
+        # R11 #413: probe metadata survives a truncated mp4 (faststart moov up front); only a
+        # full decode proves every frame is readable before the file replaces the saved video.
+        # R12 #21: a clean cut at a packet boundary decodes without errors but short, so the
+        # decoded extent must also match the container and the drafted content.
+        # R12 #22: a decode timeout stays a typed TimeoutExpired (error_code=timeout).
+        fps = validated.get('fps') or 30
+        tolerance = _tolerance(fps)
+        decoded_seconds = _decoded_video_seconds(ready, fps, duration)
+        if (decoded_seconds < duration - tolerance
+                or decoded_seconds < sum(durations) - tolerance
+                or (outro_applied and body_seconds is not None and decoded_seconds <= body_seconds)):
+            raise ValueError('渲染输出无效，请重新导出')
+        # R14 #33: with the outro, the total must match body + the outro actually used
+        # (|decoded - (body + outro)| <= 0.5 s); container metadata alone can look normal.
+        # R15 #36: an applied outro always carries a positive duration; never skip the check.
+        outro_seconds = outro_report.get('outro_seconds') if outro_applied else None
+        if outro_applied and (not isinstance(outro_seconds, (int, float)) or not math.isfinite(outro_seconds) or outro_seconds <= 0):
+            raise ValueError('渲染输出无效，请重新导出')
+        if (outro_applied and body_seconds is not None
+                and abs(decoded_seconds - (body_seconds + outro_seconds)) > 0.5):
+            raise ValueError('渲染输出无效，请重新导出')
+        project_cancellation.checkpoint(project_id)
+        os.replace(ready, output)
+        result = {'title': draft.title, 'duration': duration, 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
         if overlay_job is not None:
             from backend.services import video_encoder
             result['template_render'] = _template_report(overlay_job, video_encoder.encoder())
@@ -310,3 +394,4 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         return result
     finally:
         partial.unlink(missing_ok=True)
+        ready.unlink(missing_ok=True)

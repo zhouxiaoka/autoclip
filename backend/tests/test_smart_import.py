@@ -41,7 +41,8 @@ def queue_export_record(project_id, draft, job_id, expected):
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
-def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, monkeypatch):
+def test_append_platforms_is_unavailable_in_1_5_8(client, root, monkeypatch):
+    """The old append entry reused saved drafts. 1.5.8 refuses it before any attempt, derive, or render."""
     from backend.services.studio.models import Draft, Scene
     original = Draft(id='base', title='Saved output', scenes=[Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
     store.write('p1', {
@@ -49,23 +50,18 @@ def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, m
         'analysis': {'status': 'completed'},
         'generation': {'auto_start': True, 'status': 'completed', 'branding': {'outro_enabled': True, 'outro_version': 'v1'}},
         'output_variants': [{'id': 'done', 'draft_id': 'base', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'completed', 'render_job_id': 'old'}],
+        'attempts': [{'attempt_id': 't-old', 'kind': 'generation', 'state': 'completed', 'sequence': 1}],
     })
-    calls = []
     monkeypatch.setattr(jobs, 'run_content', lambda *_: pytest.fail('must not rerun content analysis'))
     monkeypatch.setattr(jobs, 'analyze', lambda *_: pytest.fail('must not rerun visual analysis'))
-    def export(pid, draft, *, _variant_identity, **kwargs):
-        calls.append((draft, kwargs))
-        return queue_export_record(pid, draft, 'new-job', _variant_identity)
-    monkeypatch.setattr(jobs, 'export', export)
-
+    monkeypatch.setattr(jobs, 'export', lambda *a, **k: pytest.fail('must not render'))
     response = client.post('/studio/p1/platforms', json={'platforms': ['tiktok']})
-    assert response.status_code == 200, response.text
-    state = client.get('/studio/p1').json()
-    assert len(state['output_variants']) == 2
-    added = next(item for item in state['output_variants'] if item['strategy_id'] == 'tiktok')
-    assert added['draft_id'] != 'base' and added['render_job_id'] == 'new-job'
-    assert state['output_variants'][0]['status'] == 'completed'
-    assert len(calls) == 1 and calls[0][1] == {'brand_outro': True}
+    assert response.status_code == 409, response.text
+    assert response.json()['detail']['error_code'] == 'append_platform_unavailable'
+    state = store.read('p1')
+    assert [item['id'] for item in state['output_variants']] == ['done']
+    assert [item['attempt_id'] for item in state['attempts']] == ['t-old']
+    assert state['generation']['status'] == 'completed'
 
 
 def test_retry_variant_only_requeues_failed_output(client, root, monkeypatch):
@@ -228,6 +224,12 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
         'features': resolve_features(None),
         'status': 'awaiting_confirmation',
         'created_at': state['generation']['created_at'],
+        'llm_calls': 0,
+        'prompt_tokens': 0,
+        'completion_tokens': 0,
+        'reasoning_tokens': 0,
+        'retry_count': 0,
+        'degrade_count': 0,
     }
     assert state['output_variants'] == []
     assert ImportOptions(platforms=['tiktok', 'reels', 'tiktok']).platforms == ['tiktok', 'instagram_reels']
@@ -290,8 +292,14 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
     from backend.models import Project
     with SessionLocal() as db: assert db.get(Project,pid).processing_config['import_staging'] is True
     assert not content_calls and state['drafts']==[]
-    assert state['plan']['preferences']['goal']==goal
-    confirmed=client.post('/studio/'+pid+'/start',json={'plan_id':state['plan']['id'],'goals':[goal]})
+    # E2: visual mode is the user's explicit choice, so a "content" screening result is
+    # shown as the visual route that will actually run (highlight); choosing content
+    # means the user explicitly switches the review screen to subtitles.
+    assert state['plan']['preferences']['goal']==('highlight' if goal=='content' else goal)
+    assert state['plan']['recommended_analysis']=='visual'
+    start={'plan_id':state['plan']['id'],'goals':[goal]}
+    if goal=='content': start['analysis_mode']='subtitle'
+    confirmed=client.post('/studio/'+pid+'/start',json=start)
     assert confirmed.status_code==200,confirmed.text
     state=client.get('/studio/'+pid).json()
     assert state['analysis']['status']=='completed',state
@@ -760,22 +768,48 @@ def test_link_import_refused_by_site_records_source_blocked_in_chinese(client, m
     assert state['analysis']['error'] == download_recovery.SOURCE_BLOCKED_HINT
     generation = state['generation']
     assert generation['status'] == 'failed' and generation['error_code'] == 'source_blocked'
-    assert generation['failure_stage'] == 'ingest' and generation['http_status'] == 412
+    # R27 #415 (Dong R26 design): a site refusal is a LOCAL failure; the local snapshot carries no
+    # http_status/upstream (the 412 belongs to the site, never to a provider).
+    assert generation['failure_stage'] == 'ingest' and 'http_status' not in generation
+    assert generation['attribution_source'] == 'local' and 'upstream_error_type' not in generation
     assert 'Precondition' not in generation['error'] and 'BiliBili' not in generation['error']
     # The worker still hands it to the reporter, which drops source_blocked (see test_sentry_setup).
     assert reported == ['source_blocked']
 
 
-def test_studio_content_preserves_structured_pipeline_failure(monkeypatch, tmp_path):
+@pytest.mark.parametrize('code', ['llm_not_configured', 'llm_auth_invalid'])
+def test_studio_content_preserves_structured_pipeline_failure(monkeypatch, tmp_path, code):
     from backend.tasks.processing import process_video_pipeline
     from backend.pipeline.failures import PipelineFailure
     class Result:
         def get(self):
-            return {'success':False, 'error':'private hint', 'result':{'stage':'ANALYZE', 'error_code':'llm_not_configured'}}
+            return {'success':False, 'error':'private hint', 'result':{'stage':'ANALYZE', 'error_code':code}}
     monkeypatch.setattr(process_video_pipeline, 'apply', lambda **kwargs: Result())
     with pytest.raises(PipelineFailure) as caught:
         jobs.run_content('p', tmp_path/'input.mp4')
-    assert caught.value.code == 'llm_not_configured'
+    assert caught.value.code == code
+
+
+@pytest.mark.parametrize('status', [401, 403])
+def test_automatic_auth_failure_persists_studio_generation_code(client, source, monkeypatch, status):
+    from backend.pipeline.failures import PipelineFailure, model_call_error_code
+
+    error = RuntimeError('invalid api key')
+    error.status_code = status
+    def fail(*args):
+        raise PipelineFailure('ANALYZE', 'API Key 无效或已过期，请检查后重试',
+                              code=model_call_error_code(error), http_status=status)
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', fail)
+    response = client.post('/studio/import', data={'goal': 'content', 'auto_start': 'true'},
+                           files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200
+    state = store.read(response.json()['project_id'])
+    for section in ('analysis', 'generation'):
+        assert state[section]['status'] == 'failed'
+        assert state[section]['error_code'] == 'llm_auth_invalid'
+    assert state['generation']['http_status'] == status
 
 
 def test_local_import_creates_project_thumbnail(client, source, monkeypatch):

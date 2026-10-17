@@ -44,16 +44,20 @@ def report_for(monkeypatch, settings):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness
     monkeypatch.setattr(ai, 'for_editing', lambda: settings)
+    # R23 #233: the report's analysis mode is the one planning reads; with a saved document that is its own mode.
+    from backend.services.studio import analysis_preferences
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode=settings.analysis_mode))
     return readiness.report()
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_saved_document_is_ready_without_a_provider_call(monkeypatch):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness
     connection = Connection(id='local', name='Ollama', provider='ollama')
     settings = document(
         connections=[connection],
-        analysis=Assignment(connection_id='local', model='qwen2.5:7b', capability='text'),
+        analysis=Assignment(connection_id='local', model='qwen2.5:7b', capability='auto'),
     )
     ai.path().write_text(settings.model_dump_json(), encoding='utf-8')
     monkeypatch.setattr(ai, 'migrate_legacy', lambda: (_ for _ in ()).throw(AssertionError('legacy migration')))
@@ -123,6 +127,7 @@ def test_missing_whisper_offers_install(monkeypatch):
     assert report_for(monkeypatch, document())['checks']['transcription'] == {'ok': False, 'code': 'whisper_installing', 'repair': 'none'}
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_runtime_without_the_selected_model_is_not_ready(monkeypatch, isolated):
     # RC156 Win QA #5: an installed runtime alone cannot transcribe.
     from backend.services.whisper_model_manager import get_model_manager
@@ -140,6 +145,7 @@ def test_runtime_without_the_selected_model_is_not_ready(monkeypatch, isolated):
     assert report_for(monkeypatch, small)['checks']['transcription'] == {'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
     large = document(transcription=Transcription(model='large'))
     assert report_for(monkeypatch, large)['checks']['transcription']['model'] == 'large-v3'
@@ -150,15 +156,22 @@ def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
 def test_visual_mode_requires_a_multimodal_model_and_auto_does_not(monkeypatch):
     text = document(analysis_mode='visual')
     blocked = report_for(monkeypatch, text)
-    assert blocked['checks']['visual'] == {'ok': False, 'code': 'not_configured', 'repair': 'settings_vision'}
+    assert blocked['checks']['visual'] == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
     assert blocked['ready'] is False
     allowed = report_for(monkeypatch, document(
         analysis=Assignment(connection_id='ai', model='gpt-4o', capability='multimodal'),
         analysis_mode='visual',
     ))
     assert allowed['checks']['visual'] == {'ok': True, 'code': 'configured', 'repair': 'none'}
-    auto = report_for(monkeypatch, document(analysis_mode='auto'))
-    assert auto['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    auto_text = report_for(monkeypatch, document(analysis_mode='auto'))
+    # D7: auto + known text must stay optional so S5 can fall back to subtitles
+    assert auto_text['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    assert auto_text['ready'] is True
+    auto_unresolved = report_for(monkeypatch, document(
+        analysis=Assignment(connection_id='ai', model='o3-mini', capability='auto'),
+        analysis_mode='auto',
+    ))
+    assert auto_unresolved['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
     subtitles = report_for(monkeypatch, document(analysis_mode='subtitle', allow_visual_screening=False))
     assert subtitles['checks']['visual'] == {'ok': True, 'code': 'not_required', 'repair': 'none'}
 
@@ -169,6 +182,7 @@ def test_missing_ffmpeg_has_no_repair_action(monkeypatch):
     assert result['checks']['ffmpeg'] == {'ok': False, 'code': 'missing', 'repair': 'none'}
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_http_readiness_is_registered_before_project_routes(isolated, monkeypatch):
     from backend.services import ai_model_settings as ai
     ai.path().write_text(document().model_dump_json(), encoding='utf-8')
@@ -205,7 +219,7 @@ def test_visual_check_uses_the_pipeline_capability(monkeypatch, model, capabilit
                         analysis=Assignment(connection_id='ai', model=model, capability=capability))
     visual = report_for(monkeypatch, settings)['checks']['visual']
     assert visual['ok'] is ok
-    assert visual['code'] == ('configured' if ok else 'not_configured')
+    assert visual['code'] == ('configured' if ok else 'vision_unsupported')
     # The pipeline gives the same answer: a vision endpoint exists exactly when readiness is ok.
     assert (ai.vision_endpoint(settings) is not None) is ok
     assert ai.sees_images(settings, settings.analysis) is ok
@@ -225,7 +239,7 @@ def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
     gateway = Connection(id='ai', name='Gateway', provider='compatible', api_key='k', base_url='https://gateway.example/v1')
     settings = document(connections=[gateway], analysis_mode='visual',
                         analysis=Assignment(connection_id='ai', model='gpt-6.1-sol', capability='auto'))
-    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'not_configured'
+    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'vision_unsupported'
 
 
 def test_require_transcription_raises_before_caller_spends(monkeypatch):
@@ -239,6 +253,7 @@ def test_require_transcription_raises_before_caller_spends(monkeypatch):
     readiness.require_transcription(srt_available=False, analysis_mode='visual')
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
     # W157 IA: right after the download thread reports "downloaded", readiness must say installed.
     from backend.services.whisper_model_manager import get_model_manager
@@ -250,3 +265,35 @@ def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
             'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
     finally:
         manager._download_state.pop('small', None)
+
+
+@pytest.mark.parametrize('mode', ['auto', 'visual', 'subtitle'])
+@pytest.mark.parametrize('status', ['failed', 'unchecked', 'ok'])
+def test_separate_vision_validation_gates_readiness_and_runtime(mode, status):
+    from backend.services import ai_model_settings as ai
+    from backend.services.studio import readiness, vision_settings
+    settings = document(
+        connections=[
+            Connection(id='ai', name='Analysis', provider='openai', api_key='fixture', validation_status='ok'),
+            Connection(id='vision', name='Vision', provider='openai', api_key='fixture', validation_status=status),
+        ],
+        vision=Assignment(connection_id='vision', model='gpt-4o', capability='multimodal'),
+        analysis_mode=mode,
+    )
+    ai.save(settings)
+    original = ai.path().read_bytes()
+    result = readiness.report()
+    blocked = status == 'failed' and mode == 'visual'  # S5: auto falls back to subtitles
+    assert result['ready'] is not blocked
+    if blocked:
+        assert result['checks']['visual'] == {'ok': False, 'code': 'validation_failed', 'repair': 'settings_vision'}
+        for read in (readiness.ensure_analysis_usable, lambda: ai.require_analysis(ai.load()), vision_settings.effective):
+            with pytest.raises(ValueError, match='未通过校验'):
+                read()
+    else:
+        readiness.ensure_analysis_usable()
+    if status == 'failed':
+        # A confirmation can explicitly request vision even when the saved mode is subtitle.
+        with pytest.raises(ValueError, match='未通过校验'):
+            vision_settings.effective()
+    assert ai.path().read_bytes() == original

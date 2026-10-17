@@ -27,7 +27,7 @@
 
 ## 3. 源码检查：一个入口
 
-在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci`；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
+在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci`（必装：后端测试 `test_r16_history_terminal.py` 会调用 node 和 `frontend/node_modules/typescript`，缺了直接失败，不会 skip）；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
 
 ```bash
 python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
@@ -50,7 +50,7 @@ runner 创建临时数据库、配置、日志和隐私关闭文件，清空继�
 
 Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/真实离线转写，以及三平台 SenseVoice 实际安装、模型下载与离线转写。原有这两套工作流只有 PR 路径触发，不能当成 tag 已验证；现在复用为构建的依赖，校验器核对目标构建中的实际 job。开发 Python 上的真实转写仍须由最终安装包产品矩阵补验。
 
-发版还必须通过 [服务商端到端门槛](PROVIDER_E2E_GATE.md)：`desktop-build.yml` 在 `candidate-gate` 之后调用 `provider-e2e-gate.yml`，Release Acceptance 把 `provider-e2e` 列为 required job。Linux 无界面后端跑固定素材；本地 mock（含 429 / 503 / 断线 / 杀后端）是必过项，应成功当次 ≥95%。PR / 分支 push 只跑 mock，不打真实服务商。夜间只跑 DeepSeek + Gemini 的 2–3 条；预发布 tag 把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实服务商只在 Environment `provider-e2e` 有 key 时运行；缺 `*_MODEL` 时用最便宜默认模型。未配置 key 则跳过并在汇总标明，不因此失败。Live 判定 fail-closed：任一服务商失败、缺/空/无法解析的报告、或条数少于计划矩阵必须红；滚动窗口（近 5 次、满 20 条后 ≥95%）是额外门槛，不能在样本不足时把当次失败判绿。应拦下组合必须在开始前 100% 拦下且 `billable_calls_before_failure = 0`。月度估费硬顶 ¥300，超了跳过 live 并告警。故障注入的期望类型用 `UpstreamErrorType`（见 [成功率共享契约](SUCCESS_RATE_CONTRACT.md)）。**fail-closed 已核对。88API 门槛地址为 `https://api.88api.ai/v1`、默认 `deepseek-v4-flash`；单探针已通过，完整发版仍走分层 live，不要只靠这一条探针放行。** 这不能代替双平台安装包真机验收。
+发版还必须通过 [服务商端到端门槛](PROVIDER_E2E_GATE.md)：`desktop-build.yml` 在 `candidate-gate` 之后调用 `provider-e2e-gate.yml`，Release Acceptance 把 `provider-e2e` 列为 required job。Linux 无界面后端跑固定素材；本地 mock（含 429 / 503 / 断线 / 杀后端）是必过项，应成功当次 ≥95%。PR / 分支 push 只跑 mock，不打真实服务商。夜间只跑 DeepSeek + Gemini 的 2–3 条；预发布 tag 把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实服务商只在 Environment `provider-e2e` 有 key 时运行；缺 `*_MODEL` 时用 `matrix.py` 的 live 默认模型，产品目录 `backend/presets/provider_presets.json` 不覆盖 live 默认型号（Gemini 为 `gemini-3.5-flash-lite`，聊天地址补 `/openai`；DashScope 为 `qwen-plus`）。未配置 key 则跳过并在汇总标明，不因此失败。Live 判定 fail-closed：任一服务商失败、缺/空/无法解析的报告、或条数少于计划矩阵必须红；滚动窗口（近 5 次、满 20 条后 ≥95%）是额外门槛，不能在样本不足时把当次失败判绿。应拦下组合必须在开始前 100% 拦下且 `billable_calls_before_failure = 0`。月度估费硬顶 ¥300，超了跳过 live 并告警。故障注入的期望类型用 `UpstreamErrorType`（见 [成功率共享契约](SUCCESS_RATE_CONTRACT.md)）。**fail-closed 已核对。88API 门槛地址为 `https://api.88api.ai/v1`、默认 `deepseek-v4-flash`；单探针已通过，完整发版仍走分层 live，不要只靠这一条探针放行。** 这不能代替双平台安装包真机验收。
 
 终端用户不应为可选 ASR 安装编译工具。Python 3.13 下 editdistance 缺少上游 wheel，开发 CI 曾因自带编译器而掩盖安装包失败。桌面构建现用同一 portable Python 预编译、离线安装并加载原生 wheel，随 backend 提供；两平台的安装包阶段还运行真实 SenseVoice 准备、模型下载和离线转写，防止仅源码环境可用。模型网络下载失败仍是红灯，不以 wheel 检查代替完整准备。
 
@@ -76,6 +76,8 @@ Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/�
 Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `VITE_TELEMETRY_VALIDATION=true`；受控后端进程使用 `AUTOCLIP_BUILD_ENVIRONMENT=validation` 并明确标记测试 scope，见 [监控说明](analytics/STUDIO_MONITORING.md)）；它是同一提交的补充证据，**不替代最终生产安装包**。桌面启动器会注入 production/development，验收时需核查实际事件标签。生产包检查版本标记与关闭采集，validation 检查最终收数。不要把验收事件塞入生产成功率。
 
 自动制作在生成版本前失败的恢复验收，还需从真实结果页确认重试入口，修正前置条件后沿用原素材和所选平台完成出片；validation 收数应保留同一 flow、不同 attempt 的失败与成功，各尝试重复观察只入库一次。
+
+1.5.7 E5 / 启动环境字段回归：在隔离目录验证首次启动、已有 `analytics.json` 的重启、后端端口延迟与首次身份写入失败。PostHog 与后端 Sentry 的匿名 UUID 必须相同；晚到的身份必须覆盖启动环境变量并对 worker 生效。Mac arm64 的首屏/启动事件必须带 `os=macos, arch=aarch64`，Windows x64 必须为 `windows, x86_64`；执行 [release_validation.sql](analytics/release_validation.sql) 的首屏覆盖查询，缺失/unknown 不通过。分析关闭时 Sentry 不携带 user，崩溃报告关闭时不发送；载荷不得出现密钥、完整 URL、个人路径、标题或正文。首次安装在前端尚未生成 UUID 前的后端错误可以无 user，不能为了填字段另造设备身份。源码回归不能替代两平台最终包实际收数。
 
 每条修复和新功能还需列入 `regressions`，写明 issue/变更 ID、触发条件、实际平台、预期与结果；一个 happy path 不代表整个发布说明通过。首次出片时间、费用、画幅、语种、字幕同步、切点与包装质量须按素材记录，性能声明需要与上一版同条件对照。
 

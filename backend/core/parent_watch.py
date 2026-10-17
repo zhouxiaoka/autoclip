@@ -85,6 +85,11 @@ def start(on_parent_gone: Callable[[int], None], *, pid: Optional[int] = None, i
                 return  # watch ended by the normal shutdown
         logger.warning('Desktop app (pid %s) is gone; shutting the backend down', pid)
         stop.set()
+        try:  # R16 #42: recovered runs report parent_lost, not clean
+            from backend.services.studio.shutdown_marker import mark
+            mark('parent_lost')
+        except Exception:  # noqa: BLE001,S110 - never block the shutdown
+            pass
         on_parent_gone(pid)
 
     thread = threading.Thread(target=loop, name='autoclip-parent-watch', daemon=True)

@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --require ./tests/setup.cjs --test tests/*.test.cjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
@@ -45,6 +45,7 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "happy-dom": "^21.0.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.2.2",

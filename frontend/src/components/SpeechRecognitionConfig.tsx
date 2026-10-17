@@ -1,10 +1,12 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { pipInstallErrorText } from '../utils/pipInstallError'
+import { whisperModelErrorText } from '../utils/whisperModelError'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Popconfirm, Select, message } from 'antd'
-import { speechApi, WhisperRuntimeStatus, WhisperModel } from '../services/api'
-import { Btn, ProgressLine, Row, StatusDot } from '../ui'
+import { speechApi, WhisperRuntimeStatus, WhisperModel, WhisperModelSource } from '../services/api'
+import { Btn, Row } from '../ui'
+import LocalModelPrepare from '../features/settings/LocalModelPrepare'
 
 interface SpeechRecognitionConfigProps {
   hideProvider?: boolean
@@ -21,6 +23,13 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
   const pendingModel = useRef<string | null>(null)
   const [preparing, setPreparing] = useState(false)
   const timer = useRef<number | null>(null)
+  const [modelSource, setModelSource] = useState<WhisperModelSource>('auto')
+  useEffect(() => { speechApi.getModelSource().then(v => setModelSource(v.source)).catch(() => undefined) }, [])
+  const changeModelSource = async (source: WhisperModelSource) => {
+    const previous = modelSource
+    setModelSource(source)
+    try { await speechApi.setModelSource(source) } catch { setModelSource(previous); message.error(t('保存失败，请重试')) }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -129,14 +138,21 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
         options={(models.length ? models.map(m => ({ value: m.name, label: `${m.name} · ${m.size}` })) : ['tiny', 'base', 'small', 'medium', 'large-v3'].map(name => ({ value: name, label: name })))}
         onChange={onModelChange} />
     </Row>
-    <Row label={ready ? t('模型已就绪') : t('准备本地模型')} hint={ready ? t('保存设置后，新任务将使用这个模型。') : runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? selected.errorMessage : t('首次使用需下载模型和必要组件，之后可在本机转写。')}>
-      {ready ? <StatusDot tone="ok" label={t('已就绪')} /> : installing || downloading || preparing ? <div style={{ width: 220 }}>
-        <ProgressLine percent={installing ? runtime?.progress ?? 5 : selected?.downloadProgress ?? 0} />
-        <span className="ac-hint">{installing ? t('正在准备组件…') : t('正在下载模型…')}</span>
-      </div> : <Btn size="sm" disabled={runtime?.platform_supported === false || loading || !runtime} onClick={() => void prepare()}>{t('准备模型')}</Btn>}
-    </Row>
+    <LocalModelPrepare
+      ready={ready}
+      preparing={installing || downloading || preparing}
+      progress={installing ? runtime?.progress ?? 5 : selected?.downloadProgress ?? 0}
+      hint={runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? whisperModelErrorText(t, selected) : t('首次使用需下载模型和必要组件，之后可在本机转写。')}
+      busyHint={installing ? t('正在准备组件…') : t('正在下载模型…')}
+      disabled={runtime?.platform_supported === false || loading || !runtime}
+      onPrepare={() => void prepare()} />
     {!runtime && !loading && <p className="ac-note">{t('暂时无法读取本地模型状态。')} <Btn variant="text" size="sm" onClick={() => void refresh()}>{t('重试')}</Btn></p>}
     <details className="ac-disclosure"><summary>{t('本地模型管理')}</summary>
+      <Row label={t('模型下载源')} hint={t('自动：官方源连不上时改用 hf-mirror 镜像。')}>
+        <Select aria-label={t('模型下载源')} style={{ minWidth: 180 }} value={modelSource} disabled={downloading}
+          options={[{ value: 'auto', label: t('自动') }, { value: 'huggingface', label: 'Hugging Face' }, { value: 'hf-mirror', label: t('hf-mirror 镜像') }]}
+          onChange={value => void changeModelSource(value as WhisperModelSource)} />
+      </Row>
       {models.filter(m => m.status === 'downloaded').map(m => <Row key={m.name} label={`${m.name} · ${m.size}`}>
         <Popconfirm title={t('删除模型 {{value1}}？', { value1: m.name })} onConfirm={() => handleDelete(m.name)} okText={t('删除')} cancelText={t('取消')}><Btn variant="danger" size="sm">{t('删除')}</Btn></Popconfirm>
       </Row>)}

@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/analytics/flags.defaults.json'), 'utf8'))
@@ -24,7 +24,7 @@ function load(options = {}) {
   const remote = { ...(options.remote || {}) }
   const storage = options.storage || memory()
   const module = { exports: {} }
-  vm.runInNewContext(js, {
+  runInSandbox(js, {
     exports: module.exports, module, console,
     __env: { DEV: options.dev === true, VITE_FLAGS: options.vite || '', VITE_APP_VERSION: options.version ?? '1.5.7' },
     require: (id) => {
