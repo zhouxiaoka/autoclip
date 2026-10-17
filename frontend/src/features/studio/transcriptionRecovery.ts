@@ -107,8 +107,9 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
   const read = async () => {
     let report: ImportReadiness | null = null
     let unreachable = false
+    const sentAt = now() // #418 R27b: a timed-out request was unanswered since it went out, not since the deadline
     try { report = await readinessWithDeadline() } catch (error) { unreachable = isNetworkError(error) }
-    if (unreachable) { if (unreachableSince === null) unreachableSince = now() } else unreachableSince = null
+    if (unreachable) { if (unreachableSince === null) unreachableSince = sentAt } else unreachableSince = null
     if (report && options.onReport) options.onReport(report)
     return report
   }

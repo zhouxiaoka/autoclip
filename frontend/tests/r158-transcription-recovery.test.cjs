@@ -422,6 +422,9 @@ test('#418 R27b timeouts adding up to 30s fail the wait, then it continues by it
   const firstFail = phases.find(([, p]) => p === 'failed')
   assert.ok(firstFail, `35s+ of timeouts must fail: ${JSON.stringify(phases)}`)
   assert.ok(firstFail[0] >= 30000, `not failed before 30s of timeouts: ${JSON.stringify(phases)}`)
+  // pause starts at 0, polls go out at 2, 9, 16, 23, 30 (5s each): the streak counts from the first send (2s), so the
+  // poll sent at 30 fails at 35 - a 35s pause is failed before it resumes (counting from the deadline would be 42).
+  assert.equal(firstFail[0], 35000, `failed by the end of a 35s pause: ${JSON.stringify(phases)}`)
   assert.equal(c.state.offline, true)
   clock.hung = false
   clock.t += 10000; await withDeadline(c.poll())
