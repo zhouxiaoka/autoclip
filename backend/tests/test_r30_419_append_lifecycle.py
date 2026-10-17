@@ -2,9 +2,7 @@
 prepare, then persist or settle failed; the receipt goes back to the caller). Real jobs.append_platform_variants /
 attempts / store.settle_generation; only media, framing, packaging and rendering are stubbed."""
 import pytest
-from fastapi import HTTPException
 
-from backend.api.v1 import studio as studio_api
 from backend.services.studio import attempts, jobs, store
 
 
@@ -158,12 +156,40 @@ def test_i496_append_receipt_has_no_run_id_and_own_outputs_needs_an_open_attempt
     assert 'produced_by_attempt' not in item
 
 
-# --- HTTP: the coded refusals keep their status and code ---
+# --- HTTP: the coded refusals keep their status and code (R31-pre: through the real route, not call() alone) ---
+# POST /studio/{id}/platforms on the shared test client; only the store/media stubs of _state are in place.
+# Each must fail on 59329f4b on an assertion (there: a plain-string 409 detail, or 200 with a new attempt).
 
-@pytest.mark.parametrize('code,status', [('append_platform_exists', 409), ('append_no_auto_output', 400), ('append_retry_pending', 409)])
-def test_coded_refusal_maps_to_its_status_and_error_code(code, status):
-    def refuse():
-        raise attempts.AppendRejected('x', code, status=status)
-    with pytest.raises(HTTPException) as caught:
-        studio_api.call(refuse)
-    assert caught.value.status_code == status and caught.value.detail['error_code'] == code
+from backend.tests.test_studio import client, root, source  # noqa: E402,F401  (shared HTTP client fixture)
+
+
+def _post(client, platforms=('bilibili',)):
+    response = client.post('/studio/p1/platforms', json={'platforms': list(platforms)})
+    detail = response.json().get('detail')
+    return response.status_code, (detail.get('error_code') if isinstance(detail, dict) else None)
+
+
+def test_http_existing_platform_is_409_append_platform_exists(client, monkeypatch):
+    state = _state(monkeypatch)
+    assert _post(client, ['douyin']) == (409, 'append_platform_exists')
+    assert len(state['attempts']) == 1
+
+
+def test_http_nothing_automatic_is_400_append_no_auto_output(client, monkeypatch):
+    state = _state(monkeypatch, on_demand=True)
+    assert _post(client) == (400, 'append_no_auto_output')
+    assert len(state['attempts']) == 1
+
+
+def test_http_pending_manual_retry_is_409_append_retry_pending(client, monkeypatch):
+    state = _state(monkeypatch)
+    state['attempts'].append({'attempt_id': 't-man', 'kind': 'production', 'state': 'open', 'sequence': 2, 'flow_id': 'f-1', 'retry_of': 't-gen', 'run_id': None})
+    assert _post(client) == (409, 'append_retry_pending')
+    assert attempts.find(state, 't-man')['state'] == 'open' and len(state['attempts']) == 2
+
+
+def test_http_running_attempt_is_409_append_attempt_running(client, monkeypatch):
+    state = _state(monkeypatch)
+    assert _post(client)[0] == 200
+    assert _post(client, ['xiaohongshu']) == (409, 'append_attempt_running')
+    assert len(state['attempts']) == 2
