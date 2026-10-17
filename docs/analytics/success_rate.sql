@@ -1,4 +1,4 @@
--- 1.5.8 出片成功率（v4 口径）。#416 的 SQL 可以单独合入（没有 retry_of 的终态各自成 flow）。线上看板 insight uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 尚未更新，要按重试链取末次等本 PR 合入后同步。本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。
+-- 1.5.8 出片成功率（v4 口径）。#416 的 SQL 可以单独合入，也可以先于 #419（没有 retry_of 的终态各自成 flow，没有 attempt_sequence 按 0）。线上看板 insight uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 尚未更新，要按重试链取末次等本 PR 合入后同步。本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。
 -- 口径见 docs/analytics/TRACKING_PLAN.md §6–§7。所有查询共用同一个 base / c 定义。
 --
 -- 分母为 0（稀疏的日期 / 版本 / 空窗口）时比率返回 NULL，不是 NaN（R20 #142：nullIf(分母, 0)）。
