@@ -71,6 +71,7 @@ def test_addition1_process_dies_before_the_background_job_settles_service_restar
     receipt = attempts.find(state, result['attempt']['attempt_id'])
     assert (state['generation']['status'], state['generation'].get('error_code')) == ('failed', 'service_restarted')
     assert receipt['state'] == 'failed' and receipt.get('error_code') == 'service_restarted'   # terminal reached
+    assert isinstance(receipt['summary'].get('duration_ms'), int)          # I534: even with no output of its own
     assert {v['id']: v['status'] for v in state['output_variants']} == before   # the workspace is not rolled back
 
 
