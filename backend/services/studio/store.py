@@ -525,14 +525,13 @@ def _recover_interrupted_run(data):
 
 def settle_generation(data):
     """Settle the generation once every requested (not backup) variant is completed or failed.
-    R28 #409: judged only on this round's outputs (attempts.round_outputs - the same scope as the receipt): the
-    current attempt's outputs plus those a variant retry redid. A failure redone in place counts by its latest
-    result; an older round's failure, or its leftover queued output, neither taints nor blocks this round. No
-    attempt record / no stamped output in scope -> the whole workspace, as before."""
+    Judged only on this round's outputs (attempts.round_outputs, the same scope as the receipt): the current
+    attempt's outputs plus those a variant retry redid. An older round's failure neither taints nor completes
+    this round. No attempt record -> the whole workspace. An attempt that stamped nothing is not settled here."""
     from backend.services.studio import attempts
     scope = attempts.round_outputs(data)
     if scope == []:
-        return  # R31 I530: the open attempt is still preparing; other rounds' renders never settle it
+        return  # this attempt stamped nothing; do not record it completed from other rounds
     pool = data['output_variants'] if scope is None else scope
     variants = [item for item in pool if item['status'] != 'on_demand']
     if all(item['status'] in ('completed', 'failed') for item in variants):

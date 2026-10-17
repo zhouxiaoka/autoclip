@@ -1454,6 +1454,7 @@
   "正在生成": "Generando",
   "生成成片": "Generar videos",
   "追加平台版本": "Añadir versión para otra plataforma",
+  "这一版还不能追加平台，请新建一个项目": "Esta versión no puede añadir plataformas. Crea un proyecto nuevo.",
   "生成追加版本": "Generar versiones añadidas",
   "重试这条": "Reintentar este",
   "未生成 {{platform}}：{{reason}}": "Sin versión para {{platform}}: {{reason}}",

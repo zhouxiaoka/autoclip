@@ -228,14 +228,7 @@ test('R29 #444 the re-run line shows only for a completed round with earlier fai
   assert.doesNotMatch(at({ status: 'partial', not_redone_failed_count: 2 }), NEW)
 })
 
-// R29b (Dong): the same N line after an appended platform round says "append", never "re-run".
-test('R29b the append round shows the append line, not the re-run line', () => {
-  attemptsOverride.value = [{ attempt_id: 't-first', trigger: 'initial' }, { attempt_id: 't-append', trigger: 'append_platform' }]
-  generationOverride.value = { auto_start: true, status: 'completed', attempt_id: 't-append', not_redone_failed_count: 2 }
-  try {
-    const html = render(true, 'rendering', 'completed')
-    assert.match(html, /本次追加已完成，之前还有/); assert.doesNotMatch(html, /重跑/)
-    generationOverride.value = { ...generationOverride.value, attempt_id: 't-first' }
-    assert.match(render(true, 'rendering', 'completed'), /本次重跑已完成，之前还有/)
-  } finally { generationOverride.value = null; attemptsOverride.value = null }
+test('1.5.8 results page has no control that appends platforms', () => {
+  const html = render(true, 'rendering', 'completed')
+  assert.doesNotMatch(html, /追加平台/)
 })

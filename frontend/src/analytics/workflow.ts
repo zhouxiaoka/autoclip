@@ -433,7 +433,7 @@ export class WorkflowTracker {
         event = 'studio_generation_finished'
         details = { ...sum, analysis_mode: undefined, http_status: failed ? sum.http_status : undefined,
           billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
-          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }  // R29b: append_platform splits on the dashboard
+          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }  // append_platform stays in the enum; 1.5.8 does not emit it
       } else {
         event = 'studio_production_finished'
         details = { ...sum, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }

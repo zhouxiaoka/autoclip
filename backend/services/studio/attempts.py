@@ -38,8 +38,8 @@ class RetryRejected(ConflictError):
 
 
 class AppendRejected(RetryRejected):
-    """R30 I492/I494/I495: an append refused before any attempt or preparation, with its own error_code (the
-    frontend maps it through errorText) and HTTP status (409, or 400 when nothing could be produced)."""
+    """1.5.8 does not append platforms. The refusal carries an error_code the API returns as HTTP 409.
+    Nothing is created."""
 
     def __init__(self, message, error_code, status=409):
         super().__init__(message)
@@ -133,8 +133,7 @@ def bind_run(receipt, run_id):
 def own_outputs(data, variants):
     """R27 #376/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
     open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only.
-    R29 #441: appending platforms opens its own attempt (open_append), so appended outputs carry that attempt.
-    Without an open attempt nothing is stamped (R30 I496). Already stamped outputs are never re-stamped."""
+    Without an open attempt nothing is stamped. Already stamped outputs are never re-stamped."""
     receipt = current(data)
     if not receipt:
         return
@@ -183,38 +182,6 @@ def _inherit_source(receipt, data, variant):
                                    *((k, summary.get(k)) for k in PLAN_KEYS)) if isinstance(v, str) and v}
     if inherited:
         receipt['inherited'] = inherited
-
-
-# R30 I493: the previous round's terminal fields; a new round starts without them (settle writes them again)
-ROUND_TERMINAL = ('error', 'error_code', 'failure_stage', 'upstream_error_type', 'secondary_error_codes',
-                  'secondary_upstream_error_types', 'secondary_failure_stages', 'not_redone_failed_count',
-                  'completed_variant_count', 'finished_at')
-
-
-def start_round(data, receipt):
-    """Bind the generation to a newly opened attempt and clear the previous round's terminal fields. R31 I530: the
-    round starts in production (preparing, nothing stamped yet): no render callback or restart recovery can settle it
-    on other rounds' outputs, and a dead worker is closed as service_restarted by the production recovery."""
-    generation = data['generation']
-    for key in ROUND_TERMINAL:
-        generation.pop(key, None)
-    generation.update(attempt_id=receipt['attempt_id'], status='production')
-
-
-def open_append(data, source_variant, now=None):
-    """R29 #441 / R30: appending platforms is a new generation attempt (new flow, retry_of None). It inherits the
-    plan and route of the output the new versions derive from (I491), not its outputs. Refused while another
-    attempt runs, including a manual retry waiting for confirmation (I495) - nothing is abandoned silently."""
-    open_now = current(data)
-    if open_now and unbound(open_now):
-        raise AppendRejected('请先确认待处理的重试', 'append_retry_pending')
-    if open_now:
-        raise AppendRejected('上一次制作还没结束，请稍后再追加平台', 'append_attempt_running')
-    receipt = open_attempt(data, 'generation', trigger='append_platform', now=now)
-    if isinstance(source_variant, dict) and source_variant.get('produced_by_attempt'):
-        _inherit_source(receipt, data, source_variant)
-    start_round(data, receipt)
-    return receipt
 
 
 def bind_plan(receipt, plan):
@@ -350,25 +317,19 @@ def generation_summary(data, variants=None, started=None) -> dict:
 
 
 def round_outputs(data):
-    """THE one scope rule, shared by store.settle_generation (status, counts, error code, wording, the 'all done'
-    gate) and the receipt summary. R31 I541: only outputs stamped by THIS attempt - produced by it, or redone by it
-    (「重试这条」 stamps redone_by_attempt) - never older rounds' outputs. Returns:
-    - the stamped outputs (on_demand included);
-    - [] while the attempt is open and still preparing (generation in production, nothing stamped yet): nothing to
-      settle on (R31 I530);
-    - None (whole workspace) only for data without an attempt record, or a closed/old round that stamped nothing."""
+    """THE one scope rule, shared by store.settle_generation and the receipt summary. Only outputs stamped by THIS
+    attempt - produced by it, or redone by it (「重试这条」 stamps redone_by_attempt). Returns:
+    - those stamped outputs (on_demand included), which may be empty;
+    - [] when the attempt record exists but stamped nothing: settle must not borrow other rounds (a shared
+      generation.status of rendering/screening is not evidence this attempt succeeded);
+    - None (whole workspace) only when there is no attempt record (trimmed / lost / pre-receipt data)."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
     attempt_id = generation.get('attempt_id')
     receipt = find(data, attempt_id)
-    if receipt is None:  # R29 #440: no attempt record (trimmed / lost / pre-receipt data) -> whole workspace
+    if receipt is None:
         return None
-    owned = [v for v in data.get('output_variants') or [] if isinstance(v, dict)
-             and attempt_id in (v.get('produced_by_attempt'), v.get('redone_by_attempt'))]
-    if owned:
-        return owned
-    if receipt.get('state') == 'open' and generation.get('status') == 'production':
-        return []
-    return None
+    return [v for v in data.get('output_variants') or [] if isinstance(v, dict)
+            and attempt_id in (v.get('produced_by_attempt'), v.get('redone_by_attempt'))]
 
 
 def _owned_summary(data):

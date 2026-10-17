@@ -10,11 +10,11 @@ test('completed variants render the immutable output video directly',()=>{
  assert.match(card,/<video className="studio-variant-video"/)
 })
 
-test('result page appends platforms and retries only an output variant',()=>{
- assert.match(api,/appendPlatforms: \(pid: string, platforms: string\[\], outroEnabled: boolean\)/)
- assert.match(api,/`\/studio\/\$\{pid\}\/platforms`/)
- assert.match(api,/`\/studio\/\$\{pid\}\/retry`, \{ scope: 'variant', variant_id: variantId/)  // #419: one retry command
- assert.match(results,/studioApi\.appendPlatforms\(project\.id, platforms, workspace\.generation\?\.branding\.outro_enabled/)
+test('result page retries a failed output and has no append-platform entry',()=>{
+ assert.match(api,/`\/studio\/\$\{pid\}\/retry`, \{ scope: 'variant', variant_id: variantId/)
+ assert.doesNotMatch(api,/appendPlatforms/)
+ assert.doesNotMatch(results,/追加平台版本/)
+ assert.doesNotMatch(results,/appendPlatforms/)
  assert.match(results,/studioApi\.retryOutputVariant\(project\.id, variant\.id\)/)
  assert.doesNotMatch(results,/studioApi\.import\(/)
  assert.match(card,/重试这条/)

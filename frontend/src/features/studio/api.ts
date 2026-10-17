@@ -40,8 +40,6 @@ export const studioApi = {
   readiness: (): Promise<ImportReadiness> => api.get('/studio/readiness'),
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),
-  // R30 I490: the append is its own attempt; its receipt is watched like a retry's, so success and failure both emit a terminal
-  appendPlatforms: (pid: string, platforms: string[], outroEnabled: boolean): Promise<{ variants: OutputVariant[]; attempt?: RetryReceipt['attempt'] }> => observeStudioOperation('studio_platform_append', () => api.post<unknown, { variants: OutputVariant[]; attempt?: RetryReceipt['attempt'] }>(`/studio/${pid}/platforms`, { platforms, branding: { outro_enabled: outroEnabled, outro_version: 'v1' } }), (result, props) => workflow.watchAttempt(pid, result.attempt, props), { platform_count: platforms.length, brand_outro_enabled: outroEnabled, reused_content_profile: true }),
   retryOutputVariant: (pid: string, variantId: string): Promise<OutputVariant> =>
     // #419: the one retry command. The backend validates the parent and returns the attempt receipt;
     // retry_of / attempt_id come from it, never from local watches.

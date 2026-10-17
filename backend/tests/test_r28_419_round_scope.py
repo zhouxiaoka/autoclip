@@ -113,24 +113,6 @@ def test_409_the_receipt_and_settle_share_one_scope(monkeypatch):
     assert receipt['summary']['completed_variant_count'] == data['generation']['completed_variant_count'] == 1
 
 
-# --- #410 / R29 #441 append_platform_variants stamps its outputs with its own attempt and the source plan ---
-
-def test_410_appended_outputs_record_the_generation_round_and_plan(monkeypatch):
-    from backend.tests.test_on_demand_variants import _auto_fixture, _base
-    state, _exports = _auto_fixture(monkeypatch, [_base(n, 1) for n in range(2)], ['douyin'])
-    state['attempts'] = [{'attempt_id': 't-gen', 'kind': 'generation', 'state': 'open', 'sequence': 1, 'plan_id': 'plan-a'}]
-    state['generation']['attempt_id'] = 't-gen'
-    jobs._auto_generate('p1', {'id': 'plan-a'})                           # stamped by the open round (R30 I496)
-    state['attempts'][0]['state'] = 'partial'
-    before = {v['id'] for v in state['output_variants']}
-    result = jobs.append_platform_variants('p1', ['bilibili'], {'outro_enabled': False})
-    jobs._auto_generate('p1', None, append_attempt=result['attempt']['attempt_id'])   # R31: the submitted background job
-    added = [v for v in state['output_variants'] if v['id'] not in before]
-    # R29 #441: appending opens its own attempt; it inherits the source round's plan, not its stamp
-    own = state['generation']['attempt_id']
-    assert own != 't-gen' and added and {(v['produced_by_attempt'], v.get('produced_by_plan')) for v in added} == {(own, 'plan-a')}
-
-
 # --- #411 the variant retry's route comes from the source output's plan ---
 
 def test_411_variant_retry_after_a_failed_visual_rescreen_reports_the_captions_route(monkeypatch):

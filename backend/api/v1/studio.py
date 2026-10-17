@@ -374,7 +374,7 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # variants + attempt receipt
+    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # 1.5.8: always refused, no attempt
 
 
 def _variant_job(project_id: str, variant_id: str):

@@ -1,6 +1,5 @@
-// R31 #419 I531-b / Dong addition 2: the append receipt returns before preparation. A lost response is recovered
-// from the workspace snapshot (adoptOpenAttempt), and a preparation failure reaches the page through the receipt
-// bound to the failed analysis run (receiptFailureInfo) - the shape the R31 backend writes (test_r31_419_append_redesign).
+// A lost retry response is recovered from the workspace snapshot (adoptOpenAttempt). A failure reaches the
+// page through the receipt bound to that analysis run (receiptFailureInfo). 1.5.8 does not append platforms.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -8,11 +7,11 @@ const { loadTs } = require('./load-ts.cjs')
 
 const memory = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: k => m.delete(k) } }
 const A = 't-aaaaaaaaaaaaaaaa', RUN = 'r'.repeat(32)
-const open = { attempt_id: A, flow_id: 't-f1f1f1f1f1f1f1f1', sequence: 2, kind: 'generation', trigger: 'append_platform', state: 'open', run_id: RUN, causes: [], summary: {} }
+const open = { attempt_id: A, flow_id: 't-f1f1f1f1f1f1f1f1', sequence: 2, kind: 'generation', trigger: 'retry', state: 'open', run_id: RUN, causes: [], summary: {} }
 const failed = { ...open, state: 'failed', error_code: 'invalid_key', causes: [{ goal: null, stage: 'production', code: 'invalid_key', upstream: 'invalid_key' }], summary: { duration_ms: 1200 } }
 const tracker = events => new (loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts')).WorkflowTracker)(memory(), () => true, (event, props) => { events.push({ event, props }); return true }, () => Date.parse('2026-10-17T00:00:00Z'))
 
-test('R31 I531-b: an open append attempt in the snapshot without a watch is adopted and settles exactly once', () => {
+test('an open retry attempt in the snapshot without a watch is adopted and settles exactly once', () => {
   const events = [], t = tracker(events)
   assert.equal(typeof t.adoptOpenAttempt, 'function')
   t.adoptOpenAttempt('p1', { attempts: [open] })
@@ -23,7 +22,7 @@ test('R31 I531-b: an open append attempt in the snapshot without a watch is adop
   const done = events.filter(e => e.event === 'studio_generation_finished')
   assert.equal(done.length, 1)
   assert.equal(done[0].props.attempt_id, A)
-  assert.equal(done[0].props.trigger, 'append_platform')
+  assert.equal(done[0].props.trigger, 'retry')
 })
 
 test('R31 I531-b: settled or production attempts are not adopted', () => {
@@ -33,7 +32,7 @@ test('R31 I531-b: settled or production attempts are not adopted', () => {
   assert.equal(t.list().length, 0)
 })
 
-test('R31 addition 2: a failed append preparation shows its own cause on the page (receipt bound to the analysis run)', () => {
+test('a failed retry shows its own cause on the page (receipt bound to the analysis run)', () => {
   const { receiptFailureInfo, pageFailureAction } = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
   const info = receiptFailureInfo([failed], RUN)
   assert.equal(info?.error_code, 'invalid_key')

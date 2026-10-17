@@ -41,7 +41,8 @@ def queue_export_record(project_id, draft, job_id, expected):
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
-def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, monkeypatch):
+def test_append_platforms_is_unavailable_in_1_5_8(client, root, monkeypatch):
+    """The old append entry reused saved drafts. 1.5.8 refuses it before any attempt, derive, or render."""
     from backend.services.studio.models import Draft, Scene
     original = Draft(id='base', title='Saved output', scenes=[Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
     store.write('p1', {
@@ -49,24 +50,18 @@ def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, m
         'analysis': {'status': 'completed'},
         'generation': {'auto_start': True, 'status': 'completed', 'branding': {'outro_enabled': True, 'outro_version': 'v1'}},
         'output_variants': [{'id': 'done', 'draft_id': 'base', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'completed', 'render_job_id': 'old'}],
+        'attempts': [{'attempt_id': 't-old', 'kind': 'generation', 'state': 'completed', 'sequence': 1}],
     })
-    calls = []
     monkeypatch.setattr(jobs, 'run_content', lambda *_: pytest.fail('must not rerun content analysis'))
     monkeypatch.setattr(jobs, 'analyze', lambda *_: pytest.fail('must not rerun visual analysis'))
-    def export(pid, draft, *, _variant_identity, **kwargs):
-        calls.append((draft, kwargs))
-        return queue_export_record(pid, draft, 'new-job', _variant_identity)
-    monkeypatch.setattr(jobs, 'export', export)
-    monkeypatch.setattr(jobs, 'executor', Immediate())  # R31 #419: preparation is a background job; run it inline
-
+    monkeypatch.setattr(jobs, 'export', lambda *a, **k: pytest.fail('must not render'))
     response = client.post('/studio/p1/platforms', json={'platforms': ['tiktok']})
-    assert response.status_code == 200, response.text
-    state = client.get('/studio/p1').json()
-    assert len(state['output_variants']) == 2
-    added = next(item for item in state['output_variants'] if item['strategy_id'] == 'tiktok')
-    assert added['draft_id'] != 'base' and added['render_job_id'] == 'new-job'
-    assert state['output_variants'][0]['status'] == 'completed'
-    assert len(calls) == 1 and calls[0][1] == {'brand_outro': True}
+    assert response.status_code == 409, response.text
+    assert response.json()['detail']['error_code'] == 'append_platform_unavailable'
+    state = store.read('p1')
+    assert [item['id'] for item in state['output_variants']] == ['done']
+    assert [item['attempt_id'] for item in state['attempts']] == ['t-old']
+    assert state['generation']['status'] == 'completed'
 
 
 def test_retry_variant_only_requeues_failed_output(client, root, monkeypatch):

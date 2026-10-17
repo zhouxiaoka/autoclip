@@ -14,7 +14,7 @@ const PAGE = path.join(SRC, 'features/studio/StudioResults.tsx')
 const A = 't-aaaaaaaaaaaaaaaa', OLD = 't-0000000000000000', RUN = 'r'.repeat(32), RUN1 = 'q'.repeat(32)
 const variant = { id: 'v1', strategy_id: 'douyin', status: 'completed', draft_id: 'd1', render_job_id: 'j1' }     // round 1's output
 const round1 = { attempt_id: OLD, flow_id: 't-f1f1f1f1f1f1f1f1', sequence: 1, kind: 'generation', trigger: 'initial', state: 'completed', run_id: RUN1, causes: [], summary: { duration_ms: 900 } }
-const append = { attempt_id: A, flow_id: 't-f1f1f1f1f1f1f1f1', sequence: 2, kind: 'generation', trigger: 'append_platform', state: 'open', run_id: RUN, causes: [], summary: {} }
+const append = { attempt_id: A, flow_id: 't-f1f1f1f1f1f1f1f1', sequence: 2, kind: 'generation', trigger: 'retry', retry_of: OLD, state: 'open', run_id: RUN, causes: [], summary: {} }
 // What the workspace GET returns while the append is preparing (the append response itself was lost).
 const openSnapshot = () => ({ material_origin: 'user', drafts: [], events: [], jobs: [], output_variants: [variant],
   generation: { status: 'running', auto_start: true, attempt_id: A, branding: { outro_enabled: true } },
@@ -109,7 +109,7 @@ async function pageFlow(override) {
   const page = await mount(server, override)
   try {
     const result = { gets: page.gets.page }
-    // (a) the open append attempt from the snapshot is adopted: a persisted generation watch bound to its attempt id.
+    // (a) the open retry attempt from the snapshot is adopted: a persisted generation watch bound to its attempt id.
     result.watches = page.tracker.list().map(w => ({ kind: w.kind, attemptId: w.attemptId, settled: !!w.settled }))
     result.persisted = JSON.stringify(Object.fromEntries(Array.from({ length: page.storage.length }, (_, i) => page.storage.key(i)).map(k => [k, page.storage.getItem(k)]))).includes(A)
     await page.pollObserver()                             // the observer watches it: GET /studio/p1 while still open
@@ -129,14 +129,15 @@ async function pageFlow(override) {
   } finally { await page.close() }
 }
 
-test('R31 addition 2 (DOM): the mounted page adopts the open append attempt, the observer watches it to one terminal, and the failure leads to its settings fix', async () => {
+test('retry page (DOM): the mounted page adopts the open retry attempt, the observer watches it to one terminal, and the failure leads to its settings fix', async () => {
   const r = await pageFlow()
   assert.ok(r.gets > 0, 'the page loaded the workspace through its real data hook')
   assert.deepEqual(r.watches, [{ kind: 'studio-generation', attemptId: A, settled: false }])          // (a) adopted from the snapshot
   assert.ok(r.persisted, '(a) the adopted watch is persisted, so a reload keeps watching it')
   assert.deepEqual(r.observedWhileOpen, ['/studio/p1'])                                                   // (a) the observer polls it
   assert.equal(r.finishedWhileOpen, 0)
-  assert.deepEqual(r.finished, [{ attempt_id: A, trigger: 'append_platform', outcome: 'error' }])      // (a) one terminal (failed is reported as the canonical 'error')
+  assert.deepEqual(r.finished, [{ attempt_id: A, trigger: 'retry', outcome: 'error' }])
+  assert.ok(!r.text.includes('追加平台'), 'no append-platform entry on the page')
   assert.ok(r.text.includes('这次制作未完成'), '(b) failure block rendered')
   assert.ok(r.text.includes('API Key 无效或已过期，请到设置里更新后再试'), '(b) the cause from the receipt of run_id ' + RUN)
   assert.ok(!r.text.includes('secret-ish raw text'), '(b) never the raw upstream text')

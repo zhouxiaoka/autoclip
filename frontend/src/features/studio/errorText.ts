@@ -1,8 +1,5 @@
 export const ERROR_CODE_TEXT: Record<string, string> = {
-  append_platform_exists: '该平台已有版本',
-  append_no_auto_output: '没有可自动生成的平台版本',
-  append_retry_pending: '请先确认待处理的重试',
-  append_attempt_running: '上一次制作还没结束，请稍后再追加平台',
+  append_platform_unavailable: '这一版还不能追加平台，请新建一个项目',
 }
 
 /** Human message for a failed API call (FastAPI `detail`, validation array, or error envelope). */
