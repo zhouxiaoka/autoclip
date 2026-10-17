@@ -465,6 +465,10 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
+            # R28 (Dong R27 I450): a status alone is not "model"; the chain is judged HERE, while it exists.
+            from backend.core.failure_attribution import FailureKind, classify_failure
+            if classify_failure(e).kind is FailureKind.MODEL:
+                failed["model_failure"] = True
             return failed
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"
@@ -483,6 +487,10 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
+            # R28 (Dong R27 I450): a status alone is not "model"; the chain is judged HERE, while it exists.
+            from backend.core.failure_attribution import FailureKind, classify_failure
+            if classify_failure(e).kind is FailureKind.MODEL:
+                failed["model_failure"] = True
             return failed
 
 

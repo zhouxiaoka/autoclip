@@ -25,9 +25,9 @@ test('allowlist keeps the three attribution sources and drops anything else', ()
 })
 
 test('pickAttribution carries the record source; a local failure without identity still says local', () => {
-  const own = workflow.pickAttribution([{ provider: 'glm', config_source: 'preset', attribution_source: 'phase' }], true)
+  const own = workflow.pickAttribution({ status: 'failed', provider: 'glm', config_source: 'preset', attribution_source: 'phase' })
   assert.equal(own.attribution_source, 'phase')
-  const local = workflow.pickAttribution([{ attribution_source: 'local', http_status: 503 }], true)
+  const local = workflow.pickAttribution({ status: 'failed', attribution_source: 'local', http_status: 503 })
   assert.equal(local.attribution_source, 'local')
   assert.equal(local.provider, undefined)
   assert.equal(local.http_status, undefined)

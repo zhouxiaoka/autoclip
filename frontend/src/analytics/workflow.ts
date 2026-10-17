@@ -185,31 +185,36 @@ export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string
   for (const own of [analysis?.screening_identity, snapshot.generation?.auto_start ? snapshot.generation.screening_identity : undefined]) {
     if (own && own.provider && own.config_source) return { provider: own.provider, config_source: own.config_source }
   }
-  const own = pickAttribution([analysis], false)
+  const own = pickAttribution(analysis)
   return own.provider ? { provider: own.provider as string, config_source: own.config_source as string } : {}
 }
 
-type Attributed = { attribution_source?: string; provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string; status?: string } | null | undefined
+type Attributed = { attribution_source?: string; provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string; failure_stage?: string; status?: string; outcome?: string } | null | undefined
 const ATTRIBUTION_SOURCES = ['request', 'phase', 'local']
+const FAILED = ['failed', 'partial']
 
-/** R27 #415: THE frontend attribution reader (mirrors backend failure_attribution.read_attribution).
- * Every studio event reads attribution only through here. Takes ONE record: the first one that carries an
- * attribution_source (else the first with a provider/config_source pair), projected whole:
- * identity only as a pair; status/upstream only for a failure and never for ``local``. */
-export function pickAttribution(records: Attributed[], failure: boolean): Record<string, unknown> {
-  const valid = records.filter((r): r is NonNullable<Attributed> => !!r)
-  const own = valid.find(r => ATTRIBUTION_SOURCES.includes(r.attribution_source || ''))
-    || valid.find(r => !!r.provider && !!r.config_source)
-  if (!own) {
-    // Legacy record (no source, no identity): a failure's own status/upstream, attached to no connection.
-    const first = failure ? valid.find(r => r.http_status !== undefined || !!r.upstream_error_type) : undefined
-    return first ? { http_status: first.http_status, upstream_error_type: first.upstream_error_type } : {}
-  }
+/** I451: same rule as backend failure_attribution.is_failed_terminal: status OR outcome failed/partial
+ * (completed + outcome=partial is a valid partial); no status at all -> undecided (null). */
+export function isFailedTerminal(record: Attributed): boolean | null {
+  if (!record) return false
+  if (FAILED.includes(record.status || '') || FAILED.includes(record.outcome || '')) return true
+  return record.status ? false : null
+}
+
+/** R28 #415 (I453): THE frontend attribution reader, the same rules as backend read_attribution. It reads
+ * ONE record's snapshot: the caller picks the record (the event's own terminal), never several.
+ * Identity only as a provider/config_source pair; failure fields only on a failed (or undecided) terminal,
+ * and never status/upstream on ``local``. */
+export function pickAttribution(record: Attributed): Record<string, unknown> {
+  if (!record) return {}
   const out: Record<string, unknown> = {}
-  if (own.provider && own.config_source) Object.assign(out, { provider: own.provider, config_source: own.config_source, model: own.model, base_url_host: own.base_url_host })
-  const source = ATTRIBUTION_SOURCES.includes(own.attribution_source || '') ? own.attribution_source : undefined
+  if (record.provider && record.config_source) Object.assign(out, { provider: record.provider, config_source: record.config_source, model: record.model, base_url_host: record.base_url_host })
+  const source = ATTRIBUTION_SOURCES.includes(record.attribution_source || '') ? record.attribution_source : undefined
   if (source) out.attribution_source = source
-  if (failure && source !== 'local') { out.http_status = own.http_status; out.upstream_error_type = own.upstream_error_type }
+  if (isFailedTerminal(record) !== false) {
+    out.failure_stage = record.failure_stage
+    if (source !== 'local') { out.http_status = record.http_status; out.upstream_error_type = record.upstream_error_type }
+  }
   return out
 }
 
@@ -424,8 +429,8 @@ export class WorkflowTracker {
     } else if (w.kind === 'studio-screen') {
       // R27 I420: the screen event carries the analysis record's attribution (incl. attribution_source) via
       // pickAttribution; the identity is still screening's own.
-      const { provider: _p, config_source: _c, model: _m, base_url_host: _h, ...screenAttribution } = pickAttribution([snapshot.analysis], snapshot.analysis?.status === 'failed')
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, ...screenAttribution, ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
+      const { provider: _p, config_source: _c, model: _m, base_url_host: _h, ...screenAttribution } = pickAttribution(snapshot.analysis)
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, ...screenAttribution, ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.
@@ -444,9 +449,8 @@ export class WorkflowTracker {
       const unfinished = ['failed', 'partial'].includes(outcome || '')
       const run = snapshot.generation, analysis = snapshot.analysis
       details = { ...generationSummary(snapshot), error_code: unfinished ? run?.error_code || analysis?.error_code : undefined,
-        failure_stage: unfinished ? run?.failure_stage || analysis?.failure_stage : undefined,
         shutdown_kind: unfinished ? run?.shutdown_kind || analysis?.shutdown_kind : undefined,
-        ...pickAttribution([run, analysis], unfinished),
+        ...pickAttribution(run),  // I453: the generation's own record only
         billable_calls_before_failure: unfinished ? run?.billable_calls_before_failure ?? analysis?.billable_calls_before_failure : undefined,
         retry_count: run?.retry_count ?? analysis?.retry_count,
         degrade_count: run?.degrade_count ?? analysis?.degrade_count,
@@ -459,8 +463,8 @@ export class WorkflowTracker {
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status
       // R27 #415: attribution comes from pickAttribution, never from spreading the raw record.
-      const { attribution_source: _s, provider: _p, config_source: _c, model: _m, base_url_host: _h, http_status: _hs, upstream_error_type: _u, ...rest } = snapshot.analysis!
-      details = { ...rest, ...pickAttribution([snapshot.analysis], snapshot.analysis!.status === 'failed'), analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }
+      const { attribution_source: _s, provider: _p, config_source: _c, model: _m, base_url_host: _h, http_status: _hs, upstream_error_type: _u, failure_stage: _f, ...rest } = snapshot.analysis!
+      details = { ...rest, ...pickAttribution(snapshot.analysis), analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }
     }
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))

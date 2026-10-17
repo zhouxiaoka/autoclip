@@ -62,11 +62,41 @@ test('production reads through pickAttribution: local status is dropped, half id
   assert.equal(props.upstream_error_type, undefined)
 })
 
-test('pickAttribution mirrors read_attribution', () => {
-  assert.deepEqual(JSON.parse(JSON.stringify(workflow.pickAttribution([{ attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503 }], true))),
+test('pickAttribution mirrors read_attribution (one record)', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(workflow.pickAttribution({ status: 'failed', attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503 }))),
     { provider: 'kimi', config_source: 'customized', attribution_source: 'request', http_status: 503 })
-  assert.deepEqual(workflow.pickAttribution([{ attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503 }], false).http_status, undefined)
+  assert.equal(workflow.pickAttribution({ status: 'completed', attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503 }).http_status, undefined)
   assert.equal(workflow.attributionOf, undefined, 'the old multi-record reader is gone')
+  assert.equal(workflow.pickAttribution.length, 1, 'one record, no list')
+})
+
+test('I451: completed + outcome=partial keeps its failure fields; no status is undecided (kept)', () => {
+  const partial = workflow.pickAttribution({ status: 'completed', outcome: 'partial', attribution_source: 'phase', provider: 'glm', config_source: 'preset', failure_stage: 'render', http_status: 503 })
+  assert.equal(partial.failure_stage, 'render'); assert.equal(partial.http_status, 503)
+  const bare = workflow.pickAttribution({ attribution_source: 'phase', http_status: 502 })
+  assert.equal(bare.http_status, 502)
+  assert.equal(workflow.isFailedTerminal({ status: 'completed' }), false)
+  assert.equal(workflow.isFailedTerminal({}), null)
+})
+
+test('I453: generation never borrows the analysis record (no source_blocked + kimi + 503 mix)', () => {
+  const events = observe('studio-generation', 'p1', {
+    generation: { status: 'failed', error_code: 'source_blocked', failure_stage: 'ingest' },
+    analysis: { status: 'failed', provider: 'kimi', config_source: 'customized', attribution_source: 'request', http_status: 503, upstream_error_type: 'upstream_unavailable' },
+    plan: { id: 'plan', mode: 'ai' },
+  })
+  const props = events.find(e => e.event === 'studio_generation_finished').props
+  assert.equal(props.provider, undefined); assert.equal(props.http_status, undefined); assert.equal(props.upstream_error_type, undefined)
+  assert.equal(props.failure_stage, 'ingest')
+})
+
+test('I451: a completed+partial production keeps stage/status in its event', () => {
+  const events = observe('studio-production', 'plan', {
+    plan: { id: 'plan', confirmed_analysis: 'subtitle' },
+    analysis: { status: 'completed', outcome: 'partial', failure_stage: 'analyze', attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 503, upstream_error_type: 'upstream_unavailable' },
+  }, 'p1')
+  const props = events.find(e => e.event === 'studio_production_finished').props
+  assert.equal(props.failure_stage, 'analyze'); assert.equal(props.http_status, 503)
 })
 
 test('I424: a store_lock_timeout failure shows the i18n key', () => {

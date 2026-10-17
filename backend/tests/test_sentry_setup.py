@@ -161,11 +161,12 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
     assert 'private' not in json.dumps(timeout)
 
 
-class _ProviderStatusError(Exception):
-    """Mimics openai.APIStatusError: the HTTP status lives on `status_code`."""
+class _ProviderStatusError(__import__("openai").APIStatusError):
+    """A provider answer (openai.APIStatusError): the HTTP status lives on `status_code`."""
+    # R28 (Dong R27 I450): a status alone no longer means 'model'; a provider answer is an openai.APIError.
 
     def __init__(self, message, status_code):
-        super().__init__(message)
+        Exception.__init__(self, message)
         self.status_code = status_code
 
 

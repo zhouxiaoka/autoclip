@@ -500,34 +500,31 @@ def failure_in_hand(error: BaseException | None):
         _held_failure.reset(token)
 
 
-def attribution(error: BaseException | None = None) -> dict[str, Any]:
-    """R27 #415: the failure-attribution snapshot (``failure_attribution.FailureAttribution``) as fields.
+def failure_now() -> BaseException | None:
+    """The failure in hand: the exception being handled, else one held past its except (#397)."""
+    return sys.exc_info()[1] or _held_failure.get()
 
-    ``classify_failure`` decides (local -> model -> request record); this only supplies the identities:
-    MODEL with a record -> that request, whole (``request``); MODEL without one, or no error -> the
-    identity this run's phase froze (``phase``); LOCAL -> the phase identity, never an upstream status
-    (``local``). Never the latest/biggest-seq request, never settings."""
-    from backend.core.failure_attribution import (FailureAttribution, FailureKind, SOURCE_LOCAL,
-                                                  SOURCE_PHASE, SOURCE_REQUEST, classify_failure)
+
+def attribution_snapshot(error: BaseException | None = None, *, failure_stage: str | None = None,
+                         start_identity: dict | None = None):
+    """R28 #415: this run's failure-attribution snapshot, from THE factory
+    (``failure_attribution.build_attribution``); this only supplies the error and the frozen phase."""
+    from backend.core.failure_attribution import build_attribution
     if error is None:
-        error = sys.exc_info()[1] or _held_failure.get()  # R26 #402: 3.10; #397: a failure held past its except
-    verdict = classify_failure(error)
-    if verdict.kind is FailureKind.MODEL and verdict.record is not None:
-        found = verdict.record.attribution()
-        if found:
-            return FailureAttribution.build(SOURCE_REQUEST, found, http_status=found.get("http_status"),
-                                            upstream_error_type=found.get("upstream_error_type"),
-                                            failure_stage=found.get("failure_stage")).to_fields()
+        error = failure_now()  # R26 #402: 3.10; #397: a failure held past its except
     acc = _run_acc.get()
     phase: dict[str, Any] = {}
     if acc is not None:
         with acc.lock:
             phase = dict(acc.phase_identity)
-    if verdict.kind is FailureKind.LOCAL:
-        return FailureAttribution.build(SOURCE_LOCAL, phase).to_fields()
-    if not phase:
-        return {}
-    return FailureAttribution.build(SOURCE_PHASE, phase).to_fields()
+    return build_attribution(error, phase_identity=phase, start_identity=start_identity,
+                             failure_stage=failure_stage)
+
+
+def attribution(error: BaseException | None = None) -> dict[str, Any]:
+    """The snapshot as fields ({} when there is none)."""
+    snap = attribution_snapshot(error)
+    return snap.to_fields() if snap is not None else {}
 
 
 from backend.core.failure_attribution import MODEL_ERROR_CODES  # noqa: E402,F401 - re-exported
@@ -544,17 +541,14 @@ def run_snapshot(project_id: str | None = None, *, error: BaseException | None =
     """Sanitized run-level fields for generation / production / Sentry tags. Identity fields come
     whole from ``attribution`` (R25 #415); settings are never read."""
     acc = _run_acc.get()
-    found = attribution(error)
-    provider, source = found.get("provider"), found.get("config_source")
-    model, host = _safe_model(found.get("model")), found.get("base_url_host")
-    status, upstream = found.get("http_status"), found.get("upstream_error_type")
+    snap = attribution_snapshot(error)
     raw: dict[str, Any] = {
-        "provider": provider,
-        "model": model,
-        "base_url_host": host,
-        "config_source": source,
-        "http_status": status,
-        "upstream_error_type": upstream,
+        "provider": snap.provider if snap else None,
+        "model": _safe_model(snap.model) if snap else None,
+        "base_url_host": snap.base_url_host if snap else None,
+        "config_source": snap.config_source if snap else None,
+        "http_status": snap.http_status if snap else None,
+        "upstream_error_type": snap.upstream_error_type if snap else None,
         "billable_calls_before_failure": acc.billable if acc else 0,
     }
     # Project usage is historical; track_run's accumulator belongs to this attempt only.
@@ -580,17 +574,15 @@ def run_snapshot(project_id: str | None = None, *, error: BaseException | None =
     if acc is not None:
         raw.update(llm_calls=calls, prompt_tokens=prompt, completion_tokens=completion,
                    reasoning_tokens=acc.reasoning_tokens, retry_count=retry, degrade_count=degrade)
-    if found.get("failure_stage"):
-        raw["failure_stage"] = normalize_failure_stage(found["failure_stage"])
+    if snap is not None and snap.failure_stage:
+        raw["failure_stage"] = normalize_failure_stage(snap.failure_stage)
     out = schema.sanitize_run_properties(raw)
     out.pop("success_rate_schema_version", None)
     if not (out.get("provider") and out.get("config_source")):
         for key in ("provider", "config_source", "model", "base_url_host"):
             out.pop(key, None)  # R25 #415: a pair or nothing
-        if with_source and found.get("attribution_source") == ATTRIBUTION_SOURCE_LOCAL:
-            out["attribution_source"] = ATTRIBUTION_SOURCE_LOCAL  # R26 #392: nobody upstream is blamed
-    elif with_source and found.get("attribution_source"):
-        out["attribution_source"] = found["attribution_source"]
+    if with_source and snap is not None:
+        out["attribution_source"] = snap.attribution_source
     return {key: value for key, value in out.items()
             if value not in (None, "", 0) or key == "billable_calls_before_failure"
             or (acc is not None and value == 0)}
@@ -628,14 +620,15 @@ def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, 
     """Allowlisted string tags only. R25 #415: read the failed request's record whole; the exception's
     own status is never pasted onto another request's identity."""
     tags: dict[str, str] = {}
-    snapshot = run_snapshot(error=error, with_source=True)
-    stage = normalize_failure_stage(snapshot.get("failure_stage") or phase)
-    if snapshot.get("attribution_source") in ATTRIBUTION_SOURCES:
-        tags["attribution_source"] = snapshot["attribution_source"]  # R26 #392
+    snap = attribution_snapshot(error)  # R28: Sentry reads the one snapshot object
+    stage = normalize_failure_stage((snap.failure_stage if snap else None) or phase)
+    if snap is not None:
+        tags["attribution_source"] = snap.attribution_source  # R26 #392
     if stage:
         tags["failure_stage"] = stage
-    for key in ("provider", "upstream_error_type", "base_url_host", "model"):
-        value = snapshot.get(key)
+    values = {"provider": snap.provider, "upstream_error_type": snap.upstream_error_type,
+              "base_url_host": snap.base_url_host, "model": snap.model} if snap else {}
+    for key, value in values.items():
         if not isinstance(value, str) or not value:
             continue
         if key == "model" and (not schema.MODEL_PATTERN.fullmatch(value) or "sk-" in value.lower()):
@@ -648,7 +641,7 @@ def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, 
         if key == "upstream_error_type" and schema.sanitize_upstream_error_type(value) is None:
             continue
         tags[key] = value
-    status = snapshot.get("http_status")
+    status = snap.http_status if snap else None
     if isinstance(status, int) and 400 <= status <= 599:
         tags["http_status"] = str(status)
     return tags

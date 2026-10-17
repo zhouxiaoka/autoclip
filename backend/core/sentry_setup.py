@@ -64,34 +64,19 @@ _PIPELINE_FAILURE_STAGES = {"INGEST": "ingest", "SUBTITLE": "subtitle", "ANALYZE
 
 
 def studio_failure_context(error: Exception, phase: str) -> dict:
-    """Where an automatic run failed and the provider HTTP status, without messages or URLs."""
+    """Where an automatic run failed and, for a MODEL failure only, the provider HTTP status/upstream type
+    (I455), without messages or URLs. Built by THE snapshot factory (failure_attribution.build_attribution)."""
     from backend.services.studio.intelligence import VisionRequestError
-    from backend.pipeline.failures import PipelineFailure, http_status_of
-    from backend.core.llm_telemetry import classify_run_upstream
+    from backend.pipeline.failures import PipelineFailure
+    from backend.core.failure_attribution import build_attribution
     stage = phase
     if isinstance(error, PipelineFailure):
         stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
     elif isinstance(error, VisionRequestError) and phase != "screening":
         stage = "vision"
-    # R27 I416: ONE classifier decides whether this is a provider failure; only then an upstream type.
-    # The HTTP status is the job's own (a site 412 stays on the job); a local snapshot drops it on write.
-    from backend.core.failure_attribution import FailureKind, classify_failure
-    result = {"failure_stage": stage}
-    status = http_status_of(error)
-    if status is not None:
-        result["http_status"] = status
-    if classify_failure(error).kind is FailureKind.MODEL:
-        kind = classify_run_upstream(error, status)
-        if kind:
-            result["upstream_error_type"] = kind
-    return result
-    status = http_status_of(error)
-    if status is not None:
-        result["http_status"] = status
-    kind = classify_run_upstream(error, status)
-    if kind:
-        result["upstream_error_type"] = kind
-    return result
+    snap = build_attribution(error, failure_stage=stage)
+    fields = snap.to_fields() if snap is not None else {}
+    return {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
 
 
 PRIVACY_FILE = "privacy.json"

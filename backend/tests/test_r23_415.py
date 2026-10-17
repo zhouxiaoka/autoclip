@@ -8,10 +8,17 @@ from backend.core import llm_emit
 from backend.core.llm_manager import LLMManager
 from backend.services import ai_model_settings as ai
 
+
+def _provider_down():
+    """R28 I450: a provider failure is a request that was SENT and answered with an error (a status)."""
+    return type('ProviderDown', (RuntimeError,), {'status_code': 500})('fixture')
+
+
 TEXT = {'provider': 'deepseek', 'config_source': 'preset'}
 
 
 @pytest.fixture(autouse=True)
+
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
@@ -47,7 +54,7 @@ def _failing_send(monkeypatch, provider, during=None):
     def create(**_k):
         if during:
             during()
-        raise RuntimeError('fixture')
+        raise _provider_down()
     monkeypatch.setattr(provider.client.chat.completions, 'create', create)
 
 

@@ -414,7 +414,7 @@ def test_failed_store_write_always_has_error_code_and_failure_stage(tmp_path, mo
 
 def test_source_blocked_is_not_an_upstream_model_error():
     error = PipelineFailure("INGEST", "hint", code="source_blocked", http_status=403)
-    assert studio_failure_context(error, "screening") == {"failure_stage": "ingest", "http_status": 403}
+    assert studio_failure_context(error, "screening") == {"failure_stage": "ingest"}  # R28 I450/I455: local carries no status
 
 
 @pytest.mark.stdlib_only

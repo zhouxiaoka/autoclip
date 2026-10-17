@@ -12,6 +12,12 @@ from backend.services import ai_model_settings as ai
 from backend.services.studio import failure_identity, jobs, shutdown_marker, store
 from backend.services.studio.models import ImportOptions
 
+
+def _provider_down():
+    """R28 I450: a provider failure is a request that was SENT and answered with an error (a status)."""
+    return type('ProviderDown', (RuntimeError,), {'status_code': 500})('fixture')
+
+
 TEXT = {'provider': 'deepseek', 'config_source': 'preset'}
 EYES = {'provider': 'kimi', 'config_source': 'customized'}
 OTHER = {'provider': 'glm', 'config_source': 'customized'}
@@ -19,6 +25,7 @@ A, B, C = 'a' * 32, 'b' * 32, 'c' * 32
 
 
 @pytest.fixture(autouse=True)
+
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
@@ -134,7 +141,7 @@ def test_223_snapshot_and_sentry_before_any_request_use_the_phase_identity(autom
     def no_request_yet(*_):
         seen['snapshot'] = llm_emit.run_snapshot()
         seen['tags'] = llm_emit.sentry_tags_for_error(None, 'production')
-        raise RuntimeError('fixture')
+        raise _provider_down()
     monkeypatch.setattr(jobs, '_content_drafts', no_request_yet)
     fn(*args, **kwargs)
     assert _ident(seen['snapshot']) == TEXT
@@ -192,7 +199,7 @@ class _TextProvider:
 
 def _text_request():
     def impl(*_a, **_k):
-        raise RuntimeError('fixture')
+        raise _provider_down()
     with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError) as caught:  # R23: route identity
         llm_emit.observe_provider_call(_TextProvider(), impl, 'p')
     return caught.value
@@ -213,7 +220,7 @@ def test_195_text_identity_is_read_before_the_request_is_sent(posted):
 
     def impl(*_a, **_k):
         _settings(analysis='other')
-        raise RuntimeError('fixture')
+        raise _provider_down()
     with llm_emit.track_run():
         with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError) as caught:
             llm_emit.observe_provider_call(_TextProvider(), impl, 'p')

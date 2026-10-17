@@ -237,6 +237,7 @@ def _observe_worker_write(path, previous, data):
 def _apply_read_receipts(path, data, receipts=None):
     changed = _apply_finished_covers(path, data)
     settle = False
+    receipt_failed = False  # I454: a render/preparation receipt failed something
     for expected, job_id in _pending_links.get(path, {}).items():
         linked = bind_render(data, expected, job_id)
         changed = changed or linked
@@ -254,7 +255,7 @@ def _apply_read_receipts(path, data, receipts=None):
             if job:
                 for row in data['output_variants']:
                     if row.get('render_job_id') == identity[1] and _reflect_render(row, job):
-                        changed = settle = True
+                        changed = settle = receipt_failed = True
         elif kind == 'cover':
             variant = next((row for row in data['output_variants'] if row['id'] == identity[1]), {})
             cover = variant.get('cover_job') or {}
@@ -268,24 +269,32 @@ def _apply_read_receipts(path, data, receipts=None):
                 analysis.update(status='failed', error=message, error_code=code)
                 # R27 I418: the worker never got to write its failure; a receipt is a LOCAL failure, written
                 # as the one snapshot (start identity kept, no upstream status).
-                write_attribution(analysis, FailureAttribution.build('local', analysis, failure_stage=stage))
+                write_attribution(analysis, build_attribution(local=True, start_identity=analysis, failure_stage=stage))
                 generation = data.get('generation') or {}
                 if generation.get('status') in ('screening', 'production'):
                     generation.update(status='failed', error=message, error_code=code, finished_at=now())
-                    write_attribution(generation, FailureAttribution.build('local', generation, failure_stage=stage))
+                    write_attribution(generation, build_attribution(local=True, start_identity=generation, failure_stage=stage))
                 changed = True
         elif kind == 'preparation':
             variant = next((row for row in data['output_variants'] if row['id'] == identity[1]), {})
             if variant.get('preparation_run_id') == identity[2] and variant.get('status') == 'preparing':
                 variant.update(status='failed', error=message, error_code=code, needs_prepare=True)
-                changed = settle = True
+                changed = settle = receipt_failed = True
         for expected in receipt['pending'].values():
             variant = next((row for row in data['output_variants'] if row['id'] == expected[0]), {})
             if variant_identity(variant) == expected and variant.get('status') == 'queued' and not variant.get('render_job_id'):
                 variant.update(status='failed', error=message, error_code=code)
-                changed = settle = True
+                changed = settle = receipt_failed = True
     if settle and data.get('generation'):
+        generation = data['generation']
+        was_failed = is_failed_terminal(generation)
         settle_generation(data)
+        if receipt_failed and not was_failed and is_failed_terminal(generation):
+            # R28 I454: a render/preparation that could not write its failure is a LOCAL failure of the
+            # generation too, written as the one snapshot (start identity kept, no upstream status).
+            for record in (generation, data.get('analysis')):  # settle wrote both terminals
+                if isinstance(record, dict) and is_failed_terminal(record):
+                    write_attribution(record, build_attribution(local=True, start_identity={'failure_stage': 'render', **record}))
     return changed
 
 
@@ -915,61 +924,46 @@ def _ensure_failure_identity(data):
 
 
 from backend.core.failure_attribution import (  # noqa: E402 - R27 #415: the one attribution rule
-    ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, FailureAttribution,
-    project_attribution, read_attribution, write_attribution)
+    ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, SNAPSHOT_FIELDS, FailureAttribution, build_attribution,
+    has_snapshot, is_failed_terminal, project_attribution, read_attribution, write_attribution)
 
 
 def _paired(record):
     return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
 
 
-def clear_failure_fields(record):
-    """R27 I417: a NEW failure starts from no failure fields/source (identity stays for the snapshot)."""
-    for key in (*FAILURE_FIELDS, 'attribution_source'):
-        record.pop(key, None)
+def _apply_attribution(record, failed, prior_snapshot):
+    """R28 #415: the failure attribution is a write-once snapshot, replaced whole (no merging, no inference
+    from field values, I452).
 
-
-def _apply_attribution(record, snapshot, failed, new_failure, prior=None):
-    """R27 #415: the failure attribution is a write-once snapshot.
-
-    - a NEW failure (this record was not already this failure): one ``FailureAttribution`` built from the
-      run snapshot's source/identity (+ for request: that request's status; for phase: the job's own
-      status of this error, which studio_failure_context just wrote; for local: none) replaces the group
-      whole (``write_attribution``). No merging with anything older (I417).
-    - the same failure written again: the snapshot already stored stays untouched (write once).
+    - failed, and the stored record was already THIS failure (``prior_snapshot``): that frozen snapshot is
+      copied back whole;
+    - failed, a new failure with the error in hand: the snapshot THE factory builds now (error, phase
+      identity, the job's own failure stage, the attempt's start identity for local) replaces the group;
+    - failed with no error in hand (a receipt that already wrote its own snapshot, a legacy record, a
+      later unrelated write): the stored group stays exactly as it is;
     - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
-    source = snapshot.get('attribution_source')
+    from backend.core.llm_emit import attribution_snapshot, failure_now
     if failed:
-        if not new_failure:
+        if prior_snapshot:
+            write_attribution(record, FailureAttribution.from_fields(prior_snapshot))
             return
-        if source not in ('request', 'phase', 'local'):
-            for key in FAILURE_FIELDS:  # nothing attributed: only drop explicit "absent" markers
-                if record.get(key) is None:
-                    record.pop(key, None)
+        if failure_now() is None:
             return
-        own = read_attribution({**record, 'attribution_source': None})
-        identity = snapshot if snapshot.get('provider') and snapshot.get('config_source') else own
-        if source == 'request':
-            status, upstream = snapshot.get('http_status'), snapshot.get('upstream_error_type')
-        else:
-            status, upstream = own.get('http_status'), own.get('upstream_error_type')
-            older = read_attribution(prior) if isinstance(prior, dict) else {}
-            if older.get('attribution_source') == 'request' and (status, upstream) == (older.get('http_status'), older.get('upstream_error_type')):
-                status = upstream = None  # I417: the older request's status, left on the record, is not this failure's
-        stage = record.get('failure_stage') or snapshot.get('failure_stage')  # the job's own stage wins
-        write_attribution(record, FailureAttribution.build(
-            source, identity, http_status=status, upstream_error_type=upstream, failure_stage=stage))
+        snap = attribution_snapshot(start_identity=record)  # the job's own stage rides on the record
+        if snap is not None:
+            write_attribution(record, snap)
         return
     for key in FAILURE_FIELDS:
         record.pop(key, None)
-    if not _paired(record):
-        for key in IDENTITY_FIELDS:
-            record.pop(key, None)
-        if source and snapshot.get('provider') and snapshot.get('config_source'):
-            for key in IDENTITY_FIELDS:
-                if snapshot.get(key) not in (None, ''):
-                    record[key] = snapshot[key]
-            record['attribution_source'] = source
+    if _paired(record):
+        return
+    for key in IDENTITY_FIELDS:
+        record.pop(key, None)
+    snap = attribution_snapshot()
+    if snap is not None and snap.provider:
+        record.update({k: v for k, v in snap.to_fields().items() if k in IDENTITY_FIELDS})
+        record['attribution_source'] = snap.attribution_source
 
 
 def _attach_run_telemetry(data, project_id, previous):
@@ -998,10 +992,11 @@ def _attach_run_telemetry(data, project_id, previous):
             prior_identity = prior.get(identity_key)
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
-        failed = record.get('status') in ('failed', 'partial')
-        same_failure = (failed and prior.get('status') in ('failed', 'partial') and prior_identity == identity
-                        and prior.get('error_code') == record.get('error_code'))
-        _apply_attribution(record, snapshot, failed, not same_failure, prior)
+        failed = bool(is_failed_terminal(record))
+        frozen = None
+        if failed and is_failed_terminal(prior) and prior_identity == identity and prior.get('error_code') == record.get('error_code'):
+            frozen = read_attribution(prior) if has_snapshot(prior) else None  # this failure, already written
+        _apply_attribution(record, failed, frozen)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue

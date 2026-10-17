@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from backend.pipeline.failures import PipelineFailure
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -56,9 +58,16 @@ def test_95_snapshot_provider_never_overwrites_start_identity(monkeypatch):
 
 def test_95_snapshot_still_fills_identity_when_start_had_none(monkeypatch):
     # R25 #415: the identity fills whole from ONE attribution (a lone provider would read as empty).
-    _snapshot(monkeypatch, {'provider': 'kimi', 'config_source': 'customized', 'attribution_source': 'phase'})
+    # R28: the store takes the snapshot from THE factory (llm_emit.attribution_snapshot), with the error in hand.
+    from backend.core import llm_emit
+    from backend.core.failure_attribution import build_attribution
+    monkeypatch.setattr(llm_emit, 'attribution_snapshot', lambda *a, **k: build_attribution(
+        PipelineFailure('ANALYZE', 'slow', code='timeout'), phase_identity={'provider': 'kimi', 'config_source': 'customized'}))
     _project('p95b', {'id': 'p95b', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r'}})
-    store.change('p95b', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
+    try:
+        raise PipelineFailure('ANALYZE', 'slow', code='timeout')
+    except PipelineFailure:
+        store.change('p95b', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
     analysis = store.read('p95b')['analysis']
     assert analysis['provider'] == 'kimi' and 'called_provider' not in analysis
 

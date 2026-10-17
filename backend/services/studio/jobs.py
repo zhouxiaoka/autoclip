@@ -497,9 +497,11 @@ def run_content(project_id, video):
         # HTTP status in the result dict and it is carried back here (RC156 Win QA #1).
         status = failure.get('http_status')
         status = status if type(status) is int and 400 <= status <= 599 else None
-        if failure.get('error_code') or failure.get('stage'):
+        # R28 (Dong R27 I450): the adapter judged the live chain; an uncoded provider failure keeps "model".
+        code = failure.get('error_code') or ('provider_error' if failure.get('model_failure') is True else '')
+        if code or failure.get('stage'):
             from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '', http_status=status)
+            raise PipelineFailure(failure.get('stage', ''), message, code=code, http_status=status)
         error = RuntimeError(message)
         if status is not None:
             error.http_status = status
@@ -1176,7 +1178,6 @@ def _auto_generate(project_id, plan):
         def fail(data):
             context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))  # frozen at start
             if data.get('generation'):
-                store.clear_failure_fields(data['generation'])  # R27 I417: a new failure never inherits old status/upstream
                 data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
             # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
             from backend.services.studio.failure_identity import carry_screening
@@ -1654,7 +1655,6 @@ def _inspect(project_id, options, url, browser):
                     failure[SCREENING_KEY] = screening
                 data['analysis'] = failure
                 if (data.get('generation') or {}).get('auto_start'):
-                    store.clear_failure_fields(data['generation'])  # R27 I417
                     data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
             store.change(project_id, fail_screening)
             mark_project(project_id, 'failed')

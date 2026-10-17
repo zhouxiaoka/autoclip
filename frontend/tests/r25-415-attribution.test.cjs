@@ -24,8 +24,10 @@ test('#332 generation_finished takes provider/model/host/status from ONE record,
     generation: { status: 'failed', provider: 'glm', model: 'glm-4', base_url_host: 'other.example', http_status: 503 },
     analysis: { status: 'failed', phase: 'production', provider: 'kimi', config_source: 'preset', model: 'kimi-k2', base_url_host: 'api.moonshot.cn', http_status: 429, upstream_error_type: 'rate_limited' },
   })
+  // R28 I453 (Dong): the generation event reads ONLY the generation's own record; its half identity is no
+  // identity and nothing is borrowed from analysis (no glm-status + kimi-identity mix either).
   assert.deepEqual([props.provider, props.config_source, props.model, props.base_url_host, props.http_status, props.upstream_error_type],
-    ['kimi', 'preset', 'kimi-k2', 'api.moonshot.cn', 429, 'rate_limited'])
+    [undefined, undefined, undefined, undefined, 503, undefined])
 })
 
 test('#332 an unpaired legacy screening identity reads as empty, not half an identity', () => {

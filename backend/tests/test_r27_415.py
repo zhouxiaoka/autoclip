@@ -64,7 +64,7 @@ def test_i416_no_type_name_strings_and_one_classifier():
     emit = (ROOT / 'backend/core/llm_emit.py').read_text(encoding='utf-8')
     assert '"PipelineFailure", "VisionRequestError"' not in emit
     sentry = (ROOT / 'backend/core/sentry_setup.py').read_text(encoding='utf-8')
-    assert 'skip_upstream' not in sentry and 'classify_failure' in sentry
+    assert 'skip_upstream' not in sentry and 'build_attribution' in sentry
     assert not re.search(r'^\s*(from|import)\s+\S*llm_emit', source, re.M)  # no cycle: sentry_setup -> failure_attribution never pulls llm_emit
 
     class PipelineFailure2(Exception):
@@ -93,7 +93,7 @@ def test_snapshot_local_with_upstream_fields_raises_explicitly():
         FailureAttribution('local', upstream_error_type='upstream_unavailable')
     with pytest.raises(ValueError):
         FailureAttribution('phase', provider='glm')  # half identity
-    built = FailureAttribution.build('local', {**GLM, 'model': 'glm-4'}, http_status=503, upstream_error_type='x')
+    built = FailureAttribution._make('local', {**GLM, 'model': 'glm-4'}, http_status=503, upstream_error_type='x')
     assert 'http_status' not in built.to_fields() and built.to_fields()['attribution_source'] == 'local'
 
 
@@ -106,7 +106,7 @@ def test_write_attribution_replaces_the_group_whole():
     from backend.core.failure_attribution import FailureAttribution, write_attribution
     record = {'status': 'failed', **KIMI, 'model': 'kimi-k2', 'http_status': 503,
               'upstream_error_type': 'upstream_unavailable', 'attribution_source': 'request', 'error_code': 'x'}
-    write_attribution(record, FailureAttribution.build('phase', {**GLM}, failure_stage='analyze'))
+    write_attribution(record, FailureAttribution._make('phase', {**GLM}, failure_stage='analyze'))
     assert record == {'status': 'failed', 'error_code': 'x', **GLM, 'failure_stage': 'analyze',
                       'attribution_source': 'phase'}
 
@@ -133,13 +133,12 @@ def test_i417_new_phase_failure_drops_the_older_request_status():
     assert 'http_status' not in analysis and 'upstream_error_type' not in analysis, analysis
 
 
-def test_i417_jobs_clear_old_failure_fields_before_a_new_generation_failure():
-    record = {'status': 'failed', 'http_status': 503, 'upstream_error_type': 'upstream_unavailable',
-              'attribution_source': 'request', **KIMI}
-    store.clear_failure_fields(record)
-    assert record == {'status': 'failed', **KIMI}
+def test_i452_one_mechanism_no_jobs_clearing_no_value_inference():
+    """R28 I452: old data is handled only by wholesale snapshot replacement."""
+    store_src = (ROOT / 'backend/services/studio/store.py').read_text(encoding='utf-8')
     jobs = (ROOT / 'backend/services/studio/jobs.py').read_text(encoding='utf-8')
-    assert jobs.count('store.clear_failure_fields(data[\'generation\'])') == 2
+    assert 'clear_failure_fields' not in store_src + jobs
+    assert "older.get('attribution_source') == 'request'" not in store_src
 
 
 # --- I418: lock-timeout receipt recovery writes local -------------------------------------------------
@@ -194,36 +193,103 @@ def test_history_summary_comes_from_read_attribution():
     assert summary['attribution_source'] == 'local' and 'http_status' not in summary
 
 
-# --- the only readers: grep guard ---------------------------------------------------------------------
+# --- the only readers: guard (R28 I456: every snapshot field, .get and [] reads, any variable name) ------
 
-_PY_READ = re.compile(r"""\b(record|analysis|generation|terminal|prior|previous|row|summary|run)\s*(\.get\(|\[)\s*['"](attribution_source|http_status|upstream_error_type)['"]\s*(\)|\](?!\s*=[^=]))""")
-_TS_READ = re.compile(r"""\b(analysis|generation|run|record|terminal|workspace)\??(!)?\??\.(attribution_source|upstream_error_type|http_status)\b""")
+import ast  # noqa: E402
+
+SNAPSHOT = {'provider', 'config_source', 'model', 'base_url_host', 'http_status', 'upstream_error_type',
+            'failure_stage', 'attribution_source'}
+# Functions that read these names but are NOT readers of a failure-attribution snapshot, each with why.
+# (Exempt by location, never by variable name.)
+NOT_SNAPSHOT_READERS = {
+    ('backend/core/llm_emit.py', '_remember_run'): 'builds the request record from the request event',
+    ('backend/core/llm_emit.py', '_request_properties'): 'builds the llm_request_finished event',
+    ('backend/core/llm_emit.py', 'request_finished'): 'request event context',
+    ('backend/core/llm_emit.py', 'emit_vision_request'): 'request event context',
+    ('backend/core/llm_emit.py', 'emit_asr_readiness_checked'): 'asr probe event',
+    ('backend/core/llm_emit.py', 'sent_vision_identity'): 'vision settings -> sent identity',
+    ('backend/core/llm_emit.py', '_provider_label'): 'provider object label',
+    ('backend/core/llm_emit.py', 'run_snapshot'): 'sanitized pair check on the already built snapshot fields',
+    ('backend/core/sentry_setup.py', 'before_send'): 'Sentry tag sanitizer on outgoing tags',
+    ('backend/services/studio/intelligence.py', 'vision_call'): 'vision settings model',
+    ('backend/services/studio/intelligence.py', 'visual_config'): 'vision settings model',
+    ('backend/services/studio/jobs.py', 'run_content'): "the adapter result's HTTP status -> PipelineFailure",
+    ('backend/services/studio/store.py', '_ensure_failure_identity'): "normalizes the job's own error_code/stage",
+    ('backend/services/studio/store.py', 'fill'): "normalizes the job's own error_code/stage",
+    ('backend/services/studio/vision_settings.py', '*'): 'vision settings',
+    ('backend/api/v1/settings.py', 'get_settings'): 'model settings page',
+    ('backend/api/v1/settings.py', 'get_current_provider'): 'model settings page',
+}
+
+
+def _py_reads(path):
+    rel = str(path.relative_to(ROOT))
+    out = []
+    for fn in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if (rel, fn.name) in NOT_SNAPSHOT_READERS or (rel, '*') in NOT_SNAPSHOT_READERS:
+            continue
+        for node in ast.walk(fn):
+            key = None
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'get'
+                    and node.args and isinstance(node.args[0], ast.Constant)):
+                key = node.args[0].value
+            elif (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load)
+                  and isinstance(node.slice, ast.Constant)):
+                key = node.slice.value
+            if key in SNAPSHOT:
+                out.append(f'{rel}:{node.lineno} {fn.name}: {key}')
+    return sorted(set(out))
+
+
+TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTerminal(',
+             'export function safeStudioProperties(', 'export function screeningIdentity(')
+_TS_READ = re.compile(r"""(\.\s*|\[\s*['"])(attribution_source|upstream_error_type|http_status|failure_stage|provider|config_source|base_url_host)\b(?!\s*[?]?:)""")
+
+
+def _ts_reads(path):
+    text = path.read_text(encoding='utf-8')
+    for marker in TS_EXEMPT:
+        if marker in text:
+            start = text.index(marker)
+            end = text.index('\n}\n', start)
+            text = text[:start] + '\n' * text[start:end].count('\n') + text[end:]
+    out = []
+    for no, line in enumerate(text.splitlines(), 1):
+        code = line.split('//')[0]
+        if code.lstrip().startswith(('*', '/*')):
+            continue  # doc comments
+        if re.match(r'\s*(type |export type |\w+\?: \{|  (analysis|generation)\?:)', code):
+            continue  # type declarations
+        if _TS_READ.search(code):
+            out.append(f'{path.relative_to(ROOT)}:{no}: {line.strip()}')
+    return out
 
 
 def test_grep_no_attribution_reads_outside_the_one_reader():
     offenders = []
     for path in [*(ROOT / 'backend/services/studio').glob('*.py'), ROOT / 'backend/core/llm_emit.py',
                  ROOT / 'backend/core/sentry_setup.py', *(ROOT / 'backend/api').rglob('*.py')]:
-        for no, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
-            if _PY_READ.search(line):
-                offenders.append(f'{path.relative_to(ROOT)}:{no}: {line.strip()}')
-    for path in (ROOT / 'frontend/src').rglob('*.ts*'):
-        text = path.read_text(encoding='utf-8')
-        if path.name == 'workflow.ts':  # the one reader's own body is exempt
-            start = text.index('export function pickAttribution(')
-            end = text.index('\n}\n', start)
-            text = text[:start] + text[end:]
-        for no, line in enumerate(text.splitlines(), 1):
-            if _TS_READ.search(line):
-                offenders.append(f'{path.relative_to(ROOT)}:{no}: {line.strip()}')
+        offenders += _py_reads(path)
+    for path in [ROOT / 'frontend/src/analytics/workflow.ts', *(ROOT / 'frontend/src/features/studio').rglob('*.ts*')]:
+        offenders += _ts_reads(path)
     assert offenders == [], '\n'.join(offenders)
 
 
-def test_grep_guard_catches_a_direct_read():
-    assert _PY_READ.search("x = analysis.get('attribution_source')")
-    assert _PY_READ.search("x = generation['http_status']")
-    assert not _PY_READ.search("record['attribution_source'] = source")
+def test_grep_guard_catches_direct_reads_of_every_field(tmp_path):
+    probe = ROOT / 'backend/services/studio/_guard_probe_tmp.py'
+    probe.write_text("def f(snapshot, found, record):\n    a = snapshot.get('http_status')\n"
+                     "    b = found.get('attribution_source')\n    c = record.get('failure_stage')\n"
+                     "    d = record['provider']\n    record['model'] = 1\n", encoding='utf-8')
+    try:
+        hits = _py_reads(probe)
+    finally:
+        probe.unlink()
+    assert [h.rsplit(': ', 1)[1] for h in hits] == ['http_status', 'attribution_source', 'failure_stage', 'provider']
     assert _TS_READ.search('snapshot.analysis?.upstream_error_type')
+    assert _TS_READ.search("run['failure_stage']")
+    assert not _TS_READ.search('failure_stage?: string')
 
 
 # --- I422 / I424 --------------------------------------------------------------------------------------
@@ -261,7 +327,7 @@ def test_i415_a_non_decisive_wrapper_is_looked_through():
     wrapper.__cause__.__cause__ = inner
     verdict = classify_failure(wrapper)
     assert verdict.kind is FailureKind.MODEL and verdict.record is not None
-    # innermost-first would let an inner local link beat an outer model error
+    # R28 I450: a local error in ANY layer is judged first, even under a model-coded wrapper
     outer = PipelineFailure('ANALYZE', 'x', code='provider_error')
     outer.__cause__ = subprocess.CalledProcessError(1, ['ffmpeg'])
-    assert classify_failure(outer).kind is FailureKind.MODEL
+    assert classify_failure(outer).kind is FailureKind.LOCAL

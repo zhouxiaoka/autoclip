@@ -11,6 +11,12 @@ from backend.core import llm_emit
 from backend.services import ai_model_settings as ai
 from backend.services.studio import failure_identity, shutdown_marker, store
 
+
+def _provider_down():
+    """R28 I450: a provider failure is a request that was SENT and answered with an error (a status)."""
+    return type('ProviderDown', (RuntimeError,), {'status_code': 500})('fixture')
+
+
 ROOT = Path(__file__).resolve().parents[2]
 OLD = 'f' * 32
 TEXT = {'provider': 'deepseek', 'config_source': 'preset'}
@@ -19,6 +25,7 @@ VISUAL_PLAN = {'recommended_analysis': 'visual', 'confirmed_analysis': 'visual',
 
 
 @pytest.fixture(autouse=True)
+
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
@@ -51,7 +58,7 @@ def _project(pid, data):
 def _vision_failure():
     # R22 #195: vision_call freezes the identity before it sends; the emitter only carries it.
     # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
-    error = RuntimeError('fixture')
+    error = _provider_down()
     llm_emit.emit_vision_request(config={'model': 'private-vision-model', 'base_url': 'https://vision.fixture.example/v1'},
                                  started=time.monotonic(), error=error,
                                  identity=failure_identity.provider_identity('vision'))
