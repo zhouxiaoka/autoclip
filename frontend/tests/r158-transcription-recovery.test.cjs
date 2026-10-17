@@ -453,3 +453,189 @@ test('#418 R27b only readiness gets the deadline (install/model/runtime requests
   assert.equal((src.match(/READINESS_TIMEOUT_MS\)/g) || []).length, 1)
   assert.equal((src.match(/api\.readiness\(\)/g) || []).length, 1, 'readiness is called only inside the deadline')
 })
+
+// ---- #418 R27b I426: rounds, one poll in flight, dispose on unmount, explicit link enum ----
+function deferredApi() {
+  const st = { live: 0, max: 0, calls: 0, pending: [], reply: () => check('whisper_installing') }
+  const api = {
+    readiness: () => {
+      st.calls++; st.live++; st.max = Math.max(st.max, st.live)
+      return new Promise(res => st.pending.push(v => { st.live--; res(v) }))
+    },
+    getRuntimeStatus: async () => ({ status: 'installing', progress: 10 }), getModels: async () => [],
+    installRuntime: async () => {}, downloadModel: async () => {},
+  }
+  const answer = async (v, i = 0) => { const fn = st.pending.splice(i, 1)[0]; fn(v); for (let k = 0; k < 20; k++) await Promise.resolve() }
+  return { st, api, answer }
+}
+async function waitingController(extra = {}) {
+  const d = deferredApi()
+  const c = recovery.createRecoveryController(d.api, { now: () => 0, ...extra })
+  c.open('whisper_not_installed')
+  const p = c.install(); await d.answer(check('whisper_not_installed')); await p
+  assert.equal(c.state.phase, 'installing')
+  return { c, ...d }
+}
+
+test('I426 two polls at once share one readiness request (max concurrency 1)', async () => {
+  const { c, st, answer } = await waitingController()
+  const a = c.poll(); const b = c.poll()
+  assert.equal(st.live, 1); assert.equal(a, b)
+  await answer(check('whisper_installing')); await a
+  assert.equal(st.max, 1)
+})
+
+test('I426 retry while a poll is in flight: the stale ready is dropped, installing is not overwritten, no onReady', async () => {
+  let readyCalls = 0
+  const { c, st, answer } = await waitingController({ onReady: () => { readyCalls++ } })
+  const stale = c.poll()
+  const retry = c.retry()
+  assert.equal(st.live, 2, 'the retry read and the stale poll')
+  await answer(check('whisper_not_installed'), 1)  // the retry's own read answers first -> installing
+  await retry
+  assert.equal(c.state.phase, 'installing')
+  await answer(check('ok'), 0)  // then the stale poll's ready arrives
+  await Promise.all([retry, stale])
+  assert.notEqual(c.state.phase, 'ready', 'a stale ready must not overwrite the new round')
+  assert.equal(readyCalls, 0)
+  assert.equal(st.live, 0)
+})
+
+test('I426 close and reopen while a poll is in flight: the old answer writes nothing', async () => {
+  let readyCalls = 0
+  const { c, answer } = await waitingController({ onReady: () => { readyCalls++ } })
+  const stale = c.poll()
+  c.close(); c.open('whisper_model_missing', 'base')
+  await answer(check('ok')); await stale
+  assert.equal(c.state.phase, 'install_required'); assert.equal(readyCalls, 0)
+})
+
+test('I426 dispose while a poll is in flight: no state change and no onReady afterwards; later polls do nothing', async () => {
+  let readyCalls = 0, reports = 0; const seen = []
+  const { c, st, answer } = await waitingController({ onReady: () => { readyCalls++ }, onReport: () => { reports++ } })
+  const reportsBefore = reports
+  c.subscribe(s => seen.push(s.phase))
+  const stale = c.poll()
+  c.dispose()
+  await answer(check('ok')); await stale
+  assert.equal(readyCalls, 0); assert.deepEqual(seen, []); assert.equal(c.state.phase, 'installing')
+  assert.equal(reports, reportsBefore, 'a dropped answer does not reach onReport either')
+  const calls = st.calls
+  await c.poll(); assert.equal(st.calls, calls, 'a disposed controller sends no readiness')
+})
+
+test('I426 link enum: installing -> unreachable(startedAt) -> failed_recoverable -> installing -> ready; the timer exists only in unreachable', async () => {
+  const { clock, api } = clockedApi()
+  const c = await startWait(api, clock)
+  const L = x => JSON.parse(JSON.stringify(x.link))
+  assert.equal(c.link.kind, 'installing')
+  clock.down = true
+  clock.t = 2000; await c.poll()
+  assert.deepEqual(L(c), { kind: 'unreachable', startedAt: 2000 })
+  clock.t = 4000; await c.poll()
+  assert.deepEqual(L(c), { kind: 'unreachable', startedAt: 2000 }, 'the streak keeps its start')
+  clock.t = 32000; await c.poll()
+  assert.deepEqual(L(c), { kind: 'failed_recoverable', resume: 'installing' })
+  assert.equal(c.state.offline, true); assert.equal(c.state.phase, 'failed')
+  clock.down = false; clock.t = 42000; await c.poll()
+  assert.deepEqual(L(c), { kind: 'installing' }); assert.equal(c.state.offline, undefined); assert.equal(c.state.unreachable, undefined)
+  clock.stage = 'ready'; clock.t = 44000; await c.poll()
+  assert.deepEqual(L(c), { kind: 'ready' })
+  assert.ok(!Object.keys(c.link).includes('startedAt'))
+})
+
+// ---- I428: Dong's 5 surviving mutations ----
+test('I428 a 500 between outages resets the streak (20s down, one 500, 20s down -> still waiting)', async () => {
+  const { clock, api } = clockedApi()
+  const c = await startWait(api, clock)
+  clock.down = true; await pollUntil(c, clock, 20000)
+  clock.down = false; clock.error500 = true; await pollUntil(c, clock, 22000)
+  assert.equal(c.link.kind, 'installing', 'a 500 is an answer: out of unreachable')
+  clock.error500 = false; clock.down = true
+  const phases = await pollUntil(c, clock, 42000)
+  assert.ok(!phases.includes('failed'), `never 30s unanswered in a row: ${phases}`)
+})
+
+test('I428 non-object errors (string, undefined) count as unreachable', async () => {
+  for (const thrown of ['boom', undefined, 42]) {
+    const { clock, api } = clockedApi()
+    const c = await startWait(api, clock)
+    api.readiness = async () => { throw thrown }
+    await pollUntil(c, clock, 32000)
+    assert.equal(c.state.phase, 'failed', String(thrown)); assert.equal(c.state.offline, true, String(thrown))
+  }
+})
+
+test('I428 retry restarts the unreachable timer (25s down, retry, 10s down -> still waiting)', async () => {
+  const { clock, api } = clockedApi()
+  const c = await startWait(api, clock)
+  clock.down = true; await pollUntil(c, clock, 25000)
+  assert.equal(c.link.kind, 'unreachable')
+  await c.retry()
+  assert.equal(c.state.phase, 'installing'); assert.equal(c.link.kind, 'installing', 'retry leaves unreachable')
+  const phases = await pollUntil(c, clock, 35000)
+  assert.ok(!phases.includes('failed'), `the old streak is not inherited: ${phases}`)
+})
+
+function loadHook(timers) {
+  const ts = require('typescript'); const vm = require('node:vm')
+  const { outputText } = ts.transpileModule(fs.readFileSync(path.join(dir, 'useTranscriptionRecovery.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } })
+  const hook = {}
+  const st = (fn, ms) => { const h = setTimeout(() => { timers.delete(h); fn() }, ms); timers.add(h); return h }
+  const ct = h => { timers.delete(h); clearTimeout(h) }
+  vm.runInNewContext(outputText, { exports: hook, setTimeout: st, clearTimeout: ct, require: id => id === './transcriptionRecovery' ? recovery : require(id) })
+  return hook
+}
+
+test('I428 hook unmount clears its poll timer (no timer left alive)', async () => {
+  const timers = new Set(); const hook = loadHook(timers)
+  const { clock, api } = clockedApi()
+  let controller
+  function Probe() { const [, c] = hook.useTranscriptionRecovery(api, { now: () => clock.t, pollMs: 50 }); controller = c; return null }
+  const root = createRoot(document.createElement('div'))
+  await act(async () => { root.render(React.createElement(Probe)) })
+  await act(async () => { controller.open('whisper_not_installed'); await controller.install() })
+  await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+  assert.ok(timers.size >= 1, 'a poll timer is scheduled while waiting')
+  await act(async () => root.unmount())
+  assert.equal(timers.size, 0, 'unmount clears the timer')
+})
+
+test('I428/I426 hook unmount with a poll in flight: nothing rescheduled, no auto-continue afterwards', async () => {
+  const timers = new Set(); const hook = loadHook(timers)
+  const d = deferredApi()
+  let readyCalls = 0, controller
+  function Probe() { const [, c] = hook.useTranscriptionRecovery(d.api, { now: () => 0, pollMs: 5, onReady: () => { readyCalls++ } }); controller = c; return null }
+  const root = createRoot(document.createElement('div'))
+  await act(async () => { root.render(React.createElement(Probe)) })
+  await act(async () => { controller.open('whisper_not_installed'); const p = controller.install(); await d.answer(check('whisper_not_installed')); await p })
+  await act(async () => { await new Promise(r => setTimeout(r, 5)) })
+  assert.equal(d.st.live, 1, 'the first poll is in flight')
+  await act(async () => root.unmount())
+  await act(async () => { await d.answer(check('ok')); await new Promise(r => setTimeout(r, 20)) })
+  assert.equal(readyCalls, 0, 'no auto-continue after unmount')
+  assert.equal(timers.size, 0, 'no timer rescheduled after unmount')
+  assert.equal(d.st.max, 1)
+})
+
+test('I426 hook: leaving offline and coming back continues once, with one readiness in flight at a time', async () => {
+  const timers = new Set(); const hook = loadHook(timers)
+  const { clock, api } = clockedApi()
+  let live = 0, max = 0
+  const inner = api.readiness
+  api.readiness = async () => { live++; max = Math.max(max, live); try { await new Promise(r => setTimeout(r, 3)); return await inner() } finally { live-- } }
+  let readyCalls = 0, controller, last
+  clock.down = true
+  function Probe() { const [s, c] = hook.useTranscriptionRecovery(api, { now: () => clock.t, pollMs: 5, offlinePollMs: 10, onReady: () => { readyCalls++ } }); controller = c; last = s; return null }
+  const root = createRoot(document.createElement('div'))
+  await act(async () => { root.render(React.createElement(Probe)) })
+  try {
+    await act(async () => { controller.open('whisper_not_installed'); await controller.install() })
+    const wait = ms => act(async () => { await new Promise(r => setTimeout(r, ms)) })
+    await wait(20); clock.t = 40000; await wait(40)
+    assert.equal(last.phase, 'failed'); assert.equal(last.offline, true)
+    clock.down = false; clock.stage = 'ready'
+    await wait(120)
+    assert.equal(last.phase, 'ready'); assert.equal(readyCalls, 1, 'continued exactly once'); assert.equal(max, 1)
+  } finally { await act(async () => root.unmount()) }
+})
