@@ -31,6 +31,9 @@ class RecordingTransport(Transport):
 
 real_init = sentry_sdk.init
 sentry_sdk.init = lambda **options: real_init(**options, transport=RecordingTransport)
+# Packaged copies omit backend/tests. This child simulates that layout; the
+# source-tree refusal is covered by a run that does not assign this.
+sentry_setup._running_from_source_tree = lambda: False
 assert sentry_setup.init_sentry('desktop') is True
 logging.getLogger().setLevel(logging.INFO)
 
@@ -40,17 +43,25 @@ def functions(event):
 '''
 
 
-def _run(tmp_path, body):
+def _child_env(tmp_path, **overrides):
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith(('SENTRY_', 'POSTHOG', 'VITE_PUBLIC_POSTHOG', 'VITE_PUBLIC_SENTRY'))}
+           if not key.startswith(('SENTRY_', 'POSTHOG', 'VITE_PUBLIC_POSTHOG', 'VITE_PUBLIC_SENTRY'))
+           and key not in {'PYTEST_CURRENT_TEST', 'PYTEST_ADDOPTS'}}
     env.update(AUTOCLIP_APP_DIR=str(tmp_path), AUTOCLIP_DATA_DIR=str(tmp_path),
                AUTOCLIP_MODE='desktop', AUTOCLIP_BUILD_ENVIRONMENT='production',
                AUTOCLIP_APP_VERSION='1.5.8', SENTRY_DSN='https://public@example.invalid/1',
                AUTOCLIP_EVENT_CATALOG=str(tmp_path / 'missing-catalog.json'),
                DATABASE_URL='sqlite:///' + str(tmp_path / 'isolated.sqlite'),
                PYTHONDONTWRITEBYTECODE='1')
-    result = subprocess.run([sys.executable, '-B', '-c', HARNESS + body], cwd=ROOT, env=env,
-                            capture_output=True, text=True, timeout=90)
+    env.update(overrides)
+    return env
+
+
+def _run(tmp_path, body, *, script=None, **overrides):
+    result = subprocess.run(
+        [sys.executable, '-B', '-c', script if script is not None else HARNESS + body],
+        cwd=ROOT, env=_child_env(tmp_path, **overrides),
+        capture_output=True, text=True, timeout=90, check=False)
     assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-4000:]
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -177,15 +188,114 @@ def test_i650_budget_is_per_hour_and_polling_stays_once(monkeypatch):
     # Same function name outside the backend (e.g. a dependency) is not a polling endpoint.
     outside = _event('get_ai_models', module='somelib.client')
     assert [sentry_setup._volume_allows(outside) for _ in range(6)] == [True] * 5 + [False]
+    # A different exception type in the same function keeps its own budget.
+    assert sentry_setup._volume_allows(_event('render', type_='KeyError')) is True
+
+
+def test_i650_dropped_disconnect_does_not_spend_the_budget(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    _reset_volume(monkeypatch)
+    noise = {'exception': {'values': [{'type': 'ConnectionResetError', 'value': '/Users/private',
+        'stacktrace': {'frames': [{'module': 'asyncio.proactor_events', 'filename': 'proactor_events.py',
+                                   'function': '_call_connection_lost'}]}}]}}
+    assert [sentry_setup._before_send_limited(noise) for _ in range(10)] == [None] * 10
+    business = _event('render')
+    assert [sentry_setup._before_send_limited(business) is not None for _ in range(6)] == [True] * 5 + [False]
+
+
+def test_i651_only_proactor_disconnects_are_dropped(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+
+    def event(type_, module):
+        return {'exception': {'values': [{'type': type_, 'value': 'secret /Users/private/video.mp4',
+            'stacktrace': {'frames': [{'module': module, 'filename': module.split('.')[-1] + '.py',
+                                       'function': '_call_connection_lost'}]}}]}}
+
+    for type_ in ('ConnectionResetError', 'ConnectionAbortedError', 'BrokenPipeError'):
+        assert sentry_setup.before_send(event(type_, 'asyncio.proactor_events')) is None
+        kept = sentry_setup.before_send(event(type_, 'backend.services.upload'))
+        assert kept is not None and kept['exception']['values'][0]['type'] == type_
+        assert 'private' not in json.dumps(kept)
+        # A backend protocol failure that unwinds through the Proactor is still reported.
+        mixed = event(type_, 'asyncio.proactor_events')
+        mixed['exception']['values'][0]['stacktrace']['frames'].append(
+            {'module': 'backend.server', 'filename': 'server.py', 'function': 'connection_lost'}
+        )
+        assert sentry_setup.before_send(mixed) is not None
+    raw = OSError(22, 'raw disconnect')
+    raw.winerror = 10054
+    assert sentry_setup.before_send(
+        event('OSError', 'asyncio.proactor_events'), {'exc_info': (OSError, raw, None)}
+    ) is None
+    kept_os = sentry_setup.before_send(
+        event('OSError', 'backend.services.upload'), {'exc_info': (OSError, raw, None)}
+    )
+    assert kept_os is not None and 'private' not in json.dumps(kept_os)
+    # A programming error inside the proactor module is not disconnect noise.
+    assert sentry_setup.before_send(event('RuntimeError', 'asyncio.proactor_events')) is not None
+
+
+def test_i652_source_checkout_with_a_dsn_does_not_init(tmp_path):
+    out = _run(tmp_path, '', script=r'''
+import json
+import sentry_sdk
+from sentry_sdk.transport import Transport
+from backend.core import sentry_setup
+received = []
+class RecordingTransport(Transport):
+    def capture_envelope(self, envelope):
+        for item in envelope.items:
+            if item.headers.get('type') == 'event':
+                received.append(item.payload.json)
+real_init = sentry_sdk.init
+sentry_sdk.init = lambda **options: real_init(**options, transport=RecordingTransport)
+assert sentry_setup._running_from_source_tree() is True
+assert sentry_setup.init_sentry('desktop') is False
+assert sentry_setup._initialized is False
+try:
+    raise RuntimeError('source run /Users/private/video.mp4')
+except RuntimeError as error:
+    sentry_sdk.capture_exception(error)
+print(json.dumps({'initialized': sentry_setup._initialized, 'sent': len(received)}))
+''')
+    assert out == {'initialized': False, 'sent': 0}
+
+
+def test_i652_packaged_layout_is_a_backend_directory_without_tests(monkeypatch, tmp_path):
+    assert sentry_setup._running_from_source_tree() is True
+    packaged = tmp_path / 'backend' / 'core'
+    packaged.mkdir(parents=True)
+    monkeypatch.setattr(sentry_setup, '__file__', str(packaged / 'sentry_setup.py'))
+    assert sentry_setup._running_from_source_tree() is False
+    (tmp_path / 'backend' / 'tests').mkdir()
+    assert sentry_setup._running_from_source_tree() is True
+
+
+def test_i652_pytest_never_inits_even_when_the_layout_looks_packaged(monkeypatch, tmp_path):
+    import sentry_sdk
+    calls = []
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('SENTRY_DSN', 'https://public@example.invalid/1')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setattr(sentry_setup, '_running_from_source_tree', lambda: False)
+    monkeypatch.setattr(sentry_setup, '_initialized', False)
+    monkeypatch.setattr(sentry_sdk, 'init', lambda **options: calls.append(options))
+    assert sentry_setup._under_pytest() is True
+    assert sentry_setup.init_sentry('desktop') is False
+    assert calls == []
+    assert sentry_setup._initialized is False
 
 
 @pytest.mark.parametrize('mode, build, version, expected', [
     ('web', 'production', '1.5.8', False),              # Docker / script / pip
     ('desktop', 'development', '1.5.8', False),         # launcher debug build (tauri dev)
+    ('desktop', 'unknown', '1.5.8', False),             # source default when the env is unset
+    ('desktop', '', '1.5.8', False),
     ('desktop', 'production', None, False),             # release unknown
     ('desktop', 'production', 'unknown', False),
     ('desktop', 'production', '1.5.8', True),           # packaged desktop production build
-    ('desktop', 'validation', '1.5.8', True),           # acceptance build, tagged telemetry_test
+    ('desktop', 'validation', '1.5.8', True),           # packaged acceptance build
 ])
 def test_i652_initializes_only_in_packaged_desktop_build(monkeypatch, tmp_path, mode, build, version, expected):
     import sentry_sdk
@@ -194,6 +304,9 @@ def test_i652_initializes_only_in_packaged_desktop_build(monkeypatch, tmp_path, 
     monkeypatch.setenv('SENTRY_DSN', 'https://public@example.invalid/1')
     monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', build)
     monkeypatch.delenv('SENTRY_RELEASE', raising=False)
+    # The env matrix is the packaged process. pytest and the checkout are covered separately.
+    monkeypatch.setattr(sentry_setup, '_under_pytest', lambda: False)
+    monkeypatch.setattr(sentry_setup, '_running_from_source_tree', lambda: False)
     if version is None:
         monkeypatch.delenv('AUTOCLIP_APP_VERSION', raising=False)
     else:

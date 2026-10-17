@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from collections import OrderedDict, deque
 from pathlib import Path
@@ -189,20 +190,109 @@ def _import_monitoring_fields(event: dict, hint: Optional[dict]) -> tuple[Option
     return kind, fingerprint_for_import_kind(kind)
 
 
-def _is_proactor_connection_reset(event: dict) -> bool:
-    """I651: Windows asyncio Proactor peer resets (no user impact, ~16% of volume).
+# CPython 3.13.13 Proactor teardown noise (PYTHON-FASTAPI-3 and the same callback).
+# socket.shutdown / overlapped I/O on Windows surfaces these; none of them fail a task.
+# 10054 WSAECONNRESET → ConnectionResetError (the published issue).
+# 10053 WSAECONNABORTED → ConnectionAbortedError. 10052 WSAENETRESET and 10058 WSAESHUTDOWN
+# stay OSError or ConnectionAbortedError. 109 ERROR_BROKEN_PIPE → BrokenPipeError.
+# IocpProactor.finish_socket_func rewrites 64 ERROR_NETNAME_DELETED and 995
+# ERROR_OPERATION_ABORTED into ConnectionResetError before they leave the proactor.
+_PROACTOR_DISCONNECT_TYPES = frozenset({
+    "ConnectionResetError",
+    "ConnectionAbortedError",
+    "BrokenPipeError",
+})
+_PROACTOR_DISCONNECT_WINERRORS = frozenset({64, 109, 995, 10052, 10053, 10054, 10058})
 
-    Judged by the stack frames of the raised exception, not by type alone: a
-    ConnectionResetError raised anywhere else is still reported.
-    """
+
+def _frame_is_proactor(filename: object, module: object) -> bool:
+    name = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    return module == "asyncio.proactor_events" or name == "proactor_events.py"
+
+
+def _raised_value(event: dict) -> Optional[dict]:
     values = (event.get("exception") or {}).get("values") or []
-    if not values or not isinstance(values[-1], dict) or values[-1].get("type") != "ConnectionResetError":
-        return False
-    for frame in (values[-1].get("stacktrace") or {}).get("frames") or []:
-        name = str(frame.get("filename") or frame.get("abs_path") or "").replace("\\", "/").rsplit("/", 1)[-1]
-        if frame.get("module") == "asyncio.proactor_events" or name == "proactor_events.py":
+    if values and isinstance(values[-1], dict):
+        return values[-1]
+    return None
+
+
+def _frame_is_backend(filename: object, module: object) -> bool:
+    if str(module or "").startswith("backend."):
+        return True
+    path = str(filename or "").replace("\\", "/")
+    return path.startswith("backend/") or "/backend/" in f"/{path}"
+
+
+def _event_frames(event: dict):
+    value = _raised_value(event)
+    if value is None:
+        return
+    for frame in (value.get("stacktrace") or {}).get("frames") or []:
+        if isinstance(frame, dict):
+            yield frame
+
+
+def _event_has_proactor_frame(event: dict) -> bool:
+    return any(
+        _frame_is_proactor(frame.get("filename") or frame.get("abs_path"), frame.get("module"))
+        for frame in _event_frames(event)
+    )
+
+
+def _event_has_backend_frame(event: dict) -> bool:
+    return any(
+        _frame_is_backend(frame.get("filename") or frame.get("abs_path"), frame.get("module"))
+        for frame in _event_frames(event)
+    )
+
+
+def _traceback_has_proactor(exc: BaseException) -> bool:
+    tb = exc.__traceback__
+    while tb is not None:
+        if _frame_is_proactor(tb.tb_frame.f_code.co_filename, ""):
             return True
+        tb = tb.tb_next
     return False
+
+
+def _traceback_has_backend(exc: BaseException) -> bool:
+    tb = exc.__traceback__
+    while tb is not None:
+        if _frame_is_backend(tb.tb_frame.f_code.co_filename, ""):
+            return True
+        tb = tb.tb_next
+    return False
+
+
+def _is_harmless_proactor_disconnect(event: dict, hint: Optional[dict]) -> bool:
+    """Drop peer-disconnect noise that never entered backend code.
+
+    ConnectionResetError (WinError 10054), ConnectionAbortedError (10053) and
+    BrokenPipeError (109) are ignored only when the stack is asyncio's Proactor
+    and no backend frame is on it. The same types raised by application code,
+    including a protocol failure that unwinds through the Proactor, are reported.
+    Classification uses the exception class and winerror, never the message.
+    """
+    exc = None
+    info = (hint or {}).get("exc_info") if hint else None
+    if isinstance(info, tuple) and len(info) >= 2 and isinstance(info[1], BaseException):
+        exc = info[1]
+    value = _raised_value(event)
+    type_name = str(value.get("type")) if value else ""
+    typed = type_name in _PROACTOR_DISCONNECT_TYPES or isinstance(
+        exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
+    )
+    winerror = getattr(exc, "winerror", None) if isinstance(exc, OSError) else None
+    coded = isinstance(winerror, int) and winerror in _PROACTOR_DISCONNECT_WINERRORS
+    if not typed and not coded:
+        return False
+    on_proactor = _event_has_proactor_frame(event) or (exc is not None and _traceback_has_proactor(exc))
+    if not on_proactor:
+        return False
+    if _event_has_backend_frame(event) or (exc is not None and _traceback_has_backend(exc)):
+        return False
+    return True
 
 
 def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
@@ -213,7 +303,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     """
     if not crash_reports_enabled():
         return None
-    if _is_proactor_connection_reset(event):
+    if _is_harmless_proactor_disconnect(event, hint):
         return None
     clean = {k: event[k] for k in (
         "event_id", "timestamp", "platform", "level", "release", "environment", "sdk"
@@ -403,6 +493,39 @@ def _event_distinct_id(event: dict) -> str | None:
     return None
 
 
+# Packaged acceptance builds set validation on purpose. Anything else, including the
+# unset default "unknown" and the launcher's debug value "development", does not report.
+_REPORTING_BUILD_ENVIRONMENTS = frozenset({"production", "validation"})
+
+
+def _under_pytest() -> bool:
+    return "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules
+
+
+def _running_from_source_tree() -> bool:
+    """A checkout keeps backend/tests. The desktop bundle's copy of backend omits it."""
+    try:
+        backend_dir = Path(__file__).resolve().parents[1]
+    except (OSError, IndexError, RuntimeError):
+        return True
+    return (backend_dir / "tests").is_dir()
+
+
+def _packaged_desktop_reporting(mode: str) -> bool:
+    """True only for a packaged desktop production or validation build.
+
+    pytest and a source checkout return False even when SENTRY_DSN, mode and
+    AUTOCLIP_BUILD_ENVIRONMENT are all set to look like a release.
+    """
+    if _under_pytest() or _running_from_source_tree():
+        return False
+    release = (os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "").strip()
+    build_environment = (os.getenv("AUTOCLIP_BUILD_ENVIRONMENT") or "").strip()
+    if mode != "desktop" or release.lower() in {"", "unknown"}:
+        return False
+    return build_environment in _REPORTING_BUILD_ENVIRONMENTS
+
+
 def init_sentry(mode: str = "web") -> bool:
     """在 create_app 最早调用。返回是否真正启用。"""
     global _initialized
@@ -411,13 +534,12 @@ def init_sentry(mode: str = "web") -> bool:
     dsn = (os.getenv("SENTRY_DSN") or "").strip()
     if not dsn:
         return False
-    release = os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "unknown"
-    build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
-    # I652: only the packaged desktop build reports. Web/Docker/scripts, an unknown
-    # release and the launcher's debug build ("development") stay off.
-    if mode != "desktop" or release.strip().lower() in {"", "unknown"} or build_environment == "development":
+    # I652: tests, source checkouts, web/Docker/scripts and tauri dev never init.
+    if not _packaged_desktop_reporting(mode):
         logger.info("非桌面正式版，跳过 Sentry")
         return False
+    release = (os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "").strip()
+    build_environment = (os.getenv("AUTOCLIP_BUILD_ENVIRONMENT") or "").strip()
     if not crash_reports_enabled():
         logger.info("崩溃报告已关闭，跳过 Sentry")
         return False
