@@ -15,8 +15,9 @@ DEGRADES = {
 
 
 def _excluded_codes(sql):
+    """v4 (#416): exclusion lists are the `ec IN (...)` / `ue IN (...)` blocks of user_hard / user_x."""
     return [set(re.findall(r"'(\w+)'", block)) for block in
-            re.findall(r"coalesce\(properties\.error_code, ''\) NOT IN\s*\(([^)]*)\)", sql)]
+            re.findall(r"\b(?:ec|ue) IN\s*\(([^)]*)\)", sql)]
 
 
 def test_catalog_classifies_new_codes():
