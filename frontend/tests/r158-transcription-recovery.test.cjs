@@ -534,15 +534,11 @@ async function waitingOn(clock, t, extra = {}) {
   return c
 }
 
-test('R27c readiness timeout is 5s, the controller races nothing itself and calls readiness with the round signal', () => {
-  assert.equal(recovery.READINESS_TIMEOUT_MS, 5000)
+test('R27c wiring (source): one probe call site, no timer race in the controller; both pages pass the round signal through probeConfig', () => {
+  // The 5s timeout itself is asserted by behaviour ('R28 readiness timeout 5s (behaviour, fake timers)').
   const src = fs.readFileSync(path.join(dir, 'transcriptionRecovery.ts'), 'utf8')
   assert.equal((src.match(/api\.readiness\(/g) || []).length, 1, 'one probe call site')
-  assert.match(src, /api\.readiness\(signal\)/)
   assert.doesNotMatch(src, /setTimer|clearTimer|setTimeout|Promise\.race/, 'no timer race in the controller: axios times the probe out and aborts it')
-  const studioApi = fs.readFileSync(path.join(dir, 'api.ts'), 'utf8')
-  assert.match(studioApi, /readinessProbe: \(signal: AbortSignal\)[^\n]*api\.get\('\/studio\/readiness', probeConfig\(signal\)\)/)
-  assert.equal(JSON.stringify(recovery.probeConfig('S')), JSON.stringify({ signal: 'S', timeout: 5000, retry: false }), 'I517: one definition of the read config')
   for (const page of ['CreativeImport.tsx', 'PlanSummary.tsx']) {
     const src = fs.readFileSync(path.join(dir, page), 'utf8')
     assert.match(src, /readiness: ?signal ?=> ?studioApi\.readinessProbe\(signal\)/, page)
@@ -1008,19 +1004,82 @@ test('R28 I515: polls that alternate unanswered / answered without progress stil
   assert.ok(at >= 0 && at <= 300, `timeout after ${at + 1} polls`)
 })
 
-test('R28 I514: waitForReady takes a signal and ends at once on abort', async () => {
+/** services/api.ts with the real axios and the real apiConfigManager, as the desktop app runs it (Tauri window). */
+function loadRealApi({ tauri = false } = {}) {
+  const vm = require('node:vm'); const ts = require('typescript'); const axios = require('axios')
   const cfgDir = path.resolve(__dirname, '../src/utils')
   const { apiConfigManager } = loadTs(path.join(cfgDir, 'apiConfig.ts'), {}, cfgDir)
+  const exports = {}
+  const mocks = {
+    axios: { default: axios }, '../analytics/workflow': {}, '../i18n': { t: x => x },
+    '../utils/errorHandler': { errorHandler: { handleError() {} } }, '../utils/apiConfig': { apiConfigManager },
+    '../analytics/operations': {}, '../analytics/observer': {}, '../analytics/posthog': {}, '../analytics/events': {},
+  }
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/services/api.ts'), 'utf8')
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
+    exports, require: id => { assert.ok(id in mocks, id); return mocks[id] }, console, setTimeout, clearTimeout,
+    window: tauri ? { __TAURI__: {} } : undefined,
+  })
+  return { api: exports.default, speechApi: exports.speechApi, apiConfigManager, axios }
+}
+
+test('R28 I514 (behaviour): a request aborted while waiting for the desktop backend is never sent, even once it is ready', async () => {
+  const { api, apiConfigManager, axios } = loadRealApi({ tauri: true })
   apiConfigManager.config = { ...apiConfigManager.config, isReady: false }
+  const sent = []
+  api.defaults.adapter = async config => { sent.push(config.url); return { status: 200, data: {}, headers: {}, config } }
   const ctrl = new AbortController()
-  let settled = null
-  apiConfigManager.waitForReady(10 ** 9, ctrl.signal).then(v => { settled = v })
-  await Promise.resolve(); assert.equal(settled, null)
-  ctrl.abort()
+  let outcome = null
+  const p = api.get('/whisper/runtime-status', recovery.probeConfig(ctrl.signal)).then(() => { outcome = 'sent' }, e => { outcome = axios.isCancel(e) ? 'cancelled' : 'error' })
   for (let i = 0; i < 5; i++) await Promise.resolve()
-  assert.equal(settled, false, 'abort ends the wait at once')
-  const api = fs.readFileSync(path.resolve(__dirname, '../src/services/api.ts'), 'utf8')
-  assert.match(api, /waitForReady\(undefined, config\.signal/)
+  assert.equal(outcome, null, 'waiting for the backend config'); assert.equal(sent.length, 0)
+  ctrl.abort()
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  assert.equal(outcome, 'cancelled', 'abort ends the wait at once (not after waitForReady\'s 30s)')
+  apiConfigManager.updateConfig({ baseUrl: 'http://127.0.0.1:1/api/v1', port: 1, isReady: true }) // the backend comes up later
+  await p; for (let i = 0; i < 20; i++) await Promise.resolve()
+  assert.deepEqual(sent, [], 'no request after the abort')
+  // control: without an abort the same request goes out once the backend is ready
+  apiConfigManager.config = { ...apiConfigManager.config, isReady: false }
+  const q = api.get('/whisper/runtime-status', recovery.probeConfig(new AbortController().signal))
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  apiConfigManager.updateConfig({ isReady: true }); await q
+  assert.deepEqual(sent, ['/whisper/runtime-status'])
+})
+
+test('R28 readiness timeout 5s (behaviour, fake timers): the probe and the follow-up read are aborted at 5s, not before', async t => {
+  const { api, speechApi, apiConfigManager } = loadRealApi()
+  apiConfigManager.updateConfig({ baseUrl: 'http://127.0.0.1:1/api/v1', port: 1, isReady: true })
+  const studioApi = loadTs(path.join(dir, 'api.ts'), {
+    '../../analytics/posthog': { captureBusinessEvent() {} }, '../../analytics/workflow': { safeStudioProperties: x => x },
+    '../../analytics/studio': {}, '../../analytics/observer': { workflow: {} }, '../../services/api': { default: api },
+    './noticeRuntime': { noteWorkspaceCompletion() {} }, './subtitleState': { effectiveSubtitles: () => false }, './types': {},
+  }, dir).studioApi
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const live = new Map()
+  // axios' fetch adapter with a backend that never answers: the request ends only when its signal aborts.
+  const fetch = (url, init) => new Promise((resolve, reject) => {
+    const signal = url instanceof Request ? url.signal : init.signal
+    const key = String(url.url ?? url); live.set(key, 'open')
+    signal.addEventListener('abort', () => { live.set(key, 'aborted'); reject(signal.reason ?? new Error('aborted')) })
+  })
+  api.defaults.adapter = 'fetch'; api.defaults.env = { ...api.defaults.env, fetch, Request, Response }
+  const round = new AbortController()
+  const outcomes = {}
+  const watch = (name, p) => p.then(() => { outcomes[name] = 'answered' }, e => { outcomes[name] = recovery.isNetworkError(e) && /^(ECONNABORTED|ETIMEDOUT)$/.test(e.code) ? 'timeout' : e.code })
+  const all = Promise.all([watch('probe', studioApi.readinessProbe(round.signal)), watch('read', speechApi.getRuntimeStatus(recovery.probeConfig(round.signal)))])
+  for (let i = 0; i < 50; i++) await new Promise(r => setImmediate(r))
+  assert.deepEqual([...live.values()], ['open', 'open'], 'both requests are in flight ' + JSON.stringify(outcomes))
+  t.mock.timers.tick(4999)
+  for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r))
+  assert.deepEqual([...live.values()], ['open', 'open'], 'still open at 4.999s')
+  t.mock.timers.tick(1)
+  for (let i = 0; i < 50 && Object.keys(outcomes).length < 2; i++) await new Promise(r => setImmediate(r))
+  const at5s = [...live.values()]
+  round.abort(); await all // a mutant that never times out must not hang the file
+  assert.deepEqual(at5s, ['aborted', 'aborted'], 'aborted at 5s')
+  // axios' timeout code: ECONNABORTED from the xhr adapter (the app), ETIMEDOUT from fetch (here); no response either way
+  assert.deepEqual(outcomes, { probe: 'timeout', read: 'timeout' }, 'a timeout (no response): the controller counts it as unreachable')
 })
 
 /** Drives polls with explicit gaps (ms before each poll), returns [[time since start, phase]]. */
@@ -1104,6 +1163,47 @@ test('R28 I515: offline 26s, then a 60s sleep: waking is not a failure (backend 
       const later = await gaps(c, clock, Array(16).fill(2000))
       assert.ok(later.some(([, p]) => p === 'failed'), 'still down: 30 observed seconds after the wake fail it')
     }
+  }
+})
+
+/** The hook's cadence (useTranscriptionRecovery): the next poll POLL_MS after a waiting round ends, OFFLINE_RETRY_MS
+ * after an offline failure; awake the whole time. Returns [[time since start, phase, offline]]. */
+async function hookCadence(c, clock, ms) {
+  const t0 = clock.t; const seen = []
+  while (clock.t - t0 < ms) {
+    const s = c.state
+    await clock.advance(s.phase === 'failed' && s.offline ? recovery.OFFLINE_RETRY_MS : recovery.POLL_MS)
+    let done = false; const p = c.poll().then(() => { done = true })
+    await clock.advance(0)
+    for (let i = 0; i < 200 && !done; i++) await clock.advance(100)
+    await p; seen.push([clock.t - t0, c.state.phase, !!c.state.offline])
+  }
+  return seen
+}
+const timesOut = clock => () => new Promise((resolve, reject) => clock.setTimeout(() => reject(Object.assign(new Error('timeout of 5000ms exceeded'), { code: 'ECONNABORTED' })), recovery.READINESS_TIMEOUT_MS))
+
+test('R28 I515 (Dong 11:2x): every probe hits the full 5s timeout, awake 10 minutes: failed (offline) at 35s and never cleared', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  const c = await waitingOn(clock, t)
+  t.st.mode = 'hang' // each probe ends with axios' 5s timeout: 2s wait + 5s round = 7s between round ends
+  const seen = await hookCadence(c, clock, 10 * 60 * 1000)
+  const first = seen.findIndex(([, p]) => p === 'failed')
+  assert.ok(first >= 0 && seen[first][0] <= 35000, `failed by 35s, not reset by the 7s spacing: ${JSON.stringify(seen.slice(0, 8))}`)
+  assert.ok(seen.slice(first).every(([, p, off]) => p === 'failed' && off), 'stays failed (offline) for the rest of the 10 minutes')
+  assert.ok(t.st.timeouts >= 40, `slow polls go on (10s wait + 5s timeout) (${t.st.timeouts} timeouts)`)
+})
+
+test('R28 I515 (Dong 11:2x): answered probe but the follow-up read times out every round, awake 10 minutes: timeout', async () => {
+  for (const delay of [0, 4900]) {
+    const clock = fakeClock(); const t = fakeTransport(clock)
+    t.st.delay = delay
+    const c = downloadingOn(clock, t)
+    await gaps(c, clock, [2000]) // percent null -> 5: the last progress
+    t.api.getModels = timesOut(clock) // every round: probe (+ delay) + 5s read timeout; the wait between is 2s
+    const seen = await hookCadence(c, clock, recovery.STALL_MS + 20000)
+    const first = seen.find(([, p]) => p === 'timeout')
+    assert.ok(first && first[0] <= recovery.STALL_MS + 2000 + delay + 5000, `delay ${delay}: timeout within one round of 10 minutes: ${JSON.stringify(first)}`)
+    assert.ok(seen.filter(([at]) => at < recovery.STALL_MS - 12000).every(([, p]) => p === 'downloading'), `delay ${delay}: not earlier`)
   }
 })
 
