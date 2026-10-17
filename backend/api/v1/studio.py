@@ -7,8 +7,10 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
-from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
+from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
@@ -41,11 +43,35 @@ def call(fn, *args, **kwargs):
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from None
     except ValueError as error:
+        from backend.services.studio.readiness import TranscriptionNotReady
+        from backend.services.studio.preflight import SourceRejected
+        if isinstance(error, (TranscriptionNotReady, SourceRejected)):
+            raise gate_refusal(error) from None
         raise HTTPException(422, str(error)) from None
 
 def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
+
+async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
+    """Stage the upload outside any project and run the one preflight on it, in the threadpool.
+    Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
+    from backend.services.studio import preflight
+    from backend.api.v1 import transcription_gate
+    staged = await stage_upload(video, first_chunk, ext)
+    try:
+        subtitle = staged.with_suffix('.srt') if srt_available else None
+        if subtitle is not None:
+            subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
+        try:
+            await transcription_gate.run(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
+        finally:
+            if subtitle is not None:
+                subtitle.unlink(missing_ok=True)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    return staged
 
 @router.get('/title-presets/{style}/thumbnail')
 def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=6)):
@@ -143,25 +169,43 @@ async def import_visual(
                 raise HTTPException(422, '字幕文件为空或超过 2 MB')
         finally:
             await subtitle.close()
-    prefs = ImportOptions(
-        goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
-        platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
-        recommended_template=recommended_template,
-        branding={'outro_enabled': brand_outro_enabled},
-    )
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
-    pid = str(project.id)
-    raw = store.directory(pid) / 'raw'
-    raw.mkdir(parents=True, exist_ok=True)
+    staged = None
+    if video:
+        # 1.5.8: block before creating a project when local Whisper is required but missing.
+        try:
+            staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
+        except HTTPException:
+            await video.close()
+            raise
     try:
+        prefs = ImportOptions(
+            goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+            platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
+            recommended_template=recommended_template,
+            branding={'outro_enabled': brand_outro_enabled},
+        )
+        project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+    except BaseException:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+        raise
+    pid = str(project.id)
+    try:
+        # mkdir inside the try: a failure here still runs the staging cleanup below (R18 #75).
+        raw = store.directory(pid) / 'raw'
+        raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
         if video:
             path = raw / ('input' + ext)
-            with path.open('wb') as target:
-                target.write(first_chunk)
-                while chunk := await video.read(1024 * 1024):
-                    target.write(chunk)
+            if staged is not None:
+                import shutil
+                shutil.move(str(staged), str(path))
+            else:
+                with path.open('wb') as target:
+                    target.write(first_chunk)
+                    while chunk := await video.read(1024 * 1024):
+                        target.write(chunk)
             project.video_path = str(path)
             db.commit()
         snapshot = None
@@ -178,9 +222,28 @@ async def import_visual(
         db.commit()
         raise
     finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)  # no-op once moved into the project
         if video:
             await video.close()
     return {'project_id': pid, 'analysis_run_id': run_id}
+
+
+
+async def stage_upload(video: UploadFile, first_chunk: bytes, ext: str) -> Path:
+    """Write the upload outside any project so a refused import leaves no project behind."""
+    staging = store.get_projects_directory().parent / 'import-staging'
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / (uuid.uuid4().hex + ext)
+    try:
+        with path.open('wb') as target:
+            target.write(first_chunk)
+            while chunk := await video.read(1024 * 1024):
+                target.write(chunk)
+    except BaseException:  # includes client disconnect / cancellation mid-upload
+        path.unlink(missing_ok=True)
+        raise
+    return path
 
 
 @router.post('/template-recommend')
@@ -302,6 +365,10 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
+    if not url:
+        from backend.services.studio import preflight
+        video = jobs.source(project_id)
+        call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=prefs.goal))
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
 
@@ -354,6 +421,10 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             url = (project.project_metadata or {}).get('source_url')
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
+        if not url:
+            from backend.services.studio import preflight
+            video = jobs.source(project_id)
+            call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()

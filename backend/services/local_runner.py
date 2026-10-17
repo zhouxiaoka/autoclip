@@ -302,11 +302,18 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
 
 def prepare_project(req: RunRequest, link: bool = True) -> Path:
     """
-    建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。
+    CLI / MCP 建项入口：先跑 1.5.8 门禁（content 路线），再把视频放进 raw/（见 place_video）。
     返回 raw 里的视频路径。
     """
-    from backend.core.path_utils import get_project_directory
+    _resolve_inputs(req)
+    from backend.services.studio import preflight
+    # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
+    # source does not count; the content route always transcribes, whatever the global analysis mode.
+    preflight.check(preflight.ResolvedInputs(req.video, req.srt, entry='content'))
+    return _place_resolved(req, link)
 
+
+def _resolve_inputs(req: RunRequest) -> None:
     req.video = req.video.expanduser().resolve()
     if not req.video.exists():
         raise FileNotFoundError(f"视频不存在: {req.video}")
@@ -315,6 +322,18 @@ def prepare_project(req: RunRequest, link: bool = True) -> Path:
         if not req.srt.exists():
             raise FileNotFoundError(f"字幕不存在: {req.srt}")
 
+
+def place_video(req: RunRequest, link: bool = True) -> Path:
+    """
+    建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。不做门禁：
+    调用方（prepare_project、quick output）各自在建项入口判一次（R20 #148）。
+    """
+    _resolve_inputs(req)
+    return _place_resolved(req, link)
+
+
+def _place_resolved(req: RunRequest, link: bool) -> Path:
+    from backend.core.path_utils import get_project_directory
     project_dir = get_project_directory(req.project_id)
     raw_dir = project_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)

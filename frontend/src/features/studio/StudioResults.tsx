@@ -5,6 +5,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
+import { llmFailureText } from '../../utils/llmFailure'
+import { failureSettings, sourceFailure } from './importReadiness'
 import { analysisPageFailure, receiptFailureInfo } from './failureAction'
 import FailureActions from './FailureActions'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
@@ -43,12 +45,15 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const automatic = !!workspace.generation?.auto_start
   const hideLegacy = legacyEntrypointsHidden(flagEnabled('hide_legacy_entrypoints'), managed || automatic)
   const noteLegacy = (action: 'plan_adjust' | 'collection' | 'export_confirm') => trackLegacyEntry({ legacy_action: action }, flagAssigned('hide_legacy_entrypoints'))
+  const failedCode = workspace.analysis?.error_code || workspace.generation?.error_code
+  const sourceUnusable = workspace.analysis?.status === 'failed' && sourceFailure(failedCode)
+  const whisperSettings = workspace.analysis?.status === 'failed' && !sourceUnusable && failureSettings(failedCode).label === '打开转写设置' ? failureSettings(failedCode) : null
   // R28 #409: the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
   const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
     : workspace.generation?.status === 'completed' ? t('已按所选平台生成可发布成片。')
     : workspace.generation?.status === 'partial' ? t('部分成片已完成，未完成版本可稍后重试。')
-      : workspace.generation?.status === 'failed' ? t('这次制作未完成') : t('AI 正在按所选平台制作成片。')
+      : workspace.generation?.status === 'failed' ? t(sourceUnusable ? '这个素材无法使用' : '这次制作未完成') : t('AI 正在按所选平台制作成片。')
   const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
   const variantJob = (jobId?: string) => workspace.jobs.find(job => job.job_id === jobId)
   const latest = useRef(workspace)
@@ -88,7 +93,9 @@ export default function StudioResults({ project, children, onCreateCollection, o
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={automatic ? (workspace.output_variants?.length || 0) : workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={automatic ? generationDescription : visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {workspace.analysis?.status==='running' && <div className="ac-empty studio-processing"><b><span className="spin"/> {t(workspace.analysis.message||"分析画面中")}{typeof workspace.analysis.percent==='number' && ` · ${workspace.analysis.percent}%`}</b>{workspace.analysis.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}</div>}
-      {workspace.analysis?.status==='failed' && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
+      {workspace.analysis?.status==='failed' && sourceUnusable && <div className="ac-empty" role="alert"><b>{t("这个素材无法使用")}</b><span className="studio-error">{t(llmFailureText(workspace.analysis.error, failedCode))}</span><div className="studio-actions"><Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
+      {workspace.analysis?.status==='failed' && whisperSettings && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><span className="studio-error">{t(llmFailureText(workspace.analysis.error, failedCode))}</span><div className="studio-actions">{(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
+      {workspace.analysis?.status==='failed' && !sourceUnusable && !whisperSettings && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
         <FailureActions info={{ error: workspace.analysis.error, ...(receiptFailureInfo(workspace.attempts, workspace.analysis.run_id) || analysisPageFailure(workspace.analysis, workspace.generation)) }}
           canRetry={automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))}
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
@@ -99,7 +106,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
       <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
         onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} allowExport={!hideLegacy} onExport={()=>{ noteLegacy('export_confirm'); setExporting(d) }} onHistory={()=>setHistory(true)} />)}{loaded && !automatic && children}</div>
-      {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
+      {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&!sourceUnusable&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
     </Section>}
     {actionError&&<p className="studio-error" role="alert">{actionError}</p>}
     <details className="studio-details studio-source-details"><summary>{visual?t("高光片段"):t("来源片段")} <span className="ac-mono">{workspace.events.length+(project.clips?.length||0)}</span>{t("· 需要换镜头时再选")}</summary>

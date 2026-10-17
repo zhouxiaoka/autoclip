@@ -27,6 +27,7 @@ from backend.services.whisper_model_manager import (
     ModelStatus
 )
 from backend.services.speech_config_validator import get_config_validator
+from backend.core import sentry_setup
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -412,6 +413,28 @@ async def test_speech_service(request: TestSpeechServiceRequest):
             message=f"测试失败: {str(e)}"
         )
 
+# #418 R26: QA switch for on-device acceptance of #372 (download request 500 -> failed, retry, no resend).
+# Off unless this exact env var is "1" when the app starts; release builds never set it (locked by a test).
+QA_FAIL_MODEL_DOWNLOAD_ENV = "AUTOCLIP_QA_FAIL_MODEL_DOWNLOAD"
+
+
+QA_MOCK_DOWNLOAD_DETAIL = "qa_mock_model_download_500"
+
+
+def qa_fail_model_download() -> bool:
+    import os
+    return os.environ.get(QA_FAIL_MODEL_DOWNLOAD_ENV) == "1"
+
+
+def qa_simulated_download_failure(model: str) -> JSONResponse:
+    """The one place the QA switch acts (#405, #406): the local log says it is a QA simulation; the 500 is a plain
+    response, not an HTTPException, so FastApiIntegration reports nothing to Sentry; and no success-rate telemetry
+    is emitted. Only the model download request goes through here."""
+    logger.warning("QA 模拟 (QA simulated failure): %s=1, model download request for %s answered 500; "
+                   "not reported to Sentry, no success-rate telemetry", QA_FAIL_MODEL_DOWNLOAD_ENV, model)
+    return JSONResponse(status_code=500, content={"detail": QA_MOCK_DOWNLOAD_DETAIL})
+
+
 @router.post("/whisper-models/download")
 async def download_whisper_model(request: DownloadModelRequest):
     """开始下载 Whisper 模型（后台）。
@@ -419,11 +442,16 @@ async def download_whisper_model(request: DownloadModelRequest):
     200 status=installed：本地已有完整模型。202 status=downloading：已开始或正在下载，
     结果看 GET /whisper-models/{name}/status。不能在这里说「下载完成」（RC156 Win QA #5）。
     """
+    if qa_fail_model_download():
+        return qa_simulated_download_failure(request.model)
     try:
         model_manager = get_model_manager()
         state = await model_manager.download_model(request.model)
     except Exception as e:
         logger.error(f"下载Whisper模型失败: {e}")
+        # #418 R27c I488: the one Studio capture path (consent, scope, tag whitelist); production Sentry has no
+        # Starlette integration, so the raised HTTPException alone is never reported. The QA simulation never comes here.
+        sentry_setup.capture_studio_exception(e, phase="model_download", http_status=500)
         raise HTTPException(status_code=500, detail=f"下载Whisper模型失败: {str(e)}")
     if state == "installed":
         return {"status": "installed", "model": request.model, "message": f"模型 {request.model} 已存在", "success": True}

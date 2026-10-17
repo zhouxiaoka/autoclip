@@ -109,13 +109,15 @@ def awaiting_confirmation(pid):
 
 
 def confirm(pid, plan_id, monkeypatch):
-    from backend.pipeline import media_precheck
+    from backend.services.studio import preflight
     from backend.services.studio.models import ConfirmPlan
     video = store.directory(pid) / 'input.mp4'
     video.write_bytes(b'')
     (store.directory(pid) / 'input.srt').write_text('1\n00:00:00,000 --> 00:00:01,000\nx\n')
     monkeypatch.setattr(jobs, 'source', lambda _pid: video)
-    monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    # #418 confirm refuses an unreadable fixture through preflight.check (subtitle_route_failure is gone).
+    # This helper only opens the production attempt.
+    monkeypatch.setattr(preflight, 'check', lambda *a, **k: None)
     return jobs.confirm_project(pid, ConfirmPlan(plan_id=plan_id, goals=['content']))
 
 

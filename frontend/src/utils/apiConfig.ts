@@ -124,23 +124,25 @@ class ApiConfigManager {
   /**
    * 等待 API 就绪
    */
-  async waitForReady(timeout: number = 30000): Promise<boolean> {
+  async waitForReady(timeout: number = 30000, signal?: AbortSignal): Promise<boolean> {
     if (this.isReady()) {
       return true;
     }
+    if (signal?.aborted) return false;
 
     return new Promise((resolve) => {
-      const timeoutId = setTimeout(() => {
-        resolve(false);
-      }, timeout);
-
+      const done = (ready: boolean) => {
+        clearTimeout(timeoutId);
+        removeListener();
+        signal?.removeEventListener('abort', onAbort);
+        resolve(ready);
+      };
+      const onAbort = () => done(false);
+      const timeoutId = setTimeout(() => done(false), timeout);
       const removeListener = this.addListener((config) => {
-        if (config.isReady) {
-          clearTimeout(timeoutId);
-          removeListener();
-          resolve(true);
-        }
+        if (config.isReady) done(true);
       });
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 

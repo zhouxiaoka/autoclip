@@ -40,6 +40,20 @@ def get_websocket_service():
     return WebSocketNotificationService
 
 
+async def _transcription_gate(video_path, srt_path) -> None:
+    from backend.api.v1 import transcription_gate
+    await transcription_gate.for_paths(video_path, srt_path)  # off the event loop (R23 #230)
+
+
+async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
+    """Run the import gate; returns the staged upload path when the file had to be probed, else None."""
+    return await stage_for_gate(video_file, b'', Path(video_file.filename or '').suffix.lower() or '.mp4',
+                                srt_available=has_srt, route='content')
+
+
+from .studio import stage_upload, _stage_for_gate as stage_for_gate  # noqa: E402
+
+
 @router.post("/upload", response_model=ProjectResponse)
 async def upload_files(
     video_file: UploadFile = File(...),
@@ -74,19 +88,31 @@ async def upload_files(
             }
         )
         
-        # 创建项目
-        project = project_service.create_project(project_data)
-        
-        # 保存文件到项目目录
-        project_id = str(project.id)
-        from ...core.path_utils import get_project_raw_directory
-        raw_dir = get_project_raw_directory(project_id)
-        
-        # 保存视频文件
-        video_path = raw_dir / "input.mp4"
-        with open(video_path, "wb") as f:
-            content = await video_file.read()
-            f.write(content)
+        # 1.5.8: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
+        staged = await _stage_for_gate(video_file, has_srt=bool(srt_file))
+
+        # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（R18 #75）。
+        try:
+            project = project_service.create_project(project_data)
+
+            # 保存文件到项目目录
+            project_id = str(project.id)
+            from ...core.path_utils import get_project_raw_directory
+            raw_dir = get_project_raw_directory(project_id)
+
+            # 保存视频文件
+            video_path = raw_dir / "input.mp4"
+            if staged is not None:
+                import shutil
+                shutil.move(str(staged), str(video_path))
+            else:
+                with open(video_path, "wb") as f:
+                    content = await video_file.read()
+                    f.write(content)
+        except BaseException:
+            if staged is not None:
+                staged.unlink(missing_ok=True)
+            raise
         
         # 更新项目的视频路径
         project.video_path = str(video_path)
@@ -460,6 +486,8 @@ async def start_processing(
                 srt_path = str(srt_file)
             else:
                 srt_path = None
+
+        await _transcription_gate(video_path, srt_path)
         
         # 更新项目状态为处理中
         project_service.update_project_status(project_id, "processing")
@@ -527,6 +555,8 @@ async def retry_processing(
         # 检查项目状态 - 允许失败、完成、处理中和等待中状态重试
         if project.status.value not in ["failed", "completed", "processing", "pending"]:
             raise HTTPException(status_code=400, detail="Project is not in failed, completed, processing, or pending status")
+        from backend.api.v1 import transcription_gate
+        await transcription_gate.for_project(project_id)  # gate before touching project status, off the loop (R23 #230)
         
         # 重置项目状态
         project_service.update_project_status(project_id, "pending")
@@ -641,6 +671,7 @@ async def retry_processing(
         
         # 字幕文件是可选的
         srt_path_str = str(srt_path) if srt_path.exists() else None
+        await _transcription_gate(video_path, srt_path_str)
         
         # 延迟导入，避免过早触发celery_app导入链
         from backend.tasks.processing import process_video_pipeline
