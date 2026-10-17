@@ -638,17 +638,16 @@ test('R27c I482 S1: the machine sleeps 60s with a probe in flight and wakes to a
   assert.equal(c.state.unreachable, undefined, 'the next poll is answered')
 })
 
-test('R27c I482: a sleep between polls with the backend down is not counted toward the 30s', async () => {
+test('R29 (was R27c I482): a 5-minute sleep between polls with the backend down counts the 14s cap, never resets the count', async () => {
   const clock = fakeClock(); const t = fakeTransport(clock)
   const c = await waitingOn(clock, t)
   t.st.mode = 'down'
-  await drive(c, clock, 10000)
+  await drive(c, clock, 10000) // 5 polls, 10s counted
   await clock.wake(5 * 60 * 1000)
-  const seen = await drive(c, clock, clock.t + 10000)
-  assert.ok(!seen.some(([, p]) => p === 'failed'), `10s + 10s awake, the 5 min asleep do not count: ${JSON.stringify(seen)}`)
-  const after = await drive(c, clock, clock.t + 22000)
-  // R28: unobserved time restarts the streak, so the 30s count from the wake: 32s after it (16 polls) it is failed
-  assert.ok(after.some(([, p]) => p === 'failed'), `30s of awake unreachability still fails: ${JSON.stringify(after)}`)
+  const seen = (await gaps(c, clock, [2000, 2000, 2000, 2000])).map(([, p]) => p)
+  // 10 + 14 (the 302s gap, capped at 2 x 2s + 2 x 5s) = 24, then 26, 28, 30 -> failed on the 4th poll after waking
+  assert.deepEqual(seen, ['installing', 'installing', 'installing', 'failed'])
+  assert.equal(c.state.offline, true)
 })
 
 test('R27c I483: a 15-minute sleep while downloading is not a stall timeout; 10 awake minutes still are', async () => {
@@ -1135,34 +1134,36 @@ test('R28 I515: the clock jumping 10 minutes at once is not a timeout; the stall
   assert.ok(after.some(([, p]) => p === 'timeout'), 'observed minutes after the jump still count')
 })
 
-test('R28 I515: 9m55s observed without progress, then a 15-minute sleep: the first poll after waking is not a timeout', async () => {
-  const clock = fakeClock(); const t = fakeTransport(clock)
-  const c = downloadingOn(clock, t)
-  await gaps(c, clock, [2000])
-  const before = await gaps(c, clock, Array(297).fill(2000)) // 594s observed
-  assert.equal(before[before.length - 1][1], 'downloading')
-  const wake = await gaps(c, clock, [15 * 60 * 1000]) // counts at most 2 x 2s -> 598s
-  assert.equal(wake[0][1], 'downloading', 'the sleep counts at most 2 poll intervals')
-  const more = await gaps(c, clock, [2000])
-  assert.equal(more[0][1], 'timeout', '600s observed')
+test('R29 I576 (Dong): a 15-minute sleep counts 14s: 9:50 without progress -> timeout on waking; 1:00 -> not, then 8:46 more', async () => {
+  for (const [polls, wakeAs, more] of [[295, 'timeout', 0], [30, 'downloading', 263]]) {
+    const clock = fakeClock(); const t = fakeTransport(clock)
+    const c = downloadingOn(clock, t)
+    await gaps(c, clock, [2000]) // percent null -> 5: the last progress
+    const before = await gaps(c, clock, Array(polls).fill(2000))
+    assert.ok(before.every(([, p]) => p === 'downloading'), `${polls * 2}s counted before the sleep`)
+    const wake = await gaps(c, clock, [15 * 60 * 1000])
+    assert.equal(wake[0][1], wakeAs, `${polls * 2}s + 14s`)
+    if (!more) continue
+    const after = (await gaps(c, clock, Array(more).fill(2000))).map(([, p]) => p)
+    // 74s counted at waking: 526s (263 polls, 8:46) more to 600s, not one poll earlier
+    assert.deepEqual([after.indexOf('timeout'), after.slice(0, more - 1).every(p => p === 'downloading')], [more - 1, true])
+  }
 })
 
-test('R28 I515: offline 26s, then a 60s sleep: waking is not a failure (backend back, or still down)', async () => {
-  for (const back of [true, false]) {
+test('R29 (was R28 I515): offline 26s, then a 60s sleep: back -> continues; still down -> 26 + 14 = 40s, failed on waking', async () => {
+  for (const [polls, back, wakeAs, next] of [[13, true, 'installing', null], [13, false, 'failed', null], [7, false, 'installing', 'failed']]) {
     const clock = fakeClock(); const t = fakeTransport(clock)
     const c = await waitingOn(clock, t)
     t.st.mode = 'down'
-    const down = await gaps(c, clock, Array(13).fill(2000)) // 26s unreachable
+    const down = await gaps(c, clock, Array(polls).fill(2000))
     assert.ok(down.every(([, p]) => p === 'installing'))
     assert.equal(c.state.unreachable, true)
     if (back) t.st.mode = 'ok'
     const wake = await gaps(c, clock, [60000])
-    assert.equal(wake[0][1], 'installing', `back=${back}: no failure on wake`)
+    assert.equal(wake[0][1], wakeAs, `${polls * 2}s down, back=${back}`)
     if (back) assert.equal(c.state.unreachable, undefined)
-    else {
-      const later = await gaps(c, clock, Array(16).fill(2000))
-      assert.ok(later.some(([, p]) => p === 'failed'), 'still down: 30 observed seconds after the wake fail it')
-    }
+    // control: 14s down + 14s for the sleep = 28s, still waiting; the next 2s poll makes 30s
+    if (next) assert.equal((await gaps(c, clock, [2000]))[0][1], next)
   }
 })
 

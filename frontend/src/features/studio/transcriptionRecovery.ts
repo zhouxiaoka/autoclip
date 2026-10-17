@@ -7,6 +7,7 @@
  * stays as the exit for a `ready` that was not reached by waiting. It never switches provider.
  * Polls read enums and numbers only (no model paths, no user content). */
 import type { ReadinessCheck, ImportReadiness } from './importReadiness'
+import { OFFLINE_MS, observe, startClock, STALL_MS, type Clock } from './recoveryClock'
 
 export type RecoveryPhase = 'idle' | 'install_required' | 'installing' | 'downloading' | 'ready' | 'failed' | 'timeout'
 /** `background`: an install the page started by itself (link import without whisper, #371); the page shows it
@@ -52,17 +53,14 @@ export interface ControllerOptions {
   stallMs?: number
   /** Monotonic clock (default performance.now()); tests inject a fake one. */
   now?: () => number
-  /** The page's poll cadence while waiting / while failed for being offline. */
+  /** The page's poll cadence while waiting (the cap of one observation, recoveryClock.ts). */
   pollMs?: number
-  offlinePollMs?: number
   /** A wait reached ready: continue with this fresh report (the page must not reuse its cached readiness, #349). */
   onReady?: (report: ImportReadiness | null) => void
   /** Every readiness report the controller read, so the page's readiness is never older than the controller's. */
   onReport?: (report: ImportReadiness) => void
 }
-export const STALL_MS = 10 * 60 * 1000
-/** #403: observed time the backend must be unreachable (network errors / timeouts only) before a wait is failed. */
-export const OFFLINE_MS = 30 * 1000
+export { OFFLINE_MS, STALL_MS }
 /** #403: poll interval once failed for being offline (the wait continues by itself when the backend is back). */
 export const OFFLINE_RETRY_MS = 10 * 1000
 /** Poll interval while installing / downloading. */
@@ -82,7 +80,7 @@ export function isNetworkError(error: unknown): boolean {
 
 type Waiting = 'installing' | 'downloading'
 /** What a round may write at its end. */
-interface Next { view: RecoveryState; offline: number | null; resume: Waiting; ownsInstall: boolean; report?: ImportReadiness | null; ready?: boolean }
+interface Next { view: RecoveryState; clock: Clock; resume: Waiting; ownsInstall: boolean; report?: ImportReadiness | null; ready?: boolean }
 interface Round { ctrl: AbortController; running: Promise<RecoveryState> | null }
 /** Thrown by step() when the round ended; runRound drops the round without writing anything. */
 const ABORTED = { aborted: true }
@@ -91,18 +89,12 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
   const stallMs = options.stallMs ?? STALL_MS
   const now = options.now ?? (() => typeof performance !== 'undefined' ? performance.now() : Date.now())
   const pollMs = options.pollMs ?? POLL_MS
-  const offlinePollMs = options.offlinePollMs ?? OFFLINE_RETRY_MS
   let state: RecoveryState = { phase: 'idle', percent: null }
-  // R28: no sleep detector. Both timers add up observed time only: per round, the wait before it counts at most
-  // 2 x the poll interval and the round itself at most 2 x READINESS_TIMEOUT_MS (probe + one follow-up read).
-  // Unobserved time (sleep, background throttling, a blocked main thread) is not counted; the timers run later.
-  let offline: number | null = null // observed unreachable time; null = answered
-  let stalled = 0 // observed time without progress
-  let lastEnd: number | null = null
+  let clock: Clock = startClock(now()) // R29: the only timing state (recoveryClock.ts)
   let resume: Waiting = 'installing'
   let ownsInstall = false // this controller started the install: it carries the runtime on to the model download
   const listeners = new Set<(s: RecoveryState) => void>()
-  const offlineFailed = () => state.phase === 'failed' && offline !== null
+  const offlineFailed = () => state.phase === 'failed' && clock.unanswered
   const view = (raw: RecoveryState, unanswered: boolean): RecoveryState => {
     const { unreachable: _u, offline: _o, ...rest } = raw
     void _u; void _o
@@ -111,24 +103,22 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     if (rest.phase === 'installing' || rest.phase === 'downloading') return { ...rest, unreachable: true }
     return rest
   }
-  /** Writes the state (open / close / install / round results); a phase or percent change restarts the stall time. */
+  /** Writes the state (open / close / install / round results). */
   const publish = (raw: RecoveryState) => {
     const merged = state.background && raw.background === undefined && raw.phase !== 'idle' ? { ...raw, background: true } : raw
-    const next = view(merged, offline !== null)
-    if (next.percent !== state.percent || next.phase !== state.phase) stalled = 0
-    state = next
+    state = view(merged, clock.unanswered)
     listeners.forEach(fn => fn(state))
   }
   const newRound = (): Round => ({ ctrl: new AbortController(), running: null })
   let current = newRound()
   /** open / close / install / retry: the old round is aborted (its requests are cancelled) and a new one starts. */
-  const startRound = () => { current.ctrl.abort(); current = newRound(); lastEnd = null; offline = null; ownsInstall = false; return current }
+  const startRound = () => { current.ctrl.abort(); current = newRound(); clock = startClock(now()); ownsInstall = false; return current }
   /** The one write of a round's result. I510: step() settling and this write are several microtasks apart
-   * (probe -> runRound, fromCheck -> runRound); a close() / dispose() in that gap is stopped only here. */
+   * (probe -> runRound, fromCheck -> runRound); a close() / dispose() in between is stopped only here. */
   const commit = (signal: AbortSignal, next: Next) => {
     if (signal.aborted) return
     if (next.report && options.onReport) options.onReport(next.report)
-    offline = next.offline; resume = next.resume; ownsInstall = next.ownsInstall
+    clock = next.clock; resume = next.resume; ownsInstall = next.ownsInstall
     publish(next.view)
     if (next.ready && options.onReady) options.onReady(next.report ?? null) // #232: continue by itself, once
   }
@@ -176,16 +166,14 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     }
     return { view: { phase: phaseOfCode(check.code), percent: null, model }, owns }
   }
+  /** R29: the one timing input of a round, taken right before its one commit. The cap uses the waiting cadence
+   * (pollMs): once failed for being offline the counts decide nothing (only an answer resumes the wait). */
+  const tick = (answered: boolean, progressed: boolean) => observe(clock,
+    { now: now(), answered, progressed, pollMs, readTimeoutMs: READINESS_TIMEOUT_MS },
+    { offlineMs: OFFLINE_MS, stallMs })
   /** The one serial reader of a round: probe, then the install request or the follow-up reads, then one commit. */
   const runRound = async (round: Round, kind: 'install' | 'poll'): Promise<RecoveryState> => {
     const signal = round.ctrl.signal
-    const start = now()
-    const interval = offlineFailed() ? offlinePollMs : pollMs
-    const gap = lastEnd === null ? 0 : start - lastEnd
-    const waited = Math.min(gap, 2 * interval)
-    // Time that was not observed (gap > 2 x interval) breaks the unreachable streak: it restarts from this round.
-    const streak = gap > 2 * interval ? 0 : offline ?? 0
-    const observed = () => waited + Math.min(now() - start, 2 * READINESS_TIMEOUT_MS)
     try {
       let report: ImportReadiness | null = null
       let answered = true
@@ -196,19 +184,20 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
         const toModel = !!(check && String(check.code).startsWith('whisper_model') && model)
         try {
           await step(signal, () => toModel ? api.downloadModel(model as string) : api.installRuntime())
-          commit(signal, { view: { phase: toModel ? 'downloading' : 'installing', percent: toModel ? 0 : null, model: toModel ? model : state.model }, offline: null, resume, ownsInstall: true, report })
+          commit(signal, { view: { phase: toModel ? 'downloading' : 'installing', percent: toModel ? 0 : null, model: toModel ? model : state.model }, clock: tick(true, true).clock, resume, ownsInstall: true, report })
         } catch (error) {
           if (error === ABORTED) throw error
-          commit(signal, { view: { phase: 'failed', percent: null, model: state.model }, offline: null, resume, ownsInstall: false, report })
+          commit(signal, { view: { phase: 'failed', percent: null, model: state.model }, clock: tick(true, true).clock, resume, ownsInstall: false, report })
         }
         return state
       }
       if (!answered) {
-        const total = streak + observed()
-        stalled += observed()
-        if (offlineFailed() || total < OFFLINE_MS) { commit(signal, { view: state, offline: total, resume, ownsInstall }); return state }
-        // #403 offline: unreachable for OFFLINE_MS of observed time -> failed (retry offered); slow polls go on.
-        commit(signal, { view: { ...state, phase: 'failed', percent: null }, offline: total, resume: state.phase === 'downloading' ? 'downloading' : 'installing', ownsInstall })
+        const { clock: next, outcome } = tick(false, false)
+        // Once failed for being offline only an answer changes anything (it resumes the wait).
+        if (offlineFailed() || outcome === 'continue') { commit(signal, { view: state, clock: next, resume, ownsInstall }); return state }
+        if (outcome === 'timeout') { commit(signal, { view: { ...state, phase: 'timeout' }, clock: next, resume, ownsInstall }); return state }
+        // #403 offline: unreachable for OFFLINE_MS of counted time -> failed (retry offered); slow polls go on.
+        commit(signal, { view: { ...state, phase: 'failed', percent: null }, clock: next, resume: state.phase === 'downloading' ? 'downloading' : 'installing', ownsInstall })
         return state
       }
       // Any answer (200 or a 500) ends `unreachable`; an offline failure resumes the interrupted wait by itself.
@@ -216,16 +205,13 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
       const next = report ? await fromCheck(signal, report.checks?.transcription, base, ownsInstall) : { view: { ...base }, owns: ownsInstall }
       const wasWaiting = base.phase === 'installing' || base.phase === 'downloading'
       let nextView = next.view
-      const unchanged = nextView.percent === state.percent && nextView.phase === state.phase
-      if (unchanged) stalled += observed()
-      if ((nextView.phase === 'installing' || nextView.phase === 'downloading') && unchanged && stalled >= stallMs) nextView = { ...nextView, phase: 'timeout' }
-      commit(signal, { view: nextView, offline: null, resume, ownsInstall: next.owns, report, ready: wasWaiting && nextView.phase === 'ready' })
+      const { clock: counted, outcome } = tick(true, nextView.percent !== state.percent || nextView.phase !== state.phase)
+      if ((nextView.phase === 'installing' || nextView.phase === 'downloading') && outcome === 'timeout') nextView = { ...nextView, phase: 'timeout' }
+      commit(signal, { view: nextView, clock: counted, resume, ownsInstall: next.owns, report, ready: wasWaiting && nextView.phase === 'ready' })
       return state
     } catch (error) {
       if (error === ABORTED) return state // the round ended: nothing is written
       throw error
-    } finally {
-      if (!signal.aborted) lastEnd = now()
     }
   }
   const run = (round: Round, kind: 'install' | 'poll') => {
@@ -268,7 +254,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     dispose() { current.ctrl.abort(); listeners.clear() },
     /** The page (re)mounted the same controller (React StrictMode runs effects twice): a disposed controller gets a
      * fresh round, so polling continues; the state is kept. */
-    activate() { if (current.ctrl.signal.aborted) { current = newRound(); lastEnd = null } },
+    activate() { if (current.ctrl.signal.aborted) { current = newRound(); clock = { ...clock, lastAt: now() } } },
   }
   return controller
 }
