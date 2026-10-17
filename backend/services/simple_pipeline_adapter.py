@@ -303,7 +303,7 @@ class SimplePipelineAdapter:
                     with llm_usage.timed("transcribe"):
                         srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 except CloudTranscriptionError as e:
-                    raise cloud_transcription_failure(str(e)) from e
+                    raise cloud_transcription_failure(e) from e
                 except SpeechRecognitionError as e:
                     raise failure_from_speech_error(str(e)) from e
                 if not (srt_path and srt_path.exists()):
@@ -465,6 +465,8 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
+            if getattr(e, "upstream_error_type", ""):
+                failed["upstream_error_type"] = e.upstream_error_type
             return failed
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"

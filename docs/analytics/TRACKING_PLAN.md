@@ -129,7 +129,7 @@ multiIf(
 | --- | --- |
 | `flow_id` | 同一项目从导入到出片/下载 |
 | `operation_id` | 一次 API 的 requested 与结果 |
-| `attempt_id` | 一次后台观察（重试换新） |
+| `attempt_id` | 一次业务尝试（v4 终态取后端 AttemptReceipt 的 `attempt_id`；重试换新） |
 | `artifact_id` | 同一导出作业的成片 |
 
 禁止把内部 `project_id` / `run_id` / `job_id` 当作新事件属性。旧 legacy 事件若已带，不回填、不扩散。
@@ -277,10 +277,19 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_confirm_requested` / `_accepted` | `analysis_mode` | 仅确认制作路径 |
-| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error` |
+| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error`；可选 `trigger`（`initial` / `retry` / `variant_retry`，取自后端回执）。枚举里仍有 `append_platform`，但 1.5.8 不产生该值：追加平台留到 1.5.9 |
 | `studio_production_finished` | `outcome` | 确认制作终态 |
 
 失败两者都必须有 `error_code`、`failure_stage`；模型失败加 `provider`、`base_url_host`、`upstream_error_type`、`http_status`、`billable_calls_before_failure`。身份按 **本次 run 实际调用**，不用设置页最后保存值。
+
+多目标尝试（R23 #228）有多个失败原因时，`error_code` / `upstream_error_type` 是主原因（产品类优先，同类取最早失败），其余原因放在两个可选字段，两个终态事件都可带，`event_catalog.json` 里登记在 `optional_properties`：
+
+| 字段 | 说明 | 取值白名单 | 格式 |
+| --- | --- | --- | --- |
+| `secondary_error_codes` | 其余失败目标的 `error_code`，按失败顺序 | `enums.studio_error_code` 加 `http_4xx`/`http_5xx`；不在单内发 `unknown` | 英文逗号拼接，最多 3 个，无空格，例 `authentication,timeout` |
+| `secondary_upstream_error_types` | 与上一字段同位置的 `upstream_error_type` | `enums.upstream_error_type`；没有或不在单内留空 | 英文逗号拼接，与上一字段等长，例 `invalid_key,` |
+
+这两个字段只做诊断，**不进**成功率分母口径。页面提示用的 `secondary_failure_stages` 只存在分析记录里，不上报。
 
 ### 5.6 导出 / 下载
 
@@ -363,7 +372,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 机器可读口径：`event_catalog.json` → `attribution.success_rate_v4`；SQL：[`success_rate.sql`](success_rate.sql)（两者必须一致，有测试）。
 
 - **一次尝试（attempt）** = `studio_generation_finished` / `studio_production_finished` 按 `attempt_id` 去重后取最后一条（缺 `attempt_id` 的历史行按事件 uuid 计）。重试是新的 attempt。
-- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）；“最后”的排序键是 `(attempt_sequence, leaf, ts)`：先按终态事件的 `attempt_sequence`（后端回执 `sequence`，项目内严格递增，#419；没有序号按 0，有序号的 attempt 总排在旧 attempt 后面），其次看 `leaf`（`retry_of` 链末端 = 没有再被重试的那次），`ts`（观察时间）只用来打平，事件乱序到达不改结果（R25 #346）。**旧数据（#419 之前，没有 `attempt_sequence`）**：单 attempt 的流程、`retry_of` 链完整的流程照常计算，结果和改前一样；同一 flow 有多次 attempt 又没有链能证明哪次最后（多个链末端）的流程记为未知，不进图 1 / 图 5 的流程分子分母，单独输出 `unknown_flows`；attempt 级成功率不受影响（R26 #362）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。**与 #419 的关系**：本 SQL 用 `coalesce(retry_of, '')`，`attempt_sequence` 缺省按 0。没有 `retry_of` 时每次终态各自成 flow，不串链、不报错，因此可以先于 #419 单独合入 RC。#419 才发出 `retry_of` 和 `attempt_sequence`；在那之前流程率等于按次（各自成 flow），不是「重试链最后一次」。看板仍等本文件合入后再同步，不在本 PR 里改线上 insight。
+- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）；“最后”的排序键是 `(attempt_sequence, leaf, ts)`：先按终态事件的 `attempt_sequence`（后端回执 `sequence`，项目内严格递增，#419；没有序号按 0，有序号的 attempt 总排在旧 attempt 后面），其次看 `leaf`（`retry_of` 链末端 = 没有再被重试的那次），`ts`（观察时间）只用来打平，事件乱序到达不改结果（R25 #346）。**旧数据（#419 之前，没有 `attempt_sequence`）**：单 attempt 的流程、`retry_of` 链完整的流程照常计算，结果和改前一样；同一 flow 有多次 attempt 又没有链能证明哪次最后（多个链末端）的流程记为未知，不进图 1 / 图 5 的流程分子分母，单独输出 `unknown_flows`；attempt 级成功率不受影响（R26 #362）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。**与 #416 的关系**：#416 的 SQL 用 `coalesce(retry_of, '')`，`attempt_sequence` 缺省按 0。没有 `retry_of` 时每次终态各自成 flow，不串链、不报错，因此 #416 可以单独合入 RC，也可以先于 #419。本 PR 才发出 `retry_of` 和 `attempt_sequence`；在那之前流程率等于按次（各自成 flow），不是「重试链最后一次」。看板要按重试链取末次时，用合入本 PR 之后的 `success_rate.sql`。
 - **一个人** = `person_id`（不是 `distinct_id` / 设备）。
 - **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
 - **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。
@@ -675,3 +684,11 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | T5 `legacy_stopped_or_tagged` | §8.2 / §8.3 旧事件停发，或继续发时每条带 `legacy=true`；死 wrapper 删除 | 仍出现在生产者里的 legacy 事件名，同一文件必须带 `legacy: true` |
 
 机读清单：`dates.close_transition` / `dates.stop_legacy_emit` / `dates.delete_wrappers` 均为 `"1.5.8"`。
+
+
+### 1.5.8 一键重试
+
+终态事件可带 `retry_of`（被重试 attempt 的 `attempt_id`，`t-` id）。**attempt 归后端所有（#419）**：每个 v4 尝试是项目状态里的一条 AttemptReceipt（`attempt_id, flow_id, sequence, retry_of, kind, state, causes[]`），和业务状态同一次原子写入；失败态「重试」/「继续制作」/「重试这条」都走同一个 `POST /studio/{id}/retry`，后端校验父 attempt（必须是 failed/partial、没被重试过）、同一项目串行（第二个「重试这条」并入正在进行的那次）、幂等键防重复。前端观察器只投影回执：`studio_generation_finished` / `studio_production_finished` 的 `attempt_id`、`retry_of`、主因和 `secondary_*` 都取自回执，`$insert_id` = `studio-v1:{attempt_id}:finished`；顺序看 `sequence`，不看时间戳（终态事件带 `attempt_sequence` = 回执 `sequence`，`success_rate.sql` 按它取流程里最后一次 attempt，R25 #346）；重启或清空浏览器存储不改血缘。主因按 catalog 分层确定（产品优先，`failure_attribution`），页面另取第一个用户可修复的原因给「去设置」。不自动续跑。
+
+**产出归属与结算范围（#419）**：每个成片版本创建时记 `produced_by_attempt` / `produced_by_plan`。一轮的结果和回执计数只用本轮盖章的产出，加上「重试这条」重做的产出（`redone_by_attempt`）。之前轮次没被重做的失败不算本轮，只记 `generation.not_redone_failed_count`（结果页可提示「本次重跑已完成，之前还有 N 条未完成」）。有 attempt 记录时，本轮没有盖章产出就不结算，不借用整个工作区，避免把 0 条自身产出记成 completed。只有 attempt 记录不存在（旧数据或被裁掉）才退回全工作区。范围内全是备选（on_demand）时判 validation。变体重试的计划和 route 取被重试产出的来源计划。
+**已知限制**：(1) 1.5.8 不做追加平台。`POST /studio/{id}/platforms` 固定返回 `append_platform_unavailable`（409），不打开 attempt、不改 generation；结果页没有入口。`trigger=append_platform` 留在枚举里但本版不产生，留到 1.5.9。(2) 改动前生成的旧产物没有归属：回执不计它们的数量；对没有 attempt 记录的旧轮次，「重试这条」不带来源计划，结算仍走全工作区兜底。(3) 手动确认写下的草稿记在回执 `draft_ids` 里，成功率还不按草稿计。

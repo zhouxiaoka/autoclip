@@ -10,9 +10,11 @@ def test_204_dashboard_null_claim_waits_for_the_post_merge_sync():
     assert '合入后同步' in PLAN
 
 
-def test_205_416_merges_without_the_retry_producer():
-    assert '#419' in PLAN
-    assert '可以先于 #419 单独合入' in PLAN
+def test_205_416_can_merge_without_419_producer():
+    """#416's SQL is valid when retry_of is absent. #419 is what emits it; they do not have to merge together."""
+    assert '#419' in PLAN and '#416' in PLAN
+    assert '可以单独合入' in PLAN
+    assert '先于 #419' in PLAN
     assert '同批合入' not in PLAN
 
 

@@ -1,6 +1,6 @@
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
-export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string }
+export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string; attemptId?: string }
 export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
@@ -18,7 +18,24 @@ export function telemetryId(): string {
   while (hasMarker(id)) id = id.replace(/sk-/g, 's0-').replace(/xai-/g, 'xa0-').replace(/aiza/g, 'ai0a').replace(/apikey/g, 'api0ey').replace(/token/g, 't0ken')
   return id
 }
-type Context = { props: Properties; updated: number; artifacts: Record<string, string> }
+/** firstClips: generation identities that already reported first clip. emitted: attempt_ids whose v4 terminal
+ * was already sent (stable event id; a second watch or a reload never re-sends it). */
+type Context = { props: Properties; updated: number; artifacts: Record<string, string>; firstClips?: string[]; emitted?: string[] }
+/** Terminal events counted by docs/analytics/success_rate.sql (v4). They are projections of backend AttemptReceipts (#419). */
+export const SUCCESS_RATE_TERMINALS = ['studio_generation_finished', 'studio_production_finished'] as const
+/** The backend's attempt receipt (backend/services/studio/attempts.py). The frontend never creates attempts:
+ * attempt_id, retry_of and order (sequence) come from here, not from local watches or timestamps. */
+export interface AttemptReceipt {
+  attempt_id: string; flow_id: string; sequence: number; retry_of?: string | null; kind: 'generation' | 'production'
+  trigger?: string; state: 'open' | 'completed' | 'partial' | 'failed' | 'abandoned'; run_id?: string | null
+  causes?: { goal?: string | null; stage?: string; code?: string; upstream?: string; identity?: string }[]
+  error_code?: string; failure_stage?: string | null; upstream_error_type?: string | null
+  secondary_error_codes?: string[]; secondary_upstream_error_types?: string[]; secondary_failure_stages?: string[]
+  summary?: Record<string, unknown>
+  degrade_reason?: string  // frozen from the attempt's own plan at settle (enum)
+}
+const SETTLED = ['completed', 'partial', 'failed']
+const TOKEN = /^t-[a-z0-9-]{10,100}$/
 
 const OS_CANON: Record<string, string> = { darwin: 'macos', win32: 'windows' }
 const OUTCOME_CANON: Record<string, string> = { completed: 'success', failed: 'error' }
@@ -50,7 +67,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     strategy_id: ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'],
     material_origin: ['sample', 'user', 'unknown'], layout: ['crop', 'fit', 'blur', 'window'],
     generation_reason: ['content_complete', 'platform_append', 'platform_ineligible'],
-    trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select', 'paste', 'drop', 'radar', 'watch'], framing_outcome: ['framed', 'no_detection'],
+    trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select', 'paste', 'drop', 'radar', 'watch', 'initial', 'retry', 'variant_retry', 'append_platform'], framing_outcome: ['framed', 'no_detection'],
     framing_status: ['installed', 'installing', 'failed', 'missing', 'not_installed', 'error'],
     source_type: ['file', 'youtube', 'bilibili', 'other_url', 'visual_event', 'content_clip', 'studio', 'legacy'],
     analysis_mode: ['subtitle', 'visual', 'auto'], goal: ['content', 'highlight', 'promo', 'auto'],
@@ -120,11 +137,20 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
       for (const goal of ['content', 'highlight', 'promo']) out[`${prefix}_${goal}`] = valid.includes(goal)
     }
   }
+  // R25 #346: the backend receipt's per-project sequence; success_rate.sql orders a flow's attempts by it.
+  if (typeof input.attempt_sequence === 'number' && Number.isInteger(input.attempt_sequence) && input.attempt_sequence >= 1) out.attempt_sequence = input.attempt_sequence
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
-  if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|service_restarted)$/.test(input.error_code)) out.error_code = input.error_code
+  const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|service_restarted)$/
+  if (typeof input.error_code === 'string' && ERROR_CODE.test(input.error_code)) out.error_code = input.error_code
+  // R23 #228: the other causes of a multi-goal failure, positional, comma-joined (primary is error_code / upstream_error_type).
+  // Arrays from the backend, or the joined string when an already-safe payload is sanitized again.
+  const causes = (v: unknown): unknown[] | undefined => Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : undefined
+  const codes = causes(input.secondary_error_codes), upstreams = causes(input.secondary_upstream_error_types)
+  if (codes) out.secondary_error_codes = codes.slice(0, 3).map(c => typeof c === 'string' && ERROR_CODE.test(c) ? c : 'unknown').join(',')
+  if (upstreams) out.secondary_upstream_error_types = upstreams.slice(0, 3).map(c => typeof c === 'string' && enums.upstream_error_type.includes(c) ? c : '').join(',')
   if (typeof input.model === 'string' && /^[\w.\-:/]{1,64}$/.test(input.model) && !input.model.toLowerCase().includes('sk-') && !input.model.includes('://')) out.model = input.model
   if (typeof input.base_url_host === 'string' && (input.base_url_host === 'local' || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/.test(input.base_url_host))) out.base_url_host = input.base_url_host
-  for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id']) {
+  for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id', 'retry_of']) {
     if (typeof input[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(input[key] as string)) out[key] = input[key] as string
   }
   return out
@@ -165,63 +191,17 @@ export interface TaskSnapshot {
 export interface StudioSnapshot {
   material_origin?: 'sample' | 'user' | 'unknown'
   example_version?: number
+  attempts?: AttemptReceipt[]
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback' | 'frame_extract_subtitle_fallback' | 'source_too_long_subtitle_route'; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; finished_at?: string; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
-  generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
-  output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
+  generation?: { auto_start?: boolean; attempt_id?: string; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
+  output_variants?: { id?: string; draft_id: string; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
 
 /** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
-export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
-  const all = snapshot.output_variants || []
-  // Backup clips are not packaged until someone asks for them: template counts cover produced versions.
-  const variants = all.filter(v => v.status !== 'on_demand')
-  const templates = new Map((snapshot.drafts || []).map(d => [d.id, d.packaging] as const))
-  const packaged = variants.map(v => templates.get(v.draft_id)).filter(Boolean)
-  const count = (test: (v: (typeof variants)[number]) => boolean) => variants.filter(test).length
-  const jobs = new Map((snapshot.jobs || []).map(j => [j.job_id, j]))
-  const completed = variants.filter(v => v.status === 'completed').map(v => ({ variant: v, job: jobs.get(v.render_job_id || '') }))
-  const created = utcMillis(snapshot.generation?.created_at), finished = utcMillis(snapshot.generation?.finished_at)
-  return {
-    variant_count: all.length,
-    completed_variant_count: count(v => v.status === 'completed'),
-    failed_variant_count: count(v => v.status === 'failed'),
-    on_demand_variant_count: all.length - variants.length,
-    skipped_variant_count: Array.isArray(snapshot.generation?.skipped) ? snapshot.generation!.skipped!.length : 0,
-    platform_count: snapshot.generation?.requested_platforms?.length || 0,
-    interview_count: packaged.filter(p => p?.template === 'interview_zh').length,
-    podcast_count: packaged.filter(p => p?.template === 'podcast_en').length,
-    landscape_count: variants.length - packaged.length,
-    editorial_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'editorial' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
-    street_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'street' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
-    classic_count: variants.filter(v => {
-      const report = jobs.get(v.render_job_id || '')?.result?.template_render
-      if (report) return report.downgraded === true || report.template === 'classic'
-      const packaging = templates.get(v.draft_id)
-      return packaging?.template === 'interview_zh' || packaging?.template === 'podcast_en'
-    }).length,
-    html_downgrade_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded === true).length,
-    speaker_framed_count: count(v => v.framing === 'speaker'),
-    full_frame_count: count(v => v.framing === 'full_frame'),
-    framing_pending_count: count(v => v.framing === 'full_frame_pending'),
-    framing_captions_count: count(v => v.framing === 'full_frame_captions'),
-    portrait_style: snapshot.generation?.portrait_style,
-    brand_outro_enabled: snapshot.generation?.branding?.outro_enabled,
-    outro_applied_count: completed.filter(({ job }) => job?.result?.outro_applied === true).length,
-    outro_fallback_count: completed.filter(({ variant, job }) => (job?.brand_outro ?? variant.branding?.outro_enabled) === true && job?.result?.outro_applied === false).length,
-    outro_unknown_count: completed.filter(({ job }) => typeof job?.result?.outro_applied !== 'boolean').length,
-    packaging_fallback_count: packaged.filter(p => p?.fallback).length,
-    trimmed_count: count(v => !!v.trimmed_to_sec),
-    burned_captions: !!snapshot.generation?.source_has_burned_subtitles,
-    ...(snapshot.generation?.recommended_template ? { recommended_template: snapshot.generation.recommended_template } : {}),
-    ...(typeof snapshot.generation?.accepted_recommendation === 'boolean' ? { accepted_recommendation: snapshot.generation.accepted_recommendation } : {}),
-    duration_ms: created !== undefined && finished !== undefined ? Math.max(0, finished - created) : undefined,
-  }
-}
-
 /** Time from generation.created_at to the first completed render. No observer clock, no titles. */
 export function firstClipReady(snapshot: StudioSnapshot): Record<string, unknown> | null {
   const created = utcMillis(snapshot.generation?.created_at)
@@ -271,7 +251,9 @@ export class WorkflowTracker {
       for (const [key, value] of Object.entries(raw).slice(-500)) {
         const c = value as Context
         if (c && Number.isFinite(c.updated) && c.updated > this.now() - 35 * 86400000) {
-          this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && /^t-[a-z0-9-]{10,100}$/.test(v)).slice(-100)) }
+          this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && TOKEN.test(v)).slice(-100)),
+            ...(Array.isArray(c.emitted) ? { emitted: c.emitted.filter((v): v is string => typeof v === 'string' && TOKEN.test(v)).slice(-100) } : {}),
+            ...(Array.isArray(c.firstClips) ? { firstClips: c.firstClips.filter((v): v is string => typeof v === 'string' && v.length <= 64).slice(-50) } : {}) }
         }
       }
     } catch { /* unavailable storage */ }
@@ -287,7 +269,7 @@ export class WorkflowTracker {
     if (!this.enabled() || !id) return
     const before = this.contexts[id]
     const props = safeStudioProperties(input)
-    this.contexts[id] = { props: { ...before?.props, ...props, flow_id: before?.props.flow_id || props.flow_id || telemetryId() }, updated: this.now(), artifacts: before?.artifacts || {} }
+    this.contexts[id] = { ...before, props: { ...before?.props, ...props, flow_id: before?.props.flow_id || props.flow_id || telemetryId() }, updated: this.now(), artifacts: before?.artifacts || {} }
     this.persistContexts()
   }
   context(id?: string, artifact?: string): Properties {
@@ -321,19 +303,50 @@ export class WorkflowTracker {
     this.prune()
     return [...this.watches]
   }
-  watch(kind: Watch['kind'], id: string, projectId?: string, since = this.now(), properties: Properties = {}, restart = false, runId?: string): void {
+  watch(kind: Watch['kind'], id: string, projectId?: string, since = this.now(), properties: Properties = {}, restart = false, runId?: string, attemptId?: string): void {
     if (!this.enabled() || !id) return
     this.prune()
-    const existing = this.watches.find(w => w.kind === kind && w.id === id && (!runId || w.runId === runId))
+    // restart = a new run of this subject: it supersedes every earlier watch, whatever run it watched.
+    const existing = this.watches.find(w => w.kind === kind && w.id === id && (restart || !runId || w.runId === runId))
     if (existing && (!existing.settled || kind === 'studio-export') && !restart) return
     if (existing) this.watches = this.watches.filter(w => w !== existing)
-    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
+    this.watches.push({ kind, id, runId, attemptId: attemptId && TOKEN.test(attemptId) ? attemptId : undefined, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
   }
-  emitOnce(w: Watch, key: string, event: string, properties: Properties): void {
+  /** Watch a backend attempt (#419): one watch per receipt, never a superseding restart, so an earlier attempt
+   * that settled but was not observed yet still reports its own terminal. */
+  watchAttempt(projectId: string, receipt: Pick<AttemptReceipt, 'attempt_id' | 'kind' | 'run_id'> | null | undefined, properties: Properties = {}, planId?: string): void {
+    if (!receipt || !TOKEN.test(receipt.attempt_id)) return
+    const kind = receipt.kind === 'production' ? 'studio-production' : 'studio-generation'
+    if (this.watches.some(w => w.attemptId === receipt.attempt_id)) return
+    this.watch(kind, kind === 'studio-production' ? (planId || projectId) : projectId, kind === 'studio-production' ? projectId : undefined, this.now(), properties, false, receipt.run_id || receipt.attempt_id, receipt.attempt_id)
+  }
+  /** R31 I531 #419: the append request returns its receipt before preparation; if that response was lost (reload,
+   * network), the workspace snapshot still lists the open generation attempt - adopt it so its terminal is reported.
+   * Deduplicated by attempt id in watchAttempt; the terminal's $insert_id is per attempt. */
+  adoptOpenAttempt(projectId: string, snapshot: Pick<StudioSnapshot, 'attempts'> | null | undefined): void {
+    for (const receipt of (Array.isArray(snapshot?.attempts) ? snapshot.attempts : []))
+      if (receipt.state === 'open' && receipt.kind === 'generation') this.watchAttempt(projectId, receipt)
+  }
+  /** The receipt a v4 watch projects: bound by attempt id, else by its run, else (a watch from before
+   * receipts) the attempt the backend bound to the current generation - then pinned to that attempt. */
+  private receiptFor(w: Watch, snapshot: StudioSnapshot): AttemptReceipt | undefined {
+    const list = Array.isArray(snapshot.attempts) ? snapshot.attempts : []
+    const kind = w.kind === 'studio-production' ? 'production' : 'generation'
+    let found = w.attemptId ? list.find(a => a.attempt_id === w.attemptId)
+      : w.runId ? list.find(a => a.kind === kind && a.run_id === w.runId)
+      : kind === 'generation' ? list.find(a => a.attempt_id === snapshot.generation?.attempt_id)
+      : snapshot.plan?.id === w.id ? list.find(a => a.kind === 'production' && !!a.run_id && a.run_id === snapshot.analysis?.run_id) : undefined
+    if (found && found.kind !== kind) found = undefined
+    if (found && !w.attemptId && TOKEN.test(found.attempt_id)) { w.attemptId = found.attempt_id; this.persist() }
+    return found
+  }
+  emitOnce(w: Watch, key: string, event: string, properties: Properties, attemptId?: string): void {
     if (!this.enabled() || !this.watches.includes(w) || w.seen.includes(key) || w.seen.length >= 2000) return
-    if (this.capture(event, (w.kind.startsWith('studio-') || w.kind === 'framing-runtime') ? { ...safeStudioProperties(w.properties), ...safeStudioProperties(properties), ...safeStudioProperties({ attempt_id: w.token }), ...(w.token && /^[a-z0-9-]{10,100}$/.test(w.token) ? { $insert_id: `studio-v1:${w.token}:${key}` } : {}) } : { ...this.context(w.projectId || w.id), ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
+    // A v4 terminal carries the backend attempt_id and a stable event id derived from it (#419).
+    const id = attemptId || w.token
+    if (this.capture(event, (w.kind.startsWith('studio-') || w.kind === 'framing-runtime') ? { ...safeStudioProperties(w.properties), ...safeStudioProperties(properties), ...safeStudioProperties({ attempt_id: id }), ...(id && /^[a-z0-9-]{10,100}$/.test(id) ? { $insert_id: `studio-v1:${id}:${key}` } : {}) } : { ...this.context(w.projectId || w.id), ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
       w.seen.push(key)
       this.persist()
     }
@@ -343,7 +356,13 @@ export class WorkflowTracker {
     if (!assigned || w.kind !== 'studio-generation') return
     const ready = firstClipReady(snapshot)
     if (!ready) return
+    // Dedupe by the real generation (created_at), not by the watch: a retry's new watch must not re-report it (R21 #159).
+    const pid = w.projectId || w.id, identity = String(snapshot.generation?.created_at || '').slice(0, 64)
+    const c = this.contexts[pid]
+    if (!identity || c?.firstClips?.includes(identity)) return
+    const before = w.seen.length
     this.emitOnce(w, 'first-clip', 'studio_first_clip_ready', safeStudioProperties({ ...this.context(w.projectId || w.id), ...ready }))
+    if (w.seen.length > before && this.contexts[pid]) { this.contexts[pid].firstClips = [...(this.contexts[pid].firstClips || []), identity].slice(-50); this.persistContexts() }
   }
   observeCoverJob(w: Watch, job?: { job_id: string; status: string } | null): void {
     if (w.kind !== 'studio-cover' || w.settled || job?.job_id !== w.id || !['completed', 'failed'].includes(job.status)) return
@@ -354,7 +373,8 @@ export class WorkflowTracker {
   observeStudio(w: Watch, snapshot: StudioSnapshot): void {
     if (w.settled) return
     const original = snapshot
-    if (w.runId && w.kind !== 'studio-variant') {
+    const v4 = w.kind === 'studio-generation' || w.kind === 'studio-production'
+    if (w.runId && w.kind !== 'studio-variant' && !v4) {
       const receipt = snapshot.analysis_history?.find(r => r.run_id === w.runId)
       if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis }
       else if (snapshot.analysis?.run_id !== w.runId && w.kind !== 'studio-export') return
@@ -369,7 +389,8 @@ export class WorkflowTracker {
       this.observeCoverJob(w, job)
       return
     } else if (w.kind === 'studio-variant') {
-      const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || v.render_job_id === w.runId))
+      // runId is the attempt identity the API returned: render job, render attempt, or preparation run (R21 #158).
+      const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || [v.render_job_id, v.render_attempt_id, v.preparation_run_id].includes(w.runId)))
       const job = snapshot.jobs?.find(j => j.job_id === variant?.render_job_id)
       if (variant && ['completed', 'failed'].includes(variant.status)) {
         event = 'studio_variant_finished'; outcome = variant.status
@@ -383,42 +404,47 @@ export class WorkflowTracker {
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, degrade_reason: snapshot.plan?.degrade_reason }
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, http_status: snapshot.analysis?.http_status, upstream_error_type: snapshot.analysis?.upstream_error_type, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.
         event = 'studio_screen_finished'; outcome = 'auto_started'
-        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
+        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, http_status: undefined, upstream_error_type: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
       } else if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
         details = { ...details, recommendation_mode: snapshot.plan.mode, analysis_mode: snapshot.plan.recommended_analysis, subtitle_status: snapshot.plan.local_evidence?.subtitle_status }
       }
-    } else if (w.kind === 'studio-generation') {
-      if (!['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) return
-
-      event = 'studio_generation_finished'; outcome = snapshot.generation!.status
-      const unfinished = ['failed', 'partial'].includes(outcome || '')
-      const run = snapshot.generation, analysis = snapshot.analysis
-      details = { ...generationSummary(snapshot), error_code: unfinished ? run?.error_code || analysis?.error_code : undefined,
-        failure_stage: unfinished ? run?.failure_stage || analysis?.failure_stage : undefined,
-        http_status: unfinished ? run?.http_status ?? analysis?.http_status : undefined,
-        provider: run?.provider || analysis?.provider, model: run?.model || analysis?.model,
-        base_url_host: run?.base_url_host || analysis?.base_url_host,
-        upstream_error_type: unfinished ? run?.upstream_error_type || analysis?.upstream_error_type : undefined,
-        billable_calls_before_failure: unfinished ? run?.billable_calls_before_failure ?? analysis?.billable_calls_before_failure : undefined,
-        retry_count: run?.retry_count ?? analysis?.retry_count,
-        degrade_count: run?.degrade_count ?? analysis?.degrade_count,
-        degrade_reason: snapshot.plan?.degrade_reason,
-        llm_calls: run?.llm_calls ?? analysis?.llm_calls,
-        prompt_tokens: run?.prompt_tokens ?? analysis?.prompt_tokens,
-        completion_tokens: run?.completion_tokens ?? analysis?.completion_tokens,
-        route: run?.route || snapshot.plan?.recommended_analysis, recommendation_mode: snapshot.plan?.mode }
-    } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
-               ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
-      event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status
-      details = { ...snapshot.analysis, analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }
+    } else if (v4) {
+      // #419: a projection of the backend receipt - its state, attempt_id, retry_of and primary/secondary causes.
+      const receipt = this.receiptFor(w, snapshot)
+      if (!receipt || !SETTLED.includes(receipt.state)) return
+      const pid = w.projectId || w.id
+      if (this.contexts[pid]?.emitted?.includes(receipt.attempt_id)) { w.settled = true; this.persist(); return }
+      const failed = receipt.state !== 'completed', sum = receipt.summary || {}
+      const causes = failed ? { error_code: receipt.error_code, failure_stage: receipt.failure_stage || undefined, upstream_error_type: receipt.upstream_error_type || undefined,
+        secondary_error_codes: receipt.secondary_error_codes, secondary_upstream_error_types: receipt.secondary_upstream_error_types } : {}
+      const link = receipt.retry_of ? { retry_of: receipt.retry_of } : {}
+      outcome = receipt.state
+      // R25 #345/#347: receipt only - its summary was frozen by the backend at settle (counts, route, plan modes);
+      // the live workspace / plan never fills a historical receipt, and flow_id is the receipt's, not the browser's.
+      if (receipt.kind === 'generation') {
+        event = 'studio_generation_finished'
+        details = { ...sum, analysis_mode: undefined, http_status: failed ? sum.http_status : undefined,
+          billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
+          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }  // append_platform stays in the enum; 1.5.8 does not emit it
+      } else {
+        event = 'studio_production_finished'
+        details = { ...sum, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }
+      }
+      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome, ...(receipt.flow_id ? { flow_id: receipt.flow_id } : {}), attempt_sequence: receipt.sequence }), receipt.attempt_id)
+      if (w.seen.includes('finished')) {
+        w.settled = true; this.persist()
+        const c = this.contexts[pid]
+        if (c) { c.emitted = [...(c.emitted || []), receipt.attempt_id].slice(-100); this.persistContexts() }
+      }
+      return
     }
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))

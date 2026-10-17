@@ -804,11 +804,13 @@ def test_real_render_submission_rejection_then_read_denial_cannot_leave_a_queued
         variant = next(v for v in state['output_variants'] if v['id'] != 'ready')
         job = next(j for j in state['jobs'] if j['job_id'] == variant['render_job_id'])
         assert job['status'] == variant['status'] == 'failed'
-        assert state['generation']['status'] == 'partial'
-        assert state['analysis']['status'] == 'completed'
+        # R28 #409: the round is judged on its own outputs - its only output failed; the earlier 'ready' output
+        # stays listed but no longer makes this round partial
+        assert state['generation']['status'] == 'failed'
+        assert state['analysis']['status'] == 'failed'
         assert project.client.get('/projects/p1').json()['status'] == 'failed'
         assert not store.has_pending_receipts('p1')
-        assert json.loads(project.path.read_bytes())['generation']['status'] == 'partial'
+        assert json.loads(project.path.read_bytes())['generation']['status'] == 'failed'
         assert project.ready.read_bytes() == b'existing completed output'
     finally:
         control.blocked = False

@@ -8,73 +8,10 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from backend.tests.success_rate_sql import COHORT, PARAMS, SQL, run_sql, statements, to_duckdb  # noqa: F401 (R23 #229: one adapter)
+
 ROOT = Path(__file__).resolve().parents[2]
-SQL = (ROOT / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
-PROPS = ('attempt_id', 'flow_id', 'retry_of', 'outcome', 'error_code', 'upstream_error_type', 'failure_stage',
-         'app_version', 'analytics_environment', 'runtime', 'provider', 'attempt_sequence')
-COHORT = 641509
 DAY = datetime(2026, 10, 12, 8, 0, 0)
-PARAMS = {'date_from': "'2026-10-09 00:00:00'", 'date_to': "'2026-10-16 00:00:00'", 'internal_cohort_id': str(COHORT)}
-
-
-def statements(sql=SQL):
-    body = re.sub(r'--[^\n]*', '', sql)
-    for key, value in PARAMS.items():
-        body = body.replace('{%s}' % key, value)
-    return [part.strip() for part in body.split(';') if part.strip()]
-
-
-def _split_args(text, start):
-    """Args of the call whose '(' is at text[start]; returns (args, index after ')')."""
-    depth, args, current, i = 0, [], '', start
-    while True:
-        ch = text[i]
-        if ch == '(':
-            depth += 1
-            if depth == 1:
-                i += 1
-                continue
-        elif ch == ')':
-            depth -= 1
-            if depth == 0:
-                args.append(current.strip())
-                return args, i + 1
-        elif ch == "'":
-            end = text.index("'", i + 1)
-            current += text[i:end + 1]
-            i = end + 1
-            continue
-        if ch == ',' and depth == 1:
-            args.append(current.strip())
-            current = ''
-        else:
-            current += ch
-        i += 1
-
-
-def _rewrite_calls(text, name, render):
-    pattern = re.compile(r'\b%s\(' % name)
-    while (match := pattern.search(text)):
-        args, end = _split_args(text, match.end() - 1)
-        text = text[:match.start()] + render([_rewrite_calls(a, name, render) for a in args]) + text[end:]
-    return text
-
-
-def to_duckdb(sql):
-    """Only syntax: no semantic change. HogQL -> DuckDB."""
-    sql = _rewrite_calls(sql, 'multiIf', lambda a: 'CASE ' + ' '.join(
-        f'WHEN {a[i]} THEN {a[i + 1]}' for i in range(0, len(a) - 1, 2)) + f' ELSE {a[-1]} END')
-    sql = _rewrite_calls(sql, 'argMinIf', lambda a: f'arg_min({a[0]}, {a[1]}) FILTER (WHERE {a[2]})')
-    sql = _rewrite_calls(sql, 'countIf', lambda a: f'count(*) FILTER (WHERE {a[0]})')
-    sql = _rewrite_calls(sql, 'argMax', lambda a: f'arg_max({a[0]}, {a[1]})')
-    sql = _rewrite_calls(sql, 'toDateTime', lambda a: f'CAST({a[0]} AS TIMESTAMP)')
-    sql = _rewrite_calls(sql, 'toDate', lambda a: f'CAST({a[0]} AS DATE)')
-    sql = _rewrite_calls(sql, 'toString', lambda a: f'CAST({a[0]} AS VARCHAR)')
-    sql = _rewrite_calls(sql, 'toInt', lambda a: f'TRY_CAST({a[0]} AS BIGINT)')  # HogQL toInt: NULL when not a number
-    sql = _rewrite_calls(sql, 'ifNull', lambda a: f'coalesce({a[0]}, {a[1]})')
-    sql = sql.replace('count()', 'count(*)')
-    sql = re.sub(r'person_id NOT IN COHORT (\d+)', r'person_id NOT IN (SELECT person_id FROM cohort_people WHERE cohort_id = \1)', sql)
-    return sql
 
 
 class Events:
@@ -88,16 +25,7 @@ class Events:
         self.rows.append((f'u{self.n:04d}', event, person, DAY + timedelta(minutes=minutes), props))
 
     def run(self, sql):
-        con = duckdb.connect()
-        struct = ', '.join(f'{name} VARCHAR' for name in PROPS)
-        con.execute(f'CREATE TABLE events (uuid VARCHAR, event VARCHAR, person_id VARCHAR, timestamp TIMESTAMP, properties STRUCT({struct}))')
-        for uuid, event, person, ts, props in self.rows:
-            con.execute('INSERT INTO events VALUES (?, ?, ?, ?, ?)', [uuid, event, person, ts, {k: props.get(k) for k in PROPS}])
-        con.execute('CREATE TABLE cohort_people (cohort_id INTEGER, person_id VARCHAR)')
-        con.execute('INSERT INTO cohort_people VALUES (?, ?)', [COHORT, 'staff'])
-        cursor = con.execute(to_duckdb(sql))
-        names = [d[0] for d in cursor.description]
-        return [dict(zip(names, row)) for row in cursor.fetchall()]
+        return run_sql(sql, self.rows, staff=('staff',), cohort=COHORT)
 
 
 def fixture():

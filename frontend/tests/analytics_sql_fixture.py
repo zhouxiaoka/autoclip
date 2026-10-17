@@ -47,6 +47,8 @@ class AnalyticsSqlTests(unittest.TestCase):
         result = subprocess.run(['node', '-e', """
 const path = require('node:path')
 const { loadTs } = require('./frontend/tests/load-ts.cjs')
+// #419: terminals are projections of backend receipts. This job has no backend runtime, so the snapshot carries the
+// receipt document GET /studio/{id} returns (a settled receipt as stored in studio.json; no receipt rule here).
 const workflow = loadTs(path.resolve('frontend/src/analytics/workflow.ts'))
 const events = []
 for (const kind of ['studio-export', 'studio-generation']) {
@@ -56,8 +58,10 @@ for (const kind of ['studio-export', 'studio-generation']) {
       () => true, (event, props) => { events.push({ event, props }); return true })
     tracker.watch(kind, 'fixture')
     tracker.observeStudio(tracker.list()[0], {
-      material_origin: 'user', generation: { status },
+      material_origin: 'user', generation: { status, attempt_id: 't-fixture00000000' },
       jobs: [{ job_id: 'fixture', status }],
+      attempts: [{ attempt_id: 't-fixture00000000', flow_id: 't-flow0000000000', sequence: 1, kind: 'generation', state: status,
+        ...(status === 'failed' ? { error_code: 'unexpected', failure_stage: 'render' } : {}) }],
     })
   }
 }
