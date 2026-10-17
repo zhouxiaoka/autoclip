@@ -8,7 +8,8 @@ function loadWorkflow(MathImpl=Math){
  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Math:MathImpl,JSON,Number,Array,Object,Map,Set,String,URL})
  return exports
 }
-const workflow=loadWorkflow()
+const {withRealBackend: withBackendReceipts}=require('./helpers/real-backend.cjs')
+const workflow=withBackendReceipts(loadWorkflow())
 
 function tracker(){
  const events=[],store=new Map()
@@ -30,31 +31,14 @@ const SNAPSHOT={
  drafts:[{id:'a',title:'Private title',packaging:{template:'interview_zh',fallback:false}},{id:'b',packaging:{template:'podcast_en',fallback:true}}],
 }
 
-test('generation summary counts templates, framing and fallbacks without any content',()=>{
- const summary=workflow.generationSummary(SNAPSHOT)
- assert.deepEqual({...summary},{variant_count:3,completed_variant_count:1,failed_variant_count:1,on_demand_variant_count:1,skipped_variant_count:1,platform_count:2,
-  interview_count:1,podcast_count:1,landscape_count:0,editorial_count:0,street_count:0,classic_count:2,html_downgrade_count:0,speaker_framed_count:1,full_frame_count:1,framing_pending_count:0,framing_captions_count:0,
-  portrait_style:undefined,brand_outro_enabled:undefined,outro_applied_count:0,outro_fallback_count:0,outro_unknown_count:1,packaging_fallback_count:1,trimmed_count:1,burned_captions:false,duration_ms:240000})
- const props=workflow.safeStudioProperties({...summary,title:'Private title',name:'Sam Altman',template:'interview_zh',packaging_style:'boxed',framing:'speaker'})
+test('receipt summary fields keep enums and drop content',()=>{
+ // R26 #367: the counting rules are asserted on backend attempts.generation_summary; here only the sanitizer.
+ const props=workflow.safeStudioProperties({variant_count:3,outro_unknown_count:1,portrait_style:'podcast',title:'Private title',name:'Sam Altman',template:'interview_zh',packaging_style:'boxed',framing:'speaker',warnings:['private error']})
  assert.equal(JSON.stringify(props).includes('Private'),false)
+ assert.equal(JSON.stringify(props).includes('private'),false)
  assert.equal(JSON.stringify(props).includes('Sam'),false)
  assert.equal(props.template,'interview_zh'); assert.equal(props.packaging_style,'boxed'); assert.equal(props.framing,'speaker')
-})
-
-test('outro metrics separate actual result, disabled setting, fallback and missing evidence',()=>{
- const state={generation:{portrait_style:'podcast',branding:{outro_enabled:true}},output_variants:[
-  ...['applied','fallback','disabled','unknown'].map(id=>({id,draft_id:id,render_job_id:id,strategy_id:'douyin',status:'completed',branding:{outro_enabled:true}})),
-  {id:'failed',draft_id:'failed',render_job_id:'failed',strategy_id:'douyin',status:'failed'},
- ],jobs:[
-  {job_id:'applied',status:'completed',brand_outro:true,result:{outro_applied:true}},
-  {job_id:'fallback',status:'completed',brand_outro:true,result:{outro_applied:false,warnings:['private error']}},
-  {job_id:'disabled',status:'completed',brand_outro:false,result:{outro_applied:false}},
-  {job_id:'failed',status:'failed',brand_outro:true,result:{outro_applied:false}},
- ]}
- const props=workflow.safeStudioProperties(workflow.generationSummary(state))
- assert.equal(props.portrait_style,'podcast')
- assert.equal(props.outro_applied_count,1);assert.equal(props.outro_fallback_count,1);assert.equal(props.outro_unknown_count,1)
- assert.equal(JSON.stringify(props).includes('private'),false)
+ assert.equal(props.portrait_style,'podcast'); assert.equal(props.outro_unknown_count,1)
 })
 
 test('automatic output ends screening as auto_started, even if rendering later failed',()=>{
@@ -98,7 +82,8 @@ test('automatic failures report the failed stage, HTTP status and route, rejecti
  t.observeStudio(t.list()[0],state)
  const props=events.find(e=>e.name==='studio_generation_finished').props
  assert.equal(props.failure_stage,'screening');assert.equal(props.http_status,400)
- assert.equal(props.route,'visual');assert.equal(props.recommendation_mode,'ai')
+ // R27 #378: screening failed before production bound a plan, so the stored plan's route/mode are not this attempt's
+ assert.equal(props.route,undefined);assert.equal(props.recommendation_mode,undefined)
  assert.equal(JSON.stringify(props).includes('private'),false)
  const bad=workflow.safeStudioProperties({failure_stage:'private-stage',http_status:200,route:'private-route'})
  assert.equal(bad.failure_stage,undefined);assert.equal(bad.http_status,undefined);assert.equal(bad.route,undefined)
@@ -125,12 +110,15 @@ test('automatic auth failures retain their code and pass catalog validation with
  }
 })
 
-test('old automatic failures use the analysis code and reject unrecognized codes',()=>{
+// R25: receipts come from the real backend, which always persists the generation's own code (_inspect writes it;
+// store._ensure_failure_identity normalizes anything outside STUDIO_ERROR_CODES to 'unexpected').
+test('automatic failures report the persisted code and never an unrecognized one',()=>{
  for(const code of ['subtitle_setup','private arbitrary message']){
   const {t,events}=tracker();t.watch('studio-generation','p1')
-  t.observeStudio(t.list()[0],{generation:{status:'failed'},analysis:{status:'failed',phase:'production',error_code:code}})
+  t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:code},analysis:{status:'failed',phase:'production',error_code:code}})
   const finished=events.find(e=>e.name==='studio_generation_finished')
-  assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':undefined)
+  assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':'unexpected')
+  assert.equal(JSON.stringify(finished).includes('private'),false)
  }
 })
 
@@ -181,7 +169,7 @@ test('seeded ids that would spell a secret marker are regenerated and pass catal
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../../docs/analytics/event_catalog.json'),'utf8'))
  assert.equal(SK.toString(36),'0.sk')
  for(const values of [[SK,0.25,0.5,0.75],[SK]]){   // second: RNG stuck on the bad value
-  const wf=loadWorkflow(seededMath(values))
+  const wf=withBackendReceipts(loadWorkflow(seededMath(values)))
   const events=[],store=new Map()
   const t=new wf.WorkflowTracker({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},()=>true,(name,props)=>{events.push({name,props});return true})
   t.watch('studio-generation','p1')

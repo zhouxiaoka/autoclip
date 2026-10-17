@@ -524,21 +524,45 @@ def _recover_interrupted_run(data):
 
 
 def settle_generation(data):
-    """Settle the generation once every requested (not backup) variant is completed or failed."""
-    variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
+    """Settle the generation once every requested (not backup) variant is completed or failed.
+    Judged only on this round's outputs (attempts.round_outputs, the same scope as the receipt): the current
+    attempt's outputs plus those a variant retry redid. An older round's failure neither taints nor completes
+    this round. No attempt record -> the whole workspace. An attempt that stamped nothing is not settled here."""
+    from backend.services.studio import attempts
+    scope = attempts.round_outputs(data)
+    if scope == []:
+        return  # this attempt stamped nothing; do not record it completed from other rounds
+    pool = data['output_variants'] if scope is None else scope
+    variants = [item for item in pool if item['status'] != 'on_demand']
     if all(item['status'] in ('completed', 'failed') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
         outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
         from backend.core.sentry_setup import STUDIO_ERROR_CODES
         jobs = {job['job_id']: job for job in data.get('jobs', [])}
-        codes = set()
+        # R24 #265: one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
+        from backend.core.failure_attribution import rank_failures
+        failures = []
         for item in variants:
             if item['status'] == 'failed':
-                code = item.get('error_code') or jobs.get(item.get('render_job_id'), {}).get('error_code')
-                codes.add(code if isinstance(code, str) and code in STUDIO_ERROR_CODES else 'unexpected')
+                job = jobs.get(item.get('render_job_id'), {})
+                code = item.get('error_code') or job.get('error_code')
+                upstream = item.get('upstream_error_type') or job.get('upstream_error_type')
+                failures.append({'error_code': code if isinstance(code, str) and code in STUDIO_ERROR_CODES else 'unexpected',
+                                 **({'upstream_error_type': upstream} if isinstance(upstream, str) and upstream else {})})
         if not variants:
-            codes.add('validation')
-        code = 'multiple' if len(codes) > 1 else next(iter(codes), None)
+            failures.append({'error_code': 'validation'})
+        ranked = rank_failures(failures)
+        code = ranked[0]['error_code'] if ranked else None
+        secondary = {}
+        if len(ranked) > 1:
+            secondary = {'secondary_error_codes': [f['error_code'] for f in ranked[1:]],
+                         'secondary_upstream_error_types': [f.get('upstream_error_type') or '' for f in ranked[1:]],
+                         'secondary_failure_stages': ['render'] * (len(ranked) - 1)}
+        for key in ('upstream_error_type', 'secondary_error_codes', 'secondary_upstream_error_types', 'secondary_failure_stages'):
+            data['generation'].pop(key, None)
+        if ranked and ranked[0].get('upstream_error_type'):
+            data['generation']['upstream_error_type'] = ranked[0]['upstream_error_type']
+        data['generation'].update(secondary)
         if code:
             data['generation']['error_code'] = code
             data['generation']['failure_stage'] = 'render'
@@ -558,9 +582,13 @@ def settle_generation(data):
             reason = next((text for text in reasons if isinstance(text, str) and text), None)
             if reason:
                 data['generation']['error'] = reason
-        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
+        # R28 #409: failures outside this round (an older round's, not redone) - the results page can say
+        # "this re-run succeeded, N still to redo" from this number; no separate tally.
+        ids = {id(item) for item in variants}
+        outside = sum(1 for item in data['output_variants'] if id(item) not in ids and item.get('status') == 'failed')
+        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now(), not_redone_failed_count=outside)
         error = data['generation'].get('error') if outcome == 'failed' else None
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'error': error} if error else {})}
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'upstream_error_type': data['generation']['upstream_error_type']} if data['generation'].get('upstream_error_type') else {}), **secondary, **({'error': error} if error else {})}
 
 
 @_serialized
@@ -583,13 +611,17 @@ def write(project_id, data, *, _recover_previous=True):
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
         analysis['run_id'] = prior['run_id']
         analysis.setdefault('phase', prior.get('phase'))
+    # R25 #342: settle only after the terminal identity (run_id/phase) and the run telemetry are complete - the
+    # worker's terminal write inherits run_id/phase above. The one place a receipt settles (same atomic write).
+    from backend.services.studio import attempts
+    attempts.reconcile(data, now())
     history = list(previous.get('analysis_history', []))
     for terminal, state in ((prior, previous), (analysis, data)):
         if terminal.get('run_id') and terminal.get('status') in ('awaiting_confirmation', 'completed', 'failed'):
             key = terminal['run_id']
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
-                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id') if k in terminal}
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'failure_stage', 'http_status', 'upstream_error_type', 'secondary_error_codes', 'secondary_upstream_error_types', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id') if k in terminal}
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis', 'degrade_reason') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:

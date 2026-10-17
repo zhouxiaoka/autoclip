@@ -35,6 +35,8 @@ PORTABLE_PY_REL="python.exe"
 source "$PROJECT_ROOT/scripts/lib/desktop_build_common.sh"
 # shellcheck source=lib/sign_updater.sh
 source "$PROJECT_ROOT/scripts/lib/sign_updater.sh"
+# shellcheck source=lib/ffmpeg_pin.sh
+source "$PROJECT_ROOT/scripts/lib/ffmpeg_pin.sh"
 
 check_build_tools
 prepare_portable_python
@@ -53,16 +55,17 @@ verify_backend_deps
 verify_playwright_bundled
 
 # ---- ffmpeg ----
-# Static win64 builds. BtbN's "latest" tag is a moving pointer to the current
-# master build; gyan.dev's release-essentials is the fallback. Both zips
-# contain bin/ffmpeg.exe and bin/ffprobe.exe with no external DLL deps.
+# Pinned gyan.dev essentials build; version, URL and sha256 live only in
+# scripts/ffmpeg-win64.env (the Windows CI action reads the same file). The
+# zip holds ffmpeg-<version>-essentials_build/bin/{ffmpeg,ffprobe}.exe, static
+# with no external DLL deps. One URL, no mirrors: a download or sha256 failure
+# stops the build.
 echo "==> Bundling static ffmpeg + ffprobe (win64)"
+read_ffmpeg_pin "$PROJECT_ROOT/scripts/ffmpeg-win64.env" FFMPEG_VERSION FFMPEG_URL FFMPEG_SHA256
 mkdir -p "$RESOURCES_DIR/ffmpeg"
 FFMPEG_CACHE="build/ffmpeg-cache"
-FFMPEG_ZIP="$FFMPEG_CACHE/ffmpeg-win64.zip"
-download_with_mirrors "$FFMPEG_ZIP" 50000000 \
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" \
-    "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+FFMPEG_ZIP="$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION-essentials_build.zip"
+fetch_pinned "$FFMPEG_ZIP" "$FFMPEG_URL" "$FFMPEG_SHA256"
 for name in ffmpeg ffprobe; do
     extract_from_zip "$FFMPEG_ZIP" "$name.exe" "$RESOURCES_DIR/ffmpeg/$name.exe"
 done

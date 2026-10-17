@@ -30,13 +30,47 @@ CHUNK_ATTEMPTS = 3  # parallel uploads meet rate limits more often: a busy chunk
 
 
 def _retryable(error: Exception) -> bool:
-    if isinstance(error, httpx.HTTPStatusError):
-        return error.response.status_code == 429 or error.response.status_code >= 500
+    """Classified first (R22 #170): only transient upstream types are retried, never a user cause such as
+    insufficient_quota behind a 429; a bare 429 / 5xx without a recognised body stays retryable."""
+    if isinstance(error, CloudTranscriptionError):
+        from backend.core.upstream_errors import is_retryable
+        if error.upstream_error_type:
+            return is_retryable(error.upstream_error_type)
+        return error.http_status is not None and (error.http_status == 429 or error.http_status >= 500)
     return isinstance(error, httpx.RequestError)
 
 
+def _upstream_type(status, body):
+    """Enum only: e.g. HTTP 429 + "insufficient balance" -> insufficient_quota (user cause), not rate_limited."""
+    from backend.core.upstream_errors import classify_upstream_error
+    kind = classify_upstream_error(status, body).error_type.value
+    return '' if kind == 'unknown' else kind
+
+
+def _check_status(response):
+    """The one place an HTTP error is classified. Called while the (stream) response is still open, so the
+    body is readable (R22 #169); only the enum and status leave this function, never the body."""
+    if not response.is_error:
+        return
+    try:
+        body = response.read().decode('utf-8', 'replace')
+    except Exception:  # noqa: BLE001 - unreadable body: classify by status alone
+        body = None
+    status = response.status_code
+    raise CloudTranscriptionError(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。',
+                                  http_status=status, upstream_error_type=_upstream_type(status, body))
+
+
 class CloudTranscriptionError(RuntimeError):
-    pass
+    """Safe public text only. ``http_status`` / ``upstream_error_type`` are enums/ints, never provider bodies."""
+
+    def __init__(self, message: str = '', *, http_status: int | None = None, upstream_error_type: str = ''):
+        super().__init__(message)
+        self.http_status = http_status if type(http_status) is int and 400 <= http_status <= 599 else None
+        if not upstream_error_type and self.http_status is not None:
+            from backend.core.upstream_errors import classify_upstream_error
+            upstream_error_type = classify_upstream_error(self.http_status).error_type.value
+        self.upstream_error_type = upstream_error_type if upstream_error_type != 'unknown' else ''
 
 
 def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
@@ -80,7 +114,7 @@ def request_chunk(client, connection, model, audio, language):
         sentences = {}
         with client.stream('POST', base + '/services/aigc/multimodal-generation/generation',
                            headers={**headers, 'X-DashScope-SSE': 'enable'}, json=payload) as response:
-            response.raise_for_status()
+            _check_status(response)
             if 'text/event-stream' in response.headers.get('content-type', ''):
                 events = (json.loads(line[5:].strip()) for line in response.iter_lines()
                           if line.startswith('data:') and line[5:].strip() not in {'', '[DONE]'})
@@ -89,7 +123,8 @@ def request_chunk(client, connection, model, audio, language):
                 events = [response.json()]
             for event in events:
                 if event.get('code') and event['code'] not in {'Success', '200'}:
-                    raise CloudTranscriptionError('云端转写失败，请检查账号权限、额度和模型。')
+                    raise CloudTranscriptionError('云端转写失败，请检查账号权限、额度和模型。',
+                                                  upstream_error_type=_upstream_type(None, event))
                 output = event.get('output') or {}
                 items = output.get('sentences') or [output.get('sentence') or {}]
                 for item in items:
@@ -108,7 +143,7 @@ def request_chunk(client, connection, model, audio, language):
     with audio.open('rb') as stream:
         response = client.post(endpoint['base_url'].rstrip('/') + '/audio/transcriptions', headers=headers,
                                data=data, files={'file': ('audio.wav', stream, 'audio/wav')})
-    response.raise_for_status()
+    _check_status(response)
     payload = response.json()
     segments = payload.get('segments')
     if not isinstance(segments, list):
@@ -120,7 +155,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
     selection = settings.transcription
     connection = next(c for c in settings.connections if c.id == selection.connection_id)
     if not connection.api_key and connection.provider != 'compatible':
-        raise CloudTranscriptionError('请先在字幕转写设置中填写 API Key。')
+        raise CloudTranscriptionError('请先在字幕转写设置中填写 API Key。', upstream_error_type='invalid_key')
     output = Path(output) if output else video.with_suffix('.srt')
     from backend.utils.speech_recognizer import SpeechRecognizer, srt_has_cue_text
     if output.exists() and srt_has_cue_text(output):
@@ -160,7 +195,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                         try:
                             items, milliseconds = request_chunk(client, connection, selection.model, chunk, language)
                             break
-                        except (httpx.HTTPStatusError, httpx.RequestError) as error:
+                        except (CloudTranscriptionError, httpx.RequestError) as error:
                             if attempt == CHUNK_ATTEMPTS - 1 or not _retryable(error):
                                 raise
                             time.sleep(2 * 2 ** attempt)
@@ -174,8 +209,6 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                 finally:
                     # On a failure, chunks not yet sent are dropped instead of spending more quota.
                     pool.shutdown(wait=True, cancel_futures=True)
-        except httpx.HTTPStatusError as exc:
-            raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。') from None
         except (httpx.RequestError, ValueError) as exc:
             raise CloudTranscriptionError('云端转写连接失败或响应格式无效，请稍后重试。') from None
         if not segments:

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Q
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, ConfigDict, Field
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
@@ -32,6 +33,8 @@ def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except store.ConflictError as error:
+        if getattr(error, 'error_code', None):  # R30: a coded refusal (frontend errorText maps the code)
+            raise HTTPException(error.status, {'error_code': error.error_code, 'message': str(error)}) from None
         raise HTTPException(409, str(error)) from None
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from None
@@ -205,6 +208,8 @@ async def template_recommend(
 def workspace(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
     data = call(store.read, project_id)
+    from backend.services.studio import attempts
+    data = {**data, 'attempts': [attempts.public(a) for a in attempts.receipts(data)]}
     return {**data, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
@@ -298,6 +303,41 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
 
+class RetryCommand(BaseModel):
+    """The one retry command (#419): the backend validates the parent and creates the attempt."""
+    model_config = ConfigDict(extra='forbid')
+    scope: Literal['analysis', 'variant']
+    variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
+    idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
+
+
+@router.post('/{project_id}/retry')
+def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get_db)):
+    """Returns the attempt receipt. Same idempotency_key -> same receipt, dispatched once."""
+    from backend.services.studio import attempts
+    project = project_or_404(project_id, db)
+    retry = {'parent_attempt_id': body.parent_attempt_id, 'key': body.idempotency_key}
+    if body.scope == 'variant':
+        if not body.variant_id:
+            raise HTTPException(422, '缺少成片版本')
+        variant = call(jobs.retry_variant, project_id, body.variant_id, retry)
+        receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+        return {'attempt': attempts.public(receipt) if receipt else None, 'variant': variant}
+    config = project.processing_config or {}
+    prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else ImportOptions.model_validate(Preferences.model_validate(config.get('creative', {})).model_dump())
+    url = None
+    try:
+        jobs.source(project_id)
+    except FileNotFoundError:
+        url = (project.project_metadata or {}).get('source_url')
+        if not url:
+            raise HTTPException(404, '原素材不存在，请重新导入')
+    run_id = call(jobs.inspect_project, project_id, prefs, url, config.get('creative_browser'), retry=retry)
+    receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key)
+    return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None}
+
+
 @router.put('/{project_id}/plan')
 def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
@@ -334,8 +374,7 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
-    return {'variants': variants}
+    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # 1.5.8: always refused, no attempt
 
 
 def _variant_job(project_id: str, variant_id: str):

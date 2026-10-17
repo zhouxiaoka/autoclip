@@ -9,14 +9,15 @@ function load(file, mocks) {
   return exports
 }
 test('automatic retry enrolls a fresh terminal watch on the same flow and deduplicates completion', async () => {
-  const { WorkflowTracker, safeStudioProperties } = load('analytics/workflow.ts', {})
+  // #419: terminals are projections of backend receipts (helper = what attempts.py writes for this state).
+  const { WorkflowTracker, safeStudioProperties } = require('./helpers/real-backend.cjs').withRealBackend(load('analytics/workflow.ts', {}))
   const events = [], storage = new Map(), requests = []
   const workflow = new WorkflowTracker({ getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }, () => true, (event, props) => { events.push({ event, props }); return true })
   workflow.rememberProject('p', { material_origin: 'user' })
   workflow.watch('studio-generation', 'p')
   workflow.observeStudio(workflow.list()[0], { generation: { auto_start: true, status: 'failed', error_code: 'whisper_not_installed' }, analysis: { status: 'failed' } })
   const api = load('features/studio/api.ts', {
-    '../../analytics/posthog': {}, '../../analytics/workflow': { safeStudioProperties },
+    '../../analytics/posthog': {}, '../../analytics/workflow': { safeStudioProperties, telemetryId: () => 't-0000000000' },
     '../../analytics/observer': { workflow }, '../../services/api': { default: { post: async url => { requests.push(url); return { analysis_run_id: 'new-run' } } } },
     '../../analytics/studio': { observeStudioOperation: async (_name, action, accepted) => { const result = await action(); accepted(result, {}); return result } },
   }).studioApi
@@ -28,6 +29,9 @@ test('automatic retry enrolls a fresh terminal watch on the same flow and dedupl
   workflow.observeStudio(watch, state); workflow.observeStudio(watch, state)
   const finished = events.filter(item => item.event === 'studio_generation_finished')
   assert.deepEqual(finished.map(item => item.props.outcome), ['error', 'success'])
-  assert.equal(finished[0].props.flow_id, finished[1].props.flow_id)
+  // R25/#345: flow_id comes from the backend receipt. The legacy /analyze path is not the v4 retry command, so the
+  // backend opens a new flow; flow sharing through POST /retry is covered by test_r25_419_receipt_chain_duckdb.py.
+  assert.ok(finished[0].props.flow_id && finished[1].props.flow_id)
+  assert.notEqual(finished[0].props.flow_id, finished[1].props.flow_id)
   assert.notEqual(finished[0].props.attempt_id, finished[1].props.attempt_id)
 })

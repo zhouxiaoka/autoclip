@@ -191,7 +191,7 @@ def import_subtitle_failure(speech_error: Optional[str | CloudTranscriptionError
 
     try:
         if isinstance(speech_error, CloudTranscriptionError):
-            return cloud_transcription_failure(str(speech_error))
+            return cloud_transcription_failure(speech_error)
         if speech_error:
             return failure_from_speech_error(speech_error)
         return missing_subtitle_failure()

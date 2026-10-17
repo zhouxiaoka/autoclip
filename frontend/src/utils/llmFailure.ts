@@ -2,8 +2,18 @@
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 
+/** The one user-cause reason table (R22 code health): studio 「去设置」 and every llmFailureText caller read it. */
+export const USER_CAUSE_REASONS: Record<string, string> = {
+  authentication: 'API Key 无效或已过期，请到设置里更新后再试',
+  llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试',
+  invalid_key: 'API Key 无效或已过期，请到设置里更新后再试',
+  insufficient_quota: '服务商账户余额不足，请充值或换一个服务商',
+  permission_denied: '这个 API Key 没有该模型的使用权限，请到设置里更换',
+  llm_not_configured: '还没有配置可用的模型，请先到设置里添加',
+}
+
 export function llmFailureText(error?: string | null, code?: string | null): string {
-  return code === LLM_AUTH_INVALID ? 'API Key 无效或已过期，请检查后重试' : error || ''
+  return code === LLM_AUTH_INVALID ? USER_CAUSE_REASONS[LLM_AUTH_INVALID] : error || ''
 }
 
 /**
