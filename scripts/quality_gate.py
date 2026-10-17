@@ -34,6 +34,8 @@ def checks(group: str, python: str):
             # Run the order-sensitive regression in a fresh process as well as the full suite.
             ('llm_hot_reload_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests/test_llm_hot_reload.py', '-q', '-r', 's'], ROOT),
             ('backend_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests', '-q', '-r', 's'], ROOT),
+            # Windows QA harness: its own pytest scope (scripts/winqa/tests/conftest.py), never loads the backend.
+            ('winqa_tests', [python, '-m', 'pytest', '-o', 'addopts=', 'scripts/winqa/tests', '-q', '-r', 's'], ROOT),
             ('editorial_fixtures', [python, '-m', 'backend.eval'], ROOT),
         ],
         'frontend': [
@@ -113,7 +115,7 @@ def run(group: str, report_path: Path, python: str) -> int:
             started = time.monotonic()
             skipped = []
             coverage = None
-            is_pytest = name in ('backend_tests', 'llm_hot_reload_tests', 'redline_backend')
+            is_pytest = name in ('backend_tests', 'llm_hot_reload_tests', 'redline_backend', 'winqa_tests')
             if is_pytest:
                 junit_path = Path(temp) / (name + '.xml')
                 command = [*command, '--junitxml=' + str(junit_path)]
@@ -132,6 +134,10 @@ def run(group: str, report_path: Path, python: str) -> int:
                         executed = {part for case in cases for part in case.get('classname', '').split('.')}
                         coverage = {'test_count': len(cases), 'module_count': len(expected & executed),
                                     'missing_modules': sorted(expected - executed), 'missing_reload_cases': []}
+                    elif name == 'winqa_tests':
+                        # R29 #355: same evidence as backend_tests (JUnit, unexpected skips, every module executed)
+                        coverage = pytest_coverage(junit_path, {p.stem for p in (ROOT / 'scripts/winqa/tests').glob('test_*.py')})
+                        coverage['missing_reload_cases'] = []
                     else:
                         expected = ({p.stem for p in (ROOT / 'backend/tests').rglob('test_*.py')}
                                     if name == 'backend_tests' else {'test_llm_hot_reload'})
