@@ -146,7 +146,7 @@ def test_switch_affects_only_the_model_download(monkeypatch):
     assert sr.QA_MOCK_DOWNLOAD_DETAIL not in res.text
 
 
-def test_one_capture_path_r27c_i488():
+def test_one_capture_path_r27c_i488(monkeypatch):
     """R27c I488: speech_recognition has no capture of its own (no sentry_sdk, no private _initialized read); the
     download route goes through sentry_setup.capture_studio_exception, whose phase whitelist knows model_download."""
     from pathlib import Path
@@ -155,6 +155,7 @@ def test_one_capture_path_r27c_i488():
     assert 'sentry_sdk' not in src and '_initialized' not in src
     assert 'capture_studio_exception(e, phase="model_download", http_status=500)' in src
     assert not hasattr(sr, 'capture_model_download_failure')
+    monkeypatch.setattr(sentry_setup, 'crash_reports_enabled', lambda: True)  # consent is not what this checks
     event = {'tags': {'area': 'studio', 'phase': 'model_download', 'error_code': 'validation', 'http_status': '500'},
              'exception': {'values': [{'type': 'ValueError', 'value': 'x'}]}}
     clean = sentry_setup.before_send(event, {}) or {}
