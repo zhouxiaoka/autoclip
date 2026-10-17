@@ -6,16 +6,19 @@ description: >-
 runs:
   using: composite
   steps:
-    - name: Pin FFmpeg version
+    - name: Load pinned FFmpeg version
       shell: pwsh
       run: |
-        # I558: replaces `choco install ffmpeg` (feed failures: run 38985635643,
-        # #419 9a3ba543). sha256 = local sha256sum = GitHub asset digest = gyan.dev .sha256.
-        Add-Content -LiteralPath $env:GITHUB_ENV -Value @(
-          'FFMPEG_VERSION=9.0.2'
-          'FFMPEG_URL=https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip'
-          'FFMPEG_SHA256=60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
-        )
+        # Single source: scripts/ffmpeg-win64.env (rule in scripts/lib/ffmpeg_pin.ps1,
+        # shared with scripts/build_windows_x64.sh via scripts/lib/ffmpeg_pin.sh).
+        $ErrorActionPreference = 'Stop'
+        $pin = & (Join-Path $env:GITHUB_WORKSPACE 'scripts/lib/ffmpeg_pin.ps1') `
+          -Path (Join-Path $env:GITHUB_WORKSPACE 'scripts/ffmpeg-win64.env') `
+          -Keys FFMPEG_VERSION, FFMPEG_URL, FFMPEG_SHA256
+        foreach ($entry in $pin.GetEnumerator()) {
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "$($entry.Key)=$($entry.Value)"
+          Write-Host "$($entry.Key)=$($entry.Value)"
+        }
     - name: Restore pinned FFmpeg
       id: ffmpeg-cache
       uses: actions/cache/restore@v4

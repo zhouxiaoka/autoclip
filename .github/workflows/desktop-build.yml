@@ -248,7 +248,7 @@ jobs:
           path: |
             build/pbs-cache
             build/ffmpeg-cache
-          key: desktop-downloads-windows-${{ hashFiles('scripts/build_windows_x64.sh', 'scripts/lib/desktop_build_common.sh') }}
+          key: desktop-downloads-windows-${{ hashFiles('scripts/build_windows_x64.sh', 'scripts/lib/desktop_build_common.sh', 'scripts/lib/ffmpeg_pin.sh', 'scripts/ffmpeg-win64.env') }}
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0"

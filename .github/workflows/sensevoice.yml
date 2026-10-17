@@ -9,6 +9,8 @@ on:
       - 'scripts/verify_sensevoice.py'
       - '.github/workflows/sensevoice.yml'
       - '.github/actions/setup-ffmpeg-win/**'
+      - 'scripts/ffmpeg-win64.env'
+      - 'scripts/lib/ffmpeg_pin.ps1'
 permissions:
   contents: read
 jobs:
