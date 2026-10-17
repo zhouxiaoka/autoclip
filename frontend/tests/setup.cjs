@@ -49,7 +49,18 @@ if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
     process.exitCode = 1
   }
   const realError = console.error.bind(console)
-  console.error = (...args) => { record('console.error: ' + util.format(...args)); realError(...args) }
+  // Node's own warning printer uses console.error. Those lines are not application errors:
+  // CI's Node 20 prints MaxListenersExceededWarning and the MockTimers ExperimentalWarning this way.
+  console.error = (...args) => {
+    const text = util.format(...args)
+    if (/\(node:\d+\) (?:MaxListenersExceededWarning|ExperimentalWarning):/.test(text)
+        || text.includes('Use `node --trace-warnings')) {
+      realError(...args)
+      return
+    }
+    record('console.error: ' + text)
+    realError(...args)
+  }
   process.on('unhandledRejection', reason => { record('unhandled rejection: ' + util.inspect(reason)) })
 
   // happy-dom routes every listener / timer exception of every window through

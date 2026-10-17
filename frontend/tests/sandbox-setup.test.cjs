@@ -45,6 +45,17 @@ test('#234 console.error during a test fails it (passed silently before)', () =>
   failsOnlyWithSetup(`test('probe', () => { console.error('Warning: something React swallowed') })`, /swallowed error\(s\) during the test/)
 })
 
+test('Node runtime warnings printed through console.error are not application errors', () => {
+  const hint = '(Use `node --trace-warnings ...` to show where the warning was created)'
+  const r = runWithSetup(`test('probe', () => {
+  console.error('(node:1) ExperimentalWarning: The MockTimers API is an experimental feature')
+  console.error('(node:1) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10.')
+  console.error(${JSON.stringify(hint)})
+})`)
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  failsOnlyWithSetup(`test('probe', () => { console.error('ExperimentalWarning: boom') })`, /ExperimentalWarning: boom/)
+})
+
 test('#270 console.error at module top level fails the file', () => {
   failsOnlyWithSetup(`console.error('top level')\ntest('probe', () => {})`, /top level/)
   failsOnlyWithSetup(`console.error('top level, no tests')`, /top level, no tests/)

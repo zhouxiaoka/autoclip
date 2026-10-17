@@ -1101,16 +1101,6 @@ test('R28 readiness timeout 5s (behaviour, fake timers): the probe and the follo
     '../../analytics/studio': {}, '../../analytics/observer': { workflow: {} }, '../../services/api': { default: api },
     './noticeRuntime': { noteWorkspaceCompletion() {} }, './subtitleState': { effectiveSubtitles: () => false }, './types': {},
   }, dir).studioApi
-  // Node prints this once through console.error. It is not an application error; the strict setup
-  // would otherwise fail the file. The wrapper drops that one line and then records again.
-  const recorded = console.error
-  console.error = (...args) => {
-    if (args.map(String).join(' ').includes('ExperimentalWarning: The MockTimers API')) {
-      console.error = recorded
-      return
-    }
-    return recorded(...args)
-  }
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const live = new Map()
   // axios' fetch adapter with a backend that never answers: the request ends only when its signal aborts.
