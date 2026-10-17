@@ -136,12 +136,13 @@ def test_i452_a_new_phase_failure_keeps_its_own_503_after_an_old_kimi_503():
             raise error
         except Exception:  # noqa: BLE001
             store.change('p452', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
+    store.change('p452', lambda d: d['analysis'].update(status='running'))  # R30 I560: the retry starts (a real transition)
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
             raise PipelineFailure('ANALYZE', 'glm down', code='rate_limited', http_status=503)
         except PipelineFailure:
-            store.change('p452', lambda d: d['analysis'].update(error_code='rate_limited'))
+            store.change('p452', lambda d: d['analysis'].update(status='failed', error_code='rate_limited'))
     analysis = store.read('p452')['analysis']
     assert analysis['provider'] == 'glm' and analysis['attribution_source'] == 'phase'
     assert analysis['http_status'] == 503, analysis
@@ -156,10 +157,11 @@ def test_i452_old_phase_503_is_replaced_by_a_new_failure_without_status():
         except PipelineFailure:
             store.change('p452b', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
         assert store.read('p452b')['analysis']['http_status'] == 503
+        store.change('p452b', lambda d: d['analysis'].update(status='running'))  # R30 I560: the retry starts (a real transition)
         try:
             raise PipelineFailure('ANALYZE', 'slow', code='timeout')
         except PipelineFailure:
-            store.change('p452b', lambda d: d['analysis'].update(error_code='timeout'))
+            store.change('p452b', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
     analysis = store.read('p452b')['analysis']
     assert 'http_status' not in analysis and 'upstream_error_type' not in analysis, analysis
 

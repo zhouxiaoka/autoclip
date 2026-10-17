@@ -130,26 +130,14 @@ def model_call_error_code(error: Exception) -> str:
 
 
 def http_status_of(error: BaseException | None) -> int | None:
-    """沿异常链找第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
+    """第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
 
-    流水线把提供商异常包成 PipelineFailure(...) from error，状态码在 __cause__ 上；
-    隐式链（处理异常时又抛异常）走 __context__，与 traceback 的展示规则一致。
+    R30 #415（Dong I563，和 I500 同一套遍历规则）：只有 failure_attribution.http_status_of 一处实现。
+    只走显式 __cause__；脱敏边界冻结在安全异常上的 http_status 优先；不再走 __context__
+    （处理旧 503 时又发生的新错误，不能把旧状态码带进新请求）。
     """
-    seen: set[int] = set()
-    current = error
-    while current is not None and id(current) not in seen and len(seen) < 32:
-        seen.add(id(current))
-        for attr in ("http_status", "status_code"):
-            status = getattr(current, attr, None)
-            if type(status) is int and 400 <= status <= 599:
-                return status
-        if current.__cause__ is not None:
-            current = current.__cause__
-        elif not current.__suppress_context__:
-            current = current.__context__
-        else:
-            current = None
-    return None
+    from backend.core.failure_attribution import http_status_of as _one_rule
+    return _one_rule(error)
 
 
 def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFailure:

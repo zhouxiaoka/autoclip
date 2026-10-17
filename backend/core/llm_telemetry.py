@@ -185,10 +185,13 @@ def log_safe_exception(error: Exception) -> Exception:
     # the raw exception never rides on the safe one (callers raise it ``from None``).
     # Only what the original chain DECIDES is frozen here; an undecided error (no SDK type, no local
     # evidence) gets no snapshot, and the call boundary's request record decides it as before.
+    # R30 (I563): the provider's HTTP status is frozen by the same construction, in the same place.
     from backend.core.failure_attribution import classify_failure
+    snap = None
     if classify_failure(error).decided:
         from backend.core.llm_emit import attribution_snapshot
-        attributed(safe, attribution_snapshot(error))
+        snap = attribution_snapshot(error)
+    attributed(safe, snap, http_status=safe.status_code)
     return safe
 
 

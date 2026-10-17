@@ -122,12 +122,13 @@ def test_i417_new_phase_failure_drops_the_older_request_status():
         except Exception:  # noqa: BLE001
             store.change('p417', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
     assert store.read('p417')['analysis']['attribution_source'] == 'request'
+    store.change('p417', lambda d: d['analysis'].update(status='running'))  # R30 I560: the retry starts (a real transition)
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
             raise PipelineFailure('ANALYZE', 'slow', code='timeout')
         except PipelineFailure:
-            store.change('p417', lambda d: d['analysis'].update(error_code='timeout'))
+            store.change('p417', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
     analysis = store.read('p417')['analysis']
     assert analysis['attribution_source'] == 'phase' and analysis['provider'] == 'glm'
     assert 'http_status' not in analysis and 'upstream_error_type' not in analysis, analysis

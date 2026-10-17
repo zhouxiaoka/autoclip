@@ -38,7 +38,8 @@ SEEDREAM_MODEL_MARKERS = ("seedream", "doubao-seedream")
 SEEDREAM_HOST_MARKERS = ("volces.com", "bytepluses.com", "byteplus.com", "volcengine")
 
 
-from backend.core.failure_attribution import AttributedError, attributed, build_attribution  # noqa: E402
+from backend.core.failure_attribution import (  # noqa: E402
+    AttributedError, ProviderTransportError, attributed, build_attribution)
 
 
 class ImageError(AttributedError, RuntimeError):
@@ -65,10 +66,17 @@ def _image_transport_errors(function):
             else:
                 message = '封面服务连接失败，请检查接口地址与网络后重试'
             # Request exceptions can include credentials, URLs and response bodies: the one snapshot is
-            # built from the original here (R29: sent toward the provider = model, I505; a malformed
-            # address never left this machine = local), then the safe error is raised without the chain.
-            snap = build_attribution(error, local=invalid, sent=not invalid, failure_stage='cover')
-            raise attributed(ImageError(message), snap) from None
+            # built here, inside the boundary (a malformed address never left this machine = local; anything
+            # else was sent toward the provider: a content-free ProviderTransportError that THE classifier
+            # judges, R30 I567), the HTTP status is frozen with it (I563), and the safe error goes out
+            # without the chain.
+            status = getattr(getattr(error, 'response', None), 'status_code', None)
+            if invalid:
+                snap = build_attribution(error, local=True, failure_stage='cover')
+            else:
+                snap = build_attribution(ProviderTransportError(type(error).__name__, http_status=status),
+                                         failure_stage='cover')
+            raise attributed(ImageError(message), snap, http_status=None if invalid else status) from None
     return call
 
 

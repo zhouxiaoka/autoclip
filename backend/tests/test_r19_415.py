@@ -63,7 +63,9 @@ def test_95_snapshot_still_fills_identity_when_start_had_none(monkeypatch):
     from backend.core.failure_attribution import build_attribution
     monkeypatch.setattr(llm_emit, 'attribution_snapshot', lambda *a, **k: build_attribution(
         PipelineFailure('ANALYZE', 'slow', code='timeout'), phase_identity={'provider': 'kimi', 'config_source': 'customized'}))
-    _project('p95b', {'id': 'p95b', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r'}})
+    # R30 I560: a live worker's run (its instance), not a stale one that read() recovers as already failed
+    # (service_restarted) before this write: the snapshot is stamped on the running -> failed transition.
+    _project('p95b', {'id': 'p95b', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r', 'instance': store.INSTANCE}})
     try:
         raise PipelineFailure('ANALYZE', 'slow', code='timeout')
     except PipelineFailure:

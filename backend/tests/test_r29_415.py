@@ -157,6 +157,8 @@ def test_i503_a_new_local_error_in_the_same_run_with_the_same_code_replaces_the_
         except Exception:  # noqa: BLE001
             store.change('p503', lambda d: d['analysis'].update(status='failed', error_code='unexpected'))
         assert store.read('p503')['analysis'].get('http_status') == 503
+        # R30 I560: the retry of the same run starts (a real transition), then fails with the same code.
+        store.change('p503', lambda d: d['analysis'].update(status='running'))
         try:
             raise PermissionError(13, 'fixture: a new local failure, same run, same code')
         except PermissionError:

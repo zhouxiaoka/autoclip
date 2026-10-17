@@ -752,7 +752,7 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 身份归因（1.5.8 R22）：`provider` / `config_source` 只有一条规则（`failure_identity.connection_identity`），在**开始时冻结**，结束时不重读设置。
 - 阶段：screening 用视觉连接；production/rendering 走视觉路线且目标不全是 content 时用视觉连接，否则用文本连接；确认路线（`confirmed_analysis`）优先于推荐路线。screening 的身份单独存为 `screening_identity`，自动流程里 production 重新冻结不会覆盖它；`studio_screen_finished` 读这一份。
 - 一次 generation 尝试中途换阶段时，失败按失败阶段归因：screening 失败报视觉连接，production 失败报路线连接。
-- 请求：每个模型请求在**发出前**冻结所用连接，结束时生成一条不可变请求记录（provider/config_source 成对，加上同一次请求的 model/host/http_status/upstream_error_type）。失败的记录随异常携带（沿 `__cause__`/`__context__` 链可找回）。
+- 请求：每个模型请求在**发出前**冻结所用连接，结束时生成一条不可变请求记录（provider/config_source 成对，加上同一次请求的 model/host/http_status/upstream_error_type）。失败的记录随异常携带（沿显式 `__cause__` 链可找回，不看隐式 `__context__`）。R30（I563）起，脱敏边界在安全异常上冻结服务商 HTTP 状态码（`http_status` 字段，和快照同一处构造）；状态码只有一条读取规则：先读这个冻结字段，原始异常才沿 `__cause__` 找。
 - 归因（1.5.8 R25）：失败按**出错的那次请求**的记录整条归因（`attribution_source=request`）；找不到请求记录时用阶段开始时冻结的身份（`attribution_source=phase`）；不取"最近一次请求"，运行中不读设置。落盘、run 快照、Sentry 都只读这一条，不逐字段合并。
 - 旧记录：provider/config_source 不成对时整组（provider、config_source、model、base_url_host）当空，不补。写盘和读出时都按空处理（R26 #399）。
 - `attribution_source`（1.5.8 R26，闭集 `request`/`phase`/`local`，随三个 studio 终态事件、Sentry tag 和 analysis_history 一起上报）：`request` = 失败请求自己的记录；`phase` = 没有请求记录的**模型类**失败，用阶段冻结的连接；`local` = 非模型失败（存储锁超时 `store_lock_timeout`、ffmpeg、本地渲染、请求发出前的本地校验），可带阶段身份但不带请求状态，不算服务商失败。R29（I500）起只查显式异常链 `__cause__`（`raise ... from`），不看隐式 `__context__`。analysis_history 另保留 `model`、`base_url_host`（R26 #400）。

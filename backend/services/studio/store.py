@@ -932,19 +932,21 @@ def _paired(record):
     return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
 
 
-def _apply_attribution(record, failed):
+def _apply_attribution(record, failed, newly_failed):
     """R29 #415 (I503): the store only writes the snapshot it is given, replaced whole; it never infers
-    "the same failure" from run_id/error_code or any other field value.
+    "the same failure" from run_id/error_code or any other field value. R30 (I560): a snapshot is stamped
+    only on a record that became failed IN THIS WRITE (``newly_failed``: the state transition, see
+    ``_attach_run_telemetry``); an error in hand during an unrelated write never touches it.
 
-    - failed, with an error in hand: the snapshot of THAT error replaces the group (an error that carries
-      a boundary snapshot gets it back unchanged; otherwise THE factory builds it from the error, the phase
-      identity, the job's own failure stage and, for local, the attempt's start identity);
-    - failed with no error in hand (a receipt that already wrote its own snapshot, a legacy record, a
-      later unrelated write): the stored group stays exactly as it is;
+    - newly failed, with an error in hand: the snapshot of THAT error replaces the group (an error that
+      carries a boundary snapshot gets it back unchanged; otherwise THE factory builds it from the error,
+      the phase identity, the job's own failure stage and, for local, the attempt's start identity);
+    - newly failed with no error in hand (a receipt that already wrote its own snapshot), or failed before
+      this write and still the same failure: the stored group stays exactly as it is;
     - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
     from backend.core.llm_emit import attribution_snapshot, failure_now
     if failed:
-        if failure_now() is None:
+        if not newly_failed or failure_now() is None:
             return
         snap = attribution_snapshot(start_identity=record)  # the job's own stage rides on the record
         if snap is not None:
@@ -989,7 +991,11 @@ def _attach_run_telemetry(data, project_id, previous):
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = bool(is_failed_terminal(record))
-        _apply_attribution(record, failed)
+        # R30 I560: the transition, judged inside this one serialized write against the record as stored:
+        # non-failed -> failed, or a failed record of ANOTHER attempt (run identity changed). Status and
+        # identity only; never error_code (no "same failure" inference, I503).
+        newly_failed = failed and not (is_failed_terminal(prior) and prior_identity == identity)
+        _apply_attribution(record, failed, newly_failed)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue

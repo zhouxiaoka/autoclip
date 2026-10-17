@@ -35,7 +35,8 @@ def _retryable(error: Exception) -> bool:
     return isinstance(error, httpx.RequestError)
 
 
-from backend.core.failure_attribution import AttributedError, ModelResponseInvalid, attributed, build_attribution
+from backend.core.failure_attribution import (AttributedError, ModelResponseInvalid, ProviderTransportError,
+                                              attributed, build_attribution)
 
 
 class CloudTranscriptionError(AttributedError, RuntimeError):
@@ -43,21 +44,13 @@ class CloudTranscriptionError(AttributedError, RuntimeError):
     exception (``.attribution``) before ``from None``; a local one (no key, no audio) carries none."""
 
 
-class _HTTPAnswer(Exception):
-    """Only the provider's status of an httpx.HTTPStatusError (no URL, no body) for the snapshot."""
-    def __init__(self, status_code: int):
-        super().__init__(f'HTTP {status_code}')
-        self.status_code = status_code
-
-
-class _Transport(Exception):
-    """A transport failure (connect/read/timeout): sent toward the provider, no HTTP response."""
-
-
 def _provider_failure(message: str, original: BaseException) -> CloudTranscriptionError:
-    """The redaction boundary: one snapshot from the original (I505: sent toward the provider = model;
-    http_status only when an HTTP response came back), then the safe error without the raw chain."""
-    return attributed(CloudTranscriptionError(message), build_attribution(original, sent=True, failure_stage='subtitle'))
+    """The redaction boundary: ``original`` is already the content-free view built inside the ``except``
+    (a ``ProviderTransportError`` with the type name and, when an HTTP response came back, its status; or
+    a ``ModelResponseInvalid``). THE classifier decides it (R30 I567: no ``sent`` override); the snapshot
+    and the HTTP status are frozen on the safe error (I563), which the caller raises ``from None``."""
+    return attributed(CloudTranscriptionError(message), build_attribution(original, failure_stage='subtitle'),
+                      http_status=getattr(original, 'http_status', None))
 
 
 def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
@@ -200,10 +193,11 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
             raise  # already a safe error (normalize_segments in a chunk worker)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
-            safe = _provider_failure(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。', _HTTPAnswer(status))
+            safe = _provider_failure(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。',
+                                     ProviderTransportError(type(exc).__name__, http_status=status))
             raise safe from None
         except httpx.RequestError as exc:
-            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', _Transport(type(exc).__name__)) from None
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ProviderTransportError(type(exc).__name__)) from None
         except ValueError as exc:
             raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ModelResponseInvalid(type(exc).__name__)) from None
         if not segments:

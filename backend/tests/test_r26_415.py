@@ -90,17 +90,18 @@ def test_394_new_phase_only_failure_replaces_older_request_attribution():
             store.change('p394', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
     first = store.read('p394')['analysis']
     assert first['provider'] == 'kimi' and first['attribution_source'] == 'request'
-    # R29 I503: a write with a NEW error in hand replaces the snapshot whole, even with the same
-    # run_id and error_code (no "same failure" inference); without an error in hand it stays.
+    # R29 I503: no "same failure" inference; without an error in hand the snapshot stays.
     store.change('p394', lambda d: d['analysis'].update(message='no error in hand'))
     assert store.read('p394')['analysis']['provider'] == 'kimi'
+    # R30 I560 (Dong R29, assertion changed from 'glm'): an unrelated write of an already-failed record
+    # with another error in hand is NOT a new failure: the snapshot stays (R29 overwrote it).
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
             raise PipelineFailure('ANALYZE', 'again', code='provider_error')
         except PipelineFailure:
             store.change('p394', lambda d: d['analysis'].update(message='still failed'))
-    assert store.read('p394')['analysis']['provider'] == 'glm'
+    assert store.read('p394')['analysis']['provider'] == 'kimi'
     # a NEW failure (retry run r2) with only the phase identity: the old request value must go
     store.change('p394', lambda d: d['analysis'].update(status='running', run_id='r2', error_code=None))
     analysis, _ = _fail_with('p394', PipelineFailure('ANALYZE', 'slow', code='timeout'), 'timeout')
