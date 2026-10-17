@@ -74,6 +74,48 @@ def test_addition1_process_dies_before_the_background_job_settles_service_restar
     assert {v['id']: v['status'] for v in state['output_variants']} == before   # the workspace is not rolled back
 
 
+def test_addition1_a_live_append_is_not_mistaken_for_a_dead_one(monkeypatch):
+    """Counter-case of addition 1: the same process reads the project while the job is queued - not recovered."""
+    state, recorder = _recorded(monkeypatch)
+    result = _append()
+    assert store._recover_interrupted_run(state) is False
+    attempts.reconcile(state)
+    assert state['generation']['status'] == 'production'
+    assert attempts.find(state, result['attempt']['attempt_id'])['state'] == 'open'
+    recorder.run()
+    assert _added(state, result)
+
+
+def test_i530_b_an_append_closed_during_preparation_persists_nothing(monkeypatch):
+    """The attempt was closed while preparing (here: settled failed by recovery) - its late preparation adds nothing
+    and does not reopen it."""
+    state = _state(monkeypatch)
+    before = len(state['output_variants'])
+    real = jobs._apply_framing
+    def framing(*a, **k):
+        state['generation'].update(status='failed', error_code='service_restarted')
+        attempts.reconcile(state)
+        return real(*a, **k)
+    monkeypatch.setattr(jobs, '_apply_framing', framing)
+    result = _append()
+    receipt = attempts.find(state, result['attempt']['attempt_id'])
+    assert len(state['output_variants']) == before
+    assert receipt['state'] == 'failed' and receipt.get('error_code') == 'service_restarted'
+
+
+def test_i530_c_a_closed_round_that_stamped_nothing_still_settles_on_the_workspace():
+    """round_outputs returns [] only for an open attempt still preparing; a round from before stamping (receipt but no
+    stamps) keeps settling on the whole workspace (R29 #440)."""
+    state = {'generation': {'attempt_id': 't-legacy', 'status': 'rendering', 'auto_start': True},
+             'attempts': [{'attempt_id': 't-legacy', 'kind': 'generation', 'state': 'open', 'sequence': 1}],
+             'output_variants': [{'id': 'v1', 'draft_id': 'd', 'strategy_id': 'tiktok', 'status': 'completed'},
+                                 {'id': 'v2', 'draft_id': 'd', 'strategy_id': 'bilibili', 'status': 'completed'}],
+             'drafts': [], 'analysis': {}}
+    assert attempts.round_outputs(state) is None
+    store.settle_generation(state)
+    assert state['generation']['status'] == 'completed'
+
+
 # --- I531: the receipt returns before preparation, which is the submitted worker job ---
 
 def test_i531_http_append_returns_the_open_receipt_before_any_preparation(client, monkeypatch):
