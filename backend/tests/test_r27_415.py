@@ -3,6 +3,7 @@ one reader. I415-I418, I420-I422, I424 + design points. Each test fails on 49575
 (module-not-found aside: the failure_attribution tests also pin the rule's behaviour through llm_emit/store)."""
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -248,3 +249,19 @@ def test_i424_lock_timeout_notice_in_all_8_locales():
             assert value != key and '进程' not in value and '原素材已保留' not in value, lang  # translated, not the Chinese
     ts = (ROOT / 'frontend/src/utils/llmFailure.ts').read_text(encoding='utf-8')
     assert key in ts and "STORE_LOCK_TIMEOUT = 'store_lock_timeout'" in ts
+
+
+def test_i415_a_non_decisive_wrapper_is_looked_through():
+    """The walk goes INWARD past non-decisive links (unexpected/OSError) to the model failure."""
+    from backend.core.failure_attribution import FailureKind, classify_failure
+    with llm_emit.track_run():
+        inner = _kimi_503()
+    wrapper = PipelineFailure('ANALYZE', 'x', code='unexpected')
+    wrapper.__cause__ = OSError('socket')
+    wrapper.__cause__.__cause__ = inner
+    verdict = classify_failure(wrapper)
+    assert verdict.kind is FailureKind.MODEL and verdict.record is not None
+    # innermost-first would let an inner local link beat an outer model error
+    outer = PipelineFailure('ANALYZE', 'x', code='provider_error')
+    outer.__cause__ = subprocess.CalledProcessError(1, ['ffmpeg'])
+    assert classify_failure(outer).kind is FailureKind.MODEL
