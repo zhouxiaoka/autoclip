@@ -1169,30 +1169,92 @@ def _auto_generate(project_id, plan):
         mark_project(project_id, 'failed')
 
 
+def _signature(draft):
+    return tuple((scene['start'], scene['end']) for scene in (draft or {}).get('scenes', []))
+
+
+def _append_targets(data, selected):
+    """R30 I492: what an append would derive, read from the locked state (cheap: no media, no model). Returns the
+    (base draft, strategy_id, automatic) targets and, per moment, the output that new versions derive from (I491)."""
+    from backend.services.platform_strategy import platform_strategy
+    draft_by_id = {draft['id']: draft for draft in data.get('drafts', [])}
+    existing, automatic, sources = set(), set(), {}
+    for item in data.get('output_variants', []):
+        signature = _signature(draft_by_id.get(item.get('draft_id')))
+        existing.add((item['strategy_id'], signature))
+        if item.get('status') != 'on_demand':
+            automatic.add(signature)
+        if item.get('produced_by_attempt') and signature:
+            sources[signature] = item  # I491: the latest output of this moment is what the new version derives from
+    targets, seen, duplicate = [], set(), False
+    for base in data.get('drafts', []):
+        signature = _signature(base)
+        if not signature or signature in seen:
+            continue
+        seen.add(signature)
+        for strategy_id in selected:
+            if (strategy_id, signature) in existing:
+                duplicate = True
+            elif _eligible_for_platform(base, platform_strategy(strategy_id)):
+                targets.append((base, strategy_id, signature in automatic))
+    return targets, duplicate, sources
+
+
 def append_platform_variants(project_id, platforms, branding):
-    """Derive only new platform versions from saved drafts; never reanalyze source media."""
-    state = store.read(project_id)
-    if not (state.get('generation') or {}).get('auto_start'):
-        raise ValueError('这个项目尚未使用自动生成流程')
+    """Derive only new platform versions from saved drafts; never reanalyze source media. R30 I490/I492: the append
+    is one attempt lifecycle like generation and retry - inside the lock check and open the attempt first, then
+    prepare (framing / packaging / copy), then persist the outputs or settle the attempt failed. Returns the receipt."""
     from backend.services.platform_strategy import normalize_platform_ids, platform_strategy
     selected = normalize_platform_ids(platforms)
+
+    def start(data):
+        if not (data.get('generation') or {}).get('auto_start'):
+            raise ValueError('这个项目尚未使用自动生成流程')
+        targets, duplicate, sources = _append_targets(data, selected)
+        if not targets:
+            if duplicate:
+                raise attempts.AppendRejected('该平台已有版本', 'append_platform_exists')
+            raise ValueError('没有可追加的平台版本；素材不满足所选平台要求')
+        first = next((t for t in targets if t[2]), None)
+        if first is None:  # I494: nothing would be produced automatically -> no attempt
+            raise attempts.AppendRejected('没有可自动生成的平台版本', 'append_no_auto_output', status=400)
+        receipt = attempts.open_append(data, sources.get(_signature(first[0])), now=store.now())
+        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        return receipt['attempt_id'], [(base['id'], strategy_id, now) for base, strategy_id, now in targets]
+
+    attempt_id, targets = store.change(project_id, start)
+    try:
+        derived, variants = _append_prepare(project_id, targets, branding, platform_strategy)
+    except Exception as error:  # noqa: BLE001 - the attempt settles failed and its terminal is observed (I490)
+        logger.warning('Platform append preparation failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'production')
+        code, text = studio_error_code(error), str(error)[:700]
+
+        def fail(data):
+            if (data.get('generation') or {}).get('attempt_id') == attempt_id:
+                data['generation'].update(status='failed', error=text, error_code=code, failure_stage='production', finished_at=store.now())
+                data['analysis'] = {'status': 'failed', 'phase': 'rendering', 'error': text, 'error_code': code, 'failure_stage': 'production'}
+        store.change(project_id, fail)
+        derived, variants = [], []
+    if variants:
+        def persist(data):
+            data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
+            attempts.own_outputs(data, variants)
+            data['output_variants'].extend(variants)
+        store.change(project_id, persist)
+        _dispatch_pending_variants(project_id)
+    state = store.read(project_id)
+    return {'variants': variants, 'attempt': attempts.public(attempts.find(state, attempt_id) or {})}
+
+
+def _append_prepare(project_id, targets, branding, platform_strategy):
+    state = store.read(project_id)
     draft_by_id = {draft['id']: draft for draft in state.get('drafts', [])}
-    existing = {
-        (item['strategy_id'], tuple((scene['start'], scene['end']) for scene in draft_by_id.get(item['draft_id'], {}).get('scenes', [])))
-        for item in state.get('output_variants', [])
-    }
-    # A moment rendered automatically on one platform renders automatically on the new one too;
-    # moments left on demand stay on demand.
-    automatic = {
-        tuple((scene['start'], scene['end']) for scene in draft_by_id.get(item['draft_id'], {}).get('scenes', []))
-        for item in state.get('output_variants', []) if item.get('status') != 'on_demand'
-    }
     html_by_signature = {}
     requested_by_signature = {}
     rank_signatures = set()
     for item in state.get('output_variants', []):
-        origin = draft_by_id.get(item.get('draft_id')) or {}
-        signature = tuple((scene['start'], scene['end']) for scene in origin.get('scenes', []))
+        signature = _signature(draft_by_id.get(item.get('draft_id')))
         if item.get('html_template'):
             html_by_signature[signature] = item['html_template']
             requested_by_signature.setdefault(signature, item['html_template'])
@@ -1204,62 +1266,39 @@ def append_platform_variants(project_id, platforms, branding):
     if chosen in ('editorial', 'street'):
         for signature in rank_signatures:
             requested_by_signature.setdefault(signature, chosen)
-    seen_scenes, variants, derived = set(), [], []
+    variants, derived = [], []
     burned = _source_has_burned_subtitles(project_id)
     video = source(project_id)
     framing_cache = {}
     packaging_cache = {}
-    for base in state.get('drafts', []):
-        signature = tuple((scene['start'], scene['end']) for scene in base.get('scenes', []))
-        if not signature or signature in seen_scenes:
-            continue
-        seen_scenes.add(signature)
-        for strategy_id in selected:
-            if (strategy_id, signature) in existing:
-                continue
-            strategy = platform_strategy(strategy_id)
-            if not _eligible_for_platform(base, strategy):
-                continue
-            value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-            now = signature in automatic
-            framed = None
-            post = None
-            if now:
-                value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-                value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
-                post = _posts_for(project_id, [(strategy_id, value)], packaging_cache).get((_content_key(value), strategy_id))
-                value = _audience_title(value, strategy_id, post)
-            inherited = html_by_signature.get(signature) if now and strategy.aspect == 'portrait' else None
-            rank_fallback = signature in rank_signatures and now and strategy.aspect == 'portrait' and not inherited
-            layout = 'crop' if inherited and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
-            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
-            derived.append(draft.model_dump())
-            variants.append({
-                'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
-                'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
-                'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
-                **({'trimmed_to_sec': trimmed} if trimmed else {}),
-                **({'framing': framed} if framed else {}),
-                **({'post': post} if post else {}),
-                **({'html_template': inherited} if inherited else {}),
-                **({'html_fallback': 'rank', 'requested_template': requested_by_signature.get(signature)} if rank_fallback and requested_by_signature.get(signature) else {'html_fallback': 'rank'} if rank_fallback else {}),
-            })
-    if not variants:
-        raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')
-    def persist(data):
-        data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
-        # the source output: one of the last generation round's (its plan and route), else any stamped one
-        last = (data.get('generation') or {}).get('attempt_id')
-        stamped = [v for v in data['output_variants'] if v.get('produced_by_attempt')]
-        source = next((v for v in stamped if v['produced_by_attempt'] == last), stamped[0] if stamped else None)
-        attempts.open_append(data, source, now=store.now())  # R29 #441: append = a new attempt with its own terminal
-        attempts.own_outputs(data, variants)
-        data['output_variants'].extend(variants)
-        data['generation'].update(status='rendering')
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
-    store.change(project_id, persist)
-    _dispatch_pending_variants(project_id)
-    return variants
+    for base_id, strategy_id, now in targets:
+        base = draft_by_id[base_id]
+        signature = _signature(base)
+        strategy = platform_strategy(strategy_id)
+        value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
+        framed = None
+        post = None
+        if now:
+            value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+            value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+            post = _posts_for(project_id, [(strategy_id, value)], packaging_cache).get((_content_key(value), strategy_id))
+            value = _audience_title(value, strategy_id, post)
+        inherited = html_by_signature.get(signature) if now and strategy.aspect == 'portrait' else None
+        rank_fallback = signature in rank_signatures and now and strategy.aspect == 'portrait' and not inherited
+        layout = 'crop' if inherited and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
+        derived.append(draft.model_dump())
+        variants.append({
+            'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
+            'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
+            'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
+            **({'trimmed_to_sec': trimmed} if trimmed else {}),
+            **({'framing': framed} if framed else {}),
+            **({'post': post} if post else {}),
+            **({'html_template': inherited} if inherited else {}),
+            **({'html_fallback': 'rank', 'requested_template': requested_by_signature.get(signature)} if rank_fallback and requested_by_signature.get(signature) else {'html_fallback': 'rank'} if rank_fallback else {}),
+        })
+    return derived, variants
 
 
 def _dispatch_pending_variants(project_id):

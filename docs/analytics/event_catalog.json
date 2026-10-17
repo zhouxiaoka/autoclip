@@ -178,6 +178,12 @@
       "vision_invalid_subtitle_fallback",
       "frame_extract_subtitle_fallback",
       "source_too_long_subtitle_route"
+    ],
+    "attempt_trigger": [
+      "initial",
+      "retry",
+      "variant_retry",
+      "append_platform"
     ]
   },
   "attribution": {
@@ -581,7 +587,8 @@
         ]
       },
       "enums": {
-        "outcome": "studio_outcome"
+        "outcome": "studio_outcome",
+        "trigger": "attempt_trigger"
       },
       "optional_ids": {
         "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
@@ -603,6 +610,10 @@
           "values": "upstream_error_type",
           "format": "comma_joined",
           "max_items": 3
+        },
+        "trigger": {
+          "description": "R29b #419: the backend AttemptReceipt trigger, copied from the receipt. append_platform = the user appended platforms (a new flow, counted in the success-rate denominator); dashboards split first generations from appends on it.",
+          "values": "attempt_trigger"
         }
       }
     },

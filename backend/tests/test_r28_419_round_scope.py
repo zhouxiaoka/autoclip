@@ -114,9 +114,10 @@ def test_409_the_receipt_and_settle_share_one_scope(monkeypatch):
 def test_410_appended_outputs_record_the_generation_round_and_plan(monkeypatch):
     from backend.tests.test_on_demand_variants import _auto_fixture, _base
     state, _exports = _auto_fixture(monkeypatch, [_base(n, 1) for n in range(2)], ['douyin'])
-    state['attempts'] = [{'attempt_id': 't-gen', 'kind': 'generation', 'state': 'partial', 'sequence': 1, 'plan_id': 'plan-a'}]
+    state['attempts'] = [{'attempt_id': 't-gen', 'kind': 'generation', 'state': 'open', 'sequence': 1, 'plan_id': 'plan-a'}]
     state['generation']['attempt_id'] = 't-gen'
-    jobs._auto_generate('p1', {'id': 'plan-a'})
+    jobs._auto_generate('p1', {'id': 'plan-a'})                           # stamped by the open round (R30 I496)
+    state['attempts'][0]['state'] = 'partial'
     before = {v['id'] for v in state['output_variants']}
     jobs.append_platform_variants('p1', ['bilibili'], {'outro_enabled': False})
     added = [v for v in state['output_variants'] if v['id'] not in before]

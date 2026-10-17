@@ -8,7 +8,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const workspace = {
     analysis: { status, phase, message: 'screening', error: 'failure', error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
-    drafts: [], jobs: [], events: [], output_variants: [],
+    drafts: [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
   }
   const exportsObject = {}
   const children = ({ children }) => React.createElement('div', null, children)
@@ -53,6 +53,7 @@ function loadTsx(rel, moduleRequire, globals = {}) {
 
 const navigations = []
 const generationOverride = { value: null }
+const attemptsOverride = { value: null }
 const routeSearch = { value: '' }
 
 test('automatic screening never asks for a manual confirmation', () => {
@@ -225,4 +226,16 @@ test('R29 #444 the re-run line shows only for a completed round with earlier fai
   const zero = at({ status: 'completed', not_redone_failed_count: 0 })
   assert.doesNotMatch(zero, NEW); assert.match(zero, DONE)
   assert.doesNotMatch(at({ status: 'partial', not_redone_failed_count: 2 }), NEW)
+})
+
+// R29b (Dong): the same N line after an appended platform round says "append", never "re-run".
+test('R29b the append round shows the append line, not the re-run line', () => {
+  attemptsOverride.value = [{ attempt_id: 't-first', trigger: 'initial' }, { attempt_id: 't-append', trigger: 'append_platform' }]
+  generationOverride.value = { auto_start: true, status: 'completed', attempt_id: 't-append', not_redone_failed_count: 2 }
+  try {
+    const html = render(true, 'rendering', 'completed')
+    assert.match(html, /本次追加已完成，之前还有/); assert.doesNotMatch(html, /重跑/)
+    generationOverride.value = { ...generationOverride.value, attempt_id: 't-first' }
+    assert.match(render(true, 'rendering', 'completed'), /本次重跑已完成，之前还有/)
+  } finally { generationOverride.value = null; attemptsOverride.value = null }
 })

@@ -33,6 +33,8 @@ def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except store.ConflictError as error:
+        if getattr(error, 'error_code', None):  # R30: a coded refusal (frontend errorText maps the code)
+            raise HTTPException(error.status, {'error_code': error.error_code, 'message': str(error)}) from None
         raise HTTPException(409, str(error)) from None
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from None
@@ -372,8 +374,7 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
-    return {'variants': variants}
+    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # variants + attempt receipt
 
 
 def _variant_job(project_id: str, variant_id: str):

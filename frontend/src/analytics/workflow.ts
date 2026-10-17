@@ -67,7 +67,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     strategy_id: ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'],
     material_origin: ['sample', 'user', 'unknown'], layout: ['crop', 'fit', 'blur', 'window'],
     generation_reason: ['content_complete', 'platform_append', 'platform_ineligible'],
-    trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select', 'paste', 'drop', 'radar', 'watch'], framing_outcome: ['framed', 'no_detection'],
+    trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select', 'paste', 'drop', 'radar', 'watch', 'initial', 'retry', 'variant_retry', 'append_platform'], framing_outcome: ['framed', 'no_detection'],
     framing_status: ['installed', 'installing', 'failed', 'missing', 'not_installed', 'error'],
     source_type: ['file', 'youtube', 'bilibili', 'other_url', 'visual_event', 'content_clip', 'studio', 'legacy'],
     analysis_mode: ['subtitle', 'visual', 'auto'], goal: ['content', 'highlight', 'promo', 'auto'],
@@ -426,7 +426,7 @@ export class WorkflowTracker {
         event = 'studio_generation_finished'
         details = { ...sum, analysis_mode: undefined, http_status: failed ? sum.http_status : undefined,
           billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
-          degrade_reason: receipt.degrade_reason }
+          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }  // R29b: append_platform splits on the dashboard
       } else {
         event = 'studio_production_finished'
         details = { ...sum, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }

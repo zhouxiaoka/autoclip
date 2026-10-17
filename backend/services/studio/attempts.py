@@ -37,6 +37,15 @@ class RetryRejected(ConflictError):
     """The retry command refused: bad parent or another attempt is open. Nothing was created (HTTP 409)."""
 
 
+class AppendRejected(RetryRejected):
+    """R30 I492/I494/I495: an append refused before any attempt or preparation, with its own error_code (the
+    frontend maps it through errorText) and HTTP status (409, or 400 when nothing could be produced)."""
+
+    def __init__(self, message, error_code, status=409):
+        super().__init__(message)
+        self.error_code, self.status = error_code, status
+
+
 def token() -> str:
     return 't-' + uuid.uuid4().hex
 
@@ -125,8 +134,8 @@ def own_outputs(data, variants):
     """R27 #376/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
     open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only.
     R29 #441: appending platforms opens its own attempt (open_append), so appended outputs carry that attempt.
-    With no open attempt (old callers) the generation's round is used. Already stamped outputs are never re-stamped."""
-    receipt = current(data) or find(data, (data.get('generation') or {}).get('attempt_id'))
+    Without an open attempt nothing is stamped (R30 I496). Already stamped outputs are never re-stamped."""
+    receipt = current(data)
     if not receipt:
         return
     for variant in variants:
@@ -165,18 +174,33 @@ def _inherit_source(receipt, data, variant):
         receipt['inherited'] = inherited
 
 
+# R30 I493: the previous round's terminal fields; a new round starts without them (settle writes them again)
+ROUND_TERMINAL = ('error', 'error_code', 'failure_stage', 'upstream_error_type', 'secondary_error_codes',
+                  'secondary_upstream_error_types', 'secondary_failure_stages', 'not_redone_failed_count',
+                  'completed_variant_count', 'finished_at')
+
+
+def start_round(data, receipt):
+    """Bind the generation to a newly opened attempt and clear the previous round's terminal fields."""
+    generation = data['generation']
+    for key in ROUND_TERMINAL:
+        generation.pop(key, None)
+    generation.update(attempt_id=receipt['attempt_id'], status='rendering')
+
+
 def open_append(data, source_variant, now=None):
-    """R29 #441: appending platforms is a new generation attempt. It inherits the source output's plan and route
-    (same rule as a variant retry) but NOT its outputs: no sources, so the round is only the appended outputs, with
-    its own settle, receipt and terminal. A new flow (retry_of None); finished rounds are untouched. Refused while
-    another attempt runs (one open attempt per project)."""
+    """R29 #441 / R30: appending platforms is a new generation attempt (new flow, retry_of None). It inherits the
+    plan and route of the output the new versions derive from (I491), not its outputs. Refused while another
+    attempt runs, including a manual retry waiting for confirmation (I495) - nothing is abandoned silently."""
     open_now = current(data)
-    if open_now and not unbound(open_now):
-        raise RetryRejected('上一次制作还没结束，请稍后再追加平台')
-    receipt = open_attempt(data, 'generation', trigger='append_platform', run_id=token(), now=now)
+    if open_now and unbound(open_now):
+        raise AppendRejected('请先确认待处理的重试', 'append_retry_pending')
+    if open_now:
+        raise AppendRejected('上一次制作还没结束，请稍后再追加平台', 'append_attempt_running')
+    receipt = open_attempt(data, 'generation', trigger='append_platform', now=now)
     if isinstance(source_variant, dict) and source_variant.get('produced_by_attempt'):
         _inherit_source(receipt, data, source_variant)
-    data['generation']['attempt_id'] = receipt['attempt_id']
+    start_round(data, receipt)
     return receipt
 
 
@@ -254,7 +278,7 @@ def _millis(value):
     return round((parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp() * 1000)
 
 
-def generation_summary(data, variants=None) -> dict:
+def generation_summary(data, variants=None, started=None) -> dict:
     """R25 #347: the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
     (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
@@ -272,7 +296,8 @@ def generation_summary(data, variants=None) -> dict:
         return (templates.get(v.get('draft_id')) or {}).get('template') in ('interview_zh', 'podcast_en')
     completed = [(v, jobs.get(v.get('render_job_id') or '')) for v in variants if v.get('status') == 'completed']
     count = lambda test: sum(1 for v in variants if test(v))
-    created, finished = _millis(generation.get('created_at')), _millis(generation.get('finished_at'))
+    # R29b: duration_ms runs from THIS attempt's start (an appended round never includes earlier rounds)
+    created, finished = _millis(started) or _millis(generation.get('created_at')), _millis(generation.get('finished_at'))
     branding = generation.get('branding') if isinstance(generation.get('branding'), dict) else {}
     out = {
         'variant_count': len(all_variants),
@@ -339,7 +364,7 @@ def _owned_summary(data):
     owned = round_outputs(data)
     if owned is None:
         return {k: v for k, v in generation_summary(data).items() if k in OUTPUT_FREE}
-    return generation_summary(data, variants=owned)
+    return generation_summary(data, variants=owned, started=(find(data, data['generation'].get('attempt_id')) or {}).get('created_at'))
 
 
 def reconcile(data, now=None):
