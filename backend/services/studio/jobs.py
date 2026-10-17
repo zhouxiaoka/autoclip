@@ -1776,6 +1776,7 @@ def _produce_selected(project_id, plan):
     labels = {'content':'内容切片','highlight':'精彩高光','promo':'推广成片'}
     errors = []
     error_codes = []
+    goal_errors = []
     contexts = []  # 1.5.8: failure_stage / http_status / upstream_error_type per failed goal (no text)
     diagnostics = []
     visual_error = None
@@ -1839,6 +1840,7 @@ def _produce_selected(project_id, plan):
                 store.raise_owned_read_error(error)
                 failed_goals.append(goal)
                 error_codes.append(studio_error_code(error))
+                goal_errors.append(error)
                 contexts.append(studio_failure_context(error, 'production'))
                 if all(error is not previous_error for previous_error in reported):
                     capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'), goal=goal)
@@ -1855,20 +1857,28 @@ def _produce_selected(project_id, plan):
             result['coverage'] = coverage
         if diagnostics:
             result['diagnostics'] = diagnostics
+        held = None
         if errors:
             result['error'] = '；'.join(errors)
             # R23 #228: the primary cause is the first product failure, else the first user one; the rest go along.
+            # The snapshot written below is that same cause. A secondary goal's request record must not
+            # replace the primary's stage or upstream (and a later success still cannot, #397).
             from backend.core.failure_attribution import rank_failures
-            primary, *others = rank_failures([{'error_code': code, **context} for code, context in zip(error_codes, contexts)])
+            ranked = rank_failures([
+                {'error_code': code, **context, '_error': goal_error}
+                for code, context, goal_error in zip(error_codes, contexts, goal_errors)
+            ])
+            primary, *others = ranked
+            held = primary.pop('_error', None)
+            for other in others:
+                other.pop('_error', None)
             result.update(primary)
             if others:
                 result['secondary_error_codes'] = [f['error_code'] for f in others]
                 result['secondary_upstream_error_types'] = [f.get('upstream_error_type') or '' for f in others]
                 # R24: page only (not an event field) - which settings row fixes a secondary user cause.
                 result['secondary_failure_stages'] = [f.get('failure_stage') or '' for f in others]
-        from backend.core.llm_emit import failure_in_hand, record_of
-        # A goal's failed request stays the attributed failure even if a later goal's request succeeded.
-        held = next((e for e in reported if record_of(e) is not None), reported[0] if reported else None) if errors else None
+        from backend.core.llm_emit import failure_in_hand
         with failure_in_hand(held):
             store.change(project_id, lambda data: data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **result}))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
