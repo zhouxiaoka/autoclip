@@ -51,12 +51,23 @@ export interface ControllerOptions {
   onReady?: (report: ImportReadiness | null) => void
   /** Every readiness report the controller read, so the page's readiness is never older than the controller's. */
   onReport?: (report: ImportReadiness) => void
+  /** Timer used for the readiness deadline (tests inject a clocked one). */
+  setTimer?: (fn: () => void, ms: number) => unknown
+  clearTimer?: (handle: unknown) => void
 }
 export const STALL_MS = 10 * 60 * 1000
 /** #403: continuous time the backend must be unreachable (network errors only) before a wait is failed. */
 export const OFFLINE_MS = 30 * 1000
 /** #403: poll interval once failed for being offline (the wait continues by itself when the backend is back). */
 export const OFFLINE_RETRY_MS = 10 * 1000
+/** #418 R27b: deadline of one readiness request only (other requests keep their own timeouts). A backend that
+ * accepts the connection but never answers (paused, hung) is unreachable, the same as a refused connection. */
+export const READINESS_TIMEOUT_MS = 5 * 1000
+
+/** The error a readiness request past READINESS_TIMEOUT_MS rejects with: no HTTP response, like axios' timeout. */
+export function readinessTimeoutError(): Error {
+  return Object.assign(new Error('readiness timeout'), { code: 'ECONNABORTED', response: undefined })
+}
 
 /** #403: only a network error (no HTTP response: refused, reset, timed out) means the backend is unreachable.
  * An HTTP error such as a readiness 500 is a reachable backend. */
@@ -82,10 +93,21 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     state = next
     listeners.forEach(fn => fn(state))
   }
+  const setTimer = options.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms))
+  const clearTimer = options.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>))
+  // #418 R27b: the readiness request is given READINESS_TIMEOUT_MS; a timeout counts toward OFFLINE_MS like a network error.
+  const readinessWithDeadline = () => new Promise<ImportReadiness | null>((resolve, reject) => {
+    let done = false
+    const handle = setTimer(() => { if (!done) { done = true; reject(readinessTimeoutError()) } }, READINESS_TIMEOUT_MS)
+    api.readiness().then(
+      value => { if (!done) { done = true; clearTimer(handle); resolve(value) } },
+      error => { if (!done) { done = true; clearTimer(handle); reject(error) } },
+    )
+  })
   const read = async () => {
     let report: ImportReadiness | null = null
     let unreachable = false
-    try { report = await api.readiness() } catch (error) { unreachable = isNetworkError(error) }
+    try { report = await readinessWithDeadline() } catch (error) { unreachable = isNetworkError(error) }
     if (unreachable) { if (unreachableSince === null) unreachableSince = now() } else unreachableSince = null
     if (report && options.onReport) options.onReport(report)
     return report

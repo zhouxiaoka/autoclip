@@ -376,3 +376,77 @@ test('#404 prompt: background installing stays hidden, background failed / timeo
   assert.match((await show({ phase: 'installing', percent: 10, unreachable: true })).textContent, /暂时连不上本地后端，正在重试/)
   await act(async () => root.unmount())
 })
+
+// #418 R27b (Dong): only the readiness request gets a 5s deadline; a timeout counts toward the 30s window like a
+// network error; a 500 still does not. A paused backend (accepts, never answers) is simulated by a readiness that
+// never settles; the injected timer advances the clock by the waited time, as a real 5s wait would.
+function hungApi() {
+  const { clock, api } = clockedApi()
+  clock.hung = false
+  const inner = api.readiness
+  api.readiness = () => clock.hung ? new Promise(() => {}) : inner()
+  const timers = { set: 0 }
+  const setTimer = (fn, ms) => { timers.set++; if (clock.hung) { clock.t += ms; queueMicrotask(fn) } return timers.set }
+  return { clock, api, timers, opts: { setTimer, clearTimer: () => {} } }
+}
+function withDeadline(p, ms = 1000) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('poll hung: readiness had no deadline')), ms))])
+}
+
+test('#418 R27b readiness deadline is 5s and a timeout is unreachable (no response)', () => {
+  assert.equal(recovery.READINESS_TIMEOUT_MS, 5000)
+  assert.equal(recovery.isNetworkError(recovery.readinessTimeoutError()), true)
+})
+
+test('#418 R27b a 7s pause (hung readiness) is not a failure and continues by itself', async () => {
+  const { clock, api, opts } = hungApi()
+  let readyCalls = 0
+  const c = await startWait(api, clock, { ...opts, onReady: () => { readyCalls++ } })
+  clock.hung = true
+  const t0 = clock.t
+  while (clock.t - t0 < 7000) { clock.t += 2000; await withDeadline(c.poll()); assert.notEqual(c.state.phase, 'failed') }
+  assert.equal(c.state.unreachable, true, 'the page says it is retrying')
+  clock.hung = false; clock.stage = 'ready'
+  clock.t += 2000; await withDeadline(c.poll())
+  assert.equal(c.state.phase, 'ready'); assert.equal(readyCalls, 1)
+})
+
+test('#418 R27b timeouts adding up to 30s fail the wait, then it continues by itself after recovery', async () => {
+  const { clock, api, opts } = hungApi()
+  let readyCalls = 0
+  const c = await startWait(api, clock, { ...opts, onReady: () => { readyCalls++ } })
+  clock.hung = true
+  const t0 = clock.t
+  const phases = []
+  while (clock.t - t0 < 40000) { clock.t += 2000; await withDeadline(c.poll()); phases.push([clock.t - t0, c.state.phase]) }
+  const firstFail = phases.find(([, p]) => p === 'failed')
+  assert.ok(firstFail, `35s+ of timeouts must fail: ${JSON.stringify(phases)}`)
+  assert.ok(firstFail[0] >= 30000, `not failed before 30s of timeouts: ${JSON.stringify(phases)}`)
+  assert.equal(c.state.offline, true)
+  clock.hung = false
+  clock.t += 10000; await withDeadline(c.poll())
+  assert.equal(c.state.phase, 'installing', 'back: the interrupted wait resumes without a click')
+  clock.stage = 'ready'
+  clock.t += 2000; await withDeadline(c.poll())
+  assert.equal(c.state.phase, 'ready'); assert.equal(readyCalls, 1)
+})
+
+test('#418 R27b a 500 is still reachable with the deadline in place; the deadline is cleared on an answer', async () => {
+  const { clock, api, opts } = hungApi()
+  let cleared = 0
+  const c = await startWait(api, clock, { ...opts, clearTimer: () => { cleared++ } })
+  const before = cleared
+  await pollUntil(c, clock, 6000)
+  assert.equal(cleared - before, 3, 'each answered (200) readiness clears its deadline')
+  clock.error500 = true
+  const phases = await pollUntil(c, clock, 60000)
+  assert.ok(!phases.includes('failed'), `500s for 60s are not offline: ${phases}`)
+  assert.equal(c.state.unreachable, undefined)
+  assert.ok(cleared >= phases.length, 'an answered readiness clears its deadline')
+})
+
+test('#418 R27b only readiness gets the deadline (install/model/runtime requests are not raced)', () => {
+  const src = fs.readFileSync(path.join(dir, 'transcriptionRecovery.ts'), 'utf8')
+  assert.equal((src.match(/READINESS_TIMEOUT_MS\)/g) || []).length, 1)
+  assert.equal((src.match(/api\.readiness\(\)/g) || []).length, 1, 'readiness is called only inside the deadline')
+})
