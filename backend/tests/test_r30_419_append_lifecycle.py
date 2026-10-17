@@ -217,10 +217,12 @@ def test_i495_pending_manual_retry_is_a_coded_409_and_stays_open(monkeypatch):
 
 # --- I496: no unread run_id; no stamping without an open attempt ---
 
-def test_i496_append_receipt_has_no_run_id_and_own_outputs_needs_an_open_attempt(monkeypatch):
+def test_i496_append_receipt_run_id_is_the_read_analysis_run_and_own_outputs_needs_an_open_attempt(monkeypatch):
+    # R31 changed assertion - old: receipt run_id is None (R30 removed an unread token). new: it is the append's
+    # analysis run_id. why: I539 - the page (receiptFailureInfo) and the worker's _io_receipt now read it.
     state = _state(monkeypatch)
-    _append()
-    assert attempts.current(state).get('run_id') is None
+    result = _append()
+    assert attempts.find(state, result['attempt']['attempt_id'])['run_id'] == state['analysis']['run_id']
     data = {'generation': {'attempt_id': 't-x'}, 'attempts': [{'attempt_id': 't-x', 'kind': 'generation', 'state': 'completed'}]}
     item = {'id': 'v'}
     attempts.own_outputs(data, [item])
