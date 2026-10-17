@@ -1046,6 +1046,52 @@ test('R28 I514 (behaviour): a request aborted while waiting for the desktop back
   assert.deepEqual(sent, ['/whisper/runtime-status'])
 })
 
+test('install and download pass the round signal: abort while the desktop backend is not ready never calls the adapter', async () => {
+  const { speechApi, api, apiConfigManager, axios } = loadRealApi({ tauri: true })
+  apiConfigManager.config = { ...apiConfigManager.config, isReady: false }
+  const sent = []
+  api.defaults.adapter = async config => { sent.push(config.url); return { status: 200, data: { started: true, message: '', status: 'downloading', model: 'base' }, headers: {}, config } }
+  const ctrl = new AbortController()
+  const watch = p => p.then(() => 'sent', e => axios.isCancel(e) ? 'cancelled' : 'error')
+  const all = Promise.all([
+    watch(speechApi.installRuntime({ signal: ctrl.signal })),
+    watch(speechApi.downloadModel('base', { signal: ctrl.signal })),
+  ])
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  assert.deepEqual(sent, [], 'still waiting for the backend config')
+  ctrl.abort()
+  assert.deepEqual(await all, ['cancelled', 'cancelled'])
+  assert.deepEqual(sent, [], 'a request that had not been sent is not sent, and an accepted task is not revoked from here')
+})
+
+test('the controller hands its round signal to install and download; close aborts that signal', async () => {
+  const hung = () => new Promise(() => {})
+  let installSignal, downloadSignal
+  const api = {
+    readiness: async () => check('whisper_not_installed'),
+    getRuntimeStatus: async () => ({ status: 'installing' }), getModels: async () => [],
+    installRuntime: signal => { installSignal = signal; return hung() },
+    downloadModel: (model, signal) => { downloadSignal = signal; return hung() },
+  }
+  const c = recovery.createRecoveryController(api)
+  c.open('whisper_not_installed')
+  const pending = c.install()
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+  assert.equal(typeof installSignal.aborted, 'boolean')
+  c.close()
+  await pending
+  assert.equal(installSignal.aborted, true)
+  api.readiness = async () => check('whisper_model_missing', { model: 'base' })
+  const c2 = recovery.createRecoveryController(api)
+  c2.open('whisper_model_missing', 'base')
+  const pending2 = c2.install()
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+  assert.equal(downloadSignal instanceof AbortSignal, true)
+  c2.close()
+  await pending2
+  assert.equal(downloadSignal.aborted, true)
+})
+
 test('R28 readiness timeout 5s (behaviour, fake timers): the probe and the follow-up read are aborted at 5s, not before', async t => {
   const { api, speechApi, apiConfigManager } = loadRealApi()
   apiConfigManager.updateConfig({ baseUrl: 'http://127.0.0.1:1/api/v1', port: 1, isReady: true })

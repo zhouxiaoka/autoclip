@@ -28,6 +28,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "own_whisper_status: the test simulates its own Whisper runtime state; skip the default simulated installed Whisper")
     config.addinivalue_line("markers", "reads_whisper_stand_in: the test asserts the conftest stand-in itself")
     config.addinivalue_line("markers", "real_media_probe: run the real preflight material probe (ffprobe / ffmpeg) instead of the placeholder stand-in")
+    config.addinivalue_line("markers", "real_hf: compare the snapshot-cache fake with an installed huggingface_hub; skipped when it is not installed")
 
 
 class _FollowStudioExecutor:

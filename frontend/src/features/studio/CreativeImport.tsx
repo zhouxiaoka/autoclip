@@ -169,7 +169,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     recover.close(); if (report) setReadiness(report)
   }
   const continueAfterRecovery = (report: ImportReadiness | null) => { resumeSubmit.current = false; recover.close(); setError(''); if (report) setReadiness(report); void submitRef.current?.('button', report) }
-  const [recovery, recover] = useTranscriptionRecovery({ readiness: signal => studioApi.readinessProbe(signal), getRuntimeStatus: signal => speechApi.getRuntimeStatus(probeConfig(signal)), getModels: signal => speechApi.getModels(probeConfig(signal)), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) }, { onReady: report => recoveryDone(report), onReport: report => setReadiness(report) })
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: signal => studioApi.readinessProbe(signal), getRuntimeStatus: signal => speechApi.getRuntimeStatus(probeConfig(signal)), getModels: signal => speechApi.getModels(probeConfig(signal)), installRuntime: signal => speechApi.installRuntime({ signal }), downloadModel: (model, signal) => speechApi.downloadModel(model, { signal }) }, { onReady: report => recoveryDone(report), onReport: report => setReadiness(report) })
   recoverRef.current = recover
   const repairing = recovery.phase === 'installing' || recovery.phase === 'downloading'
   const changePlatforms = (next: string[]) => {

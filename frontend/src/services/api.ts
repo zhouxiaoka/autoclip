@@ -818,10 +818,10 @@ export type WhisperModelSource = 'auto' | 'huggingface' | 'hf-mirror'
 // 语音识别 / Whisper 运行时与模型管理
 export const speechApi = {
   getRuntimeStatus: (config?: AxiosRequestConfig): Promise<WhisperRuntimeStatus> => api.get('/whisper/runtime-status', config),
-  installRuntime: (): Promise<{ started: boolean; message: string }> => api.post('/whisper/install'),
+  installRuntime: (config?: AxiosRequestConfig): Promise<{ started: boolean; message: string }> => api.post('/whisper/install', undefined, config),
   uninstallRuntime: (): Promise<{ success: boolean; message: string }> => api.post('/whisper/uninstall'),
   getModels: (config?: AxiosRequestConfig): Promise<WhisperModel[]> => api.get('/whisper-models', config),
-  downloadModel: (model: string): Promise<WhisperModelDownload> => api.post('/whisper-models/download', { model }),
+  downloadModel: (model: string, config?: AxiosRequestConfig): Promise<WhisperModelDownload> => api.post('/whisper-models/download', { model }, config),
   deleteModel: (model: string): Promise<unknown> => api.delete(`/whisper-models/${model}`),
   /** E3: where Whisper models download from. auto probes huggingface.co and switches to hf-mirror when blocked. */
   getModelSource: (): Promise<{ source: WhisperModelSource; effective: WhisperModelSource }> => api.get('/whisper/model-source'),

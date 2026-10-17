@@ -29,8 +29,9 @@ export interface RecoveryApi {
   /** The follow-up reads take the round's signal too and are called like the probe (probeConfig). */
   getRuntimeStatus: (signal: AbortSignal) => Promise<{ status?: string; progress?: number }>
   getModels: (signal: AbortSignal) => Promise<{ name: string; status?: string; downloadProgress?: number | null }[]>
-  installRuntime: () => Promise<unknown>
-  downloadModel: (model: string) => Promise<unknown>
+  /** The round's signal: axios cancels the wait. A request the backend already accepted is not revoked. */
+  installRuntime: (signal: AbortSignal) => Promise<unknown>
+  downloadModel: (model: string, signal: AbortSignal) => Promise<unknown>
 }
 
 export const RECOVERY_CODES = ['whisper_not_installed', 'whisper_install_failed', 'whisper_model_missing', 'whisper_model_failed', 'whisper_installing', 'whisper_model_downloading'] as const
@@ -158,7 +159,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     if (check.code === 'whisper_model_missing' && owns && check.model) {
       // The runtime is in; the install this controller started goes on to the model (#281). #372: only an accepted
       // request enters downloading; a 500 or a network error is failed (retry sends it again, polling never does).
-      try { await step(signal, () => api.downloadModel(check.model as string)) } catch (error) {
+      try { await step(signal, () => api.downloadModel(check.model as string, signal)) } catch (error) {
         if (error === ABORTED) throw error
         return { view: { phase: 'failed', percent: null, model: check.model }, owns: false }
       }
@@ -183,7 +184,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
         const model = check?.model ?? state.model
         const toModel = !!(check && String(check.code).startsWith('whisper_model') && model)
         try {
-          await step(signal, () => toModel ? api.downloadModel(model as string) : api.installRuntime())
+          await step(signal, () => toModel ? api.downloadModel(model as string, signal) : api.installRuntime(signal))
           commit(signal, { view: { phase: toModel ? 'downloading' : 'installing', percent: toModel ? 0 : null, model: toModel ? model : state.model }, clock: tick(true, true).clock, resume, ownsInstall: true, report })
         } catch (error) {
           if (error === ABORTED) throw error
