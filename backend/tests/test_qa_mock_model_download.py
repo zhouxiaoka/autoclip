@@ -112,16 +112,20 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
 
         class Broken:
             async def download_model(self, model):
-                raise RuntimeError('disk full at /Users/someone/models/base.pt')
+                # what the real manager raises for an unknown model (Dong's curl method, model=no_such_model)
+                raise ValueError('不支持的模型: no_such_model at /Users/someone/models/base.pt')
         monkeypatch.setattr(sr, 'get_model_manager', lambda: Broken())
-        assert http.post('/api/v1/whisper-models/download', json={'model': 'base'}).status_code == 500
+        assert http.post('/api/v1/whisper-models/download', json={'model': 'no_such_model'}).status_code == 500
         sentry_sdk.flush()
         assert len(events) == 1, f'a real download 500 is reported exactly once, got {len(events)}'
         event = events[0]
         text = str(event)
-        assert 'disk full' not in text and '/Users/' not in text and 'base.pt' not in text
-        assert set(event.get('tags', {})) <= {'error_code', 'http_status', 'runtime', 'app_mode', 'os', 'arch', 'build_environment'}
-        assert event['tags']['http_status'] == '500' and event['tags']['error_code']
+        assert 'no_such_model' not in text and '/Users/' not in text and 'base.pt' not in text and '不支持' not in text
+        tags = event.get('tags', {})
+        # R27c I488: the one capture path, capture_studio_exception(phase="model_download", http_status=500)
+        assert tags.get('area') == 'studio' and tags.get('phase') == 'model_download', tags
+        assert tags.get('error_code') == 'validation' and tags.get('http_status') == '500', tags
+        assert set(tags) <= {'area', 'phase', 'error_code', 'http_status', 'runtime', 'app_mode', 'os', 'arch', 'build_environment'}, tags
         assert 'request' not in event and 'extra' not in event
     finally:
         real_init(dsn=None)
@@ -140,3 +144,50 @@ def test_switch_affects_only_the_model_download(monkeypatch):
     res = http.delete('/api/v1/whisper-models/base')
     assert res.status_code == 404, res.text
     assert sr.QA_MOCK_DOWNLOAD_DETAIL not in res.text
+
+
+def test_one_capture_path_r27c_i488():
+    """R27c I488: speech_recognition has no capture of its own (no sentry_sdk, no private _initialized read); the
+    download route goes through sentry_setup.capture_studio_exception, whose phase whitelist knows model_download."""
+    from pathlib import Path
+    from backend.core import sentry_setup
+    src = Path(sr.__file__).read_text(encoding='utf-8')
+    assert 'sentry_sdk' not in src and '_initialized' not in src
+    assert 'capture_studio_exception(e, phase="model_download", http_status=500)' in src
+    assert not hasattr(sr, 'capture_model_download_failure')
+    event = {'tags': {'area': 'studio', 'phase': 'model_download', 'error_code': 'validation', 'http_status': '500'},
+             'exception': {'values': [{'type': 'ValueError', 'value': 'x'}]}}
+    clean = sentry_setup.before_send(event, {}) or {}
+    assert clean.get('tags', {}).get('phase') == 'model_download', clean
+
+
+def test_capture_studio_exception_http_status_tag(monkeypatch):
+    """R27c I488: the optional http_status parameter becomes the http_status tag; omitted, no tag is set."""
+    import sentry_sdk
+    from backend.core import sentry_setup
+    seen = []
+
+    class Scope:
+        def __init__(self):
+            self.tags = {}
+
+        def set_tag(self, k, v):
+            self.tags[k] = v
+
+        def set_context(self, *a):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    scopes = []
+    monkeypatch.setattr(sentry_sdk, 'new_scope', lambda: scopes.append(Scope()) or scopes[-1])
+    monkeypatch.setattr(sentry_sdk, 'capture_exception', lambda e: seen.append(scopes[-1].tags) or 'id')
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    monkeypatch.setattr(sentry_setup, 'crash_reports_enabled', lambda: True)
+    sentry_setup.capture_studio_exception(ValueError('x'), phase='model_download', http_status=500)
+    sentry_setup.capture_studio_exception(ValueError('x'), phase='model_download')
+    assert seen[0]['http_status'] == '500' and seen[0]['phase'] == 'model_download'
+    assert 'http_status' not in seen[1]

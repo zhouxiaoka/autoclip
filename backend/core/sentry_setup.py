@@ -224,7 +224,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
     allowed = {
         "area": {"studio"}, "error_code": STUDIO_ERROR_CODES,
-        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install", "qa", "packaging_html", "packaging_runtime"},
+        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install", "qa", "packaging_html", "packaging_runtime", "model_download"},
         "analysis_mode": {"subtitle", "visual"},
         "goal": {"content", "highlight", "promo"},
         "runtime": {"python"}, "app_mode": {"web", "desktop"},
@@ -367,7 +367,7 @@ def init_sentry(mode: str = "web") -> bool:
     return True
 
 
-def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None, goal=None):
+def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None, goal=None, http_status: int | None = None):
     """Report caught worker errors without allowing monitoring to fail the worker.
 
     Consent is checked both here and in before_send. Scope is isolated so worker
@@ -394,6 +394,8 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
                 scope.set_tag("analysis_mode", analysis_mode)
             if goal:
                 scope.set_tag("goal", goal)
+            if http_status is not None:
+                scope.set_tag("http_status", str(http_status))  # before_send keeps 400-599 only
             try:
                 from backend.core.llm_telemetry import sentry_tags_for_error
                 for key, value in sentry_tags_for_error(error, phase).items():
