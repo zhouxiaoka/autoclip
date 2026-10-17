@@ -12,6 +12,7 @@ on:
       - 'backend/tests/test_database_connections.py'
       - 'scripts/verify_whisper_recovery.py'
       - '.github/workflows/issue-recovery.yml'
+      - '.github/actions/setup-ffmpeg-win/**'
 permissions:
   contents: read
 jobs:
@@ -31,9 +32,10 @@ jobs:
           python-version: '3.13.13'
           cache: pip
       - name: Install dependencies
-        run: |
-          python -m pip install -r requirements.txt numpy
-          choco install ffmpeg --yes --no-progress
+        run: python -m pip install -r requirements.txt numpy
+      - name: Set up pinned FFmpeg (Windows)
+        uses: ./.github/actions/setup-ffmpeg-win
+        timeout-minutes: 8
       - name: Failure recovery regressions
         run: python -m pytest backend/tests/test_issue_closure_regressions.py backend/tests/test_whisper_local_subtitle.py backend/tests/test_whisper_model_download.py backend/tests/test_windows_media_feedback.py backend/tests/test_windows_asyncio.py backend/tests/test_recent_feedback.py backend/tests/test_deepseek_cost_guard.py backend/tests/test_task_submission.py backend/tests/test_database_connections.py -q
       - name: Install Whisper and transcribe real speech offline

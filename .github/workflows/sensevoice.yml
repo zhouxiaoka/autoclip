@@ -8,6 +8,7 @@ on:
       - 'backend/tests/test_sensevoice.py'
       - 'scripts/verify_sensevoice.py'
       - '.github/workflows/sensevoice.yml'
+      - '.github/actions/setup-ffmpeg-win/**'
 permissions:
   contents: read
 jobs:
@@ -31,77 +32,10 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      # Chocolatey community feed flakes with 503/504 (Desktop Build run 38563060200).
-      # Default pwsh does not fail the step on a native non-zero exit, so a single
-      # `choco install` can "succeed" with 0 packages and later FileNotFoundError.
-      - name: Install ffmpeg (Windows)
+      - name: Set up pinned FFmpeg (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
-          function Add-FfmpegDir([string]$Dir) {
-            if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) { return }
-            $env:PATH = "$Dir;$env:PATH"
-            Add-Content -LiteralPath $env:GITHUB_PATH -Value $Dir
-          }
-          function Test-Ffmpeg {
-            $cmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
-            if (-not $cmd) { return $false }
-            & ffmpeg -hide_banner -version | Out-Null
-            return ($LASTEXITCODE -eq 0)
-          }
-          if ($env:ChocolateyInstall) {
-            Add-FfmpegDir (Join-Path $env:ChocolateyInstall 'bin')
-          }
-          $ready = $false
-          foreach ($attempt in 1..3) {
-            Write-Host "Chocolatey ffmpeg install attempt $attempt/3"
-            & choco install ffmpeg --yes --no-progress
-            Write-Host "choco exit code: $LASTEXITCODE"
-            if ($env:ChocolateyInstall) {
-              Add-FfmpegDir (Join-Path $env:ChocolateyInstall 'bin')
-            }
-            if (Test-Ffmpeg) { $ready = $true; break }
-            if ($attempt -lt 3) {
-              $delay = 15 * $attempt
-              Write-Host "ffmpeg not ready after Chocolatey; sleeping ${delay}s"
-              Start-Sleep -Seconds $delay
-            }
-          }
-          if (-not $ready) {
-            Write-Host "Chocolatey still unavailable; using static win64 zip (same mirrors as scripts/build_windows_x64.sh)"
-            $dest = Join-Path $env:RUNNER_TEMP 'ffmpeg-ci'
-            $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg-win64.zip'
-            New-Item -ItemType Directory -Force -Path $dest | Out-Null
-            $urls = @(
-              'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
-              'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
-            )
-            foreach ($url in $urls) {
-              Write-Host "Downloading $url"
-              if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-              try {
-                & curl.exe -L --fail --retry 2 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 600 -o $zip $url
-                if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $zip) -or ((Get-Item -LiteralPath $zip).Length -lt 50000000)) {
-                  Write-Host "Download failed or smaller than 50MB; trying next mirror"
-                  continue
-                }
-                Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force
-                $ffmpeg = Get-ChildItem -LiteralPath $dest -Recurse -Filter ffmpeg.exe | Select-Object -First 1
-                if ($ffmpeg) {
-                  Add-FfmpegDir $ffmpeg.DirectoryName
-                  if (Test-Ffmpeg) { $ready = $true; break }
-                }
-              } catch {
-                Write-Host "Static-zip fallback failed for ${url}: $_"
-              }
-            }
-          }
-          if (-not (Test-Ffmpeg)) {
-            throw 'ffmpeg is not available after 3 Chocolatey attempts and static-zip fallback'
-          }
-          ffmpeg -hide_banner -version
+        uses: ./.github/actions/setup-ffmpeg-win
+        timeout-minutes: 8
       - if: runner.os == 'macOS'
         run: brew install ffmpeg
       - run: python -m pytest backend/tests/test_sensevoice.py -q

@@ -1,0 +1,65 @@
+name: Set up pinned FFmpeg (Windows)
+description: >-
+  Download a pinned, sha256-verified FFmpeg build (no Chocolatey), cache the
+  zip keyed on version + sha256, and put its bin folder on PATH. Callers set
+  timeout-minutes on the `uses:` step; composite steps cannot.
+runs:
+  using: composite
+  steps:
+    - name: Pin FFmpeg version
+      shell: pwsh
+      run: |
+        # I558: replaces `choco install ffmpeg` (feed failures: run 38985635643,
+        # #419 9a3ba543). sha256 = local sha256sum = GitHub asset digest = gyan.dev .sha256.
+        Add-Content -LiteralPath $env:GITHUB_ENV -Value @(
+          'FFMPEG_VERSION=9.0.2'
+          'FFMPEG_URL=https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip'
+          'FFMPEG_SHA256=60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
+        )
+    - name: Restore pinned FFmpeg
+      id: ffmpeg-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/ffmpeg-dl
+        key: ffmpeg-win64-${{ env.FFMPEG_VERSION }}-${{ env.FFMPEG_SHA256 }}
+    - name: Install pinned FFmpeg
+      shell: pwsh
+      env:
+        FFMPEG_CACHE_HIT: ${{ steps.ffmpeg-cache.outputs.cache-hit }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $dl = Join-Path $env:RUNNER_TEMP 'ffmpeg-dl'
+        $zip = Join-Path $dl "ffmpeg-$env:FFMPEG_VERSION-essentials_build.zip"
+        if ($env:FFMPEG_CACHE_HIT -eq 'true' -and (Test-Path -LiteralPath $zip)) {
+          Write-Host "FFmpeg $env:FFMPEG_VERSION restored from cache; skipping download"
+        } else {
+          New-Item -ItemType Directory -Force -Path $dl | Out-Null
+          # Bounded: 180s per attempt, 2 retries, no retry starts after 300s,
+          # so curl gives up within ~6 min; the caller's 8-minute step timeout is the backstop.
+          & curl.exe -L --fail --silent --show-error --retry 2 --retry-all-errors --retry-delay 5 --retry-max-time 300 --connect-timeout 15 --max-time 180 -o $zip $env:FFMPEG_URL
+          if ($LASTEXITCODE -ne 0) { throw "FFmpeg download failed (curl exit $LASTEXITCODE)" }
+        }
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+        if ($actual -ne $env:FFMPEG_SHA256) {
+          throw "FFmpeg sha256 mismatch: expected $env:FFMPEG_SHA256, got $actual"
+        }
+        $root = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+        Expand-Archive -LiteralPath $zip -DestinationPath $root -Force
+        $bin = Join-Path $root "ffmpeg-$env:FFMPEG_VERSION-essentials_build\bin"
+        foreach ($tool in 'ffmpeg', 'ffprobe') {
+          if (-not (Test-Path -LiteralPath (Join-Path $bin "$tool.exe"))) { throw "$tool.exe not found in $bin" }
+        }
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin
+        $env:PATH = "$bin;$env:PATH"
+        foreach ($tool in 'ffmpeg', 'ffprobe') {
+          $resolved = (Get-Command $tool).Source
+          if ($resolved -ne (Join-Path $bin "$tool.exe")) { throw "$tool resolves to $resolved, not the pinned build" }
+          & $tool -hide_banner -version
+          if ($LASTEXITCODE -ne 0) { throw "$tool -version failed (exit $LASTEXITCODE)" }
+        }
+    - name: Save pinned FFmpeg cache
+      if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/ffmpeg-dl
+        key: ${{ steps.ffmpeg-cache.outputs.cache-primary-key }}
