@@ -208,12 +208,30 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
     return empty_timeline_failure(topic_count)
 
 
-def cloud_transcription_failure(message: str) -> PipelineFailure:
-    """CloudTranscriptionError carries only our safe public text, never a provider body."""
+CLOUD_ASR_AUTH_TYPES = frozenset({"invalid_key", "permission_denied"})
+
+
+def cloud_transcription_failure(message, http_status: int | None = None, upstream_error_type: str = "") -> PipelineFailure:
+    """CloudTranscriptionError carries only our safe public text, never a provider body.
+
+    1.5.8: keep the ASR HTTP status + upstream_error_type; a rejected key/permission is
+    ``authentication`` (user cause) instead of collapsing into provider_error."""
+    if not isinstance(message, str):  # a CloudTranscriptionError
+        http_status = http_status or getattr(message, "http_status", None)
+        upstream_error_type = upstream_error_type or getattr(message, "upstream_error_type", "")
+        message = str(message)
+    if not upstream_error_type and http_status:
+        from backend.core.upstream_errors import classify_upstream_error
+        upstream_error_type = classify_upstream_error(http_status).error_type.value
+    if upstream_error_type == "unknown":
+        upstream_error_type = ""
     return PipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
         "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
-        code="provider_error",
+        # One code vocabulary (STUDIO_ERROR_CODES): no balance stays provider_error; the precise user cause
+        # travels in upstream_error_type, which the v4 SQL and the 「去设置」 action read (R22 #171).
+        code="authentication" if upstream_error_type in CLOUD_ASR_AUTH_TYPES else "provider_error",
+        http_status=http_status, upstream_error_type=upstream_error_type,
     )
 
 

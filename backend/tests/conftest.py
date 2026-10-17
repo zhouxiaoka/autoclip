@@ -41,6 +41,40 @@ class _FollowStudioExecutor:
         return self.jobs.executor.submit(*args, **kwargs)
 
 
+# Every env name the code reads for a Sentry DSN or a PostHog key/host (backend, frontend build, scripts).
+TELEMETRY_ENV = ('SENTRY_DSN', 'VITE_PUBLIC_SENTRY_DSN', 'SENTRY_AUTH_TOKEN', 'AUTOCLIP_POSTHOG_KEY', 'AUTOCLIP_POSTHOG_HOST',
+                 'VITE_PUBLIC_POSTHOG_KEY', 'VITE_PUBLIC_POSTHOG_HOST', 'POSTHOG_KEY', 'POSTHOG_HOST', 'POSTHOG_PERSONAL_API_KEY')
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_telemetry(monkeypatch, request):
+    # R31-pre #419 I538: create_app() calls init_sentry(), which reads SENTRY_DSN from the
+    # environment and sets the module-level `_initialized` for the rest of the process.
+    # With a DSN in the developer's shell, any create_app test turned the SDK on for real
+    # (sending test events) and left `_initialized` True and the SDK client bound, so later
+    # "no DSN -> no-op" checks failed. R32 (Dong): the same for PostHog - the QA, LLM and MCP
+    # events post whenever AUTOCLIP_POSTHOG_KEY / VITE_PUBLIC_POSTHOG_KEY is set. Telemetry is
+    # off under pytest: tests never inherit a DSN or a key; a test that wants one sets it with
+    # monkeypatch (and stubs urlopen), and whatever init_sentry() bound is undone here.
+    for name in TELEMETRY_ENV:
+        monkeypatch.delenv(name, raising=False)
+    if request.node.get_closest_marker("stdlib_only"):
+        yield
+        return
+    from backend.core import sentry_setup
+    monkeypatch.setattr(sentry_setup, "_initialized", False)
+    try:
+        import sentry_sdk
+    except ImportError:
+        yield
+        return
+    scope = sentry_sdk.get_global_scope()
+    client = scope.client
+    yield
+    if scope.client is not client:
+        scope.set_client(client)  # unbind whatever init_sentry() bound during the test
+
+
 @pytest.fixture(autouse=True)
 def _studio_render_follows_executor(monkeypatch):
     # Tests stub `jobs.executor` to run work inline; keep renders on that stub instead of

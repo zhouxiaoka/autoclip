@@ -43,7 +43,7 @@ test('S5 AUTO fallback message renders from the plan in all eight locales',()=>{
  }
 })
 
-const workflow=load('analytics/workflow.ts')
+const workflow=require('./helpers/real-backend.cjs').withRealBackend(load('analytics/workflow.ts'))
 for(const kind of ['studio-screen','studio-generation']){
  test('S5 '+kind+' records the fixed AUTO degrade reason once without content',()=>{
   const events=[],storage=new Map()

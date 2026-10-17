@@ -88,7 +88,7 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
         "service_restarted", "whisper_not_installed", "whisper_install_failed",
         "transcription_empty", "subtitle_setup", "timeline_empty",
     }
-    kind = None if skip_upstream else classify_run_upstream(error, status)
+    kind = None if skip_upstream else (getattr(error, "upstream_error_type", "") or classify_run_upstream(error, status))
     if kind:
         result["upstream_error_type"] = kind
     return result
