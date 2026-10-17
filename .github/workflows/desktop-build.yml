@@ -148,7 +148,7 @@ jobs:
           path: |
             build/pbs-cache
             build/ffmpeg-cache
-          key: desktop-downloads-macos-${{ hashFiles('scripts/build_macos_arm.sh', 'scripts/lib/desktop_build_common.sh') }}
+          key: desktop-downloads-macos-${{ hashFiles('scripts/build_macos_arm.sh', 'scripts/lib/desktop_build_common.sh', 'scripts/lib/ffmpeg_pin.sh', 'scripts/ffmpeg-macos-arm64.env') }}
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0"

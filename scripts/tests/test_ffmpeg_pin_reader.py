@@ -17,8 +17,11 @@ SH_READER = ROOT / 'scripts' / 'lib' / 'ffmpeg_pin.sh'
 PS_READER = ROOT / 'scripts' / 'lib' / 'ffmpeg_pin.ps1'
 KEYS = ('FFMPEG_VERSION', 'FFMPEG_URL', 'FFMPEG_SHA256')
 # The key set each checked-in pin file is read with (same as its build script).
+MAC_KEYS = KEYS + ('FFPROBE_URL', 'FFPROBE_SHA256')
 PIN_KEYS = {
     'ffmpeg-win64.env': KEYS,
+    'ffmpeg-macos-arm64.env': MAC_KEYS,
+    'ffmpeg-macos-x64.env': MAC_KEYS,
 }
 SHA = '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
 URL = 'https://example.invalid/ffmpeg-9.0.2.zip'
@@ -126,6 +129,15 @@ class FfmpegPinReaderTest(unittest.TestCase):
                 with self.subTest(pin=path.name, shell=shell):
                     result = run(path, PIN_KEYS[path.name])
                     self.assertEqual(result.returncode, 0, result.stderr.decode())
+
+    def test_pin_files_only_accept_their_own_key_set(self):
+        win = ROOT / 'scripts' / 'ffmpeg-win64.env'
+        mac = ROOT / 'scripts' / 'ffmpeg-macos-arm64.env'
+        for shell, run in self.readers():
+            with self.subTest(case='mac file, windows keys', shell=shell):
+                self.assertNotEqual(run(mac).returncode, 0)
+            with self.subTest(case='windows file, mac keys', shell=shell):
+                self.assertNotEqual(run(win, MAC_KEYS).returncode, 0)
 
 
 if __name__ == '__main__':
