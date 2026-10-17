@@ -9,23 +9,27 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.Mo
   { exports: mod, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
 const workflow = mod
 
-function finished(state) {
+function finished(summary, analysis) {
   const events = [], store = new Map()
   const storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) }
   const t = new workflow.WorkflowTracker(storage, () => true, (name, props) => { events.push({ name, props }); return true })
+  const attempt = 't-aaaaaaaaaaaaaaaa'
   t.watch('studio-generation', 'p1')
-  t.observeStudio(t.list()[0], state)
+  t.observeStudio(t.list()[0], {
+    generation: { status: 'failed', attempt_id: attempt },
+    analysis,
+    attempts: [{ attempt_id: attempt, flow_id: 't-ffffffffffffffff', sequence: 1, kind: 'generation', state: 'failed', summary }],
+  })
   return events.find(e => e.name === 'studio_generation_finished').props
 }
 
 test('#332 generation_finished takes provider/model/host/status from ONE record, never run+analysis', () => {
-  // legacy run record: provider only (no pair) + GLM's host/model/503; analysis: the full kimi record
-  const props = finished({
-    generation: { status: 'failed', provider: 'glm', model: 'glm-4', base_url_host: 'other.example', http_status: 503 },
-    analysis: { status: 'failed', phase: 'production', provider: 'kimi', config_source: 'preset', model: 'kimi-k2', base_url_host: 'api.moonshot.cn', http_status: 429, upstream_error_type: 'rate_limited' },
-  })
-  // R28 I453 (Dong): the generation event reads ONLY the generation's own record; its half identity is no
-  // identity and nothing is borrowed from analysis (no glm-status + kimi-identity mix either).
+  // The receipt summary is the generation record: provider only (no pair) + GLM's host/model/503.
+  // Analysis carries a full kimi record. The event must not stitch them.
+  const props = finished(
+    { provider: 'glm', model: 'glm-4', base_url_host: 'other.example', http_status: 503 },
+    { status: 'failed', phase: 'production', provider: 'kimi', config_source: 'preset', model: 'kimi-k2', base_url_host: 'api.moonshot.cn', http_status: 429, upstream_error_type: 'rate_limited' },
+  )
   assert.deepEqual([props.provider, props.config_source, props.model, props.base_url_host, props.http_status, props.upstream_error_type],
     [undefined, undefined, undefined, undefined, 503, undefined])
 })

@@ -66,6 +66,7 @@ _CODE_QUOTA = frozenset({
     "insufficient_quota", "insufficient_user_quota", "insufficient_balance",
     "billing_not_active", "billing_quota_exceeded", "quota_exceeded",
     "allocationquota", "allocationquota.freetieronly", "throttling.allocationquota",
+    "arrearage",  # DashScope: account in arrears
 })
 _CODE_KEY = frozenset({
     "invalid_api_key", "invalid_key", "invalid_token", "authentication_error",
@@ -78,7 +79,7 @@ _CODE_RATE = frozenset({
 })
 _CODE_PERMISSION = frozenset({
     "permission_denied", "access_denied", "model_not_supported",
-    "forbidden",
+    "forbidden", "accessdenied", "accessdenied.unpurchased",  # DashScope
 })
 _CODE_RESOURCE = frozenset({"resource_exhausted"})
 

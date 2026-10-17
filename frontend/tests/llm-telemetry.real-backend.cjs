@@ -24,7 +24,7 @@ function load(name, mocks = {}, globals = {}) {
   return module.exports
 }
 
-const workflow = load('workflow')
+const workflow = require('./helpers/real-backend.cjs').withRealBackend(load('workflow'))
 
 test('run-level allowlist keeps provider fields and drops keys, prompts and full URLs', () => {
   const props = workflow.safeStudioProperties({
@@ -167,7 +167,9 @@ test('same-project attempts emit independent generation and production usage', (
       [[2, 22, 8], [2, 11, 4]])
     assert.equal(rows[1].props.billable_calls_before_failure, 1)
     assert.notEqual(rows[0].props.attempt_id, rows[1].props.attempt_id)
-    assert.equal(rows[0].props.flow_id, rows[1].props.flow_id)
+    // R25/#345: flow_id is the backend receipt's; two runs started without the retry command are two flows.
+    assert.ok(rows[0].props.flow_id && rows[1].props.flow_id)
+    assert.notEqual(rows[0].props.flow_id, rows[1].props.flow_id)
   }
 })
 

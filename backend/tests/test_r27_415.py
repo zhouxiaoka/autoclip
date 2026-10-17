@@ -216,6 +216,10 @@ NOT_SNAPSHOT_READERS = {
     ('backend/services/studio/intelligence.py', 'vision_call'): 'vision settings model',
     ('backend/services/studio/intelligence.py', 'visual_config'): 'vision settings model',
     ('backend/services/studio/jobs.py', 'run_content'): "the adapter result's HTTP status -> PipelineFailure",
+    ('backend/services/studio/jobs.py', '_produce_selected'): 'ranks multi-goal causes; does not assemble a snapshot',
+    ('backend/services/studio/attempts.py', '_cause'): 'copies a settled cause onto the attempt receipt',
+    ('backend/services/studio/attempts.py', 'settle'): 'writes the ranked cause onto the attempt receipt',
+    ('backend/services/studio/store.py', 'settle_generation'): 'ranks variant failures for the generation cause',
     ('backend/services/studio/store.py', '_ensure_failure_identity'): "normalizes the job's own error_code/stage",
     ('backend/services/studio/store.py', 'fill'): "normalizes the job's own error_code/stage",
     ('backend/services/studio/vision_settings.py', '*'): 'vision settings',
@@ -246,7 +250,9 @@ def _py_reads(path):
 
 
 TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTerminal(',
-             'export function safeStudioProperties(', 'export function screeningIdentity(')
+             'export function safeStudioProperties(', 'export function screeningIdentity(',
+             'export function receiptEventCauses(', 'export function pageFailureAction(',
+             'export function analysisPageFailure(')
 _TS_READ = re.compile(r"""(\.\s*|\[\s*['"])(attribution_source|upstream_error_type|http_status|failure_stage|provider|config_source|base_url_host)\b(?!\s*[?]?:)""")
 
 

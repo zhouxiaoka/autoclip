@@ -37,22 +37,8 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(blob.includes('/Users'), false)
 })
 
-test('a rank skip is classic and is not a downgrade', () => {
-  const summary = workflow.generationSummary({
-    output_variants: [
-      { draft_id: 'a', render_job_id: 'j1', strategy_id: 'douyin', status: 'completed' },
-      { draft_id: 'b', render_job_id: 'j2', strategy_id: 'douyin', status: 'completed' },
-    ],
-    jobs: [
-      { job_id: 'j1', status: 'completed', result: { template_render: { template: 'classic', requested_template: 'editorial', downgraded: false, downgrade_reason: 'rank', outcome: 'skipped' } } },
-      { job_id: 'j2', status: 'completed', result: { template_render: { template: 'classic', requested_template: 'editorial', downgraded: true, downgrade_reason: 'over_budget', outcome: 'downgraded' } } },
-    ],
-    drafts: [],
-  })
-  assert.equal(summary.html_downgrade_count, 1)
-  assert.equal(summary.classic_count, 2)
-  assert.equal(summary.editorial_count, 0)
-})
+// R26 #367: the rank-skip summary rule is asserted on backend attempts.generation_summary
+// (backend/tests/test_r26_419_generation_summary.py); the frontend no longer derives summaries.
 
 test('override event helper keeps enums and drops free text', () => {
   const studio = fs.readFileSync(path.join(__dirname, '../src/analytics/studio.ts'), 'utf8')

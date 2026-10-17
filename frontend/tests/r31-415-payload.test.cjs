@@ -51,10 +51,15 @@ test('I565: pickAttribution copies only whitelisted keys with valid values and f
 })
 
 test('I565: dirty production / generation / screen records never put a non-whitelisted or invalid value in an event', () => {
+  const gen = 't-aaaaaaaaaaaaaaaa', prod = 't-bbbbbbbbbbbbbbbb', run = 'run-dirty'
+  const receipt = (attempt, kind, extra) => ({ attempt_id: attempt, kind, state: 'failed', error_code: 'provider_error',
+    upstream_error_type: DIRTY.upstream_error_type, failure_stage: DIRTY.failure_stage, summary: { ...DIRTY }, ...extra })
   const cases = [
-    observe('studio-production', 'plan', { plan: { id: 'plan', confirmed_analysis: 'subtitle' }, analysis: { ...DIRTY, status: 'failed', error_code: 'provider_error' } }, 'p1'),
-    observe('studio-generation', 'p1', { generation: { ...DIRTY, status: 'failed', error_code: 'provider_error' }, plan: { id: 'plan', mode: 'ai' } }),
-    observe('studio-screening', 'p1', { analysis: { ...DIRTY, status: 'failed', phase: 'screening', error_code: 'provider_error' }, plan: { id: 'plan' } }),
+    observe('studio-production', 'plan', { plan: { id: 'plan', confirmed_analysis: 'subtitle' }, analysis: { status: 'failed', run_id: run },
+      attempts: [receipt(prod, 'production', { run_id: run })] }, 'p1'),
+    observe('studio-generation', 'p1', { generation: { status: 'failed', attempt_id: gen }, plan: { id: 'plan', mode: 'ai' },
+      attempts: [receipt(gen, 'generation')] }),
+    observe('studio-screen', 'p1', { analysis: { ...DIRTY, status: 'failed', phase: 'screening', error_code: 'provider_error' }, plan: { id: 'plan' } }),
   ]
   let finished = 0
   for (const events of cases) for (const { event, props } of events) {
@@ -65,11 +70,15 @@ test('I565: dirty production / generation / screen records never put a non-white
   assert.ok(finished >= 2, 'terminal events were emitted')
 })
 
-test('X14: a production record with status=partial and no outcome keeps its failure fields', () => {
+test('X14: a partial production receipt with no outcome keeps its failure fields', () => {
+  const run = 'run-x14'
   const events = observe('studio-production', 'plan', {
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
-    analysis: { status: 'partial', error_code: 'provider_error', attribution_source: 'request', provider: 'kimi', config_source: 'customized',
-      http_status: 503, upstream_error_type: 'upstream_unavailable', failure_stage: 'analyze' },
+    analysis: { status: 'partial', run_id: run },
+    attempts: [{ attempt_id: 't-fffffffffffffffe', kind: 'production', state: 'partial', run_id: run,
+      error_code: 'provider_error', failure_stage: 'analyze', upstream_error_type: 'upstream_unavailable',
+      summary: { attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503,
+        upstream_error_type: 'upstream_unavailable', failure_stage: 'analyze' } }],
   }, 'p1')
   const done = events.find(e => e.event === 'studio_production_finished')
   assert.ok(done, JSON.stringify(events))

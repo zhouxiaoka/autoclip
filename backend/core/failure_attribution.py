@@ -404,7 +404,14 @@ def _provider_status(error: BaseException | None) -> tuple[int | None, str | Non
     except ImportError:  # pragma: no cover
         return None, None
     status = http_status_of(error)  # R30 I563: THE one status rule
-    return status, classify_run_upstream(error, status)
+    upstream = classify_run_upstream(error, status)
+    if not upstream and error is not None:
+        # A boundary that never sent a request (missing ASR key) still froze an enum cause.
+        frozen = getattr(error, "upstream_error_type", None)
+        if isinstance(frozen, str) and frozen not in ("", "unknown"):
+            from backend.core.llm_telemetry import sanitize_upstream_error_type
+            upstream = sanitize_upstream_error_type(frozen)
+    return status, upstream
 
 
 def write_attribution(record: dict, snapshot: FailureAttribution) -> None:
@@ -486,3 +493,32 @@ def project_attribution(record: dict | None) -> None:
     for key in SNAPSHOT_FIELDS:
         record.pop(key, None)
     record.update(clean)
+
+
+# R23 #419 (PM rule, one rule with docs/analytics/success_rate.sql): which failure a multi-goal
+# attempt is attributed to. Tiers come from the catalog's attribution.success_rate_v4. A cause is
+# user_hard (out of both denominators), user_x (out of the product denominator only) or product.
+# The primary cause is the first failure of the most product-like tier; the rest are secondary.
+# This does not build connection-test snapshots; classify_failure / export_attribution stay the
+# only snapshot rule above.
+PRODUCT, USER_X, USER_HARD = 0, 1, 2
+
+
+def _v4() -> dict:
+    from backend.core import event_catalog
+    return (event_catalog.load_catalog().get("attribution") or {}).get("success_rate_v4") or {}
+
+
+def cause_tier(failure: dict) -> int:
+    v4 = _v4()
+    code, upstream = failure.get("error_code"), failure.get("upstream_error_type")
+    if code in v4.get("overall_excluded_error_codes", ()) or upstream in v4.get("overall_excluded_upstream_types", ()):
+        return USER_HARD
+    if code in v4.get("product_extra_excluded_error_codes", ()):
+        return USER_X
+    return PRODUCT
+
+
+def rank_failures(failures: list) -> list:
+    """Failures in the order they failed -> primary first (most product-like tier, then earliest)."""
+    return sorted(failures, key=cause_tier)  # stable: within a tier the earliest failure stays first

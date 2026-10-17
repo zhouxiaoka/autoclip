@@ -13,6 +13,9 @@ on:
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
+      - '.github/actions/setup-ffmpeg-win/**'
+      - 'scripts/ffmpeg-win64.env'
+      - 'scripts/lib/ffmpeg_pin.ps1'
       - 'src-tauri/**'
       - 'backend/services/render_limits.py'
       - 'backend/services/studio/qa/**'
@@ -36,6 +39,9 @@ on:
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
+      - '.github/actions/setup-ffmpeg-win/**'
+      - 'scripts/ffmpeg-win64.env'
+      - 'scripts/lib/ffmpeg_pin.ps1'
       - 'src-tauri/**'
       - 'backend/services/render_limits.py'
       - 'backend/services/studio/qa/**'
@@ -77,16 +83,9 @@ jobs:
           SENTRY_DSN: ""
         # Selected by marker, never by round-numbered file names.
         run: python -m pytest backend/tests/test_store_lock.py -m store_lock -q
-      - name: Prepare FFmpeg for real interview-window rendering
-        shell: pwsh
-        run: |
-          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-            choco install ffmpeg --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
-            $env:PATH = "$env:ChocolateyInstall\bin;$env:PATH"
-          }
-          ffmpeg -version
-          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg unavailable' }
+      - name: Set up pinned FFmpeg (Windows)
+        uses: ./.github/actions/setup-ffmpeg-win
+        timeout-minutes: 8
       - name: Quote-card edges and shot-mode transitions on Windows
         env:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-window-render-regression

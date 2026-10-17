@@ -14,7 +14,9 @@ import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr,
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
+
 import { applyCustomProvider, mergeCustomList, type CustomProviderDraft } from './customProvider'
+import { notifySettingsSaved } from '../studio/settingsReturn'
 
 
 /** 1.5.8: every failed connection test carries a closed-set code (+ integer HTTP status). */
@@ -314,6 +316,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       const failed = [value, next].some(s => logic.validationTargets(s).some(({ connection }) => connection.validation_status === 'failed'))
       const visionFailed = logic.visionFollowLacksCapability(next, lists) || logic.visionFollowLacksCapability(value, lists)
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
+      // R20 #125: back to the failed project, if settings were opened from one (SETTINGS_SAVED_EVENT in studio/settingsReturn).
+      if (!failed && !visionFailed) notifySettingsSaved()
       return { ok: true, validationFailed: failed || visionFailed }
     } catch (e) { finish('failed', {}, e); setError(errorText(e)); return { ok: false } }
     finally { setSaving(false) }

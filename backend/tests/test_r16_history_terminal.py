@@ -54,10 +54,20 @@ def _capture(kind, watch_id, snapshot):
 @pytest.mark.parametrize('phase,kind,watch_id', [('screening', 'studio-screen', 'p'), ('production', 'studio-production', 'plan')])
 def test_identity_survives_history_to_terminal(project, phase, kind, watch_id):
     identity = {**IDENTITY, 'failure_stage': phase}
-    store.write(project, {'plan': {'id': 'plan', 'mode': 'local'},
-                          'analysis': {'status': 'failed', 'phase': phase, 'run_id': 'run', 'error_code': 'service_restarted', **identity}})
-    store.write(project, {'plan': {'id': 'plan2', 'mode': 'local'},
-                          'analysis': {'status': 'running', 'phase': 'screening', 'run_id': 'run2', 'instance': store.INSTANCE}})
+    state = {'plan': {'id': 'plan', 'mode': 'local'},
+             'analysis': {'status': 'failed', 'phase': phase, 'run_id': 'run', 'error_code': 'service_restarted', **identity}}
+    if phase == 'production':
+        # v4 production terminals are the settled receipt (#419). The history row still keeps the identity.
+        state['attempts'] = [{'attempt_id': 't-aaaaaaaaaaaaaaaa', 'flow_id': 't-ffffffffffffffff', 'sequence': 1,
+                              'kind': 'production', 'state': 'open', 'run_id': 'run', 'trigger': 'initial', 'causes': []}]
+        state['attempt_sequence'] = 1
+    store.write(project, state)
+    kept = store.read(project).get('attempts') if phase == 'production' else None
+    later = {'plan': {'id': 'plan2', 'mode': 'local'},
+             'analysis': {'status': 'running', 'phase': 'screening', 'run_id': 'run2', 'instance': store.INSTANCE}}
+    if kept:
+        later['attempts'] = kept
+    store.write(project, later)
     snapshot = store.read(project)
     receipt = next(row for row in snapshot['analysis_history'] if row['run_id'] == 'run')
     for key, value in identity.items():

@@ -37,23 +37,30 @@ test('I420: studio_screen_finished carries attribution_source; a local failure h
   assert.equal(screen.props.http_status, undefined)
 })
 
-test('I420: generation reads ONE record whole (generation local beats a complete analysis phase identity)', () => {
+test('I420: generation reads ONE receipt record whole (local beats a complete analysis phase identity)', () => {
+  const attempt = 't-aaaaaaaaaaaaaaaa'
   const events = observe('studio-generation', 'p1', {
-    generation: { status: 'failed', error_code: 'store_lock_timeout', attribution_source: 'local' },
+    generation: { status: 'failed', attempt_id: attempt },
     analysis: { status: 'failed', provider: 'kimi', config_source: 'customized', attribution_source: 'phase', http_status: 503, upstream_error_type: 'upstream_unavailable' },
     plan: { id: 'plan', mode: 'ai' },
+    attempts: [{ attempt_id: attempt, kind: 'generation', state: 'failed', error_code: 'store_lock_timeout',
+      upstream_error_type: 'upstream_unavailable', summary: { attribution_source: 'local', http_status: 503 } }],
   })
   const props = events.find(e => e.event === 'studio_generation_finished').props
   assert.equal(props.attribution_source, 'local')
-  assert.equal(props.provider, undefined)
+  assert.equal(props.provider, undefined, 'the live kimi identity is not borrowed')
   assert.equal(props.http_status, undefined)
+  assert.equal(props.upstream_error_type, undefined)
 })
 
 test('production reads through pickAttribution: local status is dropped, half identity is no identity', () => {
+  const run = 'run-local'
   const events = observe('studio-production', 'plan', {
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
-    analysis: { status: 'failed', outcome: 'failed', error_code: 'store_lock_timeout', attribution_source: 'local',
-      provider: 'openai', http_status: 503, upstream_error_type: 'upstream_unavailable' },
+    analysis: { status: 'failed', run_id: run },
+    attempts: [{ attempt_id: 't-bbbbbbbbbbbbbbbb', kind: 'production', state: 'failed', run_id: run,
+      error_code: 'store_lock_timeout', upstream_error_type: 'upstream_unavailable',
+      summary: { attribution_source: 'local', provider: 'openai', http_status: 503, upstream_error_type: 'upstream_unavailable' } }],
   }, 'p1')
   const props = events.find(e => e.event === 'studio_production_finished').props
   assert.equal(props.attribution_source, 'local')
@@ -80,20 +87,26 @@ test('I451: completed + outcome=partial keeps its failure fields; no status is u
 })
 
 test('I453: generation never borrows the analysis record (no source_blocked + kimi + 503 mix)', () => {
+  const attempt = 't-cccccccccccccccc'
   const events = observe('studio-generation', 'p1', {
-    generation: { status: 'failed', error_code: 'source_blocked', failure_stage: 'ingest' },
+    generation: { status: 'failed', attempt_id: attempt },
     analysis: { status: 'failed', provider: 'kimi', config_source: 'customized', attribution_source: 'request', http_status: 503, upstream_error_type: 'upstream_unavailable' },
     plan: { id: 'plan', mode: 'ai' },
+    attempts: [{ attempt_id: attempt, kind: 'generation', state: 'failed', error_code: 'source_blocked', failure_stage: 'ingest', summary: {} }],
   })
   const props = events.find(e => e.event === 'studio_generation_finished').props
   assert.equal(props.provider, undefined); assert.equal(props.http_status, undefined); assert.equal(props.upstream_error_type, undefined)
   assert.equal(props.failure_stage, 'ingest')
 })
 
-test('I451: a completed+partial production keeps stage/status in its event', () => {
+test('I451: a partial production keeps stage/status in its event', () => {
+  const run = 'run-partial'
   const events = observe('studio-production', 'plan', {
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
-    analysis: { status: 'completed', outcome: 'partial', failure_stage: 'analyze', attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 503, upstream_error_type: 'upstream_unavailable' },
+    analysis: { status: 'completed', outcome: 'partial', run_id: run },
+    attempts: [{ attempt_id: 't-dddddddddddddddd', kind: 'production', state: 'partial', run_id: run,
+      failure_stage: 'analyze', upstream_error_type: 'upstream_unavailable',
+      summary: { attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 503, failure_stage: 'analyze' } }],
   }, 'p1')
   const props = events.find(e => e.event === 'studio_production_finished').props
   assert.equal(props.failure_stage, 'analyze'); assert.equal(props.http_status, 503)

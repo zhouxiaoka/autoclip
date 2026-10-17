@@ -39,7 +39,7 @@
 - `framing`: speaker / full_frame / full_frame_pending / full_frame_captions
 - `outcome` 新增 auto_started
 
-不上传标题、字幕、译文、名牌人名、评论标签文字、高亮词、原视频标题或频道名。`frontend/tests/analytics-auto-generation.test.cjs` 覆盖：汇总计数、白名单丢弃标题与人名、自动出片初筛结局、生成终态只报一次。
+不上传标题、字幕、译文、名牌人名、评论标签文字、高亮词、原视频标题或频道名。`frontend/tests/analytics-auto-generation.real-backend.cjs`（回执由真实后端产出，CI 在后端任务里跑）覆盖：汇总计数、白名单丢弃标题与人名、自动出片初筛结局、生成终态只报一次。
 
 ## 负责人可以回答的问题
 

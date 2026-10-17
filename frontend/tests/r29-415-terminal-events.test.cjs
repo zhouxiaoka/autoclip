@@ -25,11 +25,13 @@ function observe(kind, id, state, extra) {
   return events
 }
 
-test('I504: generation completed + outcome=partial is a partial terminal and keeps its error_code', () => {
+test('I504: a partial generation receipt keeps its error_code and status', () => {
+  const attempt = 't-aaaaaaaaaaaaaaaa'
   const events = observe('studio-generation', 'p1', {
-    generation: { status: 'completed', outcome: 'partial', error_code: 'provider_error', attribution_source: 'request',
-      provider: 'kimi', config_source: 'customized', http_status: 503 },
+    generation: { status: 'completed', outcome: 'partial', attempt_id: attempt },
     plan: { id: 'plan', mode: 'ai' },
+    attempts: [{ attempt_id: attempt, kind: 'generation', state: 'partial', error_code: 'provider_error',
+      summary: { attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503 } }],
   })
   const done = events.find(e => e.event === 'studio_generation_finished')
   assert.ok(done, JSON.stringify(events))
@@ -38,20 +40,26 @@ test('I504: generation completed + outcome=partial is a partial terminal and kee
   assert.equal(done.props.http_status, 503)
 })
 
-test('I504: generation that completed cleanly carries no error_code or status', () => {
+test('I504: a clean completed generation receipt carries no error_code or status', () => {
+  const attempt = 't-bbbbbbbbbbbbbbbb'
   const props = observe('studio-generation', 'p1', {
-    generation: { status: 'completed', outcome: 'completed', error_code: 'provider_error', http_status: 503, attribution_source: 'request', provider: 'kimi', config_source: 'customized' },
+    generation: { status: 'completed', outcome: 'completed', attempt_id: attempt },
     plan: { id: 'plan', mode: 'ai' },
+    attempts: [{ attempt_id: attempt, kind: 'generation', state: 'completed', error_code: 'provider_error',
+      summary: { error_code: 'provider_error', http_status: 503, attribution_source: 'request', provider: 'kimi', config_source: 'customized' } }],
   }).find(e => e.event === 'studio_generation_finished').props
   assert.equal(props.outcome, 'success')
   assert.equal(props.error_code, undefined)
   assert.equal(props.http_status, undefined)
 })
 
-test('I504: production status=partial emits its terminal event', () => {
+test('I504: a partial production receipt emits its terminal event', () => {
+  const run = 'run-partial'
   const events = observe('studio-production', 'plan', {
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
-    analysis: { status: 'partial', error_code: 'provider_error', attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 502 },
+    analysis: { status: 'partial', run_id: run },
+    attempts: [{ attempt_id: 't-eeeeeeeeeeeeeeee', kind: 'production', state: 'partial', run_id: run, error_code: 'provider_error',
+      summary: { attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 502 } }],
   }, 'p1')
   const done = events.find(e => e.event === 'studio_production_finished')
   assert.ok(done, JSON.stringify(events))
@@ -79,7 +87,9 @@ function offences(file, source) {
     if (ts.isBinaryExpression(e)) return recish(e.left) || recish(e.right)
     return false
   }
-  const inPick = (n) => { for (let c = n; c; c = c.parent) if (ts.isFunctionDeclaration(c) && c.name && c.name.text === 'pickAttribution') return true; return false }
+  // Page cause display (去设置) reads a settled cause. It is not a telemetry serializer; pickAttribution remains the only event reader.
+  const PAGE = new Set(['analysisPageFailure', 'pageFailureAction', 'receiptFailureInfo'])
+  const inPick = (n) => { for (let c = n; c; c = c.parent) if (ts.isFunctionDeclaration(c) && c.name && (c.name.text === 'pickAttribution' || PAGE.has(c.name.text))) return true; return false }
   const collect = (n) => { if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && recish(n.initializer)) aliases.add(n.name.text); ts.forEachChild(n, collect) }
   for (let i = 0; i < 3; i++) collect(sf)
   const report = (n, what) => { if (!inPick(n)) out.push(`${file}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}: ${what}`) }
