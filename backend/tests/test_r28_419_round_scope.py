@@ -85,7 +85,7 @@ def test_409d_variant_retry_of_an_unstamped_output_is_never_a_validation_failure
     assert data['generation']['status'] == 'completed' and data['generation'].get('error_code') != 'validation'
     # R31 I541: the retried output is stamped redone_by_attempt when it is retried, so the receipt counts it (a stored
     # stamp, not an inference). Was: no counts at all ('variant_count' not in summary).
-    assert receipt['state'] == 'completed' and (receipt['summary']['variant_count'], receipt['summary']['completed_variant_count']) == (1, 1)
+    assert receipt['state'] == 'completed' and (receipt['summary'].get('variant_count'), receipt['summary'].get('completed_variant_count')) == (1, 1)
 
 
 def test_409e_previous_round_queued_leftover_does_not_block_this_round(monkeypatch):

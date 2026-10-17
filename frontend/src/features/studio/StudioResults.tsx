@@ -17,6 +17,7 @@ import PlatformPicker from './PlatformPicker'
 import { platformLabel } from './platformLabel'
 import { flagAssigned, flagEnabled } from '../../analytics/flags'
 import { trackLegacyEntry } from '../../analytics/studio'
+import { workflow } from '../../analytics/observer'
 import { legacyEntrypointsHidden } from './legacyEntrypoints'
 import { clearCompletionBadge, subscribeCompletionNotice, type NoticeKind } from './noticeRuntime'
 import { noticeCopy } from './completionNotice'
@@ -79,6 +80,8 @@ export default function StudioResults({ project, children, onCreateCollection, o
       stopLeave()
     }
   }, [project.id])
+  // R31 I531 #419: an append whose response was lost still reports its terminal - adopt the open attempt from the snapshot.
+  useEffect(()=>{workflow.adoptOpenAttempt(project.id, workspace)},[project.id, workspace.attempts])
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
   // The generation terminal event comes from the persisted `studio-generation` watch registered at
   // import, so it is reported once even when the user leaves this page before rendering ends.

@@ -1297,6 +1297,7 @@ def append_platform_variants(project_id, platforms, branding):
         receipt = attempts.open_append(data, first['output'], now=store.now())
         receipt['input'] = _freeze_append_input(data, targets, branding, receipt)
         run_id = uuid.uuid4().hex
+        attempts.bind_run(receipt, run_id)   # I539: the page matches the failed analysis to this receipt by run_id
         data['generation']['started_at'] = store.now()
         data['analysis'] = {'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
         return receipt['attempt_id'], run_id

@@ -69,8 +69,8 @@ def test_addition1_process_dies_before_the_background_job_settles_service_restar
     assert store._recover_interrupted_run(state) is True
     attempts.reconcile(state)
     receipt = attempts.find(state, result['attempt']['attempt_id'])
-    assert (state['generation']['status'], state['generation']['error_code']) == ('failed', 'service_restarted')
-    assert receipt['state'] == 'failed' and receipt['error_code'] == 'service_restarted'   # terminal reached
+    assert (state['generation']['status'], state['generation'].get('error_code')) == ('failed', 'service_restarted')
+    assert receipt['state'] == 'failed' and receipt.get('error_code') == 'service_restarted'   # terminal reached
     assert {v['id']: v['status'] for v in state['output_variants']} == before   # the workspace is not rolled back
 
 
@@ -86,7 +86,7 @@ def test_i531_http_append_returns_the_open_receipt_before_any_preparation(client
     assert prepared == []                                                 # 913f416d: prepared inside the request
     assert body['variants'] == [] and body['attempt']['state'] == 'open' and body['attempt']['trigger'] == 'append_platform'
     [(fn, args, kwargs)] = recorder.calls
-    run_id = state['analysis']['run_id']
+    run_id = state['analysis'].get('run_id')
     assert fn.__name__ == '_auto_generate' and args == ('p1', None)
     assert kwargs == {'append_attempt': body['attempt']['attempt_id'], '_io_receipt': ('analysis', run_id, 'production')}
     assert 'input' not in body['attempt']                                 # the frozen input stays server-side
@@ -142,7 +142,8 @@ def test_i535_preparation_failure_carries_attribution_run_id_duration_and_marks_
         raise _rate_limited()
     monkeypatch.setattr(jobs, '_apply_framing', framing)
     result = _append()
-    run_id = state['analysis']['run_id']
+    run_id = state['analysis'].get('run_id')
+    assert run_id                                                         # 913f416d: the append's analysis has no run_id
     recorder.run()
     attempts.reconcile(state)
     generation, analysis = state['generation'], state['analysis']
@@ -150,6 +151,7 @@ def test_i535_preparation_failure_carries_attribution_run_id_duration_and_marks_
     assert (generation['error_code'], generation.get('http_status'), generation.get('failure_stage')) == ('rate_limited', 429, 'production')
     assert generation.get('upstream_error_type')                          # studio_failure_context (#415)
     assert (analysis['status'], analysis['phase'], analysis.get('run_id')) == ('failed', 'production', run_id)   # I539
+    assert receipt['run_id'] == run_id and receipt['causes'][0]['upstream']   # what receiptFailureInfo matches on
     assert isinstance(analysis.get('duration_ms'), int) and marked == ['failed']
     assert receipt['state'] == 'failed' and receipt['error_code'] == 'rate_limited'
     assert isinstance(receipt['summary'].get('duration_ms'), int) and receipt['summary']['duration_ms'] >= 0   # I534

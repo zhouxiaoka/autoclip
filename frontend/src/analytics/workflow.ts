@@ -322,6 +322,13 @@ export class WorkflowTracker {
     if (this.watches.some(w => w.attemptId === receipt.attempt_id)) return
     this.watch(kind, kind === 'studio-production' ? (planId || projectId) : projectId, kind === 'studio-production' ? projectId : undefined, this.now(), properties, false, receipt.run_id || receipt.attempt_id, receipt.attempt_id)
   }
+  /** R31 I531 #419: the append request returns its receipt before preparation; if that response was lost (reload,
+   * network), the workspace snapshot still lists the open generation attempt - adopt it so its terminal is reported.
+   * Deduplicated by attempt id in watchAttempt; the terminal's $insert_id is per attempt. */
+  adoptOpenAttempt(projectId: string, snapshot: Pick<StudioSnapshot, 'attempts'> | null | undefined): void {
+    for (const receipt of (Array.isArray(snapshot?.attempts) ? snapshot.attempts : []))
+      if (receipt.state === 'open' && receipt.kind === 'generation') this.watchAttempt(projectId, receipt)
+  }
   /** The receipt a v4 watch projects: bound by attempt id, else by its run, else (a watch from before
    * receipts) the attempt the backend bound to the current generation - then pinned to that attempt. */
   private receiptFor(w: Watch, snapshot: StudioSnapshot): AttemptReceipt | undefined {
