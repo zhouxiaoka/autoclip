@@ -130,7 +130,8 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
         # R27c I488: the one capture path, capture_studio_exception(phase="model_download", http_status=500)
         assert tags.get('area') == 'studio' and tags.get('phase') == 'model_download', tags
         assert tags.get('error_code') == 'validation' and tags.get('http_status') == '500', tags
-        assert set(tags) <= {'area', 'phase', 'error_code', 'http_status', 'runtime', 'app_mode', 'os', 'arch', 'build_environment'}, tags
+        assert tags.get('attribution_source') == 'local', tags  # local ValueError: no request identity
+        assert set(tags) <= {'area', 'phase', 'error_code', 'http_status', 'runtime', 'app_mode', 'os', 'arch', 'build_environment', 'attribution_source'}, tags
         assert 'request' not in event and 'extra' not in event
     finally:
         real_init(dsn=None)
