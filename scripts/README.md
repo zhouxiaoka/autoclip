@@ -63,7 +63,7 @@ Tauri 合并，不影响 macOS。
    （防止"开发机能跑、打包就 500"）
 5. 构建前端（`npm ci && npm run build`）
 
-平台脚本各自负责：静态 ffmpeg/ffprobe（macOS: osxexperts arm64 静态包；Windows: BtbN win64 gpl 包）、
+平台脚本各自负责：静态 ffmpeg/ffprobe（macOS: martin-riedl.de 静态 release 包，arm64/x64 各一份 scripts/ffmpeg-macos-{arm64,x64}.env；Windows: gyan.dev essentials，scripts/ffmpeg-win64.env；三者同为 ffmpeg 9.0.2，版本/URL/sha256 只在这些文件里）、
 `cargo tauri build`、打包与签名。
 
 ### 运行时怎么找到这些资源（`src-tauri/src/backend_manager.rs`）

@@ -13,6 +13,9 @@ on:
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
+      - '.github/actions/setup-ffmpeg-win/**'
+      - 'scripts/ffmpeg-win64.env'
+      - 'scripts/lib/ffmpeg_pin.ps1'
       - 'src-tauri/**'
       - 'backend/services/render_limits.py'
       - 'backend/services/studio/qa/**'
@@ -31,6 +34,9 @@ on:
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
+      - '.github/actions/setup-ffmpeg-win/**'
+      - 'scripts/ffmpeg-win64.env'
+      - 'scripts/lib/ffmpeg_pin.ps1'
       - 'src-tauri/**'
       - 'backend/services/render_limits.py'
       - 'backend/services/studio/qa/**'
@@ -60,16 +66,9 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py backend/tests/test_orphan_reaper.py -q
-      - name: Prepare FFmpeg for real interview-window rendering
-        shell: pwsh
-        run: |
-          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-            choco install ffmpeg --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
-            $env:PATH = "$env:ChocolateyInstall\bin;$env:PATH"
-          }
-          ffmpeg -version
-          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg unavailable' }
+      - name: Set up pinned FFmpeg (Windows)
+        uses: ./.github/actions/setup-ffmpeg-win
+        timeout-minutes: 8
       - name: Quote-card edges and shot-mode transitions on Windows
         env:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-window-render-regression
