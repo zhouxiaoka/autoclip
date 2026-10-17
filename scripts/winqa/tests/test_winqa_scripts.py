@@ -776,7 +776,9 @@ def test_r23_187_redact_failure_never_exits_0(tmp_path, bash, remote_rc):
          + str(remote_rc) + ';;\nesac; exit 0')
     done = subprocess.run([bash, str(SH), '999'], env=dict(_sh_env(tmp_path), WINQA_MODEL_API_KEY='a\nb'),
                           capture_output=True)
-    assert done.returncode == (8 if remote_rc == 0 else remote_rc), done.stderr
+    # a bad key makes redact exit before it reads anything, so the script's own writes may die on SIGPIPE (141,
+    # seen on macOS CI); either way the exit is non-zero and the output is withheld
+    assert done.returncode in ((8 if remote_rc == 0 else remote_rc), 141), done.stderr
     assert '脱敏失败'.encode() in done.stderr and b'Traceback' not in done.stderr
     assert b'b\x00o\x00b' not in done.stdout + done.stderr
 
