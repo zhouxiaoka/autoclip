@@ -94,11 +94,16 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
     monkeypatch.setattr(sentry_setup, 'crash_reports_enabled', lambda: True)
     monkeypatch.setattr(sentry_setup, 'sync_anonymous_user', lambda *a, **k: None)
     monkeypatch.setenv('SENTRY_DSN', 'https://k@o0.ingest.sentry.io/0')
+    # I652 refuses pytest and a source checkout. Stub only those two refusals.
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+    monkeypatch.setattr(sentry_setup, '_under_pytest', lambda: False)
+    monkeypatch.setattr(sentry_setup, '_running_from_source_tree', lambda: False)
     try:
         assert sentry_setup.init_sentry('desktop') is True
         names = {type(i).__name__ for i in seen['integrations']}
         assert 'StarletteIntegration' not in names and seen['auto_enabling_integrations'] is False
-        assert seen['before_send'] is sentry_setup.before_send
+        assert seen['before_send'] is sentry_setup._before_send_limited
 
         monkeypatch.setenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, '1')
         http, calls = client
