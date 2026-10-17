@@ -7,7 +7,7 @@ import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { llmFailureText } from '../../utils/llmFailure'
 import { failureSettings, sourceFailure } from './importReadiness'
-import { pickSecondary, receiptFailureInfo } from './failureAction'
+import { analysisPageFailure, receiptFailureInfo } from './failureAction'
 import FailureActions from './FailureActions'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
@@ -96,7 +96,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
       {workspace.analysis?.status==='failed' && sourceUnusable && <div className="ac-empty" role="alert"><b>{t("这个素材无法使用")}</b><span className="studio-error">{t(llmFailureText(workspace.analysis.error, failedCode))}</span><div className="studio-actions"><Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
       {workspace.analysis?.status==='failed' && whisperSettings && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><span className="studio-error">{t(llmFailureText(workspace.analysis.error, failedCode))}</span><div className="studio-actions">{(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
       {workspace.analysis?.status==='failed' && !sourceUnusable && !whisperSettings && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
-        <FailureActions info={{ error: workspace.analysis.error, ...(receiptFailureInfo(workspace.attempts, workspace.analysis.run_id) || { error_code: failedCode, upstream_error_type: (workspace.analysis as { upstream_error_type?: string }).upstream_error_type, failure_stage: (workspace.analysis as { failure_stage?: string }).failure_stage, ...pickSecondary(workspace.analysis) }) }}
+        <FailureActions info={{ error: workspace.analysis.error, ...(receiptFailureInfo(workspace.attempts, workspace.analysis.run_id) || analysisPageFailure(workspace.analysis, workspace.generation)) }}
           canRetry={automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))}
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
           onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}

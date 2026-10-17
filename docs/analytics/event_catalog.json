@@ -92,22 +92,50 @@
       "source_no_audio",
       "source_unreadable",
       "service_restarted",
-      "frame_extract_failed"
+      "frame_extract_failed",
+      "store_lock_timeout"
     ],
     "provider": [
+      "api88",
+      "infistar",
+      "deepseek",
       "dashscope",
+      "siliconflow",
+      "seed",
+      "glm",
+      "kimi",
+      "minimax-cn",
+      "xiaomi",
       "openai",
       "gemini",
-      "deepseek",
-      "seed",
-      "kimi",
-      "glm",
-      "grok",
-      "infistar",
-      "api88",
-      "compatible",
+      "whisper",
+      "sensevoice",
       "ollama",
       "lmstudio",
+      "openrouter",
+      "anthropic",
+      "grok",
+      "groq",
+      "mistral",
+      "together",
+      "fireworks",
+      "huggingface",
+      "nvidia",
+      "cerebras",
+      "baseten",
+      "azure-openai",
+      "amazon-bedrock",
+      "google-vertex",
+      "cloudflare-workers-ai",
+      "cloudflare-ai-gateway",
+      "vercel-ai-gateway",
+      "moonshotai",
+      "minimax",
+      "ant-ling",
+      "qianfan",
+      "hunyuan",
+      "byteplus-modelark",
+      "compatible",
       "other"
     ],
     "asr_provider": [
@@ -184,6 +212,39 @@
       "retry",
       "variant_retry",
       "append_platform"
+    ],
+    "connection_test_error_code": [
+      "empty_key",
+      "invalid_key",
+      "insufficient_quota",
+      "permission_denied",
+      "bad_base_url",
+      "model_not_found",
+      "rate_limited",
+      "http_5xx",
+      "timeout",
+      "dns",
+      "cors",
+      "network",
+      "vision_unsupported",
+      "output_truncated",
+      "invalid_request",
+      "unknown"
+    ],
+    "config_source": [
+      "preset",
+      "customized"
+    ],
+    "attribution_source": [
+      "request",
+      "phase",
+      "local"
+    ],
+    "shutdown_kind": [
+      "clean",
+      "parent_lost",
+      "crash",
+      "unknown"
     ]
   },
   "attribution": {
@@ -268,7 +329,8 @@
       ]
     },
     "product_error_codes": [
-      "frame_extract_failed"
+      "frame_extract_failed",
+      "store_lock_timeout"
     ]
   },
   "privacy": {
@@ -568,6 +630,14 @@
       },
       "optional_ids": {
         "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
+      },
+      "enums": {
+        "config_source": "config_source",
+        "attribution_source": "attribution_source",
+        "provider": "provider",
+        "upstream_error_type": "upstream_error_type",
+        "failure_stage": "failure_stage",
+        "shutdown_kind": "shutdown_kind"
       }
     },
     "studio_generation_finished": {
@@ -588,7 +658,13 @@
       },
       "enums": {
         "outcome": "studio_outcome",
-        "trigger": "attempt_trigger"
+        "trigger": "attempt_trigger",
+        "config_source": "config_source",
+        "attribution_source": "attribution_source",
+        "provider": "provider",
+        "upstream_error_type": "upstream_error_type",
+        "failure_stage": "failure_stage",
+        "shutdown_kind": "shutdown_kind"
       },
       "optional_ids": {
         "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
@@ -630,7 +706,13 @@
         ]
       },
       "enums": {
-        "outcome": "studio_outcome"
+        "outcome": "studio_outcome",
+        "config_source": "config_source",
+        "attribution_source": "attribution_source",
+        "provider": "provider",
+        "upstream_error_type": "upstream_error_type",
+        "failure_stage": "failure_stage",
+        "shutdown_kind": "shutdown_kind"
       },
       "optional_ids": {
         "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
@@ -853,6 +935,25 @@
     "studio_first_clip_ready": {
       "status": "keep",
       "domain": "studio"
+    },
+    "provider_connection_test_finished": {
+      "status": "core",
+      "domain": "provider",
+      "required": [
+        "provider",
+        "outcome"
+      ],
+      "required_when": {
+        "outcome=error": [
+          "error_code"
+        ]
+      },
+      "enums": {
+        "provider": "provider",
+        "outcome": "experience_outcome",
+        "error_code": "connection_test_error_code",
+        "config_source": "config_source"
+      }
     }
   }
 }

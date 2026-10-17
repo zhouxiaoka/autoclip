@@ -100,6 +100,18 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
                 raise ValueError(message) from None
         return {k: v for k, v in added.items() if k not in ('instance', 'snapshot', 'variant_links')}
 
+
+def _freeze_phase_identity(project_id):
+    """R22 #223: a run phase's worker starts from the identity its start record froze, so snapshots
+    and Sentry taken before the first model request name that connection (not today's settings)."""
+    try:
+        data = json.loads((store.directory(project_id) / 'metadata' / 'studio.json').read_text(encoding='utf-8'))
+        from backend.core.llm_emit import freeze_phase_identity
+        freeze_phase_identity((data.get('analysis') if isinstance(data, dict) else None) or {})
+    except Exception:  # noqa: BLE001 - attribution only
+        logger.debug('phase identity was not frozen', exc_info=True)
+
+
 def _tracked(stage):
     """Record model token usage of a studio job (first argument: project id) under `stage`."""
     def wrap(fn):
@@ -111,6 +123,8 @@ def _tracked(stage):
             from backend.core.project_cancellation import ProjectDeleted, bind
             from backend.core import llm_telemetry
             with bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage), llm_telemetry.track_run():
+                if identity and identity[0] == 'analysis':
+                    _freeze_phase_identity(project_id)
                 try:
                     return fn(project_id, *args, **kwargs)
                 except ProjectDeleted:
@@ -225,7 +239,8 @@ def analyze_project(project_id, prefs, url=None, browser=None):
     def begin(data):
         if (data.get('analysis') or {}).get('status') == 'running':
             raise ValueError('视觉分析正在运行')
-        data['analysis'] = {'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
+        from backend.services.studio.failure_identity import provider_identity
+        data['analysis'] = {**provider_identity('vision'), 'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
         return data['analysis']['run_id']
     run_id = store.change(project_id, begin)
     try:
@@ -274,7 +289,7 @@ def _analyze(project_id, prefs, url, browser):
         def complete(data):
             data['events'] = [e.model_dump() for e in events]
             data['drafts'].extend({**d, 'updated_at': store.now()} for d in drafts)
-            data['analysis'] = {'status': 'completed', 'coverage': coverage, 'created_at': store.now()}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis')), 'status': 'completed', 'coverage': coverage, 'created_at': store.now()}
         store.change(project_id, complete)
         mark_project(project_id, 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
@@ -284,7 +299,7 @@ def _analyze(project_id, prefs, url, browser):
         message = str(error)[:700]
         diagnostics = [error.diagnostics()] if isinstance(error, VisionRequestError) else None
         def failed(data):
-            data['analysis'] = {'status': 'failed', 'error': message}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'failed', 'error': message}
             if diagnostics:
                 data['analysis']['diagnostics'] = diagnostics
         try:
@@ -467,6 +482,15 @@ def ensure_project_thumbnail(project_id):
         logger.warning('Project thumbnail generation failed', exc_info=True)
 
 
+
+from backend.core.failure_attribution import AttributedError  # noqa: E402
+from backend.pipeline.failures import AttributedPipelineFailure as ContentPipelineFailure  # noqa: E402
+
+
+class ContentRunError(AttributedError, RuntimeError):
+    """R29 I501: an uncoded content pipeline failure rebuilt across apply().get(), with its snapshot."""
+
+
 def run_content(project_id, video):
     """Run the existing content pipeline in this worker, without a second broker queue."""
     from backend.tasks.processing import process_video_pipeline
@@ -481,15 +505,19 @@ def run_content(project_id, video):
         failure = (result or {}).get('result') or {}
         # The original exception does not survive apply().get(): the adapter records the provider
         # HTTP status in the result dict and it is carried back here (RC156 Win QA #1).
+        # The original exception does not survive apply().get(): the adapter built the one attribution
+        # snapshot while the chain existed and it rides in the dict (R29 I501); it is restored here whole.
+        from backend.core.failure_attribution import attributed, restore_attribution
         status = failure.get('http_status')
-        status = status if type(status) is int and 400 <= status <= 599 else None
-        if failure.get('error_code') or failure.get('stage'):
-            from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '', http_status=status,
-                                  upstream_error_type=failure.get('upstream_error_type') or '')
-        error = RuntimeError(message)
-        if status is not None:
-            error.http_status = status
+        code = failure.get('error_code') or ''
+        if code or failure.get('stage'):
+            error = ContentPipelineFailure(failure.get('stage', ''), message, code=code,
+                                           upstream_error_type=failure.get('upstream_error_type') or '')
+        else:
+            error = ContentRunError(message)
+        attributed(error, restore_attribution(failure.get('attribution')), http_status=status)
+        if failure.get('upstream_error_type'):
+            error.upstream_error_type = failure.get('upstream_error_type')
         raise error
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
@@ -1105,7 +1133,8 @@ def _auto_generate(project_id, plan):
             attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
-            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
+            from backend.services.studio.failure_identity import carry_screening
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
         _dispatch_pending_variants(project_id)
     except Exception as error:
@@ -1123,10 +1152,11 @@ def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_i
     def fail(data):
         if not _still_this_run(data, attempt_id, run_id):
             return False
+        context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))
         if data.get('generation'):
             data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
-        # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
-        data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context}
+        from backend.services.studio.failure_identity import carry_screening
+        data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context, **carry_screening(data.get('analysis'), data.get('generation'))}
         return True
     if store.change(project_id, fail):
         mark_project(project_id, 'failed')
@@ -1227,7 +1257,7 @@ def _submit_production(project_id, run_id, plan, *, attempt_id=None):
             if not _still_this_run(data, attempt_id, run_id):
                 return False
             data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': run_id, 'error': message, 'error_code': code, 'failure_stage': 'dispatch'}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'failed', 'phase': 'production', 'run_id': run_id, 'error': message, 'error_code': code, 'failure_stage': 'dispatch'}
             return True
         if store.change(project_id, fail_automatic):
             mark_project(project_id, 'failed')
@@ -1473,7 +1503,7 @@ def retry_variant(project_id, variant_id, retry=None):
             if item.get('status') != 'failed':
                 raise ValueError('只有失败的成片版本可以重试')
             receipt = _variant_attempt(data, retry, item)
-            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
             return _start_preparing(data, item)
         attempt_id = store.change(project_id, prepare)
         _submit_on_demand(project_id, variant_id, attempt_id)
@@ -1490,7 +1520,7 @@ def retry_variant(project_id, variant_id, retry=None):
         item.pop('error_code', None)
         data['generation'].update(status='rendering')
         receipt = _variant_attempt(data, retry, item)
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
     _dispatch_pending_variants(project_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
@@ -1560,7 +1590,10 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'created_at': store.now(),
         }
         state.setdefault('output_variants', [])
-        state['analysis'] = {'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        from backend.services.studio.failure_identity import SCREENING_KEY, frozen, phase_identity
+        screening = phase_identity('screening')
+        state['analysis'] = {**screening, **({SCREENING_KEY: frozen(screening)} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['generation'].update(store.attempt_identity(state['analysis']), **({SCREENING_KEY: frozen(screening)} if screening else {}))
         # #419: automatic output is one generation attempt from this run; a manual retry opens the production
         # attempt now (bound at confirmation) so its retry_of survives the screening step.
         if options.auto_start or retry is not None:
@@ -1588,7 +1621,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
-            store.write(project_id, previous, _recover_previous=False)
+            store.write(project_id, previous, _recover_previous=False, restore=True)  # I620: rollback is not a transition
             raise ValueError(message) from None
 
         return state['analysis']['run_id']
@@ -1608,13 +1641,16 @@ def _inspect(project_id, options, url, browser):
         ensure_project_thumbnail(project_id)
         plan['id'] = uuid.uuid4().hex
         if options.auto_start:
+            from backend.services.studio.failure_identity import SCREENING_KEY, phase_identity, screening_identity
+            production_identity = phase_identity('production', plan)
             def start_automatic(data):
                 run_id = (data.get('analysis') or {}).get('run_id')  # observers match the run across phases
-                data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
+                screening = screening_identity(data.get('analysis'))
+                data.update(plan=plan, analysis={**production_identity, **({SCREENING_KEY: screening} if screening else {}), 'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
                 receipt = attempts.current(data)
                 if receipt and receipt.get('attempt_id') == (data.get('generation') or {}).get('attempt_id'):
                     attempts.bind_plan(receipt, plan)  # R25 #348: this attempt's own plan
-                data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan))
+                data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan), **store.attempt_identity(data.get('analysis')))
                 return run_id
             run_id = store.change(project_id, start_automatic)
             mark_project(project_id, 'processing', creative=plan['preferences'], awaiting_confirmation=False, import_staging=False)
@@ -1622,7 +1658,9 @@ def _inspect(project_id, options, url, browser):
             _submit_production(project_id, run_id, plan, attempt_id=attempt_id)
             return
         def awaiting_confirmation(data):
-            data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
+            from backend.services.studio.failure_identity import SCREENING_KEY, screening_identity
+            screening = screening_identity(data.get('analysis'))
+            data.update(plan=plan, analysis={**screening, **({SCREENING_KEY: screening} if screening else {}), 'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
             if data.get('generation'):
                 data['generation']['status'] = 'awaiting_confirmation'
         store.change(project_id, awaiting_confirmation)
@@ -1640,8 +1678,13 @@ def _inspect(project_id, options, url, browser):
         context = studio_failure_context(error, 'screening')
         try:
             def fail_screening(data):
-                # 1.5.8: history keeps failure_stage / http_status / upstream_error_type (ASR vs analysis).
-                data['analysis'] = {**failure, **context}
+                from backend.services.studio.failure_identity import SCREENING_KEY, screening_identity
+                screening = screening_identity(data.get('analysis'))
+                context.update(screening)
+                failure.update(context)
+                if screening:
+                    failure[SCREENING_KEY] = screening
+                data['analysis'] = failure
                 if (data.get('generation') or {}).get('auto_start'):
                     data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
             store.change(project_id, fail_screening)
@@ -1687,7 +1730,8 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        state['analysis'] = {'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+        from backend.services.studio.failure_identity import phase_identity
+        state['analysis'] = {**phase_identity('production', plan, body.goals), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
         pending = attempts.current(state)
         if pending and pending['kind'] == 'production' and not pending.get('run_id'):
@@ -1704,7 +1748,7 @@ def confirm_project(project_id, body):
             capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
-            store.write(project_id, previous, _recover_previous=False)
+            store.write(project_id, previous, _recover_previous=False, restore=True)  # I620: rollback is not a transition
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 
         return state['analysis']['run_id']
@@ -1725,6 +1769,7 @@ def _produce_selected(project_id, plan):
     labels = {'content':'内容切片','highlight':'精彩高光','promo':'推广成片'}
     errors = []
     error_codes = []
+    goal_errors = []
     contexts = []  # 1.5.8: failure_stage / http_status / upstream_error_type per failed goal (no text)
     diagnostics = []
     visual_error = None
@@ -1788,6 +1833,7 @@ def _produce_selected(project_id, plan):
                 store.raise_owned_read_error(error)
                 failed_goals.append(goal)
                 error_codes.append(studio_error_code(error))
+                goal_errors.append(error)
                 contexts.append(studio_failure_context(error, 'production'))
                 if all(error is not previous_error for previous_error in reported):
                     capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'), goal=goal)
@@ -1804,18 +1850,30 @@ def _produce_selected(project_id, plan):
             result['coverage'] = coverage
         if diagnostics:
             result['diagnostics'] = diagnostics
+        held = None
         if errors:
             result['error'] = '；'.join(errors)
             # R23 #228: the primary cause is the first product failure, else the first user one; the rest go along.
+            # The snapshot written below is that same cause. A secondary goal's request record must not
+            # replace the primary's stage or upstream (and a later success still cannot, #397).
             from backend.core.failure_attribution import rank_failures
-            primary, *others = rank_failures([{'error_code': code, **context} for code, context in zip(error_codes, contexts)])
+            ranked = rank_failures([
+                {'error_code': code, **context, '_error': goal_error}
+                for code, context, goal_error in zip(error_codes, contexts, goal_errors)
+            ])
+            primary, *others = ranked
+            held = primary.pop('_error', None)
+            for other in others:
+                other.pop('_error', None)
             result.update(primary)
             if others:
                 result['secondary_error_codes'] = [f['error_code'] for f in others]
                 result['secondary_upstream_error_types'] = [f.get('upstream_error_type') or '' for f in others]
                 # R24: page only (not an event field) - which settings row fixes a secondary user cause.
                 result['secondary_failure_stages'] = [f.get('failure_stage') or '' for f in others]
-        store.change(project_id, lambda data:data.update(analysis=result))
+        from backend.core.llm_emit import failure_in_hand
+        with failure_in_hand(held):
+            store.change(project_id, lambda data: data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **result}))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         store.raise_owned_read_error(error)
@@ -1826,7 +1884,7 @@ def _produce_selected(project_id, plan):
             'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000),
             **studio_failure_context(error, 'production')}
         try:
-            store.change(project_id, lambda data:data.update(analysis=failure))
+            store.change(project_id, lambda data: data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **failure}))
             mark_project(project_id,'failed')
         except FileNotFoundError:
             pass

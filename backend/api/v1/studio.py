@@ -31,6 +31,8 @@ def project_or_404(project_id: str, db: Session):
         raise HTTPException(404, '项目不存在')
     return project
 
+from backend.core.failure_attribution import ModelResponseInvalid  # R29
+
 def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
@@ -584,7 +586,15 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         raise HTTPException(404, '草稿不存在')
     try:
         result = intelligence.text_json('你是剪辑文案编辑。按用户要求优化 title 和 hook，保持事实；依据仅限原文与镜头证据。不能声称已修改镜头、声音或视频，也不能承诺投放效果。返回 {"title":"...","hook":"..."}。', {'instruction': body.instruction, 'language': body.draft.language, 'title': body.draft.title, 'hook': body.draft.hook, 'scenes': [s.model_dump() for s in body.draft.scenes]})
-        candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
+        # R29 (Dong 11:09): the model's own reply failed our checks -> MODEL / invalid_response, no raw text.
+        # R31 I568: only the reply's own shape is judged (not a dict, a missing key, a field the schema
+        # rejects); a TypeError from our own code is not caught here and stays local/unexpected.
+        if not isinstance(result, dict):
+            raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试')
+        try:
+            candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
+        except (KeyError, ValueError):  # pydantic's ValidationError is a ValueError
+            raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试') from None
     except Exception as error:
         capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None

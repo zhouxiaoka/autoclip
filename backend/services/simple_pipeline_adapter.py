@@ -467,8 +467,12 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
-            if getattr(e, "upstream_error_type", ""):
-                failed["upstream_error_type"] = e.upstream_error_type
+            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
+            _carry_attribution(failed, e)
+            upstream = getattr(e, "upstream_error_type", "") or (failed.get("attribution") or {}).get("upstream_error_type")
+            if upstream:
+                failed["upstream_error_type"] = upstream
             return failed
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"
@@ -487,7 +491,17 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
+            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
+            _carry_attribution(failed, e)
             return failed
+
+
+def _carry_attribution(failed: dict, error: BaseException) -> None:
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(error)
+    if snap is not None:
+        failed["attribution"] = snap.to_fields()
 
 
 def create_simple_pipeline_adapter(project_id: str, task_id: str) -> SimplePipelineAdapter:

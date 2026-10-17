@@ -9,8 +9,8 @@ from backend.services.studio import jobs
 
 
 @pytest.mark.parametrize('status,upstream,code', [
-    (401, 'invalid_key', 'authentication'),
-    (403, 'permission_denied', 'authentication'),
+    (401, 'invalid_key', 'llm_auth_invalid'),
+    (403, 'permission_denied', 'llm_auth_invalid'),
     (429, 'rate_limited', 'provider_error'),
     (503, 'upstream_unavailable', 'provider_error'),
 ])
@@ -35,7 +35,7 @@ def test_missing_asr_key_real_transcribe_path_is_user_cause(tmp_path):
         ct.transcribe(video, None, settings)
     assert info.value.upstream_error_type == 'invalid_key' and info.value.http_status is None
     failure = cloud_transcription_failure(info.value)
-    assert failure.code == 'authentication'
+    assert failure.code == 'llm_auth_invalid'
     assert studio_failure_context(failure, 'screening') == {'failure_stage': 'subtitle', 'upstream_error_type': 'invalid_key'}
 
 
@@ -80,7 +80,7 @@ def _on_disk(store):
 def _assert_history_row(data, run_id):
     rows = [r for r in data['analysis_history'] if r['run_id'] == run_id]
     assert len(rows) == 1, data['analysis_history']
-    assert rows[0]['analysis']['status'] == 'failed' and rows[0]['analysis']['error_code'] == 'authentication'
+    assert rows[0]['analysis']['status'] == 'failed' and rows[0]['analysis']['error_code'] == 'llm_auth_invalid'
     # R22 110: the history row itself (what 107/the observer reads for an older run) keeps the context
     row = rows[0]['analysis']
     assert (row.get('failure_stage'), row.get('http_status'), row.get('upstream_error_type')) == ('subtitle', 401, 'invalid_key'), row
@@ -102,7 +102,7 @@ def test_screening_failure_history_keeps_stage_status_upstream(monkeypatch, tmp_
     data = _on_disk(store)
     a = data['analysis']
     _assert_history_row(data, 'run-s')
-    assert a['status'] == 'failed' and a['error_code'] == 'authentication'
+    assert a['status'] == 'failed' and a['error_code'] == 'llm_auth_invalid'
     assert (a['failure_stage'], a['http_status'], a['upstream_error_type']) == ('subtitle', 401, 'invalid_key')
     assert 'secret' not in str(a)
 
@@ -118,7 +118,7 @@ def test_manual_produce_selected_failure_keeps_stage_status_upstream(monkeypatch
     data = _on_disk(store)
     a = data['analysis']
     _assert_history_row(data, 'run-p')
-    assert a['status'] == 'failed' and a['error_code'] == 'authentication'
+    assert a['status'] == 'failed' and a['error_code'] == 'llm_auth_invalid'
     assert (a['failure_stage'], a['http_status'], a['upstream_error_type']) == ('subtitle', 401, 'invalid_key')
 
 
@@ -138,7 +138,7 @@ def test_r20_126_produce_selected_outer_exception_keeps_stage_status_upstream(mo
     jobs._produce_selected('p', {'selected_goals': ['content'], 'confirmed_preferences': {}, 'confirmed_analysis': 'subtitle'})
     data = _on_disk(store)
     a = data['analysis']
-    assert a['status'] == 'failed' and a['outcome'] == 'failed' and a['error_code'] == 'authentication'
+    assert a['status'] == 'failed' and a['outcome'] == 'failed' and a['error_code'] == 'llm_auth_invalid'
     assert a['failed_goals'] == ['content'] and a['succeeded_goals'] == []
     assert (a['failure_stage'], a['http_status'], a['upstream_error_type']) == ('subtitle', 401, 'invalid_key')
     _assert_history_row(data, 'run-o')

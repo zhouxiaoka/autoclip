@@ -1974,6 +1974,7 @@
   "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "A análise visual suporta fontes de até 120 minutos. Mudamos para a análise de legendas para continuar.",
   "读取素材画面失败，已改用字幕分析继续制作。": "Não foi possível ler os quadros da fonte. Mudamos para a análise de legendas para continuar.",
   "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Falha ao baixar o modelo Whisper. Verifique a rede e baixe novamente em Configurações → Transcrição, ou mude a fonte para o espelho hf-mirror.",
+  "本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留": "Os dados do projeto neste computador estão em uso por outro processo do AutoClip. Tente novamente em instantes; o material original foi mantido.",
   "暂时连不上本地后端。后端恢复后会自动继续，也可以重试。": "Não foi possível acessar o backend local agora. Continuará automaticamente quando ele voltar, ou você pode tentar de novo.",
   "暂时连不上本地后端，正在重试…": "Não foi possível acessar o backend local, tentando novamente…"
 }

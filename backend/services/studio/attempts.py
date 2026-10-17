@@ -28,7 +28,8 @@ RETRYABLE_PARENT = ('failed', 'partial')
 KEEP = 100
 PLAN_KEYS = ('recommendation_mode', 'analysis_mode', 'route')  # frozen from the attempt's own plan
 OUTPUT_FREE = ('platform_count', 'portrait_style', 'brand_outro_enabled', 'recommended_template', 'accepted_recommendation', 'burned_captions')
-SUMMARY_KEYS = ('provider', 'model', 'base_url_host', 'billable_calls_before_failure', 'retry_count', 'degrade_count',
+SUMMARY_KEYS = ('provider', 'config_source', 'attribution_source', 'model', 'base_url_host', 'shutdown_kind',
+                'billable_calls_before_failure', 'retry_count', 'degrade_count',
                 'llm_calls', 'prompt_tokens', 'completion_tokens', 'route', 'http_status', 'duration_ms',
                 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'completed_variant_count')
 

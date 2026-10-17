@@ -24,6 +24,7 @@ os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autocli
 
 
 def pytest_configure(config):
+    config.addinivalue_line("markers", "store_lock: store lock / receipt tests, also run on Windows CI (msvcrt)")
     config.addinivalue_line("markers", "stdlib_only: runtime regression without application dependencies")
     config.addinivalue_line("markers", "own_whisper_status: the test simulates its own Whisper runtime state; skip the default simulated installed Whisper")
     config.addinivalue_line("markers", "reads_whisper_stand_in: the test asserts the conftest stand-in itself")

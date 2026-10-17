@@ -158,6 +158,19 @@ test('local render timeout retains a safe code for export and automatic partial 
  }
 })
 
+test('R22 #220: auto screen_finished names the screening connection, not the production re-freeze',()=>{
+ const live={...SNAPSHOT,generation:{...SNAPSHOT.generation,status:'production',screening_identity:{provider:'kimi',config_source:'customized'},provider:'deepseek',config_source:'preset'},
+  analysis:{status:'running',phase:'production',run_id:'run-1',provider:'deepseek',config_source:'preset',screening_identity:{provider:'kimi',config_source:'customized'}}}
+ for(const snapshot of [live,{...live,analysis:{status:'running',phase:'rendering',run_id:'run-1',provider:'deepseek',config_source:'preset'}}]){
+  const {t,events}=tracker()
+  t.watch('studio-screen','p1',undefined,undefined,{},false,'run-1')
+  t.observeStudio(t.list().find(w=>w.kind==='studio-screen'),snapshot)
+  const screen=events.find(e=>e.name==='studio_screen_finished')
+  assert.equal(screen.props.outcome,'auto_started')
+  assert.equal(screen.props.provider,'kimi'); assert.equal(screen.props.config_source,'customized')
+ }
+})
+
 // Flake root cause: telemetryId() joined random base36 segments with '-', so a segment ending in
 // "sk" produced "sk-", which the catalog privacy check flags as a secret. Seeded reproduction:
 function seededMath(values){let i=0;return Object.assign(Object.create(Math),{random:()=>values[i++%values.length]})}
@@ -200,4 +213,16 @@ test('id markers cover the catalog forbidden substrings (detector not weakened)'
  // #93: shape is t-<seg>-<seg>-<seg>, three non-empty base36 segments.
  const SHAPE=/^t-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/
  for(let i=0;i<20000;i++){const id=workflow.telemetryId();assert.match(id,SHAPE);for(const m of workflow.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(m),id)}
+})
+
+test('R24 #292: a replayed run reads its own receipt, never the current round\'s screening identity',()=>{
+ const current={...SNAPSHOT,generation:{...SNAPSHOT.generation,status:'production',screening_identity:{provider:'glm',config_source:'customized'}},
+  analysis:{status:'running',phase:'production',run_id:'run-2',provider:'glm',config_source:'customized',screening_identity:{provider:'glm',config_source:'customized'}},
+  analysis_history:[{run_id:'run-1',analysis:{status:'failed',phase:'screening',run_id:'run-1',error_code:'unexpected',failure_stage:'screening',provider:'kimi',config_source:'customized'}}]}
+ const {t,events}=tracker()
+ t.watch('studio-screen','p1',undefined,undefined,{},false,'run-1')
+ t.observeStudio(t.list().find(w=>w.kind==='studio-screen'),current)
+ const screen=events.find(e=>e.name==='studio_screen_finished')
+ assert.ok(screen)
+ assert.equal(screen.props.provider,'kimi'); assert.equal(screen.props.config_source,'customized')
 })

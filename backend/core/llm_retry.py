@@ -49,6 +49,9 @@ def parse_retry_after(value: object) -> float | None:
 
 
 def retry_after_from_error(error: BaseException) -> float | None:
+    """The provider's Retry-After on the error or its EXPLICIT ``__cause__`` links (R31, Dong 8f0e155c #3,
+    the I563 rule): an exception that was merely being handled (an earlier, unrelated 429) never lends
+    its Retry-After to this one."""
     seen: set[int] = set()
     current: BaseException | None = error
     while current is not None and id(current) not in seen and len(seen) < 32:
@@ -59,12 +62,7 @@ def retry_after_from_error(error: BaseException) -> float | None:
         delay = _retry_after_from_headers(_headers_of(current))
         if delay is not None:
             return delay
-        if current.__cause__ is not None:
-            current = current.__cause__
-        elif not current.__suppress_context__:
-            current = current.__context__
-        else:
-            current = None
+        current = current.__cause__
     return None
 
 

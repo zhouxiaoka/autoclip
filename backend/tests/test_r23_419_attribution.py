@@ -22,7 +22,7 @@ WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00
 def _produce(monkeypatch, tmp_path, goals, visual_error):
     store = _real_store_jobs(monkeypatch, {'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'run-m'}}, tmp_path)
     def asr_fails(*a, **k):
-        raise _asr_401()                       # content goal: speech key rejected -> authentication / invalid_key
+        raise _asr_401()                       # content goal: speech key rejected -> llm_auth_invalid / invalid_key
     def vision_fails(*a, **k):
         raise visual_error                     # highlight goal (visual)
     monkeypatch.setattr(jobs, 'run_content', asr_fails)
@@ -48,7 +48,7 @@ def test_228_auth_plus_visual_timeout_is_a_product_failure_whatever_the_goal_ord
     assert a['status'] == 'failed' and sorted(a['failed_goals']) == ['content', 'highlight']
     assert a['error_code'] == 'timeout' and a['failure_stage'] == 'vision', a
     assert a.get('upstream_error_type') != 'invalid_key'
-    assert a['secondary_error_codes'] == ['authentication'] and a['secondary_upstream_error_types'] == ['invalid_key']
+    assert a['secondary_error_codes'] == ['llm_auth_invalid'] and a['secondary_upstream_error_types'] == ['invalid_key']
     assert _denominators(a) == (1, 1)          # counted in both denominators (was 0 with content first)
 
 
@@ -57,7 +57,7 @@ def test_228_all_user_causes_leave_the_product_denominator_only(monkeypatch, tmp
     """auth (user_hard) + vision connection (user_x): every cause is a user cause for the product view;
     the full view still counts it because connection is not a hard user cause."""
     a = _produce(monkeypatch, tmp_path, goals, intelligence.VisionRequestError('connection', '视觉模型连接失败'))
-    assert a['error_code'] == 'connection' and a['secondary_error_codes'] == ['authentication'], a
+    assert a['error_code'] == 'connection' and a['secondary_error_codes'] == ['llm_auth_invalid'], a
     assert _denominators(a) == (1, 0)
 
 
@@ -100,7 +100,7 @@ def test_r24_page_gets_the_user_cause_stage_while_event_primary_stays_product(mo
     event, and carries each secondary cause's stage so the page can send 「去设置」 to the right row."""
     a = _produce(monkeypatch, tmp_path, goals, intelligence.VisionRequestError('timeout', '视觉模型请求超时'))
     assert a['error_code'] == 'timeout' and a['failure_stage'] == 'vision'
-    assert a['secondary_error_codes'] == ['authentication'] and a['secondary_upstream_error_types'] == ['invalid_key']
+    assert a['secondary_error_codes'] == ['llm_auth_invalid'] and a['secondary_upstream_error_types'] == ['invalid_key']
     assert a['secondary_failure_stages'] == ['subtitle'], a
 
 
@@ -111,5 +111,5 @@ def test_267_history_row_keeps_the_secondary_causes(monkeypatch, tmp_path):
     data = _on_disk(s)
     [row] = [r for r in data['analysis_history'] if r['run_id'] == 'run-m']
     assert row['analysis']['error_code'] == 'timeout'
-    assert row['analysis']['secondary_error_codes'] == ['authentication'], row
+    assert row['analysis']['secondary_error_codes'] == ['llm_auth_invalid'], row
     assert row['analysis']['secondary_upstream_error_types'] == ['invalid_key']

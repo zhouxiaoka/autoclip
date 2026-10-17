@@ -69,7 +69,7 @@ test('generation and production finished carry run identity; failures keep stage
   tracker.observeStudio(tracker.list()[0], {
     generation: {
       status: 'failed', error_code: 'provider_error', failure_stage: 'analyze',
-      http_status: 429, provider: 'api88', model: 'gpt-4o-mini', base_url_host: '88api.ai',
+      http_status: 429, provider: 'api88', config_source: 'customized', model: 'gpt-4o-mini', base_url_host: '88api.ai',
       upstream_error_type: 'rate_limited', billable_calls_before_failure: 1, retry_count: 2, degrade_count: 1,
     },
     analysis: { status: 'failed', phase: 'production' },
@@ -95,7 +95,7 @@ test('generation and production finished carry run identity; failures keep stage
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
     analysis: {
       status: 'failed', outcome: 'failed', failure_stage: 'analyze', error_code: 'authentication',
-      provider: 'openai', model: 'gpt-4o-mini', base_url_host: 'api.openai.com',
+      provider: 'openai', config_source: 'preset', model: 'gpt-4o-mini', base_url_host: 'api.openai.com',  // R27: identity is a pair
       upstream_error_type: 'invalid_key', http_status: 401, billable_calls_before_failure: 0,
     },
   })

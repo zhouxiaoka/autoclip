@@ -106,7 +106,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     qa_mode: ['shadow'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'other'],
     route: ['subtitle', 'visual'],
-    provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
+    provider: ['api88', 'infistar', 'deepseek', 'dashscope', 'siliconflow', 'seed', 'glm', 'kimi', 'minimax-cn', 'xiaomi', 'openai', 'gemini', 'whisper', 'sensevoice', 'ollama', 'lmstudio', 'openrouter', 'anthropic', 'grok', 'groq', 'mistral', 'together', 'fireworks', 'huggingface', 'nvidia', 'cerebras', 'baseten', 'azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway', 'vercel-ai-gateway', 'moonshotai', 'minimax', 'ant-ling', 'qianfan', 'hunyuan', 'byteplus-modelark', 'compatible', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
+    config_source: ['preset', 'customized'],
+    attribution_source: ['request', 'phase', 'local'],
+    shutdown_kind: ['clean', 'parent_lost', 'crash', 'unknown'],
     upstream_error_type: ['invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'timeout', 'connection', 'output_truncated', 'unknown'],
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
     platform_source: ['remembered', 'accounts', 'locale', 'user'],
@@ -140,7 +143,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   // R25 #346: the backend receipt's per-project sequence; success_rate.sql orders a flow's attempts by it.
   if (typeof input.attempt_sequence === 'number' && Number.isInteger(input.attempt_sequence) && input.attempt_sequence >= 1) out.attempt_sequence = input.attempt_sequence
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
-  const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|service_restarted)$/
+  const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|store_lock_timeout|service_restarted)$/
   if (typeof input.error_code === 'string' && ERROR_CODE.test(input.error_code)) out.error_code = input.error_code
   // R23 #228: the other causes of a multi-goal failure, positional, comma-joined (primary is error_code / upstream_error_type).
   // Arrays from the backend, or the joined string when an already-safe payload is sanitized again.
@@ -194,14 +197,137 @@ export interface StudioSnapshot {
   attempts?: AttemptReceipt[]
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback' | 'frame_extract_subtitle_fallback' | 'source_too_long_subtitle_route'; local_evidence?: { subtitle_status?: string } }
-  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
+  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; screening_identity?: { provider?: string; config_source?: string }; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; attribution_source?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; finished_at?: string; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
-  generation?: { auto_start?: boolean; attempt_id?: string; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
+  generation?: { auto_start?: boolean; attempt_id?: string; status?: string; screening_identity?: { provider?: string; config_source?: string }; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; attribution_source?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
 
 /** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
+/** R22 #220: screening's own provider/config_source. Production re-freezes ``analysis.provider`` by its
+ * route, so screen_finished reads the identity screening stored apart (older records: the flat fields). */
+export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string; config_source?: string } {
+  const analysis = snapshot.analysis
+  for (const own of [analysis?.screening_identity, snapshot.generation?.auto_start ? snapshot.generation.screening_identity : undefined]) {
+    if (own && own.provider && own.config_source) return { provider: own.provider, config_source: own.config_source }
+  }
+  const own = pickAttribution(analysis)
+  return own.provider ? { provider: own.provider as string, config_source: own.config_source as string } : {}
+}
+
+type Attributed = { attribution_source?: string; provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string; failure_stage?: string; status?: string; outcome?: string } | null | undefined
+const ATTRIBUTION_SOURCES = ['request', 'phase', 'local']
+const FAILED = ['failed', 'partial']
+
+/** I451: same rule as backend failure_attribution.is_failed_terminal: status OR outcome failed/partial
+ * (completed + outcome=partial is a valid partial); no status at all -> undecided (null). */
+export function isFailedTerminal(record: Attributed): boolean | null {
+  if (!record) return false
+  if (FAILED.includes(record.status || '') || FAILED.includes(record.outcome || '')) return true
+  return record.status ? false : null
+}
+
+/** R29 I504: an event's outcome, the same rule as the reader: a failed/partial ``outcome`` wins over
+ * ``status`` (completed + outcome=partial is a partial), else the status. */
+export function terminalOutcome(record: Attributed): string | undefined {
+  if (!record) return undefined
+  return FAILED.includes(record.outcome || '') ? record.outcome : record.status
+}
+
+/** Settled attempt cause fields for the v4 terminal. Not a snapshot reader: the receipt already chose them.
+ * A local summary carries no upstream status (same rule as pickAttribution). */
+export function receiptEventCauses(receipt: { error_code?: string; failure_stage?: string | null; upstream_error_type?: string | null; secondary_error_codes?: unknown; secondary_upstream_error_types?: unknown; summary?: { attribution_source?: string } }, failed: boolean): Record<string, unknown> {
+  if (!failed) return {}
+  const local = receipt.summary?.attribution_source === 'local'
+  return {
+    error_code: receipt.error_code,
+    failure_stage: receipt.failure_stage || undefined,
+    upstream_error_type: local ? undefined : receipt.upstream_error_type || undefined,
+    secondary_error_codes: receipt.secondary_error_codes,
+    secondary_upstream_error_types: receipt.secondary_upstream_error_types,
+  }
+}
+
+/** R31 (Dong I565): THE frontend attribution serializer (twin of backend failure_attribution
+ * export_attribution). The only keys that can come out, copied one by one and type-checked. */
+export const ATTRIBUTION_KEYS = Object.freeze(['provider', 'config_source', 'model', 'base_url_host', 'attribution_source', 'http_status', 'upstream_error_type', 'failure_stage'] as const)
+const IDENTITY_KEYS = ['provider', 'config_source', 'model', 'base_url_host'] as const
+
+function validAttributionValue(key: string, value: unknown): boolean {
+  if (key === 'http_status') return typeof value === 'number' && Number.isInteger(value) && value >= 400 && value <= 599
+  if (key === 'attribution_source') return typeof value === 'string' && ATTRIBUTION_SOURCES.includes(value)
+  return typeof value === 'string' && value !== ''
+}
+
+/** R28 #415 (I453): THE frontend attribution reader, the same rules as backend read_attribution. It reads
+ * ONE record's snapshot: the caller picks the record (the event's own terminal), never several.
+ * Identity only as a provider/config_source pair; failure fields only on a failed (or undecided) terminal,
+ * and never status/upstream on ``local``. R31 (I565): an explicit whitelist (ATTRIBUTION_KEYS), every value
+ * type-checked, the result frozen; ``omitIdentity`` serves screen events (their identity is screening's own). */
+export function pickAttribution(record: Attributed, options: { omitIdentity?: boolean } = {}): Readonly<Record<string, unknown>> {
+  if (!record) return Object.freeze({})
+  const raw = record as Record<string, unknown>
+  const clean: Record<string, unknown> = {}
+  for (const key of ATTRIBUTION_KEYS) if (validAttributionValue(key, raw[key])) clean[key] = raw[key]
+  const out: Record<string, unknown> = {}
+  if (!options.omitIdentity && clean.provider && clean.config_source) for (const key of IDENTITY_KEYS) if (key in clean) out[key] = clean[key]
+  const source = clean.attribution_source as string | undefined
+  if (source) out.attribution_source = source
+  if (isFailedTerminal(record) !== false) {
+    if ('failure_stage' in clean) out.failure_stage = clean.failure_stage
+    if (source !== 'local') for (const key of ['http_status', 'upstream_error_type'] as const) if (key in clean) out[key] = clean[key]
+  }
+  return Object.freeze(out)
+}
+
+export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
+  const all = snapshot.output_variants || []
+  // Backup clips are not packaged until someone asks for them: template counts cover produced versions.
+  const variants = all.filter(v => v.status !== 'on_demand')
+  const templates = new Map((snapshot.drafts || []).map(d => [d.id, d.packaging] as const))
+  const packaged = variants.map(v => templates.get(v.draft_id)).filter(Boolean)
+  const count = (test: (v: (typeof variants)[number]) => boolean) => variants.filter(test).length
+  const jobs = new Map((snapshot.jobs || []).map(j => [j.job_id, j]))
+  const completed = variants.filter(v => v.status === 'completed').map(v => ({ variant: v, job: jobs.get(v.render_job_id || '') }))
+  const created = utcMillis(snapshot.generation?.created_at), finished = utcMillis(snapshot.generation?.finished_at)
+  return {
+    variant_count: all.length,
+    completed_variant_count: count(v => v.status === 'completed'),
+    failed_variant_count: count(v => v.status === 'failed'),
+    on_demand_variant_count: all.length - variants.length,
+    skipped_variant_count: Array.isArray(snapshot.generation?.skipped) ? snapshot.generation!.skipped!.length : 0,
+    platform_count: snapshot.generation?.requested_platforms?.length || 0,
+    interview_count: packaged.filter(p => p?.template === 'interview_zh').length,
+    podcast_count: packaged.filter(p => p?.template === 'podcast_en').length,
+    landscape_count: variants.length - packaged.length,
+    editorial_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'editorial' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
+    street_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'street' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
+    classic_count: variants.filter(v => {
+      const report = jobs.get(v.render_job_id || '')?.result?.template_render
+      if (report) return report.downgraded === true || report.template === 'classic'
+      const packaging = templates.get(v.draft_id)
+      return packaging?.template === 'interview_zh' || packaging?.template === 'podcast_en'
+    }).length,
+    html_downgrade_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded === true).length,
+    speaker_framed_count: count(v => v.framing === 'speaker'),
+    full_frame_count: count(v => v.framing === 'full_frame'),
+    framing_pending_count: count(v => v.framing === 'full_frame_pending'),
+    framing_captions_count: count(v => v.framing === 'full_frame_captions'),
+    portrait_style: snapshot.generation?.portrait_style,
+    brand_outro_enabled: snapshot.generation?.branding?.outro_enabled,
+    outro_applied_count: completed.filter(({ job }) => job?.result?.outro_applied === true).length,
+    outro_fallback_count: completed.filter(({ variant, job }) => (job?.brand_outro ?? variant.branding?.outro_enabled) === true && job?.result?.outro_applied === false).length,
+    outro_unknown_count: completed.filter(({ job }) => typeof job?.result?.outro_applied !== 'boolean').length,
+    packaging_fallback_count: packaged.filter(p => p?.fallback).length,
+    trimmed_count: count(v => !!v.trimmed_to_sec),
+    burned_captions: !!snapshot.generation?.source_has_burned_subtitles,
+    ...(snapshot.generation?.recommended_template ? { recommended_template: snapshot.generation.recommended_template } : {}),
+    ...(typeof snapshot.generation?.accepted_recommendation === 'boolean' ? { accepted_recommendation: snapshot.generation.accepted_recommendation } : {}),
+    duration_ms: created !== undefined && finished !== undefined ? Math.max(0, finished - created) : undefined,
+  }
+}
+
 /** Time from generation.created_at to the first completed render. No observer clock, no titles. */
 export function firstClipReady(snapshot: StudioSnapshot): Record<string, unknown> | null {
   const created = utcMillis(snapshot.generation?.created_at)
@@ -376,7 +502,8 @@ export class WorkflowTracker {
     const v4 = w.kind === 'studio-generation' || w.kind === 'studio-production'
     if (w.runId && w.kind !== 'studio-variant' && !v4) {
       const receipt = snapshot.analysis_history?.find(r => r.run_id === w.runId)
-      if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis }
+      // R24 #292: a replayed run reads its OWN receipt; never borrow the current round's screening identity.
+      if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis, generation: snapshot.generation && { ...snapshot.generation, screening_identity: undefined } }
       else if (snapshot.analysis?.run_id !== w.runId && w.kind !== 'studio-export') return
     }
     const context = this.context(w.projectId || w.id)
@@ -404,39 +531,44 @@ export class WorkflowTracker {
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, http_status: snapshot.analysis?.http_status, upstream_error_type: snapshot.analysis?.upstream_error_type, degrade_reason: snapshot.plan?.degrade_reason }
+      // R27 I420: the screen event carries the analysis record's attribution (incl. attribution_source) via
+      // pickAttribution; the identity is still screening's own.
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, ...pickAttribution(snapshot.analysis, { omitIdentity: true }), ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.
         event = 'studio_screen_finished'; outcome = 'auto_started'
-        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, http_status: undefined, upstream_error_type: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
-      } else if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
+        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, upstream_error_type: undefined, http_status: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
+      } else if (isFailedTerminal(snapshot.analysis) === true && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
         details = { ...details, recommendation_mode: snapshot.plan.mode, analysis_mode: snapshot.plan.recommended_analysis, subtitle_status: snapshot.plan.local_evidence?.subtitle_status }
       }
     } else if (v4) {
-      // #419: a projection of the backend receipt - its state, attempt_id, retry_of and primary/secondary causes.
+      // #419: a projection of the backend receipt. No receipt means no terminal (an attempt is never invented).
+      // Attribution on the event is pickAttribution of that receipt's summary, never the live analysis.
       const receipt = this.receiptFor(w, snapshot)
+      // No receipt: do not invent an attempt or a terminal (pre-receipt rows are not a success-rate attempt).
       if (!receipt || !SETTLED.includes(receipt.state)) return
       const pid = w.projectId || w.id
       if (this.contexts[pid]?.emitted?.includes(receipt.attempt_id)) { w.settled = true; this.persist(); return }
-      const failed = receipt.state !== 'completed', sum = receipt.summary || {}
-      const causes = failed ? { error_code: receipt.error_code, failure_stage: receipt.failure_stage || undefined, upstream_error_type: receipt.upstream_error_type || undefined,
-        secondary_error_codes: receipt.secondary_error_codes, secondary_upstream_error_types: receipt.secondary_upstream_error_types } : {}
+      const failed = receipt.state !== 'completed', sum = { ...(receipt.summary || {}) }
+      const counts = { ...sum }
+      for (const key of ATTRIBUTION_KEYS) delete counts[key]
+      if (!failed) { delete counts.error_code; delete counts.shutdown_kind }
+      const attributed = pickAttribution({ ...sum, status: receipt.state })
+      const causes = receiptEventCauses(receipt, failed)
       const link = receipt.retry_of ? { retry_of: receipt.retry_of } : {}
       outcome = receipt.state
-      // R25 #345/#347: receipt only - its summary was frozen by the backend at settle (counts, route, plan modes);
-      // the live workspace / plan never fills a historical receipt, and flow_id is the receipt's, not the browser's.
       if (receipt.kind === 'generation') {
         event = 'studio_generation_finished'
-        details = { ...sum, analysis_mode: undefined, http_status: failed ? sum.http_status : undefined,
+        details = { ...counts, ...attributed, analysis_mode: undefined,
           billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
-          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }  // append_platform stays in the enum; 1.5.8 does not emit it
+          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }
       } else {
         event = 'studio_production_finished'
-        details = { ...sum, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }
+        details = { ...counts, ...attributed, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }
       }
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome, ...(receipt.flow_id ? { flow_id: receipt.flow_id } : {}), attempt_sequence: receipt.sequence }), receipt.attempt_id)
       if (w.seen.includes('finished')) {

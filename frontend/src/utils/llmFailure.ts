@@ -2,7 +2,11 @@
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 
-/** The one user-cause reason table (R22 code health): studio 「去设置」 and every llmFailureText caller read it. */
+/** R27 I424: the lock-timeout notice is an i18n key in all 8 locales (backend file_lock.LOCK_TIMEOUT_MESSAGE). */
+export const STORE_LOCK_TIMEOUT = 'store_lock_timeout'
+export const STORE_LOCK_TIMEOUT_TEXT = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
+
+/** The one user-cause reason table (R22): studio 「去设置」 reads it. Project cards only swap llm_auth_invalid. */
 export const USER_CAUSE_REASONS: Record<string, string> = {
   authentication: 'API Key 无效或已过期，请到设置里更新后再试',
   llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试',
@@ -13,7 +17,9 @@ export const USER_CAUSE_REASONS: Record<string, string> = {
 }
 
 export function llmFailureText(error?: string | null, code?: string | null): string {
-  return code === LLM_AUTH_INVALID ? USER_CAUSE_REASONS[LLM_AUTH_INVALID] : error || ''
+  if (code === STORE_LOCK_TIMEOUT) return STORE_LOCK_TIMEOUT_TEXT
+  if (code === LLM_AUTH_INVALID) return USER_CAUSE_REASONS[LLM_AUTH_INVALID]
+  return error || ''
 }
 
 /**

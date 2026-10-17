@@ -23,7 +23,7 @@ _ANONYMOUS_ID = re.compile(r"^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4
 
 logger = logging.getLogger(__name__)
 
-STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted", "frame_extract_failed", "network", "disk", "corrupt"}
+STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted", "frame_extract_failed", "store_lock_timeout", "network", "disk", "corrupt"}
 # Expected failures caused by the environment or by the user's own source (too short,
 # no audio track): never sent to Sentry, still recorded locally with their code.
 UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_too_short", "source_no_audio", "service_restarted"}
@@ -40,6 +40,10 @@ def studio_error_code(error: Exception) -> str:
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
+    from backend.core.failure_attribution import frozen_error_code
+    frozen = frozen_error_code(error)  # R31 I562: the code a redaction boundary froze (timeout/connection)
+    if frozen in STUDIO_ERROR_CODES:
+        return frozen
     # Whisper model download (whisper_model_manager.ModelDownloadFailed). Duck-typed so
     # crash reporting does not import the downloader. The code is network / disk / corrupt / unexpected.
     if type(error).__name__ == "ModelDownloadFailed":
@@ -49,6 +53,9 @@ def studio_error_code(error: Exception) -> str:
     # Local render, frame sampling and optional-runtime preparation use typed subprocess timeouts.
     if isinstance(error, subprocess.TimeoutExpired):
         return "timeout"
+    from backend.core.file_lock import LockTimeout
+    if isinstance(error, LockTimeout):
+        return "store_lock_timeout"  # R26 #390: a local product failure, never a model timeout
     # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
     # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
     try:
@@ -60,6 +67,9 @@ def studio_error_code(error: Exception) -> str:
         return model_call_error_code(error)
     if isinstance(error, FileNotFoundError):
         return "missing_resource"
+    from backend.core.failure_attribution import ModelResponseInvalid
+    if isinstance(error, ModelResponseInvalid):
+        return ModelResponseInvalid.error_code  # R29: 200 + content failed validation -> a model code
     if isinstance(error, ValueError):
         return "validation"
     return "unexpected"
@@ -70,31 +80,19 @@ _PIPELINE_FAILURE_STAGES = {"INGEST": "ingest", "SUBTITLE": "subtitle", "ANALYZE
 
 
 def studio_failure_context(error: Exception, phase: str) -> dict:
-    """Where an automatic run failed and the provider HTTP status, without messages or URLs."""
+    """Where an automatic run failed and, for a MODEL failure only, the provider HTTP status/upstream type
+    (I455), without messages or URLs. Built by THE snapshot factory (failure_attribution.build_attribution)."""
     from backend.services.studio.intelligence import VisionRequestError
-    from backend.pipeline.failures import PipelineFailure, http_status_of
-    from backend.core.llm_telemetry import classify_run_upstream
+    from backend.pipeline.failures import PipelineFailure
+    from backend.core.failure_attribution import build_attribution, export_attribution
     stage = phase
     if isinstance(error, PipelineFailure):
         stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
     elif isinstance(error, VisionRequestError) and phase != "screening":
         stage = "vision"
-    result = {"failure_stage": stage}
-    # The pipeline wraps provider errors (`PipelineFailure(...) from error`); the status lives on the cause.
-    status = http_status_of(error)
-    if status is not None:
-        result["http_status"] = status
-    # Site refusals and local setup failures are not upstream model errors.
-    # A Bilibili 403 must not become permission_denied / model_forbidden.
-    skip_upstream = isinstance(error, PipelineFailure) and error.code in {
-        "source_blocked", "source_too_short", "source_no_audio", "source_unreadable",
-        "service_restarted", "whisper_not_installed", "whisper_install_failed",
-        "transcription_empty", "subtitle_setup", "timeline_empty",
-    }
-    kind = None if skip_upstream else (getattr(error, "upstream_error_type", "") or classify_run_upstream(error, status))
-    if kind:
-        result["upstream_error_type"] = kind
-    return result
+    snap = build_attribution(error, failure_stage=stage)
+    fields = export_attribution(snap)  # R31 I565: THE serializer
+    return {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
 
 
 PRIVACY_FILE = "privacy.json"
@@ -351,6 +349,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "pipeline_stage": PIPELINE_STAGES,
         "upstream_error_type": UPSTREAM_ERROR_TYPES,
         "failure_stage": FAILURE_STAGES,
+        "attribution_source": {"request", "phase", "local"},  # R26 #392
         "provider": TELEMETRY_PROVIDERS | ASR_PROVIDERS,
     }
     clean_tags = {key: value for key, value in tags.items()

@@ -40,7 +40,9 @@ def test_342_real_manual_production_settles_the_receipt(monkeypatch, outcome):
     assert store.read(pid)['analysis']['run_id'] == run  # inherited by store.write, not written by the worker
     [receipt] = flow.receipts(pid)
     assert receipt['state'] == outcome and receipt['run_id'] == run
-    assert receipt['summary'].get('llm_calls') == 3 and receipt['summary'].get('provider') == 'deepseek'
+    # Usage numbers freeze on the receipt. An unpaired provider is not an identity (#415).
+    assert receipt['summary'].get('llm_calls') == 3 and receipt['summary'].get('retry_count') == 1
+    assert receipt['summary'].get('provider') is None
 
 
 def test_342_real_manual_failure_can_be_retried(monkeypatch):

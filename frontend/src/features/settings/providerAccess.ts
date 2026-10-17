@@ -28,6 +28,10 @@ export interface ValidationResult {
   recommended?: Record<string, string[]>
   truncated?: boolean
   message_key?: string
+  /** 1.5.8 telemetry: closed-set connection-test code and integer upstream status. */
+  error_code?: string
+  http_status?: number | null
+  config_source?: 'preset' | 'customized'
 }
 
 const KEY_HINTS: Array<[RegExp, ProviderKey]> = [

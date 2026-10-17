@@ -42,6 +42,19 @@ export type PageFailureInfo = {
   secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
 }
 
+/** Page fallback when the run has no attempt receipt: the analysis record's own cause fields. */
+export function analysisPageFailure(
+  analysis?: { error_code?: string; upstream_error_type?: string; failure_stage?: string } | null,
+  generation?: { error_code?: string } | null,
+): PageFailureInfo {
+  return {
+    error_code: analysis?.error_code || generation?.error_code,
+    upstream_error_type: analysis?.upstream_error_type,
+    failure_stage: analysis?.failure_stage,
+    ...pickSecondary(analysis),
+  }
+}
+
 /** R24 (PM rule): page hint and stats are separate. Stats keep the product-first primary cause
  * (backend failure_attribution); the page leads with the first cause the user can fix (e.g. auth),
  * because retrying cannot fix it. Primary first, then secondaries in recorded order. */

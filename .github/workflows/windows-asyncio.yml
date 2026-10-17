@@ -23,6 +23,11 @@ on:
       - 'scripts/windows_tests/test_studio_qa_windows.py'
       - 'backend/core/orphan_reaper.py'
       - 'backend/tests/test_orphan_reaper.py'
+      - 'backend/core/file_lock.py'
+      - 'backend/services/studio/store.py'
+      - 'backend/services/studio/shutdown_marker.py'
+      - 'backend/tests/test_store_lock.py'
+      - 'backend/tests/conftest.py'
   pull_request:
     paths:
       - 'backend/core/windows_asyncio.py'
@@ -44,6 +49,11 @@ on:
       - 'scripts/windows_tests/test_studio_qa_windows.py'
       - 'backend/core/orphan_reaper.py'
       - 'backend/tests/test_orphan_reaper.py'
+      - 'backend/core/file_lock.py'
+      - 'backend/services/studio/store.py'
+      - 'backend/services/studio/shutdown_marker.py'
+      - 'backend/tests/test_store_lock.py'
+      - 'backend/tests/conftest.py'
   workflow_dispatch:
 
 permissions:
@@ -66,6 +76,13 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py backend/tests/test_orphan_reaper.py -q
+      - name: Store lock across processes (msvcrt.locking, #391 / R27 I414 I419 I425)
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-store-lock
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-store-lock
+          SENTRY_DSN: ""
+        # Selected by marker, never by round-numbered file names.
+        run: python -m pytest backend/tests/test_store_lock.py -m store_lock -q
       - name: Set up pinned FFmpeg (Windows)
         uses: ./.github/actions/setup-ffmpeg-win
         timeout-minutes: 8

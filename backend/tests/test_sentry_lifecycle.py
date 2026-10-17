@@ -57,7 +57,7 @@ expected = {'runtime': 'python', 'app_mode': 'desktop',
             'os': detect_os(), 'arch': detect_arch(),
             'build_environment': os.environ['AUTOCLIP_BUILD_ENVIRONMENT'],
             'area': 'studio', 'phase': 'production', 'error_code': 'unexpected',
-            'failure_stage': 'production'}
+            'failure_stage': 'production', 'attribution_source': 'local'}  # R26 #392: not a provider failure
 if os.environ['AUTOCLIP_BUILD_ENVIRONMENT'] == 'validation':
     expected['telemetry_test'] = 'true'
 assert event.get('tags') == expected, event.get('tags')

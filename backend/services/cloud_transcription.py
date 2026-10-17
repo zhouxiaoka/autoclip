@@ -40,8 +40,12 @@ def _retryable(error: Exception) -> bool:
     return isinstance(error, httpx.RequestError)
 
 
+from backend.core.failure_attribution import AttributedError, ModelResponseInvalid, ProviderTransportError, attributed
+
+
 def _upstream_type(status, body):
-    """Enum only: e.g. HTTP 429 + "insufficient balance" -> insufficient_quota (user cause), not rate_limited."""
+    """Enum only: e.g. HTTP 429 + "insufficient balance" -> insufficient_quota (user cause), not rate_limited.
+    The body is classified and dropped; it never leaves this function."""
     from backend.core.upstream_errors import classify_upstream_error
     kind = classify_upstream_error(status, body).error_type.value
     return '' if kind == 'unknown' else kind
@@ -61,8 +65,12 @@ def _check_status(response):
                                   http_status=status, upstream_error_type=_upstream_type(status, body))
 
 
-class CloudTranscriptionError(RuntimeError):
-    """Safe public text only. ``http_status`` / ``upstream_error_type`` are enums/ints, never provider bodies."""
+class CloudTranscriptionError(AttributedError, RuntimeError):
+    """Safe public text only. ``http_status`` / ``upstream_error_type`` are enums/ints, never provider bodies.
+
+    R29: a provider failure carries the snapshot built from the original exception (``.attribution``)
+    before ``from None``; a local one (no key, no audio) carries none. ``error_code`` is the coarse studio
+    code (``studio_code_for``), so a rejected key stays ``llm_auth_invalid`` and the fine cause stays upstream."""
 
     def __init__(self, message: str = '', *, http_status: int | None = None, upstream_error_type: str = ''):
         super().__init__(message)
@@ -70,10 +78,28 @@ class CloudTranscriptionError(RuntimeError):
         if not upstream_error_type and self.http_status is not None:
             from backend.core.upstream_errors import classify_upstream_error
             upstream_error_type = classify_upstream_error(self.http_status).error_type.value
-        self.upstream_error_type = upstream_error_type if upstream_error_type != 'unknown' else ''
+        self.upstream_error_type = '' if upstream_error_type in ('', 'unknown') else upstream_error_type
+        if self.upstream_error_type or self.http_status is not None:
+            from backend.core.llm_retry import studio_code_for
+            code = studio_code_for(self.upstream_error_type or 'unknown', self.http_status)
+            # R22 #171: a plain 429 stays provider_error; rate_limited is the upstream enum, not the studio code.
+            self.error_code = 'provider_error' if code == 'rate_limited' else code
 
 
-def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
+def _provider_failure(message: str, original: BaseException, identity: dict | None = None) -> CloudTranscriptionError:
+    """The redaction boundary: ``original`` is already the content-free view built inside the ``except``
+    (a ``ProviderTransportError`` with the type name and, when an HTTP response came back, its status; or
+    a ``ModelResponseInvalid``). THE classifier decides it (R30 I567: no ``sent`` override); the snapshot,
+    the HTTP status (I563) and the controlled error code (R31 I562) are frozen on the safe error, which the
+    caller raises ``from None``. R31 (I561): ``identity`` is the transcription connection THIS call used,
+    frozen once in ``transcribe`` (``connection_identity``), so the snapshot names who answered."""
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(original, failure_stage='subtitle', phase_identity=identity)
+    return attributed(CloudTranscriptionError(message), snap, http_status=getattr(original, 'http_status', None),
+                      error_code=getattr(original, 'error_code', None))
+
+
+def normalize_segments(items, offset=0.0, milliseconds=False, duration=None, identity=None):
     """Reject missing/invalid timing instead of inventing clip boundaries."""
     result = []
     scale = 1000 if milliseconds else 1
@@ -88,8 +114,9 @@ def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
                 raise ValueError()
             if duration is not None and end > duration + 1:
                 raise ValueError()
-        except (KeyError, TypeError, ValueError):
-            raise CloudTranscriptionError('转写服务未返回有效时间戳，无法生成准确字幕；请更换转写模型。') from None
+        except (KeyError, TypeError, ValueError) as error:
+            raise _provider_failure('转写服务未返回有效时间戳，无法生成准确字幕；请更换转写模型。',
+                                    ModelResponseInvalid(type(error).__name__), identity) from None
         result.append({'start': start + offset, 'end': end + offset, 'text': text})
     return result
 
@@ -171,6 +198,8 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
             raise CloudTranscriptionError('无法提取视频音频，请检查视频是否包含音轨。')
         segments = []
         from backend.core.llm_providers import is_local_url
+        from backend.services.studio.failure_identity import connection_identity
+        identity = connection_identity(connection, selection.model, full=True)  # I561: this call's connection
         try:
             # Cut every chunk first, then upload them side by side: one request after another made a
             # three-hour talk ~60 sequential round trips. Offsets come from exact sample counts.
@@ -199,7 +228,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                             if attempt == CHUNK_ATTEMPTS - 1 or not _retryable(error):
                                 raise
                             time.sleep(2 * 2 ** attempt)
-                    return normalize_segments(items, start, milliseconds, duration)
+                    return normalize_segments(items, start, milliseconds, duration, identity)
 
                 from concurrent.futures import ThreadPoolExecutor
                 pool = ThreadPoolExecutor(max_workers=UPLOAD_WORKERS, thread_name_prefix='asr-chunk')
@@ -209,8 +238,26 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                 finally:
                     # On a failure, chunks not yet sent are dropped instead of spending more quota.
                     pool.shutdown(wait=True, cancel_futures=True)
-        except (httpx.RequestError, ValueError) as exc:
-            raise CloudTranscriptionError('云端转写连接失败或响应格式无效，请稍后重试。') from None
+        except CloudTranscriptionError as exc:
+            if getattr(exc, 'attribution', None) is not None or not (exc.http_status or exc.upstream_error_type):
+                raise  # already snapped, or a local sentence (no key, empty audio, unsupported model)
+            transport = ProviderTransportError('HTTPStatus', http_status=exc.http_status)
+            if getattr(exc, 'error_code', None):
+                transport.error_code = exc.error_code
+            safe = _provider_failure(str(exc), transport, identity)
+            safe.upstream_error_type = exc.upstream_error_type
+            raise safe from None
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            safe = _provider_failure(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。',
+                                     ProviderTransportError(type(exc).__name__, http_status=status), identity)
+            raise safe from None
+        except httpx.RequestError as exc:
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。',
+                                    ProviderTransportError(type(exc).__name__, timed_out=isinstance(exc, httpx.TimeoutException)),
+                                    identity) from None
+        except ValueError as exc:
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ModelResponseInvalid(type(exc).__name__), identity) from None
         if not segments:
             raise CloudTranscriptionError('转写结果为空，音频中可能没有可识别的人声。')
         segments.sort(key=lambda s: (s['start'], s['end']))

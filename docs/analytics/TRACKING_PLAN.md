@@ -191,7 +191,7 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率 **v
 | --- | --- | --- | --- |
 | `user_both`（`user_hard`） | `outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)` | **剔除** | **剔除** |
 | `user_product_only`（`user_x`） | `error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)` | 计入 | **剔除** |
-| `product` | 其余，**明确包括** `frame_extract_failed`（本地抽帧失败）、`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`，以及 `unexpected`、`rate_limited`、`timeout`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 等 | 计入 | 计入 |
+| `product` | 其余，**明确包括** `frame_extract_failed`（本地抽帧失败）、`store_lock_timeout`（本机项目存储锁等待超时，本地原因、用户修不了，不记到服务商，不是模型 `timeout`）、`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`，以及 `unexpected`、`rate_limited`、`timeout`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 等 | 计入 | 计入 |
 
 `outcome_canon = success` 一律算成功，忽略错误字段。查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验只用 `event_catalog.json` → `attribution.success_rate_v4`（`overall_excluded_*`、`product_extra_excluded_error_codes`、`product_failure_codes`、`flow_definition`）；同文件的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes` 是 v4 之前的口径，仅留作历史，**不得**再用于成功率。
 
@@ -685,6 +685,31 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 
 机读清单：`dates.close_transition` / `dates.stop_legacy_emit` / `dates.delete_wrappers` 均为 `"1.5.8"`。
 
+
+
+### 1.5.8 终态事件身份字段
+
+`studio_screen_finished` / `studio_generation_finished` / `studio_production_finished` 失败时必带 `failure_stage`（含服务重启、IO 失败、调度失败路径）、`upstream_error_type`；全部带 `provider`（目录 slug 或 `other`）与 `config_source`（`preset` = 目录 base URL + 目录模型 id，否则 `customized`）。不发送 URL 或自定义模型名。
+
+身份归因（1.5.8 R22）：`provider` / `config_source` 只有一条规则（`failure_identity.connection_identity`），在**开始时冻结**，结束时不重读设置。
+- 阶段：screening 用视觉连接；production/rendering 走视觉路线且目标不全是 content 时用视觉连接，否则用文本连接；确认路线（`confirmed_analysis`）优先于推荐路线。screening 的身份单独存为 `screening_identity`，自动流程里 production 重新冻结不会覆盖它；`studio_screen_finished` 读这一份。
+- 一次 generation 尝试中途换阶段时，失败按失败阶段归因：screening 失败报视觉连接，production 失败报路线连接。
+- 请求：每个模型请求在**发出前**冻结所用连接，结束时生成一条不可变请求记录（provider/config_source 成对，加上同一次请求的 model/host/http_status/upstream_error_type）。失败的记录随异常携带（沿显式 `__cause__` 链可找回，不看隐式 `__context__`）。R30（I563）起，脱敏边界在安全异常上冻结服务商 HTTP 状态码（`http_status` 字段，和快照同一处构造）；状态码只有一条读取规则：先读这个冻结字段，原始异常才沿 `__cause__` 找。
+- 归因（1.5.8 R25）：失败按**出错的那次请求**的记录整条归因（`attribution_source=request`）；找不到请求记录时用阶段开始时冻结的身份（`attribution_source=phase`）；不取"最近一次请求"，运行中不读设置。落盘、run 快照、Sentry 都只读这一条，不逐字段合并。
+- 旧记录：provider/config_source 不成对时整组（provider、config_source、model、base_url_host）当空，不补。写盘和读出时都按空处理（R26 #399）。
+- `attribution_source`（1.5.8 R26，闭集 `request`/`phase`/`local`，随三个 studio 终态事件、Sentry tag 和 analysis_history 一起上报）：`request` = 失败请求自己的记录；`phase` = 没有请求记录的**模型类**失败，用阶段冻结的连接；`local` = 非模型失败（存储锁超时 `store_lock_timeout`、ffmpeg、本地渲染、请求发出前的本地校验），可带阶段身份但不带请求状态，不算服务商失败。R29（I500）起只查显式异常链 `__cause__`（`raise ... from`），不看隐式 `__context__`。analysis_history 另保留 `model`、`base_url_host`（R26 #400）。
+- 归因快照（1.5.8 R29，设计见 `backend/core/failure_attribution.py` 模块说明）：离服务商调用最近、异常链完整的一层调用一次 `build_attribution` 生成快照，之后 dict、线程、store、事件都原样携带，下游不重新判定。脱敏边界（`log_safe_exception`、云端转写、封面）保留 `from None`，快照挂在安全异常（`AttributedError`）的 `.attribution` 上，只含来源、身份、状态码、上游类型、失败阶段，不含消息/URL/正文。连接错误和超时算模型侧（请求已发往服务商），用 `error_code`（`connection`/`timeout`）区分；`http_status` 只在真正收到 HTTP 响应时写。模型返回 200 但内容校验失败抛 `ModelResponseInvalid`，判模型侧，`error_code=invalid_response`。
+
+`service_restarted` 失败另带 `shutdown_kind`，按上次进程在 `<标记目录>/<instance>` 留下的记录分类（标记目录由桌面壳启动时统一解析为 `<应用目录>/shutdown_markers`，经 `AUTOCLIP_SHUTDOWN_MARKER_DIR` 交给后端，壳写 `unacked` 也写这里；无壳运行时为 `<数据目录>/shutdown_markers`）（每个 instance 一条记录、一个目录、一套修剪规则）：
+
+| 值 | 含义 |
+|---|---|
+| `clean` | 壳通知了正常退出或更新（记录为 `user_quit` / `update`），后端在超时前写好了标记 |
+| `parent_lost` | 后端发现桌面壳先没了（壳被杀或崩溃），自己写了 `parent_lost` |
+| `crash` | 该 instance 没有任何记录 |
+| `unknown` | 壳发了退出通知但 3 秒内没拿到 200，退出前写了 `unacked`（unacked→unknown，不当 crash）；或记录不可读、内容无效、缺少/非法 instance id |
+
+**四种取值都算产品失败**（PM 口径）：`shutdown_kind` 只用于拆分原因，不从任何分母里剔除样本；`clean` 是否单独处理放到 1.5.9 之后再议。同一个 instance 下的多个项目读到同一个分类；记录在没有任何项目还引用该 instance 时才删除，修剪只在启动恢复之后于后台执行一次（退出路径不扫项目）：超过 50 条时按时间修剪，仍被未恢复项目引用的不删；读不了的项目只保护比它最后修改时间更新的记录；超过 1 小时的孤儿 `.tmp` 一并清理。只发枚举，instance id 不出本机。
 
 ### 1.5.8 一键重试
 

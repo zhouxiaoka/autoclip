@@ -28,14 +28,19 @@ EVENT_PROVIDER_VALIDATION_FINISHED = "provider_validation_finished"
 EVENT_STUDIO_GENERATION_FINISHED = "studio_generation_finished"
 EVENT_STUDIO_PRODUCTION_FINISHED = "studio_production_finished"
 
-TELEMETRY_PROVIDERS: frozenset[str] = frozenset({
-    "dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok",
-    "infistar", "api88", "compatible", "ollama", "lmstudio", "other",
-})
+def _telemetry_providers() -> frozenset[str]:
+    # Single source: backend/presets/provider_presets.json (every preset id) + compatible/other.
+    from backend.core.provider_presets import telemetry_provider_slugs
+    return frozenset(telemetry_provider_slugs())
+
+
+TELEMETRY_PROVIDERS: frozenset[str] = _telemetry_providers()
 ASR_PROVIDERS: frozenset[str] = frozenset({
     "whisper_local", "sensevoice_local", "cloud",
 })
 REQUEST_KINDS: frozenset[str] = frozenset({"text", "vision"})
+#: R20 #137: run-level identity enum (preset = catalog URL + catalog model, else customized).
+CONFIG_SOURCES: tuple[str, ...] = ("preset", "customized")
 REQUEST_OUTCOMES: frozenset[str] = frozenset({"success", "error"})
 VALIDATION_RESULTS: frozenset[str] = frozenset({"success", "failed", "skipped"})
 FINISH_REASONS: frozenset[str] = frozenset({"stop", "length", "content_filter", "unknown"})
@@ -47,7 +52,7 @@ FAILURE_STAGES: frozenset[str] = frozenset({
 
 # run 级（generation / production 终态 + Sentry tag）
 RUN_LEVEL_FIELDS: frozenset[str] = frozenset({
-    "provider", "model", "base_url_host", "http_status", "upstream_error_type",
+    "provider", "config_source", "model", "base_url_host", "http_status", "upstream_error_type",
     "failure_stage", "llm_calls", "prompt_tokens", "completion_tokens",
     "reasoning_tokens", "retry_count", "degrade_count", "billable_calls_before_failure",
 })
@@ -155,8 +160,12 @@ def sanitize_exception_text(text: str | BaseException | None) -> str:
     return code + (f" host={host}" if host else "")
 
 
-class _LogSafeLLMError(RuntimeError):
-    """Safe printable boundary; protocol metadata stays available to retry/degrade."""
+from backend.core.failure_attribution import AttributedError, attributed  # noqa: E402 - no cycle
+
+
+class _LogSafeLLMError(AttributedError, RuntimeError):
+    """Safe printable boundary; protocol metadata stays available to retry/degrade.
+    R29: ``.attribution`` is the snapshot built from the ORIGINAL exception before ``from None``."""
 
 
 def log_safe_exception(error: Exception) -> Exception:
@@ -172,6 +181,22 @@ def log_safe_exception(error: Exception) -> Exception:
         safe.body = "timeout" if kind is UpstreamErrorType.TIMEOUT else "connection error"
     safe.code = getattr(error, "code", None)
     safe.retry_after = retry_after_from_error(error)
+    # R29 (Dong): the redaction boundary builds the one snapshot while the original chain is intact;
+    # the raw exception never rides on the safe one (callers raise it ``from None``).
+    # Only what the original chain DECIDES is frozen here; an undecided error (no SDK type, no local
+    # evidence) gets no snapshot, and the call boundary's request record decides it as before.
+    # R30 (I563): the provider's HTTP status is frozen by the same construction, in the same place.
+    # R31 (I562): the controlled studio code (timeout / connection / ...) is frozen by the same call, and
+    # only on a MODEL snapshot (an undecided or local error freezes none; X2).
+    from backend.core.failure_attribution import SOURCE_LOCAL, classify_failure
+    snap = code = None
+    if classify_failure(error).decided:
+        from backend.core.llm_emit import attribution_snapshot
+        snap = attribution_snapshot(error)
+        if snap is not None and snap.attribution_source != SOURCE_LOCAL:
+            from backend.pipeline.failures import model_call_error_code
+            code = model_call_error_code(error)
+    attributed(safe, snap, http_status=safe.status_code, error_code=code)
     return safe
 
 
@@ -181,8 +206,13 @@ def sanitize_provider(value: str | None, *, allow_asr: bool = False) -> str | No
     key = value.strip().lower()
     if key in TELEMETRY_PROVIDERS:
         return key
-    if allow_asr and key in ASR_PROVIDERS:
-        return key
+    if key in ASR_PROVIDERS:
+        return key if allow_asr else None
+    if key:
+        from backend.core.provider_presets import resolve_provider_id
+        resolved = resolve_provider_id(key)
+        if resolved in TELEMETRY_PROVIDERS:
+            return resolved
     return None
 
 
@@ -247,6 +277,7 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
             _put_count(out, raw, key)
     elif kind == "run":
         _put_enum(out, raw, "failure_stage", FAILURE_STAGES)
+        _put_enum(out, raw, "config_source", frozenset(CONFIG_SOURCES))
         _put_http_status(out, raw.get("http_status"), minimum=400)
         for key in (
             "llm_calls", "prompt_tokens", "completion_tokens", "reasoning_tokens",

@@ -81,8 +81,9 @@ def test_real_cloud_http_failure_keeps_provider_status(cloud_adapter, model, sta
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    # 1.5.8 R18 80: a rejected ASR key is a user cause (authentication), status + upstream type kept.
-    assert result['error_code'] == ('authentication' if status == 401 else 'provider_error')
+    # R31 I562: the coarse studio code is frozen from the status (401 -> llm_auth_invalid).
+    # The fine user cause stays on upstream_error_type (invalid_key); both are user_hard in v4.
+    assert result['error_code'] == {409: 'provider_error', 401: 'llm_auth_invalid', 500: 'provider_error'}[status]
     assert result['http_status'] == status
     # 409 classifies as unknown, which is never stored; 401/500 keep their enum.
     assert result.get('upstream_error_type') == {401: 'invalid_key', 500: 'upstream_unavailable', 409: None}[status]
@@ -113,7 +114,9 @@ def test_real_cloud_non_http_failure_has_no_local_install_advice(cloud_adapter, 
     result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    assert result['error_code'] == 'provider_error'
+    # R31 I562: connection and invalid replies keep their own codes (were provider_error)
+    assert result['error_code'] == {'connection': 'connection', 'invalid_response': 'invalid_response',
+                                    'empty': 'provider_error'}[kind]
     assert '云端转写' in result['error']
     assert 'Whisper' not in result['error']
     assert 'private-network-detail' not in result['error']

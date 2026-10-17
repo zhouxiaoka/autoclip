@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import ipaddress
 import logging
 import re
@@ -38,7 +39,35 @@ SEEDREAM_MODEL_MARKERS = ("seedream", "doubao-seedream")
 SEEDREAM_HOST_MARKERS = ("volces.com", "bytepluses.com", "byteplus.com", "volcengine")
 
 
-class ImageError(RuntimeError):
+from backend.core.failure_attribution import (  # noqa: E402
+    AttributedError, ModelResponseInvalid, ProviderTransportError, attributed, build_attribution)
+
+# R31 (I561/I621): the identity of the image config the CURRENT call sent, frozen once by
+# ``_image_transport_errors`` so every redaction point inside the call (transport and HTTP status) builds
+# its snapshot with it, once.
+_call_identity_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar("image_call_identity", default=None)
+
+# Errors requests raises BEFORE anything was sent (a malformed address or header, a body that cannot be
+# serialized, no URL): decisively local (R31 I566 X10). ``JSONDecodeError`` subclasses InvalidJSONError
+# but is a RESPONSE that failed to parse: the model's side.
+_LOCAL_REQUEST_ERRORS = (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
+                         requests.exceptions.MissingSchema, requests.exceptions.InvalidHeader,
+                         requests.exceptions.InvalidJSONError, requests.exceptions.URLRequired)
+
+
+def _cover_failure(message: str, original: BaseException, **kwargs) -> "ImageError":
+    """THE cover redaction point: ``original`` is content-free (a ``ProviderTransportError`` with type name
+    and status, or a ``ModelResponseInvalid``); THE factory builds the snapshot with this call's identity,
+    and the status and controlled code are frozen by the same ``attributed`` call (I562/I563/I621)."""
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(original, failure_stage='cover', phase_identity=_call_identity_var.get())
+    return attributed(ImageError(message, **kwargs), snap, http_status=getattr(original, 'http_status', None),
+                      error_code=getattr(original, 'error_code', None))
+
+
+class ImageError(AttributedError, RuntimeError):
+    """Safe text only. R29: a provider transport failure carries the snapshot built from the original
+    request exception (``.attribution``) before ``from None``; other ImageErrors carry none."""
     def __init__(self, message: str, *, unsupported_edit: bool = False):
         super().__init__(message)
         self.unsupported_edit = unsupported_edit
@@ -48,19 +77,58 @@ def _image_transport_errors(function):
     """Keep provider transport failures inside the local-cover recovery boundary."""
     @wraps(function)
     def call(*args, **kwargs):
+        token = _call_identity_var.set(_call_identity(kwargs))
         try:
             return function(*args, **kwargs)
         except requests.exceptions.RequestException as error:
-            if isinstance(error, (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
-                                  requests.exceptions.MissingSchema)):
+            invalid = (isinstance(error, _LOCAL_REQUEST_ERRORS)
+                       and not isinstance(error, requests.exceptions.JSONDecodeError))
+            if invalid:
                 message = '封面服务接口地址无效，请检查模型设置中的 HTTP(S) 地址'
             elif isinstance(error, requests.exceptions.Timeout):
                 message = '封面服务请求超时，请检查服务和网络后重试'
             else:
                 message = '封面服务连接失败，请检查接口地址与网络后重试'
-            # Request exceptions can include credentials, URLs and response bodies.
-            raise ImageError(message) from None
+            # Request exceptions can include credentials, URLs and response bodies: the one snapshot is
+            # built here, inside the boundary (a malformed address never left this machine = local; anything
+            # else was sent toward the provider: a content-free ProviderTransportError that THE classifier
+            # judges, R30 I567), the HTTP status is frozen with it (I563), and the safe error goes out
+            # without the chain.
+            # R31: the identity is the image config THIS call sent (I561); the controlled error code is
+            # frozen with the status (I562).
+            if invalid:
+                snap = build_attribution(error, local=True, phase_identity=_call_identity_var.get(),
+                                         failure_stage='cover')
+                raise attributed(ImageError(message), snap) from None
+            if isinstance(error, requests.exceptions.JSONDecodeError):
+                raise _cover_failure('封面服务返回格式无效，请检查模型设置后重试',
+                                     ModelResponseInvalid(type(error).__name__)) from None
+            status = getattr(getattr(error, 'response', None), 'status_code', None)
+            transport = ProviderTransportError(type(error).__name__, http_status=status,
+                                               timed_out=isinstance(error, requests.exceptions.Timeout))
+            raise _cover_failure(message, transport) from None
+        finally:
+            _call_identity_var.reset(token)
     return call
+
+
+def _call_identity(kwargs: dict) -> dict:
+    """R31 I561: provider/config_source/model/host of the image config a call sent (no settings read)."""
+    from backend.services.studio.failure_identity import sent_identity
+    from backend.core.llm_telemetry import hostname_of_base_url
+    request = kwargs.get('request')
+    model = kwargs.get('model') or getattr(request, 'model', '') or ''
+    base_url = kwargs.get('base_url') if isinstance(kwargs.get('base_url'), str) else ''
+    identity = sent_identity(kwargs.get('provider'), base_url, model)
+    try:
+        host = hostname_of_base_url(base_url) if base_url else None
+    except ValueError:
+        host = None
+    if host:
+        identity['base_url_host'] = host
+    if isinstance(model, str) and model.strip():
+        identity['model'] = model.strip()
+    return identity
 
 
 @dataclass
@@ -159,13 +227,20 @@ def _raise_for_status(resp: Any, *, edit: bool = False) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         data = {}
     if status >= 400 or not isinstance(data, dict):
-        message = _error_message(resp)
-        lowered = message.lower()
+        # R31 (Dong I621): the provider's body only decides "this endpoint cannot edit"; it never becomes
+        # the message (fixed text, chosen by status) nor leaves this function. An HTTP error is a
+        # content-free ProviderTransportError with the frozen status; a 2xx that is not an object is the
+        # model's invalid response. Both get THE snapshot (``_cover_failure``) instead of none (= LOCAL).
+        lowered = _error_message(resp).lower()
         unsupported = edit and (
             status in (404, 405)
             or any(word in lowered for word in ("not support", "unsupported", "unknown url", "not found", "invalid endpoint"))
         )
-        raise ImageError(message or "生图失败", unsupported_edit=unsupported)
+        if status >= 400:
+            raise _cover_failure(f'封面服务请求失败（HTTP {status}），请检查密钥、额度和模型权限',
+                                 ProviderTransportError('HTTPStatus', http_status=status), unsupported_edit=unsupported)
+        raise _cover_failure('封面服务返回格式无效，请检查模型设置后重试', ModelResponseInvalid('NotAnObject'),
+                             unsupported_edit=unsupported)
     return data
 
 

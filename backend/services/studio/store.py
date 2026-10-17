@@ -14,8 +14,19 @@ from pathlib import Path
 
 from backend.core.path_utils import get_projects_directory
 
-lock = threading.RLock()
-INSTANCE = uuid.uuid4().hex
+from backend.core.file_lock import LOCK_TIMEOUT_CODE, LOCK_TIMEOUT_MESSAGE, LockTimeout, ProcessLock  # noqa: E402
+
+
+def _lock_path():
+    # Outside projects/: project listings must never see it.
+    return Path(get_projects_directory()).parent / '.studio-store.lock'
+
+
+# R25 #415 #335: every project writer AND the shutdown-marker scan->delete hold this lock; it also
+# excludes CLI/MCP child processes writing the same data directory (file lock with a timeout).
+lock = ProcessLock(_lock_path)
+from backend.core.launch_token import instance_id as _shell_instance_id  # noqa: E402
+INSTANCE = _shell_instance_id() or uuid.uuid4().hex  # R19 #98: shell-assigned when launched by the desktop app
 
 logger = logging.getLogger(__name__)
 IO_FAILURE_MESSAGE = '无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留'
@@ -29,6 +40,29 @@ _io_failures = {}
 _read_failures = {}
 _pending_links = {}
 _worker = ContextVar('studio_metadata_worker', default=None)
+_receipt_mutex = threading.Lock()
+
+
+def _append_receipt(path, receipt):
+    # R27 I419: every append, read and clear of _read_failures holds _receipt_mutex.
+    with _receipt_mutex:
+        _read_failures.setdefault(path, []).append(receipt)
+
+
+def _receipts(path):
+    with _receipt_mutex:
+        return list(_read_failures.get(path, []))
+
+
+def _drop_receipts(path, handled):
+    """R27 I419: drop only the receipts this read handled; one appended meanwhile stays."""
+    ids = {id(receipt) for receipt in handled}
+    with _receipt_mutex:
+        left = [receipt for receipt in _read_failures.get(path, []) if id(receipt) not in ids]
+        if left:
+            _read_failures[path] = left
+        else:
+            _read_failures.pop(path, None)
 
 
 @contextmanager
@@ -46,12 +80,18 @@ def worker_read_scope(project_id, identity):
         except PermissionError as error:
             if error is not receipt.get('read_error'):
                 raise
+        except LockTimeout:
+            # R26 #401: the worker could not even write its failure. Leave a receipt WITHOUT the store
+            # lock (it is what timed out); the next read fails the job instead of leaving it queued.
+            _append_receipt(path, {'identity': identity, 'pending': {},
+                                   'message': LOCK_TIMEOUT_MESSAGE, 'error_code': LOCK_TIMEOUT_CODE})
+            raise
     finally:
         _worker.reset(token)
         if receipt['denied'] or receipt.get('cover_finished_instance'):
             with lock:
                 receipt.pop('read_error', None)
-                _read_failures.setdefault(path, []).append(receipt)
+                _append_receipt(path, receipt)
 
 
 def mark_render_finished(project_id, job_id):
@@ -64,7 +104,7 @@ def mark_render_finished(project_id, job_id):
 
 def _apply_finished_covers(path, data):
     changed = False
-    for receipt in _read_failures.get(path, []):
+    for receipt in _receipts(path):
         identity = receipt['identity']
         instance = receipt.get('cover_finished_instance')
         if identity[0] != 'render' or not instance:
@@ -175,7 +215,7 @@ def remember_render_link(project_id, expected, job_id):
 
 def has_pending_receipts(project_id):
     path = directory(project_id) / 'metadata' / 'studio.json'
-    return bool(_read_failures.get(path) or _pending_links.get(path) or _io_failures.get(path))
+    return bool(_receipts(path) or _pending_links.get(path) or _io_failures.get(path))
 
 
 def _observe_worker_write(path, previous, data):
@@ -194,14 +234,15 @@ def _observe_worker_write(path, previous, data):
             receipt['pending'][row['id']] = variant_identity(row)
 
 
-def _apply_read_receipts(path, data):
+def _apply_read_receipts(path, data, receipts=None):
     changed = _apply_finished_covers(path, data)
     settle = False
+    receipt_failed = False  # I454: a render/preparation receipt failed something
     for expected, job_id in _pending_links.get(path, {}).items():
         linked = bind_render(data, expected, job_id)
         changed = changed or linked
         settle = settle or linked
-    for receipt in _read_failures.get(path, []):
+    for receipt in (_receipts(path) if receipts is None else receipts):
         identity = receipt['identity']
         kind = identity[0]
         message = receipt.get('message', IO_FAILURE_MESSAGE)
@@ -214,7 +255,7 @@ def _apply_read_receipts(path, data):
             if job:
                 for row in data['output_variants']:
                     if row.get('render_job_id') == identity[1] and _reflect_render(row, job):
-                        changed = settle = True
+                        changed = settle = receipt_failed = True
         elif kind == 'cover':
             variant = next((row for row in data['output_variants'] if row['id'] == identity[1]), {})
             cover = variant.get('cover_job') or {}
@@ -224,23 +265,37 @@ def _apply_read_receipts(path, data):
         elif kind == 'analysis':
             analysis = data.get('analysis') or {}
             if analysis.get('run_id') == identity[1] and analysis.get('phase') == identity[2] and analysis.get('status') == 'running':
+                # A refused submit never entered the phase: the stage is dispatch (the worker did not start).
+                stage = 'dispatch' if receipt.get('rejected') else (identity[2] if identity[2] in ('screening', 'production') else 'other')
                 analysis.update(status='failed', error=message, error_code=code)
+                # R27 I418: the worker never got to write its failure; a receipt is a LOCAL failure, written
+                # as the one snapshot (start identity kept, no upstream status).
+                write_attribution(analysis, build_attribution(local=True, start_identity=analysis, failure_stage=stage))
                 generation = data.get('generation') or {}
                 if generation.get('status') in ('screening', 'production'):
                     generation.update(status='failed', error=message, error_code=code, finished_at=now())
+                    write_attribution(generation, build_attribution(local=True, start_identity=generation, failure_stage=stage))
                 changed = True
         elif kind == 'preparation':
             variant = next((row for row in data['output_variants'] if row['id'] == identity[1]), {})
             if variant.get('preparation_run_id') == identity[2] and variant.get('status') == 'preparing':
                 variant.update(status='failed', error=message, error_code=code, needs_prepare=True)
-                changed = settle = True
+                changed = settle = receipt_failed = True
         for expected in receipt['pending'].values():
             variant = next((row for row in data['output_variants'] if row['id'] == expected[0]), {})
             if variant_identity(variant) == expected and variant.get('status') == 'queued' and not variant.get('render_job_id'):
                 variant.update(status='failed', error=message, error_code=code)
-                changed = settle = True
+                changed = settle = receipt_failed = True
     if settle and data.get('generation'):
+        generation = data['generation']
+        was_failed = is_failed_terminal(generation)
         settle_generation(data)
+        if receipt_failed and not was_failed and is_failed_terminal(generation):
+            # R28 I454: a render/preparation that could not write its failure is a LOCAL failure of the
+            # generation too, written as the one snapshot (start identity kept, no upstream status).
+            for record in (generation, data.get('analysis')):  # settle wrote both terminals
+                if isinstance(record, dict) and is_failed_terminal(record):
+                    write_attribution(record, build_attribution(local=True, start_identity={'failure_stage': 'render', **record}))
     return changed
 
 
@@ -252,7 +307,7 @@ def remember_submission_rejection(project_id, identity, *, error_code='unexpecte
         message = {'render': '导出任务未能启动，请重试；已有成片已保留',
                    'preparation': '这条成片任务未能启动，请重试；已有成片已保留',
                    'cover': 'AI 封面任务未能启动，请重试'}.get(kind, '分析或制作任务未能启动，请重试；原素材与已有成片已保留')
-        _read_failures.setdefault(path, []).append({'identity': identity, 'pending': {}, 'rejected': True, 'message': message, 'error_code': error_code})
+        _append_receipt(path, {'identity': identity, 'pending': {}, 'rejected': True, 'message': message, 'error_code': error_code})
 
 
 def _changed_active_ids(previous, attempted, key, id_key, active):
@@ -317,10 +372,11 @@ def _apply_io_failure(path, data):
                 data['analysis']['error'] = IO_FAILURE_MESSAGE
     analysis = data.get('analysis') or {}
     if 'analysis_run_id' in patch and analysis.get('status') == 'running' and analysis.get('run_id') == patch['analysis_run_id']:
-        analysis.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')
+        stage = analysis.get('phase') if analysis.get('phase') in ('screening', 'production') else 'render' if analysis.get('phase') == 'rendering' else 'other'
+        analysis.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', failure_stage=stage)
         generation = data.get('generation') or {}
         if generation.get('status') in ('screening', 'production', 'rendering'):
-            generation.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', finished_at=patch['at'])
+            generation.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', finished_at=patch['at'], failure_stage=stage)
         changed = True
     return changed
 
@@ -362,7 +418,7 @@ def read(project_id: str, *, recover: bool = True):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
         _io_failures.pop(path, None)
-        _read_failures.pop(path, None)
+        _drop_receipts(path, _receipts(path))
         _pending_links.pop(path, None)
         return {'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [], 'analysis': None, 'output_variants': []}
     try:
@@ -379,11 +435,23 @@ def read(project_id: str, *, recover: bool = True):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
+    # R27 #415 (I399/I421): every record that carries an attribution is read through export_attribution:
+    # legacy half identities, local records with an upstream status, failure fields on a success are
+    # cleaned in what this read returns. The read itself never writes this back.
+    for name in ('analysis', 'generation'):
+        project_attribution(data.get(name))
+    for row in data.get('analysis_history') or []:
+        if isinstance(row, dict):
+            project_attribution(row.get('analysis'))
     if not recover or producer_alive(data.get('generation')):
         # CLI status commands are observers in another process, not a server restart.
         # A live CLI / MCP producer owns its run: the desktop list must not fail it.
         return data
     interrupted = set()
+    # R19 #97/#99: classify how a dead owner ended BEFORE anything settles the render (settling replaces
+    # the analysis and drops its instance); the marker is released only after the terminal is written.
+    prior_analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+    dead_instance = prior_analysis.get('instance') if _stale_analysis(prior_analysis) else None
     cover_finished = _apply_finished_covers(path, data)
     for job in data['jobs']:
         if job['status'] == 'completed' and job.get('cover_pending') and job.get('instance') != INSTANCE:
@@ -416,25 +484,199 @@ def read(project_id: str, *, recover: bool = True):
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
+        _record_restart_shutdown_kind(data, dead_instance)
     patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished or settle or bool(interrupted)
-    patched = _apply_read_receipts(path, data) or patched
+    handled = _receipts(path)  # R27 I419: exactly what this read applies (and may then clear)
+    patched = _apply_read_receipts(path, data, handled) or patched
     patched = _recover_interrupted_run(data) or patched
     analysis = data.get('analysis')
     if isinstance(analysis, dict) and analysis.get('status') == 'running' and not analysis.get('instance'):
-        analysis.update(status='failed', error='服务已重启，请重试分析')
+        stage = analysis.get('phase') if analysis.get('phase') in ('screening', 'production') else 'other'
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind='unknown')
     if patched:
         try:
             write(project_id, data, _recover_previous=False)
         except OSError:
             logger.warning('Studio terminal receipt persistence deferred')
         else:
-            _read_failures.pop(path, None)
+            _drop_receipts(path, handled)
             _pending_links.pop(path, None)
+            if dead_instance:
+                from backend.services.studio.shutdown_marker import release
+                release(dead_instance)
     else:
         # Stale receipts cannot affect later attempts or already saved terminals.
-        _read_failures.pop(path, None)
+        _drop_receipts(path, handled)
         _pending_links.pop(path, None)
     return data
+
+def _instances_referenced(data):
+    """Dead instances whose shutdown record this project's unrecovered state still needs."""
+    out = set()
+    analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+    if analysis.get('status') == 'running' and analysis.get('instance'):
+        out.add(analysis['instance'])
+    for job in data.get('jobs') or []:
+        if isinstance(job, dict) and job.get('status') in ('queued', 'running') and job.get('instance'):
+            out.add(job['instance'])
+    for variant in data.get('output_variants') or []:
+        if not isinstance(variant, dict):
+            continue
+        if variant.get('status') == 'preparing' and variant.get('instance'):
+            out.add(variant['instance'])
+        if variant.get('status') == 'queued' and variant.get('render_dispatch_instance'):
+            out.add(variant['render_dispatch_instance'])
+    return out
+
+
+def _references_instance(data, instance):
+    return instance in _instances_referenced(data)
+
+
+REFS_NAME = 'instance_refs.json'
+
+
+def _refs_path(project_id):
+    return directory(project_id) / 'metadata' / REFS_NAME
+
+
+def _fsync_file(path):
+    """R24 #295: the bytes of a file we are about to publish are on disk. Windows fsync
+    (_commit) needs a writable descriptor, so open it read-write."""
+    fd = os.open(path, os.O_RDWR | getattr(os, 'O_BINARY', 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(directory):
+    """R24 #295 / R25 #337: a rename inside ``directory`` survives power loss (POSIX; Windows has no
+    directory fsync). Returns False when durability is unknown; callers must not shrink protection."""
+    if os.name == 'nt':
+        return True
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        os.fsync(fd)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+
+
+def _publish(path, text, encoding):
+    """Write ``text`` to a temporary sibling, fsync it, atomically replace ``path``, fsync the dir."""
+    tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+    try:
+        tmp.write_text(text, encoding=encoding)
+        _fsync_file(tmp)
+        _replace_state(tmp, path)
+        if not _fsync_dir(path.parent):
+            logger.warning('Ledger directory durability unknown')
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _ledger_content(path):
+    try:
+        return _read_refs(path)
+    except (OSError, ValueError):
+        return None
+
+
+def _set_refs(path, refs):
+    """Make the ledger hold exactly ``refs``. Skips only when the ledger on disk ALREADY holds them
+    (R24 #293: compare the ledger's real content, never 'references unchanged'). Never deletes it."""
+    refs = set(refs)
+    if _ledger_content(path) == refs:
+        return True
+    try:
+        _publish(path, json.dumps(sorted(refs)), 'ascii')
+        return True
+    except OSError:
+        logger.warning('Could not update the instance reference ledger')
+        return False
+
+
+def _write_refs(state_path, data, previous):
+    """R22 #221 / R24 #293: the project -> instance reference ledger next to studio.json, written as a
+    two-step commit around the studio.json replace:
+
+    1. before: ledger := old ledger ∪ refs(previous) ∪ refs(new) - every reference either version of
+       studio.json can hold is protected while the replace is in flight;
+    2. after: ``commit_refs`` shrinks it to refs(new) once studio.json is durable; on failure
+       ``rollback_refs`` sets it back to what the surviving studio.json needs.
+
+    Returns the context ``commit_refs`` / ``rollback_refs`` take."""
+    path = state_path.with_name(REFS_NAME)
+    old = _ledger_content(path) or set()
+    before = _instances_referenced(previous) if isinstance(previous, dict) else set()
+    after = _instances_referenced(data)
+    if not _set_refs(path, old | before | after):
+        # R25 #334: prepare failed -> studio.json must not be committed (it could reference an
+        # instance the ledger does not protect).
+        raise LedgerPrepareError('instance reference ledger prepare failed')
+    return path, old | before, after
+
+
+class LedgerPrepareError(OSError):
+    """R25 #334: the reference ledger could not be widened before a studio.json replace."""
+
+
+def commit_refs(context):
+    path, _surviving, after = context
+    _set_refs(path, after)
+
+
+def rollback_refs(context):
+    path, surviving, _after = context
+    _set_refs(path, surviving)
+
+
+def _read_refs(path):
+    value = json.loads(path.read_text(encoding='ascii'))
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError('invalid ledger')
+    return set(value)
+
+
+def reference_index():
+    """See ``_reference_index``. R24 #294: the scan holds ``store.lock`` (every writer holds it too)."""
+    with lock:
+        return _reference_index()
+
+
+def _reference_index():
+    """R22 #221/#198: ONE scan of every project -> the set of dead instances still referenced.
+
+    A project contributes the references in its studio.json AND in its ledger (``instance_refs.json``).
+    A project whose studio.json and ledger both cannot be read cannot be recovered either, so it
+    protects nothing: a long-broken file never pins records, and pruning stays bounded at ``_KEEP``."""
+    referenced = set()
+    for path in get_projects_directory().glob('*/metadata/studio.json'):
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if isinstance(data, dict):
+                referenced |= _instances_referenced(data)
+        except (OSError, ValueError):
+            pass
+        try:
+            referenced |= _read_refs(path.with_name(REFS_NAME))
+        except (OSError, ValueError):
+            pass
+    return frozenset(referenced)
+
+
+def index_protects(index, instance):
+    return instance in index
+
 
 def producer_alive(generation):
     """A CLI / MCP producer process (quick_output_runner) that is still running owns the run."""
@@ -484,6 +726,25 @@ def interrupted_run(data):
     return bool(variants) and all(row.get('status') in ('completed', 'failed') for row in variants)
 
 
+from backend.services.studio.failure_identity import IDENTITY_KEYS as ATTEMPT_IDENTITY_KEYS  # noqa: E402
+from backend.services.studio.failure_identity import frozen as attempt_identity  # noqa: E402,F401 - one rule
+from backend.services.studio.failure_identity import carry_screening  # noqa: E402 - R24 #292
+
+
+def _record_restart_shutdown_kind(data, instance):
+    """R16 #43 / R19 #97: a render settled because of a restart records how the previous process ended."""
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+    if not instance or not generation or generation.get('status') == 'rendering':
+        return
+    variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)]
+    if generation.get('error_code') == RESTART_CODE or any(v.get('error_code') == RESTART_CODE for v in variants):
+        from backend.services.studio.shutdown_marker import shutdown_kind
+        kind = shutdown_kind(instance)
+        generation['shutdown_kind'] = kind
+        if isinstance(data.get('analysis'), dict):
+            data['analysis']['shutdown_kind'] = kind
+
+
 def _recover_interrupted_run(data):
     """Close a screening/production/rendering run whose worker died with the previous process.
 
@@ -494,6 +755,8 @@ def _recover_interrupted_run(data):
     if not interrupted_run(data):
         return False
     analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+    from backend.services.studio.shutdown_marker import shutdown_kind
+    kind = shutdown_kind((analysis or {}).get('instance'))
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
     variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
     if generation and generation.get('status') == 'rendering' and variants:
@@ -504,21 +767,26 @@ def _recover_interrupted_run(data):
                     variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
         settle_generation(data)
         if generation.get('status') != 'rendering':
+            _record_restart_shutdown_kind(data, (analysis or {}).get('instance'))
             return True
     if generation and generation.get('status') in ('screening', 'production', 'rendering') and not (generation['status'] == 'rendering' and variants):
         owned = isinstance(analysis, dict) and analysis.get('status') == 'running' and analysis.get('instance') == INSTANCE
         if owned:
             return False
         stage = generation['status']
-        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now())
+        identity = attempt_identity(analysis, generation)
+        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, **identity)
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
-                            'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now()}
+                            'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now(),
+                            'failure_stage': stage, 'shutdown_kind': kind, **identity, **carry_screening(analysis, generation)}
         return True
     if analysis and _stale_analysis(analysis):
         # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
         for key in ('message', 'percent', 'instance'):
             analysis.pop(key, None)
-        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE)
+        phase = analysis.get('phase')
+        stage = phase if phase in ('screening', 'production') else 'render' if phase == 'rendering' else 'other'
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind=kind)
         return True
     return False
 
@@ -588,11 +856,18 @@ def settle_generation(data):
         outside = sum(1 for item in data['output_variants'] if id(item) not in ids and item.get('status') == 'failed')
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now(), not_redone_failed_count=outside)
         error = data['generation'].get('error') if outcome == 'failed' else None
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'upstream_error_type': data['generation']['upstream_error_type']} if data['generation'].get('upstream_error_type') else {}), **secondary, **({'error': error} if error else {})}
+        identity = attempt_identity(data.get('analysis'), data['generation'])
+        data['generation'].update(identity)
+        screening = carry_screening(data.get('analysis'), data['generation'])  # R24 #292
+        upstream = data['generation'].get('upstream_error_type')
+        data['analysis'] = {**identity, **screening, 'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'upstream_error_type': upstream} if upstream else {}), **secondary, **({'error': error} if error else {})}
 
 
 @_serialized
-def write(project_id, data, *, _recover_previous=True):
+def write(project_id, data, *, _recover_previous=True, restore=False):
+    """``restore=True`` (R31, Dong I620): ``data`` is a state read earlier, written back as is to undo a
+    reservation nobody accepted (a rejected dispatch). It is not a state transition: no attribution
+    snapshot is stamped and every record keeps the attribution group it carries."""
     from backend.core.project_cancellation import checkpoint
     checkpoint(project_id)
     root = directory(project_id)
@@ -605,7 +880,7 @@ def write(project_id, data, *, _recover_previous=True):
     previous = read(project_id, recover=_recover_previous) if path.exists() else {}
     _apply_read_receipts(path, data)
     _ensure_failure_identity(data)
-    usage_checkpoint = _attach_run_telemetry(data, project_id, previous)
+    usage_checkpoint = _attach_run_telemetry(data, project_id, previous, restore=restore)
     analysis = data.get('analysis') or {}
     prior = previous.get('analysis') or {}
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
@@ -621,7 +896,8 @@ def write(project_id, data, *, _recover_previous=True):
             key = terminal['run_id']
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
-                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'failure_stage', 'http_status', 'upstream_error_type', 'secondary_error_codes', 'secondary_upstream_error_types', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id') if k in terminal}
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'screening_identity', 'shutdown_kind', 'secondary_error_codes', 'secondary_upstream_error_types', 'secondary_failure_stages') if k in terminal}
+                summary.update(export_attribution(terminal))  # R27 #415 / R31 I565: THE serializer (stage/status/upstream)
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis', 'degrade_reason') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
@@ -629,14 +905,24 @@ def write(project_id, data, *, _recover_previous=True):
                 history.append({'run_id': key, 'finished_at': now(), 'plan': plan_summary, 'analysis': summary})
     data['analysis_history'] = history[-100:]
     tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+    refs = None
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        _fsync_file(tmp)  # R24 #295
+        refs = _write_refs(path, data, previous if path.exists() else None)
         _replace_state(tmp, path)
+        if _fsync_dir(path.parent):
+            commit_refs(refs)  # R24 #293: release only after studio.json is durable
+        else:
+            # R25 #337: replaced but durability unknown -> keep the union until a durable write.
+            logger.warning('Project state directory durability unknown; reference ledger kept')
         if usage_checkpoint is not None:
             usage_checkpoint[0].update(usage_checkpoint[1])
         _observe_worker_write(path, previous, data)
         _io_failures.pop(path, None)
     except OSError:
+        if refs is not None:
+            rollback_refs(refs)  # R24 #293: the surviving studio.json keeps its references protected
         _remember_io_failure(path, previous, data)
         raise
     finally:
@@ -674,7 +960,57 @@ def _ensure_failure_identity(data):
     fill(analysis)
 
 
-def _attach_run_telemetry(data, project_id, previous):
+from backend.core.failure_attribution import (  # noqa: E402 - R27 #415: the one attribution rule
+    ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, build_attribution,
+    SNAPSHOT_FIELDS, export_attribution, has_snapshot, is_failed_terminal, project_attribution,
+    write_attribution)
+
+
+def _paired(record):
+    return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
+
+
+def _apply_attribution(record, failed, newly_failed, prior=None):
+    """R29 #415 (I503): the store only writes the snapshot it is given, replaced whole; it never infers
+    "the same failure" from run_id/error_code or any other field value. R30 (I560): a snapshot is stamped
+    only on a record that became failed IN THIS WRITE (``newly_failed``: the state transition, see
+    ``_attach_run_telemetry``); an error in hand during an unrelated write never touches it.
+
+    - newly failed, with an error in hand: the snapshot of THAT error replaces the group (an error that
+      carries a boundary snapshot gets it back unchanged; otherwise THE factory builds it from the error,
+      the phase identity, the job's own failure stage and, for local, the attempt's start identity);
+    - newly failed with no error in hand (a receipt that already wrote its own snapshot): the group the
+      record carries stays exactly as it is;
+    - failed before this write and still the same attempt (R31 I622): the STORED group (``prior``) is
+      carried forward whole, even when the writer rebuilt the record dict (no inference: copied as is);
+    - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
+    from backend.core.llm_emit import attribution_snapshot, failure_now
+    if failed:
+        if not newly_failed:
+            if has_snapshot(prior):
+                for key in SNAPSHOT_FIELDS:
+                    record.pop(key, None)
+                record.update({k: prior[k] for k in SNAPSHOT_FIELDS if k in prior})
+            return
+        if failure_now() is None:
+            return
+        snap = attribution_snapshot(start_identity=record)  # the job's own stage rides on the record
+        if snap is not None:
+            write_attribution(record, snap)
+        return
+    for key in FAILURE_FIELDS:
+        record.pop(key, None)
+    if _paired(record):
+        return
+    for key in IDENTITY_FIELDS:
+        record.pop(key, None)
+    snap = attribution_snapshot()
+    if snap is not None and snap.provider:
+        record.update({k: v for k, v in export_attribution(snap).items() if k in IDENTITY_FIELDS})
+        record['attribution_source'] = snap.attribution_source
+
+
+def _attach_run_telemetry(data, project_id, previous, *, restore=False):
     try:
         from backend.core.llm_emit import run_usage_checkpoint
         from backend.core.llm_telemetry import run_snapshot
@@ -684,10 +1020,6 @@ def _attach_run_telemetry(data, project_id, previous):
         return
     if not snapshot:
         return
-    skip_unless_failed = {
-        'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure',
-    }
-    keep_if_set = {'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure'}
     usage_keys = {'llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'degrade_count', 'retry_count'}
     persisted = {}
     for name in ('generation', 'analysis'):
@@ -704,16 +1036,19 @@ def _attach_run_telemetry(data, project_id, previous):
             prior_identity = prior.get(identity_key)
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
-        failed = record.get('status') in ('failed', 'partial')
-        if not failed:
-            for key in skip_unless_failed:
-                record.pop(key, None)
+        failed = bool(is_failed_terminal(record))
+        # R30 I560: the transition, judged inside this one serialized write against the record as stored:
+        # non-failed -> failed, or a failed record of ANOTHER attempt (run identity changed). Status and
+        # identity only; never error_code (no "same failure" inference, I503).
+        newly_failed = failed and not (is_failed_terminal(prior) and prior_identity == identity)
+        if not restore:  # R31 I620: a rollback write is not a transition; its records keep their groups
+            _apply_attribution(record, failed, newly_failed, prior)
         for key, value in snapshot.items():
-            if value is None:
+            if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue
-            if key in skip_unless_failed and not failed:
-                continue
-            if key in keep_if_set and record.get(key) not in (None, ''):
+            if key == 'billable_calls_before_failure':
+                if failed and record.get(key) in (None, ''):
+                    record[key] = value
                 continue
             if key in usage_keys and checkpoint is not None and identity:
                 base = (prior.get(key) or 0) if prior_identity == identity else 0
@@ -722,6 +1057,8 @@ def _attach_run_telemetry(data, project_id, previous):
                 record[key] = prior.get(key) or value
             else:
                 record[key] = value
+        if not failed:
+            record.pop('billable_calls_before_failure', None)
         persisted[usage_id] = {key: snapshot[key] for key in usage_keys if key in snapshot}
     return (checkpoint, persisted) if checkpoint is not None else None
 

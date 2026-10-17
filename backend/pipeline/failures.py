@@ -118,9 +118,13 @@ def empty_timeline_failure(topic_count: int) -> PipelineFailure:
 
 def model_call_error_code(error: Exception) -> str:
     """Coarse studio code only. Fine type lives on ClassifiedUpstreamError / PipelineFailure.upstream_error_type."""
+    from backend.core.failure_attribution import frozen_error_code
     from backend.core.llm_retry import studio_code_for
     from backend.core.upstream_errors import classify_exception, http_error_parts
 
+    frozen = frozen_error_code(error)  # R31 I562: the redaction boundary already decided it
+    if frozen:
+        return frozen
     info = classify_exception(error)
     status, _body = http_error_parts(error)
     code = studio_code_for(info.error_type, status)
@@ -130,26 +134,14 @@ def model_call_error_code(error: Exception) -> str:
 
 
 def http_status_of(error: BaseException | None) -> int | None:
-    """沿异常链找第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
+    """第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
 
-    流水线把提供商异常包成 PipelineFailure(...) from error，状态码在 __cause__ 上；
-    隐式链（处理异常时又抛异常）走 __context__，与 traceback 的展示规则一致。
+    R30 #415（Dong I563，和 I500 同一套遍历规则）：只有 failure_attribution.http_status_of 一处实现。
+    只走显式 __cause__；脱敏边界冻结在安全异常上的 http_status 优先；不再走 __context__
+    （处理旧 503 时又发生的新错误，不能把旧状态码带进新请求）。
     """
-    seen: set[int] = set()
-    current = error
-    while current is not None and id(current) not in seen and len(seen) < 32:
-        seen.add(id(current))
-        for attr in ("http_status", "status_code"):
-            status = getattr(current, attr, None)
-            if type(status) is int and 400 <= status <= 599:
-                return status
-        if current.__cause__ is not None:
-            current = current.__cause__
-        elif not current.__suppress_context__:
-            current = current.__context__
-        else:
-            current = None
-    return None
+    from backend.core.failure_attribution import http_status_of as _one_rule
+    return _one_rule(error)
 
 
 def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFailure:
@@ -208,31 +200,41 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
     return empty_timeline_failure(topic_count)
 
 
-CLOUD_ASR_AUTH_TYPES = frozenset({"invalid_key", "permission_denied"})
+from backend.core.failure_attribution import AttributedError  # noqa: E402 - no cycle
 
 
-def cloud_transcription_failure(message, http_status: int | None = None, upstream_error_type: str = "") -> PipelineFailure:
+class AttributedPipelineFailure(AttributedError, PipelineFailure):
+    """R29: a PipelineFailure carrying the snapshot built where the chain was intact (``.attribution``)."""
+
+
+def cloud_transcription_failure(message, error: BaseException | None = None, http_status: int | None = None,
+                                upstream_error_type: str = "") -> PipelineFailure:
     """CloudTranscriptionError carries only our safe public text, never a provider body.
 
-    1.5.8: keep the ASR HTTP status + upstream_error_type; a rejected key/permission is
-    ``authentication`` (user cause) instead of collapsing into provider_error."""
-    if not isinstance(message, str):  # a CloudTranscriptionError
-        http_status = http_status or getattr(message, "http_status", None)
-        upstream_error_type = upstream_error_type or getattr(message, "upstream_error_type", "")
+    R29: the transcription boundary already built the snapshot (``error.attribution``); it is carried
+    here as is and wins over this wrapper's code (which only picks the user hint), never re-judged.
+    R31 (I562): the code is the one the boundary froze (timeout / connection / llm_auth_invalid / ...),
+    else ``provider_error``. The fine user cause (``invalid_key`` / ``insufficient_quota``) stays on
+    ``upstream_error_type``. The user text depends ONLY on the code and the frozen HTTP status.
+    A non-str ``message`` is the safe error itself (callers pass the exception)."""
+    from backend.core.failure_attribution import attributed, frozen_error_code
+    if not isinstance(message, str):
+        error = error or message
         message = str(message)
-    if not upstream_error_type and http_status:
-        from backend.core.upstream_errors import classify_upstream_error
-        upstream_error_type = classify_upstream_error(http_status).error_type.value
+    if error is not None:
+        http_status = http_status or getattr(error, "http_status", None)
+        upstream_error_type = upstream_error_type or getattr(error, "upstream_error_type", "") or ""
     if upstream_error_type == "unknown":
         upstream_error_type = ""
-    return PipelineFailure(
+    code = frozen_error_code(error) or "provider_error"
+    failure = AttributedPipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
         "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
-        # One code vocabulary (STUDIO_ERROR_CODES): no balance stays provider_error; the precise user cause
-        # travels in upstream_error_type, which the v4 SQL and the 「去设置」 action read (R22 #171).
-        code="authentication" if upstream_error_type in CLOUD_ASR_AUTH_TYPES else "provider_error",
-        http_status=http_status, upstream_error_type=upstream_error_type,
+        code=code, http_status=http_status if isinstance(http_status, int) else None,
+        upstream_error_type=upstream_error_type,
     )
+    return attributed(failure, getattr(error, "attribution", None), http_status=http_status,
+                      error_code=code if code != "provider_error" else frozen_error_code(error))
 
 
 def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> PipelineFailure:
