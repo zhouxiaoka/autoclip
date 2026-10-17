@@ -1248,7 +1248,12 @@ def append_platform_variants(project_id, platforms, branding):
         raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')
     def persist(data):
         data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
-        attempts.own_outputs(data, variants)  # R28 #410: appended outputs belong to the generation's round
+        # the source output: one of the last generation round's (its plan and route), else any stamped one
+        last = (data.get('generation') or {}).get('attempt_id')
+        stamped = [v for v in data['output_variants'] if v.get('produced_by_attempt')]
+        source = next((v for v in stamped if v['produced_by_attempt'] == last), stamped[0] if stamped else None)
+        attempts.open_append(data, source, now=store.now())  # R29 #441: append = a new attempt with its own terminal
+        attempts.own_outputs(data, variants)
         data['output_variants'].extend(variants)
         data['generation'].update(status='rendering')
         data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}

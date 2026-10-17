@@ -7,7 +7,7 @@ const { renderToStaticMarkup } = require('react-dom/server')
 function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage) {
   const workspace = {
     analysis: { status, phase, message: 'screening', error: 'failure', error_code: errorCode, failure_stage: failureStage },
-    generation: automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null,
+    generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
     drafts: [], jobs: [], events: [], output_variants: [],
   }
   const exportsObject = {}
@@ -52,6 +52,7 @@ function loadTsx(rel, moduleRequire, globals = {}) {
 }
 
 const navigations = []
+const generationOverride = { value: null }
 const routeSearch = { value: '' }
 
 test('automatic screening never asks for a manual confirmation', () => {
@@ -212,4 +213,16 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
   assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '这个 API Key 没有该模型的使用权限，请到设置里更换')
+})
+
+// R29 #444: the results-page line for "this re-run finished, N earlier failures" shows only when the round completed
+// and settle's not_redone_failed_count > 0; otherwise the original wording.
+test('R29 #444 the re-run line shows only for a completed round with earlier failures left', () => {
+  const NEW = /本次重跑已完成，之前还有/, DONE = /已按所选平台生成可发布成片/
+  const at = generation => { generationOverride.value = { auto_start: true, ...generation }; try { return render(true, 'rendering', 'completed') } finally { generationOverride.value = null } }
+  const withN = at({ status: 'completed', not_redone_failed_count: 2 })
+  assert.match(withN, NEW); assert.doesNotMatch(withN, DONE)
+  const zero = at({ status: 'completed', not_redone_failed_count: 0 })
+  assert.doesNotMatch(zero, NEW); assert.match(zero, DONE)
+  assert.doesNotMatch(at({ status: 'partial', not_redone_failed_count: 2 }), NEW)
 })

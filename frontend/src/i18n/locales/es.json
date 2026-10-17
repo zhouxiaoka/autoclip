@@ -1462,7 +1462,7 @@
   "AI 正在按所选平台制作成片。": "La IA está creando los videos para las plataformas elegidas.",
   "已按所选平台生成可发布成片。": "Los videos listos para publicar ya están hechos para las plataformas elegidas.",
   "部分成片已完成，未完成版本可稍后重试。": "Algunos videos están listos. Puedes reintentar los pendientes más tarde.",
-  "本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。": "Esta repetición terminó. Aún se pueden reintentar {{count}} versiones anteriores sin terminar.",
+  "本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。": "Esta repetición terminó. Versiones anteriores sin terminar que aún puedes reintentar: {{count}}",
   "正在准备成片": "Preparando el video",
   "已生成 · 可下载": "Listo · Disponible para descargar",
   "生成失败": "Error al generar",

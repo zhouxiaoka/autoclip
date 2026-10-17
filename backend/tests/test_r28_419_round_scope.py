@@ -96,6 +96,7 @@ def test_409e_previous_round_queued_leftover_does_not_block_this_round(monkeypat
     store.change(pid, lambda d: [r.update(state='failed') for r in attempts.receipts(d) if r['attempt_id'] == first['attempt_id']])
     data, receipt = _rerun(pid, monkeypatch, flow.receipts(pid)[0], {'new': OK})
     assert data['generation']['status'] == 'completed' and receipt['state'] == 'completed'
+    assert data['generation']['not_redone_failed_count'] == 0             # R29 #444: a queued leftover is not N
     store.change(pid, lambda d: next(v for v in d['output_variants'] if v['id'] == 'stuck').update(status='completed'))
     assert store.read(pid)['generation']['status'] == 'completed'          # the leftover finishing later changes nothing
 
@@ -108,7 +109,7 @@ def test_409_the_receipt_and_settle_share_one_scope(monkeypatch):
     assert receipt['summary']['completed_variant_count'] == data['generation']['completed_variant_count'] == 1
 
 
-# --- #410 append_platform_variants stamps its outputs with the generation's round ---
+# --- #410 / R29 #441 append_platform_variants stamps its outputs with its own attempt and the source plan ---
 
 def test_410_appended_outputs_record_the_generation_round_and_plan(monkeypatch):
     from backend.tests.test_on_demand_variants import _auto_fixture, _base
@@ -119,7 +120,9 @@ def test_410_appended_outputs_record_the_generation_round_and_plan(monkeypatch):
     before = {v['id'] for v in state['output_variants']}
     jobs.append_platform_variants('p1', ['bilibili'], {'outro_enabled': False})
     added = [v for v in state['output_variants'] if v['id'] not in before]
-    assert added and {(v['produced_by_attempt'], v.get('produced_by_plan')) for v in added} == {('t-gen', 'plan-a')}
+    # R29 #441: appending opens its own attempt; it inherits the source round's plan, not its stamp
+    own = state['generation']['attempt_id']
+    assert own != 't-gen' and added and {(v['produced_by_attempt'], v.get('produced_by_plan')) for v in added} == {(own, 'plan-a')}
 
 
 # --- #411 the variant retry's route comes from the source output's plan ---

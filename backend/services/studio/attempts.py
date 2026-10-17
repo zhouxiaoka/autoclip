@@ -124,8 +124,8 @@ def bind_run(receipt, run_id):
 def own_outputs(data, variants):
     """R27 #376/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
     open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only.
-    R28 #410: outputs appended to a finished generation (append_platform_variants, no attempt open) belong to that
-    generation's round - generation.attempt_id - and its plan. Already stamped outputs are never re-stamped."""
+    R29 #441: appending platforms opens its own attempt (open_append), so appended outputs carry that attempt.
+    With no open attempt (old callers) the generation's round is used. Already stamped outputs are never re-stamped."""
     receipt = current(data) or find(data, (data.get('generation') or {}).get('attempt_id'))
     if not receipt:
         return
@@ -150,6 +150,11 @@ def inherit_plan(receipt, data, variant):
     sources.append(variant['produced_by_attempt'])
     if len(sources) > 1:
         return  # the first retried output decides the plan of this aggregate attempt
+    _inherit_source(receipt, data, variant)
+
+
+def _inherit_source(receipt, data, variant):
+    """The source output's plan and its attempt's frozen enums (degrade_reason, PLAN_KEYS incl. route)."""
     if variant.get('produced_by_plan'):
         receipt['plan_id'] = variant['produced_by_plan']
     source = find(data, variant['produced_by_attempt']) or {}
@@ -158,6 +163,21 @@ def inherit_plan(receipt, data, variant):
                                    *((k, summary.get(k)) for k in PLAN_KEYS)) if isinstance(v, str) and v}
     if inherited:
         receipt['inherited'] = inherited
+
+
+def open_append(data, source_variant, now=None):
+    """R29 #441: appending platforms is a new generation attempt. It inherits the source output's plan and route
+    (same rule as a variant retry) but NOT its outputs: no sources, so the round is only the appended outputs, with
+    its own settle, receipt and terminal. A new flow (retry_of None); finished rounds are untouched. Refused while
+    another attempt runs (one open attempt per project)."""
+    open_now = current(data)
+    if open_now and not unbound(open_now):
+        raise RetryRejected('上一次制作还没结束，请稍后再追加平台')
+    receipt = open_attempt(data, 'generation', trigger='append_platform', run_id=token(), now=now)
+    if isinstance(source_variant, dict) and source_variant.get('produced_by_attempt'):
+        _inherit_source(receipt, data, source_variant)
+    data['generation']['attempt_id'] = receipt['attempt_id']
+    return receipt
 
 
 def bind_plan(receipt, plan):
@@ -294,9 +314,10 @@ def owners_of(data):
     """R28 #409: the attempts whose outputs this round is judged on - the current generation attempt, plus (for a
     variant retry) the attempts that produced the outputs it redid. None when the round has no attempt record."""
     attempt_id = (data.get('generation') or {}).get('attempt_id') if isinstance(data.get('generation'), dict) else None
-    if not attempt_id:
+    receipt = find(data, attempt_id)
+    if receipt is None:  # R29 #440: only the id is left (record trimmed / lost) -> whole workspace
         return None
-    return {attempt_id, *((find(data, attempt_id) or {}).get('sources') or ())}
+    return {attempt_id, *(receipt.get('sources') or ())}
 
 
 def round_outputs(data):
@@ -311,7 +332,7 @@ def round_outputs(data):
     return owned or None
 
 
-def _owned_summary(receipt, data):
+def _owned_summary(data):
     """R26 #363 / R27 #376 / R28 #409: output counts are those of round_outputs (the same scope settle_generation
     judges the status on). With no stamped output in scope the receipt keeps the request fields but no counts -
     unstamped outputs are not attributed by inference."""
@@ -331,12 +352,12 @@ def reconcile(data, now=None):
     if receipt['kind'] == 'generation':
         if generation.get('attempt_id') != receipt['attempt_id'] or generation.get('status') not in TERMINAL:
             return
-        # R27 #376: store.settle_generation counts completed outputs over the whole workspace; the receipt's output
-        # counts come only from the outputs this attempt owns (_owned_summary), so that workspace count is not copied.
+        # R28 #409: settle_generation and the receipt share round_outputs; the counts are taken from _owned_summary
+        # (round_outputs again), so generation's completed_variant_count is not copied twice.
         record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS},
                   **{k: v for k, v in generation.items() if k != 'completed_variant_count'}}
         settle(receipt, generation['status'], record, now, data.get('plan') if isinstance(data.get('plan'), dict) else None,
-               base=_owned_summary(receipt, data))
+               base=_owned_summary(data))
     elif receipt['kind'] == 'production':
         if not receipt.get('run_id') or analysis.get('run_id') != receipt['run_id'] or analysis.get('phase') != 'production' \
                 or analysis.get('status') not in ('completed', 'failed'):
