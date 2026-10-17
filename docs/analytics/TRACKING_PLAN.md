@@ -755,7 +755,8 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 - 请求：每个模型请求在**发出前**冻结所用连接，结束时生成一条不可变请求记录（provider/config_source 成对，加上同一次请求的 model/host/http_status/upstream_error_type）。失败的记录随异常携带（沿 `__cause__`/`__context__` 链可找回）。
 - 归因（1.5.8 R25）：失败按**出错的那次请求**的记录整条归因（`attribution_source=request`）；找不到请求记录时用阶段开始时冻结的身份（`attribution_source=phase`）；不取"最近一次请求"，运行中不读设置。落盘、run 快照、Sentry 都只读这一条，不逐字段合并。
 - 旧记录：provider/config_source 不成对时整组（provider、config_source、model、base_url_host）当空，不补。写盘和读出时都按空处理（R26 #399）。
-- `attribution_source`（1.5.8 R26，闭集 `request`/`phase`/`local`，随三个 studio 终态事件、Sentry tag 和 analysis_history 一起上报）：`request` = 失败请求自己的记录；`phase` = 没有请求记录的**模型类**失败，用阶段冻结的连接；`local` = 非模型失败（存储锁超时 `store_lock_timeout`、ffmpeg、本地渲染、请求发出前的本地校验），可带阶段身份但不带请求状态，不算服务商失败。异常链 `__cause__` 与 `__context__` 两条都查（R26 #398）。analysis_history 另保留 `model`、`base_url_host`（R26 #400）。
+- `attribution_source`（1.5.8 R26，闭集 `request`/`phase`/`local`，随三个 studio 终态事件、Sentry tag 和 analysis_history 一起上报）：`request` = 失败请求自己的记录；`phase` = 没有请求记录的**模型类**失败，用阶段冻结的连接；`local` = 非模型失败（存储锁超时 `store_lock_timeout`、ffmpeg、本地渲染、请求发出前的本地校验），可带阶段身份但不带请求状态，不算服务商失败。R29（I500）起只查显式异常链 `__cause__`（`raise ... from`），不看隐式 `__context__`。analysis_history 另保留 `model`、`base_url_host`（R26 #400）。
+- 归因快照（1.5.8 R29，设计见 `backend/core/failure_attribution.py` 模块说明）：离服务商调用最近、异常链完整的一层调用一次 `build_attribution` 生成快照，之后 dict、线程、store、事件都原样携带，下游不重新判定。脱敏边界（`log_safe_exception`、云端转写、封面）保留 `from None`，快照挂在安全异常（`AttributedError`）的 `.attribution` 上，只含来源、身份、状态码、上游类型、失败阶段，不含消息/URL/正文。连接错误和超时算模型侧（请求已发往服务商），用 `error_code`（`connection`/`timeout`）区分；`http_status` 只在真正收到 HTTP 响应时写。模型返回 200 但内容校验失败抛 `ModelResponseInvalid`，判模型侧，`error_code=invalid_response`。
 
 `service_restarted` 失败另带 `shutdown_kind`，按上次进程在 `<标记目录>/<instance>` 留下的记录分类（标记目录由桌面壳启动时统一解析为 `<应用目录>/shutdown_markers`，经 `AUTOCLIP_SHUTDOWN_MARKER_DIR` 交给后端，壳写 `unacked` 也写这里；无壳运行时为 `<数据目录>/shutdown_markers`）（每个 instance 一条记录、一个目录、一套修剪规则）：
 

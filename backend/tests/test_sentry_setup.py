@@ -188,18 +188,22 @@ def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
     assert context == {'failure_stage': 'analyze', 'http_status': 500, 'upstream_error_type': 'upstream_unavailable'}
     assert 'private' not in json.dumps(context)
 
-    # Two levels deep (provider error re-wrapped by a client layer), explicit and implicit chaining.
-    def client_layer():
+    # Two levels deep (provider error re-wrapped by a client layer): explicit chaining is followed.
+    # R29 I500: an implicit __context__ is not this failure's cause and is never walked.
+    def client_layer(explicit):
         try:
             raise _ProviderStatusError('private body', 502)
-        except _ProviderStatusError:
+        except _ProviderStatusError as provider:
+            if explicit:
+                raise RuntimeError('client wrapper') from provider
             raise RuntimeError('client wrapper')  # implicit __context__
-    try:
-        client_layer()
-    except RuntimeError as inner:
-        failure = wrapped(inner)
-    assert sentry_setup.studio_failure_context(failure, 'production') == {
-        'failure_stage': 'analyze', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}
+    for explicit, expected in ((True, {'failure_stage': 'analyze', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}),
+                               (False, {'failure_stage': 'analyze'})):
+        try:
+            client_layer(explicit)
+        except RuntimeError as inner:
+            failure = wrapped(inner)
+        assert sentry_setup.studio_failure_context(failure, 'production') == expected, explicit
 
     # The nearest valid status wins; non-HTTP and out-of-range values are ignored.
     outer = _ProviderStatusError('proxy', 503)

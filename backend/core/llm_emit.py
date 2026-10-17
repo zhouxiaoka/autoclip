@@ -117,6 +117,8 @@ def _attach_record(error: BaseException | None, record: RequestRecord) -> None:
         setattr(error, _RECORD_ATTR, record)
     except (AttributeError, TypeError):  # exotic exception types without __dict__
         pass
+    from backend.core.failure_attribution import with_request_record
+    with_request_record(error, record)  # R29: a redaction-boundary snapshot takes the request's identity
 
 
 from backend.core.failure_attribution import chain as _chain, record_of  # noqa: E402,F401 - R27: one home

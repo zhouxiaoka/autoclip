@@ -208,13 +208,25 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
     return empty_timeline_failure(topic_count)
 
 
-def cloud_transcription_failure(message: str) -> PipelineFailure:
-    """CloudTranscriptionError carries only our safe public text, never a provider body."""
-    return PipelineFailure(
+from backend.core.failure_attribution import AttributedError  # noqa: E402 - no cycle
+
+
+class AttributedPipelineFailure(AttributedError, PipelineFailure):
+    """R29: a PipelineFailure carrying the snapshot built where the chain was intact (``.attribution``)."""
+
+
+def cloud_transcription_failure(message, error: BaseException | None = None) -> PipelineFailure:
+    """CloudTranscriptionError carries only our safe public text, never a provider body.
+
+    R29: the transcription boundary already built the snapshot (``error.attribution``); it is carried
+    here as is and wins over this wrapper's code (which only picks the user hint), never re-judged."""
+    failure = AttributedPipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
         "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
         code="provider_error",
     )
+    failure.attribution = getattr(error, "attribution", None)
+    return failure
 
 
 def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> PipelineFailure:

@@ -1,4 +1,5 @@
 """Render immutable draft snapshots using the existing ffmpeg layout/subtitle code."""
+from backend.core.failure_attribution import ModelResponseInvalid  # R29
 import os
 import math
 import subprocess
@@ -144,10 +145,10 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
         rows = translated.get('subtitles', [])
         if len(rows) != len(entries) or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str):
-            raise ValueError('字幕翻译格式不完整，请重试')
+            raise ModelResponseInvalid('字幕翻译格式不完整，请重试')
         hook = translated['title']
         if len(hook) > 500:
-            raise ValueError('翻译后的开头文字过长')
+            raise ModelResponseInvalid('翻译后的开头文字过长')
         for e, t in zip(entries, rows):
             e['text'] = t
     font = resolve_cjk_font()

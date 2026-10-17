@@ -38,7 +38,12 @@ SEEDREAM_MODEL_MARKERS = ("seedream", "doubao-seedream")
 SEEDREAM_HOST_MARKERS = ("volces.com", "bytepluses.com", "byteplus.com", "volcengine")
 
 
-class ImageError(RuntimeError):
+from backend.core.failure_attribution import AttributedError, attributed, build_attribution  # noqa: E402
+
+
+class ImageError(AttributedError, RuntimeError):
+    """Safe text only. R29: a provider transport failure carries the snapshot built from the original
+    request exception (``.attribution``) before ``from None``; other ImageErrors carry none."""
     def __init__(self, message: str, *, unsupported_edit: bool = False):
         super().__init__(message)
         self.unsupported_edit = unsupported_edit
@@ -51,15 +56,19 @@ def _image_transport_errors(function):
         try:
             return function(*args, **kwargs)
         except requests.exceptions.RequestException as error:
-            if isinstance(error, (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
-                                  requests.exceptions.MissingSchema)):
+            invalid = isinstance(error, (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
+                                         requests.exceptions.MissingSchema))
+            if invalid:
                 message = '封面服务接口地址无效，请检查模型设置中的 HTTP(S) 地址'
             elif isinstance(error, requests.exceptions.Timeout):
                 message = '封面服务请求超时，请检查服务和网络后重试'
             else:
                 message = '封面服务连接失败，请检查接口地址与网络后重试'
-            # Request exceptions can include credentials, URLs and response bodies.
-            raise ImageError(message) from None
+            # Request exceptions can include credentials, URLs and response bodies: the one snapshot is
+            # built from the original here (R29: sent toward the provider = model, I505; a malformed
+            # address never left this machine = local), then the safe error is raised without the chain.
+            snap = build_attribution(error, local=invalid, sent=not invalid, failure_stage='cover')
+            raise attributed(ImageError(message), snap) from None
     return call
 
 

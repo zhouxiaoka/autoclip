@@ -160,8 +160,12 @@ def sanitize_exception_text(text: str | BaseException | None) -> str:
     return code + (f" host={host}" if host else "")
 
 
-class _LogSafeLLMError(RuntimeError):
-    """Safe printable boundary; protocol metadata stays available to retry/degrade."""
+from backend.core.failure_attribution import AttributedError, attributed  # noqa: E402 - no cycle
+
+
+class _LogSafeLLMError(AttributedError, RuntimeError):
+    """Safe printable boundary; protocol metadata stays available to retry/degrade.
+    R29: ``.attribution`` is the snapshot built from the ORIGINAL exception before ``from None``."""
 
 
 def log_safe_exception(error: Exception) -> Exception:
@@ -177,6 +181,14 @@ def log_safe_exception(error: Exception) -> Exception:
         safe.body = "timeout" if kind is UpstreamErrorType.TIMEOUT else "connection error"
     safe.code = getattr(error, "code", None)
     safe.retry_after = retry_after_from_error(error)
+    # R29 (Dong): the redaction boundary builds the one snapshot while the original chain is intact;
+    # the raw exception never rides on the safe one (callers raise it ``from None``).
+    # Only what the original chain DECIDES is frozen here; an undecided error (no SDK type, no local
+    # evidence) gets no snapshot, and the call boundary's request record decides it as before.
+    from backend.core.failure_attribution import classify_failure
+    if classify_failure(error).decided:
+        from backend.core.llm_emit import attribution_snapshot
+        attributed(safe, attribution_snapshot(error))
     return safe
 
 

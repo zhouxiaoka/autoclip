@@ -201,6 +201,13 @@ export function isFailedTerminal(record: Attributed): boolean | null {
   return record.status ? false : null
 }
 
+/** R29 I504: an event's outcome, the same rule as the reader: a failed/partial ``outcome`` wins over
+ * ``status`` (completed + outcome=partial is a partial), else the status. */
+export function terminalOutcome(record: Attributed): string | undefined {
+  if (!record) return undefined
+  return FAILED.includes(record.outcome || '') ? record.outcome : record.status
+}
+
 /** R28 #415 (I453): THE frontend attribution reader, the same rules as backend read_attribution. It reads
  * ONE record's snapshot: the caller picks the record (the event's own terminal), never several.
  * Identity only as a provider/config_source pair; failure fields only on a failed (or undecided) terminal,
@@ -436,7 +443,7 @@ export class WorkflowTracker {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.
         event = 'studio_screen_finished'; outcome = 'auto_started'
         details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, upstream_error_type: undefined, http_status: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
-      } else if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
+      } else if (isFailedTerminal(snapshot.analysis) === true && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
@@ -445,8 +452,9 @@ export class WorkflowTracker {
     } else if (w.kind === 'studio-generation') {
       if (!['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) return
 
-      event = 'studio_generation_finished'; outcome = snapshot.generation!.status
-      const unfinished = ['failed', 'partial'].includes(outcome || '')
+      // R29 I504: outcome and "unfinished" follow isFailedTerminal (completed + outcome=partial keeps error_code).
+      event = 'studio_generation_finished'; outcome = terminalOutcome(snapshot.generation)
+      const unfinished = isFailedTerminal(snapshot.generation) === true
       const run = snapshot.generation, analysis = snapshot.analysis
       details = { ...generationSummary(snapshot), error_code: unfinished ? run?.error_code || analysis?.error_code : undefined,
         shutdown_kind: unfinished ? run?.shutdown_kind || analysis?.shutdown_kind : undefined,
@@ -460,8 +468,9 @@ export class WorkflowTracker {
         completion_tokens: run?.completion_tokens ?? analysis?.completion_tokens,
         route: run?.route || snapshot.plan?.recommended_analysis, recommendation_mode: snapshot.plan?.mode }
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
-               ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
-      event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status
+               ['completed', 'failed', 'partial'].includes(snapshot.analysis?.status || '')) {
+      // R29 I504: status=partial is a terminal too; outcome follows the same rule as isFailedTerminal.
+      event = 'studio_production_finished'; outcome = terminalOutcome(snapshot.analysis) || snapshot.analysis!.outcome
       // R27 #415: attribution comes from pickAttribution, never from spreading the raw record.
       const { attribution_source: _s, provider: _p, config_source: _c, model: _m, base_url_host: _h, http_status: _hs, upstream_error_type: _u, failure_stage: _f, ...rest } = snapshot.analysis!
       details = { ...rest, ...pickAttribution(snapshot.analysis), analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }

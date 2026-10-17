@@ -106,7 +106,8 @@ def test_331_concurrent_chunk_failure_is_attributed_to_the_failing_request_every
 
 
 def test_331_rewrapped_failure_keeps_its_request_record(posted):
-    """R25-a: the record is found up __cause__/__context__ (raise from, raise from None, implicit)."""
+    """R25-a, R29 I500: the record is found up the explicit __cause__ chain (raise from). ``from None``
+    cuts it: a boundary that cuts the chain must carry the snapshot itself (AttributedError)."""
     from backend.pipeline.failures import PipelineFailure
     _project('pwrap', {'status': 'running', 'phase': 'production', 'run_id': 'r'})
     with llm_emit.track_run():
@@ -117,8 +118,8 @@ def test_331_rewrapped_failure_keeps_its_request_record(posted):
                 except _Status as inner:
                     _call(GLM, 'https://glm.fixture.example/v1', 'glm-4')   # a later success (fallback probe)
                     raise PipelineFailure('ANALYZE', 'fixture', code='provider_error') from inner
-            except PipelineFailure:
-                raise RuntimeError('wrapped') from None                     # context only
+            except PipelineFailure as failure:
+                raise RuntimeError('wrapped') from failure                  # explicit cause
         except RuntimeError as outer:
             tags = llm_emit.sentry_tags_for_error(outer, 'production')
             store.change('pwrap', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))

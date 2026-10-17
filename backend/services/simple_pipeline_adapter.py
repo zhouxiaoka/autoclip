@@ -303,7 +303,7 @@ class SimplePipelineAdapter:
                     with llm_usage.timed("transcribe"):
                         srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 except CloudTranscriptionError as e:
-                    raise cloud_transcription_failure(str(e)) from e
+                    raise cloud_transcription_failure(str(e), e) from e
                 except SpeechRecognitionError as e:
                     raise failure_from_speech_error(str(e)) from e
                 if not (srt_path and srt_path.exists()):
@@ -465,10 +465,9 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
-            # R28 (Dong R27 I450): a status alone is not "model"; the chain is judged HERE, while it exists.
-            from backend.core.failure_attribution import FailureKind, classify_failure
-            if classify_failure(e).kind is FailureKind.MODEL:
-                failed["model_failure"] = True
+            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
+            _carry_attribution(failed, e)
             return failed
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"
@@ -487,11 +486,17 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
-            # R28 (Dong R27 I450): a status alone is not "model"; the chain is judged HERE, while it exists.
-            from backend.core.failure_attribution import FailureKind, classify_failure
-            if classify_failure(e).kind is FailureKind.MODEL:
-                failed["model_failure"] = True
+            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
+            _carry_attribution(failed, e)
             return failed
+
+
+def _carry_attribution(failed: dict, error: BaseException) -> None:
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(error)
+    if snap is not None:
+        failed["attribution"] = snap.to_fields()
 
 
 def create_simple_pipeline_adapter(project_id: str, task_id: str) -> SimplePipelineAdapter:

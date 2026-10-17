@@ -54,6 +54,9 @@ def studio_error_code(error: Exception) -> str:
         return model_call_error_code(error)
     if isinstance(error, FileNotFoundError):
         return "missing_resource"
+    from backend.core.failure_attribution import ModelResponseInvalid
+    if isinstance(error, ModelResponseInvalid):
+        return ModelResponseInvalid.error_code  # R29: 200 + content failed validation -> a model code
     if isinstance(error, ValueError):
         return "validation"
     return "unexpected"

@@ -35,8 +35,29 @@ def _retryable(error: Exception) -> bool:
     return isinstance(error, httpx.RequestError)
 
 
-class CloudTranscriptionError(RuntimeError):
-    pass
+from backend.core.failure_attribution import AttributedError, ModelResponseInvalid, attributed, build_attribution
+
+
+class CloudTranscriptionError(AttributedError, RuntimeError):
+    """Our safe public text only. R29: a provider failure carries the snapshot built from the original
+    exception (``.attribution``) before ``from None``; a local one (no key, no audio) carries none."""
+
+
+class _HTTPAnswer(Exception):
+    """Only the provider's status of an httpx.HTTPStatusError (no URL, no body) for the snapshot."""
+    def __init__(self, status_code: int):
+        super().__init__(f'HTTP {status_code}')
+        self.status_code = status_code
+
+
+class _Transport(Exception):
+    """A transport failure (connect/read/timeout): sent toward the provider, no HTTP response."""
+
+
+def _provider_failure(message: str, original: BaseException) -> CloudTranscriptionError:
+    """The redaction boundary: one snapshot from the original (I505: sent toward the provider = model;
+    http_status only when an HTTP response came back), then the safe error without the raw chain."""
+    return attributed(CloudTranscriptionError(message), build_attribution(original, sent=True, failure_stage='subtitle'))
 
 
 def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
@@ -54,8 +75,9 @@ def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
                 raise ValueError()
             if duration is not None and end > duration + 1:
                 raise ValueError()
-        except (KeyError, TypeError, ValueError):
-            raise CloudTranscriptionError('转写服务未返回有效时间戳，无法生成准确字幕；请更换转写模型。') from None
+        except (KeyError, TypeError, ValueError) as error:
+            raise _provider_failure('转写服务未返回有效时间戳，无法生成准确字幕；请更换转写模型。',
+                                    ModelResponseInvalid(type(error).__name__)) from None
         result.append({'start': start + offset, 'end': end + offset, 'text': text})
     return result
 
@@ -174,10 +196,16 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                 finally:
                     # On a failure, chunks not yet sent are dropped instead of spending more quota.
                     pool.shutdown(wait=True, cancel_futures=True)
+        except CloudTranscriptionError:
+            raise  # already a safe error (normalize_segments in a chunk worker)
         except httpx.HTTPStatusError as exc:
-            raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。') from None
-        except (httpx.RequestError, ValueError) as exc:
-            raise CloudTranscriptionError('云端转写连接失败或响应格式无效，请稍后重试。') from None
+            status = exc.response.status_code
+            safe = _provider_failure(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。', _HTTPAnswer(status))
+            raise safe from None
+        except httpx.RequestError as exc:
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', _Transport(type(exc).__name__)) from None
+        except ValueError as exc:
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ModelResponseInvalid(type(exc).__name__)) from None
         if not segments:
             raise CloudTranscriptionError('转写结果为空，音频中可能没有可识别的人声。')
         segments.sort(key=lambda s: (s['start'], s['end']))

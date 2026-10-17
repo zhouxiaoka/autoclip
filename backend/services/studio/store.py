@@ -924,30 +924,26 @@ def _ensure_failure_identity(data):
 
 
 from backend.core.failure_attribution import (  # noqa: E402 - R27 #415: the one attribution rule
-    ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, SNAPSHOT_FIELDS, FailureAttribution, build_attribution,
-    has_snapshot, is_failed_terminal, project_attribution, read_attribution, write_attribution)
+    ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, build_attribution,
+    is_failed_terminal, project_attribution, read_attribution, write_attribution)
 
 
 def _paired(record):
     return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
 
 
-def _apply_attribution(record, failed, prior_snapshot):
-    """R28 #415: the failure attribution is a write-once snapshot, replaced whole (no merging, no inference
-    from field values, I452).
+def _apply_attribution(record, failed):
+    """R29 #415 (I503): the store only writes the snapshot it is given, replaced whole; it never infers
+    "the same failure" from run_id/error_code or any other field value.
 
-    - failed, and the stored record was already THIS failure (``prior_snapshot``): that frozen snapshot is
-      copied back whole;
-    - failed, a new failure with the error in hand: the snapshot THE factory builds now (error, phase
-      identity, the job's own failure stage, the attempt's start identity for local) replaces the group;
+    - failed, with an error in hand: the snapshot of THAT error replaces the group (an error that carries
+      a boundary snapshot gets it back unchanged; otherwise THE factory builds it from the error, the phase
+      identity, the job's own failure stage and, for local, the attempt's start identity);
     - failed with no error in hand (a receipt that already wrote its own snapshot, a legacy record, a
       later unrelated write): the stored group stays exactly as it is;
     - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
     from backend.core.llm_emit import attribution_snapshot, failure_now
     if failed:
-        if prior_snapshot:
-            write_attribution(record, FailureAttribution.from_fields(prior_snapshot))
-            return
         if failure_now() is None:
             return
         snap = attribution_snapshot(start_identity=record)  # the job's own stage rides on the record
@@ -993,10 +989,7 @@ def _attach_run_telemetry(data, project_id, previous):
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = bool(is_failed_terminal(record))
-        frozen = None
-        if failed and is_failed_terminal(prior) and prior_identity == identity and prior.get('error_code') == record.get('error_code'):
-            frozen = read_attribution(prior) if has_snapshot(prior) else None  # this failure, already written
-        _apply_attribution(record, failed, frozen)
+        _apply_attribution(record, failed)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue

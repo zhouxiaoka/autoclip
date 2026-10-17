@@ -50,9 +50,9 @@
 
 验证查询按 `release` 与 `build_environment` 筛选，并分组查看 `phase`、`error_code`、`pipeline_stage` 和事件数。生产事件可能没有 `telemetry_test` 标签，不能通过 `-telemetry_test:true` 查询为空认定没有生产故障；需用 `build_environment:production` 正向筛选。新增阶段只用于定位失败边界，不推断具体模型回答或素材内容。回归应覆盖抽帧失败不调用视觉服务、字幕降级、无错误码的阶段传递以及脱敏白名单，且用新安装包验证正常制作与失败后恢复。
 
-ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线以 llm_auth_invalid 区分上游 401/403 鉴权失败，llm_not_configured 仅用于未配置密钥；保留字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
+ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线以 llm_auth_invalid 区分上游 401/403 鉴权失败，llm_not_configured 仅用于未配置密钥；保留字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；模型返回 200 但内容校验失败抛 `ModelResponseInvalid`，归为 `invalid_response`（模型侧，R29）；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
 
-链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码、`failure_stage=ingest` 和 `http_status`，界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
+链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码和 `failure_stage=ingest`，**不记录**站点状态码（local 归因不带 `http_status`；`success_rate.sql` 按 error_code 剔除、界面提示也按 error_code 判断，都不依赖站点状态码），界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
 
 源视频本身走不了字幕路线时，在任何模型调用之前就失败（`backend/pipeline/media_precheck.py`，导入初筛、确认制作、内容管线入口与旧版导入任务共用）：比最短片段（短视频档 20 秒）还短归为 `source_too_short`，没有音轨且没有附带 SRT 归为 `source_no_audio`。能走画面路线时（画面识别已开启且模型支持图片）无声视频仍交给画面初筛，只有初筛仍选字幕路线才失败。两者都是用户素材问题，不是故障：本地失败记录保留错误码与失败阶段，界面显示可翻译的固定文案，**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`；旧版导入任务用 `ImportSourceUnusable`，`before_send` 按 `import_failure=source-input` 丢弃）。转写失败文案不再带内部异常名（如 `IndexError`），异常类型只进本地日志。
 

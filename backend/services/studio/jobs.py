@@ -481,6 +481,14 @@ def ensure_project_thumbnail(project_id):
         logger.warning('Project thumbnail generation failed', exc_info=True)
 
 
+from backend.core.failure_attribution import AttributedError  # noqa: E402
+from backend.pipeline.failures import AttributedPipelineFailure as ContentPipelineFailure  # noqa: E402
+
+
+class ContentRunError(AttributedError, RuntimeError):
+    """R29 I501: an uncoded content pipeline failure rebuilt across apply().get(), with its snapshot."""
+
+
 def run_content(project_id, video):
     """Run the existing content pipeline in this worker, without a second broker queue."""
     from backend.tasks.processing import process_video_pipeline
@@ -493,18 +501,20 @@ def run_content(project_id, video):
     if not result or not result.get('success'):
         message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
         failure = (result or {}).get('result') or {}
-        # The original exception does not survive apply().get(): the adapter records the provider
-        # HTTP status in the result dict and it is carried back here (RC156 Win QA #1).
+        # The original exception does not survive apply().get(): the adapter built the one attribution
+        # snapshot while the chain existed and it rides in the dict (R29 I501); it is restored here whole
+        # and never re-judged. The HTTP status stays on the error for the user-facing hint (RC156 Win QA #1).
         status = failure.get('http_status')
         status = status if type(status) is int and 400 <= status <= 599 else None
-        # R28 (Dong R27 I450): the adapter judged the live chain; an uncoded provider failure keeps "model".
-        code = failure.get('error_code') or ('provider_error' if failure.get('model_failure') is True else '')
+        code = failure.get('error_code') or ''
         if code or failure.get('stage'):
-            from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=code, http_status=status)
-        error = RuntimeError(message)
-        if status is not None:
-            error.http_status = status
+            error = ContentPipelineFailure(failure.get('stage', ''), message, code=code, http_status=status)
+        else:
+            error = ContentRunError(message)
+            if status is not None:
+                error.http_status = status
+        from backend.core.failure_attribution import attributed, restore_attribution
+        attributed(error, restore_attribution(failure.get('attribution')))  # the adapter's snapshot, whole
         raise error
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')

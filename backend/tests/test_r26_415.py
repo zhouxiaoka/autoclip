@@ -90,14 +90,17 @@ def test_394_new_phase_only_failure_replaces_older_request_attribution():
             store.change('p394', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
     first = store.read('p394')['analysis']
     assert first['provider'] == 'kimi' and first['attribution_source'] == 'request'
-    # same failure re-written without the error in hand: the request attribution stays
+    # R29 I503: a write with a NEW error in hand replaces the snapshot whole, even with the same
+    # run_id and error_code (no "same failure" inference); without an error in hand it stays.
+    store.change('p394', lambda d: d['analysis'].update(message='no error in hand'))
+    assert store.read('p394')['analysis']['provider'] == 'kimi'
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
             raise PipelineFailure('ANALYZE', 'again', code='provider_error')
         except PipelineFailure:
             store.change('p394', lambda d: d['analysis'].update(message='still failed'))
-    assert store.read('p394')['analysis']['provider'] == 'kimi'
+    assert store.read('p394')['analysis']['provider'] == 'glm'
     # a NEW failure (retry run r2) with only the phase identity: the old request value must go
     store.change('p394', lambda d: d['analysis'].update(status='running', run_id='r2', error_code=None))
     analysis, _ = _fail_with('p394', PipelineFailure('ANALYZE', 'slow', code='timeout'), 'timeout')
@@ -140,7 +143,9 @@ def test_397_failed_goal_request_survives_a_later_successful_goal(monkeypatch):
     assert analysis.get('attribution_source') == 'request'
 
 
-def test_398_record_on_context_is_found_even_when_a_cause_exists():
+def test_398_r29_i500_record_on_the_implicit_context_only_is_not_this_failures():
+    """R29 I500 (Dong): only the explicit __cause__ chain is walked; a record that is only on the
+    implicit __context__ belongs to an error that was merely being handled."""
     with llm_emit.track_run():
         try:
             _call(GLM, 'https://glm.fixture.example/v1', 'glm-4', status=503)
@@ -150,7 +155,7 @@ def test_398_record_on_context_is_found_even_when_a_cause_exists():
             except RuntimeError as outer:
                 assert outer.__context__ is failed
                 found = llm_emit.attribution(outer)
-    assert found.get('provider') == 'glm' and found.get('attribution_source') == 'request'
+    assert found.get('provider') != 'glm' and found.get('attribution_source') == 'local', found
 
 
 def test_399_half_identity_is_empty_on_read():

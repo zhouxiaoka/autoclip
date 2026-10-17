@@ -1,6 +1,8 @@
 """R27 #415: THE failure-attribution rule (Dong R26 design, 157/415-attribution-design.md).
 
-One classifier, one write-once snapshot, one reader:
+One classifier, one write-once snapshot, one reader. R29: the layer closest to the provider call, where
+the exception chain is still intact, builds the snapshot once; dicts, threads, store writes and events
+carry it unchanged (an ``AttributedError`` carries it on ``.attribution``):
 
 - ``classify_failure(error)``: walks the error chain from the outermost link inward; the first DECISIVE
   link wins. Local errors first (store lock timeout, subprocess, a pipeline/vision failure with a
@@ -55,19 +57,66 @@ class Classification:
     kind: FailureKind
     decisive: BaseException | None = None
     record: Any = None  # the failed request's record; only ever set for MODEL
+    snapshot: Any = None  # R29: the snapshot an AttributedError carried (returned as is)
+    decided: bool = True  # False: LOCAL only because nothing in the chain decided (the fall-through)
+
+
+class AttributedError(Exception):
+    """R29 (Dong): the base of every redaction-boundary exception (``_LogSafeLLMError``,
+    ``CloudTranscriptionError``, ``ImageError``) and of a failure rebuilt across the Celery boundary.
+
+    The boundary calls ``build_attribution`` ONCE on the original exception while its chain is intact,
+    then raises the safe exception ``from None`` with that snapshot on ``.attribution``. The snapshot holds
+    only codes and ids (source, provider/config_source/model/base_url_host, http_status,
+    upstream_error_type, failure_stage): never a message, URL or body. ``classify_failure`` returns it as
+    is. ``None`` (the class default): the raise site had no provider failure to attribute."""
+    attribution: "FailureAttribution | None" = None
+
+
+class ModelResponseInvalid(ValueError):
+    """R29 (Dong): the model answered (HTTP 200) but its content failed our validation (JSON that does not
+    parse, a schema/ID/range check). An explicit type, never a fallback: ``classify_failure`` judges it
+    MODEL by ``isinstance`` and its studio error code is ``invalid_response``."""
+    error_code = "invalid_response"
+
+
+def attributed(error: BaseException, snapshot: "FailureAttribution | None") -> BaseException:
+    """Put the boundary's snapshot on its safe exception (an ``AttributedError``); returns the exception."""
+    if snapshot is not None and not isinstance(snapshot, FailureAttribution):
+        raise TypeError("attributed takes a FailureAttribution")
+    error.attribution = snapshot
+    return error
+
+
+def with_request_record(error: BaseException, record) -> None:
+    """The call boundary (llm_emit) attaches the failed request's record to the safe exception raised just
+    inside it. A MODEL snapshot built at the redaction boundary had only the phase identity: it takes the
+    request's identity now. Kind, status and upstream type stay exactly as the boundary built them."""
+    snap = getattr(error, "attribution", None)
+    if not isinstance(error, AttributedError) or not isinstance(snap, FailureAttribution):
+        return
+    if snap.attribution_source != SOURCE_PHASE or record is None:
+        return
+    found = record.attribution() if callable(getattr(record, "attribution", None)) else {}
+    if not (found.get("provider") and found.get("config_source")):
+        return
+    error.attribution = FailureAttribution._make(
+        SOURCE_REQUEST, found, http_status=snap.http_status, upstream_error_type=snap.upstream_error_type,
+        failure_stage=snap.failure_stage or found.get("failure_stage"))
 
 
 def chain(error: BaseException | None) -> Iterator[BaseException]:
-    """The error, then BOTH its ``__cause__`` and ``__context__`` (breadth-first, cycle-safe; R26 #398)."""
+    """The error, then its EXPLICIT ``__cause__`` links only (``raise ... from``), cycle-safe.
+
+    R29 I500: the implicit ``__context__`` (an exception that merely happened to be handled when this one
+    was raised, e.g. the ``FileNotFoundError`` of a cache miss before the real request) is never walked:
+    only a cause the code chose to attach can decide."""
     seen: set[int] = set()
-    queue = [error]
-    while queue:
-        current = queue.pop(0)
-        if current is None or id(current) in seen:
-            continue
+    current = error
+    while current is not None and id(current) not in seen:
         seen.add(id(current))
         yield current
-        queue.extend((current.__cause__, current.__context__))
+        current = current.__cause__
 
 
 def record_of(error: BaseException | None):
@@ -131,6 +180,8 @@ def _sent_and_answered(link: BaseException) -> bool:
 
 
 def _is_model(link: BaseException, coded: tuple, api: tuple) -> bool:
+    if isinstance(link, ModelResponseInvalid):
+        return True
     if coded and isinstance(link, coded):
         return getattr(link, "code", "") in MODEL_ERROR_CODES
     if api and isinstance(link, api):
@@ -148,8 +199,10 @@ def classify_failure(error: BaseException | None) -> Classification:
        provider SDK, a pipeline/vision failure with a model code, or a request that was sent and answered
        with an error. The record of that request rides along;
     3. otherwise LOCAL (a status code or a record alone never makes a model failure); no error -> NONE.
-    Known limitation: a real model failure surfacing only as our own ValueError (no type/status/record)
-    is LOCAL; the pipeline wraps those as ``invalid_response`` (a model code)."""
+    R29: only the explicit ``__cause__`` chain is walked (I500). An ``AttributedError`` carrying a snapshot
+    decides with that snapshot, returned unchanged (it was built where the chain was intact). A
+    ``ModelResponseInvalid`` (200 + content failed validation) is MODEL. A connection error or timeout is
+    MODEL too (I505: the request was sent toward the provider); error_code tells them apart."""
     if error is None:
         return Classification(FailureKind.NONE)
     local, coded, api = _local_types(), _coded_types(), _api_types()
@@ -157,10 +210,14 @@ def classify_failure(error: BaseException | None) -> Classification:
     for link in links:
         if _is_local(link, local, coded):
             return Classification(FailureKind.LOCAL, link)
+        snap = getattr(link, "attribution", None) if isinstance(link, AttributedError) else None
+        if isinstance(snap, FailureAttribution):  # built where the chain was intact: returned as is
+            kind = FailureKind.LOCAL if snap.attribution_source == SOURCE_LOCAL else FailureKind.MODEL
+            return Classification(kind, link, snapshot=snap)
     for link in links:
         if _is_model(link, coded, api):
             return Classification(FailureKind.MODEL, link, record_of(error))
-    return Classification(FailureKind.LOCAL, error)
+    return Classification(FailureKind.LOCAL, error, decided=False)
 
 
 def _paired_identity(fields: dict | None) -> dict[str, Any]:
@@ -207,9 +264,17 @@ class FailureAttribution:
         return {k: getattr(self, k) for k in SNAPSHOT_FIELDS if getattr(self, k) not in (None, "")}
 
 
+def restore_attribution(fields: dict | None) -> FailureAttribution | None:
+    """R29 I501/I502: THE one restore point for a snapshot that crossed a boundary as fields (the adapter's
+    result dict across ``apply().get()``). The fields are taken whole, never re-judged; None if absent."""
+    if not isinstance(fields, dict) or fields.get("attribution_source") not in SOURCES:
+        return None
+    return FailureAttribution.from_fields(fields)
+
+
 def build_attribution(error: BaseException | None = None, *, phase_identity: dict | None = None,
                       start_identity: dict | None = None, failure_stage: str | None = None,
-                      local: bool = False) -> FailureAttribution | None:
+                      local: bool = False, sent: bool = False) -> FailureAttribution | None:
     """THE one place a failure-attribution snapshot is assembled (llm_emit.attribution, sentry_setup's
     studio_failure_context and store all call this).
 
@@ -218,10 +283,24 @@ def build_attribution(error: BaseException | None = None, *, phase_identity: dic
     - LOCAL (or ``local=True``: a receipt, no exception object) -> ``local``: the phase identity, else the
       attempt's start identity; never a status/upstream;
     - no error -> the phase identity as ``phase`` (no status), or None when there is none.
-    ``failure_stage`` defaults to the stage the job itself recorded on ``start_identity`` (its record)."""
+    ``failure_stage`` defaults to the stage the job itself recorded on ``start_identity`` (its record).
+    R29: an error carrying a boundary snapshot (``AttributedError``) gets that snapshot back unchanged
+    (only a missing ``failure_stage`` is filled in). ``sent=True``: called at a redaction boundary around a
+    provider request whose SDK types this module does not know (httpx/requests)."""
     if failure_stage is None and isinstance(start_identity, dict):
         failure_stage = start_identity.get("failure_stage") or None
     verdict = Classification(FailureKind.LOCAL) if local else classify_failure(error)
+    if sent and verdict.kind is FailureKind.LOCAL and verdict.decisive is error and verdict.snapshot is None \
+            and not _is_local(error, _local_types(), _coded_types()):
+        # R29 I505: a redaction boundary around a provider request (httpx/requests transport or HTTP error)
+        # says the request was sent toward the provider; with no local evidence that is MODEL.
+        verdict = Classification(FailureKind.MODEL, error)
+    if verdict.snapshot is not None:
+        snap = verdict.snapshot  # carried from the boundary: never re-judged, only WHERE may be filled
+        if snap.failure_stage is None and failure_stage:
+            from dataclasses import replace
+            snap = replace(snap, failure_stage=failure_stage)
+        return snap
     if verdict.kind is FailureKind.MODEL and verdict.record is not None:
         found = verdict.record.attribution()
         if found.get("provider") and found.get("config_source"):
@@ -240,20 +319,28 @@ def build_attribution(error: BaseException | None = None, *, phase_identity: dic
     identity = _paired_identity(phase_identity)
     if error is None and not identity:
         return None
-    if not identity and status is None and not upstream and not failure_stage:
-        return None
+    if verdict.kind is not FailureKind.MODEL and not identity and not failure_stage:
+        return None  # R29: a MODEL failure always gets its snapshot (it must survive a redaction wrap)
     return FailureAttribution._make(SOURCE_PHASE, identity, http_status=status, upstream_error_type=upstream,
                                     failure_stage=failure_stage)
 
 
 def _provider_status(error: BaseException | None) -> tuple[int | None, str | None]:
+    """The provider's HTTP status on the EXPLICIT chain (I500/I505: only a response actually received;
+    a connection error or timeout has none), and its upstream type."""
     try:
         from backend.core.llm_telemetry import classify_run_upstream
-        from backend.pipeline.failures import http_status_of
     except ImportError:  # pragma: no cover
         return None, None
-    status = http_status_of(error)
-    status = status if isinstance(status, int) and 400 <= status <= 599 else None
+    status = None
+    for link in chain(error):
+        for attr in ("http_status", "status_code"):
+            value = getattr(link, attr, None)
+            if type(value) is int and 400 <= value <= 599:
+                status = value
+                break
+        if status is not None:
+            break
     return status, classify_run_upstream(error, status)
 
 
