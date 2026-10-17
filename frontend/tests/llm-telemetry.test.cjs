@@ -192,6 +192,7 @@ test('Sentry keeps only a valid anonymous id and drops emails', () => {
       throw new Error(id)
     },
     localStorage: { getItem: () => null, setItem() {} },
+    window: { __TAURI_INTERNALS__: {} }, // I652: packaged desktop build
   })
   module.exports.initSentry()
   module.exports.setAnonymousUser('018f6b2a-7c3d-7b2a-8c11-111111111111')

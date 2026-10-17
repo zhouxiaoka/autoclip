@@ -68,6 +68,9 @@ def test_sentry_initializes_without_catalog(unavailable_catalog, monkeypatch, tm
     from backend.core import sentry_setup
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.setenv('SENTRY_DSN', 'https://public@example.invalid/0')
+    # I652: only a packaged desktop build with a known release initializes.
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.delenv('AUTOCLIP_BUILD_ENVIRONMENT', raising=False)
     monkeypatch.setattr(sentry_setup, '_initialized', False)
     monkeypatch.setattr(sentry_sdk, 'init', lambda **options: None)
     with caplog.at_level(logging.INFO):

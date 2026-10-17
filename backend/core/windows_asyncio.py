@@ -1,8 +1,9 @@
 """CPython 3.13 Proactor shutdown workaround for PYTHON-FASTAPI-3.
 
 Keep the bundled Windows runtime's cleanup sequence, but tolerate a peer reset
-from socket.shutdown(). Do not filter ConnectionResetError in Sentry or change
-loop policy: Proactor is required for asyncio subprocess support on Windows.
+from socket.shutdown(). Do not change loop policy: Proactor is required for
+asyncio subprocess support on Windows. Sentry drops only ConnectionResetError
+raised from asyncio.proactor_events frames (I651, sentry_setup); others are reported.
 
 Based on CPython's Lib/asyncio/proactor_events.py (PSF license).
 Revisit this private-API compatibility shim when upgrading bundled Python.

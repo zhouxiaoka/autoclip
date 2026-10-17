@@ -44,6 +44,8 @@
 
 保留固定标签 area=studio、phase、analysis_mode、goal、error_code、runtime、app_mode、build_environment。后端保留 desktop/web 的 environment，桌面启动器显式注入 production/development 的 build_environment，其他部署可设置 `AUTOCLIP_BUILD_ENVIRONMENT`，未设置时 unknown。前端 environment 延续 production/development。
 
+1.5.8（I650–I652）起控制上报量：只有打包好的桌面正式版初始化 Sentry（后端 environment=desktop、release 已知、build_environment 不是 development；前端要求 PROD 构建、版本号已知且运行在 Tauri 里），web/Docker/脚本、`tauri dev` 和浏览器标签页不上报。SDK 端按客户端指纹（显式 fingerprint，否则异常类型加模块/函数，不含行号和正文）限流，每个进程每小时同一指纹最多 5 条；轮询接口 `get_processing_status`、`get_ai_models` 出错每个进程只报一次。Windows asyncio Proactor 的 ConnectionResetError（调用栈里有 `asyncio.proactor_events`）直接丢弃，其他 ConnectionResetError 照报。已发出的旧版本安装包不受影响，服务端限速另定。
+
 1.5.2 候选的告警补充修复增加后端 `pipeline_stage` 标签，只允许 INGEST、SUBTITLE、ANALYZE、HIGHLIGHT、EXPORT、DONE。内容任务返回有阶段但没有错误码的结构化失败时保留该阶段；仍按原有异常规则上报，不隐藏未知故障。大纲模型请求失败使用已有的受控失败码，无法解析的回答归为 invalid_response；不增加请求重放。快速视觉推荐的抽帧进程失败、超时或文件错误会保留 screening 告警并降级到字幕方案，不能阻止导入。此补充尚未发布，已存在的 1.5.1 安装包不会自动获得这些改动。
 
 未公开 1.5.4 的补充修复把本地 `subprocess.TimeoutExpired` 归为已有 `timeout` 代码，保留 `render`、`screening` 等实际阶段。模型服务和本地进程都可能超时，因此查询须同时按 `phase` 和 `error_code` 分组，不能把全部 timeout 计为供应商故障；原有枚举及 SQL 不变。普通 I/O/权限错误或仅含 timeout 字样的正文不改类。补充验收用真实本地子进程超时验证分类、渲染终态、原素材/已完成文件保留和重新生成，并核对统计终态只记录受控代码且重复观察去重；原用户的视频合并超时原因仍待确认，不能用这些边界回归宣称消除了全部渲染超时。

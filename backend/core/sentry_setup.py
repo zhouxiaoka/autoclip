@@ -13,6 +13,8 @@ import logging
 import os
 import re
 import subprocess
+import time
+from collections import OrderedDict, deque
 from pathlib import Path
 from typing import Any, Optional
 
@@ -187,6 +189,22 @@ def _import_monitoring_fields(event: dict, hint: Optional[dict]) -> tuple[Option
     return kind, fingerprint_for_import_kind(kind)
 
 
+def _is_proactor_connection_reset(event: dict) -> bool:
+    """I651: Windows asyncio Proactor peer resets (no user impact, ~16% of volume).
+
+    Judged by the stack frames of the raised exception, not by type alone: a
+    ConnectionResetError raised anywhere else is still reported.
+    """
+    values = (event.get("exception") or {}).get("values") or []
+    if not values or not isinstance(values[-1], dict) or values[-1].get("type") != "ConnectionResetError":
+        return False
+    for frame in (values[-1].get("stacktrace") or {}).get("frames") or []:
+        name = str(frame.get("filename") or frame.get("abs_path") or "").replace("\\", "/").rsplit("/", 1)[-1]
+        if frame.get("module") == "asyncio.proactor_events" or name == "proactor_events.py":
+            return True
+    return False
+
+
 def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     """Recheck consent for every event, including long-running worker processes.
 
@@ -194,6 +212,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     local variables, log messages or breadcrumbs (which may contain subtitles).
     """
     if not crash_reports_enabled():
+        return None
+    if _is_proactor_connection_reset(event):
         return None
     clean = {k: event[k] for k in (
         "event_id", "timestamp", "platform", "level", "release", "environment", "sdk"
@@ -263,6 +283,78 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     return clean
 
 
+# I650: one machine stuck in a loop must not use up the project quota.
+EVENTS_PER_FINGERPRINT_PER_HOUR = 5
+_VOLUME_WINDOW_SECONDS = 3600.0
+_VOLUME_MAX_KEYS = 512
+# Polled by the UI every few seconds; one report per process is enough to locate the fault.
+POLLING_FUNCTIONS = frozenset({"get_processing_status", "get_ai_models"})
+_volume_lock = threading.Lock()
+_volume_sent: "OrderedDict[tuple, deque]" = OrderedDict()
+_polling_reported: set[str] = set()
+_clock = time.monotonic
+
+
+def _exception_frames(event: dict):
+    for value in (event.get("exception") or {}).get("values") or []:
+        for frame in (value.get("stacktrace") or {}).get("frames") or []:
+            yield value, frame
+
+
+def _polling_endpoint(event: dict) -> Optional[str]:
+    for _value, frame in _exception_frames(event):
+        if frame.get("function") in POLLING_FUNCTIONS and str(frame.get("module") or "").startswith("backend."):
+            return frame["function"]
+    return None
+
+
+def _volume_key(event: dict) -> tuple:
+    """Client-side stand-in for the issue fingerprint: explicit fingerprint, else
+    exception types plus code locations (module/function, no line numbers, no text)."""
+    fingerprint = event.get("fingerprint")
+    if fingerprint:
+        return ("fingerprint",) + tuple(str(part) for part in fingerprint)
+    parts: list = []
+    for value in (event.get("exception") or {}).get("values") or []:
+        parts.append(str(value.get("type")))
+        for frame in (value.get("stacktrace") or {}).get("frames") or []:
+            parts.append((frame.get("module") or frame.get("filename"), frame.get("function")))
+    return ("default",) + tuple(parts)
+
+
+def _volume_allows(event: dict) -> bool:
+    now = _clock()
+    with _volume_lock:
+        endpoint = _polling_endpoint(event)
+        if endpoint is not None:
+            if endpoint in _polling_reported:
+                return False
+            _polling_reported.add(endpoint)
+            return True
+        key = _volume_key(event)
+        sent = _volume_sent.get(key)
+        if sent is None:
+            sent = _volume_sent[key] = deque()
+            while len(_volume_sent) > _VOLUME_MAX_KEYS:
+                _volume_sent.popitem(last=False)
+        else:
+            _volume_sent.move_to_end(key)
+        while sent and now - sent[0] >= _VOLUME_WINDOW_SECONDS:
+            sent.popleft()
+        if len(sent) >= EVENTS_PER_FINGERPRINT_PER_HOUR:
+            return False
+        sent.append(now)
+        return True
+
+
+def _before_send_limited(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
+    """SDK hook: privacy and consent filters first, so dropped events never use the budget."""
+    clean = before_send(event, hint)
+    if clean is None or not _volume_allows(clean):
+        return None
+    return clean
+
+
 def clear_anonymous_user() -> None:
     """R12 #17: drop Sentry user.id in this process now, without reading privacy.json."""
     if not _initialized:
@@ -319,6 +411,13 @@ def init_sentry(mode: str = "web") -> bool:
     dsn = (os.getenv("SENTRY_DSN") or "").strip()
     if not dsn:
         return False
+    release = os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "unknown"
+    build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
+    # I652: only the packaged desktop build reports. Web/Docker/scripts, an unknown
+    # release and the launcher's debug build ("development") stay off.
+    if mode != "desktop" or release.strip().lower() in {"", "unknown"} or build_environment == "development":
+        logger.info("非桌面正式版，跳过 Sentry")
+        return False
     if not crash_reports_enabled():
         logger.info("崩溃报告已关闭，跳过 Sentry")
         return False
@@ -330,7 +429,6 @@ def init_sentry(mode: str = "web") -> bool:
         logger.warning("未安装 sentry-sdk，崩溃上报不可用")
         return False
 
-    release = os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "unknown"
     sentry_sdk.init(
         dsn=dsn,
         release=f"autoclip-backend@{release}",
@@ -343,7 +441,7 @@ def init_sentry(mode: str = "web") -> bool:
         include_source_context=False,
         max_request_body_size="never",
         max_breadcrumbs=0,
-        before_send=before_send,
+        before_send=_before_send_limited,
         integrations=[
             FastApiIntegration(),
             LoggingIntegration(level=logging.ERROR, event_level=logging.ERROR),
@@ -357,7 +455,6 @@ def init_sentry(mode: str = "web") -> bool:
     from backend.core.event_catalog import detect_os, detect_arch
     scope.set_tag("os", detect_os())
     scope.set_tag("arch", detect_arch())
-    build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
     scope.set_tag("build_environment", build_environment)
     if build_environment == "validation":
         scope.set_tag("telemetry_test", "true")
