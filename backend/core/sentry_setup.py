@@ -13,6 +13,9 @@ import logging
 import os
 import re
 import subprocess
+import sys
+import time
+from collections import OrderedDict, deque
 from pathlib import Path
 from typing import Any, Optional
 
@@ -187,6 +190,111 @@ def _import_monitoring_fields(event: dict, hint: Optional[dict]) -> tuple[Option
     return kind, fingerprint_for_import_kind(kind)
 
 
+# CPython 3.13.13 Proactor teardown noise (PYTHON-FASTAPI-3 and the same callback).
+# socket.shutdown / overlapped I/O on Windows surfaces these; none of them fail a task.
+# 10054 WSAECONNRESET → ConnectionResetError (the published issue).
+# 10053 WSAECONNABORTED → ConnectionAbortedError. 10052 WSAENETRESET and 10058 WSAESHUTDOWN
+# stay OSError or ConnectionAbortedError. 109 ERROR_BROKEN_PIPE → BrokenPipeError.
+# IocpProactor.finish_socket_func rewrites 64 ERROR_NETNAME_DELETED and 995
+# ERROR_OPERATION_ABORTED into ConnectionResetError before they leave the proactor.
+_PROACTOR_DISCONNECT_TYPES = frozenset({
+    "ConnectionResetError",
+    "ConnectionAbortedError",
+    "BrokenPipeError",
+})
+_PROACTOR_DISCONNECT_WINERRORS = frozenset({64, 109, 995, 10052, 10053, 10054, 10058})
+
+
+def _frame_is_proactor(filename: object, module: object) -> bool:
+    name = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    return module == "asyncio.proactor_events" or name == "proactor_events.py"
+
+
+def _raised_value(event: dict) -> Optional[dict]:
+    values = (event.get("exception") or {}).get("values") or []
+    if values and isinstance(values[-1], dict):
+        return values[-1]
+    return None
+
+
+def _frame_is_backend(filename: object, module: object) -> bool:
+    if str(module or "").startswith("backend."):
+        return True
+    path = str(filename or "").replace("\\", "/")
+    return path.startswith("backend/") or "/backend/" in f"/{path}"
+
+
+def _event_frames(event: dict):
+    value = _raised_value(event)
+    if value is None:
+        return
+    for frame in (value.get("stacktrace") or {}).get("frames") or []:
+        if isinstance(frame, dict):
+            yield frame
+
+
+def _event_has_proactor_frame(event: dict) -> bool:
+    return any(
+        _frame_is_proactor(frame.get("filename") or frame.get("abs_path"), frame.get("module"))
+        for frame in _event_frames(event)
+    )
+
+
+def _event_has_backend_frame(event: dict) -> bool:
+    return any(
+        _frame_is_backend(frame.get("filename") or frame.get("abs_path"), frame.get("module"))
+        for frame in _event_frames(event)
+    )
+
+
+def _traceback_has_proactor(exc: BaseException) -> bool:
+    tb = exc.__traceback__
+    while tb is not None:
+        if _frame_is_proactor(tb.tb_frame.f_code.co_filename, ""):
+            return True
+        tb = tb.tb_next
+    return False
+
+
+def _traceback_has_backend(exc: BaseException) -> bool:
+    tb = exc.__traceback__
+    while tb is not None:
+        if _frame_is_backend(tb.tb_frame.f_code.co_filename, ""):
+            return True
+        tb = tb.tb_next
+    return False
+
+
+def _is_harmless_proactor_disconnect(event: dict, hint: Optional[dict]) -> bool:
+    """Drop peer-disconnect noise that never entered backend code.
+
+    ConnectionResetError (WinError 10054), ConnectionAbortedError (10053) and
+    BrokenPipeError (109) are ignored only when the stack is asyncio's Proactor
+    and no backend frame is on it. The same types raised by application code,
+    including a protocol failure that unwinds through the Proactor, are reported.
+    Classification uses the exception class and winerror, never the message.
+    """
+    exc = None
+    info = (hint or {}).get("exc_info") if hint else None
+    if isinstance(info, tuple) and len(info) >= 2 and isinstance(info[1], BaseException):
+        exc = info[1]
+    value = _raised_value(event)
+    type_name = str(value.get("type")) if value else ""
+    typed = type_name in _PROACTOR_DISCONNECT_TYPES or isinstance(
+        exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
+    )
+    winerror = getattr(exc, "winerror", None) if isinstance(exc, OSError) else None
+    coded = isinstance(winerror, int) and winerror in _PROACTOR_DISCONNECT_WINERRORS
+    if not typed and not coded:
+        return False
+    on_proactor = _event_has_proactor_frame(event) or (exc is not None and _traceback_has_proactor(exc))
+    if not on_proactor:
+        return False
+    if _event_has_backend_frame(event) or (exc is not None and _traceback_has_backend(exc)):
+        return False
+    return True
+
+
 def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     """Recheck consent for every event, including long-running worker processes.
 
@@ -194,6 +302,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     local variables, log messages or breadcrumbs (which may contain subtitles).
     """
     if not crash_reports_enabled():
+        return None
+    if _is_harmless_proactor_disconnect(event, hint):
         return None
     clean = {k: event[k] for k in (
         "event_id", "timestamp", "platform", "level", "release", "environment", "sdk"
@@ -263,6 +373,78 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     return clean
 
 
+# I650: one machine stuck in a loop must not use up the project quota.
+EVENTS_PER_FINGERPRINT_PER_HOUR = 5
+_VOLUME_WINDOW_SECONDS = 3600.0
+_VOLUME_MAX_KEYS = 512
+# Polled by the UI every few seconds; one report per process is enough to locate the fault.
+POLLING_FUNCTIONS = frozenset({"get_processing_status", "get_ai_models"})
+_volume_lock = threading.Lock()
+_volume_sent: "OrderedDict[tuple, deque]" = OrderedDict()
+_polling_reported: set[str] = set()
+_clock = time.monotonic
+
+
+def _exception_frames(event: dict):
+    for value in (event.get("exception") or {}).get("values") or []:
+        for frame in (value.get("stacktrace") or {}).get("frames") or []:
+            yield value, frame
+
+
+def _polling_endpoint(event: dict) -> Optional[str]:
+    for _value, frame in _exception_frames(event):
+        if frame.get("function") in POLLING_FUNCTIONS and str(frame.get("module") or "").startswith("backend."):
+            return frame["function"]
+    return None
+
+
+def _volume_key(event: dict) -> tuple:
+    """Client-side stand-in for the issue fingerprint: explicit fingerprint, else
+    exception types plus code locations (module/function, no line numbers, no text)."""
+    fingerprint = event.get("fingerprint")
+    if fingerprint:
+        return ("fingerprint",) + tuple(str(part) for part in fingerprint)
+    parts: list = []
+    for value in (event.get("exception") or {}).get("values") or []:
+        parts.append(str(value.get("type")))
+        for frame in (value.get("stacktrace") or {}).get("frames") or []:
+            parts.append((frame.get("module") or frame.get("filename"), frame.get("function")))
+    return ("default",) + tuple(parts)
+
+
+def _volume_allows(event: dict) -> bool:
+    now = _clock()
+    with _volume_lock:
+        endpoint = _polling_endpoint(event)
+        if endpoint is not None:
+            if endpoint in _polling_reported:
+                return False
+            _polling_reported.add(endpoint)
+            return True
+        key = _volume_key(event)
+        sent = _volume_sent.get(key)
+        if sent is None:
+            sent = _volume_sent[key] = deque()
+            while len(_volume_sent) > _VOLUME_MAX_KEYS:
+                _volume_sent.popitem(last=False)
+        else:
+            _volume_sent.move_to_end(key)
+        while sent and now - sent[0] >= _VOLUME_WINDOW_SECONDS:
+            sent.popleft()
+        if len(sent) >= EVENTS_PER_FINGERPRINT_PER_HOUR:
+            return False
+        sent.append(now)
+        return True
+
+
+def _before_send_limited(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
+    """SDK hook: privacy and consent filters first, so dropped events never use the budget."""
+    clean = before_send(event, hint)
+    if clean is None or not _volume_allows(clean):
+        return None
+    return clean
+
+
 def clear_anonymous_user() -> None:
     """R12 #17: drop Sentry user.id in this process now, without reading privacy.json."""
     if not _initialized:
@@ -311,6 +493,39 @@ def _event_distinct_id(event: dict) -> str | None:
     return None
 
 
+# Packaged acceptance builds set validation on purpose. Anything else, including the
+# unset default "unknown" and the launcher's debug value "development", does not report.
+_REPORTING_BUILD_ENVIRONMENTS = frozenset({"production", "validation"})
+
+
+def _under_pytest() -> bool:
+    return "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules
+
+
+def _running_from_source_tree() -> bool:
+    """A checkout keeps backend/tests. The desktop bundle's copy of backend omits it."""
+    try:
+        backend_dir = Path(__file__).resolve().parents[1]
+    except (OSError, IndexError, RuntimeError):
+        return True
+    return (backend_dir / "tests").is_dir()
+
+
+def _packaged_desktop_reporting(mode: str) -> bool:
+    """True only for a packaged desktop production or validation build.
+
+    pytest and a source checkout return False even when SENTRY_DSN, mode and
+    AUTOCLIP_BUILD_ENVIRONMENT are all set to look like a release.
+    """
+    if _under_pytest() or _running_from_source_tree():
+        return False
+    release = (os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "").strip()
+    build_environment = (os.getenv("AUTOCLIP_BUILD_ENVIRONMENT") or "").strip()
+    if mode != "desktop" or release.lower() in {"", "unknown"}:
+        return False
+    return build_environment in _REPORTING_BUILD_ENVIRONMENTS
+
+
 def init_sentry(mode: str = "web") -> bool:
     """在 create_app 最早调用。返回是否真正启用。"""
     global _initialized
@@ -319,6 +534,12 @@ def init_sentry(mode: str = "web") -> bool:
     dsn = (os.getenv("SENTRY_DSN") or "").strip()
     if not dsn:
         return False
+    # I652: tests, source checkouts, web/Docker/scripts and tauri dev never init.
+    if not _packaged_desktop_reporting(mode):
+        logger.info("非桌面正式版，跳过 Sentry")
+        return False
+    release = (os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "").strip()
+    build_environment = (os.getenv("AUTOCLIP_BUILD_ENVIRONMENT") or "").strip()
     if not crash_reports_enabled():
         logger.info("崩溃报告已关闭，跳过 Sentry")
         return False
@@ -330,7 +551,6 @@ def init_sentry(mode: str = "web") -> bool:
         logger.warning("未安装 sentry-sdk，崩溃上报不可用")
         return False
 
-    release = os.getenv("AUTOCLIP_APP_VERSION") or os.getenv("SENTRY_RELEASE") or "unknown"
     sentry_sdk.init(
         dsn=dsn,
         release=f"autoclip-backend@{release}",
@@ -343,7 +563,7 @@ def init_sentry(mode: str = "web") -> bool:
         include_source_context=False,
         max_request_body_size="never",
         max_breadcrumbs=0,
-        before_send=before_send,
+        before_send=_before_send_limited,
         integrations=[
             FastApiIntegration(),
             LoggingIntegration(level=logging.ERROR, event_level=logging.ERROR),
@@ -357,7 +577,6 @@ def init_sentry(mode: str = "web") -> bool:
     from backend.core.event_catalog import detect_os, detect_arch
     scope.set_tag("os", detect_os())
     scope.set_tag("arch", detect_arch())
-    build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
     scope.set_tag("build_environment", build_environment)
     if build_environment == "validation":
         scope.set_tag("telemetry_test", "true")
