@@ -144,7 +144,9 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
         translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
         rows = translated.get('subtitles', [])
-        if len(rows) != len(entries) or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str):
+        # null / a non-list is the model's shape, same as [] when rows were expected: invalid_response.
+        if (not isinstance(rows, list) or len(rows) != len(entries)
+                or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str)):
             raise ModelResponseInvalid('字幕翻译格式不完整，请重试')
         hook = translated['title']
         if len(hook) > 500:

@@ -271,8 +271,8 @@ _INVALID_SITES = {
 
 
 def test_model_response_invalid_raise_sites():
-    """Every listed site raises the explicit type (intelligence 7 incl. 2 duration sites, promo 3, render 2,
-    llm_client 2); none raises a bare ValueError any more."""
+    """Every listed site raises the explicit type (intelligence 8 incl. refine + 2 duration sites, promo 3,
+    render 2, llm_client 2); none raises a bare ValueError any more."""
     count = 0
     for rel, needles in _INVALID_SITES.items():
         tree = ast.parse((ROOT / rel).read_text(encoding='utf-8'))
@@ -284,7 +284,7 @@ def test_model_response_invalid_raise_sites():
                 name = node.exc.func.id if isinstance(node.exc.func, ast.Name) else ast.unparse(node.exc.func)
                 assert name == 'ModelResponseInvalid', f'{rel}:{node.lineno}: {name}'
                 count += 1
-    assert count == 14, count
+    assert count == 15, count
 
 
 def test_model_response_invalid_is_model_with_invalid_response(monkeypatch):
