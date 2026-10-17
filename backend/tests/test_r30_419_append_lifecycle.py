@@ -123,6 +123,66 @@ def test_i493_failed_append_after_a_failed_round_does_not_reuse_the_old_error(mo
     assert state['generation']['status'] == 'failed' and state['generation'].get('error') != 'OLD-ROUND'
 
 
+# R31 I536: every terminal field of the previous round, listed literally (not via attempts.ROUND_TERMINAL, which a
+# mutation would shrink together with the test).
+_OLD_ROUND = {'error': 'OLD-ROUND', 'error_code': 'timeout', 'failure_stage': 'render', 'upstream_error_type': 'timeout',
+              'secondary_error_codes': ['unexpected'], 'secondary_upstream_error_types': [''], 'secondary_failure_stages': ['render'],
+              'not_redone_failed_count': 2, 'completed_variant_count': 0, 'finished_at': '2026-10-16T00:00:00Z'}
+
+
+@pytest.mark.parametrize('field', sorted(_OLD_ROUND))
+def test_i536_append_round_starts_without_each_previous_terminal_field(monkeypatch, field):
+    state = _state(monkeypatch, error=True)
+    state['generation'].update(_OLD_ROUND)
+    _append()
+    assert field not in state['generation'], (field, state['generation'].get(field))
+
+
+def test_i536_failed_round_then_successful_append_is_completed_without_an_error_code(monkeypatch):
+    state = _state(monkeypatch, error=True)
+    state['generation'].update(_OLD_ROUND)
+    result = _append()
+    for v in _added(state, result):
+        if v['status'] != 'on_demand':
+            v['status'] = 'completed'
+    store.settle_generation(state)
+    generation = state['generation']
+    assert generation['status'] == 'completed'
+    assert [k for k in ('error', 'error_code', 'failure_stage', 'upstream_error_type', 'secondary_error_codes',
+                        'secondary_upstream_error_types', 'secondary_failure_stages') if k in generation] == []
+
+
+def test_i536_existing_platform_while_an_attempt_runs_is_still_append_platform_exists(monkeypatch):
+    state = _state(monkeypatch)
+    _append()                                                             # an append attempt is now running
+    with pytest.raises(store.ConflictError) as caught:
+        _append(['douyin'])                                               # douyin already exists
+    assert (getattr(caught.value, 'error_code', None), getattr(caught.value, 'status', None)) == ('append_platform_exists', 409)
+    assert len(state['attempts']) == 2
+
+
+def test_i536_preparation_failure_writes_the_error_code_to_generation_and_analysis(monkeypatch):
+    import subprocess
+    state = _state(monkeypatch)
+    def boom(*_a, **_k):
+        raise subprocess.TimeoutExpired('ffmpeg', 1)                      # typed: studio_error_code -> 'timeout'
+    monkeypatch.setattr(jobs, '_apply_framing', boom)
+    _append()
+    assert state['generation']['status'] == 'failed' and state['generation'].get('error_code') == 'timeout'
+    assert state['analysis'].get('error_code') == 'timeout'
+
+
+def test_i536_preparation_failure_does_not_overwrite_a_round_that_took_over(monkeypatch):
+    state = _state(monkeypatch)
+    def boom(*_a, **_k):
+        state['generation'].update(attempt_id='t-newer', status='rendering')  # a newer round owns generation now
+        raise TimeoutError('framing timed out')
+    monkeypatch.setattr(jobs, '_apply_framing', boom)
+    _append()
+    assert state['generation']['attempt_id'] == 't-newer' and state['generation']['status'] == 'rendering'
+    assert 'error_code' not in state['generation'] and 'error' not in state['generation']
+
+
 # --- I494: nothing automatic -> coded 400, no attempt ---
 
 def test_i494_all_on_demand_is_a_400_without_an_attempt(monkeypatch):
