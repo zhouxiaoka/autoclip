@@ -44,16 +44,21 @@ def test_a_dsn_in_the_environment_never_reaches_sentry_from_tests(polluter, tmp_
     assert run.returncode == 0, run.stdout[-2000:]         # the no-DSN check passes after the polluter
 
 
-def test_b_a_test_that_sets_a_dsn_itself_initializes_for_real(monkeypatch, tmp_path):
-    """Like create_app with a DSN: the real sentry_sdk.init, but with a counting fake transport."""
+def test_b_a_test_that_sets_a_dsn_itself_does_not_initialize(monkeypatch, tmp_path):
+    """I652: pytest must not init Sentry, even when the test sets a release-shaped environment."""
     import sentry_sdk
     from backend.tests.sentry_leak_probe import CountingTransport
     real_init = sentry_sdk.init
+    calls = []
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.setenv('SENTRY_DSN', FAKE_DSN)
-    monkeypatch.setattr(sentry_sdk, 'init', lambda **options: real_init(**{**options, 'transport': CountingTransport}))
-    assert sentry_setup.init_sentry('web') is True
-    assert sentry_setup._initialized is True and sentry_sdk.get_client().is_active()  # set by init_sentry itself
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+    monkeypatch.setattr(sentry_sdk, 'init', lambda **options: calls.append(options) or real_init(**{**options, 'transport': CountingTransport}))
+    assert sentry_setup.init_sentry('web') is False
+    assert sentry_setup.init_sentry('desktop') is False
+    assert calls == []
+    assert sentry_setup._initialized is False and not sentry_sdk.get_client().is_active()
 
 
 def test_c_next_test_starts_without_a_dsn_or_an_initialized_flag(monkeypatch, tmp_path):

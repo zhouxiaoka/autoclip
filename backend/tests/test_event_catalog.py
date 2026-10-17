@@ -68,6 +68,13 @@ def test_sentry_initializes_without_catalog(unavailable_catalog, monkeypatch, tm
     from backend.core import sentry_setup
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.setenv('SENTRY_DSN', 'https://public@example.invalid/0')
+    # Missing catalog must not break the packaged desktop path. This process is pytest
+    # inside a checkout, so the two refusals are stubbed; the real refusals are in
+    # test_sentry_volume.
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+    monkeypatch.setattr(sentry_setup, '_under_pytest', lambda: False)
+    monkeypatch.setattr(sentry_setup, '_running_from_source_tree', lambda: False)
     monkeypatch.setattr(sentry_setup, '_initialized', False)
     monkeypatch.setattr(sentry_sdk, 'init', lambda **options: None)
     with caplog.at_level(logging.INFO):
