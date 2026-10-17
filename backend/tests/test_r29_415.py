@@ -384,9 +384,9 @@ def py_offences(source, rel='<memory>'):
             n.name if isinstance(n, ast.alias) else n.value if isinstance(n, ast.Constant) and isinstance(n.value, str) else None
         if name in FACTORY_NAMES:
             out.append((getattr(n, 'lineno', 0), f'factory: {name}'))
-        if name == 'restore_attribution' and isinstance(n, (ast.Name, ast.Attribute)) \
+        if name == 'restore_attribution' and isinstance(n, (ast.Name, ast.Attribute, ast.alias)) \
                 and (rel, funcs.get(id(n))) not in RESTORE_ALLOWED:
-            out.append((n.lineno, 'restore outside its one restore point'))
+            out.append((getattr(n, 'lineno', 0), 'restore outside its one restore point'))
     module_keys = {t.id for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
                    and n.value.value in READ_KEYS for t in n.targets if isinstance(t, ast.Name)}
     for scope in [tree] + [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]:
@@ -414,6 +414,8 @@ def test_i502_ast_guard_backend_has_one_factory_and_one_reader():
     # Python dynamic key read
     'def f(analysis):\n    out = {}\n    for k in ("http_status", "upstream_error_type"):\n        out[k] = analysis.get(k)\n    return out\n',
     # a key bound to a name, read through an alias of a record
+    # a restore under an import alias, outside run_content (R29 mutation G5)
+    'from backend.core.failure_attribution import restore_attribution as _ra\n_y = lambda f: _ra(f)\n',
     'KEY = "attribution_source"\ndef f(data):\n    terminal = data["generation"]\n    t2 = terminal\n    return t2[KEY]\n',
 ])
 def test_i502_ast_guard_catches_every_bypass(source):
@@ -450,3 +452,18 @@ def test_i506_monitoring_doc_says_source_blocked_keeps_no_site_status():
     text = (ROOT / 'docs/analytics/STUDIO_MONITORING.md').read_text(encoding='utf-8')
     assert '`failure_stage=ingest` 和 `http_status`' not in text
     assert '**不记录**站点状态码' in text
+
+
+def test_redaction_boundary_returns_an_error_with_no_raw_chain():
+    """log_safe_exception is also used without `raise … from None` (step1_outline), so the safe error itself
+    must not link back to the raw provider error: no __cause__, and the formatted traceback has no raw text."""
+    import traceback
+    from backend.core.llm_telemetry import log_safe_exception
+    try:
+        raise _connection_error()
+    except Exception as raw:
+        safe = log_safe_exception(raw)
+    assert safe.__cause__ is None
+    text = ''.join(traceback.format_exception(type(safe), safe, safe.__traceback__))
+    assert SECRET_URL not in text and 'Connection error' not in text
+    assert classify_failure(safe).kind is FailureKind.MODEL
