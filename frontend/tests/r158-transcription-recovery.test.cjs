@@ -7,6 +7,7 @@ const path = require('node:path')
 const { Window } = require('happy-dom')
 const React = require('react')
 const { loadTs } = require('./load-ts.cjs')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 
 const { act } = require('react')
 // DOM is created per file in before(), never at module load (a top-level new Window() leaks into other files).
@@ -769,10 +770,10 @@ test('R27c A6: dispose then activate (StrictMode remount) keeps polling', async 
 
 // ---- hook tests on the same fake clock ----
 function loadHook(clock) {
-  const ts = require('typescript'); const vm = require('node:vm')
+  const ts = require('typescript')
   const { outputText } = ts.transpileModule(fs.readFileSync(path.join(dir, 'useTranscriptionRecovery.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } })
   const hook = {}
-  vm.runInNewContext(outputText, { exports: hook, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, require: id => id === './transcriptionRecovery' ? recovery : require(id) })
+  runInSandbox(outputText, { exports: hook, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, require: id => id === './transcriptionRecovery' ? recovery : require(id) })
   clock.act = true
   return hook
 }
@@ -1005,7 +1006,7 @@ test('R28 I515: polls that alternate unanswered / answered without progress stil
 
 /** services/api.ts with the real axios and the real apiConfigManager, as the desktop app runs it (Tauri window). */
 function loadRealApi({ tauri = false } = {}) {
-  const vm = require('node:vm'); const ts = require('typescript'); const axios = require('axios')
+  const ts = require('typescript'); const axios = require('axios')
   const cfgDir = path.resolve(__dirname, '../src/utils')
   const { apiConfigManager } = loadTs(path.join(cfgDir, 'apiConfig.ts'), {}, cfgDir)
   const exports = {}
@@ -1015,7 +1016,7 @@ function loadRealApi({ tauri = false } = {}) {
     '../analytics/operations': {}, '../analytics/observer': {}, '../analytics/posthog': {}, '../analytics/events': {},
   }
   const source = fs.readFileSync(path.resolve(__dirname, '../src/services/api.ts'), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
+  runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
     exports, require: id => { assert.ok(id in mocks, id); return mocks[id] }, console, setTimeout, clearTimeout,
     window: tauri ? { __TAURI__: {} } : undefined,
   })

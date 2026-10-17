@@ -2,13 +2,13 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 const file = path.join(__dirname, '../src/features/settings/providerUrl.ts')
 const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
 const urls = {}
-vm.runInNewContext(code, { exports: urls, URL }, { filename: file })
+runInSandbox(code, { exports: urls, URL }, { filename: file })
 
 test('cleanup collapses spaces, trailing slashes, and missing scheme', () => {
   assert.equal(urls.cleanupBaseUrl('  https://gw.example /v1/  \n'), 'https://gw.example/v1')

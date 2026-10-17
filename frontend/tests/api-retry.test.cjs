@@ -1,6 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm')
+const fs = require('node:fs'), path = require('node:path')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript'), axios = require('axios')
 
 function loadApi(timers) {
@@ -13,7 +14,7 @@ function loadApi(timers) {
     '../analytics/operations': {}, '../analytics/observer': {}, '../analytics/posthog': {}, '../analytics/events': {},
   }
   const source = fs.readFileSync(path.join(__dirname, '../src/services/api.ts'), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
+  runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
     exports, require: id => { assert.ok(id in mocks, id); return mocks[id] }, console,
     setTimeout: (fn, delay) => { delays.push(delay); if (timers) return timers.add(fn, delay); queueMicrotask(fn) },
     clearTimeout: id => { if (timers) timers.clear(id) },

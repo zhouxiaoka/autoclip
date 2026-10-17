@@ -1,7 +1,8 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
-function load(file,mocks){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/features/studio',file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}});return exports}
+const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
+function load(file,mocks){const exports={};runInSandbox(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/features/studio',file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}});return exports}
 function view(mode,goals,available=true){
  const states=[mode,{visual_analysis:available,visual_model:'test-model'},false,{},goals,false,''];let index=0
  const calls=[]

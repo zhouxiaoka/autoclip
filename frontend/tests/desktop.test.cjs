@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 function load(name, mocks, globals = {}) {
   const source = fs.readFileSync(path.join(__dirname, '../src/desktop', `${name}.ts`), 'utf8').replaceAll('import.meta.env', '__env')
@@ -16,7 +16,7 @@ function load(name, mocks, globals = {}) {
     if (id.startsWith('./')) return load(id.slice(2).replace(/\.ts$/, ''), mocks, globals)
     throw Error(id)
   }
-  vm.runInNewContext(js, sandbox)
+  runInSandbox(js, sandbox)
   return module.exports
 }
 const DESKTOP_WINDOW = { __TAURI_INTERNALS__: {} }

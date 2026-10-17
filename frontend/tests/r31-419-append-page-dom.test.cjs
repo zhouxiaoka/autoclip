@@ -5,7 +5,8 @@
 // layer (studioApi.get / axios.get) and leaf UI modules are stubbed; both HTTP stubs serve one backend-shaped state.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm')
+const fs = require('node:fs'), path = require('node:path')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const React = require('react')
 const SRC = path.resolve(__dirname, '../src')
@@ -68,7 +69,7 @@ async function mount(server, override = {}) {
     cache.set(file, exports)
     const code = override[path.relative(SRC, file)] ?? fs.readFileSync(file, 'utf8')
     const out = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true }, fileName: file }).outputText
-    vm.runInNewContext(out, { exports, module: { exports }, window, document: window.document, localStorage: window.localStorage, console, Promise,
+    runInSandbox(out, { exports, module: { exports }, window, document: window.document, localStorage: window.localStorage, console, Promise,
       setTimeout, clearTimeout, URL, URLSearchParams, AbortController, Event: window.Event, Date, Math, JSON,
       require: id => {
         if (id in external) return external[id]

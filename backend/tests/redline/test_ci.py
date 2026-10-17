@@ -26,6 +26,7 @@ def test_required_ci_step_blocks_every_pull_request():
     commands = {name: command for name, command, _ in checks}
     assert "backend/tests/redline" in commands["redline_backend"]
     assert "-m" in commands["redline_backend"] and "pytest" in commands["redline_backend"]
-    assert commands["redline_frontend"][:2] == ["node", "--test"]
+    # #273: the redline frontend tests load the same strict setup as `npm test`.
+    assert commands["redline_frontend"][:4] == ["node", "--require", "./frontend/tests/setup.cjs", "--test"]
     expected = {str(path.relative_to(ROOT)) for path in (ROOT / "frontend/tests").glob("redline-*.test.cjs")}
-    assert expected and set(commands["redline_frontend"][2:]) == expected
+    assert expected and set(commands["redline_frontend"][4:]) == expected

@@ -1,11 +1,12 @@
 // R25 #415: a stored identity is ONE record; terminal events never stitch run and analysis fields.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const fs = require('node:fs'), path = require('node:path'), ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 
 const source = fs.readFileSync(path.join(__dirname, '../src/analytics/workflow.ts'), 'utf8')
 const mod = {}
-vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
+runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
   { exports: mod, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
 const workflow = mod
 

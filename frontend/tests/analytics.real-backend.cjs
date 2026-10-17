@@ -2,11 +2,21 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const { loadTs } = require('./load-ts.cjs')
 
 // Compile the actual source in memory. No new runner dependency or network calls.
+// Pending timers in `queue`, in order; clearTimeout really removes one (the PUT abort timer is cleared on reply).
+function fakeTimers(queue) {
+  const ids = new Map()
+  let next = 0
+  return {
+    setTimeout: fn => { const id = ++next; ids.set(id, fn); queue.push(fn); return id },
+    clearTimeout: id => { const fn = ids.get(id); ids.delete(id); const at = queue.indexOf(fn); if (at >= 0) queue.splice(at, 1) },
+  }
+}
+
 function load(name, mocks = {}, globals = {}) {
   const file = path.join(__dirname, '../src/analytics', `${name}.ts`)
   const source = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env', '__env')
@@ -14,7 +24,7 @@ function load(name, mocks = {}, globals = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
   } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, Blob, Date, Math, console, URL,
+  runInSandbox(js, { exports: module.exports, module, Blob, Date, Math, console, URL,
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
@@ -628,7 +638,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   const file=path.join(__dirname,'../src/features/studio/api.ts')
   const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText
   const module={exports:{}}
-  vm.runInNewContext(js,{module,exports:module.exports,require:id=>({'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
+  runInSandbox(js,{module,exports:module.exports,require:id=>({'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
   const api=module.exports.studioApi
   await api.import({filename:'private.mp4',url:'https://private.test/?key=secret'})
   await api.confirmPlan('private-project','private-plan',['highlight'],{language:'source'})
@@ -1096,7 +1106,7 @@ test('every flag evaluation carries app_version as a semver flag person property
   const source = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env', '__env')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, console, localStorage: storage, window: {},
+  runInSandbox(js, { exports: module.exports, module, console, localStorage: storage, window: {},
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key', VITE_APP_VERSION: 'v1.5.7' },
     require: (id) => {
       if (id === 'posthog-js') return { __esModule: true, default: sdk }
@@ -1244,8 +1254,8 @@ test('R11: an opt-out keeps retrying after the backoff is exhausted until the AP
     get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
     opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
     localStorage: storage, window: {},
-    setTimeout: (fn) => { timers.push(fn); return timers.length },
-    clearTimeout: () => {},
+    // Real browsers have AbortController: the 5 s abort timer is armed and cleared around every PUT.
+    AbortController, ...fakeTimers(timers),
     fetch: (url, opts) => {
       if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
       puts.push(JSON.parse(opts.body).enabled)
@@ -1360,7 +1370,7 @@ test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => 
   const timers = []
   const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
     get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111', opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
-    localStorage: shared, window: {}, setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    localStorage: shared, window: {}, AbortController, ...fakeTimers(timers),
     fetch: (url, opts) => { if (String(url).includes('analytics-consent')) puts.push(JSON.parse(opts.body).enabled); return Promise.resolve({ ok: false }) },
   })
   ph.setAnalyticsEnabled(true); await new Promise(r => setImmediate(r))

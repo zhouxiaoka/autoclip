@@ -1,5 +1,6 @@
 // Shared harness: real tracker + real studio api + real StudioResults (used by tests and the DuckDB flow script).
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const fs = require('node:fs'), path = require('node:path'), ts = require('typescript')
+const { runInSandbox } = require('../vm-sandbox.cjs')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 const { loadTs } = require('../load-ts.cjs')
@@ -44,7 +45,7 @@ function renderResults(workspace, studioApi, cards) {
     if (name === './FailureActions') {
       const out = {}
       const src = fs.readFileSync(path.join(ROOT, '../src/features/studio/FailureActions.tsx'), 'utf8')
-      vm.runInNewContext(ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: out, require: moduleRequire })
+      runInSandbox(ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: out, require: moduleRequire })
       return out
     }
     if (name === './platformLabel') return { platformLabel: String }
@@ -55,7 +56,7 @@ function renderResults(workspace, studioApi, cards) {
   }
   const exportsObject = {}
   const source = fs.readFileSync(path.join(ROOT, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: exportsObject, require: moduleRequire, console, URLSearchParams })
+  runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: exportsObject, require: moduleRequire, console, URLSearchParams })
   return renderToStaticMarkup(React.createElement(exportsObject.default, { project: { id: 'p1', status: 'completed', settings: { smart_import: {} }, clips: [], collections: [] }, onCreateCollection() {}, onReload() {} }))
 }
 

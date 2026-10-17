@@ -5,15 +5,15 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
 const ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 
 function load(name) {
   const file = path.join(__dirname, '../src/analytics', `${name}.ts`)
   const source = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env', '__env')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, Date, Math, console, __env: { DEV: false },
+  runInSandbox(js, { exports: module.exports, module, Date, Math, console, __env: { DEV: false },
     require: (id) => { throw new Error(`Unexpected dependency: ${id}`) } }, { filename: file })
   return module.exports
 }
