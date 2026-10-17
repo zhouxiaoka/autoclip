@@ -43,7 +43,7 @@ function load(file, mocks, clock) {
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks, clock)
     throw new Error('unexpected import ' + id)
   }
-  runInSandbox(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, setTimeout: clock ? clock.setTimeout : setTimeout, clearTimeout: clock ? clock.clearTimeout : clearTimeout, ...(clock ? { Date: clock.Date } : {}) })
+  runInSandbox(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, AbortController, setTimeout: clock ? clock.setTimeout : setTimeout, clearTimeout: clock ? clock.clearTimeout : clearTimeout, ...(clock ? { Date: clock.Date } : {}) })
   return exports
 }
 
@@ -62,7 +62,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     'react-router-dom': { useNavigate: () => navigate },
     '../../ui': { Btn, Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label) },
     './PlatformPicker': { default: () => null },
-    './api': { studioApi: { readiness, import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
+    './api': { studioApi: { readiness, readinessProbe: signal => readiness(signal), import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
     '../../analytics/flags': { useFlag: () => false, flagEnabled: name => dropZone && name === 'import_drop_zone', flagValue: name => autostart && name === 'one_click_paste_start' ? 'autostart' : 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
@@ -322,8 +322,8 @@ test('R24 #232: a stalled download times out into retry (model download again) o
   await openWaiting(view)
   for (let i = 0; i < 5; i++) await clock.advance(2000)
   assert.equal(button(view.host, '重试'), undefined, 'not a timeout yet')
-  await clock.advance(10 * 60 * 1000)
-  await clock.advance(2000)
+  // R27c I483: 10 awake minutes of 2s polls without progress (one 10-minute jump with no polls is a sleep, not counted)
+  for (let i = 0; i < 301; i++) await clock.advance(2000)
   assert.match(view.host.textContent, /长时间没有进展/)
   assert.ok(button(view.host, '打开转写设置'))
   await act(async () => { button(view.host, '重试').click() }); await act(async () => {}); await act(async () => {})

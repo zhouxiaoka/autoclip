@@ -48,7 +48,7 @@ function load(file, mocks) {
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks)
     throw new Error('unexpected import ' + id)
   }
-  runInSandbox(outputText, { exports, require: req, window, console, URL, HTMLElement: window.HTMLElement, Promise, setTimeout, clearTimeout })
+  runInSandbox(outputText, { exports, require: req, window, console, URL, HTMLElement: window.HTMLElement, Promise, setTimeout, clearTimeout, AbortController })
   return exports
 }
 
@@ -66,7 +66,7 @@ async function mount(confirmPlan, poll = {}) {
     '../../ui': { Btn, Dialog: () => null, Row: ({ children }) => h('div', null, children), Segmented: () => null, fmtDuration: String },
     './types': { defaultImportOptions: {}, goalLabels: { content: '内容切片', highlight: '高光', promo: '推广' }, languages: [] },
     './ImportPreferences': { default: () => null },
-    './api': { studioApi: { capabilities: async () => ({ visual_analysis: false, visual_model: '' }), confirmPlan, readiness: poll.readiness || (async () => null) }, ...realErrorText },
+    './api': { studioApi: { capabilities: async () => ({ visual_analysis: false, visual_model: '' }), confirmPlan, readiness: poll.readiness || (async () => null), readinessProbe: signal => (poll.readiness || (async () => null))(signal) }, ...realErrorText },
     '../../services/api': { speechApi: { installRuntime: async () => { installs.push('runtime'); return {} }, downloadModel: async m => { installs.push(m); return {} }, getRuntimeStatus: poll.runtime || (async () => ({ status: 'installing', progress: 0 })), getModels: poll.models || (async () => []) } },
   }
   const PlanSummary = load('PlanSummary.tsx', mocks).default

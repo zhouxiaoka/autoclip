@@ -36,7 +36,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
     }
     throw new Error(id)
   }
-  vm.runInNewContext(outputText, { exports, URL, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout })
+  vm.runInNewContext(outputText, { exports, URL, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout, AbortController })
   return exports
 }
 
