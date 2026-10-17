@@ -15,6 +15,10 @@ import {
 
 // 扩展Axios配置类型
 declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** #418 R27c: false = a single attempt (the caller polls on its own, e.g. the readiness probe). */
+    retry?: boolean
+  }
   interface InternalAxiosRequestConfig {
     metadata?: {
       startTime: number
@@ -38,6 +42,7 @@ const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504])
 const MAX_RETRIES = 2
 
 const shouldRetry = (error: any): boolean => {
+  if (error?.config?.retry === false || axios.isCancel(error)) return false
   const method = error?.config?.method?.toLowerCase()
   if (!method || !RETRYABLE_METHODS.has(method)) return false
 
@@ -49,6 +54,16 @@ const shouldRetry = (error: any): boolean => {
 }
 
 const getRetryDelay = (retryCount: number): number => 300 * Math.pow(2, retryCount)
+
+/** #418 R27c: the wait before a retry ends at once when the request's signal aborts; nothing more is sent. */
+const waitForRetry = (ms: number, config: any) => new Promise<void>((resolve, reject) => {
+  const signal: AbortSignal | undefined = config?.signal
+  const cancelled = () => new axios.CanceledError(undefined, config)
+  if (signal?.aborted) { reject(cancelled()); return }
+  const onAbort = () => { clearTimeout(timer); reject(cancelled()) }
+  const timer = setTimeout(() => { signal?.removeEventListener?.('abort', onAbort); resolve() }, ms)
+  signal?.addEventListener?.('abort', onAbort, { once: true })
+})
 
 apiConfigManager.addListener((config) => {
   api.defaults.baseURL = config.baseUrl
@@ -150,7 +165,7 @@ api.interceptors.response.use(
           ...(error.config.metadata || { startTime: Date.now() }),
           retryCount: currentRetryCount + 1,
         }
-        await new Promise((resolve) => setTimeout(resolve, getRetryDelay(currentRetryCount)))
+        await waitForRetry(getRetryDelay(currentRetryCount), error.config)
         return api.request(error.config)
       }
     }
@@ -163,7 +178,7 @@ api.interceptors.response.use(
       const message = error.response?.data?.detail || t("系统正在处理其他项目，请稍后再试")
       error.userMessage = message
     }
-    else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+    else if (error.config?.retry !== false && (error.code === 'ECONNABORTED' || error.message?.includes('timeout'))) {
       error.userMessage = t("请求超时，项目可能仍在后台处理中，请稍后查看项目状态")
     }
     else if (error.code === 'NETWORK_ERROR' || !error.response) {
