@@ -6,9 +6,20 @@ import pytest
 from backend.services.studio import attempts, jobs, store
 
 
+class _Inline:
+    """R31: the append's preparation is a background job; these tests run it inline (the worker entry itself)."""
+    def __init__(self):
+        self.calls = []
+
+    def submit(self, fn, *args, **kwargs):
+        self.calls.append((fn.__name__, args, dict(kwargs)))
+        return fn(*args, **kwargs)
+
+
 def _state(monkeypatch, on_demand=False, error=None):
     from backend.tests.test_on_demand_variants import _auto_fixture, _base
     state, _ = _auto_fixture(monkeypatch, [_base(n, 1) for n in range(2)], ['douyin'])
+    monkeypatch.setattr(jobs, 'executor', _Inline())
     state['attempts'] = [{'attempt_id': 't-gen', 'kind': 'generation', 'state': 'open', 'sequence': 1, 'plan_id': 'plan-a',
                           'flow_id': 'f-1', 'summary': {'route': 'subtitle'}}]
     state['attempt_sequence'] = 1
@@ -29,8 +40,8 @@ def _append(platforms=('bilibili',)):
 
 
 def _added(state, result):
-    ids = {v['id'] for v in result['variants']}
-    return [v for v in state['output_variants'] if v['id'] in ids]
+    # R31: the response no longer carries the outputs (they are made in the background); the attempt's stamps do
+    return [v for v in state['output_variants'] if v.get('produced_by_attempt') == result['attempt']['attempt_id']]
 
 
 # --- I490: the receipt goes back to the caller (the frontend watches it like a retry's) ---
@@ -40,7 +51,7 @@ def test_i490_append_returns_its_attempt_receipt(monkeypatch):
     result = _append()
     receipt = attempts.current(state)
     assert result['attempt']['attempt_id'] == receipt['attempt_id'] and result['attempt']['trigger'] == 'append_platform'
-    assert result['attempt']['kind'] == 'generation' and result['variants']
+    assert result['attempt']['kind'] == 'generation' and result['variants'] == [] and _added(state, result)
 
 
 def test_i490_preparation_failure_settles_the_attempt_failed_and_still_returns_the_receipt(monkeypatch):

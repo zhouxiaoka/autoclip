@@ -87,7 +87,7 @@ def test_377_variant_retry_counts_the_retried_outputs(monkeypatch):
     pid = flow.new_project()
     _plan_a, _first, retried = _rescreen_fails_then_retry_a_variant(pid, monkeypatch)
     assert (retried['summary']['variant_count'], retried['summary']['completed_variant_count'],
-            retried['summary']['failed_variant_count']) == (2, 2, 0)
+            retried['summary']['failed_variant_count']) == (1, 1, 0)   # R31 I541: only 'bad' (redone); was (2, 2, 0)
 
 
 def test_377_variant_retry_counts_do_not_depend_on_the_plan_id(monkeypatch):
@@ -99,7 +99,7 @@ def test_377_variant_retry_counts_do_not_depend_on_the_plan_id(monkeypatch):
     flow.render_outcome(pid, {'ok': ('completed', None, None), 'bad': ('completed', None, None)})
     retried = flow.receipts(pid)[1]
     assert retried['plan_id'] == plan_a and retried['retry_of'] == first['attempt_id']
-    assert (retried['summary']['variant_count'], retried['summary']['completed_variant_count']) == (2, 2)
+    assert (retried['summary']['variant_count'], retried['summary']['completed_variant_count']) == (1, 1)   # R31 I541; was (2, 2)
 
 
 def test_376_real_auto_generate_stamps_the_outputs_it_creates(monkeypatch):

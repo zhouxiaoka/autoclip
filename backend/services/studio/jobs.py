@@ -1302,7 +1302,6 @@ def append_platform_variants(project_id, platforms, branding):
         return receipt['attempt_id'], run_id
 
     attempt_id, run_id = store.change(project_id, start)
-    mark_project(project_id, 'processing')
     _submit_production(project_id, run_id, None, append_attempt=attempt_id)
     return {'variants': [], 'attempt': attempts.public(attempts.find(store.read(project_id), attempt_id) or {})}
 
@@ -1863,13 +1862,13 @@ def confirm_project(project_id, body):
         return state['analysis']['run_id']
 
 
-@_tracked('production')
 def _add_confirmed_drafts(data, drafts):
     rows = [{**d, 'updated_at': store.now()} for d in drafts]
     attempts.own_drafts(data, rows)  # R31 I540: owned by this confirmation's attempt
     data['drafts'].extend(rows)
 
 
+@_tracked('production')
 def _produce_selected(project_id, plan):
     from backend.services.studio import intelligence
     started = monotonic()

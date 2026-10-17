@@ -45,7 +45,7 @@ def test_409a_a_rerun_with_its_own_failure_is_partial(monkeypatch):
     assert 'secondary_error_codes' not in g and g['not_redone_failed_count'] == 1                               # A's timeout is not a secondary cause
 
 
-def test_409b_retrying_one_of_two_failures_stays_partial(monkeypatch):
+def test_409b_retrying_one_of_two_failures_is_judged_on_the_redone_one(monkeypatch):
     pid = flow.new_project()
     _screen_and_plan(pid, monkeypatch, PLAN_A)
     flow.render_outcome(pid, {'b1': BAD, 'b2': BAD})
@@ -53,8 +53,10 @@ def test_409b_retrying_one_of_two_failures_stays_partial(monkeypatch):
     flow.retry_variant(pid, 'b1', 'v1')
     flow.render_outcome(pid, {'b1': OK})
     data, receipt = store.read(pid), flow.receipts(pid)[1]
-    assert (data['generation']['status'], data['generation']['error_code'], receipt['state']) == ('partial', 'timeout', 'partial')
-    assert data['generation']['not_redone_failed_count'] == 0             # b2 is in scope, not "outside"
+    # R31 I541 (Dong 10:42): a 「重试这条」 round is judged only on what it redid (redone_by_attempt) - b2 belongs to
+    # the earlier round. Was: ('partial', 'timeout', 'partial') with b2 in scope and N == 0.
+    assert (data['generation']['status'], data['generation'].get('error_code'), receipt['state']) == ('completed', None, 'completed')
+    assert data['generation']['not_redone_failed_count'] == 1             # b2: an earlier round's failure, not redone
 
 
 def _legacy(data):
@@ -81,7 +83,9 @@ def test_409d_variant_retry_of_an_unstamped_output_is_never_a_validation_failure
     flow.render_outcome(pid, {'bad': OK})
     data, receipt = store.read(pid), flow.receipts(pid)[1]
     assert data['generation']['status'] == 'completed' and data['generation'].get('error_code') != 'validation'
-    assert receipt['state'] == 'completed' and 'variant_count' not in receipt['summary']   # no inferred counts
+    # R31 I541: the retried output is stamped redone_by_attempt when it is retried, so the receipt counts it (a stored
+    # stamp, not an inference). Was: no counts at all ('variant_count' not in summary).
+    assert receipt['state'] == 'completed' and (receipt['summary']['variant_count'], receipt['summary']['completed_variant_count']) == (1, 1)
 
 
 def test_409e_previous_round_queued_leftover_does_not_block_this_round(monkeypatch):
@@ -119,7 +123,8 @@ def test_410_appended_outputs_record_the_generation_round_and_plan(monkeypatch):
     jobs._auto_generate('p1', {'id': 'plan-a'})                           # stamped by the open round (R30 I496)
     state['attempts'][0]['state'] = 'partial'
     before = {v['id'] for v in state['output_variants']}
-    jobs.append_platform_variants('p1', ['bilibili'], {'outro_enabled': False})
+    result = jobs.append_platform_variants('p1', ['bilibili'], {'outro_enabled': False})
+    jobs._auto_generate('p1', None, append_attempt=result['attempt']['attempt_id'])   # R31: the submitted background job
     added = [v for v in state['output_variants'] if v['id'] not in before]
     # R29 #441: appending opens its own attempt; it inherits the source round's plan, not its stamp
     own = state['generation']['attempt_id']
@@ -172,7 +177,7 @@ def test_413_joined_variant_retries_from_two_plans_keep_the_first_plan(monkeypat
 
 def test_409b_variant_retry_is_judged_on_the_round_it_redid(monkeypatch):
     """A partial -> re-run B partial -> 「重试这条」 on A's failed output succeeds: the retry is judged on A's outputs
-    (owners = the retry + its source attempt A), so A is now complete; B's failure is not this round's."""
+    R31 I541: the round is the output it redid (redone_by_attempt); A's other outputs and B's failure are not its."""
     pid = flow.new_project()
     _plan_a, first = _plan_a_partial(pid, monkeypatch)
     _screen_and_plan(pid, monkeypatch, PLAN_B, retry={'key': 'r1', 'parent_attempt_id': first['attempt_id']})
@@ -180,5 +185,6 @@ def test_409b_variant_retry_is_judged_on_the_round_it_redid(monkeypatch):
     flow.retry_variant(pid, 'bad', 'v1')
     flow.render_outcome(pid, {'bad': OK})
     data, receipt = store.read(pid), flow.receipts(pid)[-1]
-    assert (data['generation']['status'], receipt['state'], receipt['summary']['variant_count']) == ('completed', 'completed', 2)
+    # R31 I541: only the output this retry redid; A's earlier completed output is not this round's. Was: variant_count 2.
+    assert (data['generation']['status'], receipt['state'], receipt['summary']['variant_count']) == ('completed', 'completed', 1)
     assert data['generation']['not_redone_failed_count'] == 1          # B's failed output, still listed

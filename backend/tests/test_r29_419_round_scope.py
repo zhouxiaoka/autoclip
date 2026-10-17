@@ -17,7 +17,7 @@ def _data(attempt_id, variants, records=()):
 def test_i440_missing_record_with_stamps_left_is_judged_on_the_whole_workspace():
     data = _data('t-gone', [{'id': 'a', 'status': 'completed', 'produced_by_attempt': 't-gone'},
                             {'id': 'b', 'status': 'failed', 'error_code': 'timeout', 'produced_by_attempt': 't-old'}])
-    assert attempts.owners_of(data) is None and attempts.round_outputs(data) is None
+    assert attempts.round_outputs(data) is None   # R31: owners_of removed (scope = this attempt's stamps only)
     store.settle_generation(data)
     assert (data['generation']['status'], data['generation']['error_code']) == ('partial', 'timeout')   # not 'completed'
 
@@ -67,6 +67,8 @@ def test_i444_error_text_comes_from_this_round_only():
 def appended(monkeypatch):
     from backend.tests.test_on_demand_variants import _auto_fixture, _base
     state, _exports = _auto_fixture(monkeypatch, [_base(n, 1) for n in range(2)], ['douyin'])
+    from backend.tests.test_r30_419_append_lifecycle import _Inline
+    monkeypatch.setattr(jobs, 'executor', _Inline())                      # R31: preparation is a background job
     state['attempts'] = [{'attempt_id': 't-gen', 'kind': 'generation', 'state': 'open', 'sequence': 1, 'plan_id': 'plan-a',
                           'flow_id': 'f-1', 'summary': {'route': 'subtitle', 'recommendation_mode': 'local'}}]
     state['attempt_sequence'] = 1

@@ -57,6 +57,7 @@ def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, m
         calls.append((draft, kwargs))
         return queue_export_record(pid, draft, 'new-job', _variant_identity)
     monkeypatch.setattr(jobs, 'export', export)
+    monkeypatch.setattr(jobs, 'executor', Immediate())  # R31 #419: preparation is a background job; run it inline
 
     response = client.post('/studio/p1/platforms', json={'platforms': ['tiktok']})
     assert response.status_code == 200, response.text

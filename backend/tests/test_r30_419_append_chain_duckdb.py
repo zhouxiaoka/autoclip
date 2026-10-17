@@ -44,6 +44,9 @@ def _first_round_succeeded(pid):
     flow.render_outcome(pid, {'ok': ('completed', None, None)})
     def scenes(data):  # the moment the output was cut from (render_outcome leaves drafts empty)
         data['drafts'][0]['scenes'] = [{'id': 's0', 'label': 'x', 'start': 0.0, 'end': 30.0}]
+        # R31: a real title - at 913f416d the untitled draft made preparation fail (Draft validation), so the
+        # "failed append" was a preparation failure; now the appended output is made and its render fails.
+        data['drafts'][0]['title'] = 'moment'
     store.change(pid, scenes)
 
 
@@ -62,7 +65,9 @@ def _chain():
     _first_round_succeeded(pid)
     first = flow.workspace(pid)
     response = json.loads(json.dumps(jobs.append_platform_variants(pid, ['bilibili'], {'outro_enabled': False})))
-    _append_failed(pid, {v['id'] for v in response['variants']})
+    attempt_id = response['attempt']['attempt_id']
+    jobs._auto_generate(pid, None, append_attempt=attempt_id)             # R31: the submitted background job
+    _append_failed(pid, {v['id'] for v in store.read(pid)['output_variants'] if v.get('produced_by_attempt') == attempt_id})
     result = _node({'pid': pid, 'import_run': run, 'first': first, 'append_response': response, 'platforms': ['bilibili'],
                     'final': flow.workspace(pid)})
     return result, flow.receipts(pid)
