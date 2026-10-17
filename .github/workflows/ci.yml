@@ -133,9 +133,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install pytest
-        run: python -m pip install pytest
-      - name: Export boundary tests under /bin/bash 3.2
+      - name: Install test-only dependencies (no backend requirements on purpose)
+        # scripts/winqa/tests has its own conftest scope and fails if a backend module gets imported;
+        # requests is only for the updater-manifest cases, pwsh is preinstalled on macOS runners.
+        run: python -m pip install pytest requests
+      - name: WinQA harness tests (export + scripts) under /bin/bash 3.2
         env:
           WINQA_TEST_BASH32: /bin/bash
           LANG: en_US.UTF-8
@@ -143,7 +145,8 @@ jobs:
         run: |
           /bin/bash --version | head -1
           /bin/bash --version | head -1 | grep -q 'version 3\.2\.' || { echo "expected /bin/bash 3.2"; exit 1; }
-          python -m pytest -q backend/tests/test_winqa_export.py
+          command -v pwsh
+          python -m pytest -q -p no:cacheprovider scripts/winqa/tests
 
   frontend:
     name: Frontend checks
