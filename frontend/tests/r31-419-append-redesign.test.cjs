@@ -3,7 +3,7 @@
 // bound to the failed analysis run (receiptFailureInfo) - the shape the R31 backend writes (test_r31_419_append_redesign).
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path')
+const path = require('node:path')
 const { loadTs } = require('./load-ts.cjs')
 
 const memory = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: k => m.delete(k) } }
@@ -39,7 +39,6 @@ test('R31 addition 2: a failed append preparation shows its own cause on the pag
   assert.equal(info?.error_code, 'invalid_key')
   assert.equal(pageFailureAction(info).kind, 'settings')          // the page leads to the settings fix, not a silent close
   assert.equal(receiptFailureInfo([{ ...failed, run_id: null }], undefined), null)   // 913f416d's shape: nothing matched
-  const page = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.match(page, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\.run_id\)/)
-  assert.match(page, /workflow\.adoptOpenAttempt\(project\.id, workspace\)/)
+  // R31 review: the StudioResults source-text regexes were removed; the page wiring is proven by rendering in
+  // r31-419-append-page-dom.test.cjs.
 })
