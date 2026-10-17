@@ -246,15 +246,25 @@ def test_no_hardcoded_host_or_token():
         assert needle not in text
 
 
+def _stream_bytes(raw, keys=()):
+    """#414 R31: the one streaming path (redact.Stream, as --stdin / --lines / logpipe use it) on one byte string."""
+    redact = _module('redact')
+    out = []
+    s = redact.Stream(list(keys), out.append)
+    s.feed(raw)
+    s.close()
+    return b''.join(out)
+
+
 def _scrub_stream_files(folder):
     """R27 #312: redact.py no longer rewrites evidence directories. These byte-level rule tests now drive the live
-    entry point (--stdin / --lines: scrub_bytes in stream mode, each file as one stream) on every file."""
+    entry point (#414 R31: redact.Stream, the only byte path; each file as one stream) on every file."""
     redact = _module('redact')
     keys = redact._env_keys()
     for p in sorted(Path(folder).rglob('*')):
         if p.is_file():
             raw = p.read_bytes()
-            out = redact.scrub_bytes(raw, keys=keys)
+            out = _stream_bytes(raw, keys)
             if out != raw:
                 p.write_bytes(out)
 
@@ -352,14 +362,15 @@ def test_pwsh_verify_only_replaces_its_own_files(tmp_path):
 
 @pytest.mark.parametrize('suffix', ['.log', '.json'])
 def test_redact_non_utf8_file_is_replaced_bytewise(tmp_path, suffix):
-    """R21 #128: GBK (or broken) bytes outside the masked name come back unchanged."""
+    """R21 #128 / #414 R31: a GBK (or broken) line is not UTF-8: it is written only as the encoding marker, so the
+    name in it cannot leak through a second byte-level reader."""
     redact = _module('redact')
     head = '错误 C:\\Users\\'.encode('gbk')
     tail = '\\AppData 日志\r\n'.encode('gbk') + b'\xff\xfe raw\n'
     raw = head + b'kris' + tail
     (tmp_path / ('e' + suffix)).write_bytes(raw)
     _scrub_stream_files(tmp_path)
-    assert (tmp_path / ('e' + suffix)).read_bytes() == head + b'<user>' + tail
+    assert (tmp_path / ('e' + suffix)).read_bytes() == b'[REDACTED:encoding]\r\n[REDACTED:encoding]\n'
 
 
 def test_redact_utf8_key_is_masked_in_byte_mode(tmp_path, monkeypatch):
@@ -367,10 +378,10 @@ def test_redact_utf8_key_is_masked_in_byte_mode(tmp_path, monkeypatch):
     redact = _module('redact')
     key = 'sk-' + 'q' * 20 + 'Z9x'
     monkeypatch.setenv('WINQA_MODEL_API_KEY', key)
-    raw = ('k=' + key + ' m=' + key[:3] + '…' + key[-3:] + ' ').encode('utf-8') + b'\xff'
+    raw = ('k=' + key + ' m=' + key[:3] + '…' + key[-3:] + ' \n').encode('utf-8') + b'\xff' + key.encode()
     (tmp_path / 'e.log').write_bytes(raw)
     _scrub_stream_files(tmp_path)
-    assert (tmp_path / 'e.log').read_bytes() == b'k=*** m=*** \xff'
+    assert (tmp_path / 'e.log').read_bytes() == b'k=*** m=*** \n[REDACTED:encoding]'
 
 
 # R22: GBK trail byte 0x5C ('\\', e.g. 乗 81 5C, 淺 9C 5C) or 0x7C ('|', e.g. 億 83 7C) inside a user
@@ -387,7 +398,7 @@ def test_redact_gbk_name_with_5c_trail_byte_masked_whole(tmp_path, name, root):
     raw = '错误 '.encode('gbk') + pre + name.encode('gbk') + suf + b'\r\n'
     (tmp_path / 'e.log').write_bytes(raw)
     _scrub_stream_files(tmp_path)
-    assert (tmp_path / 'e.log').read_bytes() == '错误 '.encode('gbk') + pre + b'<user>' + suf + b'\r\n'
+    assert (tmp_path / 'e.log').read_bytes() == b'[REDACTED:encoding]\r\n'   # #414 R31: GBK is not UTF-8
 
 
 @pytest.mark.parametrize('name', GBK_5C_NAMES)
@@ -395,7 +406,7 @@ def test_redact_stdin_gbk_name_with_5c_trail_byte(name):
     raw = 'C:\\Users\\'.encode('gbk') + name.encode('gbk') + '\\AppData 日志 https://x.invalid/s?sig=1\n'.encode('gbk')
     p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), '--stdin'], input=raw, capture_output=True)
     assert p.returncode == 0, p.stderr
-    assert p.stdout == 'C:\\Users\\<user>\\AppData 日志 <url>\n'.encode('gbk')
+    assert p.stdout == b'[REDACTED:encoding]\n'                              # #414 R31: GBK is not UTF-8
 
 
 def test_redact_utf8_log_keeps_plain_rule(tmp_path):
@@ -446,12 +457,13 @@ def test_corpus_python(case):
 @pytest.mark.parametrize('case', CORPUS, ids=CASE_IDS)
 def test_corpus_stdin_bytes(case):
     redact = _module('redact')
-    assert redact.scrub_stream_bytes(case['text'].encode('utf-8')) == redact.scrub_stream(case['text']).encode('utf-8')
+    assert _stream_bytes(case['text'].encode('utf-8')) == redact.scrub_stream(case['text']).encode('utf-8')
 
 
 @pytest.mark.parametrize('case', [c for c in CORPUS if not c.get('chains')], ids=[c['id'] for c in CORPUS if not c.get('chains')])
 def test_corpus_files_every_encoding_and_line_ending(tmp_path, case):
-    """#129 CRLF kept, #155 UTF-16, #149 GBK, SJIS/Big5: same expectation as text, original bytes elsewhere."""
+    """#129 CRLF kept, #155 UTF-16: same expectation as text, original bytes elsewhere. #414 R31: GBK / SJIS / Big5
+    lines are not UTF-8, so the one stream path writes each of them only as [REDACTED:encoding] (fail closed)."""
     redact = _module('redact')
     tried = 0
     for label, codec, bom in FILE_ENCODINGS:
@@ -462,6 +474,8 @@ def test_corpus_files_every_encoding_and_line_ending(tmp_path, case):
                 raw, out = bom + body.encode(codec), bom + want.encode(codec)
             except UnicodeEncodeError:
                 continue   # sample not representable in this encoding
+            if label in LEGACY:
+                out = _legacy_lines(raw, out)
             f = tmp_path / f'{label}{len(eol)}.log'
             f.write_bytes(raw)
             _scrub_stream_files(tmp_path)
@@ -469,6 +483,21 @@ def test_corpus_files_every_encoding_and_line_ending(tmp_path, case):
             f.unlink()
             tried += 1
     assert tried >= 4
+
+
+LEGACY = ('gbk', 'shift_jis', 'big5')
+
+
+def _legacy_lines(raw, want):
+    """#414 R31: a line that is valid UTF-8 is scrubbed as text; any other line becomes the encoding marker."""
+    got = []
+    for r, w in zip(raw.split(b'\n'), want.split(b'\n')):
+        try:
+            r.decode('utf-8')
+            got.append(w)
+        except UnicodeDecodeError:
+            got.append(b'[REDACTED:encoding]' + (b'\r' if r.endswith(b'\r') else b''))
+    return b'\n'.join(got)
 
 
 SH_REDACT = [sys.executable, str(ROOT / 'redact.py'), '--stdin']
@@ -623,14 +652,14 @@ def test_r23_189_dot_segments_are_skipped(raw, expected):
 def test_r23_185_urls_any_case_and_escaped(raw):
     redact = _module('redact')
     assert redact.scrub_stream('a ' + raw + ' b') == 'a <url> b'
-    assert redact.scrub_stream_bytes(('a ' + raw + ' b').encode()) == b'a <url> b'
+    assert _stream_bytes(('a ' + raw + ' b').encode()) == b'a <url> b'
 
 
 @pytest.mark.parametrize('name', ['ｱソAlice', 'ｶﾞソ太郎', 'ﾃｽﾄ表示'])
 def test_r23_181_shift_jis_halfwidth_names_masked_whole(tmp_path, name):
     redact = _module('redact')
     raw = ('ログ C:\\Users\\' + name + '\\AppData\\x /home/' + name + '/y\r\n').encode('shift_jis')
-    want = 'ログ C:\\Users\\<user>\\AppData\\x /home/<user>/y\r\n'.encode('shift_jis')
+    want = b'[REDACTED:encoding]\r\n'                                    # #414 R31: SJIS is not UTF-8
     (tmp_path / 'e.log').write_bytes(raw)
     _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == want
@@ -696,7 +725,7 @@ def test_r23_190_utf16_without_bom_is_masked_and_written_back(tmp_path, codec):
     (tmp_path / 'e.log').write_bytes('C:\\Users\\kris\\x /home/bob/y\r\n'.encode(codec))
     _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == 'C:\\Users\\<user>\\x /home/<user>/y\r\n'.encode(codec)
-    assert redact.scrub_stream_bytes('/Users/kris/x'.encode(codec)) == '/Users/<user>/x'.encode(codec)
+    assert _stream_bytes('/Users/kris/x'.encode(codec)) == '/Users/<user>/x'.encode(codec)
 
 
 
@@ -704,8 +733,9 @@ def test_r23_190_utf16_without_bom_is_masked_and_written_back(tmp_path, codec):
 def test_r23_187_stdin_error_prints_nothing_and_exits_non_zero():
     bad = b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00'
     p = subprocess.run(SH_REDACT, input=bad, capture_output=True)
-    # #414 v5 I-A5: one streaming path - a failure stops output; what was already written was scrubbed
-    assert p.returncode == 3 and b'b\x00o\x00b' not in p.stdout and b'bob' not in p.stdout
+    # #414 R31 I432: a dangling UTF-16 byte at EOF is not an internal error: the rest is the marker, a warning, rc 0
+    assert p.returncode == 0 and b'b\x00o\x00b' not in p.stdout and b'bob' not in p.stdout
+    assert p.stdout == b'\xff\xfe' + '[REDACTED:encoding]'.encode('utf-16-le') and b'WINQA_W_REDACT_TRUNCATED' in p.stderr
     assert b'Traceback' not in p.stderr and b'bob' not in p.stderr
 
 
@@ -736,15 +766,16 @@ def test_r23_186_every_command_output_goes_through_redact(tmp_path, bash, tool):
 @pytest.mark.parametrize('bash', BASHES)
 @pytest.mark.parametrize('remote_rc', [0, 7])
 def test_r23_187_redact_failure_never_exits_0(tmp_path, bash, remote_rc):
-    """R23 #187: undecodable output (odd-length UTF-16 on stderr) makes redact fail: nothing raw is printed and
-    the script exits non-zero (8 if the run itself succeeded, else the run's own code)."""
+    """R23 #187: a redact failure (#414 R31: a key with a line break; odd-length UTF-16 is no longer an error, I432)
+    prints nothing raw and the script exits non-zero (8 if the run itself succeeded, else the run's own code)."""
     _run(tmp_path, bash)
     bins = tmp_path / 'bin'
     payload = (b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00')
     (tmp_path / 'bad.bin').write_bytes(payload)
     _bin(bins, 'ssh', 'case "$*" in\n  *pull_run_installer.ps1*) cat "' + str(tmp_path / 'bad.bin') + '" >&2; exit '
          + str(remote_rc) + ';;\nesac; exit 0')
-    done = subprocess.run([bash, str(SH), '999'], env=_sh_env(tmp_path), capture_output=True)
+    done = subprocess.run([bash, str(SH), '999'], env=dict(_sh_env(tmp_path), WINQA_MODEL_API_KEY='a\nb'),
+                          capture_output=True)
     assert done.returncode == (8 if remote_rc == 0 else remote_rc), done.stderr
     assert '脱敏失败'.encode() in done.stderr and b'Traceback' not in done.stderr
     assert b'b\x00o\x00b' not in done.stdout + done.stderr
