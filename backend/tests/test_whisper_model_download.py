@@ -506,6 +506,52 @@ def test_r28_i519_retry_after_interrupted_download_repairs_a_partial_snapshot(mo
     assert (manager.get_local_model_path("base") / "model.bin").stat().st_size > 0
 
 
+def test_r28_i519_real_run_truncated_file_next_to_a_missing_one_is_refetched(monkeypatch, tmp_path):
+    """Real run on huggingface_hub 2.2.0 (157/418-i519-partial-file.md): a truncated, non-empty model.bin passes the
+    non-empty check and HF keeps it. When the retry re-enters (another file missing), the model must not end
+    DOWNLOADED with the truncated weights: sizes are checked against the repo and force_download fetches it again."""
+    calls = []
+    full = {"model.bin": b"weights-full", "config.json": b"{}", "tokenizer.json": b"tok", "vocabulary.json": b"voc"}
+    snapshot = tmp_path / "hub/models--Systran--faster-whisper-base/snapshots/rev1"
+
+    def hub_like(**kwargs):
+        calls.append(kwargs.get("force_download", False))
+        if len(calls) == 1:
+            snapshot.mkdir(parents=True)
+            (snapshot / "config.json").write_bytes(full["config.json"])
+            (snapshot / "model.bin").write_bytes(b"weig")  # truncated, not empty
+            raise ConnectionError("network dropped")
+        for name, data in full.items():
+            path = snapshot / name
+            if kwargs.get("force_download") or not path.exists():
+                path.write_bytes(data)
+        return str(snapshot)
+
+    hub = _install_fake_hub(monkeypatch, hub_like)
+    sizes = []
+
+    class FakeApi:
+        def __init__(self, endpoint=None):
+            pass
+
+        def get_paths_info(self, repo_id, paths, revision=None):
+            sizes.append((repo_id, revision))
+            return [types.SimpleNamespace(path=name, size=len(full[name])) for name in paths if name in full]
+
+    hub.HfApi = FakeApi
+    monkeypatch.setattr("backend.services.whisper_model_manager.download_plan", lambda: [("official", "https://huggingface.co")])
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert manager.get_model_info("base").status == ModelStatus.ERROR
+
+    manager._download_blocking("base")  # Retry
+
+    assert manager.get_model_info("base").status == ModelStatus.DOWNLOADED
+    assert (snapshot / "model.bin").read_bytes() == full["model.bin"], "the truncated weights were kept"
+    assert calls == [False, False, True]
+    assert sizes and sizes[0] == ("Systran/faster-whisper-base", "rev1")
+
+
 def test_r28_i520_background_download_failure_is_reported_once_without_text_url_or_path(monkeypatch, tmp_path):
     """A failure in the background download thread reaches Sentry exactly once through capture_studio_exception
     (phase=model_download, an error_code), with no exception text, URL or path in the event."""

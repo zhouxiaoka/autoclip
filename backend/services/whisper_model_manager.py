@@ -211,6 +211,19 @@ def _snapshot_is_complete(snapshot: Path) -> bool:
         return False
 
 
+def _snapshot_sizes_match(snapshot: Path, repo_id: str, endpoint: str) -> bool:
+    """#418 R28 I519 (real run): a truncated but non-empty file passes _snapshot_is_complete, and HF keeps it on a
+    retry. Compare the snapshot's files with the repo's sizes for that revision. No metadata (old hub, a mirror
+    without the API, a network error) counts as a match, so this never blocks a download that used to work."""
+    try:
+        from huggingface_hub import HfApi
+        names = sorted(path.name for path in snapshot.iterdir() if path.is_file())
+        infos = HfApi(endpoint=endpoint).get_paths_info(repo_id, names, revision=snapshot.name)
+        return all((snapshot / info.path).stat().st_size == info.size for info in infos if isinstance(getattr(info, "size", None), int))
+    except Exception:  # noqa: BLE001
+        return True
+
+
 class WhisperModelManager:
     def __init__(self):
         self.model_configs = _MODELS
@@ -360,12 +373,13 @@ class WhisperModelManager:
                 logger.info("开始下载 Whisper 模型 %s (%s, 源 %s)", model_name, repo_id, source)
                 try:
                     args = dict(repo_id=repo_id, cache_dir=str(whisper_runtime.get_models_dir() / "hub"), endpoint=endpoint)
+                    complete = lambda path: _snapshot_is_complete(path) and _snapshot_sizes_match(path, repo_id, endpoint)  # noqa: E731
                     snapshot = snapshot_download(**args)
-                    if not _snapshot_is_complete(Path(snapshot)):
+                    if not complete(Path(snapshot)):
                         # #418 R28 I519: HF keeps a file that is already in the snapshot (it only resumes *.incomplete
                         # blobs), so a truncated / empty snapshot file would be returned on every retry: fetch it again.
                         snapshot = snapshot_download(**args, force_download=True)
-                    if not _snapshot_is_complete(Path(snapshot)):
+                    if not complete(Path(snapshot)):
                         raise RuntimeError("Whisper 模型文件不完整，请重新下载模型后再试。")
                 except Exception as e:  # noqa: BLE001
                     failures.append(f"{source}: {type(e).__name__}: {e}")
