@@ -208,7 +208,8 @@ def _gen(rng):
         k = rng.choice(names)
         v = rng.choice([KEY, f'"{KEY}"', f'"a\n{KEY}"', f'{{"x": "{KEY}",\n"y": 1}}', f'Bearer {KEY}', 'plain',
                         f'\n  {KEY}', f'pre {KEY} post'])
-        parts.append(f'{k}{rng.choice([": ", "=", "\":"])}{v}')
+        sep = rng.choice([': ', '=', '":'])
+        parts.append(f'{k}{sep}{v}')
     return rng.choice(['\n', '\r\n', ' ']).join(parts) + '\n'
 
 
