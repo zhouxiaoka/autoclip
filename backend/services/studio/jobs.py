@@ -1176,6 +1176,7 @@ def _auto_generate(project_id, plan):
         def fail(data):
             context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))  # frozen at start
             if data.get('generation'):
+                store.clear_failure_fields(data['generation'])  # R27 I417: a new failure never inherits old status/upstream
                 data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
             # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
             from backend.services.studio.failure_identity import carry_screening
@@ -1653,6 +1654,7 @@ def _inspect(project_id, options, url, browser):
                     failure[SCREENING_KEY] = screening
                 data['analysis'] = failure
                 if (data.get('generation') or {}).get('auto_start'):
+                    store.clear_failure_fields(data['generation'])  # R27 I417
                     data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
             store.change(project_id, fail_screening)
             mark_project(project_id, 'failed')

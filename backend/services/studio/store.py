@@ -265,10 +265,14 @@ def _apply_read_receipts(path, data, receipts=None):
             analysis = data.get('analysis') or {}
             if analysis.get('run_id') == identity[1] and analysis.get('phase') == identity[2] and analysis.get('status') == 'running':
                 stage = identity[2] if identity[2] in ('screening', 'production') else 'other'
-                analysis.update(status='failed', error=message, error_code=code, failure_stage=stage)
+                analysis.update(status='failed', error=message, error_code=code)
+                # R27 I418: the worker never got to write its failure; a receipt is a LOCAL failure, written
+                # as the one snapshot (start identity kept, no upstream status).
+                write_attribution(analysis, FailureAttribution.build('local', analysis, failure_stage=stage))
                 generation = data.get('generation') or {}
                 if generation.get('status') in ('screening', 'production'):
-                    generation.update(status='failed', error=message, error_code=code, finished_at=now(), failure_stage=stage)
+                    generation.update(status='failed', error=message, error_code=code, finished_at=now())
+                    write_attribution(generation, FailureAttribution.build('local', generation, failure_stage=stage))
                 changed = True
         elif kind == 'preparation':
             variant = next((row for row in data['output_variants'] if row['id'] == identity[1]), {})
@@ -421,13 +425,14 @@ def read(project_id: str, *, recover: bool = True):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
+    # R27 #415 (I399/I421): every record that carries an attribution is read through read_attribution:
+    # legacy half identities, local records with an upstream status, failure fields on a success are
+    # cleaned in what this read returns. The read itself never writes this back.
     for name in ('analysis', 'generation'):
-        # R26 #399: a legacy half identity (provider without its config_source, or the reverse) is
-        # empty on READ too, so no event built from a read (e.g. manual export) carries half of it.
-        record = data.get(name)
-        if isinstance(record, dict) and any(record.get(k) for k in ATTEMPT_IDENTITY_KEYS) and not _paired(record):
-            for key in IDENTITY_FIELDS:
-                record.pop(key, None)
+        project_attribution(data.get(name))
+    for row in data.get('analysis_history') or []:
+        if isinstance(row, dict):
+            project_attribution(row.get('analysis'))
     if not recover or producer_alive(data.get('generation')):
         # CLI status commands are observers in another process, not a server restart.
         # A live CLI / MCP producer owns its run: the desktop list must not fail it.
@@ -845,7 +850,8 @@ def write(project_id, data, *, _recover_previous=True):
             key = terminal['run_id']
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
-                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'provider', 'config_source', 'screening_identity', 'upstream_error_type', 'failure_stage', 'shutdown_kind', 'http_status', 'model', 'base_url_host', 'attribution_source') if k in terminal}  # R26 #400
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'screening_identity', 'shutdown_kind') if k in terminal}
+                summary.update(read_attribution(terminal))  # R27 #415: the snapshot, via the one reader
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis', 'degrade_reason') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
@@ -908,67 +914,62 @@ def _ensure_failure_identity(data):
     fill(analysis)
 
 
-IDENTITY_FIELDS = ('provider', 'config_source', 'model', 'base_url_host')
-FAILURE_FIELDS = ('http_status', 'upstream_error_type', 'failure_stage')
-ATTRIBUTION_FIELDS = (*IDENTITY_FIELDS, *FAILURE_FIELDS)
+from backend.core.failure_attribution import (  # noqa: E402 - R27 #415: the one attribution rule
+    ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, FailureAttribution,
+    project_attribution, read_attribution, write_attribution)
 
 
 def _paired(record):
     return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
 
 
-def _apply_attribution(record, snapshot, failed, same_failure=False):
-    """R25 #415: identity is ONE record, written whole or not at all (never merged field by field).
+def clear_failure_fields(record):
+    """R27 I417: a NEW failure starts from no failure fields/source (identity stays for the snapshot)."""
+    for key in (*FAILURE_FIELDS, 'attribution_source'):
+        record.pop(key, None)
 
-    - a stored identity without its provider/config_source pair (legacy) reads as empty;
-    - failed: the failed request's attribution replaces the group whole. A phase attribution keeps a
-      request attribution only while it is the SAME failure (``same_failure``: the stored record was
-      already this failure of this run with this error_code); a new failure replaces it (R26 #394);
-    - failed with ``attribution_source=local`` (no request, not a model error, R26 #392): an older
-      request's status/upstream goes (the job's own status of this error stays), the identity is the phase one (else the stored start identity) and the
-      record says ``local`` so dashboards/Sentry/history never count it as a provider failure;
-    - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one;
-    - nothing attributed (e.g. a render write): the stored identity is left exactly as it is."""
+
+def _apply_attribution(record, snapshot, failed, new_failure, prior=None):
+    """R27 #415: the failure attribution is a write-once snapshot.
+
+    - a NEW failure (this record was not already this failure): one ``FailureAttribution`` built from the
+      run snapshot's source/identity (+ for request: that request's status; for phase: the job's own
+      status of this error, which studio_failure_context just wrote; for local: none) replaces the group
+      whole (``write_attribution``). No merging with anything older (I417).
+    - the same failure written again: the snapshot already stored stays untouched (write once).
+    - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
+    source = snapshot.get('attribution_source')
+    if failed:
+        if not new_failure:
+            return
+        if source not in ('request', 'phase', 'local'):
+            for key in FAILURE_FIELDS:  # nothing attributed: only drop explicit "absent" markers
+                if record.get(key) is None:
+                    record.pop(key, None)
+            return
+        own = read_attribution({**record, 'attribution_source': None})
+        identity = snapshot if snapshot.get('provider') and snapshot.get('config_source') else own
+        if source == 'request':
+            status, upstream = snapshot.get('http_status'), snapshot.get('upstream_error_type')
+        else:
+            status, upstream = own.get('http_status'), own.get('upstream_error_type')
+            older = read_attribution(prior) if isinstance(prior, dict) else {}
+            if older.get('attribution_source') == 'request' and (status, upstream) == (older.get('http_status'), older.get('upstream_error_type')):
+                status = upstream = None  # I417: the older request's status, left on the record, is not this failure's
+        stage = record.get('failure_stage') or snapshot.get('failure_stage')  # the job's own stage wins
+        write_attribution(record, FailureAttribution.build(
+            source, identity, http_status=status, upstream_error_type=upstream, failure_stage=stage))
+        return
+    for key in FAILURE_FIELDS:
+        record.pop(key, None)
     if not _paired(record):
         for key in IDENTITY_FIELDS:
             record.pop(key, None)
-    if not failed:
-        for key in FAILURE_FIELDS:
-            record.pop(key, None)
-    source = snapshot.get('attribution_source')
-    if failed and source == 'local':
-        if same_failure and record.get('attribution_source') == 'request':
-            return
-        if record.get('attribution_source') == 'request':  # an older request's status is not this failure's
-            for key in ('http_status', 'upstream_error_type'):
-                record.pop(key, None)
-        if snapshot.get('provider') and snapshot.get('config_source'):
+        if source and snapshot.get('provider') and snapshot.get('config_source'):
             for key in IDENTITY_FIELDS:
-                record.pop(key, None)
                 if snapshot.get(key) not in (None, ''):
                     record[key] = snapshot[key]
-        record['attribution_source'] = source
-        return
-    if not (source and snapshot.get('provider') and snapshot.get('config_source')):
-        return
-    if failed:
-        if source != 'request' and same_failure and record.get('attribution_source') == 'request':
-            return
-        # request: that request's identity AND status/upstream, whole. phase: the identity only; the
-        # job's own status/upstream of the same error (studio_failure_context) stays.
-        fields = ATTRIBUTION_FIELDS if source == 'request' else IDENTITY_FIELDS
-    else:
-        if _paired(record):
-            return
-        fields = IDENTITY_FIELDS
-    stage = record.get('failure_stage')  # the job's own failure stage (e.g. dispatch) is authoritative
-    for key in fields:
-        record.pop(key, None)
-        if snapshot.get(key) not in (None, ''):
-            record[key] = snapshot[key]
-    if failed and stage:
-        record['failure_stage'] = stage
-    record['attribution_source'] = source
+            record['attribution_source'] = source
 
 
 def _attach_run_telemetry(data, project_id, previous):
@@ -1000,7 +1001,7 @@ def _attach_run_telemetry(data, project_id, previous):
         failed = record.get('status') in ('failed', 'partial')
         same_failure = (failed and prior.get('status') in ('failed', 'partial') and prior_identity == identity
                         and prior.get('error_code') == record.get('error_code'))
-        _apply_attribution(record, snapshot, failed, same_failure)
+        _apply_attribution(record, snapshot, failed, not same_failure, prior)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue

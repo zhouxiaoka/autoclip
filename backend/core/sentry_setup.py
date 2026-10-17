@@ -73,19 +73,22 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
         stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
     elif isinstance(error, VisionRequestError) and phase != "screening":
         stage = "vision"
+    # R27 I416: ONE classifier decides whether this is a provider failure; only then an upstream type.
+    # The HTTP status is the job's own (a site 412 stays on the job); a local snapshot drops it on write.
+    from backend.core.failure_attribution import FailureKind, classify_failure
     result = {"failure_stage": stage}
-    # The pipeline wraps provider errors (`PipelineFailure(...) from error`); the status lives on the cause.
     status = http_status_of(error)
     if status is not None:
         result["http_status"] = status
-    # Site refusals and local setup failures are not upstream model errors.
-    # A Bilibili 403 must not become permission_denied / model_forbidden.
-    skip_upstream = isinstance(error, PipelineFailure) and error.code in {
-        "source_blocked", "source_too_short", "source_no_audio", "source_unreadable",
-        "service_restarted", "whisper_not_installed", "whisper_install_failed",
-        "transcription_empty", "subtitle_setup", "timeline_empty",
-    }
-    kind = None if skip_upstream else classify_run_upstream(error, status)
+    if classify_failure(error).kind is FailureKind.MODEL:
+        kind = classify_run_upstream(error, status)
+        if kind:
+            result["upstream_error_type"] = kind
+    return result
+    status = http_status_of(error)
+    if status is not None:
+        result["http_status"] = status
+    kind = classify_run_upstream(error, status)
     if kind:
         result["upstream_error_type"] = kind
     return result

@@ -170,9 +170,9 @@ export interface StudioSnapshot {
   example_version?: number
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback' | 'frame_extract_subtitle_fallback' | 'source_too_long_subtitle_route'; local_evidence?: { subtitle_status?: string } }
-  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; screening_identity?: { provider?: string; config_source?: string }; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
+  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; screening_identity?: { provider?: string; config_source?: string }; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; attribution_source?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; finished_at?: string; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
-  generation?: { auto_start?: boolean; status?: string; screening_identity?: { provider?: string; config_source?: string }; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
+  generation?: { auto_start?: boolean; status?: string; screening_identity?: { provider?: string; config_source?: string }; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; attribution_source?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
@@ -185,26 +185,31 @@ export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string
   for (const own of [analysis?.screening_identity, snapshot.generation?.auto_start ? snapshot.generation.screening_identity : undefined]) {
     if (own && own.provider && own.config_source) return { provider: own.provider, config_source: own.config_source }
   }
-  const own = attributionOf([analysis], false)
+  const own = pickAttribution([analysis], false)
   return own.provider ? { provider: own.provider as string, config_source: own.config_source as string } : {}
 }
 
-type Attributed = { attribution_source?: string; provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string } | null | undefined
+type Attributed = { attribution_source?: string; provider?: string; config_source?: string; model?: string; base_url_host?: string; http_status?: number; upstream_error_type?: string; status?: string } | null | undefined
+const ATTRIBUTION_SOURCES = ['request', 'phase', 'local']
 
-/** R25 #415: identity is ONE record. Take the first record carrying the provider/config_source pair,
- * whole (model/host and, for failures, status/upstream of that same record); an unpaired record is empty. */
-export function attributionOf(records: Attributed[], failure: boolean): Record<string, unknown> {
-  const own = records.find(r => !!r && !!r.provider && !!r.config_source)
+/** R27 #415: THE frontend attribution reader (mirrors backend failure_attribution.read_attribution).
+ * Every studio event reads attribution only through here. Takes ONE record: the first one that carries an
+ * attribution_source (else the first with a provider/config_source pair), projected whole:
+ * identity only as a pair; status/upstream only for a failure and never for ``local``. */
+export function pickAttribution(records: Attributed[], failure: boolean): Record<string, unknown> {
+  const valid = records.filter((r): r is NonNullable<Attributed> => !!r)
+  const own = valid.find(r => ATTRIBUTION_SOURCES.includes(r.attribution_source || ''))
+    || valid.find(r => !!r.provider && !!r.config_source)
   if (!own) {
-    // No identity at all: the failure's own status/upstream still report, attached to no connection.
-    if (!failure) return {}
-    // R26 #392: a local failure says so; nothing is attributed to a provider.
-    const local = records.find(r => !!r && r.attribution_source === 'local') ? { attribution_source: 'local' } : {}
-    const first = records.find(r => !!r && (r.http_status !== undefined || !!r.upstream_error_type))
-    return first ? { ...local, http_status: first.http_status, upstream_error_type: first.upstream_error_type } : local
+    // Legacy record (no source, no identity): a failure's own status/upstream, attached to no connection.
+    const first = failure ? valid.find(r => r.http_status !== undefined || !!r.upstream_error_type) : undefined
+    return first ? { http_status: first.http_status, upstream_error_type: first.upstream_error_type } : {}
   }
-  const out: Record<string, unknown> = { provider: own.provider, config_source: own.config_source, model: own.model, base_url_host: own.base_url_host, attribution_source: own.attribution_source }
-  if (failure) { out.http_status = own.http_status; out.upstream_error_type = own.upstream_error_type }
+  const out: Record<string, unknown> = {}
+  if (own.provider && own.config_source) Object.assign(out, { provider: own.provider, config_source: own.config_source, model: own.model, base_url_host: own.base_url_host })
+  const source = ATTRIBUTION_SOURCES.includes(own.attribution_source || '') ? own.attribution_source : undefined
+  if (source) out.attribution_source = source
+  if (failure && source !== 'local') { out.http_status = own.http_status; out.upstream_error_type = own.upstream_error_type }
   return out
 }
 
@@ -417,12 +422,15 @@ export class WorkflowTracker {
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, upstream_error_type: snapshot.analysis?.upstream_error_type, ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
+      // R27 I420: the screen event carries the analysis record's attribution (incl. attribution_source) via
+      // pickAttribution; the identity is still screening's own.
+      const { provider: _p, config_source: _c, model: _m, base_url_host: _h, ...screenAttribution } = pickAttribution([snapshot.analysis], snapshot.analysis?.status === 'failed')
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, ...screenAttribution, ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.
         event = 'studio_screen_finished'; outcome = 'auto_started'
-        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, upstream_error_type: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
+        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, upstream_error_type: undefined, http_status: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
       } else if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'
@@ -438,7 +446,7 @@ export class WorkflowTracker {
       details = { ...generationSummary(snapshot), error_code: unfinished ? run?.error_code || analysis?.error_code : undefined,
         failure_stage: unfinished ? run?.failure_stage || analysis?.failure_stage : undefined,
         shutdown_kind: unfinished ? run?.shutdown_kind || analysis?.shutdown_kind : undefined,
-        ...attributionOf([run, analysis], unfinished),
+        ...pickAttribution([run, analysis], unfinished),
         billable_calls_before_failure: unfinished ? run?.billable_calls_before_failure ?? analysis?.billable_calls_before_failure : undefined,
         retry_count: run?.retry_count ?? analysis?.retry_count,
         degrade_count: run?.degrade_count ?? analysis?.degrade_count,
@@ -450,7 +458,9 @@ export class WorkflowTracker {
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status
-      details = { ...snapshot.analysis, analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }
+      // R27 #415: attribution comes from pickAttribution, never from spreading the raw record.
+      const { attribution_source: _s, provider: _p, config_source: _c, model: _m, base_url_host: _h, http_status: _hs, upstream_error_type: _u, ...rest } = snapshot.analysis!
+      details = { ...rest, ...pickAttribution([snapshot.analysis], snapshot.analysis!.status === 'failed'), analysis_mode: snapshot.plan.confirmed_analysis, degrade_reason: snapshot.plan.degrade_reason }
     }
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))

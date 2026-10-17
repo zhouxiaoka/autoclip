@@ -2,7 +2,12 @@
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 
+/** R27 I424: the lock-timeout notice is an i18n key in all 8 locales (backend file_lock.LOCK_TIMEOUT_MESSAGE). */
+export const STORE_LOCK_TIMEOUT = 'store_lock_timeout'
+export const STORE_LOCK_TIMEOUT_TEXT = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
+
 export function llmFailureText(error?: string | null, code?: string | null): string {
+  if (code === STORE_LOCK_TIMEOUT) return STORE_LOCK_TIMEOUT_TEXT
   return code === LLM_AUTH_INVALID ? 'API Key 无效或已过期，请检查后重试' : error || ''
 }
 

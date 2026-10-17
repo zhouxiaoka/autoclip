@@ -24,12 +24,13 @@ test('allowlist keeps the three attribution sources and drops anything else', ()
   assert.equal(workflow.safeStudioProperties({ attribution_source: '/Users/me/secret' }).attribution_source, undefined)
 })
 
-test('attributionOf carries the record source; a local failure without identity still says local', () => {
-  const own = workflow.attributionOf([{ provider: 'glm', config_source: 'preset', attribution_source: 'phase' }], true)
+test('pickAttribution carries the record source; a local failure without identity still says local', () => {
+  const own = workflow.pickAttribution([{ provider: 'glm', config_source: 'preset', attribution_source: 'phase' }], true)
   assert.equal(own.attribution_source, 'phase')
-  const local = workflow.attributionOf([{ attribution_source: 'local' }], true)
+  const local = workflow.pickAttribution([{ attribution_source: 'local', http_status: 503 }], true)
   assert.equal(local.attribution_source, 'local')
   assert.equal(local.provider, undefined)
+  assert.equal(local.http_status, undefined)
 })
 
 test('catalog registers the enum on the three studio terminal events', () => {

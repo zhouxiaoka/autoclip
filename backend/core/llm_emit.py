@@ -119,27 +119,7 @@ def _attach_record(error: BaseException | None, record: RequestRecord) -> None:
         pass
 
 
-def _chain(error: BaseException | None):
-    """R26 #398: the error, then BOTH its ``__cause__`` and ``__context__`` (breadth-first, cycle-safe)."""
-    seen: set[int] = set()
-    queue = [error]
-    while queue:
-        current = queue.pop(0)
-        if current is None or id(current) in seen:
-            continue
-        seen.add(id(current))
-        yield current
-        queue.extend((current.__cause__, current.__context__))
-
-
-def record_of(error: BaseException | None) -> RequestRecord | None:
-    """R25 #415: the record of the request that failed, found on ``error`` or up its
-    ``__cause__``/``__context__`` chain (re-wrapped errors keep it). None: no request failed here."""
-    for link in _chain(error):
-        record = getattr(link, _RECORD_ATTR, None)
-        if isinstance(record, RequestRecord):
-            return record
-    return None
+from backend.core.failure_attribution import chain as _chain, record_of  # noqa: E402,F401 - R27: one home
 
 
 @dataclass
@@ -521,58 +501,42 @@ def failure_in_hand(error: BaseException | None):
 
 
 def attribution(error: BaseException | None = None) -> dict[str, Any]:
-    """R25 #415: THE attribution rule for snapshots, persistence and Sentry.
+    """R27 #415: the failure-attribution snapshot (``failure_attribution.FailureAttribution``) as fields.
 
-    1. ``error`` (else the exception being handled in this thread) carries the failed request's record
-       -> that record, whole (``attribution_source=request``);
-    2. else, when the error is NOT a model call failure (``is_model_error``) -> the phase identity (if
-       any) with ``attribution_source=local`` and never a request status (R26 #390/#392);
-    3. else (model error, or no error) the identity this run's phase froze (``attribution_source=phase``);
-    4. else {}. Never the latest/biggest-seq request, never settings."""
+    ``classify_failure`` decides (local -> model -> request record); this only supplies the identities:
+    MODEL with a record -> that request, whole (``request``); MODEL without one, or no error -> the
+    identity this run's phase froze (``phase``); LOCAL -> the phase identity, never an upstream status
+    (``local``). Never the latest/biggest-seq request, never settings."""
+    from backend.core.failure_attribution import (FailureAttribution, FailureKind, SOURCE_LOCAL,
+                                                  SOURCE_PHASE, SOURCE_REQUEST, classify_failure)
     if error is None:
         error = sys.exc_info()[1] or _held_failure.get()  # R26 #402: 3.10; #397: a failure held past its except
-    record = record_of(error)
-    if record is not None:
-        out = record.attribution()
-        return {**out, "attribution_source": ATTRIBUTION_SOURCE_REQUEST} if out else {}
-    # R26 #390/#392: a failure that never reached a provider (store lock timeout, ffmpeg, local render,
-    # a text step failing before its request on a mixed-goals visual route) is ``local``: the phase
-    # identity still says what the attempt ran on, but no request status and no provider blame.
-    local = error is not None and not is_model_error(error)
+    verdict = classify_failure(error)
+    if verdict.kind is FailureKind.MODEL and verdict.record is not None:
+        found = verdict.record.attribution()
+        if found:
+            return FailureAttribution.build(SOURCE_REQUEST, found, http_status=found.get("http_status"),
+                                            upstream_error_type=found.get("upstream_error_type"),
+                                            failure_stage=found.get("failure_stage")).to_fields()
     acc = _run_acc.get()
     phase: dict[str, Any] = {}
     if acc is not None:
         with acc.lock:
             phase = dict(acc.phase_identity)
-    if local:
-        return {**phase, "attribution_source": ATTRIBUTION_SOURCE_LOCAL}
+    if verdict.kind is FailureKind.LOCAL:
+        return FailureAttribution.build(SOURCE_LOCAL, phase).to_fields()
     if not phase:
         return {}
-    return {**phase, "attribution_source": ATTRIBUTION_SOURCE_PHASE}
+    return FailureAttribution.build(SOURCE_PHASE, phase).to_fields()
 
 
-# Codes a failed model call carries (PipelineFailure / VisionRequestError). Local codes are absent.
-MODEL_ERROR_CODES = frozenset({"timeout", "connection", "authentication", "rate_limited", "provider_error",
-                               "invalid_response", "output_truncated", "refused", "llm_auth_invalid"})
+from backend.core.failure_attribution import MODEL_ERROR_CODES  # noqa: E402,F401 - re-exported
 
 
 def is_model_error(error: BaseException | None) -> bool:
-    """R26 #392: True only when the error (or its __cause__/__context__ chain) is a model call failure.
-    The outermost decisive link wins (a provider error wrapping its socket OSError stays a model error)."""
-    import subprocess
-    from backend.core.file_lock import LockTimeout
-    try:
-        from openai import APIError
-    except ImportError:  # pragma: no cover
-        APIError = ()
-    for error in _chain(error):
-        if isinstance(error, (LockTimeout, subprocess.TimeoutExpired, subprocess.CalledProcessError)):
-            return False
-        if APIError and isinstance(error, APIError):
-            return True
-        if type(error).__name__ in ("PipelineFailure", "VisionRequestError"):
-            return getattr(error, "code", "") in MODEL_ERROR_CODES
-    return False
+    """R27 I416: a thin wrapper; the one rule is ``failure_attribution.classify_failure``."""
+    from backend.core.failure_attribution import FailureKind, classify_failure
+    return classify_failure(error).kind is FailureKind.MODEL
 
 
 def run_snapshot(project_id: str | None = None, *, error: BaseException | None = None,
