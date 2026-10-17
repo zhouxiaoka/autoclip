@@ -98,22 +98,23 @@ class ProcessLock:
         self._handle = None
 
     def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
-        # R26 #393: the in-process wait is bounded by the same timeout (and raises the same code) as the
-        # file lock; an explicit ``timeout`` keeps RLock semantics (False), non-blocking never waits.
-        bounded = self.timeout if (blocking and timeout < 0) else timeout
-        if not self._thread.acquire(blocking, bounded if blocking else -1):
-            if blocking and timeout < 0:
+        # R27 I414: ONE deadline for both stages, computed on entry; the file lock only gets what the
+        # in-process wait left. Default timeout: either stage raises LockTimeout. Explicit timeout: either
+        # stage returns False (RLock semantics). Non-blocking never waits.
+        explicit = blocking and timeout >= 0
+        budget = (timeout if explicit else self.timeout) if blocking else 0.0
+        deadline = time.monotonic() + max(0.0, budget)
+        if not self._thread.acquire(blocking, max(0.0, budget) if blocking else -1):
+            if blocking and not explicit:
                 logger.warning('In-process lock not acquired in time (%s)', LOCK_TIMEOUT_CODE)
                 raise LockTimeout()
             return False
         if self._depth == 0:
-            # R26 #393: non-blocking never waits out the timeout; an explicit timeout caps the wait.
-            wait = 0.0 if not blocking else (min(self.timeout, timeout) if timeout >= 0 else self.timeout)
             try:
-                self._handle = acquire(Path(self._path_fn()), wait)
+                self._handle = acquire(Path(self._path_fn()), max(0.0, deadline - time.monotonic()))
             except LockTimeout:
                 self._thread.release()
-                if not blocking:
+                if not blocking or explicit:
                     return False
                 raise
             except BaseException:

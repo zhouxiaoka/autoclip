@@ -155,7 +155,6 @@ class _RunAcc:
     seq: int = 0
     # R22 #223 / R24 #291: identity the current phase froze at its start from ONE connection.
     phase_identity: dict = field(default_factory=dict)
-    phase_frozen: bool = False
     # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -740,7 +739,6 @@ def freeze_phase_identity(identity: dict | None) -> None:
     whole = frozen_phase(identity.get(PHASE_KEY)) or frozen_phase(identity)
     with acc.lock:
         acc.phase_identity = whole
-        acc.phase_frozen = True
 
 
 def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: dict | None = None,

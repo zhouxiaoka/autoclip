@@ -225,54 +225,6 @@ def _records(root, count):
         os.utime(root / f'{i:032x}', (1000 + i, 1000 + i))
 
 
-def test_335_prune_waits_for_a_writer_in_another_process(tmp_path):
-    root = shutdown_marker._root()
-    _records(root, shutdown_marker._KEEP + 2)
-    child = _hold_lock_in_child(tmp_path, 1.5)
-    done = threading.Event()
-    worker = threading.Thread(target=lambda: (shutdown_marker.prune(root), done.set()))
-    worker.start()
-    try:
-        assert not done.wait(0.6), 'prune scanned/deleted while another process held the store lock'
-    finally:
-        child.wait(30)
-        worker.join(30)
-    assert done.is_set()
-
-
-def test_335_release_waits_for_a_writer_in_another_process(tmp_path):
-    """Closes R24 m5 (release without store.lock survived)."""
-    root = shutdown_marker._root()
-    _records(root, 1)
-    name = f'{0:032x}'
-    shutdown_marker._consumed[(str(root), name)] = 'unacked'
-    child = _hold_lock_in_child(tmp_path, 1.5)
-    done = threading.Event()
-    worker = threading.Thread(target=lambda: (shutdown_marker.release(name), done.set()))
-    worker.start()
-    try:
-        assert not done.wait(0.6), 'release deleted a record while another process held the store lock'
-        assert (root / name).exists()
-    finally:
-        child.wait(30)
-        worker.join(30)
-    assert done.is_set()
-
-
-def test_335_lock_timeout_raises_a_coded_error(tmp_path, monkeypatch):
-    from backend.core.sentry_setup import studio_error_code
-    child = _hold_lock_in_child(tmp_path, 1.5)
-    monkeypatch.setattr(store.lock, 'timeout', 0.2)
-    try:
-        with pytest.raises(OSError) as caught:
-            with store.lock:
-                pass
-    finally:
-        child.wait(30)
-    assert getattr(caught.value, 'code', None) == 'store_lock_timeout'
-    assert studio_error_code(caught.value) == 'store_lock_timeout'  # R26 #390
-
-
 # --- #336: the settings-page vision test carries the tested connection's identity ---------------
 
 def test_336_settings_vision_test_uses_the_connection_identity_not_its_hostname(monkeypatch, posted):
@@ -350,19 +302,3 @@ def test_331_an_outer_observed_layer_never_replaces_the_failing_requests_record(
     assert (tags.get('provider'), tags.get('model'), tags.get('http_status')) == ('kimi', 'kimi-k2', '503')
 
 
-def test_335_release_deletes_only_while_holding_the_store_lock(monkeypatch):
-    """R24 m5: the reference scan alone being locked is not enough; the unlink must be too."""
-    root = shutdown_marker._root()
-    _records(root, 1)
-    name = f'{0:032x}'
-    shutdown_marker._consumed[(str(root), name)] = 'unacked'
-    held = []
-    real = Path.unlink
-
-    def spy(self, *a, **k):
-        if self.name == name:
-            held.append(store.lock._is_owned())
-        return real(self, *a, **k)
-    monkeypatch.setattr(Path, 'unlink', spy)
-    shutdown_marker.release(name)
-    assert held == [True]

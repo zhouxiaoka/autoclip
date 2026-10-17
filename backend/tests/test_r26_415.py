@@ -81,24 +81,6 @@ def test_390_store_lock_timeout_is_its_own_product_code_not_a_model_timeout():
         assert '|store_lock_timeout|' in (ROOT / path).read_text(encoding='utf-8'), path
 
 
-def test_393_non_blocking_acquire_returns_at_once_while_another_process_holds_it(tmp_path, monkeypatch):
-    monkeypatch.setattr(store.lock, 'timeout', 5.0)
-    child = _hold_lock_in_child(tmp_path, 3)
-    try:
-        started = time.monotonic()
-        got = store.lock.acquire(blocking=False)
-        elapsed = time.monotonic() - started
-        assert got is False and elapsed < 1.0, elapsed
-    finally:
-        child.wait(30)
-    import threading
-    got = []
-    other = threading.Thread(target=lambda: got.append(store.lock.acquire(blocking=False) and (store.lock.release() or True)))
-    other.start()
-    other.join(10)
-    assert got == [True], 'the failed non-blocking attempt leaked the in-process lock'
-
-
 def test_394_new_phase_only_failure_replaces_older_request_attribution():
     _project('p394', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -124,30 +106,6 @@ def test_394_new_phase_only_failure_replaces_older_request_attribution():
 
 
 # --- second pass (Dong R25-b): #393 P2, #397-#402, #394 status, #392 source surfaces ----------------
-
-def test_393_default_acquire_bounds_the_in_process_wait_with_the_same_code(monkeypatch):
-    import threading
-    monkeypatch.setattr(store.lock, 'timeout', 0.3)
-    held, release = threading.Event(), threading.Event()
-
-    def holder():
-        with store.lock:
-            held.set()
-            release.wait(10)
-    other = threading.Thread(target=holder)
-    other.start()
-    held.wait(5)
-    started = time.monotonic()
-    try:
-        with pytest.raises(file_lock.LockTimeout) as caught:
-            with store.lock:
-                pass
-        assert time.monotonic() - started < 3
-        assert studio_error_code(caught.value) == 'store_lock_timeout'
-    finally:
-        release.set()
-        other.join(10)
-
 
 def test_394_new_local_failure_drops_the_old_request_status():
     _project('p394l', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})

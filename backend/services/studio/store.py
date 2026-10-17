@@ -43,6 +43,28 @@ _worker = ContextVar('studio_metadata_worker', default=None)
 _receipt_mutex = threading.Lock()
 
 
+def _append_receipt(path, receipt):
+    # R27 I419: every append, read and clear of _read_failures holds _receipt_mutex.
+    with _receipt_mutex:
+        _read_failures.setdefault(path, []).append(receipt)
+
+
+def _receipts(path):
+    with _receipt_mutex:
+        return list(_read_failures.get(path, []))
+
+
+def _drop_receipts(path, handled):
+    """R27 I419: drop only the receipts this read handled; one appended meanwhile stays."""
+    ids = {id(receipt) for receipt in handled}
+    with _receipt_mutex:
+        left = [receipt for receipt in _read_failures.get(path, []) if id(receipt) not in ids]
+        if left:
+            _read_failures[path] = left
+        else:
+            _read_failures.pop(path, None)
+
+
 @contextmanager
 def worker_read_scope(project_id, identity):
     """Only accepted workers can leave a content-free read-failure receipt."""
@@ -61,17 +83,15 @@ def worker_read_scope(project_id, identity):
         except LockTimeout:
             # R26 #401: the worker could not even write its failure. Leave a receipt WITHOUT the store
             # lock (it is what timed out); the next read fails the job instead of leaving it queued.
-            with _receipt_mutex:
-                _read_failures.setdefault(path, []).append(
-                    {'identity': identity, 'pending': {}, 'lock_timeout': True,
-                     'message': LOCK_TIMEOUT_MESSAGE, 'error_code': LOCK_TIMEOUT_CODE})
+            _append_receipt(path, {'identity': identity, 'pending': {},
+                                   'message': LOCK_TIMEOUT_MESSAGE, 'error_code': LOCK_TIMEOUT_CODE})
             raise
     finally:
         _worker.reset(token)
         if receipt['denied'] or receipt.get('cover_finished_instance'):
             with lock:
                 receipt.pop('read_error', None)
-                _read_failures.setdefault(path, []).append(receipt)
+                _append_receipt(path, receipt)
 
 
 def mark_render_finished(project_id, job_id):
@@ -84,7 +104,7 @@ def mark_render_finished(project_id, job_id):
 
 def _apply_finished_covers(path, data):
     changed = False
-    for receipt in _read_failures.get(path, []):
+    for receipt in _receipts(path):
         identity = receipt['identity']
         instance = receipt.get('cover_finished_instance')
         if identity[0] != 'render' or not instance:
@@ -195,7 +215,7 @@ def remember_render_link(project_id, expected, job_id):
 
 def has_pending_receipts(project_id):
     path = directory(project_id) / 'metadata' / 'studio.json'
-    return bool(_read_failures.get(path) or _pending_links.get(path) or _io_failures.get(path))
+    return bool(_receipts(path) or _pending_links.get(path) or _io_failures.get(path))
 
 
 def _observe_worker_write(path, previous, data):
@@ -214,14 +234,14 @@ def _observe_worker_write(path, previous, data):
             receipt['pending'][row['id']] = variant_identity(row)
 
 
-def _apply_read_receipts(path, data):
+def _apply_read_receipts(path, data, receipts=None):
     changed = _apply_finished_covers(path, data)
     settle = False
     for expected, job_id in _pending_links.get(path, {}).items():
         linked = bind_render(data, expected, job_id)
         changed = changed or linked
         settle = settle or linked
-    for receipt in _read_failures.get(path, []):
+    for receipt in (_receipts(path) if receipts is None else receipts):
         identity = receipt['identity']
         kind = identity[0]
         message = receipt.get('message', IO_FAILURE_MESSAGE)
@@ -273,7 +293,7 @@ def remember_submission_rejection(project_id, identity, *, error_code='unexpecte
         message = {'render': '导出任务未能启动，请重试；已有成片已保留',
                    'preparation': '这条成片任务未能启动，请重试；已有成片已保留',
                    'cover': 'AI 封面任务未能启动，请重试'}.get(kind, '分析或制作任务未能启动，请重试；原素材与已有成片已保留')
-        _read_failures.setdefault(path, []).append({'identity': identity, 'pending': {}, 'rejected': True, 'message': message, 'error_code': error_code})
+        _append_receipt(path, {'identity': identity, 'pending': {}, 'rejected': True, 'message': message, 'error_code': error_code})
 
 
 def _changed_active_ids(previous, attempted, key, id_key, active):
@@ -384,7 +404,7 @@ def read(project_id: str, *, recover: bool = True):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
         _io_failures.pop(path, None)
-        _read_failures.pop(path, None)
+        _drop_receipts(path, _receipts(path))
         _pending_links.pop(path, None)
         return {'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [], 'analysis': None, 'output_variants': []}
     try:
@@ -451,7 +471,8 @@ def read(project_id: str, *, recover: bool = True):
         settle_generation(data)
         _record_restart_shutdown_kind(data, dead_instance)
     patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished or settle or bool(interrupted)
-    patched = _apply_read_receipts(path, data) or patched
+    handled = _receipts(path)  # R27 I419: exactly what this read applies (and may then clear)
+    patched = _apply_read_receipts(path, data, handled) or patched
     patched = _recover_interrupted_run(data) or patched
     analysis = data.get('analysis')
     if isinstance(analysis, dict) and analysis.get('status') == 'running' and not analysis.get('instance'):
@@ -463,14 +484,14 @@ def read(project_id: str, *, recover: bool = True):
         except OSError:
             logger.warning('Studio terminal receipt persistence deferred')
         else:
-            _read_failures.pop(path, None)
+            _drop_receipts(path, handled)
             _pending_links.pop(path, None)
             if dead_instance:
                 from backend.services.studio.shutdown_marker import release
                 release(dead_instance)
     else:
         # Stale receipts cannot affect later attempts or already saved terminals.
-        _read_failures.pop(path, None)
+        _drop_receipts(path, handled)
         _pending_links.pop(path, None)
     return data
 
