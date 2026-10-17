@@ -2,7 +2,7 @@
 
 create_app() calls init_sentry(), which reads SENTRY_DSN from the environment, binds the sentry_sdk client
 and sets the module-level `_initialized` for the whole process. Before the conftest fixture
-`_no_ambient_sentry`, a DSN in the developer's shell made the create_app tests (test_422_beginner_hint's
+`_no_ambient_sentry` (now `_no_ambient_telemetry`), a DSN in the developer's shell made the create_app tests (test_422_beginner_hint's
 client fixture, test_r7_d1_d7, test_r8_e1_e5) turn the SDK on for real - sending test events - and the
 later test_sentry_setup::test_init_sentry_noop_without_dsn failed in a full run.
 
