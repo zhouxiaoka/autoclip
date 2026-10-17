@@ -105,7 +105,8 @@ def test_i530_b_an_append_closed_during_preparation_persists_nothing(monkeypatch
 
 def test_i530_c_a_closed_round_that_stamped_nothing_still_settles_on_the_workspace():
     """round_outputs returns [] only for an open attempt still preparing; a round from before stamping (receipt but no
-    stamps) keeps settling on the whole workspace (R29 #440)."""
+    stamps) keeps settling on the whole workspace (R29 #440). Regression lock: 913f416d already did this; it pins the
+    mutant that settles such a round on nothing."""
     state = {'generation': {'attempt_id': 't-legacy', 'status': 'rendering', 'auto_start': True},
              'attempts': [{'attempt_id': 't-legacy', 'kind': 'generation', 'state': 'open', 'sequence': 1}],
              'output_variants': [{'id': 'v1', 'draft_id': 'd', 'strategy_id': 'tiktok', 'status': 'completed'},

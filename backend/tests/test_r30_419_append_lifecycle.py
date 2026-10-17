@@ -222,7 +222,8 @@ def test_i496_append_receipt_run_id_is_the_read_analysis_run_and_own_outputs_nee
     # analysis run_id. why: I539 - the page (receiptFailureInfo) and the worker's _io_receipt now read it.
     state = _state(monkeypatch)
     result = _append()
-    assert attempts.find(state, result['attempt']['attempt_id'])['run_id'] == state['analysis']['run_id']
+    run_id = state['analysis'].get('run_id')
+    assert run_id and attempts.find(state, result['attempt']['attempt_id'])['run_id'] == run_id
     data = {'generation': {'attempt_id': 't-x'}, 'attempts': [{'attempt_id': 't-x', 'kind': 'generation', 'state': 'completed'}]}
     item = {'id': 'v'}
     attempts.own_outputs(data, [item])
