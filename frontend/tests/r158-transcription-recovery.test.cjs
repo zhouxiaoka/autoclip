@@ -955,13 +955,57 @@ test('R28 I513: follow-up reads take the round signal; a hung read ends after th
   t.st.stage = 'downloading'; t.st.progress = 5
   const c = recovery.createRecoveryController(t.api, { now: () => clock.t })
   c.open('whisper_model_downloading', 'base')
+  t.api.getModels = async () => [{ name: 'base', status: 'downloading', downloadProgress: 5 }]
+  await c.poll(); assert.equal(c.state.percent, 5)
+  t.api.getModels = hung
   const p = c.poll(); await clock.advance(5000); await p
   assert.equal(c.state.phase, 'downloading', 'the hung read timed out; the wait goes on'); assert.equal(reads.live, 0)
+  assert.equal(c.state.percent, 5, 'a failed read keeps the last progress (no reset that restarts the stall time)')
   assert.ok(reads.signals.every(s => s instanceof AbortSignal))
   const q = c.poll(); await clock.advance(1000)
   assert.equal(reads.live, 1)
   c.close(); await q
   assert.equal(reads.aborted, 1, 'close cancels the follow-up read'); assert.equal(reads.live, 0)
+  t.st.stage = 'installing'
+  const d = recovery.createRecoveryController(t.api, { now: () => clock.t })
+  d.open('whisper_installing')
+  const r = d.poll(); await clock.advance(1000)
+  assert.equal(reads.live, 1, 'getRuntimeStatus in flight')
+  d.close(); await r
+  assert.equal(reads.aborted, 2, 'close cancels the runtime read too'); assert.equal(reads.live, 0)
+})
+
+test('R28 A8: a probe that ignores its signal still ends the round at once on close', async () => {
+  const api = { ...fakeApi({}), readiness: () => new Promise(() => {}) }
+  const c = recovery.createRecoveryController(api, { now: () => 0 })
+  c.open('whisper_installing')
+  let done = false; const p = c.poll().then(() => { done = true })
+  await Promise.resolve(); c.close()
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  assert.ok(done, 'the round does not wait for a request that never settles'); await p
+})
+
+test('R28 I515: slow rounds (4s probe + 4s read) are observed time: timeout within one round of 10 minutes', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  t.st.delay = 4000
+  const slowModels = () => new Promise(resolve => clock.setTimeout(() => resolve([{ name: 'base', status: 'downloading', downloadProgress: 5 }]), 4000))
+  t.api.getModels = slowModels
+  const c = downloadingOn(clock, t)
+  await gaps(c, clock, [2000])
+  const seen = await gaps(c, clock, Array(70).fill(2000))
+  const first = seen.find(([, p]) => p === 'timeout')
+  assert.ok(first && first[0] <= recovery.STALL_MS + 10000, JSON.stringify(first))
+})
+
+test('R28 I515: polls that alternate unanswered / answered without progress still time out at 10 minutes', async () => {
+  const clock = fakeClock(); const t = fakeTransport(clock)
+  const c = downloadingOn(clock, t)
+  await gaps(c, clock, [2000])
+  const seen = []
+  for (let i = 0; i < 320; i++) { t.st.mode = i % 2 ? 'ok' : 'down'; seen.push(...(await gaps(c, clock, [2000])).map(([, p]) => p)) }
+  assert.ok(!seen.includes('failed'), 'never 30s unreachable in a row')
+  const at = seen.indexOf('timeout')
+  assert.ok(at >= 0 && at <= 300, `timeout after ${at + 1} polls`)
 })
 
 test('R28 I514: waitForReady takes a signal and ends at once on abort', async () => {
@@ -970,10 +1014,11 @@ test('R28 I514: waitForReady takes a signal and ends at once on abort', async ()
   apiConfigManager.config = { ...apiConfigManager.config, isReady: false }
   const ctrl = new AbortController()
   let settled = null
-  const p = apiConfigManager.waitForReady(30000, ctrl.signal).then(v => { settled = v })
+  apiConfigManager.waitForReady(10 ** 9, ctrl.signal).then(v => { settled = v })
   await Promise.resolve(); assert.equal(settled, null)
-  ctrl.abort(); await p
-  assert.equal(settled, false)
+  ctrl.abort()
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  assert.equal(settled, false, 'abort ends the wait at once')
   const api = fs.readFileSync(path.resolve(__dirname, '../src/services/api.ts'), 'utf8')
   assert.match(api, /waitForReady\(undefined, config\.signal/)
 })

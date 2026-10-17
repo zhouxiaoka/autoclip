@@ -389,6 +389,10 @@ class WhisperModelManager:
                 "下载 Whisper 模型 %s 失败: %s: %s",
                 model_name, type(e).__name__, e,
             )
+            # #418 R28 I520: background failures are reported too; the one Studio capture path keeps only the error
+            # code and filtered tags (no message, URL or path).
+            from backend.core import sentry_setup
+            sentry_setup.capture_studio_exception(e, phase="model_download")
             with self._lock:
                 self._download_state[model_name] = {
                     "status": "error", "progress": 0, "error": WHISPER_DOWNLOAD_USER_ERROR,
