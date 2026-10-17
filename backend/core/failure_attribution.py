@@ -11,8 +11,9 @@ carry it unchanged (an ``AttributedError`` carries it on ``.attribution``):
 - ``FailureAttribution``: the snapshot. ``local`` never carries ``http_status``/``upstream_error_type``
   (validated on construction: ``ValueError``). Identity is a provider/config_source pair or nothing.
 - ``write_attribution(record, snapshot)``: replaces the attribution group WHOLE (no merging).
-- ``read_attribution(record)``: the cleaned projection every reader uses; legacy half records are
-  cleaned at read time only, never written back.
+- ``export_attribution(source)`` (R31 I565; ``read_attribution`` is the same function): THE whitelist
+  serializer every emitter and reader uses; legacy half records are cleaned at read time only, never
+  written back.
 
 This module imports nothing from llm_emit/sentry_setup (no cycles): both import it.
 """
@@ -73,9 +74,14 @@ class AttributedError(Exception):
 
     R30 (Dong I563): ``http_status`` is the provider's HTTP status FROZEN at the same boundary, by the same
     construction (``attributed``), because ``from None`` leaves no ``__cause__`` to read it from later.
-    ``http_status_of`` reads this field; None: no HTTP response came back (or none was observed)."""
+    ``http_status_of`` reads this field; None: no HTTP response came back (or none was observed).
+
+    R31 (Dong I562): ``error_code`` is the controlled studio code (``connection``/``timeout``/...,
+    one of ``MODEL_ERROR_CODES``) FROZEN by the same ``attributed`` call, so a timeout and a refused
+    connection stay apart after the redaction wrap. ``frozen_error_code`` reads it."""
     attribution: "FailureAttribution | None" = None
     http_status: int | None = None
+    error_code: str | None = None
 
 
 class ProviderTransportError(Exception):
@@ -86,9 +92,26 @@ class ProviderTransportError(Exception):
     ``build_attribution`` classify it like any other link (``classify_failure``: MODEL by ``isinstance``),
     and never raises it: the safe error still goes out ``from None``."""
 
-    def __init__(self, kind: str, *, http_status: int | None = None):
+    def __init__(self, kind: str, *, http_status: int | None = None, timed_out: bool = False):
         super().__init__(kind)
-        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+        self.http_status = http_status if valid_status(http_status) else None
+        self.error_code = _transport_code(kind, self.http_status, timed_out)
+
+
+def valid_status(value) -> bool:
+    """R31 (Dong mid-review, I623): THE valid range of a provider HTTP status, everywhere a status is
+    frozen or read: an error response, 400-599 (an int, not a bool). Nothing below 400 is ever frozen."""
+    return type(value) is int and 400 <= value <= 599
+
+
+def _transport_code(kind: str, status: int | None, timed_out: bool) -> str:
+    """R31 I562: the controlled studio code of a transport failure, from its type and HTTP status ONLY
+    (never a body): no response -> ``timeout`` or ``connection``; else the shared status rule."""
+    if status is None:
+        return "timeout" if timed_out else "connection"
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.upstream_errors import classify_upstream_error
+    return studio_code_for(classify_upstream_error(status, None, error_name=kind).error_type, status)
 
 
 class ModelResponseInvalid(ValueError):
@@ -99,16 +122,27 @@ class ModelResponseInvalid(ValueError):
 
 
 def attributed(error: BaseException, snapshot: "FailureAttribution | None", *,
-               http_status: int | None = None) -> BaseException:
+               http_status: int | None = None, error_code: str | None = None) -> BaseException:
     """THE construction of a redaction boundary's frozen fields on its safe exception (an
-    ``AttributedError``): the snapshot, and (R30 I563) the provider's HTTP status when a response came
-    back. Returns the exception. A status outside 100-599 is not frozen; an absent one leaves the field."""
+    ``AttributedError``): the snapshot, (R30 I563) the provider's HTTP status when a response came
+    back, and (R31 I562) the controlled studio error code. Returns the exception. A status outside
+    ``valid_status`` (400-599, R31 I623) is not frozen; a code outside ``MODEL_ERROR_CODES`` is not
+    frozen; an absent one leaves the field."""
     if snapshot is not None and not isinstance(snapshot, FailureAttribution):
         raise TypeError("attributed takes a FailureAttribution")
     error.attribution = snapshot
-    if type(http_status) is int and 100 <= http_status <= 599:
+    if valid_status(http_status):
         error.http_status = http_status
+    if isinstance(error_code, str) and error_code in MODEL_ERROR_CODES:
+        error.error_code = error_code
     return error
+
+
+def frozen_error_code(error: BaseException | None) -> str | None:
+    """R31 I562: the studio code a redaction boundary froze on this safe error (``attributed``), else
+    None. Only the error itself is read (its chain was dropped at the boundary)."""
+    code = getattr(error, "error_code", None) if isinstance(error, AttributedError) else None
+    return code if isinstance(code, str) and code in MODEL_ERROR_CODES else None
 
 
 def with_request_record(error: BaseException, record) -> None:
@@ -133,7 +167,7 @@ def http_status_of(error: BaseException | None) -> int | None:
     for link in chain(error):
         for attr in ("http_status", "status_code"):
             value = getattr(link, attr, None)
-            if type(value) is int and 400 <= value <= 599:
+            if valid_status(value):
                 return value
     return None
 
@@ -292,7 +326,7 @@ class FailureAttribution:
 
     @classmethod
     def from_fields(cls, fields: dict) -> "FailureAttribution":
-        """Restore a snapshot already stored (read via read_attribution); not a new assembly."""
+        """Restore a snapshot already stored (read via export_attribution); not a new assembly."""
         return cls(**{k: fields.get(k) for k in SNAPSHOT_FIELDS})
 
     def to_fields(self) -> dict[str, Any]:
@@ -379,7 +413,7 @@ def write_attribution(record: dict, snapshot: FailureAttribution) -> None:
         raise TypeError("write_attribution takes a FailureAttribution")
     for key in SNAPSHOT_FIELDS:
         record.pop(key, None)
-    record.update(snapshot.to_fields())
+    record.update(export_attribution(snapshot))
 
 
 def has_snapshot(record: dict | None) -> bool:
@@ -396,35 +430,59 @@ def is_failed_terminal(record: dict | None) -> bool | None:
     return None if record.get("status") in (None, "") else False
 
 
-def read_attribution(record: dict | None) -> dict[str, Any]:
-    """The attribution every reader uses (store, history, Sentry; frontend pickAttribution has the same
-    rules). Cleans by snapshot completeness, in the returned projection only:
+def _valid(key: str, value: Any) -> bool:
+    if key == "http_status":
+        return valid_status(value)
+    if key == "attribution_source":
+        return value in SOURCES
+    return isinstance(value, str) and value != ""
+
+
+def export_attribution(source: "FailureAttribution | dict | None", *, failed: bool | None = None) -> dict[str, Any]:
+    """R31 (Dong I565): THE whitelist serializer. Every attribution that leaves a record or a snapshot
+    (Sentry tags/context, the PostHog run snapshot, the store's history summary and read projection, the
+    stored group itself) goes through here; the frontend twin is ``pickAttribution`` (workflow.ts).
+
+    Only ``SNAPSHOT_FIELDS`` are copied, one by one, each type-checked (a status is an int 400-599, the
+    source one of ``SOURCES``, every other field a non-empty string); nothing else in ``source`` (extra
+    keys, prose, URLs) can come out. Then the reader rules, on the copy only:
     - identity without its provider/config_source pair -> no identity;
     - ``local`` -> no http_status/upstream_error_type;
-    - failure fields stay on a failed terminal (status OR outcome failed/partial) and on a record with no
-      status (undecided: nothing is deleted); a record that ended without failing has none;
+    - failure fields stay on a failed terminal (status OR outcome failed/partial) and on an undecided one
+      (no status; a bare snapshot is undecided unless ``failed`` says otherwise); a record that ended
+      without failing has none;
     - an unknown attribution_source is dropped."""
-    if not isinstance(record, dict):
+    if isinstance(source, FailureAttribution):
+        fields = {k: getattr(source, k) for k in SNAPSHOT_FIELDS}
+        terminal = failed
+    elif isinstance(source, dict):
+        fields = source
+        terminal = is_failed_terminal(source) if failed is None else failed
+    else:
         return {}
-    out = _paired_identity(record)
-    source = record.get("attribution_source")
-    if source in SOURCES:
-        out["attribution_source"] = source
-    if is_failed_terminal(record) is not False:
+    clean = {k: fields[k] for k in SNAPSHOT_FIELDS if _valid(k, fields.get(k))}
+    out = _paired_identity(clean)
+    origin = clean.get("attribution_source")
+    if origin is not None:
+        out["attribution_source"] = origin
+    if terminal is not False:
         for key in FAILURE_FIELDS:
-            if record.get(key) not in (None, ""):
-                out[key] = record[key]
-        if source == SOURCE_LOCAL:
+            if key in clean:
+                out[key] = clean[key]
+        if origin == SOURCE_LOCAL:
             for key in UPSTREAM_FIELDS:
                 out.pop(key, None)
     return out
+
+
+read_attribution = export_attribution  # the record reader IS the serializer (one implementation)
 
 
 def project_attribution(record: dict | None) -> None:
     """Read-time cleanup in place on a record just read (never written back by the read itself)."""
     if not isinstance(record, dict):
         return
-    clean = read_attribution(record)
+    clean = export_attribution(record)
     for key in SNAPSHOT_FIELDS:
         record.pop(key, None)
     record.update(clean)

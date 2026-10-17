@@ -81,7 +81,8 @@ def test_real_cloud_http_failure_keeps_provider_status(cloud_adapter, model, sta
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    assert result['error_code'] == 'provider_error'
+    # R31 I562: the code the boundary froze from the status alone (was provider_error for every status)
+    assert result['error_code'] == {409: 'provider_error', 401: 'llm_auth_invalid', 500: 'provider_error'}[status]
     assert f'HTTP {status}' in result['error']
     assert '云端转写' in result['error']
     assert 'Whisper' not in result['error']
@@ -109,7 +110,9 @@ def test_real_cloud_non_http_failure_has_no_local_install_advice(cloud_adapter, 
     result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    assert result['error_code'] == 'provider_error'
+    # R31 I562: connection and invalid replies keep their own codes (were provider_error)
+    assert result['error_code'] == {'connection': 'connection', 'invalid_response': 'invalid_response',
+                                    'empty': 'provider_error'}[kind]
     assert '云端转写' in result['error']
     assert 'Whisper' not in result['error']
     assert 'private-network-detail' not in result['error']

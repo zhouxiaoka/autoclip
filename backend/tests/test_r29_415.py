@@ -4,7 +4,6 @@ writes and events carry it unchanged. Every test here fails on 9ce045c2 on an as
 mutation (157/mut415-r29). Nothing here imports a symbol that only exists after R29."""
 import ast
 import json
-import re
 from pathlib import Path
 
 import openai
@@ -318,59 +317,11 @@ def test_model_response_invalid_from_text_json(monkeypatch):
 
 # --- I502: the single factory / single reader guard is an AST scan ----------------------------------------
 
-REC = re.compile(r'^(record|analysis|generation|terminal|prior|previous|row|summary|run|workspace)$')
-READ_KEYS = {'attribution_source', 'http_status', 'upstream_error_type'}
-FIELD_SETS = {'UPSTREAM_FIELDS', 'FAILURE_FIELDS', 'SNAPSHOT_FIELDS', 'ATTRIBUTION_FIELDS'}
+# R31 (Dong I565): the variable-name reader heuristic (REC / READ_KEYS, ~60 lines) is deleted: the runtime
+# payload tests (test_r31_415_payload.py, frontend r31-415-payload.test.cjs) are the guarantee now. What
+# stays here is the cheap structural part: one factory, one restore point.
 FACTORY_NAMES = {'FailureAttribution', '_make', 'from_fields'}
 RESTORE_ALLOWED = {('backend/services/studio/jobs.py', 'run_content')}
-
-
-def _own_nodes(scope):
-    stack = list(ast.iter_child_nodes(scope))
-    while stack:
-        node = stack.pop()
-        yield node
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            stack.extend(ast.iter_child_nodes(node))
-
-
-def _reader_offences(nodes, module_keys=frozenset()):
-    keynames, aliases, out = set(module_keys), set(), []
-    for n in nodes:
-        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant) and n.value.value in READ_KEYS:
-            keynames |= {t.id for t in n.targets if isinstance(t, ast.Name)}
-        if isinstance(n, (ast.For, ast.comprehension)) and isinstance(n.target, ast.Name):
-            it = n.iter
-            if (isinstance(it, (ast.Tuple, ast.List, ast.Set)) and any(isinstance(e, ast.Constant) and e.value in READ_KEYS for e in it.elts)) \
-                    or (isinstance(it, ast.Name) and it.id in FIELD_SETS) or (isinstance(it, ast.Attribute) and it.attr in FIELD_SETS):
-                keynames.add(n.target.id)
-
-    def recish(e):
-        if isinstance(e, ast.Name):
-            return bool(REC.match(e.id)) or e.id in aliases
-        if isinstance(e, ast.Attribute):
-            return bool(REC.match(e.attr))
-        if isinstance(e, ast.Subscript) and isinstance(e.slice, ast.Constant):
-            return bool(REC.match(str(e.slice.value)))
-        if isinstance(e, ast.Call) and isinstance(e.func, ast.Attribute) and e.func.attr == 'get' and e.args and isinstance(e.args[0], ast.Constant):
-            return bool(REC.match(str(e.args[0].value)))
-        if isinstance(e, ast.BoolOp):
-            return any(recish(v) for v in e.values)
-        return False
-    for _ in range(3):
-        for n in nodes:
-            if isinstance(n, ast.Assign) and recish(n.value):
-                aliases |= {t.id for t in n.targets if isinstance(t, ast.Name)}
-
-    def iskey(k):
-        return (isinstance(k, ast.Constant) and k.value in READ_KEYS) or (isinstance(k, ast.Name) and k.id in keynames)
-    for n in nodes:
-        if isinstance(n, ast.Subscript) and isinstance(n.ctx, ast.Load) and iskey(n.slice) and recish(n.value):
-            out.append((n.lineno, 'reader: ' + ast.unparse(n)))
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == 'get' and n.args \
-                and iskey(n.args[0]) and recish(n.func.value):
-            out.append((n.lineno, 'reader: ' + ast.unparse(n)))
-    return out
 
 
 def py_offences(source, rel='<memory>'):
@@ -389,10 +340,6 @@ def py_offences(source, rel='<memory>'):
         if name == 'restore_attribution' and isinstance(n, (ast.Name, ast.Attribute, ast.alias)) \
                 and (rel, funcs.get(id(n))) not in RESTORE_ALLOWED:
             out.append((getattr(n, 'lineno', 0), 'restore outside its one restore point'))
-    module_keys = {t.id for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
-                   and n.value.value in READ_KEYS for t in n.targets if isinstance(t, ast.Name)}
-    for scope in [tree] + [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]:
-        out.extend(_reader_offences(list(_own_nodes(scope)), module_keys))
     return out
 
 
@@ -413,12 +360,8 @@ def test_i502_ast_guard_backend_has_one_factory_and_one_reader():
     'from backend.core import failure_attribution as fa\nSnapshot = fa.FailureAttribution\nsnap = Snapshot("local")\n',
     # a dynamic getattr on the module
     'import importlib\nm = importlib.import_module("backend.core.failure_attribution")\nS = getattr(m, "FailureAttribution")\n',
-    # Python dynamic key read
-    'def f(analysis):\n    out = {}\n    for k in ("http_status", "upstream_error_type"):\n        out[k] = analysis.get(k)\n    return out\n',
-    # a key bound to a name, read through an alias of a record
     # a restore under an import alias, outside run_content (R29 mutation G5)
     'from backend.core.failure_attribution import restore_attribution as _ra\n_y = lambda f: _ra(f)\n',
-    'KEY = "attribution_source"\ndef f(data):\n    terminal = data["generation"]\n    t2 = terminal\n    return t2[KEY]\n',
 ])
 def test_i502_ast_guard_catches_every_bypass(source):
     assert py_offences(source), source

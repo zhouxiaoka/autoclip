@@ -203,13 +203,16 @@ def test_i563_the_log_safe_boundary_freezes_the_status_and_cuts_the_chain():
 # --- I567: one classification; boundaries classify inside and raise from None -------------------------
 
 def _recording_factory(monkeypatch, module):
+    # R31 (I561): the boundaries now reach THE factory through llm_emit.attribution_snapshot (to pass the
+    # call's identity), which imports it from failure_attribution at call time: record it there.
+    from backend.core import failure_attribution
     calls = []
-    real = module.build_attribution
+    real = failure_attribution.build_attribution
 
     def record(error=None, **kwargs):
         calls.append((error, kwargs))
         return real(error, **kwargs)
-    monkeypatch.setattr(module, 'build_attribution', record)
+    monkeypatch.setattr(failure_attribution, 'build_attribution', record)
     return calls
 
 

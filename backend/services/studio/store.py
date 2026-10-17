@@ -434,7 +434,7 @@ def read(project_id: str, *, recover: bool = True):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
-    # R27 #415 (I399/I421): every record that carries an attribution is read through read_attribution:
+    # R27 #415 (I399/I421): every record that carries an attribution is read through export_attribution:
     # legacy half identities, local records with an upstream status, failure fields on a success are
     # cleaned in what this read returns. The read itself never writes this back.
     for name in ('analysis', 'generation'):
@@ -834,7 +834,10 @@ def settle_generation(data):
 
 
 @_serialized
-def write(project_id, data, *, _recover_previous=True):
+def write(project_id, data, *, _recover_previous=True, restore=False):
+    """``restore=True`` (R31, Dong I620): ``data`` is a state read earlier, written back as is to undo a
+    reservation nobody accepted (a rejected dispatch). It is not a state transition: no attribution
+    snapshot is stamped and every record keeps the attribution group it carries."""
     from backend.core.project_cancellation import checkpoint
     checkpoint(project_id)
     root = directory(project_id)
@@ -847,7 +850,7 @@ def write(project_id, data, *, _recover_previous=True):
     previous = read(project_id, recover=_recover_previous) if path.exists() else {}
     _apply_read_receipts(path, data)
     _ensure_failure_identity(data)
-    usage_checkpoint = _attach_run_telemetry(data, project_id, previous)
+    usage_checkpoint = _attach_run_telemetry(data, project_id, previous, restore=restore)
     analysis = data.get('analysis') or {}
     prior = previous.get('analysis') or {}
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
@@ -860,7 +863,7 @@ def write(project_id, data, *, _recover_previous=True):
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
                 summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'screening_identity', 'shutdown_kind') if k in terminal}
-                summary.update(read_attribution(terminal))  # R27 #415: the snapshot, via the one reader
+                summary.update(export_attribution(terminal))  # R27 #415 / R31 I565: THE serializer
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis', 'degrade_reason') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
@@ -925,14 +928,15 @@ def _ensure_failure_identity(data):
 
 from backend.core.failure_attribution import (  # noqa: E402 - R27 #415: the one attribution rule
     ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, build_attribution,
-    is_failed_terminal, project_attribution, read_attribution, write_attribution)
+    SNAPSHOT_FIELDS, export_attribution, has_snapshot, is_failed_terminal, project_attribution,
+    write_attribution)
 
 
 def _paired(record):
     return all(isinstance(record.get(k), str) and record[k] for k in ATTEMPT_IDENTITY_KEYS)
 
 
-def _apply_attribution(record, failed, newly_failed):
+def _apply_attribution(record, failed, newly_failed, prior=None):
     """R29 #415 (I503): the store only writes the snapshot it is given, replaced whole; it never infers
     "the same failure" from run_id/error_code or any other field value. R30 (I560): a snapshot is stamped
     only on a record that became failed IN THIS WRITE (``newly_failed``: the state transition, see
@@ -941,12 +945,20 @@ def _apply_attribution(record, failed, newly_failed):
     - newly failed, with an error in hand: the snapshot of THAT error replaces the group (an error that
       carries a boundary snapshot gets it back unchanged; otherwise THE factory builds it from the error,
       the phase identity, the job's own failure stage and, for local, the attempt's start identity);
-    - newly failed with no error in hand (a receipt that already wrote its own snapshot), or failed before
-      this write and still the same failure: the stored group stays exactly as it is;
+    - newly failed with no error in hand (a receipt that already wrote its own snapshot): the group the
+      record carries stays exactly as it is;
+    - failed before this write and still the same attempt (R31 I622): the STORED group (``prior``) is
+      carried forward whole, even when the writer rebuilt the record dict (no inference: copied as is);
     - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
     from backend.core.llm_emit import attribution_snapshot, failure_now
     if failed:
-        if not newly_failed or failure_now() is None:
+        if not newly_failed:
+            if has_snapshot(prior):
+                for key in SNAPSHOT_FIELDS:
+                    record.pop(key, None)
+                record.update({k: prior[k] for k in SNAPSHOT_FIELDS if k in prior})
+            return
+        if failure_now() is None:
             return
         snap = attribution_snapshot(start_identity=record)  # the job's own stage rides on the record
         if snap is not None:
@@ -960,11 +972,11 @@ def _apply_attribution(record, failed, newly_failed):
         record.pop(key, None)
     snap = attribution_snapshot()
     if snap is not None and snap.provider:
-        record.update({k: v for k, v in snap.to_fields().items() if k in IDENTITY_FIELDS})
+        record.update({k: v for k, v in export_attribution(snap).items() if k in IDENTITY_FIELDS})
         record['attribution_source'] = snap.attribution_source
 
 
-def _attach_run_telemetry(data, project_id, previous):
+def _attach_run_telemetry(data, project_id, previous, *, restore=False):
     try:
         from backend.core.llm_emit import run_usage_checkpoint
         from backend.core.llm_telemetry import run_snapshot
@@ -995,7 +1007,8 @@ def _attach_run_telemetry(data, project_id, previous):
         # non-failed -> failed, or a failed record of ANOTHER attempt (run identity changed). Status and
         # identity only; never error_code (no "same failure" inference, I503).
         newly_failed = failed and not (is_failed_terminal(prior) and prior_identity == identity)
-        _apply_attribution(record, failed, newly_failed)
+        if not restore:  # R31 I620: a rollback write is not a transition; its records keep their groups
+            _apply_attribution(record, failed, newly_failed, prior)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':
                 continue

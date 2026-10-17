@@ -35,8 +35,7 @@ def _retryable(error: Exception) -> bool:
     return isinstance(error, httpx.RequestError)
 
 
-from backend.core.failure_attribution import (AttributedError, ModelResponseInvalid, ProviderTransportError,
-                                              attributed, build_attribution)
+from backend.core.failure_attribution import AttributedError, ModelResponseInvalid, ProviderTransportError, attributed
 
 
 class CloudTranscriptionError(AttributedError, RuntimeError):
@@ -44,16 +43,20 @@ class CloudTranscriptionError(AttributedError, RuntimeError):
     exception (``.attribution``) before ``from None``; a local one (no key, no audio) carries none."""
 
 
-def _provider_failure(message: str, original: BaseException) -> CloudTranscriptionError:
+def _provider_failure(message: str, original: BaseException, identity: dict | None = None) -> CloudTranscriptionError:
     """The redaction boundary: ``original`` is already the content-free view built inside the ``except``
     (a ``ProviderTransportError`` with the type name and, when an HTTP response came back, its status; or
-    a ``ModelResponseInvalid``). THE classifier decides it (R30 I567: no ``sent`` override); the snapshot
-    and the HTTP status are frozen on the safe error (I563), which the caller raises ``from None``."""
-    return attributed(CloudTranscriptionError(message), build_attribution(original, failure_stage='subtitle'),
-                      http_status=getattr(original, 'http_status', None))
+    a ``ModelResponseInvalid``). THE classifier decides it (R30 I567: no ``sent`` override); the snapshot,
+    the HTTP status (I563) and the controlled error code (R31 I562) are frozen on the safe error, which the
+    caller raises ``from None``. R31 (I561): ``identity`` is the transcription connection THIS call used,
+    frozen once in ``transcribe`` (``connection_identity``), so the snapshot names who answered."""
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(original, failure_stage='subtitle', phase_identity=identity)
+    return attributed(CloudTranscriptionError(message), snap, http_status=getattr(original, 'http_status', None),
+                      error_code=getattr(original, 'error_code', None))
 
 
-def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
+def normalize_segments(items, offset=0.0, milliseconds=False, duration=None, identity=None):
     """Reject missing/invalid timing instead of inventing clip boundaries."""
     result = []
     scale = 1000 if milliseconds else 1
@@ -70,7 +73,7 @@ def normalize_segments(items, offset=0.0, milliseconds=False, duration=None):
                 raise ValueError()
         except (KeyError, TypeError, ValueError) as error:
             raise _provider_failure('转写服务未返回有效时间戳，无法生成准确字幕；请更换转写模型。',
-                                    ModelResponseInvalid(type(error).__name__)) from None
+                                    ModelResponseInvalid(type(error).__name__), identity) from None
         result.append({'start': start + offset, 'end': end + offset, 'text': text})
     return result
 
@@ -151,6 +154,8 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
             raise CloudTranscriptionError('无法提取视频音频，请检查视频是否包含音轨。')
         segments = []
         from backend.core.llm_providers import is_local_url
+        from backend.services.studio.failure_identity import connection_identity
+        identity = connection_identity(connection, selection.model, full=True)  # I561: this call's connection
         try:
             # Cut every chunk first, then upload them side by side: one request after another made a
             # three-hour talk ~60 sequential round trips. Offsets come from exact sample counts.
@@ -179,7 +184,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                             if attempt == CHUNK_ATTEMPTS - 1 or not _retryable(error):
                                 raise
                             time.sleep(2 * 2 ** attempt)
-                    return normalize_segments(items, start, milliseconds, duration)
+                    return normalize_segments(items, start, milliseconds, duration, identity)
 
                 from concurrent.futures import ThreadPoolExecutor
                 pool = ThreadPoolExecutor(max_workers=UPLOAD_WORKERS, thread_name_prefix='asr-chunk')
@@ -194,12 +199,14 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             safe = _provider_failure(f'云端转写请求失败（HTTP {status}），请检查密钥、额度和模型权限。',
-                                     ProviderTransportError(type(exc).__name__, http_status=status))
+                                     ProviderTransportError(type(exc).__name__, http_status=status), identity)
             raise safe from None
         except httpx.RequestError as exc:
-            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ProviderTransportError(type(exc).__name__)) from None
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。',
+                                    ProviderTransportError(type(exc).__name__, timed_out=isinstance(exc, httpx.TimeoutException)),
+                                    identity) from None
         except ValueError as exc:
-            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ModelResponseInvalid(type(exc).__name__)) from None
+            raise _provider_failure('云端转写连接失败或响应格式无效，请稍后重试。', ModelResponseInvalid(type(exc).__name__), identity) from None
         if not segments:
             raise CloudTranscriptionError('转写结果为空，音频中可能没有可识别的人声。')
         segments.sort(key=lambda s: (s['start'], s['end']))

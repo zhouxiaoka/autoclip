@@ -508,15 +508,17 @@ def failure_now() -> BaseException | None:
 
 
 def attribution_snapshot(error: BaseException | None = None, *, failure_stage: str | None = None,
-                         start_identity: dict | None = None):
+                         start_identity: dict | None = None, phase_identity: dict | None = None):
     """R28 #415: this run's failure-attribution snapshot, from THE factory
-    (``failure_attribution.build_attribution``); this only supplies the error and the frozen phase."""
-    from backend.core.failure_attribution import build_attribution
+    (``failure_attribution.build_attribution``); this only supplies the error and the frozen phase.
+    R31 (I561): a redaction boundary that knows the connection its call used passes that identity
+    (``phase_identity``, a provider/config_source pair); it wins over the run's frozen phase identity."""
+    from backend.core.failure_attribution import _paired_identity, build_attribution
     if error is None:
         error = failure_now()  # R26 #402: 3.10; #397: a failure held past its except
+    phase: dict[str, Any] = _paired_identity(phase_identity)
     acc = _run_acc.get()
-    phase: dict[str, Any] = {}
-    if acc is not None:
+    if not phase and acc is not None:
         with acc.lock:
             phase = dict(acc.phase_identity)
     return build_attribution(error, phase_identity=phase, start_identity=start_identity,
@@ -524,9 +526,9 @@ def attribution_snapshot(error: BaseException | None = None, *, failure_stage: s
 
 
 def attribution(error: BaseException | None = None) -> dict[str, Any]:
-    """The snapshot as fields ({} when there is none)."""
-    snap = attribution_snapshot(error)
-    return snap.to_fields() if snap is not None else {}
+    """The snapshot as fields ({} when there is none), via THE serializer (R31 I565)."""
+    from backend.core.failure_attribution import export_attribution
+    return export_attribution(attribution_snapshot(error))
 
 
 from backend.core.failure_attribution import MODEL_ERROR_CODES  # noqa: E402,F401 - re-exported
@@ -542,15 +544,16 @@ def run_snapshot(project_id: str | None = None, *, error: BaseException | None =
                  with_source: bool = False) -> dict[str, Any]:
     """Sanitized run-level fields for generation / production / Sentry tags. Identity fields come
     whole from ``attribution`` (R25 #415); settings are never read."""
+    from backend.core.failure_attribution import export_attribution
     acc = _run_acc.get()
-    snap = attribution_snapshot(error)
+    fields = export_attribution(attribution_snapshot(error))  # R31 I565: THE serializer, no field read off
     raw: dict[str, Any] = {
-        "provider": snap.provider if snap else None,
-        "model": _safe_model(snap.model) if snap else None,
-        "base_url_host": snap.base_url_host if snap else None,
-        "config_source": snap.config_source if snap else None,
-        "http_status": snap.http_status if snap else None,
-        "upstream_error_type": snap.upstream_error_type if snap else None,
+        "provider": fields.get("provider"),
+        "model": _safe_model(fields.get("model")),
+        "base_url_host": fields.get("base_url_host"),
+        "config_source": fields.get("config_source"),
+        "http_status": fields.get("http_status"),
+        "upstream_error_type": fields.get("upstream_error_type"),
         "billable_calls_before_failure": acc.billable if acc else 0,
     }
     # Project usage is historical; track_run's accumulator belongs to this attempt only.
@@ -576,15 +579,15 @@ def run_snapshot(project_id: str | None = None, *, error: BaseException | None =
     if acc is not None:
         raw.update(llm_calls=calls, prompt_tokens=prompt, completion_tokens=completion,
                    reasoning_tokens=acc.reasoning_tokens, retry_count=retry, degrade_count=degrade)
-    if snap is not None and snap.failure_stage:
-        raw["failure_stage"] = normalize_failure_stage(snap.failure_stage)
+    if fields.get("failure_stage"):
+        raw["failure_stage"] = normalize_failure_stage(fields["failure_stage"])
     out = schema.sanitize_run_properties(raw)
     out.pop("success_rate_schema_version", None)
     if not (out.get("provider") and out.get("config_source")):
         for key in ("provider", "config_source", "model", "base_url_host"):
             out.pop(key, None)  # R25 #415: a pair or nothing
-    if with_source and snap is not None:
-        out["attribution_source"] = snap.attribution_source
+    if with_source and fields.get("attribution_source"):
+        out["attribution_source"] = fields["attribution_source"]
     return {key: value for key, value in out.items()
             if value not in (None, "", 0) or key == "billable_calls_before_failure"
             or (acc is not None and value == 0)}
@@ -621,15 +624,15 @@ def configured_connection_fields(*, role: str = "analysis") -> dict[str, Any]:
 def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, str]:
     """Allowlisted string tags only. R25 #415: read the failed request's record whole; the exception's
     own status is never pasted onto another request's identity."""
+    from backend.core.failure_attribution import export_attribution
     tags: dict[str, str] = {}
-    snap = attribution_snapshot(error)  # R28: Sentry reads the one snapshot object
-    stage = normalize_failure_stage((snap.failure_stage if snap else None) or phase)
-    if snap is not None:
-        tags["attribution_source"] = snap.attribution_source  # R26 #392
+    fields = export_attribution(attribution_snapshot(error))  # R28 one snapshot; R31 I565 THE serializer
+    stage = normalize_failure_stage(fields.get("failure_stage") or phase)
+    if fields.get("attribution_source"):
+        tags["attribution_source"] = fields["attribution_source"]  # R26 #392
     if stage:
         tags["failure_stage"] = stage
-    values = {"provider": snap.provider, "upstream_error_type": snap.upstream_error_type,
-              "base_url_host": snap.base_url_host, "model": snap.model} if snap else {}
+    values = {key: fields.get(key) for key in ("provider", "upstream_error_type", "base_url_host", "model")}
     for key, value in values.items():
         if not isinstance(value, str) or not value:
             continue
@@ -643,7 +646,7 @@ def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, 
         if key == "upstream_error_type" and schema.sanitize_upstream_error_type(value) is None:
             continue
         tags[key] = value
-    status = snap.http_status if snap else None
+    status = fields.get("http_status")
     if isinstance(status, int) and 400 <= status <= 599:
         tags["http_status"] = str(status)
     return tags

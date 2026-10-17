@@ -186,12 +186,17 @@ def log_safe_exception(error: Exception) -> Exception:
     # Only what the original chain DECIDES is frozen here; an undecided error (no SDK type, no local
     # evidence) gets no snapshot, and the call boundary's request record decides it as before.
     # R30 (I563): the provider's HTTP status is frozen by the same construction, in the same place.
-    from backend.core.failure_attribution import classify_failure
-    snap = None
+    # R31 (I562): the controlled studio code (timeout / connection / ...) is frozen by the same call, and
+    # only on a MODEL snapshot (an undecided or local error freezes none; X2).
+    from backend.core.failure_attribution import SOURCE_LOCAL, classify_failure
+    snap = code = None
     if classify_failure(error).decided:
         from backend.core.llm_emit import attribution_snapshot
         snap = attribution_snapshot(error)
-    attributed(safe, snap, http_status=safe.status_code)
+        if snap is not None and snap.attribution_source != SOURCE_LOCAL:
+            from backend.pipeline.failures import model_call_error_code
+            code = model_call_error_code(error)
+    attributed(safe, snap, http_status=safe.status_code, error_code=code)
     return safe
 
 

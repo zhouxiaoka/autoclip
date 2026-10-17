@@ -211,6 +211,7 @@ NOT_SNAPSHOT_READERS = {
     ('backend/core/llm_emit.py', 'sent_vision_identity'): 'vision settings -> sent identity',
     ('backend/core/llm_emit.py', '_provider_label'): 'provider object label',
     ('backend/core/llm_emit.py', 'run_snapshot'): 'sanitized pair check on the already built snapshot fields',
+    ('backend/core/llm_emit.py', 'sentry_tags_for_error'): 'R31 I565: reads the output of export_attribution only',
     ('backend/core/sentry_setup.py', 'before_send'): 'Sentry tag sanitizer on outgoing tags',
     ('backend/services/studio/intelligence.py', 'vision_call'): 'vision settings model',
     ('backend/services/studio/intelligence.py', 'visual_config'): 'vision settings model',
@@ -263,6 +264,8 @@ def _ts_reads(path):
             continue  # doc comments
         if re.match(r'\s*(type |export type |\w+\?: \{|  (analysis|generation)\?:)', code):
             continue  # type declarations
+        if re.match(r'\s*(export )?const [A-Z_]+ = ', code):
+            continue  # R31 I565: a key-list constant (ATTRIBUTION_KEYS) names keys, it reads no record
         if _TS_READ.search(code):
             out.append(f'{path.relative_to(ROOT)}:{no}: {line.strip()}')
     return out

@@ -61,6 +61,8 @@ test('I504: production status=partial emits its terminal event', () => {
 })
 
 // --- I502: AST guard over frontend/src: studio records' attribution is read only inside pickAttribution ---
+// R31 (Dong I565): AUXILIARY only. The primary guard is the runtime payload test (r31-415-payload.test.cjs):
+// whatever the code looks like, the event properties carry only ATTRIBUTION_KEYS with valid values.
 const KEYS = new Set(['attribution_source', 'http_status', 'upstream_error_type', 'provider', 'config_source', 'model', 'base_url_host'])
 const REC = /^(analysis|generation|run|record|terminal|workspace)$/
 
@@ -100,7 +102,7 @@ function offences(file, source) {
   return out
 }
 
-test('I502: no studio record attribution is read outside pickAttribution (AST, all of frontend/src)', () => {
+test('I502 (auxiliary): no studio record attribution is read outside pickAttribution (AST, all of frontend/src)', () => {
   const found = []
   // features/settings edits the model SETTINGS (settings.analysis.model), not a studio failure record.
   const walk = (dir) => { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); if (fs.statSync(p).isDirectory()) { if (!p.endsWith(path.join('features', 'settings'))) walk(p) } else if (/\.tsx?$/.test(f)) found.push(...offences(path.relative(path.join(__dirname, '..'), p), fs.readFileSync(p, 'utf8'))) } }
@@ -108,7 +110,7 @@ test('I502: no studio record attribution is read outside pickAttribution (AST, a
   assert.deepEqual(found, [])
 })
 
-test('I502: the AST guard catches .model, destructuring, element access and an alias', () => {
+test('I502 (auxiliary): the AST guard catches .model, destructuring, element access and an alias', () => {
   for (const source of [
     'const m = snapshot.analysis?.model',
     'const { http_status, upstream_error_type: u } = snapshot.generation!',

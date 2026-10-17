@@ -208,21 +208,36 @@ export function terminalOutcome(record: Attributed): string | undefined {
   return FAILED.includes(record.outcome || '') ? record.outcome : record.status
 }
 
+/** R31 (Dong I565): THE frontend attribution serializer (twin of backend failure_attribution
+ * export_attribution). The only keys that can come out, copied one by one and type-checked. */
+export const ATTRIBUTION_KEYS = Object.freeze(['provider', 'config_source', 'model', 'base_url_host', 'attribution_source', 'http_status', 'upstream_error_type', 'failure_stage'] as const)
+const IDENTITY_KEYS = ['provider', 'config_source', 'model', 'base_url_host'] as const
+
+function validAttributionValue(key: string, value: unknown): boolean {
+  if (key === 'http_status') return typeof value === 'number' && Number.isInteger(value) && value >= 400 && value <= 599
+  if (key === 'attribution_source') return typeof value === 'string' && ATTRIBUTION_SOURCES.includes(value)
+  return typeof value === 'string' && value !== ''
+}
+
 /** R28 #415 (I453): THE frontend attribution reader, the same rules as backend read_attribution. It reads
  * ONE record's snapshot: the caller picks the record (the event's own terminal), never several.
  * Identity only as a provider/config_source pair; failure fields only on a failed (or undecided) terminal,
- * and never status/upstream on ``local``. */
-export function pickAttribution(record: Attributed): Record<string, unknown> {
-  if (!record) return {}
+ * and never status/upstream on ``local``. R31 (I565): an explicit whitelist (ATTRIBUTION_KEYS), every value
+ * type-checked, the result frozen; ``omitIdentity`` serves screen events (their identity is screening's own). */
+export function pickAttribution(record: Attributed, options: { omitIdentity?: boolean } = {}): Readonly<Record<string, unknown>> {
+  if (!record) return Object.freeze({})
+  const raw = record as Record<string, unknown>
+  const clean: Record<string, unknown> = {}
+  for (const key of ATTRIBUTION_KEYS) if (validAttributionValue(key, raw[key])) clean[key] = raw[key]
   const out: Record<string, unknown> = {}
-  if (record.provider && record.config_source) Object.assign(out, { provider: record.provider, config_source: record.config_source, model: record.model, base_url_host: record.base_url_host })
-  const source = ATTRIBUTION_SOURCES.includes(record.attribution_source || '') ? record.attribution_source : undefined
+  if (!options.omitIdentity && clean.provider && clean.config_source) for (const key of IDENTITY_KEYS) if (key in clean) out[key] = clean[key]
+  const source = clean.attribution_source as string | undefined
   if (source) out.attribution_source = source
   if (isFailedTerminal(record) !== false) {
-    out.failure_stage = record.failure_stage
-    if (source !== 'local') { out.http_status = record.http_status; out.upstream_error_type = record.upstream_error_type }
+    if ('failure_stage' in clean) out.failure_stage = clean.failure_stage
+    if (source !== 'local') for (const key of ['http_status', 'upstream_error_type'] as const) if (key in clean) out[key] = clean[key]
   }
-  return out
+  return Object.freeze(out)
 }
 
 export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
@@ -436,8 +451,7 @@ export class WorkflowTracker {
     } else if (w.kind === 'studio-screen') {
       // R27 I420: the screen event carries the analysis record's attribution (incl. attribution_source) via
       // pickAttribution; the identity is still screening's own.
-      const { provider: _p, config_source: _c, model: _m, base_url_host: _h, ...screenAttribution } = pickAttribution(snapshot.analysis)
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, ...screenAttribution, ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, ...pickAttribution(snapshot.analysis, { omitIdentity: true }), ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.

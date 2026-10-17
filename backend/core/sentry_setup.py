@@ -37,6 +37,10 @@ def studio_error_code(error: Exception) -> str:
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
+    from backend.core.failure_attribution import frozen_error_code
+    frozen = frozen_error_code(error)  # R31 I562: the code a redaction boundary froze (timeout/connection)
+    if frozen in STUDIO_ERROR_CODES:
+        return frozen
     # Local render, frame sampling and optional-runtime preparation use typed subprocess timeouts.
     if isinstance(error, subprocess.TimeoutExpired):
         return "timeout"
@@ -71,14 +75,14 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
     (I455), without messages or URLs. Built by THE snapshot factory (failure_attribution.build_attribution)."""
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure
-    from backend.core.failure_attribution import build_attribution
+    from backend.core.failure_attribution import build_attribution, export_attribution
     stage = phase
     if isinstance(error, PipelineFailure):
         stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
     elif isinstance(error, VisionRequestError) and phase != "screening":
         stage = "vision"
     snap = build_attribution(error, failure_stage=stage)
-    fields = snap.to_fields() if snap is not None else {}
+    fields = export_attribution(snap)  # R31 I565: THE serializer
     return {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
 
 

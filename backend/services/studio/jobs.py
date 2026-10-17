@@ -504,17 +504,15 @@ def run_content(project_id, video):
         # The original exception does not survive apply().get(): the adapter built the one attribution
         # snapshot while the chain existed and it rides in the dict (R29 I501); it is restored here whole
         # and never re-judged. The HTTP status stays on the error for the user-facing hint (RC156 Win QA #1).
+        # R31 (I623): the status is frozen by THE construction (``attributed``, one valid range), not by hand.
+        from backend.core.failure_attribution import attributed, restore_attribution
         status = failure.get('http_status')
-        status = status if type(status) is int and 400 <= status <= 599 else None
         code = failure.get('error_code') or ''
         if code or failure.get('stage'):
-            error = ContentPipelineFailure(failure.get('stage', ''), message, code=code, http_status=status)
+            error = ContentPipelineFailure(failure.get('stage', ''), message, code=code)
         else:
             error = ContentRunError(message)
-            if status is not None:
-                error.http_status = status
-        from backend.core.failure_attribution import attributed, restore_attribution
-        attributed(error, restore_attribution(failure.get('attribution')))  # the adapter's snapshot, whole
+        attributed(error, restore_attribution(failure.get('attribution')), http_status=status)  # the adapter's snapshot, whole
         raise error
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
@@ -1592,7 +1590,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
-            store.write(project_id, previous, _recover_previous=False)
+            store.write(project_id, previous, _recover_previous=False, restore=True)  # R31 I620: a rollback
             raise ValueError(message) from None
 
         return state['analysis']['run_id']
@@ -1730,7 +1728,7 @@ def confirm_project(project_id, body):
             capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
-            store.write(project_id, previous, _recover_previous=False)
+            store.write(project_id, previous, _recover_previous=False, restore=True)  # R31 I620: a rollback
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 
         return state['analysis']['run_id']

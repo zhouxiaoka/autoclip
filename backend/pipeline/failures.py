@@ -118,9 +118,13 @@ def empty_timeline_failure(topic_count: int) -> PipelineFailure:
 
 def model_call_error_code(error: Exception) -> str:
     """Coarse studio code only. Fine type lives on ClassifiedUpstreamError / PipelineFailure.upstream_error_type."""
+    from backend.core.failure_attribution import frozen_error_code
     from backend.core.llm_retry import studio_code_for
     from backend.core.upstream_errors import classify_exception, http_error_parts
 
+    frozen = frozen_error_code(error)  # R31 I562: the redaction boundary already decided it
+    if frozen:
+        return frozen
     info = classify_exception(error)
     status, _body = http_error_parts(error)
     code = studio_code_for(info.error_type, status)
@@ -207,14 +211,19 @@ def cloud_transcription_failure(message, error: BaseException | None = None) -> 
     """CloudTranscriptionError carries only our safe public text, never a provider body.
 
     R29: the transcription boundary already built the snapshot (``error.attribution``); it is carried
-    here as is and wins over this wrapper's code (which only picks the user hint), never re-judged."""
+    here as is and wins over this wrapper's code (which only picks the user hint), never re-judged.
+    R31 (I562): the code is the one the boundary froze (timeout / connection / rate_limited / ...), else
+    ``provider_error``. The user text depends ONLY on that code and the frozen HTTP status (Dong 8f0e155c
+    #1): ``message`` is the boundary's own fixed sentence, never upstream response text. R31 (I623): the
+    snapshot, status and code are carried by THE construction (``attributed``), not set by hand."""
+    from backend.core.failure_attribution import attributed, frozen_error_code
     failure = AttributedPipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
         "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
-        code="provider_error",
+        code=frozen_error_code(error) or "provider_error",
     )
-    failure.attribution = getattr(error, "attribution", None)
-    return failure
+    return attributed(failure, getattr(error, "attribution", None), http_status=getattr(error, "http_status", None),
+                      error_code=frozen_error_code(error))
 
 
 def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> PipelineFailure:
