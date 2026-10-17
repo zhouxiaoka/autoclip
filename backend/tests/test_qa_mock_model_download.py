@@ -69,44 +69,62 @@ def test_endpoint_docstring_is_kept():
 
 
 def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
-    """#406 + group decision: the simulated failure emits 0 success-rate events and 0 Sentry events (one place);
-    a real 5xx HTTPException through the same app and SDK setup is reported, so the counter can see a report."""
+    """#406 + R27b I427: with the production Sentry init (init_sentry, production before_send, no Starlette
+    integration added) the QA simulated 500 sends 0 Sentry events and 0 success-rate events, and a real model
+    download 500 is reported exactly once, carrying only the error code and status (no message, no path)."""
     import sentry_sdk
-    from sentry_sdk.integrations.fastapi import FastApiIntegration
-    from sentry_sdk.integrations.starlette import StarletteIntegration
-    from backend.core import llm_emit
+    from backend.core import llm_emit, sentry_setup
 
     telemetry = []
     monkeypatch.setattr(llm_emit, '_post_event', lambda event, props: telemetry.append(event))
-    envelopes = []
+    events = []
 
     class Transport(sentry_sdk.transport.Transport):
         def capture_envelope(self, envelope):
-            envelopes.extend(item for item in envelope.items if item.type == 'event')
+            events.extend(item.payload.json for item in envelope.items if item.type == 'event')
 
-    sentry_sdk.init(dsn='https://k@o0.ingest.sentry.io/0', transport=Transport(), default_integrations=False, auto_session_tracking=False,
-                    integrations=[StarletteIntegration(), FastApiIntegration()])
+    real_init = sentry_sdk.init
+    seen = {}
+
+    def init_with_memory_transport(*args, **kwargs):
+        seen.update(kwargs)
+        return real_init(*args, transport=Transport(), **kwargs)
+    monkeypatch.setattr(sentry_sdk, 'init', init_with_memory_transport)
+    monkeypatch.setattr(sentry_setup, '_initialized', False)
+    monkeypatch.setattr(sentry_setup, 'crash_reports_enabled', lambda: True)
+    monkeypatch.setattr(sentry_setup, 'sync_anonymous_user', lambda *a, **k: None)
+    monkeypatch.setenv('SENTRY_DSN', 'https://k@o0.ingest.sentry.io/0')
     try:
+        assert sentry_setup.init_sentry('desktop') is True
+        names = {type(i).__name__ for i in seen['integrations']}
+        assert 'StarletteIntegration' not in names and seen['auto_enabling_integrations'] is False
+        assert seen['before_send'] is sentry_setup.before_send
+
         monkeypatch.setenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, '1')
         http, calls = client
         res = http.post('/api/v1/whisper-models/download', json={'model': 'base'})
         sentry_sdk.flush()
         assert res.status_code == 500 and calls == []
         assert telemetry == [], telemetry
-        assert envelopes == [], 'QA simulated 500 reported to Sentry'
+        assert events == [], 'QA simulated 500 reported to Sentry'
 
-        # control: a real download failure (HTTPException 500) is reported by the same setup
         monkeypatch.delenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV)
 
         class Broken:
             async def download_model(self, model):
-                raise RuntimeError('disk full')
+                raise RuntimeError('disk full at /Users/someone/models/base.pt')
         monkeypatch.setattr(sr, 'get_model_manager', lambda: Broken())
         assert http.post('/api/v1/whisper-models/download', json={'model': 'base'}).status_code == 500
         sentry_sdk.flush()
-        assert len(envelopes) >= 1, 'control: a real 5xx must be visible to the counter'
+        assert len(events) == 1, f'a real download 500 is reported exactly once, got {len(events)}'
+        event = events[0]
+        text = str(event)
+        assert 'disk full' not in text and '/Users/' not in text and 'base.pt' not in text
+        assert set(event.get('tags', {})) <= {'error_code', 'http_status', 'runtime', 'app_mode', 'os', 'arch', 'build_environment'}
+        assert event['tags']['http_status'] == '500' and event['tags']['error_code']
+        assert 'request' not in event and 'extra' not in event
     finally:
-        sentry_sdk.init(dsn=None)
+        real_init(dsn=None)
 
 
 def test_switch_affects_only_the_model_download(monkeypatch):

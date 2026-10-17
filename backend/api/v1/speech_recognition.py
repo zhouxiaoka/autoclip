@@ -434,6 +434,23 @@ def qa_simulated_download_failure(model: str) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": QA_MOCK_DOWNLOAD_DETAIL})
 
 
+def capture_model_download_failure(error: Exception):
+    """#418 R27b I427: a real model download 500 is captured explicitly (production Sentry runs without the Starlette
+    integration, so a raised HTTPException alone is never reported). Only the error code and the HTTP status go
+    along; before_send drops the message, paths and request. The QA simulation never comes here."""
+    from backend.core import sentry_setup
+    if not sentry_setup._initialized or not sentry_setup.crash_reports_enabled():
+        return None
+    try:
+        import sentry_sdk
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("error_code", sentry_setup.studio_error_code(error))
+            scope.set_tag("http_status", "500")
+            return sentry_sdk.capture_exception(error)
+    except Exception:
+        return None
+
+
 @router.post("/whisper-models/download")
 async def download_whisper_model(request: DownloadModelRequest):
     """开始下载 Whisper 模型（后台）。
@@ -448,6 +465,7 @@ async def download_whisper_model(request: DownloadModelRequest):
         state = await model_manager.download_model(request.model)
     except Exception as e:
         logger.error(f"下载Whisper模型失败: {e}")
+        capture_model_download_failure(e)
         raise HTTPException(status_code=500, detail=f"下载Whisper模型失败: {str(e)}")
     if state == "installed":
         return {"status": "installed", "model": request.model, "message": f"模型 {request.model} 已存在", "success": True}
