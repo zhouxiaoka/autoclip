@@ -232,7 +232,7 @@ def test_frontend_contract_lists_stay_aligned():
     def const_list(name: str) -> list[str]:
         match = __import__("re").search(rf"export const {name} = \[((?:.|\n)*?)\] as const", text)
         assert match, name
-        return __import__("re").findall(r"'([a-z0-9_]+)'", match.group(1))
+        return __import__("re").findall(r"'([a-z0-9_-]+)'", match.group(1))
 
     assert set(const_list("UPSTREAM_ERROR_TYPES")) == UPSTREAM_ERROR_TYPES
     assert set(const_list("RETRYABLE_UPSTREAM_ERROR_TYPES")) == {item.value for item in RETRYABLE_TYPES}

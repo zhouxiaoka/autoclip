@@ -21,6 +21,8 @@ from fastapi.testclient import TestClient
 from backend.api.v1.settings import router
 from backend.core import sentry_setup
 from backend.core.event_catalog import detect_os, detect_arch
+# This child simulates the packaged tree (no backend/tests) and is not a pytest process.
+sentry_setup._running_from_source_tree = lambda: False
 
 received = []
 class RecordingTransport(Transport):
@@ -55,7 +57,7 @@ expected = {'runtime': 'python', 'app_mode': 'desktop',
             'os': detect_os(), 'arch': detect_arch(),
             'build_environment': os.environ['AUTOCLIP_BUILD_ENVIRONMENT'],
             'area': 'studio', 'phase': 'production', 'error_code': 'unexpected',
-            'failure_stage': 'production'}
+            'failure_stage': 'production', 'attribution_source': 'local'}  # R26 #392: not a provider failure
 if os.environ['AUTOCLIP_BUILD_ENVIRONMENT'] == 'validation':
     expected['telemetry_test'] = 'true'
 assert event.get('tags') == expected, event.get('tags')
@@ -85,7 +87,7 @@ worker.join(10)
 assert len(received) == count, 'OFF must not submit another envelope'
 sentry_sdk.get_client().close()
 '''
-    env = dict(os.environ)
+    env = {key: value for key, value in os.environ.items() if key not in {'PYTEST_CURRENT_TEST', 'PYTEST_ADDOPTS'}}
     env.update(AUTOCLIP_APP_DIR=str(tmp_path), AUTOCLIP_DATA_DIR=str(tmp_path),
                AUTOCLIP_MODE='desktop', AUTOCLIP_BUILD_ENVIRONMENT=environment,
                AUTOCLIP_APP_VERSION='1.5.4', SENTRY_DSN='https://public@example.invalid/1',

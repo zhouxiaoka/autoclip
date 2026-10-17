@@ -15,9 +15,15 @@ pub async fn start_backend_service(app_handle: AppHandle) -> Result<String, Stri
 }
 
 #[tauri::command]
-pub async fn stop_backend_service(app_handle: AppHandle) -> Result<String, String> {
+pub async fn stop_backend_service(app_handle: AppHandle, reason: Option<String>) -> Result<String, String> {
     let backend_manager = app_handle.state::<crate::BackendManager>();
-    match backend_manager.stop() {
+    // R16 #42: the updater passes reason="update"; everything else is a user quit/stop.
+    let intent = if reason.as_deref() == Some("update") {
+        crate::backend_manager::ShutdownIntent::Update
+    } else {
+        crate::backend_manager::ShutdownIntent::UserQuit
+    };
+    match backend_manager.stop_with_intent(intent) {
         Ok(_) => Ok("后端服务停止成功".to_string()),
         Err(e) => Err(e),
     }

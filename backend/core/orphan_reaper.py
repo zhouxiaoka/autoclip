@@ -38,14 +38,19 @@ def _parse(token: str) -> Optional[tuple]:
         return None
 
 
-def _owner_alive(pid: int, created: float) -> bool:
+def _owner_state(pid: int, created: float) -> str:
+    """'alive', 'dead' or 'unclear' (psutil could not tell: never kill)."""
     import psutil
     try:
-        return abs(psutil.Process(pid).create_time() - created) < 0.01
+        return 'alive' if abs(psutil.Process(pid).create_time() - created) < 0.01 else 'dead'
     except psutil.NoSuchProcess:
-        return False
+        return 'dead'
     except psutil.Error:
-        return True  # unclear: never kill
+        return 'unclear'
+
+
+def _owner_alive(pid: int, created: float) -> bool:
+    return _owner_state(pid, created) != 'dead'
 
 
 def _is_target(proc) -> bool:
@@ -54,22 +59,52 @@ def _is_target(proc) -> bool:
     return stem in TARGET_NAMES
 
 
-def find_orphans(processes: Optional[Iterable] = None) -> list:
+def _reason(error: BaseException, where: str) -> str:
+    import psutil
+    if isinstance(error, psutil.AccessDenied):
+        return f'{where}_access_denied'
+    if isinstance(error, psutil.NoSuchProcess):
+        return f'{where}_gone'
+    return f'{where}_error'
+
+
+def find_orphans(processes: Optional[Iterable] = None, uncertain: Optional[dict] = None) -> list:
+    """R31 (I559): each process is judged in its own ``try`` (environment read AND owner check), so one
+    process psutil cannot read never ends the scan. Every process skipped because the answer was unclear
+    is counted by reason into ``uncertain`` (``environ_access_denied``, ``owner_unclear``, ...)."""
     import psutil
     me = os.getpid()
     current = os.environ.get(ENV)
     orphans = []
+    uncertain = {} if uncertain is None else uncertain
+
+    def unclear(reason: str) -> None:
+        uncertain[reason] = uncertain.get(reason, 0) + 1
+
     for proc in processes if processes is not None else psutil.process_iter(['name']):
         try:
             if proc.pid == me or not _is_target(proc):
                 continue
+        except Exception:  # noqa: BLE001 - a process we cannot even name is not ours to judge
+            continue
+        try:
             token = proc.environ().get(ENV)
-        except psutil.Error:
+        except Exception as error:  # noqa: BLE001
+            unclear(_reason(error, 'environ'))
             continue
         if not token or token == current:
             continue
         owner = _parse(token)
-        if owner and not _owner_alive(*owner):
+        if not owner:
+            continue
+        try:
+            state = _owner_state(*owner)
+        except Exception as error:  # noqa: BLE001
+            unclear(_reason(error, 'owner'))
+            continue
+        if state == 'unclear':
+            unclear('owner_unclear')
+        elif state == 'dead':
             orphans.append(proc)
     return orphans
 
@@ -83,12 +118,16 @@ def reap_orphans(timeout: float = 3.0) -> int:
     R11: outcomes are counted separately — exited (gone after kill), access_denied (kill
     refused), still_alive (kill sent but the process outlived the wait) — and logged so a
     support log tells "nothing to do" from "could not clean up".
+    R31 (I559): processes skipped because the answer was unclear are counted by reason in
+    ``LAST_RESULT['uncertain']`` and logged; an exception that ends the whole scan is recorded by type
+    in ``LAST_RESULT['error']``. Both keys appear only when there is something to report.
     """
     global LAST_RESULT
     result = {'found': 0, 'exited': 0, 'access_denied': 0, 'still_alive': 0}
+    uncertain: dict = {}
     try:
         import psutil
-        orphans = find_orphans()
+        orphans = find_orphans(uncertain=uncertain)
         result['found'] = len(orphans)
         signalled = []
         for proc in orphans:
@@ -109,9 +148,16 @@ def reap_orphans(timeout: float = 3.0) -> int:
             logger.warning(
                 'Orphaned ffmpeg from a previous backend: found=%d exited=%d access_denied=%d still_alive=%d',
                 result['found'], result['exited'], result['access_denied'], result['still_alive'])
+        if uncertain:
+            result['uncertain'] = dict(uncertain)
+            logger.warning('Orphan reaper skipped processes it could not judge: %s',
+                           ' '.join(f'{k}={v}' for k, v in sorted(uncertain.items())))
         LAST_RESULT = result
         return result['found']
     except Exception as error:  # noqa: BLE001
         logger.warning('Orphan reaper unavailable: %s', type(error).__name__)
+        result['error'] = type(error).__name__
+        if uncertain:
+            result['uncertain'] = dict(uncertain)
         LAST_RESULT = result
         return 0

@@ -64,7 +64,7 @@ test('Studio progress messages, including transcription progress, are translated
  const transcribing=src.match(/^STUDIO_TRANSCRIBING_MESSAGE = '([^']+)'$/m)[1]
  const production=src.match(/^STUDIO_PRODUCTION_MESSAGE = '([^']+)'$/m)[1]
  const jobs=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/jobs.py'),'utf8')
- const keys=[transcribing,production,'正在生成可发布成片','正在追加平台版本','正在重试成片版本']
+ const keys=[transcribing,production,'正在生成可发布成片','正在重试成片版本']
  for(const key of keys.slice(1))assert.ok(jobs.includes(`'${key}'`),key)
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
 })

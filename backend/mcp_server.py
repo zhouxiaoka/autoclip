@@ -144,6 +144,8 @@ def _job_update(project_id: str, **fields: Any) -> None:
 def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, Any]:
     """阻塞执行；在线程里调用。"""
     from backend.services.local_runner import configure_llm, prepare_project, run_pipeline, summarize_project
+    from backend.services.studio.readiness import TranscriptionNotReady
+    from backend.services.studio.preflight import SourceRejected
 
     with _pipeline_lock:
         try:
@@ -156,11 +158,20 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
 
             result = run_pipeline(req, video_in_raw, on_progress=on_progress)
             if result.get("status") != "succeeded":
-                _job_update(req.project_id, status="failed", error_code="failed", error=result.get("error") or "处理失败")
+                from backend.services.mcp_telemetry import normalize_error
+                # R24 #284: keep a source failure's own code (source_unreadable ...), never fold it into "failed".
+                _job_update(req.project_id, status="failed", error_code=normalize_error(result.get("error_code"), ok=False),
+                            error=result.get("error") or "处理失败")
                 return _jobs[req.project_id]
             summary = summarize_project(req.project_id)
             _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
                         error_code="none", result=summary)
+            return _jobs[req.project_id]
+        except SourceRejected as e:  # #284: the source's own code, never folded into invalid_input / failed
+            _job_update(req.project_id, status="failed", error_code=e.code, error=str(e)[:500])
+            return _jobs[req.project_id]
+        except TranscriptionNotReady as e:  # only the 1.5.8 gate; other ValueErrors are product failures (R18 #77)
+            _job_update(req.project_id, status="failed", error_code="invalid_input", error=str(e)[:500])
             return _jobs[req.project_id]
         except Exception as e:  # noqa: BLE001
             logger.exception("MCP 任务失败")
@@ -222,7 +233,8 @@ async def clip_video(
                 pass
     job = task.result()
     if job.get("status") != "completed":
-        return {"ok": False, "project_id": req.project_id, "error": job.get("error", "处理失败")}
+        return {"ok": False, "project_id": req.project_id, "error_code": job.get("error_code") or "failed",
+                "error": job.get("error", "处理失败")}
     return {"ok": True, **job["result"], "llm": job.get("llm")}
 
 

@@ -53,10 +53,11 @@ class _FakeProc:
 
 
 def _dead_owner_token():
-    owner = subprocess.Popen([sys.executable, '-c', 'pass'])
-    created = psutil.Process(owner.pid).create_time()
-    owner.wait()
-    return f'{owner.pid}:{created:.3f}'
+    """R31 (I559): deterministic by construction: this test process's pid with a create time 1000 s
+    earlier than its real one, so that owner is dead by definition (the PID-reuse rule). A child that
+    just exited is not: on Windows its process object can linger (open handles), psutil then still
+    returns its create time and the owner reads as alive (CI jobs 117267399378, 117289886647)."""
+    return f'{os.getpid()}:{psutil.Process().create_time() - 1000:.3f}'
 
 
 def test_reaps_only_orphans_of_a_dead_backend(monkeypatch):
@@ -227,3 +228,77 @@ def test_startup_marks_environment_before_starting_services(monkeypatch):
     assert events[0][1] is None  # reaping happens before our own token exists
     token = events[1][1]
     assert token and token == orphan_reaper._owner_token(psutil.Process())
+
+
+# --- R31 #415 I559: one try per process; uncertain reasons reach LAST_RESULT and the log --------------
+
+def test_i559_dead_owner_token_is_dead_by_construction():
+    pid, created = orphan_reaper._parse(_dead_owner_token())
+    assert pid == os.getpid()
+    assert orphan_reaper._owner_alive(pid, created) is False
+
+
+def _process_raising(monkeypatch, pid_to_error):
+    real = psutil.Process
+
+    def process(pid=None):
+        if pid in pid_to_error:
+            raise pid_to_error[pid]
+        return real() if pid is None else real(pid)
+    monkeypatch.setattr(psutil, 'Process', process)
+
+
+def test_i559_unclear_owner_is_kept_counted_and_logged(monkeypatch, caplog):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    dead = _dead_owner_token()
+    _process_raising(monkeypatch, {424242: psutil.AccessDenied(424242)})
+    unclear = _FakeProc(501, 'ffmpeg', {orphan_reaper.ENV: '424242:1.000'})
+    orphan = _FakeProc(502, 'ffmpeg', {orphan_reaper.ENV: dead})
+    monkeypatch.setattr(psutil, 'process_iter', lambda *a, **k: iter([unclear, orphan]))
+    with caplog.at_level('WARNING', logger=orphan_reaper.logger.name):
+        assert orphan_reaper.reap_orphans(timeout=0.05) == 1
+    assert orphan.killed and not unclear.killed  # unclear is never killed
+    assert orphan_reaper.LAST_RESULT.get('uncertain') == {'owner_unclear': 1}
+    assert 'owner_unclear=1' in caplog.text
+
+
+def test_i559_one_unreadable_process_does_not_end_the_scan(monkeypatch, caplog):
+    """An environment read that raises something psutil does not wrap (OSError / SystemError) used to
+    escape find_orphans: reap_orphans then returned 0 for EVERY process."""
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    dead = _dead_owner_token()
+
+    class Broken(_FakeProc):
+        def environ(self):
+            raise OSError(22, 'invalid')
+
+    procs = [Broken(601, 'ffmpeg.exe', {}), _FakeProc(602, 'ffmpeg', {orphan_reaper.ENV: dead})]
+    monkeypatch.setattr(psutil, 'process_iter', lambda *a, **k: iter(procs))
+    with caplog.at_level('WARNING', logger=orphan_reaper.logger.name):
+        assert orphan_reaper.reap_orphans(timeout=0.05) == 1
+    assert procs[1].killed
+    assert orphan_reaper.LAST_RESULT.get('uncertain') == {'environ_error': 1}
+    assert 'environ_error=1' in caplog.text
+
+
+def test_i559_owner_check_raising_is_per_process(monkeypatch):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    dead = _dead_owner_token()
+    _process_raising(monkeypatch, {434343: SystemError('psutil internal')})
+    odd = _FakeProc(701, 'ffprobe', {orphan_reaper.ENV: '434343:1.000'})
+    orphan = _FakeProc(702, 'ffmpeg', {orphan_reaper.ENV: dead})
+    monkeypatch.setattr(psutil, 'process_iter', lambda *a, **k: iter([odd, orphan]))
+    assert orphan_reaper.reap_orphans(timeout=0.05) == 1
+    assert orphan.killed and not odd.killed
+    assert orphan_reaper.LAST_RESULT.get('uncertain') == {'owner_error': 1}
+
+
+def test_i559_scan_ending_exception_is_recorded_by_type(monkeypatch, caplog):
+    monkeypatch.setattr(orphan_reaper, 'find_orphans', lambda **k: 1 / 0)
+    with caplog.at_level('WARNING', logger=orphan_reaper.logger.name):
+        assert orphan_reaper.reap_orphans() == 0
+    assert orphan_reaper.LAST_RESULT.get('error') == 'ZeroDivisionError'
+    assert 'ZeroDivisionError' in caplog.text

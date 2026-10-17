@@ -102,7 +102,7 @@ def cmd_produce(args: argparse.Namespace) -> int:
         elif ok:
             error_code = 'none'
         else:
-            error_code = mcp_telemetry.normalize_error(result.get('status'), ok=False)
+            error_code = mcp_telemetry.normalize_error(result.get('error_code') or result.get('status'), ok=False)  # R24 #284
         outcome = {'ok': ok, 'error_code': error_code, 'job_id': project_id, 'terminal': True}
         result['ok'] = ok
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -161,6 +161,8 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         _err(str(e))
         return 2
 
+    from backend.services.studio.readiness import TranscriptionNotReady
+    from backend.services.studio.preflight import SourceRejected
     req = RunRequest(
         video=Path(args.video),
         srt=Path(args.srt) if args.srt else None,
@@ -171,9 +173,15 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
     )
     try:
         video_in_raw = prepare_project(req, link=not args.copy)
-    except FileNotFoundError as e:
-        outcome.update(ok=False, error_code='invalid_input', job_id=req.project_id)
-        _err(str(e))
+    except (FileNotFoundError, TranscriptionNotReady, SourceRejected) as e:  # only preflight refusals (R18 #77)
+        # #284: a source refusal keeps its own code (source_unreadable / source_too_short / source_no_audio).
+        code = e.code if isinstance(e, SourceRejected) else 'invalid_input'
+        outcome.update(ok=False, error_code=code, job_id=req.project_id)
+        if args.json:  # R18 #76: scripts read the contract from stdout
+            print(json.dumps({'ok': False, 'error_code': code, 'project_id': req.project_id,
+                              'error': str(e)}, ensure_ascii=False))
+        else:
+            _err(str(e))
         return 2
 
     if not args.json:
@@ -204,7 +212,8 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         outcome.update(ok=False, error_code=normalize_error(result.get('error_code') or result.get('status'), ok=False),
                        job_id=req.project_id, terminal=True)
         if args.json:
-            print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error")}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error"),
+                              "error_code": outcome.get("error_code")}, ensure_ascii=False))  # R24 #284
         else:
             _err(result.get("error") or "处理失败")
             print(_dim(f"日志：{os.getenv('LOG_FILE')}"), file=sys.stderr)

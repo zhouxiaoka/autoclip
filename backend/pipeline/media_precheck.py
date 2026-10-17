@@ -111,23 +111,6 @@ def silent_visual_failure(video, srt_available: bool) -> Optional[PipelineFailur
     return no_audio_failure("ANALYZE", after_visual=True)
 
 
-def subtitle_route_failure(video, *, srt_available: bool, duration: Optional[float] = None,
-                           audio: Optional[bool] = None, stage: str = "INGEST") -> Optional[PipelineFailure]:
-    """The reason the subtitle route cannot work for this source, or None.
-
-    Pass `duration` / `audio` when the caller already probed; otherwise one ffprobe call fills them in.
-    """
-    if duration is None or (audio is None and not srt_available):
-        info = probe(Path(video))
-        duration = duration if duration is not None else info["duration"]
-        audio = audio if audio is not None else info["audio"]
-    if too_short(duration):
-        return too_short_failure(stage)
-    if not srt_available and audio is False:
-        return no_audio_failure(stage)
-    return None
-
-
 def is_no_audio_text(text: str) -> bool:
     return (text or "").startswith("这个视频没有声音")
 
@@ -158,7 +141,7 @@ def sanitize_tool_output(text: str, video=None, limit: int = 600) -> str:
     return out.strip()[-limit:]
 
 
-def _ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
+def ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
     """Fallback: decode the file with ffmpeg and read the last ``time=``."""
     import re
     try:
@@ -186,52 +169,7 @@ def _ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
     return None, stderr
 
 
-def probe_duration(video) -> tuple[Optional[float], str]:
-    """Duration in seconds or None, plus diagnostics (ffprobe/ffmpeg stderr) when unreadable.
-
-    Tries ffprobe format=duration first, then decodes with ffmpeg (#345: some Windows
-    sources report no container duration to ffprobe).
-    """
-    probe_err = ""
-    try:
-        from backend.utils.ffmpeg_utils import get_ffprobe_path
-        result = subprocess.run(
-            [get_ffprobe_path(), "-v", "error", "-show_entries", "format=duration", "-of", "json", str(video)],
-            capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=30,
-        )
-        probe_err = result.stderr or ""
-        try:
-            value = float(((json.loads(result.stdout or "{}") or {}).get("format") or {}).get("duration"))
-        except (TypeError, ValueError, AttributeError):
-            value = None
-        if value and value > 0:
-            return round(value, 2), ""
-        if not probe_err:
-            probe_err = f"ffprobe exit {result.returncode}: no duration"
-    except Exception as error:  # noqa: BLE001
-        probe_err = f"ffprobe unavailable: {type(error).__name__}"
-    logger.warning("ffprobe could not read duration: %s", sanitize_tool_output(probe_err, video, 300))
-    value, decode_err = _ffmpeg_decode_duration(video)
-    if value:
-        logger.info("source duration recovered by ffmpeg decode fallback: %.2fs", value)
-        return value, ""
-    return None, sanitize_tool_output(f"ffprobe: {probe_err}\nffmpeg: {decode_err}", video)
-
-
 class SourceUnreadable(PipelineFailure):
     def __init__(self, detail: str, stage: str = "INGEST"):
         super().__init__(stage, UNREADABLE_MESSAGE, code=SOURCE_UNREADABLE)
         self.probe_detail = detail
-
-
-def duration_or_fail(video, info_duration=None, stage: str = "INGEST") -> float:
-    """Readable duration ≥ 1 s, else SourceUnreadable / source_too_short."""
-    duration = float(info_duration or 0)
-    if duration <= 0:
-        found, detail = probe_duration(video)
-        if found is None:
-            raise SourceUnreadable(detail, stage)
-        duration = found
-    if duration < 1:
-        raise PipelineFailure(stage, TOO_SHORT_1S_MESSAGE, code=SOURCE_TOO_SHORT)
-    return duration

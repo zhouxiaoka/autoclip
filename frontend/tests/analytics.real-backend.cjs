@@ -29,6 +29,7 @@ function load(name, mocks = {}, globals = {}) {
     require: (id) => {
       if (id in mocks) return mocks[id]
       if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
+      if (id === './connectionTestCode' || id === '../../analytics/connectionTestCode') return load('connectionTestCode')
       if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))
       if (id === './runtime') return load('runtime', {}, globals)
       if (id === '../utils/apiConfig') {
@@ -38,7 +39,7 @@ function load(name, mocks = {}, globals = {}) {
     }, ...globals }, { filename: file })
   return module.exports
 }
-const core = load('workflow')
+const core = require('./helpers/real-backend.cjs').withRealBackend(load('workflow'))
 
 test('native Mac architecture overrides the Intel webview UA before launch resolves', () => {
   const lifecycle = load('lifecycle', {
@@ -851,7 +852,7 @@ function settingsHook(s, transport, initial) {
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const custom=load('../features/settings/customProvider',{'./providerUrl':urls,'./modelSettingsLogic':logic,'./providerAccess':access},{URL,crypto:{randomUUID:()=>'uuid'}})
   const hook=load('../features/settings/useModelSettings',{
-    react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
+    react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},'../studio/settingsReturn':{notifySettingsSaved(){}},
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
     './modelDefaults':defaults,'./modelSettingsLogic':logic,'./defaultModelSlots':slotLogic,
@@ -1008,7 +1009,7 @@ test('retrying the same plan retains both execution attempts until independently
 
 test('actual auto-frame API distinguishes automatic zero detection from retained edits',async()=>{
  const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
- const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':{post:async()=>({scenes:[{crop_x:null,fit_shots:2}]})},'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}},'./subtitleState':load('../features/studio/subtitleState')})
+ const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':{post:async()=>({scenes:[{crop_x:null,fit_shots:2}]})},'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}},'./subtitleState':load('../features/studio/subtitleState'),'./transcriptionRecovery':load('../features/studio/transcriptionRecovery',{'./recoveryClock':load('../features/studio/recoveryClock')})})
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.studioApi.autoFrame('private-project',{layout:'crop',scenes:[]},'auto')
  const event=s.events.find(e=>e.event==='studio_auto_frame_finished')
@@ -1037,8 +1038,8 @@ test('framing installation retries use distinct terminal deduplication keys',()=
 test('1.5 API observes cover and retry terminal results across restart without content',async()=>{
  const s=setup()
  const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
- const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{job_id:'private-new-render',status:'queued'},get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
- const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}},'./subtitleState':load('../features/studio/subtitleState')}).studioApi
+ const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{attempt:null,variant:{id:'private-variant',render_job_id:'private-new-render',status:'queued'}} /* #419: the retry command returns {attempt, variant} */,get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
+ const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}},'./subtitleState':load('../features/studio/subtitleState'),'./transcriptionRecovery':load('../features/studio/transcriptionRecovery',{'./recoveryClock':load('../features/studio/recoveryClock')})}).studioApi
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.redesignVariantCover('private-project','private-variant')
  await api.variantCoverJob('private-project','private-variant') // terminal before the global poll
@@ -1377,4 +1378,36 @@ test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => 
   assert.ok(timers.length)
   timers.shift()(); await new Promise(r => setImmediate(r)) // queued retry of the stale session ON
   assert.equal(puts.at(-1), false)
+})
+
+test('1.5.8 connection-test failure keeps closed error_code, integer status and config_source only', () => {
+  const s=setup();const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  x.trackExperience('provider_connection_test_finished', { outcome:'failed', error_code:'dns', http_status:503, config_source:'customized', base_url:'https://gw.example/v1', api_key:'sk-secret', detail:'upstream private' })
+  x.trackExperience('provider_connection_test_finished', { outcome:'failed', error_code:'https://leak', http_status:'503', config_source:'https://gw.example' })
+  const [ok, bad] = s.events.map(e => e.props)
+  assert.equal(ok.error_code, 'dns'); assert.equal(ok.http_status, 503); assert.equal(ok.config_source, 'customized')
+  assert.equal(JSON.stringify(ok).includes('sk-secret') || JSON.stringify(ok).includes('https://') || JSON.stringify(ok).includes('private'), false)
+  assert.equal(bad.error_code, undefined); assert.equal(bad.http_status, undefined); assert.equal(bad.config_source, undefined)
+})
+
+test('1.5.8 connection-test codes: 422 local validation, gemini-style results, transport', () => {
+  const c = load('connectionTestCode')
+  const r422 = (detail) => ({ response: { status: 422, data: { detail } } })
+  assert.equal(c.codeFromRequestError(r422('请填写 API Key')), 'empty_key')
+  assert.equal(c.codeFromRequestError(r422('x'), { emptyKey: true }), 'empty_key')
+  assert.equal(c.codeFromRequestError(r422('请填写接口地址，不要填控制台网址')), 'bad_base_url')
+  assert.equal(c.codeFromRequestError(r422('field required')), 'invalid_request')
+  assert.equal(c.codeFromRequestError({ code: 'ECONNABORTED' }), 'timeout')
+  assert.equal(c.codeFromRequestError({ code: 'ERR_NETWORK' }, { desktop: false }), 'cors')
+  assert.equal(c.codeFromRequestError({ code: 'ERR_NETWORK' }), 'network')
+  assert.equal(c.codeFromRequestError({ response: { status: 502 } }), 'http_5xx')
+  // Gemini 1.5.6 results had error_type but no error_code: still classified, never 'uncoded'.
+  assert.equal(c.codeFromResult({ error_type: 'invalid_key', http_status: 400 }), 'invalid_key')
+  assert.equal(c.codeFromResult({ error_type: 'upstream_unavailable' }), 'http_5xx')
+  assert.equal(c.codeFromResult({ http_status: 429 }), 'rate_limited')
+  assert.equal(c.codeFromResult({ error_code: 'dns' }), 'dns')
+  assert.equal(c.codeFromResult({}), 'unknown')
+  for (const type of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) assert.equal(c.codeFromResult({ error_type: type }), 'unknown', type)
+  assert.equal(c.codeFromResult({ error_code: 'constructor' }), 'unknown')
+  assert.equal(c.safeHttpStatus(503), 503); assert.equal(c.safeHttpStatus('503'), undefined)
 })

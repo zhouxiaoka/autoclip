@@ -36,8 +36,9 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
     }
     throw new Error(id)
   }
-  // console is passed explicitly so a console.error inside the module reaches the strict setup (#299)
-  runInSandbox(outputText, { exports, URL, console, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set })
+  // console is passed explicitly so a console.error inside the module reaches the strict setup (#299).
+  // URLSearchParams, Event, timers and AbortController stay explicit: setup only fills URL / URLSearchParams (#272).
+  runInSandbox(outputText, { exports, URL, URLSearchParams, Event, console, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout, AbortController })
   return exports
 }
 

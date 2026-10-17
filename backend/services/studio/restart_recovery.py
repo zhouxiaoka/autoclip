@@ -41,6 +41,10 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             logger.warning('Studio restart recovery skipped a project: %s', type(error).__name__)
     if recovered:
         logger.info('Studio restart recovery closed %d interrupted run(s): %s', len(recovered), ', '.join(recovered))
+    # R21 #197/#202: bound the shutdown-record dir once per start, after recovery released what it
+    # could, in the background (never on the quit path, never blocking startup).
+    from backend.services.studio.shutdown_marker import prune_in_background
+    prune_in_background()
     return recovered
 
 

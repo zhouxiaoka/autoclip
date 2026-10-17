@@ -7,7 +7,10 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
+from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
@@ -28,19 +31,47 @@ def project_or_404(project_id: str, db: Session):
         raise HTTPException(404, '项目不存在')
     return project
 
+from backend.core.failure_attribution import ModelResponseInvalid  # R29
+
 def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except store.ConflictError as error:
+        if getattr(error, 'error_code', None):  # R30: a coded refusal (frontend errorText maps the code)
+            raise HTTPException(error.status, {'error_code': error.error_code, 'message': str(error)}) from None
         raise HTTPException(409, str(error)) from None
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from None
     except ValueError as error:
+        from backend.services.studio.readiness import TranscriptionNotReady
+        from backend.services.studio.preflight import SourceRejected
+        if isinstance(error, (TranscriptionNotReady, SourceRejected)):
+            raise gate_refusal(error) from None
         raise HTTPException(422, str(error)) from None
 
 def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
+
+async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
+    """Stage the upload outside any project and run the one preflight on it, in the threadpool.
+    Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
+    from backend.services.studio import preflight
+    from backend.api.v1 import transcription_gate
+    staged = await stage_upload(video, first_chunk, ext)
+    try:
+        subtitle = staged.with_suffix('.srt') if srt_available else None
+        if subtitle is not None:
+            subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
+        try:
+            await transcription_gate.run(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
+        finally:
+            if subtitle is not None:
+                subtitle.unlink(missing_ok=True)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    return staged
 
 @router.get('/title-presets/{style}/thumbnail')
 def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=6)):
@@ -138,25 +169,43 @@ async def import_visual(
                 raise HTTPException(422, '字幕文件为空或超过 2 MB')
         finally:
             await subtitle.close()
-    prefs = ImportOptions(
-        goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
-        platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
-        recommended_template=recommended_template,
-        branding={'outro_enabled': brand_outro_enabled},
-    )
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
-    pid = str(project.id)
-    raw = store.directory(pid) / 'raw'
-    raw.mkdir(parents=True, exist_ok=True)
+    staged = None
+    if video:
+        # 1.5.8: block before creating a project when local Whisper is required but missing.
+        try:
+            staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
+        except HTTPException:
+            await video.close()
+            raise
     try:
+        prefs = ImportOptions(
+            goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+            platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
+            recommended_template=recommended_template,
+            branding={'outro_enabled': brand_outro_enabled},
+        )
+        project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+    except BaseException:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+        raise
+    pid = str(project.id)
+    try:
+        # mkdir inside the try: a failure here still runs the staging cleanup below (R18 #75).
+        raw = store.directory(pid) / 'raw'
+        raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
         if video:
             path = raw / ('input' + ext)
-            with path.open('wb') as target:
-                target.write(first_chunk)
-                while chunk := await video.read(1024 * 1024):
-                    target.write(chunk)
+            if staged is not None:
+                import shutil
+                shutil.move(str(staged), str(path))
+            else:
+                with path.open('wb') as target:
+                    target.write(first_chunk)
+                    while chunk := await video.read(1024 * 1024):
+                        target.write(chunk)
             project.video_path = str(path)
             db.commit()
         snapshot = None
@@ -173,9 +222,28 @@ async def import_visual(
         db.commit()
         raise
     finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)  # no-op once moved into the project
         if video:
             await video.close()
     return {'project_id': pid, 'analysis_run_id': run_id}
+
+
+
+async def stage_upload(video: UploadFile, first_chunk: bytes, ext: str) -> Path:
+    """Write the upload outside any project so a refused import leaves no project behind."""
+    staging = store.get_projects_directory().parent / 'import-staging'
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / (uuid.uuid4().hex + ext)
+    try:
+        with path.open('wb') as target:
+            target.write(first_chunk)
+            while chunk := await video.read(1024 * 1024):
+                target.write(chunk)
+    except BaseException:  # includes client disconnect / cancellation mid-upload
+        path.unlink(missing_ok=True)
+        raise
+    return path
 
 
 @router.post('/template-recommend')
@@ -205,6 +273,8 @@ async def template_recommend(
 def workspace(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
     data = call(store.read, project_id)
+    from backend.services.studio import attempts
+    data = {**data, 'attempts': [attempts.public(a) for a in attempts.receipts(data)]}
     return {**data, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
@@ -295,8 +365,47 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
+    if not url:
+        from backend.services.studio import preflight
+        video = jobs.source(project_id)
+        call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=prefs.goal))
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
+
+class RetryCommand(BaseModel):
+    """The one retry command (#419): the backend validates the parent and creates the attempt."""
+    model_config = ConfigDict(extra='forbid')
+    scope: Literal['analysis', 'variant']
+    variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
+    idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
+
+
+@router.post('/{project_id}/retry')
+def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get_db)):
+    """Returns the attempt receipt. Same idempotency_key -> same receipt, dispatched once."""
+    from backend.services.studio import attempts
+    project = project_or_404(project_id, db)
+    retry = {'parent_attempt_id': body.parent_attempt_id, 'key': body.idempotency_key}
+    if body.scope == 'variant':
+        if not body.variant_id:
+            raise HTTPException(422, '缺少成片版本')
+        variant = call(jobs.retry_variant, project_id, body.variant_id, retry)
+        receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+        return {'attempt': attempts.public(receipt) if receipt else None, 'variant': variant}
+    config = project.processing_config or {}
+    prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else ImportOptions.model_validate(Preferences.model_validate(config.get('creative', {})).model_dump())
+    url = None
+    try:
+        jobs.source(project_id)
+    except FileNotFoundError:
+        url = (project.project_metadata or {}).get('source_url')
+        if not url:
+            raise HTTPException(404, '原素材不存在，请重新导入')
+    run_id = call(jobs.inspect_project, project_id, prefs, url, config.get('creative_browser'), retry=retry)
+    receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key)
+    return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None}
+
 
 @router.put('/{project_id}/plan')
 def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get_db)):
@@ -312,6 +421,10 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             url = (project.project_metadata or {}).get('source_url')
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
+        if not url:
+            from backend.services.studio import preflight
+            video = jobs.source(project_id)
+            call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
@@ -334,8 +447,7 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
-    return {'variants': variants}
+    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # 1.5.8: always refused, no attempt
 
 
 def _variant_job(project_id: str, variant_id: str):
@@ -474,7 +586,15 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         raise HTTPException(404, '草稿不存在')
     try:
         result = intelligence.text_json('你是剪辑文案编辑。按用户要求优化 title 和 hook，保持事实；依据仅限原文与镜头证据。不能声称已修改镜头、声音或视频，也不能承诺投放效果。返回 {"title":"...","hook":"..."}。', {'instruction': body.instruction, 'language': body.draft.language, 'title': body.draft.title, 'hook': body.draft.hook, 'scenes': [s.model_dump() for s in body.draft.scenes]})
-        candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
+        # R29 (Dong 11:09): the model's own reply failed our checks -> MODEL / invalid_response, no raw text.
+        # R31 I568: only the reply's own shape is judged (not a dict, a missing key, a field the schema
+        # rejects); a TypeError from our own code is not caught here and stays local/unexpected.
+        if not isinstance(result, dict):
+            raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试')
+        try:
+            candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
+        except (KeyError, ValueError):  # pydantic's ValidationError is a ValueError
+            raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试') from None
     except Exception as error:
         capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None

@@ -65,9 +65,24 @@ class ValidationResult:
     recommended: dict[str, list[str]] = field(default_factory=dict)
     truncated: bool = False
     message_key: str = ''
+    # Telemetry: closed-set code and integer upstream status only (no URL/key/body).
+    http_status: Optional[int] = None
+    network_kind: str = ''
+    empty_key: bool = False
+
+    @property
+    def error_code(self) -> str:
+        if self.ok:
+            return ''
+        from backend.core.connection_test_codes import connection_test_error_code
+        return connection_test_error_code(self.error_type, http_status=self.http_status,
+                                          network_kind=self.network_kind, empty_key=self.empty_key)
 
     def as_api(self) -> dict:
+        from backend.core.connection_test_codes import safe_http_status
         return {
+            'error_code': self.error_code,
+            'http_status': safe_http_status(self.http_status),
             'success': self.ok,
             'ok': self.ok,
             'result': self.result,
@@ -111,10 +126,13 @@ def _failed(
     recommended: Optional[dict[str, list[str]]] = None,
     truncated: bool = False,
     message_key: str = '',
+    http_status: Optional[int] = None,
+    network_kind: str = '',
 ) -> ValidationResult:
     if not isinstance(classified, ClassifiedUpstreamError):
         classified = _as_type(classified)
     return ValidationResult(
+        http_status=http_status, network_kind=network_kind,
         ok=False, result='transient' if classified.retryable else 'failed',
         error_type=classified.error_type.value,
         hint_key=classified.hint_key,
@@ -151,6 +169,18 @@ def _get_models(base: str, api_key: str, provider: str = 'compatible'):
     return models, error, fetched
 
 
+@dataclass(frozen=True)
+class _ProbeClassified(ClassifiedUpstreamError):
+    """Classified probe failure plus telemetry-only integer status / network kind."""
+    http_status: Optional[int] = None
+    network_kind: str = ''
+
+
+def _with_detail(classified: ClassifiedUpstreamError, http_status=None, network_kind='') -> ClassifiedUpstreamError:
+    return _ProbeClassified(error_type=classified.error_type, retryable=classified.retryable,
+                            hint_key=classified.hint_key, http_status=http_status, network_kind=network_kind)
+
+
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
     from backend.core.llm_providers import guarded_chat_kwargs, token_param_kwargs
@@ -168,18 +198,20 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
                 headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'},
             )
     except httpx.TimeoutException:
-        return _classify(None, '', error_name='TimeoutError')
-    except httpx.RequestError:
-        return _classify(None, '', error_name='ConnectionError')
+        return _with_detail(_classify(None, '', error_name='TimeoutError'))
+    except httpx.RequestError as exc:
+        from backend.core.upstream_errors import network_kind_of
+        return _with_detail(_classify(None, '', error_name='ConnectionError'), network_kind=network_kind_of(exc))
+    status = response.status_code
     text = response.text or ''
     if response.status_code == 429 or 500 <= response.status_code <= 599:
-        return _as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE)
+        return _with_detail(_as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE), status)
     content_type = (response.headers.get('content-type') or '').lower()
     html = _html_or_classify(response.status_code, text[:4000], content_type)
     if html:
-        return html
+        return _with_detail(html, status)
     if response.status_code >= 400:
-        return _classify(response.status_code, text[:4000])
+        return _with_detail(_classify(response.status_code, text[:4000]), status)
     return None
 
 
@@ -225,6 +257,7 @@ def validate_connection(
 ) -> ValidationResult:
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     result = _validate_resolved(resolved, model, purpose=purpose)
+    result.empty_key = not (resolved.api_key or '').strip()
     return _local_service_down(result, result.normalized_base_url)
 
 
@@ -253,7 +286,8 @@ def _validate_resolved(
     models, models_error, fetched = _get_models(base, api_key, resolved.provider)
     extras = dict(recommended=fetched.recommended, truncated=fetched.truncated, message_key=fetched.message_key)
     if models_error:
-        return _failed(models_error, base, hint, models, **extras)
+        return _failed(models_error, base, hint, models, **extras,
+                       http_status=getattr(fetched, 'http_status', 0) or None, network_kind=getattr(fetched, 'network_kind', ''))
     if not (model or '').strip():
         return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
     if purpose in ('cover', 'transcription'):
@@ -264,7 +298,9 @@ def _validate_resolved(
         return _ok(base, hint, models, **extras)
     probe_error = _probe(base, api_key, model.strip())
     if probe_error:
-        return _failed(probe_error, base, hint, models, **extras)
+        return _failed(probe_error, base, hint, models, **extras,
+                       http_status=getattr(probe_error, 'http_status', None),
+                       network_kind=getattr(probe_error, 'network_kind', ''))
     return _ok(base, hint, models, **extras)
 
 

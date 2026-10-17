@@ -2,8 +2,24 @@
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 
+/** R27 I424: the lock-timeout notice is an i18n key in all 8 locales (backend file_lock.LOCK_TIMEOUT_MESSAGE). */
+export const STORE_LOCK_TIMEOUT = 'store_lock_timeout'
+export const STORE_LOCK_TIMEOUT_TEXT = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
+
+/** The one user-cause reason table (R22): studio 「去设置」 reads it. Project cards only swap llm_auth_invalid. */
+export const USER_CAUSE_REASONS: Record<string, string> = {
+  authentication: 'API Key 无效或已过期，请到设置里更新后再试',
+  llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试',
+  invalid_key: 'API Key 无效或已过期，请到设置里更新后再试',
+  insufficient_quota: '服务商账户余额不足，请充值或换一个服务商',
+  permission_denied: '这个 API Key 没有该模型的使用权限，请到设置里更换',
+  llm_not_configured: '还没有配置可用的模型，请先到设置里添加',
+}
+
 export function llmFailureText(error?: string | null, code?: string | null): string {
-  return code === LLM_AUTH_INVALID ? 'API Key 无效或已过期，请检查后重试' : error || ''
+  if (code === STORE_LOCK_TIMEOUT) return STORE_LOCK_TIMEOUT_TEXT
+  if (code === LLM_AUTH_INVALID) return USER_CAUSE_REASONS[LLM_AUTH_INVALID]
+  return error || ''
 }
 
 /**

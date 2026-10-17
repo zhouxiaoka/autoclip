@@ -10,6 +10,8 @@
 能不能看图不靠猜：「测试图片理解」通过后记下 base_url + 模型，配置变了就回到未验证。
 付费视觉调用仍由 analysis_preferences 的显式同意控制，这里只提供端点。
 """
+import contextvars
+from contextlib import contextmanager
 import json
 import os
 import threading
@@ -109,7 +111,10 @@ def effective():
     if settings:
         endpoint = ai.vision_endpoint(settings)
         binding = settings.vision or settings.analysis
+        from backend.services.studio.failure_identity import settings_identity
         return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
+                # R22 #195: the identity of THIS connection, frozen with the endpoint it resolves to.
+                'identity': settings_identity(settings, 'vision'),
                 'mode': 'custom' if settings.vision else 'text_model', 'source': 'connections',
                 'text_model': binding.model if binding else '', 'timeout': settings.vision_timeout}
     saved = _saved()
@@ -187,10 +192,26 @@ def _resolve(body):
     return stored
 
 
+_tested_identity = contextvars.ContextVar('vision_tested_identity', default=None)
+
+
+@contextmanager
+def testing_identity(identity):
+    """R25 #336: the identity of the saved connection a settings-page test runs on."""
+    token = _tested_identity.set(dict(identity) if identity else None)
+    try:
+        yield
+    finally:
+        _tested_identity.reset(token)
+
+
 def test(body):
     from backend.services.studio.intelligence import vision_call
     import base64, struct, zlib
     config = _resolve(body)
+    identity = _tested_identity.get()  # R25 #336: else the sent config's identity
+    if identity:
+        config = {**config, 'identity': dict(identity)}
     def chunk(kind, data):
         return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
     image = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 32, 32, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + b'\xff\0\0' * 32) * 32)) + chunk(b'IEND', b'')

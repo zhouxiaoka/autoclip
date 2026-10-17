@@ -24,7 +24,7 @@ function load(name, mocks = {}, globals = {}) {
   return module.exports
 }
 
-const workflow = load('workflow')
+const workflow = require('./helpers/real-backend.cjs').withRealBackend(load('workflow'))
 
 test('run-level allowlist keeps provider fields and drops keys, prompts and full URLs', () => {
   const props = workflow.safeStudioProperties({
@@ -69,7 +69,7 @@ test('generation and production finished carry run identity; failures keep stage
   tracker.observeStudio(tracker.list()[0], {
     generation: {
       status: 'failed', error_code: 'provider_error', failure_stage: 'analyze',
-      http_status: 429, provider: 'api88', model: 'gpt-4o-mini', base_url_host: '88api.ai',
+      http_status: 429, provider: 'api88', config_source: 'customized', model: 'gpt-4o-mini', base_url_host: '88api.ai',
       upstream_error_type: 'rate_limited', billable_calls_before_failure: 1, retry_count: 2, degrade_count: 1,
     },
     analysis: { status: 'failed', phase: 'production' },
@@ -95,7 +95,7 @@ test('generation and production finished carry run identity; failures keep stage
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
     analysis: {
       status: 'failed', outcome: 'failed', failure_stage: 'analyze', error_code: 'authentication',
-      provider: 'openai', model: 'gpt-4o-mini', base_url_host: 'api.openai.com',
+      provider: 'openai', config_source: 'preset', model: 'gpt-4o-mini', base_url_host: 'api.openai.com',  // R27: identity is a pair
       upstream_error_type: 'invalid_key', http_status: 401, billable_calls_before_failure: 0,
     },
   })
@@ -167,7 +167,9 @@ test('same-project attempts emit independent generation and production usage', (
       [[2, 22, 8], [2, 11, 4]])
     assert.equal(rows[1].props.billable_calls_before_failure, 1)
     assert.notEqual(rows[0].props.attempt_id, rows[1].props.attempt_id)
-    assert.equal(rows[0].props.flow_id, rows[1].props.flow_id)
+    // R25/#345: flow_id is the backend receipt's; two runs started without the retry command are two flows.
+    assert.ok(rows[0].props.flow_id && rows[1].props.flow_id)
+    assert.notEqual(rows[0].props.flow_id, rows[1].props.flow_id)
   }
 })
 
@@ -192,6 +194,7 @@ test('Sentry keeps only a valid anonymous id and drops emails', () => {
       throw new Error(id)
     },
     localStorage: { getItem: () => null, setItem() {} },
+    window: { __TAURI_INTERNALS__: {} }, // I652: packaged desktop build
   })
   module.exports.initSentry()
   module.exports.setAnonymousUser('018f6b2a-7c3d-7b2a-8c11-111111111111')

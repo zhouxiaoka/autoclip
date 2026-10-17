@@ -53,10 +53,7 @@ test('picker telemetry keeps recommendation enums and drops free text', () => {
   assert.equal(play.is_recommended, true)
   const legacy = workflow.safeStudioProperties({ trigger: 'manual' })
   assert.equal(legacy.trigger, 'manual')
-  const finished = workflow.safeStudioProperties(workflow.generationSummary({
-    generation: { recommended_template: 'editorial', accepted_recommendation: false },
-    output_variants: [], jobs: [], drafts: [],
-  }))
+  const finished = workflow.safeStudioProperties({ recommended_template: 'editorial', accepted_recommendation: false })
   assert.equal(finished.recommended_template, 'editorial')
   assert.equal(finished.accepted_recommendation, false)
 })

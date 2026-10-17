@@ -19,9 +19,26 @@ function load(name, mocks, globals = {}) {
   runInSandbox(js, sandbox)
   return module.exports
 }
+const DESKTOP_WINDOW = { __TAURI_INTERNALS__: {} }
+test('I652: frontend Sentry initializes only in the packaged desktop production build', () => {
+  const DSN = 'https://public@example.invalid/1'
+  const cases = [
+    ['packaged desktop production build', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.8' }, DESKTOP_WINDOW, 1],
+    ['dev server / tauri dev', { PROD: false, DEV: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.8' }, DESKTOP_WINDOW, 0],
+    ['unknown release', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '' }, DESKTOP_WINDOW, 0],
+    ['production bundle opened in a browser tab', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.8' }, {}, 0],
+  ]
+  for (const [name, env, window, expected] of cases) {
+    let inits = 0
+    const sentry = load('sentry', { '@sentry/react': { init: () => { inits++ }, setUser() {} } }, { __env: env, window, localStorage: { getItem: () => null, setItem() {} } })
+    sentry.initSentry()
+    sentry.setCrashReportsEnabled(true)
+    assert.equal(inits, expected, name)
+  }
+})
 test('crash payload removes private text and retains code positions for source maps', () => {
   let config
-  const sentry = load('sentry', { '@sentry/react': { init: c => { config = c } } }, { localStorage: { getItem: () => null } })
+  const sentry = load('sentry', { '@sentry/react': { init: c => { config = c } } }, { localStorage: { getItem: () => null }, window: DESKTOP_WINDOW })
   sentry.initSentry()
   const event = config.beforeSend({ event_id: 'event', release: 'autoclip-frontend@1.3.1',
     message: 'private', request: { data: 'private' }, extra: { secret: 'private' }, breadcrumbs: ['private'], user: { id: 'private' },
@@ -33,7 +50,7 @@ test('crash payload removes private text and retains code positions for source m
 })
 test('crash opt-out takes effect even when storage is blocked and rapid toggles do not reinitialize', () => {
   let config; let inits = 0
-  const sentry = load('sentry', { '@sentry/react': { init: c => { config = c; inits++ } } }, { localStorage: { getItem() { throw Error() }, setItem() { throw Error() } } })
+  const sentry = load('sentry', { '@sentry/react': { init: c => { config = c; inits++ } } }, { localStorage: { getItem() { throw Error() }, setItem() { throw Error() } }, window: DESKTOP_WINDOW })
   sentry.initSentry(); sentry.setCrashReportsEnabled(false)
   assert.equal(sentry.isCrashReportsEnabled(), false)
   assert.equal(config.beforeSend({}), null)

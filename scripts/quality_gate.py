@@ -46,7 +46,7 @@ def checks(group: str, python: str):
 
 
 def pytest_skips(path: Path):
-    """Only an external opt-in probe and a foreign-platform test may skip."""
+    """Only an external opt-in probe, a foreign-platform test, and the optional hub comparison may skip."""
     rows = []
     for case in ET.parse(path).iter('testcase'):
         if case.find('skipped') is None:
@@ -54,7 +54,8 @@ def pytest_skips(path: Path):
         name = case.get('name', '').split('[', 1)[0]
         module = case.get('classname', '')
         allowed = (module.endswith('test_upload_post_publisher') and name == 'test_live_upload_post_rejects_unknown_key') or (
-            module.endswith('test_windows_asyncio') and name == 'test_windows_real_reset_and_subprocess' and os.name != 'nt')
+            module.endswith('test_windows_asyncio') and name == 'test_windows_real_reset_and_subprocess' and os.name != 'nt') or (
+            module.endswith('test_whisper_snapshot_repair') and name == 'test_real_hub_copy_layout_does_not_replace_an_existing_file')
         rows.append({'test': name, 'allowed': allowed})
     return rows
 
