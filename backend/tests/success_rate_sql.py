@@ -11,12 +11,22 @@ SQL = (ROOT / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
 PROPS = ('attempt_id', 'flow_id', 'retry_of', 'outcome', 'error_code', 'upstream_error_type', 'failure_stage',
          'app_version', 'analytics_environment', 'runtime', 'provider', 'attempt_sequence')
 COHORT = 641509
-PARAMS = {'date_from': "'2026-10-09 00:00:00'", 'date_to': "'2026-10-16 00:00:00'", 'internal_cohort_id': str(COHORT)}
+# release_1_5_7 is the fixture clock (DAY in the success-rate tests), not a production publish time.
+# The SQL file keeps the {release_1_5_7} token; callers overlay their own window when events are earlier.
+PARAMS = {
+    'date_from': "'2026-10-09 00:00:00'",
+    'date_to': "'2026-10-16 00:00:00'",
+    'internal_cohort_id': str(COHORT),
+    'release_1_5_7': "'2026-10-12 08:00:00'",
+}
 
 
 def statements(sql=SQL, params=None):
     body = re.sub(r'--[^\n]*', '', sql)
-    for key, value in (params or PARAMS).items():
+    merged = dict(PARAMS)
+    if params:
+        merged.update(params)
+    for key, value in merged.items():
         body = body.replace('{%s}' % key, value)
     return [part.strip() for part in body.split(';') if part.strip()]
 

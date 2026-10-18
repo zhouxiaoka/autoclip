@@ -56,9 +56,10 @@ def fixture():
     e.add('staff', 0, attempt_id='s1', flow_id='FS', outcome='completed')
     e.add('G', 0, attempt_id='g1', flow_id='FG', outcome='error', runtime='web')
     e.add('G', 0, attempt_id='g2', flow_id='FG2', outcome='error', env='development')
-    # Same app_version as the public package, but an internal test build (validation).
-    # Figure 5 keeps it out via analytics_environment, not via a second version string.
+    # validation is still excluded by analytics_environment.
     e.add('G', 2, attempt_id='g4', flow_id='FG4', outcome='completed', env='validation')
+    # Pre-release production 1.5.7 (one hour before the fixture release cutoff). Must stay out of the 1.5.7 bucket.
+    e.add('P', -60, attempt_id='p0', flow_id='FP0', outcome='completed')
     e.add('G', 60 * 24 * 10, attempt_id='g3', flow_id='FG3', outcome='error')
     e.add('G', 1, event='llm_request_finished', outcome='error', upstream_error_type='timeout', provider='deepseek')
     return e
@@ -140,10 +141,28 @@ def test_per_version_query():
     assert {k: rows['1.5.6'][k] for k in ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')} == {
         'ok': 1, 'q_all': 2, 'q_prod': 2, 'flow_ok': 1, 'fq_all': 2, 'fq_prod': 2}
     # 1.5.7 production: 12 attempts, ok 4, q_all 11, q_prod 10; flows FA S, FB E, FC E, FI S, FD hard, FE x -> 2/5, 2/4
-    # The validation 1.5.7 row (g4) is not in this bucket.
+    # g4 (validation) and p0 (pre-release production) stay out of this bucket.
     assert {k: rows['1.5.7'][k] for k in ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')} == {
         'ok': 4, 'q_all': 11, 'q_prod': 10, 'flow_ok': 2, 'fq_all': 5, 'fq_prod': 4}
     assert rows['1.5.6']['partial_delivery_rate'] == 0.5
+
+
+def test_release_cutoff_keeps_earlier_versions_and_drops_pre_release_1_5_7():
+    """1.5.6 before the cutoff still counts. A production 1.5.7 before it does not enter the 1.5.7 bucket.
+    An event at the cutoff (inclusive) does. A blank release time drops every 1.5.7 event."""
+    e = Events()
+    e.add('Old', -120, attempt_id='old', flow_id='Fold', outcome='completed', app_version='1.5.6')
+    e.add('Pre', -30, attempt_id='pre', flow_id='Fpre', outcome='completed')
+    e.add('On', 0, attempt_id='on', flow_id='Fon', outcome='error', error_code='render')
+    rows = {r['app_version']: r for r in e.run(statements()[4])}
+    assert set(rows) == {'1.5.6', '1.5.7'}
+    assert rows['1.5.6']['ok'] == 1 and rows['1.5.6']['q_all'] == 1
+    assert rows['1.5.7']['ok'] == 0 and rows['1.5.7']['q_all'] == 1
+    blank = dict(PARAMS)
+    blank['release_1_5_7'] = "''"
+    only_old = {r['app_version']: r for r in e.run(statements(params=blank)[4])}
+    assert set(only_old) == {'1.5.6'}
+    assert '{release_1_5_7}' in SQL and "SELECT '1.5.7' AS app_version, '20" not in SQL
 
 
 def test_per_version_last_any_mutation_is_caught():
@@ -504,7 +523,7 @@ ORD = '(ifNull(seq, 0), leaf, ts) AS ord'
 def test_380_header_and_tracking_plan_name_the_real_ordering_key():
     for stmt in (statements()[0], statements()[4]):
         assert stmt.count(ORD) == 1            # the key the docs describe is the one both figures use
-    header = SQL.split('WITH base AS', 1)[0]
+    header = SQL.split('WITH version_releases', 1)[0]
     assert '(attempt_sequence, leaf, ts)' in header, 'success_rate.sql header must spell out the ordering key'
     plan = (ROOT / 'docs/analytics/TRACKING_PLAN.md').read_text(encoding='utf-8')
     assert '(attempt_sequence, leaf, ts)' in plan, 'TRACKING_PLAN §6.1 must spell out the ordering key'

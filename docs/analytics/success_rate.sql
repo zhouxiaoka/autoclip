@@ -6,6 +6,12 @@
 --   {date_from}          固定 UTC 起点（含），例如 '2026-10-09 00:00:00'
 --   {date_to}            固定 UTC 终点（不含），例如 '2026-10-16 00:00:00'
 --   {internal_cohort_id} 内部账号 cohort id（project 450605 当前为 641509）
+--   {release_1_5_7}      1.5.7 正式发布时间（UTC，含）。GitHub Release 的 published_at 形如
+--                        YYYY-MM-DDTHH:MM:SSZ，填成带单引号的 'YYYY-MM-DD HH:MM:SS'（去掉 T 和 Z）。
+--                        执行 RELEASE_CHECKLIST.md 3.5 Promote 的人，把它填进 PostHog 项目 450605
+--                        看板「AutoClip｜1.5.7 出片成功率」里本文件的每一条 insight
+--                        （version_releases 中 1.5.7 那一行的 released_at_text）。本文件不写死日期。
+--                        空字符串 '' 表示还没填：这一版的事件全部不计入。1.5.6 及更早不在表里。
 --
 -- 定义：
 --   attempt  = 一次终态尝试，按 attempt_id 去重（取最后一条）；缺 attempt_id 的历史行按事件 uuid 计。
@@ -25,18 +31,19 @@
 --   两个口径都算产品失败（不剔除）：whisper_not_installed、service_restarted、model_not_found、bad_endpoint
 --   （error_code 或 upstream_error_type）。
 -- 只看 analytics_environment = 'production' 且 runtime = 'desktop'，排除内部 cohort。
--- 同一 app_version 不能把此前的内部测试包和这次要发的正式包分开（两边都可能是 1.5.7）。
--- 正式包看 analytics_environment = 'production'（来自构建环境 AUTOCLIP_BUILD_ENVIRONMENT=production）。
--- validation / development 是内部测试或源码运行，上面的过滤已经排除。
--- 打成 production 的内部账号仍靠 {internal_cohort_id} 排除。
--- 事件上没有 commit 或构建时间，这里不新增字段。
--- 图 5 仍按 app_version 分组，只用来分开真正不同的对外版本（例如 1.5.6 与 1.5.7）。
+-- validation / development 仍由上面的过滤排除。打成 production 的内部账号仍靠 {internal_cohort_id} 排除。
+-- 旧的 1.5.7 内部测试包也是 production + desktop，两个内部 cohort 都是空的，环境和 cohort 分不开。
+-- 表 version_releases 给表里的对外版本加发布时间下限：timestamp >= released_at（含）才计入。
+-- 1.5.6 及更早不在表里，不受这道下限影响。事件上没有 commit 或构建时间，这里不新增字段，也不改 cohort。
+-- 图 5 仍按 app_version 分组。
 --   frame_extract_failed（本地抽帧失败，1.5.7 R11）是产品失败，计入两个口径的分母，不在任何剔除列表里。
 --   frame_extract_subtitle_fallback / source_too_long_subtitle_route / vision_*_subtitle_fallback 是成功出片上的
 --   degrade_reason（降级走字幕），不是失败码，见图 6。
 
 -- 图 1：按日 按次 / 按流程 成功率（全量 + 产品）与 partial-delivery 率
-WITH base AS (
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
     argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
@@ -51,12 +58,14 @@ WITH base AS (
     argMax(toString(properties.app_version), timestamp) AS v,
     argMax(coalesce(toString(properties.retry_of), ''), timestamp) AS rof
   FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND toString(properties.analytics_environment) = 'production'
     AND toString(properties.runtime) = 'desktop'
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), chained AS (
   -- retry chain: follow retry_of up to 4 hops to the chain root, the flow is the root's flow.
@@ -104,7 +113,9 @@ FROM d1 LEFT JOIN d2 ON d1.d = d2.d
 ORDER BY dt;
 
 -- 图 2：按人（person_id）首次合格出片成功率（全量 + 产品）
-WITH base AS (
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
     argMax(person_id, timestamp) AS pid,
@@ -113,12 +124,14 @@ WITH base AS (
     argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue
   FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND toString(properties.analytics_environment) = 'production'
     AND toString(properties.runtime) = 'desktop'
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), c AS (
   SELECT *,
@@ -142,7 +155,9 @@ SELECT countIf(has_all AND f_all = 'success') AS overall_first_ok, countIf(has_a
 FROM p;
 
 -- 图 3：失败身份（failure_stage × error_code × 归因），按 attempt 去重
-WITH base AS (
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
     argMax(toString(properties.outcome), timestamp) AS o_raw,
@@ -150,12 +165,14 @@ WITH base AS (
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
     argMax(coalesce(toString(properties.failure_stage), '(空)'), timestamp) AS stage
   FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND toString(properties.analytics_environment) = 'production'
     AND toString(properties.runtime) = 'desktop'
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), c AS (
   SELECT *,
@@ -173,24 +190,31 @@ GROUP BY stage, error_code, outcome, attribution
 ORDER BY attempts DESC;
 
 -- 图 4：模型请求上游错误（诊断，不是成功率分母）
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+)
 SELECT
   properties.provider AS provider,
   properties.upstream_error_type AS upstream_error_type,
   count() AS events
 FROM events
+LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
 WHERE event = 'llm_request_finished'
   AND toString(properties.analytics_environment) = 'production'
   AND properties.outcome = 'error'
   AND timestamp >= toDateTime({date_from}, 'UTC')
   AND timestamp < toDateTime({date_to}, 'UTC')
   AND person_id NOT IN COHORT {internal_cohort_id}
+  AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
 GROUP BY provider, upstream_error_type
 ORDER BY events DESC;
 
 
 -- 图 5：按版本（app_version）按次 / 按流程成功率（全量 + 产品）与 partial-delivery 率
 -- 与图 1 同一 base / chained / c；流程归到最后一次 attempt 的版本
-WITH base AS (
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
     argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
@@ -205,12 +229,14 @@ WITH base AS (
     argMax(toString(properties.app_version), timestamp) AS v,
     argMax(coalesce(toString(properties.retry_of), ''), timestamp) AS rof
   FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND toString(properties.analytics_environment) = 'production'
     AND toString(properties.runtime) = 'desktop'
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), chained AS (
   -- retry chain: follow retry_of up to 4 hops to the chain root, the flow is the root's flow.
@@ -257,6 +283,9 @@ FROM v1 LEFT JOIN v2 ON v1.v = v2.v
 ORDER BY app_version;
 
 -- 图 6：降级走字幕的成功出片（degrade_reason，不是失败；不进剔除列表），按 attempt 去重
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+)
 SELECT degrade_reason, count() AS attempts
 FROM (
   SELECT
@@ -264,12 +293,14 @@ FROM (
     argMax(toString(properties.outcome), timestamp) AS o_raw,
     argMax(coalesce(toString(properties.degrade_reason), ''), timestamp) AS degrade_reason
   FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND toString(properties.analytics_environment) = 'production'
     AND toString(properties.runtime) = 'desktop'
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 )
 WHERE o_raw IN ('completed', 'success')
