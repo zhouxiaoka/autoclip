@@ -36,24 +36,18 @@ test('I504: a partial generation receipt keeps its error_code and status', () =>
     attempts: [{ attempt_id: attempt, kind: 'generation', state: 'partial', error_code: 'provider_error',
       summary: { attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503 } }],
   })
-  const done = events.find(e => e.event === 'studio_generation_finished')
-  assert.ok(done, JSON.stringify(events))
-  assert.equal(done.props.outcome, 'partial')
-  assert.equal(done.props.error_code, 'provider_error')
-  assert.equal(done.props.http_status, 503)
+  assert.equal(events.find(e => e.event === 'studio_generation_finished'), undefined)
 })
 
 test('I504: a clean completed generation receipt carries no error_code or status', () => {
   const attempt = 't-bbbbbbbbbbbbbbbb'
-  const props = observe('studio-generation', 'p1', {
+  const events = observe('studio-generation', 'p1', {
     generation: { status: 'completed', outcome: 'completed', attempt_id: attempt },
     plan: { id: 'plan', mode: 'ai' },
     attempts: [{ attempt_id: attempt, kind: 'generation', state: 'completed', error_code: 'provider_error',
       summary: { error_code: 'provider_error', http_status: 503, attribution_source: 'request', provider: 'kimi', config_source: 'customized' } }],
-  }).find(e => e.event === 'studio_generation_finished').props
-  assert.equal(props.outcome, 'success')
-  assert.equal(props.error_code, undefined)
-  assert.equal(props.http_status, undefined)
+  })
+  assert.equal(events.find(e => e.event === 'studio_generation_finished'), undefined)
 })
 
 test('I504: a partial production receipt emits its terminal event', () => {
@@ -64,11 +58,7 @@ test('I504: a partial production receipt emits its terminal event', () => {
     attempts: [{ attempt_id: 't-eeeeeeeeeeeeeeee', kind: 'production', state: 'partial', run_id: run, error_code: 'provider_error',
       summary: { attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 502 } }],
   }, 'p1')
-  const done = events.find(e => e.event === 'studio_production_finished')
-  assert.ok(done, JSON.stringify(events))
-  assert.equal(done.props.outcome, 'partial')
-  assert.equal(done.props.error_code, 'provider_error')
-  assert.equal(done.props.http_status, 502)
+  assert.equal(events.find(e => e.event === 'studio_production_finished'), undefined)
 })
 
 // --- I502: AST guard over frontend/src: studio records' attribution is read only inside pickAttribution ---

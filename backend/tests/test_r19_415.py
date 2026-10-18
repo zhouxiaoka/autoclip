@@ -113,7 +113,7 @@ def test_97_restart_mid_render_records_shutdown_kind_through_store_read(marker, 
     if marker:
         assert mark(marker, OLD)
     _mid_render('p97')
-    state = store.read('p97')
+    state = store.recover('p97')
     assert state['generation']['status'] == 'partial'
     assert state['generation']['error_code'] == store.RESTART_CODE
     assert state['generation']['shutdown_kind'] == kind
@@ -132,11 +132,11 @@ def test_99_marker_survives_until_the_terminal_is_written(monkeypatch):
     def broken(*a, **k):
         raise OSError('disk full')
     monkeypatch.setattr(store, 'write', broken)
-    store.read('p99')                       # recovery write fails
+    store.recover('p99')                    # recovery write fails
     assert marker.exists()                  # ... so the marker must still be there
     shutdown_marker._consumed.clear()       # next process start
     monkeypatch.setattr(store, 'write', real_write)
-    state = store.read('p99')
+    state = store.recover('p99')
     assert state['generation']['shutdown_kind'] == 'clean'
     assert not marker.exists()              # released once the terminal is on disk
 
@@ -220,7 +220,7 @@ def test_98_no_record_at_all_is_still_crash():
 def test_98_unacked_record_through_store_read_and_released(tmp_path):
     record = _unacked(tmp_path, OLD)
     _mid_render('p98')
-    state = store.read('p98')
+    state = store.recover('p98')
     assert state['generation']['shutdown_kind'] == 'unknown'
     assert not record.exists()
 
@@ -254,16 +254,16 @@ def test_r20_99_second_project_of_same_instance_keeps_clean_after_first_released
     from backend.services.studio import shutdown_marker
     assert shutdown_marker.mark('user_quit', OLD)
     _two_projects_mid_render()
-    assert store.read('pa')['generation']['shutdown_kind'] == 'clean'   # A written, tries to release
+    assert store.recover('pa')['generation']['shutdown_kind'] == 'clean'   # A written, tries to release
     real_write = store.write
 
     def broken(*a, **k):
         raise OSError('disk full')
     monkeypatch.setattr(store, 'write', broken)
-    store.read('pb')                        # B's recovery write fails
+    store.recover('pb')                     # B's recovery write fails
     shutdown_marker._consumed.clear()       # app restarts again
     monkeypatch.setattr(store, 'write', real_write)
-    assert store.read('pb')['generation']['shutdown_kind'] == 'clean'   # was 'crash' on 6fbacce3
+    assert store.recover('pb')['generation']['shutdown_kind'] == 'clean'   # was 'crash' on 6fbacce3
     assert not (shutdown_marker._root() / OLD).exists()                  # released after the last one
 
 
@@ -272,7 +272,7 @@ def test_r20_134_unacked_lives_in_the_single_marker_dir_and_is_released(tmp_path
     record = _unacked(tmp_path, OLD)
     assert record.parent == shutdown_marker._root()
     _mid_render('p134')
-    assert store.read('p134')['generation']['shutdown_kind'] == 'unknown'
+    assert store.recover('p134')['generation']['shutdown_kind'] == 'unknown'
     assert not record.exists()
     assert not (tmp_path / 'shutdown_unacked').exists()
 

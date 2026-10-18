@@ -227,11 +227,11 @@ def test_i419_receipt_appended_during_a_read_survives_its_clear(monkeypatch):
             store._append_receipt(p, late) if hasattr(store, '_append_receipt') else store._read_failures.setdefault(p, []).append(late)
         return changed
     monkeypatch.setattr(store, '_apply_read_receipts', interleave)
-    store.read('p419')
+    store.recover('p419')
     assert injected
     assert any(r is late for r in store._read_failures.get(path, [])), 'the late receipt was popped with the bucket'
     monkeypatch.setattr(store, '_apply_read_receipts', real)
-    analysis = store.read('p419')['analysis']
+    analysis = store.recover('p419')['analysis']
     assert analysis['status'] == 'failed' and analysis['error_code'] == 'store_lock_timeout'
     assert not store._read_failures.get(path)
 

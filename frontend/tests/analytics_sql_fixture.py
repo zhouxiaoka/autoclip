@@ -3,6 +3,8 @@ import json
 import re
 import sqlite3
 import subprocess
+import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -40,34 +42,57 @@ def queries(name, internal=('internal',)):
     return [statement.strip() for statement in sql.split(';') if statement.strip()]
 
 
+def generation_terminals():
+    """The two success-rate generation rows, from the backend producer.
+
+    Frontend CI Python has no backend dependencies. Stub ``backend.services`` so
+    importing the studio package does not load ``services/__init__.py``.
+    """
+    sys.path.insert(0, str(ROOT))
+    import backend  # noqa: F401 - real package so provider presets resolve
+    if 'backend.services' not in sys.modules:
+        stub = types.ModuleType('backend.services')
+        stub.__path__ = [str(ROOT / 'backend' / 'services')]
+        stub.__package__ = 'backend.services'
+        sys.modules['backend.services'] = stub
+    from backend.services.studio.attempts import _terminal_event
+    events = []
+    for status in ('completed', 'failed'):
+        receipt = {
+            'kind': 'generation', 'state': status, 'attempt_id': 't-fixture00000000',
+            'flow_id': 't-flow0000000000', 'sequence': 1, 'summary': {},
+        }
+        if status == 'failed':
+            receipt.update(error_code='unexpected', failure_stage='render')
+        posted = _terminal_event(receipt)
+        events.append({'event': posted['event'], 'props': posted['properties']})
+    return events
+
+
 class AnalyticsSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Use the real frontend producer, not a test copy of its outcome mapping.
+        # Export terminals still use the real frontend observer. Generation terminals
+        # are posted by the backend; this process has no store, so the receipt is the
+        # settled document and the event is attempts._terminal_event.
         result = subprocess.run(['node', '-e', """
 const path = require('node:path')
 const { loadTs } = require('./frontend/tests/load-ts.cjs')
-// #419: terminals are projections of backend receipts. This job has no backend runtime, so the snapshot carries the
-// receipt document GET /studio/{id} returns (a settled receipt as stored in studio.json; no receipt rule here).
 const workflow = loadTs(path.resolve('frontend/src/analytics/workflow.ts'))
 const events = []
-for (const kind of ['studio-export', 'studio-generation']) {
-  for (const status of ['completed', 'failed']) {
-    const tracker = new workflow.WorkflowTracker(
-      { getItem: () => null, setItem() {}, removeItem() {} },
-      () => true, (event, props) => { events.push({ event, props }); return true })
-    tracker.watch(kind, 'fixture')
-    tracker.observeStudio(tracker.list()[0], {
-      material_origin: 'user', generation: { status, attempt_id: 't-fixture00000000' },
-      jobs: [{ job_id: 'fixture', status }],
-      attempts: [{ attempt_id: 't-fixture00000000', flow_id: 't-flow0000000000', sequence: 1, kind: 'generation', state: status,
-        ...(status === 'failed' ? { error_code: 'unexpected', failure_stage: 'render' } : {}) }],
-    })
-  }
+for (const status of ['completed', 'failed']) {
+  const tracker = new workflow.WorkflowTracker(
+    { getItem: () => null, setItem() {}, removeItem() {} },
+    () => true, (event, props) => { events.push({ event, props }); return true })
+  tracker.watch('studio-export', 'fixture')
+  tracker.observeStudio(tracker.list()[0], {
+    material_origin: 'user', generation: { status, attempt_id: 't-fixture00000000' },
+    jobs: [{ job_id: 'fixture', status }],
+  })
 }
 process.stdout.write(JSON.stringify(events))
 """], cwd=ROOT, capture_output=True, text=True, check=True)
-        cls.frontend_events = json.loads(result.stdout)
+        cls.frontend_events = json.loads(result.stdout) + generation_terminals()
 
     def setUp(self):
         self.db = sqlite3.connect(':memory:')

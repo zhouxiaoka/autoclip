@@ -144,7 +144,7 @@ def test_a_run_killed_by_a_restart_settles_its_attempt_as_failed():
     data = json.loads(path.read_text())
     data['analysis']['instance'] = 'previous-process'
     path.write_text(json.dumps(data))
-    store.read(pid)  # the recovering read persists the terminal
+    store.recover(pid)  # startup recovery persists the terminal; a plain read does not
     [receipt] = flow.receipts(pid)
     assert receipt['state'] == 'failed' and receipt['error_code'] == store.RESTART_CODE
 

@@ -272,7 +272,7 @@ async def template_recommend(
 @router.get('/{project_id}')
 def workspace(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
-    data = call(store.read, project_id)
+    data = call(store.recover, project_id)
     from backend.services.studio import attempts
     data = {**data, 'attempts': [attempts.public(a) for a in attempts.receipts(data)]}
     return {**data, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}

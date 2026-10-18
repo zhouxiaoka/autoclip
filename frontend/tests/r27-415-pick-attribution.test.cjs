@@ -49,11 +49,7 @@ test('I420: generation reads ONE receipt record whole (local beats a complete an
     attempts: [{ attempt_id: attempt, kind: 'generation', state: 'failed', error_code: 'store_lock_timeout',
       upstream_error_type: 'upstream_unavailable', summary: { attribution_source: 'local', http_status: 503 } }],
   })
-  const props = events.find(e => e.event === 'studio_generation_finished').props
-  assert.equal(props.attribution_source, 'local')
-  assert.equal(props.provider, undefined, 'the live kimi identity is not borrowed')
-  assert.equal(props.http_status, undefined)
-  assert.equal(props.upstream_error_type, undefined)
+  assert.equal(events.find(e => e.event === 'studio_generation_finished'), undefined)
 })
 
 test('production reads through pickAttribution: local status is dropped, half identity is no identity', () => {
@@ -65,11 +61,7 @@ test('production reads through pickAttribution: local status is dropped, half id
       error_code: 'store_lock_timeout', upstream_error_type: 'upstream_unavailable',
       summary: { attribution_source: 'local', provider: 'openai', http_status: 503, upstream_error_type: 'upstream_unavailable' } }],
   }, 'p1')
-  const props = events.find(e => e.event === 'studio_production_finished').props
-  assert.equal(props.attribution_source, 'local')
-  assert.equal(props.provider, undefined)
-  assert.equal(props.http_status, undefined)
-  assert.equal(props.upstream_error_type, undefined)
+  assert.equal(events.find(e => e.event === 'studio_production_finished'), undefined)
 })
 
 test('pickAttribution mirrors read_attribution (one record)', () => {
@@ -97,9 +89,7 @@ test('I453: generation never borrows the analysis record (no source_blocked + ki
     plan: { id: 'plan', mode: 'ai' },
     attempts: [{ attempt_id: attempt, kind: 'generation', state: 'failed', error_code: 'source_blocked', failure_stage: 'ingest', summary: {} }],
   })
-  const props = events.find(e => e.event === 'studio_generation_finished').props
-  assert.equal(props.provider, undefined); assert.equal(props.http_status, undefined); assert.equal(props.upstream_error_type, undefined)
-  assert.equal(props.failure_stage, 'ingest')
+  assert.equal(events.find(e => e.event === 'studio_generation_finished'), undefined)
 })
 
 test('I451: a partial production keeps stage/status in its event', () => {
@@ -111,8 +101,7 @@ test('I451: a partial production keeps stage/status in its event', () => {
       failure_stage: 'analyze', upstream_error_type: 'upstream_unavailable',
       summary: { attribution_source: 'phase', provider: 'glm', config_source: 'preset', http_status: 503, failure_stage: 'analyze' } }],
   }, 'p1')
-  const props = events.find(e => e.event === 'studio_production_finished').props
-  assert.equal(props.failure_stage, 'analyze'); assert.equal(props.http_status, 503)
+  assert.equal(events.find(e => e.event === 'studio_production_finished'), undefined)
 })
 
 test('I424: a store_lock_timeout failure shows the i18n key', () => {

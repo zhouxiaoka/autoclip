@@ -45,7 +45,7 @@ def sync_project_completion(project_id, db=None):
                     return False
                 if analysis and not analysis.get('status'):
                     return False
-                store.read(project_id)
+                store.recover(project_id)
                 data = json.loads(path.read_text(encoding='utf-8'))
                 if not isinstance(data, dict):
                     return False

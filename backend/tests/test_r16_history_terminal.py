@@ -56,9 +56,26 @@ def _capture(kind, watch_id, snapshot):
     return json.loads(done.stdout)
 
 
+def _posted(monkeypatch):
+    posted = []
+
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        raise OSError('tests do not send')
+
+    monkeypatch.setattr('urllib.request.urlopen', fake)
+    return posted
+
+
 @pytest.mark.parametrize('phase,kind,watch_id', [('screening', 'studio-screen', 'p'), ('production', 'studio-production', 'plan')])
-def test_identity_survives_history_to_terminal(project, phase, kind, watch_id):
+def test_identity_survives_history_to_terminal(project, phase, kind, watch_id, monkeypatch, tmp_path):
     identity = {**IDENTITY, 'failure_stage': phase}
+    posted = _posted(monkeypatch)
+    if phase == 'production':
+        monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+        monkeypatch.setenv('AUTOCLIP_MODE', 'desktop')
+        monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+        monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
     state = {'plan': {'id': 'plan', 'mode': 'local'},
              'analysis': {'status': 'failed', 'phase': phase, 'run_id': 'run', 'error_code': 'service_restarted', **identity}}
     if phase == 'production':
@@ -66,7 +83,14 @@ def test_identity_survives_history_to_terminal(project, phase, kind, watch_id):
         state['attempts'] = [{'attempt_id': 't-aaaaaaaaaaaaaaaa', 'flow_id': 't-ffffffffffffffff', 'sequence': 1,
                               'kind': 'production', 'state': 'open', 'run_id': 'run', 'trigger': 'initial', 'causes': []}]
         state['attempt_sequence'] = 1
+        store.write(project, {**state, 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'run', 'instance': store.INSTANCE}})
+        assert posted == []
     store.write(project, state)
+    if phase == 'production':
+        bodies = [item for item in posted if item['event'] == 'studio_production_finished']
+        assert len(bodies) == 1, posted
+        for key, value in identity.items():
+            assert bodies[0]['properties'].get(key) == value, (key, bodies[0]['properties'])
     kept = store.read(project).get('attempts') if phase == 'production' else None
     later = {'plan': {'id': 'plan2', 'mode': 'local'},
              'analysis': {'status': 'running', 'phase': 'screening', 'run_id': 'run2', 'instance': store.INSTANCE}}
@@ -78,6 +102,10 @@ def test_identity_survives_history_to_terminal(project, phase, kind, watch_id):
     for key, value in identity.items():
         assert receipt['analysis'][key] == value, key
     finished = _capture(kind, watch_id, snapshot)
+    if phase == 'production':
+        assert finished == []  # 成功率终态由后端在结算时发出，打开结果页不再补一条
+        assert len([item for item in posted if item['event'] == 'studio_production_finished']) == 1
+        return
     assert len(finished) == 1, finished
     props = finished[0]['props']
     for key, value in identity.items():

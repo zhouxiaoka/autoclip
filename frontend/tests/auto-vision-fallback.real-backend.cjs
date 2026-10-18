@@ -62,6 +62,7 @@ for(const kind of ['studio-screen','studio-generation']){
   tracker.observeStudio(watch,snapshot)
   tracker.observeStudio(watch,snapshot)
   const finished=events.filter(event=>event.name===kind.replaceAll('-','_')+'_finished')
+  if(kind==='studio-generation'){assert.equal(finished.length,0);return}
   assert.equal(finished.length,1)
   assert.equal(finished[0].props.degrade_reason,CODE)
   assert.equal(JSON.stringify(finished).includes(MESSAGE),false)
@@ -93,8 +94,7 @@ for(const reason of ['frame_extract_subtitle_fallback','source_too_long_subtitle
    tracker.observeStudio(watch,snapshot)
    tracker.observeStudio(watch,snapshot)
    const finished=events.filter(event=>event.name===kind.replaceAll('-','_')+'_finished')
-   assert.equal(finished.length,1)
-   assert.equal(finished[0].props.degrade_reason,reason)
+   assert.equal(finished.length,0)
   })
  }
 }

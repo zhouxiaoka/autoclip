@@ -380,11 +380,11 @@ def test_recovered_read_receipt_survives_failed_atomic_save(project, monkeypatch
         control.blocked = False
         with monkeypatch.context() as blocked:
             blocked.setattr(store, '_replace_state', lambda *a: (_ for _ in ()).throw(PermissionError('atomic save denied')))
-            assert store.read('p1')['generation']['status'] == 'partial'
+            assert store.recover('p1')['generation']['status'] == 'partial'
             assert project.path.read_bytes() == original
             assert store.has_pending_receipts('p1')
             assert not list(project.path.parent.glob('*.tmp'))
-        assert store.read('p1')['generation']['status'] == 'partial'
+        assert store.recover('p1')['generation']['status'] == 'partial'
         assert json.loads(project.path.read_bytes())['generation']['status'] == 'partial'
         assert not store.has_pending_receipts('p1')
     finally:
@@ -706,7 +706,7 @@ def test_owned_background_read_error_reports_once_with_consent_and_safe_tags(pro
         control.blocked = True
         executor.drain()
         control.blocked = False
-        state = store.read('p1')
+        state = store.recover('p1')
         assert state['output_variants'][0]['cover_job']['status'] == 'failed'
         assert state['output_variants'][0]['status'] == 'completed'
         assert len(captured) == int(consent)
@@ -734,7 +734,7 @@ def test_render_primary_error_and_denied_failure_write_do_not_report_twice(proje
         executor.gates[project.draft.id].set()
         executor.futures[0].result(timeout=3)
         control.blocked = False
-        assert next(v for v in store.read('p1')['output_variants'] if v['id'] == 'active')['status'] == 'failed'
+        assert next(v for v in store.recover('p1')['output_variants'] if v['id'] == 'active')['status'] == 'failed'
         assert captured == [('RuntimeError', 'render')]
     finally:
         control.blocked = False

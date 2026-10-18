@@ -19,11 +19,8 @@ export function telemetryId(): string {
   while (hasMarker(id)) id = id.replace(/sk-/g, 's0-').replace(/xai-/g, 'xa0-').replace(/aiza/g, 'ai0a').replace(/apikey/g, 'api0ey').replace(/token/g, 't0ken')
   return id
 }
-/** firstClips: generation identities that already reported first clip. emitted: attempt_ids whose v4 terminal
- * was already sent (stable event id; a second watch or a reload never re-sends it). */
-type Context = { props: Properties; updated: number; artifacts: Record<string, string>; firstClips?: string[]; emitted?: string[] }
-/** Terminal events counted by docs/analytics/success_rate.sql (v4). They are projections of backend AttemptReceipts (#419). */
-export const SUCCESS_RATE_TERMINALS = ['studio_generation_finished', 'studio_production_finished'] as const
+/** firstClips: generation identities that already reported first clip. */
+type Context = { props: Properties; updated: number; artifacts: Record<string, string>; firstClips?: string[] }
 /** The backend's attempt receipt (backend/services/studio/attempts.py). The frontend never creates attempts:
  * attempt_id, retry_of and order (sequence) come from here, not from local watches or timestamps. */
 export interface AttemptReceipt {
@@ -35,7 +32,6 @@ export interface AttemptReceipt {
   summary?: Record<string, unknown>
   degrade_reason?: string  // frozen from the attempt's own plan at settle (enum)
 }
-const SETTLED = ['completed', 'partial', 'failed']
 const TOKEN = /^t-[a-z0-9-]{10,100}$/
 
 const OS_CANON: Record<string, string> = { darwin: 'macos', win32: 'windows' }
@@ -228,20 +224,6 @@ export function isFailedTerminal(record: Attributed): boolean | null {
   return record.status ? false : null
 }
 
-/** Settled attempt cause fields for the v4 terminal. Not a snapshot reader: the receipt already chose them.
- * A local summary carries no upstream status (same rule as pickAttribution). */
-export function receiptEventCauses(receipt: { error_code?: string; failure_stage?: string | null; upstream_error_type?: string | null; secondary_error_codes?: unknown; secondary_upstream_error_types?: unknown; summary?: { attribution_source?: string } }, failed: boolean): Record<string, unknown> {
-  if (!failed) return {}
-  const local = receipt.summary?.attribution_source === 'local'
-  return {
-    error_code: receipt.error_code,
-    failure_stage: receipt.failure_stage || undefined,
-    upstream_error_type: local ? undefined : receipt.upstream_error_type || undefined,
-    secondary_error_codes: receipt.secondary_error_codes,
-    secondary_upstream_error_types: receipt.secondary_upstream_error_types,
-  }
-}
-
 /** R31 (Dong I565): THE frontend attribution serializer (twin of backend failure_attribution
  * export_attribution). The only keys that can come out, copied one by one and type-checked. */
 export const ATTRIBUTION_KEYS = Object.freeze(['provider', 'config_source', 'model', 'base_url_host', 'attribution_source', 'http_status', 'upstream_error_type', 'failure_stage'] as const)
@@ -324,7 +306,6 @@ export class WorkflowTracker {
         const c = value as Context
         if (c && Number.isFinite(c.updated) && c.updated > this.now() - 35 * 86400000) {
           this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && TOKEN.test(v)).slice(-100)),
-            ...(Array.isArray(c.emitted) ? { emitted: c.emitted.filter((v): v is string => typeof v === 'string' && TOKEN.test(v)).slice(-100) } : {}),
             ...(Array.isArray(c.firstClips) ? { firstClips: c.firstClips.filter((v): v is string => typeof v === 'string' && v.length <= 64).slice(-50) } : {}) }
         }
       }
@@ -386,37 +367,20 @@ export class WorkflowTracker {
     this.prune()
     this.persist()
   }
-  /** Watch a backend attempt (#419): one watch per receipt, never a superseding restart, so an earlier attempt
-   * that settled but was not observed yet still reports its own terminal. */
+  /** One watch per attempt so a lost import response still follows first-clip and completion notices. */
   watchAttempt(projectId: string, receipt: Pick<AttemptReceipt, 'attempt_id' | 'kind' | 'run_id'> | null | undefined, properties: Properties = {}, planId?: string): void {
     if (!receipt || !TOKEN.test(receipt.attempt_id)) return
     const kind = receipt.kind === 'production' ? 'studio-production' : 'studio-generation'
     if (this.watches.some(w => w.attemptId === receipt.attempt_id)) return
     this.watch(kind, kind === 'studio-production' ? (planId || projectId) : projectId, kind === 'studio-production' ? projectId : undefined, this.now(), properties, false, receipt.run_id || receipt.attempt_id, receipt.attempt_id)
   }
-  /** R31 I531 #419: the append request returns its receipt before preparation; if that response was lost (reload,
-   * network), the workspace snapshot still lists the open generation attempt - adopt it so its terminal is reported.
-   * Deduplicated by attempt id in watchAttempt; the terminal's $insert_id is per attempt. */
+  /** A lost import response still leaves the open attempt on the workspace; adopt that watch. */
   adoptOpenAttempt(projectId: string, snapshot: Pick<StudioSnapshot, 'attempts'> | null | undefined): void {
     for (const receipt of (Array.isArray(snapshot?.attempts) ? snapshot.attempts : []))
       if (receipt.state === 'open' && receipt.kind === 'generation') this.watchAttempt(projectId, receipt)
   }
-  /** The receipt a v4 watch projects: bound by attempt id, else by its run, else (a watch from before
-   * receipts) the attempt the backend bound to the current generation - then pinned to that attempt. */
-  private receiptFor(w: Watch, snapshot: StudioSnapshot): AttemptReceipt | undefined {
-    const list = Array.isArray(snapshot.attempts) ? snapshot.attempts : []
-    const kind = w.kind === 'studio-production' ? 'production' : 'generation'
-    let found = w.attemptId ? list.find(a => a.attempt_id === w.attemptId)
-      : w.runId ? list.find(a => a.kind === kind && a.run_id === w.runId)
-      : kind === 'generation' ? list.find(a => a.attempt_id === snapshot.generation?.attempt_id)
-      : snapshot.plan?.id === w.id ? list.find(a => a.kind === 'production' && !!a.run_id && a.run_id === snapshot.analysis?.run_id) : undefined
-    if (found && found.kind !== kind) found = undefined
-    if (found && !w.attemptId && TOKEN.test(found.attempt_id)) { w.attemptId = found.attempt_id; this.persist() }
-    return found
-  }
   emitOnce(w: Watch, key: string, event: string, properties: Properties, attemptId?: string): void {
     if (!this.enabled() || !this.watches.includes(w) || w.seen.includes(key) || w.seen.length >= 2000) return
-    // A v4 terminal carries the backend attempt_id and a stable event id derived from it (#419).
     const id = attemptId || w.token
     if (this.capture(event, (w.kind.startsWith('studio-') || w.kind === 'framing-runtime') ? { ...safeStudioProperties(w.properties), ...safeStudioProperties(properties), ...safeStudioProperties({ attempt_id: id }), ...(id && /^[a-z0-9-]{10,100}$/.test(id) ? { $insert_id: `studio-v1:${id}:${key}` } : {}) } : { ...this.context(w.projectId || w.id), ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
       w.seen.push(key)
@@ -491,39 +455,7 @@ export class WorkflowTracker {
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
         details = { ...details, recommendation_mode: snapshot.plan.mode, analysis_mode: snapshot.plan.recommended_analysis, subtitle_status: snapshot.plan.local_evidence?.subtitle_status }
       }
-    } else if (v4) {
-      // #419: a projection of the backend receipt. No receipt means no terminal (an attempt is never invented).
-      // Attribution on the event is pickAttribution of that receipt's summary, never the live analysis.
-      const receipt = this.receiptFor(w, snapshot)
-      // No receipt: do not invent an attempt or a terminal (pre-receipt rows are not a success-rate attempt).
-      if (!receipt || !SETTLED.includes(receipt.state)) return
-      const pid = w.projectId || w.id
-      if (this.contexts[pid]?.emitted?.includes(receipt.attempt_id)) { w.settled = true; this.persist(); return }
-      const failed = receipt.state !== 'completed', sum = { ...(receipt.summary || {}) }
-      const counts = { ...sum }
-      for (const key of ATTRIBUTION_KEYS) delete counts[key]
-      if (!failed) { delete counts.error_code; delete counts.shutdown_kind }
-      const attributed = pickAttribution({ ...sum, status: receipt.state })
-      const causes = receiptEventCauses(receipt, failed)
-      const link = receipt.retry_of ? { retry_of: receipt.retry_of } : {}
-      outcome = receipt.state
-      if (receipt.kind === 'generation') {
-        event = 'studio_generation_finished'
-        details = { ...counts, ...attributed, analysis_mode: undefined,
-          billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
-          degrade_reason: receipt.degrade_reason, trigger: receipt.trigger }
-      } else {
-        event = 'studio_production_finished'
-        details = { ...counts, ...attributed, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }
-      }
-      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome, ...(receipt.flow_id ? { flow_id: receipt.flow_id } : {}), attempt_sequence: receipt.sequence }), receipt.attempt_id)
-      if (w.seen.includes('finished')) {
-        w.settled = true; this.persist()
-        const c = this.contexts[pid]
-        if (c) { c.emitted = [...(c.emitted || []), receipt.attempt_id].slice(-100); this.persistContexts() }
-      }
-      return
-    }
+    } else if (v4) return
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))
       if (w.seen.includes('finished')) { w.settled = true; this.persist() }

@@ -30,7 +30,7 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             data = json.loads(path.read_text(encoding='utf-8'))
             if not isinstance(data, dict) or not store.interrupted_run(data):
                 continue
-            data = store.read(project_id)  # owned recovery: persists the failed terminal
+            data = store.recover(project_id)  # explicit repair: persists the failed terminal
             generation = data.get('generation') or {}
             if generation.get('auto_start'):
                 sync_project_completion(project_id)

@@ -1,4 +1,7 @@
--- 1.5.7 出片成功率（v4 口径）。#416 的 SQL 可以单独合入，也可以先于 #419（没有 retry_of 的终态各自成 flow，没有 attempt_sequence 按 0）。线上看板 insight uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 尚未更新，要按重试链取末次等本 PR 合入后同步。本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。
+-- 1.5.7 出片成功率（v4 口径）。终态事件 studio_generation_finished / studio_production_finished 由后端
+-- settle_attempt 在落盘后各发一次（runtime=desktop，analytics_environment 仍是 AUTOCLIP_BUILD_ENVIRONMENT）。
+-- 前端不再发这两条，避免和后端重复计入分母。分子和分母都是这两条终态，没有单独的起始事件要搬家。
+-- 本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。查询本身不改。
 -- 口径见 docs/analytics/TRACKING_PLAN.md §6–§7。所有查询共用同一个 base / c 定义。
 --
 -- 分母为 0（稀疏的日期 / 版本 / 空窗口）时比率返回 NULL，不是 NaN（R20 #142：nullIf(分母, 0)）。

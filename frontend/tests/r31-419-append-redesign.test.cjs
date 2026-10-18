@@ -19,10 +19,7 @@ test('an open retry attempt in the snapshot without a watch is adopted and settl
   assert.equal(JSON.stringify(t.list().map(w => w.attemptId)), JSON.stringify([A]))
   const live = { material_origin: 'user', attempts: [failed], generation: { status: 'failed', attempt_id: A }, output_variants: [], analysis: { status: 'failed', phase: 'production', run_id: RUN } }
   for (let i = 0; i < 2; i++) for (const w of t.list()) t.observeStudio(w, live)
-  const done = events.filter(e => e.event === 'studio_generation_finished')
-  assert.equal(done.length, 1)
-  assert.equal(done[0].props.attempt_id, A)
-  assert.equal(done[0].props.trigger, 'retry')
+  assert.equal(events.filter(e => e.event === 'studio_generation_finished').length, 0)
 })
 
 test('R31 I531-b: settled or production attempts are not adopted', () => {

@@ -751,7 +751,7 @@ def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: 
             acc.billable += 1
 
 
-def _post_event(event: str, properties: dict[str, Any]) -> None:
+def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None) -> None:
     from backend.core.event_catalog import envelope_properties, validate_event
     from backend.services.studio.qa import telemetry as qa_telemetry
     key = qa_telemetry._key()
@@ -763,7 +763,7 @@ def _post_event(event: str, properties: dict[str, Any]) -> None:
         return
     posted = {
         **properties,
-        **envelope_properties(),
+        **(envelope if envelope is not None else envelope_properties()),
         "studio_schema_version": 2,
     }
     problems = validate_event(event, posted, envelope=True)

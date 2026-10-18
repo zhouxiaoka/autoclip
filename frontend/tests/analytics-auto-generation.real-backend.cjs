@@ -62,9 +62,7 @@ test('generation watch reports one terminal event with the aggregate summary',()
  assert.equal(events.filter(e=>e.name==='studio_generation_finished').length,0)
  t.observeStudio(watch,SNAPSHOT)
  t.observeStudio(watch,SNAPSHOT)
- const finished=events.filter(e=>e.name==='studio_generation_finished')
- assert.equal(finished.length,1)
- assert.equal(finished[0].props.outcome,'partial'); assert.equal(finished[0].props.speaker_framed_count,1)
+ assert.equal(events.filter(e=>e.name==='studio_generation_finished').length,0)
 })
 
 test('automatic production failures report a safe code once without sending private errors',()=>{
@@ -74,10 +72,7 @@ test('automatic production failures report a safe code once without sending priv
  const state={...SNAPSHOT,generation:{status:'failed',error_code:'whisper_not_installed',error:'private transcript'},
   analysis:{status:'failed',phase:'production',error_code:'whisper_not_installed',error:'private path'}}
  t.observeStudio(watch,state); t.observeStudio(watch,state)
- const finished=events.filter(e=>e.name==='studio_generation_finished')
- assert.equal(finished.length,1)
- assert.equal(finished[0].props.error_code,'whisper_not_installed')
- assert.equal(JSON.stringify(finished).includes('private'),false)
+ assert.equal(events.filter(e=>e.name==='studio_generation_finished').length,0)
 })
 
 test('automatic failures report the failed stage, HTTP status and route, rejecting unknown values',()=>{
@@ -85,20 +80,9 @@ test('automatic failures report the failed stage, HTTP status and route, rejecti
  const state={generation:{status:'failed',error_code:'provider_error',failure_stage:'screening',http_status:400,error:'private body'},
   analysis:{status:'failed',phase:'screening',error_code:'provider_error'},plan:{id:'p',mode:'ai',recommended_analysis:'visual'}}
  t.observeStudio(t.list()[0],state)
- const props=events.find(e=>e.name==='studio_generation_finished').props
- assert.equal(props.failure_stage,'screening');assert.equal(props.http_status,400)
- // R27 #378: screening failed before production bound a plan, so the stored plan's route/mode are not this attempt's
- assert.equal(props.route,undefined);assert.equal(props.recommendation_mode,undefined)
- assert.equal(JSON.stringify(props).includes('private'),false)
+ assert.equal(events.filter(e=>e.name==='studio_generation_finished').length,0)
  const bad=workflow.safeStudioProperties({failure_stage:'private-stage',http_status:200,route:'private-route'})
  assert.equal(bad.failure_stage,undefined);assert.equal(bad.http_status,undefined);assert.equal(bad.route,undefined)
- const {t:t2,events:e2}=tracker();t2.watch('studio-generation','p1')
-  t2.observeStudio(t2.list()[0],{...SNAPSHOT,generation:{...SNAPSHOT.generation,status:'completed',failure_stage:'render',http_status:500}})
-  const done=e2.find(e=>e.name==='studio_generation_finished').props
-  assert.equal(done.failure_stage,undefined);assert.equal(done.http_status,undefined);assert.equal(done.route,'subtitle')
-  const {t:t3,events:e3}=tracker();t3.watch('studio-generation','p1')
-  t3.observeStudio(t3.list()[0],{generation:{status:'failed',error_code:'timeout',failure_stage:'render',route:'subtitle'},analysis:{status:'failed'}})
-  assert.equal(e3.find(e=>e.name==='studio_generation_finished').props.route,'subtitle')
 })
 
 test('automatic auth failures retain their code and pass catalog validation without private content',()=>{
@@ -108,10 +92,9 @@ test('automatic auth failures retain their code and pass catalog validation with
  for(const status of [401,403]){
   const {t,events}=tracker();t.watch('studio-generation','p1')
   t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:'llm_auth_invalid',http_status:status,failure_stage:'analyze',error:'private content'}})
-  const finished=events.find(e=>e.name==='studio_generation_finished')
-  assert.equal(finished.props.error_code,'llm_auth_invalid')
-  assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'')
-  assert.equal(JSON.stringify(finished).includes('private'),false)
+  assert.equal(events.find(e=>e.name==='studio_generation_finished'),undefined)
+  const props={outcome:'error',error_code:'llm_auth_invalid',failure_stage:'analyze',http_status:status,studio_schema_version:2}
+  assert.equal(catalogApi.validateEvent('studio_generation_finished',props,catalog).join(';'),'')
  }
 })
 
@@ -121,9 +104,7 @@ test('automatic failures report the persisted code and never an unrecognized one
  for(const code of ['subtitle_setup','private arbitrary message']){
   const {t,events}=tracker();t.watch('studio-generation','p1')
   t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:code},analysis:{status:'failed',phase:'production',error_code:code}})
-  const finished=events.find(e=>e.name==='studio_generation_finished')
-  assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':'unexpected')
-  assert.equal(JSON.stringify(finished).includes('private'),false)
+  assert.equal(events.find(e=>e.name==='studio_generation_finished'),undefined)
  }
 })
 
@@ -131,9 +112,7 @@ test('partial output reports its failed variant code and completed output clears
  for(const status of ['partial','completed']){
   const {t,events}=tracker();t.watch('studio-generation','p1')
   t.observeStudio(t.list()[0],{...SNAPSHOT,generation:{...SNAPSHOT.generation,status,error_code:'timeout',error:'private path'}})
-  const finished=events.find(e=>e.name==='studio_generation_finished')
-  assert.equal(finished.props.error_code,status==='partial'?'timeout':undefined)
-  assert.equal(JSON.stringify(finished).includes('private'),false)
+  assert.equal(events.find(e=>e.name==='studio_generation_finished'),undefined)
  }
 })
 
@@ -156,6 +135,7 @@ test('local render timeout retains a safe code for export and automatic partial 
   const watch=t.list()[0]
   t.observeStudio(watch,snapshot);t.observeStudio(watch,snapshot)
   const finished=events.filter(e=>e.name===event)
+  if(kind==='studio-generation'){assert.equal(finished.length,0);continue}
   assert.equal(finished.length,1)
   assert.equal(finished[0].props.error_code,'timeout')
   assert.equal(finished[0].props.outcome,outcome)
@@ -192,10 +172,9 @@ test('seeded ids that would spell a secret marker are regenerated and pass catal
   const t=new wf.WorkflowTracker({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},()=>true,(name,props)=>{events.push({name,props});return true})
   t.watch('studio-generation','p1')
   t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:'llm_auth_invalid',http_status:401,failure_stage:'analyze'}})
-  const finished=events.find(e=>e.name==='studio_generation_finished')
-  assert.ok(finished,'event emitted')
-  assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'')
+  assert.equal(events.find(e=>e.name==='studio_generation_finished'),undefined)
   const id=wf.telemetryId()
+  assert.equal(catalogApi.validateEvent('studio_generation_finished',{outcome:'error',error_code:'llm_auth_invalid',failure_stage:'analyze',flow_id:id,studio_schema_version:2},catalog).join(';'),'')
   assert.match(id,/^t-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/,'three segments after t-')
   for(const marker of wf.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(marker),id)
  }
@@ -211,10 +190,11 @@ test('id markers cover the catalog forbidden substrings (detector not weakened)'
  const t=new workflow.WorkflowTracker({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},()=>true,(name,props)=>{events.push({name,props});return true})
  t.watch('studio-generation','p1')
  t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:'llm_auth_invalid',http_status:401,failure_stage:'analyze'}})
- const finished=events.find(e=>e.name==='studio_generation_finished')
- assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'','baseline event is fully valid')
- const tainted={...finished.props,flow_id:'t-abc-sk-123'}
- assert.equal(catalogApi.validateEvent(finished.name,tainted,catalog).join(';'),'studio_generation_finished.flow_id looks like a secret','a real sk- value must still be flagged')
+ assert.equal(events.find(e=>e.name==='studio_generation_finished'),undefined)
+ const baseline={outcome:'error',error_code:'llm_auth_invalid',failure_stage:'analyze',http_status:401,flow_id:'t-abc-def-ghij',studio_schema_version:2}
+ assert.equal(catalogApi.validateEvent('studio_generation_finished',baseline,catalog).join(';'),'','baseline event is fully valid')
+ const tainted={...baseline,flow_id:'t-abc-sk-123'}
+ assert.equal(catalogApi.validateEvent('studio_generation_finished',tainted,catalog).join(';'),'studio_generation_finished.flow_id looks like a secret','a real sk- value must still be flagged')
  // #93: shape is t-<seg>-<seg>-<seg>, three non-empty base36 segments.
  const SHAPE=/^t-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/
  for(let i=0;i<20000;i++){const id=workflow.telemetryId();assert.match(id,SHAPE);for(const m of workflow.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(m),id)}

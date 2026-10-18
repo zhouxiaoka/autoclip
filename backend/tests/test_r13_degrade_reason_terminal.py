@@ -62,9 +62,20 @@ def _terminal(reason, auto):
     }
 
 
+def _posted(monkeypatch):
+    posted = []
+
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        raise OSError('tests do not send')
+
+    monkeypatch.setattr('urllib.request.urlopen', fake)
+    return posted
+
+
 @pytest.mark.parametrize('reason', REASONS)
 @pytest.mark.parametrize('entry', ['auto', 'manual'])
-def test_degrade_reason_reaches_terminal_event_from_stored_record(project, reason, entry):
+def test_degrade_reason_reaches_terminal_event_from_stored_record(project, reason, entry, monkeypatch, tmp_path):
     auto = entry == 'auto'
     opened = {}
     receipt_kind = 'generation' if auto else 'production'
@@ -80,23 +91,30 @@ def test_degrade_reason_reaches_terminal_event_from_stored_record(project, reaso
         if auto:
             data['generation']['attempt_id'] = opened['attempt_id']
         return data
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_MODE', 'desktop')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    posted = _posted(monkeypatch)
     store.write(project, start(store.read(project)))
+    assert posted == []  # 还没到终态
     done = store.read(project)
     done.update({k: v for k, v in _terminal(reason, auto).items() if k != 'generation'})
     done['generation'] = {**_terminal(reason, auto)['generation'], **({'attempt_id': opened['attempt_id']} if auto else {})}
     store.write(project, done)
+    assert len(posted) == 1, posted
+    assert posted[0]['properties']['degrade_reason'] == reason
     # The live run moves on (re-screen / plan rewrite); only the persisted terminal record
-    # still describes run 'run', so the frontend reads it from analysis_history.
+    # still describes run 'run'. A second write must not emit the terminal again.
     later = store.read(project)
     later['plan'] = {'id': 'plan2', 'mode': 'local', 'recommended_analysis': 'vision'}
     later['analysis'] = {'status': 'running', 'phase': 'analysis', 'run_id': 'run2', 'instance': store.INSTANCE}
     store.write(project, later)
+    assert len(posted) == 1  # 结果页打开时任务已经结束：前端不再补发，后端也不再发一次
     snapshot = store.read(project)
     settled = attempts.find(snapshot, opened['attempt_id'])
     assert settled['state'] == 'completed' and settled['degrade_reason'] == reason
     receipt = next(row for row in snapshot['analysis_history'] if row['run_id'] == 'run')
     assert receipt['plan']['degrade_reason'] == reason
     kind = 'studio-generation' if auto else 'studio-production'
-    finished = _capture(kind, 'p' if auto else 'plan', snapshot)
-    assert len(finished) == 1, finished  # duplicate observation counted once
-    assert finished[0]['props']['degrade_reason'] == reason
+    assert _capture(kind, 'p' if auto else 'plan', snapshot) == []

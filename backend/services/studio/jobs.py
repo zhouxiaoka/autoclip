@@ -1091,14 +1091,7 @@ def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_i
     context = studio_failure_context(error, 'production')
     error_text = user_visible_error(error)
     def fail(data):
-        if not _still_this_run(data, attempt_id, run_id):
-            return False
-        context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))
-        if data.get('generation'):
-            data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
-        from backend.services.studio.failure_identity import carry_screening
-        data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context, **carry_screening(data.get('analysis'), data.get('generation'))}
-        return True
+        return store.settle_attempt(data, kind='fail', error=error_text, error_code=code, skipped=skipped, context=context, duration_ms=round((monotonic() - started) * 1000), guard=lambda d: _still_this_run(d, attempt_id, run_id))
     if store.change(project_id, fail):
         mark_project(project_id, 'failed')
 
@@ -1195,11 +1188,7 @@ def _submit_production(project_id, run_id, plan, *, attempt_id=None):
         message = '自动制作任务未能启动，请重试；原素材已保留'
         code = studio_error_code(error)
         def fail_automatic(data):
-            if not _still_this_run(data, attempt_id, run_id):
-                return False
-            data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
-            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'failed', 'phase': 'production', 'run_id': run_id, 'error': message, 'error_code': code, 'failure_stage': 'dispatch'}
-            return True
+            return store.settle_attempt(data, kind='fail', error=message, error_code=code, failure_stage='dispatch', route=_generation_route(plan), run_id=run_id, carry=False, identify=False, guard=lambda d: _still_this_run(d, attempt_id, run_id))
         if store.change(project_id, fail_automatic):
             mark_project(project_id, 'failed')
 
@@ -1218,15 +1207,9 @@ def _dispatch_pending_variants(project_id):
         expected = store.change(project_id, lambda data: store.claim_render(data, store.variant_identity(variant)))
         if expected is None:
             continue
-        def reject(data, message, code, expected=expected):
-            target = next((item for item in data['output_variants'] if item['id'] == expected[0]), None)
-            if target and store.variant_identity(target) == expected and target.get('status') == 'queued' and not target.get('render_job_id'):
-                target.update(status='failed', error=message, error_code=code)
-                target.pop('render_dispatch_claimed', None)
-                target.pop('render_dispatch_instance', None)
         raw = drafts.get(variant['draft_id'])
         if not raw:
-            store.change(project_id, lambda data: reject(data, '来源草稿不存在', 'missing_resource'))
+            store.change(project_id, lambda data: store.settle_attempt(data, kind='reject', variant_id=expected[0], expected=expected, error='来源草稿不存在', error_code='missing_resource'))
             continue
         try:
             from backend.services.studio.overlay_fill import SAFE_AREAS
@@ -1247,7 +1230,7 @@ def _dispatch_pending_variants(project_id):
             store.raise_owned_read_error(error)
             capture_studio_exception(error, 'dispatch')
             code = studio_error_code(error)
-            store.change(project_id, lambda data: reject(data, '这条成片任务未能启动，请重试；已有成片已保留', code))
+            store.change(project_id, lambda data: store.settle_attempt(data, kind='reject', variant_id=expected[0], expected=expected, error='这条成片任务未能启动，请重试；已有成片已保留', error_code=code))
             continue
         store.remember_render_link(project_id, expected, job['job_id'])
         store.change(project_id, lambda data, expected=expected, job_id=job['job_id']: store.bind_render(data, expected, job_id))
@@ -1492,7 +1475,7 @@ def _sync_variant_status(project_id, job_id, status, error=None):
 
 
 def _finish_generation(data):
-    store.settle_generation(data)
+    store.settle_attempt(data, kind='finish')
 
 
 def inspect_project(project_id, options, url=None, browser=None, *, producer=None, features=None, retry=None):
@@ -1623,9 +1606,7 @@ def _inspect(project_id, options, url, browser):
                 failure.update(context)
                 if screening:
                     failure[SCREENING_KEY] = screening
-                data['analysis'] = failure
-                if (data.get('generation') or {}).get('auto_start'):
-                    data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
+                return store.settle_attempt(data, kind='screen', failure=failure, context=context)
             store.change(project_id, fail_screening)
             mark_project(project_id, 'failed')
         except FileNotFoundError:
@@ -1812,7 +1793,7 @@ def _produce_selected(project_id, plan):
                 result['secondary_failure_stages'] = [f.get('failure_stage') or '' for f in others]
         from backend.core.llm_emit import failure_in_hand
         with failure_in_hand(held):
-            store.change(project_id, lambda data: data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **result}))
+            store.change(project_id, lambda data: store.settle_attempt(data, kind='production', analysis=result))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         store.raise_owned_read_error(error)
@@ -1823,7 +1804,7 @@ def _produce_selected(project_id, plan):
             'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000),
             **studio_failure_context(error, 'production')}
         try:
-            store.change(project_id, lambda data: data.update(analysis={**store.attempt_identity(data.get('analysis'), data.get('generation')), **failure}))
+            store.change(project_id, lambda data: store.settle_attempt(data, kind='production', analysis=failure))
             mark_project(project_id,'failed')
         except FileNotFoundError:
             pass

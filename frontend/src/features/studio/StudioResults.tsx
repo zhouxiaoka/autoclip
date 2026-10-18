@@ -83,8 +83,6 @@ export default function StudioResults({ project, children, onCreateCollection, o
   // A retry whose response was lost is still watched: the open generation attempt on the snapshot is the source.
   useEffect(()=>{workflow.adoptOpenAttempt(project.id, workspace)},[project.id, workspace.attempts])
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
-  // The generation terminal event comes from the persisted `studio-generation` watch registered at
-  // import, so it is reported once even when the user leaves this page before rendering ends.
   const act = async (key: string, fn:()=>Promise<void>) => {setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy('')}}
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
   return <div className="studio-results">
