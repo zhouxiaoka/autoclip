@@ -125,6 +125,8 @@ process.stdout.write(JSON.stringify(events))
         self.assertNotIn('now()', body)
         self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 6)
         self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 6)
+        self.assertEqual(body.count('{release_1_5_7}'), 6)
+        self.assertNotIn("SELECT '1.5.7' AS app_version, '20", body)
         self.assertIn('partial_delivery_rate', body)
         # per-flow = last attempt of the retry chain (retry_of -> root flow_id).
         self.assertEqual(v4['flow_definition']['retry_link_property'], 'retry_of')

@@ -16,7 +16,8 @@ pytest.importorskip('duckdb')
 from backend.tests.success_rate_sql import figure, run_sql  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00'", 'internal_cohort_id': '641509'}
+WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00'", 'internal_cohort_id': '641509',
+          'release_1_5_7': "'2026-10-01 00:00:00'"}
 
 
 def _produce(monkeypatch, tmp_path, goals, visual_error):

@@ -219,7 +219,7 @@ multiIf(
 ) AS os_canon
 ```
 
-发送：lifecycle super property 和 #361 `envelope_properties()` 已经发规范值。此前内部测试包的 `workflow.safeStudioProperties` 与 `template_telemetry.OPERATING_SYSTEMS` 可能发出 `darwin`/`win32`。那些事件和这次的正式包 `app_version` 都可能是 1.5.7，查询用 `analytics_environment` 区分：`validation` / `development` 是内部测试或源码运行，`production` 是正式包。**本版 1.5.7 全生产者只发 `macos` / `windows` / `linux`**（侦不到才 `unknown`），禁止 `darwin`/`win32`。#361 不改已有 `darwin`/`win32`，以免打断现有看板。
+发送：lifecycle super property 和 #361 `envelope_properties()` 已经发规范值。此前内部测试包的 `workflow.safeStudioProperties` 与 `template_telemetry.OPERATING_SYSTEMS` 可能发出 `darwin`/`win32`。**本版 1.5.7 全生产者只发 `macos` / `windows` / `linux`**（侦不到才 `unknown`），禁止 `darwin`/`win32`。#361 不改已有 `darwin`/`win32`，以免打断现有看板。旧 1.5.7 测试包与正式包的成功率分界是 §6 的发布时间下限 `{release_1_5_7}`。
 
 **版本只报 `app_version`。** `version` 是历史别名，查询 `coalesce(nullIf(properties.app_version, ''), nullIf(properties.version, ''))`。`app_installed` / `app_opened` / MCP 在 **1.5.7** 停发裸字段 `version`。
 
@@ -359,9 +359,14 @@ multiIf(
 analytics_environment = production
 runtime = desktop                      -- 主指标；web 可另列
 person_id NOT IN COHORT {internal_cohort_id}
+-- version_releases 里的版本再加发布时间下限（含）：
+--   timestamp >= toDateTime(released_at, 'UTC')
+-- 1.5.7 的 released_at 是参数 {release_1_5_7}。执行 Promote 的人把 GitHub Release
+-- published_at（UTC）填进 PostHog insight，不写进仓库。空字符串表示该版本先全部排除。
+-- 1.5.6 及更早不在表里。
 ```
 
-不在过滤里写死 `app_version`：按版本看用 [`success_rate.sql`](success_rate.sql) 图 5（每个 `app_version` 一行，按次 / 按流程、全量 / 产品、partial-delivery 率；流程归到其最后一次 attempt 的版本）。
+不在过滤里写死 `app_version`：按版本看用 [`success_rate.sql`](success_rate.sql) 图 5（每个 `app_version` 一行，按次 / 按流程、全量 / 产品、partial-delivery 率；流程归到其最后一次 attempt 的版本）。表 `version_releases` 里的版本只统计正式发布之后（含发布时间）的事件。
 
 `partial` 算出片未成功（分子只认 `outcome_canon=success`），另列 **partial-delivery 率** = `partial` 次数 / 产品口径分母。
 
@@ -375,7 +380,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 - **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）；“最后”的排序键是 `(attempt_sequence, leaf, ts)`：先按终态事件的 `attempt_sequence`（后端回执 `sequence`，项目内严格递增，#419；没有序号按 0，有序号的 attempt 总排在旧 attempt 后面），其次看 `leaf`（`retry_of` 链末端 = 没有再被重试的那次），`ts`（观察时间）只用来打平，事件乱序到达不改结果（R25 #346）。**旧数据（#419 之前，没有 `attempt_sequence`）**：单 attempt 的流程、`retry_of` 链完整的流程照常计算，结果和改前一样；同一 flow 有多次 attempt 又没有链能证明哪次最后（多个链末端）的流程记为未知，不进图 1 / 图 5 的流程分子分母，单独输出 `unknown_flows`；attempt 级成功率不受影响（R26 #362）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。**与 #416 的关系**：#416 的 SQL 用 `coalesce(retry_of, '')`，`attempt_sequence` 缺省按 0。没有 `retry_of` 时每次终态各自成 flow，不串链、不报错，因此 #416 可以单独合入 RC，也可以先于 #419。本 PR 才发出 `retry_of` 和 `attempt_sequence`；在那之前流程率等于按次（各自成 flow），不是「重试链最后一次」。看板要按重试链取末次时，用合入本 PR 之后的 `success_rate.sql`。
 - **一个人** = `person_id`（不是 `distinct_id` / 设备）。
 - **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
-- **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。
+- **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。表 `version_releases` 里的版本另加发布时间下限：`{release_1_5_7}` 由执行 Promote 的人在贴 SQL 时填成 GitHub Release `published_at`（UTC，含）；空字符串则该版本全部不计入。1.5.6 及更早不在表里。
 - **全量成功率** 分母只剔除明确的用户行为：`outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)`。
 - **产品成功率** 在全量基础上再剔除：`error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)`。
 - 两个口径都算 **产品失败**（不剔除）：`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`。
@@ -413,6 +418,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 - 事件属性 `analytics_environment = production`、`runtime = desktop`
 - 排除内部 cohort `{internal_cohort_id}`（450605 为 641509）
 - 日期：固定 UTC 区间 `{date_from}` / `{date_to}`，写在图题里；不用滚动 7 天
+- `version_releases`：1.5.7 只统计 `{release_1_5_7}`（GitHub Release `published_at`，UTC，含）之后的事件。执行 §3.5 Promote 的人贴 insight 时填写；空字符串则这一版先全部排除。1.5.6 及更早不在表里
 - 不加 `app_version` 过滤，按版本看图 11（`success_rate.sql` 图 5）
 
 | # | 图 | Insight 类型 | 事件 | 过滤 / 拆解 | 公式或读法 |
@@ -660,7 +666,7 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 
 ## 12. 过渡计划（1.5.7 收口）
 
-以本文件日期 **2026-10-14** 为起点。**过渡保留**：查询继续用 §2.3 / §4.4 映射，覆盖此前内部测试包及更早公开版本里的 `completed` / `darwin` / `win32` / `version`。内部测试包和这次要发的正式包 `app_version` 都可能是 1.5.7；查询用 `analytics_environment` 区分（`production` 为正式包，`validation` / `development` 为内部测试或源码运行）。事件上没有 commit 或构建时间。**收口在本版 1.5.7**：该版本必须让所有生产者只发规范值，并停发或标记旧事件。不靠日历日，不靠「观察期延长」。
+以本文件日期 **2026-10-14** 为起点。**过渡保留**：查询继续用 §2.3 / §4.4 映射，覆盖此前内部测试包及更早公开版本里的 `completed` / `darwin` / `win32` / `version`。旧 1.5.7 测试包与正式包的成功率按 [`success_rate.sql`](success_rate.sql) 的 `{release_1_5_7}` / `version_releases` 切开：只统计该版本 GitHub Release `published_at`（UTC）及之后的事件。事件上没有 commit 或构建时间。**收口在本版 1.5.7**：该版本必须让所有生产者只发规范值，并停发或标记旧事件。生产者收口不靠日历日，不靠「观察期延长」。
 
 | 节点 | 做什么 | 谁 |
 | --- | --- | --- |
