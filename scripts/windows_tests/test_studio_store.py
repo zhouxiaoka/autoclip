@@ -72,7 +72,7 @@ def test_native_windows_reader_leaves_failed_worker_retryable(state_path, monkey
     with state_path.open('rb'):
         with pytest.raises(PermissionError):
             jobs._render('p1', object(), 'j1')
-        live = store.read('p1')
+        live = store.recover('p1')
         assert live['jobs'][0]['status'] == 'failed'
         assert live['output_variants'][0]['status'] == 'failed'
         assert live['generation']['status'] == 'failed'

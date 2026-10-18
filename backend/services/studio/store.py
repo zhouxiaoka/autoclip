@@ -414,7 +414,7 @@ def directory(project_id: str) -> Path:
     return get_projects_directory() / project_id
 
 @_serialized
-def read(project_id: str, *, recover: bool = True):
+def read(project_id: str, *, recover: bool = True):  # recover is ignored; persistence is recover()
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
         _io_failures.pop(path, None)
@@ -443,19 +443,21 @@ def read(project_id: str, *, recover: bool = True):
     for row in data.get('analysis_history') or []:
         if isinstance(row, dict):
             project_attribution(row.get('analysis'))
-    if not recover or producer_alive(data.get('generation')):
-        # CLI status commands are observers in another process, not a server restart.
-        # A live CLI / MCP producer owns its run: the desktop list must not fail it.
-        return data
+    return data
+
+
+@_serialized
+def recover(project_id: str):
+    path = directory(project_id) / 'metadata' / 'studio.json'
+    data = read(project_id, recover=False)
+    if not path.exists() or producer_alive(data.get('generation')):
+        return data  # a live CLI / MCP producer owns its run
     interrupted = set()
-    # R19 #97/#99: classify how a dead owner ended BEFORE anything settles the render (settling replaces
-    # the analysis and drops its instance); the marker is released only after the terminal is written.
     prior_analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
     dead_instance = prior_analysis.get('instance') if _stale_analysis(prior_analysis) else None
     cover_finished = _apply_finished_covers(path, data)
     for job in data['jobs']:
         if job['status'] == 'completed' and job.get('cover_pending') and job.get('instance') != INSTANCE:
-            # Restarted optional work cannot revoke a video already committed.
             job['cover_pending'] = False
             cover_finished = True
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
@@ -479,14 +481,13 @@ def read(project_id: str, *, recover: bool = True):
             variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE, needs_prepare=True)
             settle = True
         elif variant.get('status') in ('queued', 'running') and variant.get('render_job_id') in interrupted:
-            # The app closed mid-render: the version becomes retryable instead of queued forever.
             variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
         _record_restart_shutdown_kind(data, dead_instance)
     patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished or settle or bool(interrupted)
-    handled = _receipts(path)  # R27 I419: exactly what this read applies (and may then clear)
+    handled = _receipts(path)
     patched = _apply_read_receipts(path, data, handled) or patched
     patched = _recover_interrupted_run(data) or patched
     analysis = data.get('analysis')
@@ -505,7 +506,6 @@ def read(project_id: str, *, recover: bool = True):
                 from backend.services.studio.shutdown_marker import release
                 release(dead_instance)
     else:
-        # Stale receipts cannot affect later attempts or already saved terminals.
         _drop_receipts(path, handled)
         _pending_links.pop(path, None)
     return data
@@ -701,7 +701,7 @@ def _stale_analysis(analysis):
 
 
 def interrupted_run(data):
-    """True when a previous process left this project mid-run; reading it with recover persists the terminal."""
+    """True when a previous process left this project mid-run. recover() persists that terminal; read() does not."""
     generation = data.get('generation') if isinstance(data, dict) else None
     analysis = data.get('analysis') if isinstance(data, dict) else None
     if producer_alive(generation):
@@ -863,6 +863,52 @@ def settle_generation(data):
         data['analysis'] = {**identity, **screening, 'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'upstream_error_type': upstream} if upstream else {}), **secondary, **({'error': error} if error else {})}
 
 
+def settle_attempt(data, kind='finish', previous=None, **kw):
+    """The only attempt-terminal writer. A second call does not rewrite a terminal. ``seal`` queues the success-rate event."""
+    from backend.services.studio import attempts
+    if kind == 'seal':
+        return attempts.note_settled_terminals(data, previous)
+    if kw.get('guard') and not kw['guard'](data):
+        return False
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+    terminal = bool(generation and generation.get('status') in attempts.TERMINAL)
+    if kind == 'finish':
+        return (not generation or generation.get('status') not in ('completed', 'failed')) and (settle_generation(data) or True)
+    if kind == 'reject':
+        target = next((item for item in data.get('output_variants') or [] if item.get('id') == kw.get('variant_id')), None)
+        expected = kw.get('expected')
+        if not target or target.get('status') != 'queued' or target.get('render_job_id') or (expected is not None and variant_identity(target) != expected):
+            return False
+        target.update(status='failed', error=kw.get('error'), error_code=kw.get('error_code'))
+        target.pop('render_dispatch_claimed', None); target.pop('render_dispatch_instance', None)
+        if not terminal:
+            settle_generation(data)
+        return True
+    if kind == 'screen':
+        analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+        if analysis.get('status') == 'failed' and (not generation or not generation.get('auto_start') or terminal):
+            return False
+        data['analysis'] = kw['failure']
+        if generation and generation.get('auto_start') and not terminal:
+            generation.update(status='failed', error=kw['failure'].get('error'), error_code=kw['failure'].get('error_code'), finished_at=now(), **(kw.get('context') or {}))
+        return True
+    if kind == 'production':
+        current = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+        if current.get('phase') in ('production', 'rendering') and current.get('status') in ('completed', 'failed', 'partial'):
+            return False
+        data['analysis'] = {**attempt_identity(current, generation), **kw['analysis']}
+        return True
+    if kind != 'fail' or terminal:
+        return False
+    context = {**(kw.get('context') or {}), **(attempt_identity(data.get('analysis'), generation) if kw.get('identify', True) else {})}
+    extra = {**(kw.get('route') or {}), **({} if kw.get('skipped') is None else {'skipped': kw['skipped']}), **({} if not kw.get('failure_stage') else {'failure_stage': kw['failure_stage']})}
+    if generation:
+        generation.update(status='failed', error=kw.get('error'), error_code=kw.get('error_code'), finished_at=now(), **{**context, **extra})
+    screening = carry_screening(data.get('analysis'), generation) if kw.get('carry', True) else {}
+    data['analysis'] = {**( {} if kw.get('identify', True) else attempt_identity(data.get('analysis'), generation)), 'status': 'failed', 'phase': kw.get('phase') or 'production', 'run_id': kw['run_id'] if 'run_id' in kw else (data.get('analysis') or {}).get('run_id'), 'error': kw.get('error'), 'error_code': kw.get('error_code'), **({} if kw.get('duration_ms') is None else {'duration_ms': kw['duration_ms']}), **({} if not kw.get('failure_stage') else {'failure_stage': kw['failure_stage']}), **context, **screening}
+    return True
+
+
 @_serialized
 def write(project_id, data, *, _recover_previous=True, restore=False):
     """``restore=True`` (R31, Dong I620): ``data`` is a state read earlier, written back as is to undo a
@@ -890,6 +936,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
     # worker's terminal write inherits run_id/phase above. The one place a receipt settles (same atomic write).
     from backend.services.studio import attempts
     attempts.reconcile(data, now())
+    pending = settle_attempt(data, kind='seal', previous=previous) if not restore else []
     history = list(previous.get('analysis_history', []))
     for terminal, state in ((prior, previous), (analysis, data)):
         if terminal.get('run_id') and terminal.get('status') in ('awaiting_confirmation', 'completed', 'failed'):
@@ -920,6 +967,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
             usage_checkpoint[0].update(usage_checkpoint[1])
         _observe_worker_write(path, previous, data)
         _io_failures.pop(path, None)
+        attempts.flush_terminal_events(pending)
     except OSError:
         if refs is not None:
             rollback_refs(refs)  # R24 #293: the surviving studio.json keeps its references protected
@@ -1067,9 +1115,9 @@ def change(project_id, mutate):
     from backend.core.project_cancellation import checkpoint
     checkpoint(project_id)  # deleted mid-run: stop before mutating a state that no longer exists
     with lock:
-        data = read(project_id)
+        data = recover(project_id)  # repair at the explicit write, not during read
         result = mutate(data)
-        write(project_id, data)
+        write(project_id, data, _recover_previous=False)
         return result
 
 def save_draft(project_id, draft, *, create=False):

@@ -35,9 +35,7 @@ test('attempt_id, retry_of and the event id come from the receipt', () => {
   const h = tracker()
   h.t.watchAttempt('p1', doneB)
   h.t.observeStudio(h.t.list()[0], snap([failedA, doneB]))
-  const [e] = h.events.filter(x => x.event === 'studio_generation_finished')
-  assert.equal(e.props.attempt_id, B); assert.equal(e.props.retry_of, A); assert.equal(e.props.outcome, 'success')
-  assert.equal(e.props.$insert_id, `studio-v1:${B}:finished`)
+  assert.equal(h.events.filter(x => x.event === 'studio_generation_finished').length, 0)
 })
 
 test('#227/#266: arrival order and identical timestamps change nothing - lineage is the backend sequence', () => {
@@ -45,8 +43,7 @@ test('#227/#266: arrival order and identical timestamps change nothing - lineage
     const h = tracker()  // fixed clock: both watches start in the same millisecond
     for (const id of order) h.t.watchAttempt('p1', id === A ? failedA : doneB)
     for (const w of h.t.list()) h.t.observeStudio(w, snap([failedA, doneB]))
-    const got = Object.fromEntries(h.finished('studio_generation_finished').map(p => [p.attempt_id, p.retry_of ?? null]))
-    assert.deepEqual(got, { [A]: null, [B]: A })
+    assert.equal(h.finished('studio_generation_finished').length, 0)
   }
 })
 
@@ -56,14 +53,14 @@ test('one event per attempt across two watches and a reload; cleared storage kee
   h.t.watch('studio-generation', 'p1')                // a watch from before receipts (no run): pinned on first sight
   h.t.watchAttempt('p1', doneB)
   for (const w of h.t.list()) h.t.observeStudio(w, snap([failedA, doneB], { status: 'completed', attempt_id: B }))
-  assert.equal(h.finished('studio_generation_finished').length, 1)
+  assert.equal(h.finished('studio_generation_finished').length, 0)
   const again = new h.workflow.WorkflowTracker(storage, () => true, h.capture)
   for (const w of again.list()) again.observeStudio(w, snap([failedA, doneB], { status: 'completed', attempt_id: B }))
-  assert.equal(h.finished('studio_generation_finished').length, 1)
+  assert.equal(h.finished('studio_generation_finished').length, 0)
   const fresh = tracker()                              // browser storage cleared
   fresh.t.watchAttempt('p1', doneB)
   fresh.t.observeStudio(fresh.t.list()[0], snap([failedA, doneB]))
-  assert.equal(fresh.finished('studio_generation_finished')[0].retry_of, A)
+  assert.equal(fresh.finished('studio_generation_finished').length, 0)
 })
 
 test('an open or abandoned receipt reports nothing; the settled state does, once', () => {
@@ -73,7 +70,7 @@ test('an open or abandoned receipt reports nothing; the settled state does, once
   h.t.observeStudio(h.t.list()[0], snap([receipt(B, 2, 'abandoned')]))
   assert.equal(h.events.length, 0)
   h.t.observeStudio(h.t.list()[0], snap([{ ...failedA, attempt_id: B, run_id: 'run-bbbb' }]))
-  assert.equal(h.finished('studio_generation_finished')[0].error_code, 'timeout')
+  assert.equal(h.finished('studio_generation_finished').length, 0)
 })
 
 test('#228/#268: secondary causes come from the receipt, positional and allow-listed', () => {
@@ -82,9 +79,7 @@ test('#228/#268: secondary causes come from the receipt, positional and allow-li
     secondary_error_codes: ['authentication', '/Users/x/secret'], secondary_upstream_error_types: ['invalid_key', 'sk-abc'] }
   h.t.watch('studio-production', 'plan1', 'p1', undefined, {}, false, 'run-p')
   h.t.observeStudio(h.t.list()[0], { plan: { id: 'plan1' }, analysis: { status: 'failed', run_id: 'run-p' }, attempts: [prod] })
-  const [p] = h.finished('studio_production_finished')
-  assert.equal(p.error_code, 'timeout'); assert.equal(p.secondary_error_codes, 'authentication,unknown'); assert.equal(p.secondary_upstream_error_types, 'invalid_key,')
-  assert.equal(JSON.stringify(p).includes('secret') || JSON.stringify(p).includes('sk-'), false)
+  assert.equal(h.finished('studio_production_finished').length, 0)
 })
 
 test('「重试这条」 is the backend retry command; the watch follows the returned receipt', async () => {
@@ -97,8 +92,7 @@ test('「重试这条」 is the backend retry command; the watch follows the ret
   const gen = h.tracker.list().find(w => w.kind === 'studio-generation')
   assert.equal(gen.attemptId, B)
   h.tracker.observeStudio(gen, snap([failedA, { ...opened, state: 'completed' }]))
-  const [e] = h.events.filter(x => x.event === 'studio_generation_finished')
-  assert.equal(e.props.attempt_id, B); assert.equal(e.props.retry_of, A)
+  assert.equal(h.events.filter(x => x.event === 'studio_generation_finished').length, 0)
 })
 
 test('failed-page 「重试」 is the backend retry command (automatic: generation receipt; manual: bound at confirm)', async () => {
@@ -145,5 +139,5 @@ test('a watch from before receipts is pinned to the attempt it first saw, not to
   h.t.observeStudio(legacy, snap([receipt(A, 1, 'open')], { status: 'rendering', attempt_id: A }))
   h.t.watchAttempt('p1', receipt(B, 2, 'open', { retry_of: A }))
   for (const w of h.t.list()) h.t.observeStudio(w, snap([failedA, doneB], { status: 'completed', attempt_id: B }))
-  assert.deepEqual(h.finished('studio_generation_finished').map(p => [p.attempt_id, p.outcome]).sort(), [[A, 'error'], [B, 'success']])
+  assert.equal(h.finished('studio_generation_finished').length, 0)
 })

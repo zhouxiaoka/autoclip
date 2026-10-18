@@ -141,7 +141,7 @@ test('retry page (DOM): the mounted page adopts the open retry attempt, the obse
   assert.ok(r.persisted, '(a) the adopted watch is persisted, so a reload keeps watching it')
   assert.deepEqual(r.observedWhileOpen, ['/studio/p1'])                                                   // (a) the observer polls it
   assert.equal(r.finishedWhileOpen, 0)
-  assert.deepEqual(r.finished, [{ attempt_id: A, trigger: 'retry', outcome: 'error' }])
+  assert.deepEqual(r.finished, [])
   assert.ok(!r.text.includes('追加平台'), 'no append-platform entry on the page')
   assert.ok(r.text.includes('这次制作未完成'), '(b) failure block rendered')
   assert.ok(r.text.includes('API Key 无效或已过期，请到设置里更新后再试'), '(b) the cause from the receipt of run_id ' + RUN)

@@ -28,7 +28,18 @@ WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00
 
 @pytest.fixture(autouse=True)
 def env(tmp_path, monkeypatch):
-    return flow.setup_env(tmp_path, monkeypatch)
+    flow.setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    monkeypatch.setenv('AUTOCLIP_MODE', 'desktop')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
+    posted = []
+
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        raise OSError('tests do not send')
+
+    monkeypatch.setattr('urllib.request.urlopen', fake)
+    return posted
 
 
 def _node(payload):
@@ -42,7 +53,7 @@ def _node(payload):
     return json.loads(out.stdout)
 
 
-def _chain(order=('ok', 'bad')):
+def _chain(posted, order=('ok', 'bad')):
     pid = flow.new_project()
     run = flow.auto_import(pid)
     spec = {'ok': ('completed', None, None), 'bad': ('failed', 'timeout', None)}
@@ -52,6 +63,10 @@ def _chain(order=('ok', 'bad')):
     flow.render_outcome(pid, {k: ('completed', None, None) for k in order})
     result = _node({'pid': pid, 'import_run': run, 'partial': partial, 'retry_response': response,
                     'retry_variant': 'bad', 'final': flow.workspace(pid)})
+    assert not [e for e in result['events'] if e['event'] in ('studio_generation_finished', 'studio_production_finished')]
+    terminals = [{'event': body['event'], 'props': body['properties']} for body in posted
+                 if body['event'] in ('studio_generation_finished', 'studio_production_finished')]
+    result['events'] = [e for e in result['events'] if e['event'] not in ('studio_generation_finished', 'studio_production_finished')] + terminals
     return result, flow.receipts(pid)
 
 
@@ -61,8 +76,8 @@ def _rows(events):
               'app_version': e['props'].get('app_version') or '1.5.7'}) for i, e in enumerate(events)]
 
 
-def test_events_are_projections_of_backend_receipts():
-    result, receipts = _chain()
+def test_events_are_projections_of_backend_receipts(env):
+    result, receipts = _chain(env)
     [post] = result['posts']
     assert post['url'] == '/studio/p1/retry' and post['body']['scope'] == 'variant'
     gen = [e['props'] for e in result['events'] if e['event'] == 'studio_generation_finished']
@@ -73,8 +88,8 @@ def test_events_are_projections_of_backend_receipts():
 
 @pytest.mark.parametrize('fig', [1, 5])
 @pytest.mark.parametrize('order', [('ok', 'bad'), ('bad', 'ok')])
-def test_partial_then_retry_is_one_successful_flow_whatever_the_goal_order(fig, order):
-    result, _ = _chain(order)
+def test_partial_then_retry_is_one_successful_flow_whatever_the_goal_order(fig, order, env):
+    result, _ = _chain(env, order)
     [row] = run_sql(figure(fig, SQL, WINDOW), _rows(result['events']))
     assert row['q_all'] == 2 and row['ok'] == 1
     assert (row['flow_ok'], row['fq_all'], row['fq_prod']) == (1, 1, 1), row
@@ -82,16 +97,16 @@ def test_partial_then_retry_is_one_successful_flow_whatever_the_goal_order(fig, 
 
 
 @pytest.mark.parametrize('fig', [1, 5])
-def test_duplicate_deliveries_still_count_one_attempt_each(fig):
-    result, _ = _chain()
+def test_duplicate_deliveries_still_count_one_attempt_each(fig, env):
+    result, _ = _chain(env)
     events = result['events'] + [json.loads(json.dumps(e)) for e in result['events'] if e['event'] == 'studio_generation_finished']
     [row] = run_sql(figure(fig, SQL, WINDOW), _rows(events))
     assert row['q_all'] == 2 and row['fq_all'] == 1
 
 
 @pytest.mark.parametrize('fig', [1, 5])
-def test_mutation_guard_without_the_receipt_retry_of_it_is_two_flows(fig):
-    result, _ = _chain()
+def test_mutation_guard_without_the_receipt_retry_of_it_is_two_flows(fig, env):
+    result, _ = _chain(env)
     for e in result['events']:
         e['props'].pop('retry_of', None)
         if e['event'] == 'studio_generation_finished':
@@ -101,10 +116,10 @@ def test_mutation_guard_without_the_receipt_retry_of_it_is_two_flows(fig):
 
 
 @pytest.mark.parametrize('fig', [1, 5])
-def test_346_out_of_order_observation_is_still_one_successful_flow(fig):
+def test_346_out_of_order_observation_is_still_one_successful_flow(fig, env):
     """R25 #346 on the real chain: the retry's terminal is observed BEFORE the partial one (offline client); the
     events carry the receipt sequence and success_rate.sql orders by it, so figures 1 and 5 stay at 100%."""
-    result, receipts = _chain()
+    result, receipts = _chain(env)
     gen = [e for e in result['events'] if e['event'] == 'studio_generation_finished']
     assert [e['props']['attempt_sequence'] for e in gen] == [r['sequence'] for r in receipts] == [1, 2]
     reordered = [e for e in result['events'] if e not in gen] + list(reversed(gen))

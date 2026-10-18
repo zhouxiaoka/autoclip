@@ -194,7 +194,7 @@ def test_401_render_that_cannot_write_its_failure_leaves_a_receipt_not_a_queued_
         with store.worker_read_scope('p401', ('render', 'j1')):
             jobs._render.__wrapped__('p401', {'id': 'd'}, 'j1') if hasattr(jobs._render, '__wrapped__') else jobs._render('p401', {'id': 'd'}, 'j1')
     monkeypatch.setattr(store, 'change', real_change)
-    job = store.read('p401')['jobs'][0]
+    job = store.recover('p401')['jobs'][0]
     assert job['status'] == 'failed' and job['error_code'] == 'store_lock_timeout', job
 
 

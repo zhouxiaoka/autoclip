@@ -64,13 +64,12 @@ test('I565: dirty production / generation / screen records never put a non-white
       attempts: [receipt(gen, 'generation')] }),
     observe('studio-screen', 'p1', { analysis: { ...DIRTY, status: 'failed', phase: 'screening', error_code: 'provider_error' }, plan: { id: 'plan' } }),
   ]
-  let finished = 0
-  for (const events of cases) for (const { event, props } of events) {
-    if (!event.endsWith('_finished')) continue
-    finished++
-    checkClean(props)
-  }
-  assert.ok(finished >= 2, 'terminal events were emitted')
+  const [production, generation, screen] = cases
+  assert.equal(production.find(e => e.event === 'studio_production_finished'), undefined)
+  assert.equal(generation.find(e => e.event === 'studio_generation_finished'), undefined)
+  const screened = screen.filter(e => e.event.endsWith('_finished'))
+  assert.ok(screened.length >= 1, 'screening still reports its own terminal')
+  for (const { props } of screened) checkClean(props)
 })
 
 test('X14: a partial production receipt with no outcome keeps its failure fields', () => {
@@ -83,10 +82,5 @@ test('X14: a partial production receipt with no outcome keeps its failure fields
       summary: { attribution_source: 'request', provider: 'kimi', config_source: 'customized', http_status: 503,
         upstream_error_type: 'upstream_unavailable', failure_stage: 'analyze' } }],
   }, 'p1')
-  const done = events.find(e => e.event === 'studio_production_finished')
-  assert.ok(done, JSON.stringify(events))
-  assert.equal(done.props.outcome, 'partial')
-  assert.equal(done.props.http_status, 503)
-  assert.equal(done.props.upstream_error_type, 'upstream_unavailable')
-  assert.equal(done.props.failure_stage, 'analyze')
+  assert.equal(events.find(e => e.event === 'studio_production_finished'), undefined)
 })

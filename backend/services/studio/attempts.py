@@ -371,3 +371,44 @@ def reconcile(data, now=None):
 def public(receipt) -> dict:
     """What the API returns: the receipt without the idempotency key."""
     return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id', 'inherited', 'sources', 'input', 'draft_ids')}
+
+
+def _terminal_event(receipt):
+    summary = receipt.get('summary') if isinstance(receipt.get('summary'), dict) else {}
+    failed, local, generation = receipt.get('state') != 'completed', summary.get('attribution_source') == 'local', receipt.get('kind') == 'generation'
+    props = {k: v for k, v in summary.items() if isinstance(v, bool) or (isinstance(v, str) and v) or (isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0)}
+    for key in (*(() if failed else ('shutdown_kind', 'billable_calls_before_failure', 'error_code', 'upstream_error_type', 'http_status')), *(('upstream_error_type', 'http_status') if local else ())):
+        props.pop(key, None)
+    props.pop('analysis_mode' if generation else 'recommendation_mode', None)
+    props.pop('route', None) if not generation else props.update(trigger=receipt['trigger']) if receipt.get('trigger') else None
+    props.update(outcome={'completed': 'success', 'failed': 'error'}.get(receipt.get('state'), receipt.get('state')), attempt_id=receipt.get('attempt_id'), flow_id=receipt.get('flow_id'), studio_schema_version=2, **({'attempt_sequence': receipt['sequence']} if isinstance(receipt.get('sequence'), int) else {}), **({'retry_of': receipt['retry_of']} if receipt.get('retry_of') else {}), **({'degrade_reason': receipt['degrade_reason']} if receipt.get('degrade_reason') else {}), **({'error_code': receipt['error_code']} if failed and receipt.get('error_code') else {}), **({'failure_stage': receipt['failure_stage']} if failed and receipt.get('failure_stage') else {}), **({'upstream_error_type': receipt['upstream_error_type']} if failed and not local and receipt.get('upstream_error_type') else {}), **{key: ','.join(str(item) for item in list(receipt[key])[:3]) for key in ('secondary_error_codes', 'secondary_upstream_error_types') if failed and receipt.get(key)})
+    props['$insert_id'] = f"studio-v1:{receipt.get('attempt_id')}:finished"
+    return {'event': 'studio_generation_finished' if generation else 'studio_production_finished', 'properties': {k: v for k, v in props.items() if v is not None and v != ''}}
+
+def note_settled_terminals(data, previous):
+    prior = {a.get('attempt_id'): a.get('state') for a in ((previous or {}).get('attempts') or []) if isinstance(a, dict)}
+    return [_terminal_event(r) for r in (data.get('attempts') or []) if isinstance(r, dict) and r.get('state') in TERMINAL and prior.get(r.get('attempt_id')) == 'open']
+
+
+def flush_terminal_events(pending):
+    if not pending:
+        return
+    import logging, os
+    from backend.core.event_catalog import analytics_environment, app_version, detect_arch, detect_os, validate_event
+    from backend.core.llm_emit import _post_event
+    envelope = {'schema_version': 2, 'runtime': 'desktop' if os.environ.get('AUTOCLIP_MODE') == 'desktop' else 'web', 'app_version': app_version(), 'os': detect_os(), 'arch': detect_arch(), 'analytics_environment': analytics_environment()}
+    for item in pending:
+        name, props = item.get('event'), dict(item.get('properties') or {})
+        if name not in ('studio_generation_finished', 'studio_production_finished'):
+            continue
+        for _ in range(6):  # a bad optional field must not drop the terminal
+            bad = [p.split('.', 1)[-1].split('=', 1)[0].split(' ', 1)[0] for p in validate_event(name, {**props, **envelope, 'studio_schema_version': 2}, envelope=True) if any(s in p for s in (' not in ', 'secret', 'URL'))]
+            if not [props.pop(key, None) for key in bad if key not in ('outcome', 'error_code', 'failure_stage')]:
+                break
+        if validate_event(name, {**props, **envelope, 'studio_schema_version': 2}, envelope=True):
+            logging.getLogger(__name__).warning('%s failed catalog checks', name)
+            continue
+        if name == 'studio_generation_finished':
+            _post_event('studio_generation_finished', props, envelope=envelope)
+        else:
+            _post_event('studio_production_finished', props, envelope=envelope)

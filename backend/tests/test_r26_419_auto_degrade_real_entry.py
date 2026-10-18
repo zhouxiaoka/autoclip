@@ -42,6 +42,16 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
     monkeypatch.setattr(planning, 'recommend', lambda *_a, **_k: next(plans))
     captured = []
     monkeypatch.setattr(jobs.executor, 'submit', lambda fn, *a, **k: captured.append((fn, a)))
+    posted = []
+
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        raise OSError('tests do not send')
+
+    monkeypatch.setattr('urllib.request.urlopen', fake)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    monkeypatch.setenv('AUTOCLIP_MODE', 'desktop')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
     pid = flow.new_project()
     run = flow.auto_import(pid)
     snapshots = [flow.workspace(pid)]
@@ -59,8 +69,11 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
     assert 'degrade_reason' not in late['plan'] and late['plan']['id'] != receipt.get('plan_id')
     late['output_variants'] = [late['output_variants'][0]]  # the live workspace moved on (one variant left)
     snapshots += [late, json.loads(json.dumps(late))]
+    [finished] = [body for body in posted if body['event'] == 'studio_generation_finished']
+    assert [body['event'] for body in posted if body['event'] == 'studio_generation_finished'] == ['studio_generation_finished']
     events = _frontend(pid, run, snapshots)
-    [finished] = [e for e in events if e['event'] == 'studio_generation_finished']
+    assert [e for e in events if e['event'] == 'studio_generation_finished'] == []
+    finished = {'props': finished['properties']}
     assert finished['props']['degrade_reason'] == reason
     assert finished['props']['flow_id'] == receipt['flow_id']  # #345: the backend flow, not the browser context
     assert finished['props']['completed_variant_count'] == 2 and finished['props']['variant_count'] == 2  # #347

@@ -37,7 +37,7 @@ def test_draft_save_preserves_original_and_detects_conflict(root):
 
 def test_restart_turns_running_jobs_into_retryable_failures(root):
     store.write('p1', {'drafts': [], 'events': [], 'jobs': [{'job_id':'j1','status':'running','instance':'previous'}], 'analysis':{'status':'running','instance':'previous'}})
-    state = store.read('p1')
+    state = store.recover('p1')
     assert state['jobs'][0]['status'] == 'failed'
     assert state['analysis']['status'] == 'failed'
 

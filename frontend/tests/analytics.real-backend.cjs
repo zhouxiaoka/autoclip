@@ -613,16 +613,14 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   s.tracker.observeStudio(w,snapshot);s.tracker.observeStudio(w,snapshot)
   const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
   recovered.observeStudio(recovered.list()[0],snapshot)
-  assert.equal(s.events.length,1)
-  assert.equal(s.events[0].props.studio_schema_version,2)
-  assert.equal(s.events[0].props.outcome,'error')
-  assert.equal(JSON.stringify(s.events).includes('secret'),false)
+  assert.equal(s.events.length,0)
   s.tracker.watch('studio-export','secret-job','secret-project')
   s.tracker.observeStudio(s.tracker.list()[1],{jobs:[{job_id:'secret-job',status:'completed'}]})
-  assert.equal(s.events[1].event,'studio_export_finished')
+  assert.equal(s.events[0].event,'studio_export_finished')
+  assert.equal(JSON.stringify(s.events).includes('secret'),false)
   s.enable(false);s.tracker.list();s.enable(true)
   s.tracker.observeStudio(w,snapshot)
-  assert.equal(s.events.length,2)
+  assert.equal(s.events.length,1)
 })
 test('Studio screening distinguishes recommendations, manual fallback and import failure',()=>{
   for (const [snapshot,outcome] of [[{plan:{id:'plan',mode:'ai'},analysis:{status:'awaiting_confirmation'}},'recommended'],[{plan:{id:'plan',mode:'fallback'},analysis:{status:'awaiting_confirmation'}},'fallback'],[{analysis:{status:'failed'}},'error']]) {
@@ -672,7 +670,7 @@ test('Studio allowlist rejects arbitrary values and preserves per-run partial co
  assert.equal(JSON.stringify(props).includes('secret'),false);assert.equal(JSON.stringify(props).includes('private'),false)
  const s=setup();s.tracker.watch('studio-production','plan','project')
  s.tracker.observeStudio(s.tracker.list()[0],{plan:{id:'plan',confirmed_analysis:'visual'},analysis:{status:'failed',outcome:'partial',requested_goals:['highlight','promo'],succeeded_goals:['highlight'],failed_goals:['promo'],result_count:2,duration_ms:321}})
- const p=s.events[0].props;assert.equal(p.outcome,'partial');assert.equal(p.succeeded_highlight,true);assert.equal(p.failed_count,1);assert.equal(p.duration_ms,321);assert.equal(p.analysis_mode,'visual')
+ assert.equal(s.events.length,0)
 })
 test('rescreen ignores an old plan while running and replaces the old local watch',()=>{
  const s=setup();s.tracker.watch('studio-screen','p');const old=s.tracker.list()[0]
@@ -781,11 +779,10 @@ test('immutable receipts recover the right run after a newer plan replaced curre
   const w=s.tracker.list()[0]
   s.tracker.observeStudio(w,{material_origin:'sample',plan:{id:'new-plan'},analysis:{run_id:'new-run',phase:'screening',status:'running'},analysis_history:[{run_id:'old-run',plan:{id:'old-plan',confirmed_analysis:'subtitle'},analysis:{phase:'production',status:'completed'}}]})
   s.tracker.observeStudio(w,{plan:{id:'new-plan'},analysis:{status:'failed'}})
-  assert.equal(s.events.length,1);assert.equal(s.events[0].props.outcome,'success');assert.equal(s.events[0].props.material_origin,'sample')
-  assert.equal(JSON.stringify(s.events).includes('old-run'),false)
+  assert.equal(s.events.length,0)
   s.tracker.watch('studio-screen','p',undefined,undefined,{},true,'screen-run')
   s.tracker.observeStudio(s.tracker.list()[1],{analysis:{run_id:'production-run',phase:'production',status:'failed'}})
-  assert.equal(s.events.length,1)
+  assert.equal(s.events.length,0)
 })
 
 test('experience contract excludes config secrets and results cannot replay across consent changes', () => {
@@ -1003,9 +1000,7 @@ test('retrying the same plan retains both execution attempts until independently
  s.tracker.watch('studio-production','plan','p',undefined,{},false,'run-second')
  const state={plan:{id:'plan'},analysis:{status:'completed',phase:'production',run_id:'run-second'},analysis_history:[{run_id:'run-first',plan:{id:'plan'},analysis:{status:'failed',phase:'production'}}]}
  for(const watch of s.tracker.list())s.tracker.observeStudio(watch,state)
- assert.equal(s.events.length,2)
- assert.deepEqual(s.events.map(e=>e.props.outcome),['error','success'])
- assert.notEqual(s.events[0].props.attempt_id,s.events[1].props.attempt_id)
+ assert.equal(s.events.length,0)
 })
 
 test('actual auto-frame API distinguishes automatic zero detection from retained edits',async()=>{

@@ -17,18 +17,17 @@ function finished(summary, analysis) {
     analysis,
     attempts: [{ attempt_id: attempt, flow_id: 't-ffffffffffffffff', sequence: 1, kind: 'generation', state: 'failed', summary }],
   })
-  return events.find(e => e.name === 'studio_generation_finished').props
+  return events.find(e => e.name === 'studio_generation_finished')
 }
 
-test('#332 generation_finished takes provider/model/host/status from ONE record, never run+analysis', () => {
-  // The receipt summary is the generation record: provider only (no pair) + GLM's host/model/503.
-  // Analysis carries a full kimi record. The event must not stitch them.
-  const props = finished(
+test('#332 the results page does not emit studio_generation_finished (the backend settles that terminal)', () => {
+  // A half identity on the receipt and a full identity on analysis used to be stitched by the frontend projector.
+  // That projector is gone: opening the page must not emit the success-rate terminal at all.
+  const event = finished(
     { provider: 'glm', model: 'glm-4', base_url_host: 'other.example', http_status: 503 },
     { status: 'failed', phase: 'production', provider: 'kimi', config_source: 'preset', model: 'kimi-k2', base_url_host: 'api.moonshot.cn', http_status: 429, upstream_error_type: 'rate_limited' },
   )
-  assert.deepEqual([props.provider, props.config_source, props.model, props.base_url_host, props.http_status, props.upstream_error_type],
-    [undefined, undefined, undefined, undefined, 503, undefined])
+  assert.equal(event, undefined)
 })
 
 test('#332 an unpaired legacy screening identity reads as empty, not half an identity', () => {
