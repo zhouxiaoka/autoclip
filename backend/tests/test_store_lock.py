@@ -13,7 +13,12 @@ import pytest
 from backend.core import file_lock
 from backend.core.sentry_setup import studio_error_code
 from backend.services.studio import shutdown_marker, store
-from backend.tests.test_r25_415 import _hold_lock_in_child, _project, _records, isolated  # noqa: F401
+from backend.tests.test_failure_attribution import (  # noqa: F401
+    _hold_lock_in_child,
+    _project__r25_415 as _project,
+    _records__r25_415 as _records,
+    isolated__r22_415 as isolated,
+)
 
 pytestmark = pytest.mark.store_lock
 ROOT = Path(__file__).resolve().parents[2]

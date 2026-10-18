@@ -35,7 +35,7 @@ test('template render facts stay enumerable and drop captions and paths', () => 
 })
 
 // R26 #367: the rank-skip summary rule is asserted on backend attempts.generation_summary
-// (backend/tests/test_r26_419_generation_summary.py); the frontend no longer derives summaries.
+// (backend/tests/test_studio_attempts.py); the frontend no longer derives summaries.
 
 test('override event helper keeps enums and drops free text', () => {
   const studio = fs.readFileSync(path.join(__dirname, '../src/analytics/studio.ts'), 'utf8')

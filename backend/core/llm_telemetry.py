@@ -39,7 +39,7 @@ ASR_PROVIDERS: frozenset[str] = frozenset({
     "whisper_local", "sensevoice_local", "cloud",
 })
 REQUEST_KINDS: frozenset[str] = frozenset({"text", "vision"})
-#: R20 #137: run-level identity enum (preset = catalog URL + catalog model, else customized).
+# run-level identity enum (preset = catalog URL + catalog model, else customized).
 CONFIG_SOURCES: tuple[str, ...] = ("preset", "customized")
 REQUEST_OUTCOMES: frozenset[str] = frozenset({"success", "error"})
 VALIDATION_RESULTS: frozenset[str] = frozenset({"success", "failed", "skipped"})
@@ -165,7 +165,7 @@ from backend.core.failure_attribution import AttributedError, attributed  # noqa
 
 class _LogSafeLLMError(AttributedError, RuntimeError):
     """Safe printable boundary; protocol metadata stays available to retry/degrade.
-    R29: ``.attribution`` is the snapshot built from the ORIGINAL exception before ``from None``."""
+    ``.attribution`` is the snapshot built from the ORIGINAL exception before ``from None``."""
 
 
 def log_safe_exception(error: Exception) -> Exception:
@@ -181,12 +181,12 @@ def log_safe_exception(error: Exception) -> Exception:
         safe.body = "timeout" if kind is UpstreamErrorType.TIMEOUT else "connection error"
     safe.code = getattr(error, "code", None)
     safe.retry_after = retry_after_from_error(error)
-    # R29 (Dong): the redaction boundary builds the one snapshot while the original chain is intact;
+    # the redaction boundary builds the one snapshot while the original chain is intact;
     # the raw exception never rides on the safe one (callers raise it ``from None``).
     # Only what the original chain DECIDES is frozen here; an undecided error (no SDK type, no local
     # evidence) gets no snapshot, and the call boundary's request record decides it as before.
-    # R30 (I563): the provider's HTTP status is frozen by the same construction, in the same place.
-    # R31 (I562): the controlled studio code (timeout / connection / ...) is frozen by the same call, and
+    # the provider's HTTP status is frozen by the same construction, in the same place.
+    # the controlled studio code (timeout / connection /...) is frozen by the same call, and
     # only on a MODEL snapshot (an undecided or local error freezes none; X2).
     from backend.core.failure_attribution import SOURCE_LOCAL, classify_failure
     snap = code = None

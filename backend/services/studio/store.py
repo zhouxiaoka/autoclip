@@ -22,12 +22,12 @@ def _lock_path():
     return Path(get_projects_directory()).parent / '.studio-store.lock'
 
 
-# R25 #415 #335: every project writer AND the shutdown-marker scan->delete hold this lock; it also
+# every project writer AND the shutdown-marker scan->delete hold this lock; it also
 # excludes CLI/MCP child processes writing the same data directory (file lock with a timeout).
 lock = ProcessLock(_lock_path)
 _deferred_terminals = threading.local()
 from backend.core.launch_token import instance_id as _shell_instance_id  # noqa: E402
-INSTANCE = _shell_instance_id() or uuid.uuid4().hex  # R19 #98: shell-assigned when launched by the desktop app
+INSTANCE = _shell_instance_id() or uuid.uuid4().hex  # shell-assigned when launched by the desktop app
 
 logger = logging.getLogger(__name__)
 IO_FAILURE_MESSAGE = '无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留'
@@ -45,7 +45,7 @@ _receipt_mutex = threading.Lock()
 
 
 def _append_receipt(path, receipt):
-    # R27 I419: every append, read and clear of _read_failures holds _receipt_mutex.
+    # every append, read and clear of _read_failures holds _receipt_mutex.
     with _receipt_mutex:
         _read_failures.setdefault(path, []).append(receipt)
 
@@ -56,7 +56,7 @@ def _receipts(path):
 
 
 def _drop_receipts(path, handled):
-    """R27 I419: drop only the receipts this read handled; one appended meanwhile stays."""
+    """drop only the receipts this read handled; one appended meanwhile stays."""
     ids = {id(receipt) for receipt in handled}
     with _receipt_mutex:
         left = [receipt for receipt in _read_failures.get(path, []) if id(receipt) not in ids]
@@ -82,7 +82,7 @@ def worker_read_scope(project_id, identity):
             if error is not receipt.get('read_error'):
                 raise
         except LockTimeout:
-            # R26 #401: the worker could not even write its failure. Leave a receipt WITHOUT the store
+            # the worker could not even write its failure. Leave a receipt WITHOUT the store
             # lock (it is what timed out); the next read fails the job instead of leaving it queued.
             _append_receipt(path, {'identity': identity, 'pending': {},
                                    'message': LOCK_TIMEOUT_MESSAGE, 'error_code': LOCK_TIMEOUT_CODE})
@@ -238,7 +238,7 @@ def _observe_worker_write(path, previous, data):
 def _apply_read_receipts(path, data, receipts=None):
     changed = _apply_finished_covers(path, data)
     settle = False
-    receipt_failed = False  # I454: a render/preparation receipt failed something
+    receipt_failed = False  # a render/preparation receipt failed something
     for expected, job_id in _pending_links.get(path, {}).items():
         linked = bind_render(data, expected, job_id)
         changed = changed or linked
@@ -269,7 +269,7 @@ def _apply_read_receipts(path, data, receipts=None):
                 # A refused submit never entered the phase: the stage is dispatch (the worker did not start).
                 stage = 'dispatch' if receipt.get('rejected') else (identity[2] if identity[2] in ('screening', 'production') else 'other')
                 analysis.update(status='failed', error=message, error_code=code)
-                # R27 I418: the worker never got to write its failure; a receipt is a LOCAL failure, written
+                # the worker never got to write its failure; a receipt is a LOCAL failure, written
                 # as the one snapshot (start identity kept, no upstream status).
                 write_attribution(analysis, build_attribution(local=True, start_identity=analysis, failure_stage=stage))
                 generation = data.get('generation') or {}
@@ -292,7 +292,7 @@ def _apply_read_receipts(path, data, receipts=None):
         was_failed = is_failed_terminal(generation)
         settle_generation(data)
         if receipt_failed and not was_failed and is_failed_terminal(generation):
-            # R28 I454: a render/preparation that could not write its failure is a LOCAL failure of the
+            # a render/preparation that could not write its failure is a LOCAL failure of the
             # generation too, written as the one snapshot (start identity kept, no upstream status).
             for record in (generation, data.get('analysis')):  # settle wrote both terminals
                 if isinstance(record, dict) and is_failed_terminal(record):
@@ -469,7 +469,7 @@ def read(project_id: str, *, recover: bool = True):  # recover is ignored; persi
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
-    # R27 #415 (I399/I421): every record that carries an attribution is read through export_attribution:
+    # every record that carries an attribution is read through export_attribution
     # legacy half identities, local records with an upstream status, failure fields on a success are
     # cleaned in what this read returns. The read itself never writes this back.
     for name in ('analysis', 'generation'):
@@ -575,7 +575,7 @@ def _refs_path(project_id):
 
 
 def _fsync_file(path):
-    """R24 #295: the bytes of a file we are about to publish are on disk. Windows fsync
+    """the bytes of a file we are about to publish are on disk. Windows fsync
     (_commit) needs a writable descriptor, so open it read-write."""
     fd = os.open(path, os.O_RDWR | getattr(os, 'O_BINARY', 0))
     try:
@@ -585,7 +585,7 @@ def _fsync_file(path):
 
 
 def _fsync_dir(directory):
-    """R24 #295 / R25 #337: a rename inside ``directory`` survives power loss (POSIX; Windows has no
+    """/ a rename inside ``directory`` survives power loss (POSIX; Windows has no
     directory fsync). Returns False when durability is unknown; callers must not shrink protection."""
     if os.name == 'nt':
         return True
@@ -627,7 +627,7 @@ def _ledger_content(path):
 
 def _set_refs(path, refs):
     """Make the ledger hold exactly ``refs``. Skips only when the ledger on disk ALREADY holds them
-    (R24 #293: compare the ledger's real content, never 'references unchanged'). Never deletes it."""
+    (compare the ledger's real content, never 'references unchanged'). Never deletes it."""
     refs = set(refs)
     if _ledger_content(path) == refs:
         return True
@@ -640,7 +640,7 @@ def _set_refs(path, refs):
 
 
 def _write_refs(state_path, data, previous):
-    """R22 #221 / R24 #293: the project -> instance reference ledger next to studio.json, written as a
+    """/ the project -> instance reference ledger next to studio.json, written as a
     two-step commit around the studio.json replace:
 
     1. before: ledger := old ledger ∪ refs(previous) ∪ refs(new) - every reference either version of
@@ -654,14 +654,14 @@ def _write_refs(state_path, data, previous):
     before = _instances_referenced(previous) if isinstance(previous, dict) else set()
     after = _instances_referenced(data)
     if not _set_refs(path, old | before | after):
-        # R25 #334: prepare failed -> studio.json must not be committed (it could reference an
+        # prepare failed -> studio.json must not be committed (it could reference an
         # instance the ledger does not protect).
         raise LedgerPrepareError('instance reference ledger prepare failed')
     return path, old | before, after
 
 
 class LedgerPrepareError(OSError):
-    """R25 #334: the reference ledger could not be widened before a studio.json replace."""
+    """the reference ledger could not be widened before a studio.json replace."""
 
 
 def commit_refs(context):
@@ -682,13 +682,13 @@ def _read_refs(path):
 
 
 def reference_index():
-    """See ``_reference_index``. R24 #294: the scan holds ``store.lock`` (every writer holds it too)."""
+    """See ``_reference_index``. the scan holds ``store.lock`` (every writer holds it too)."""
     with lock:
         return _reference_index()
 
 
 def _reference_index():
-    """R22 #221/#198: ONE scan of every project -> the set of dead instances still referenced.
+    """/#198: ONE scan of every project -> the set of dead instances still referenced.
 
     A project contributes the references in its studio.json AND in its ledger (``instance_refs.json``).
     A project whose studio.json and ledger both cannot be read cannot be recovered either, so it
@@ -762,11 +762,11 @@ def interrupted_run(data):
 
 from backend.services.studio.failure_identity import IDENTITY_KEYS as ATTEMPT_IDENTITY_KEYS  # noqa: E402
 from backend.services.studio.failure_identity import frozen as attempt_identity  # noqa: E402,F401 - one rule
-from backend.services.studio.failure_identity import carry_screening  # noqa: E402 - R24 #292
+from backend.services.studio.failure_identity import carry_screening  # noqa: E402
 
 
 def _record_restart_shutdown_kind(data, instance):
-    """R16 #43 / R19 #97: a render settled because of a restart records how the previous process ended."""
+    """/ a render settled because of a restart records how the previous process ended."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
     if not instance or not generation or generation.get('status') == 'rendering':
         return
@@ -841,7 +841,7 @@ def settle_generation(data):
         outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
         from backend.core.failure_codes import sentry_codes
         jobs = {job['job_id']: job for job in data.get('jobs', [])}
-        # R24 #265: one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
+        # one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
         from backend.core.failure_attribution import rank_failures
         failures = []
         for item in variants:
@@ -884,7 +884,7 @@ def settle_generation(data):
             reason = next((text for text in reasons if isinstance(text, str) and text), None)
             if reason:
                 data['generation']['error'] = reason
-        # R28 #409: failures outside this round (an older round's, not redone) - the results page can say
+        # failures outside this round (an older round's, not redone) - the results page can say
         # "this re-run succeeded, N still to redo" from this number; no separate tally.
         ids = {id(item) for item in variants}
         outside = sum(1 for item in data['output_variants'] if id(item) not in ids and item.get('status') == 'failed')
@@ -892,7 +892,7 @@ def settle_generation(data):
         error = data['generation'].get('error') if outcome == 'failed' else None
         identity = attempt_identity(data.get('analysis'), data['generation'])
         data['generation'].update(identity)
-        screening = carry_screening(data.get('analysis'), data['generation'])  # R24 #292
+        screening = carry_screening(data.get('analysis'), data['generation'])  
         upstream = data['generation'].get('upstream_error_type')
         data['analysis'] = {**identity, **screening, 'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'upstream_error_type': upstream} if upstream else {}), **secondary, **({'error': error} if error else {})}
 
@@ -945,7 +945,7 @@ def settle_attempt(data, kind='finish', previous=None, **kw):
 
 @_serialized
 def write(project_id, data, *, _recover_previous=True, restore=False):
-    """``restore=True`` (R31, Dong I620): ``data`` is a state read earlier, written back as is to undo a
+    """``restore=True`` ``data`` is a state read earlier, written back as is to undo a
     reservation nobody accepted (a rejected dispatch). It is not a state transition: no attribution
     snapshot is stamped and every record keeps the attribution group it carries."""
     from backend.core.project_cancellation import checkpoint
@@ -966,7 +966,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
         analysis['run_id'] = prior['run_id']
         analysis.setdefault('phase', prior.get('phase'))
-    # R25 #342: settle only after the terminal identity (run_id/phase) and the run telemetry are complete - the
+    # settle only after the terminal identity (run_id/phase) and the run telemetry are complete - the
     # worker's terminal write inherits run_id/phase above. The one place a receipt settles (same atomic write).
     from backend.services.studio import attempts
     attempts.reconcile(data, now())
@@ -978,7 +978,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
                 summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'screening_identity', 'shutdown_kind', 'secondary_error_codes', 'secondary_upstream_error_types', 'secondary_failure_stages') if k in terminal}
-                summary.update(export_attribution(terminal))  # R27 #415 / R31 I565: THE serializer (stage/status/upstream)
+                summary.update(export_attribution(terminal))  # / THE serializer (stage/status/upstream)
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis', 'degrade_reason') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
@@ -989,13 +989,13 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
     refs = None
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-        _fsync_file(tmp)  # R24 #295
+        _fsync_file(tmp)  
         refs = _write_refs(path, data, previous if path.exists() else None)
         _replace_state(tmp, path)
         if _fsync_dir(path.parent):
-            commit_refs(refs)  # R24 #293: release only after studio.json is durable
+            commit_refs(refs)  # release only after studio.json is durable
         else:
-            # R25 #337: replaced but durability unknown -> keep the union until a durable write.
+            # replaced but durability unknown -> keep the union until a durable write.
             logger.warning('Project state directory durability unknown; reference ledger kept')
         if usage_checkpoint is not None:
             usage_checkpoint[0].update(usage_checkpoint[1])
@@ -1004,7 +1004,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
         _defer_terminals(pending)  # send after the outermost lock release, never while this write holds it
     except OSError:
         if refs is not None:
-            rollback_refs(refs)  # R24 #293: the surviving studio.json keeps its references protected
+            rollback_refs(refs)  # the surviving studio.json keeps its references protected
         _remember_io_failure(path, previous, data)
         raise
     finally:
@@ -1042,7 +1042,7 @@ def _ensure_failure_identity(data):
     fill(analysis)
 
 
-from backend.core.failure_attribution import (  # noqa: E402 - R27 #415: the one attribution rule
+from backend.core.failure_attribution import (  # noqa: E402 - - the one attribution rule
     ATTRIBUTION_FIELDS, FAILURE_FIELDS, IDENTITY_FIELDS, build_attribution,
     SNAPSHOT_FIELDS, export_attribution, has_snapshot, is_failed_terminal, project_attribution,
     write_attribution)
@@ -1053,8 +1053,8 @@ def _paired(record):
 
 
 def _apply_attribution(record, failed, newly_failed, prior=None):
-    """R29 #415 (I503): the store only writes the snapshot it is given, replaced whole; it never infers
-    "the same failure" from run_id/error_code or any other field value. R30 (I560): a snapshot is stamped
+    """the store only writes the snapshot it is given, replaced whole; it never infers
+    "the same failure" from run_id/error_code or any other field value. a snapshot is stamped
     only on a record that became failed IN THIS WRITE (``newly_failed``: the state transition, see
     ``_attach_run_telemetry``); an error in hand during an unrelated write never touches it.
 
@@ -1063,7 +1063,7 @@ def _apply_attribution(record, failed, newly_failed, prior=None):
       the phase identity, the job's own failure stage and, for local, the attempt's start identity);
     - newly failed with no error in hand (a receipt that already wrote its own snapshot): the group the
       record carries stays exactly as it is;
-    - failed before this write and still the same attempt (R31 I622): the STORED group (``prior``) is
+    - failed before this write and still the same attempt the STORED group (``prior``) is
       carried forward whole, even when the writer rebuilt the record dict (no inference: copied as is);
     - not failed: failure fields go; the identity recorded at attempt start stays, else the phase one."""
     from backend.core.llm_emit import attribution_snapshot, failure_now
@@ -1119,11 +1119,11 @@ def _attach_run_telemetry(data, project_id, previous, *, restore=False):
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = bool(is_failed_terminal(record))
-        # R30 I560: the transition, judged inside this one serialized write against the record as stored:
+        # the transition, judged inside this one serialized write against the record as stored
         # non-failed -> failed, or a failed record of ANOTHER attempt (run identity changed). Status and
-        # identity only; never error_code (no "same failure" inference, I503).
+        # identity only; never error_code (no "same failure" inference, ).
         newly_failed = failed and not (is_failed_terminal(prior) and prior_identity == identity)
-        if not restore:  # R31 I620: a rollback write is not a transition; its records keep their groups
+        if not restore:  # a rollback write is not a transition; its records keep their groups
             _apply_attribution(record, failed, newly_failed, prior)
         for key, value in snapshot.items():
             if value is None or key in ATTRIBUTION_FIELDS or key == 'attribution_source':

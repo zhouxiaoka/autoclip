@@ -89,7 +89,7 @@
 
 ```sh
 cd frontend
-node --test tests/analytics.real-backend.cjs  # 需要后端 Python 环境（AUTOCLIP_TEST_PYTHON）；CI 由 backend/tests/test_r26_frontend_real_backend_suites.py 跑
+node --test tests/analytics.real-backend.cjs  # 需要后端 Python 环境（AUTOCLIP_TEST_PYTHON）；CI 由 backend/tests/test_frontend_real_backend.py 跑
 npm run typecheck
 npm run lint
 npm run build

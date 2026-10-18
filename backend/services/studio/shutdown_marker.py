@@ -1,4 +1,4 @@
-"""1.5.7 / R16 #42: tell a clean quit/update from a lost parent or a crash when a run is recovered
+"""1.5.7 / tell a clean quit/update from a lost parent or a crash when a run is recovered
 as service_restarted.
 
 - Normal quit / update: the desktop shell (Rust BackendManager::stop) calls
@@ -12,8 +12,8 @@ as service_restarted.
 On the next start the dead run's instance record is classified (cached per process):
 user_quit/update -> ``clean``, parent_lost -> ``parent_lost``, unacked -> ``unknown``, missing -> ``crash``,
 unreadable or invalid content -> ``unknown`` (also for a missing/invalid instance id).
-R20 #134/#99: one record per instance in ONE directory (``<data dir>/shutdown_markers/<instance>``), one
-prune rule (run once at startup, in the background; never on the quit path). R19 #98's "shell got no 200 in time" is the same record with content ``unacked``, written by
+/#99: one record per instance in ONE directory (``<data dir>/shutdown_markers/<instance>``), one
+prune rule (run once at startup, in the background; never on the quit path). 's "shell got no 200 in time" is the same record with content ``unacked``, written by
 the shell only when no marker exists yet (a marker that landed in time wins). A record is released only
 when no project still references that instance, so several projects of one dead instance all read the
 same classification even if one of them fails to persist and the app restarts again. Pruning keeps the
@@ -41,7 +41,7 @@ _TMP_MAX_AGE = 3600.0
 
 
 def _root() -> Path:
-    """R21 #196: the desktop shell resolves the marker dir once and passes it in ``MARKER_DIR_ENV``;
+    """the desktop shell resolves the marker dir once and passes it in ``MARKER_DIR_ENV``;
     the shell writes ``unacked`` into that same dir. Without the shell (CLI/dev): the data dir."""
     configured = os.environ.get(MARKER_DIR_ENV, '').strip()
     if configured:
@@ -54,7 +54,7 @@ def mark(kind: str, instance: str | None = None) -> bool:
     """Atomically write this process's marker. Returns True once the marker is on disk.
 
     Runs on the quit path inside the shell's 3 s budget: it writes one file and never scans projects
-    (R21 #202). Pruning happens once at startup (``prune_in_background``)."""
+    . Pruning happens once at startup (``prune_in_background``)."""
     if kind not in MARKER_KINDS:
         return False
     tmp = None
@@ -82,7 +82,7 @@ def mark(kind: str, instance: str | None = None) -> bool:
     except Exception:  # noqa: BLE001 - a marker must never block shutdown
         return False
     finally:
-        if tmp is not None:  # R21 #199: a failed write leaves no .tmp behind
+        if tmp is not None:  # a failed write leaves no.tmp behind
             try:
                 tmp.unlink(missing_ok=True)
             except OSError:
@@ -99,8 +99,8 @@ def _referenced(instance: str) -> bool:
 
 def prune(root: Path | None = None) -> int:
     """Bound the record dir: keep the newest ``_KEEP`` records, never drop one an unrecovered project
-    may still reference (studio.json or its reference ledger, R22 #221), and drop orphan ``.tmp`` files
-    older than an hour. ONE project scan total (R21 #202). Returns how many files were removed."""
+    may still reference (studio.json or its reference ledger, ), and drop orphan ``.tmp`` files
+    older than an hour. ONE project scan total. Returns how many files were removed."""
     try:
         root = root or _root()
         entries = [(p, p.stat().st_mtime) for p in root.iterdir() if p.is_file()]
@@ -120,7 +120,7 @@ def prune(root: Path | None = None) -> int:
         from backend.services.studio import store
     except Exception:  # noqa: BLE001 - cannot tell -> keep everything
         return removed
-    # R24 #294: scan, re-check and delete under the SAME lock every project writer holds, so a
+    # scan, re-check and delete under the SAME lock every project writer holds, so a
     # reference written after the scan can never land between the check and the unlink.
     with store.lock:
         try:
@@ -135,7 +135,7 @@ def prune(root: Path | None = None) -> int:
 
 
 def prune_in_background() -> threading.Thread:
-    """Startup: prune off the request and quit paths (R21 #197/#202)."""
+    """Startup: prune off the request and quit paths (/#202)."""
     def run():
         try:
             prune()
@@ -157,7 +157,7 @@ def _classify(path: Path) -> str:
         return 'clean'
     if content == 'parent_lost':
         return 'parent_lost'
-    return 'unknown'  # 'unacked' (R19 #98) or anything unexpected
+    return 'unknown'  # 'unacked' or anything unexpected
 
 
 def shutdown_kind(instance: str | None) -> str:
@@ -177,7 +177,7 @@ def shutdown_kind(instance: str | None) -> str:
 
 
 def release(instance: str | None) -> None:
-    """Delete a dead instance's record once no project references it any more (R20 #99).
+    """Delete a dead instance's record once no project references it any more.
 
     Call only after the caller's own terminal state was written."""
     if not instance or not re.fullmatch(r'[0-9a-f]{32}', str(instance)):
@@ -185,7 +185,7 @@ def release(instance: str | None) -> None:
     try:
         root = _root()
         from backend.services.studio import store
-        with store.lock, _lock:  # R24 #294: lock order store -> marker, same as read()/prune
+        with store.lock, _lock:  # lock order store -> marker, same as read/prune
             record = root / instance
             if (str(root), instance) in _consumed and record.exists() and not _referenced(instance):
                 record.unlink(missing_ok=True)

@@ -1,5 +1,5 @@
 """Bounded still-frame analysis through an OpenAI-compatible vision endpoint."""
-from backend.core.failure_attribution import ModelResponseInvalid  # R29
+from backend.core.failure_attribution import ModelResponseInvalid  
 import base64
 import json
 import math
@@ -56,7 +56,7 @@ def text_json(prompt, data):
     response = client.call(prompt, data)
     try:
         return decode_json(response)
-    except ValueError:  # R29: 200 but not JSON -> a model failure, never our "validation"
+    except ValueError:  # 200 but not JSON -> a model failure, never our "validation"
         raise ModelResponseInvalid('文字模型返回的内容不是有效 JSON，请重试') from None
 
 class VisionRequestError(RuntimeError):
@@ -76,7 +76,7 @@ class VisionRequestError(RuntimeError):
 
 
 class FrameExtractError(VisionRequestError):
-    """R11 #406: ffmpeg could not extract frames from the local source. A local media
+    """ffmpeg could not extract frames from the local source. A local media
     problem, not a vision-service outage; callers that only know VisionRequestError still
     get a safe message and diagnostics."""
     def __init__(self, message):
@@ -101,7 +101,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
     config = config or effective()
     key, base, model = config.get('api_key', ''), config['base_url'], config['model']
     from backend.core.llm_emit import sent_vision_identity
-    # R24 #297: the frozen identity, else the config actually being sent (never re-read settings).
+    # the frozen identity, else the config actually being sent (never re-read settings).
     identity = config.get('identity') or sent_vision_identity(config)
     if not base or not model:
         raise ValueError('当前模型只能处理文字，不能看画面；请在「设置 → AI 分析」换成多模态模型，或改用字幕分析')
@@ -299,7 +299,7 @@ NON_PLAY_EVENTS = {'menu', 'reward_screen', 'loading'}
 def select_highlights(raw_events, duration, limit=6, *, max_duration=None):
     try:
         candidates = [HighlightCandidate.model_validate(e) for e in raw_events[:12]]
-    except ValueError:  # R29: pydantic ValidationError on the model's own answer
+    except ValueError:  # pydantic ValidationError on the model's own answer
         raise ModelResponseInvalid('视觉模型返回的候选格式无效，请重试') from None
     validate_scenes(candidates, duration)
     if len({e.id for e in candidates}) != len(candidates):

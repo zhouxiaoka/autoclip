@@ -1,5 +1,5 @@
 /**
- * R20 #125: 「去设置」 from a failed project remembers the project; once the model settings are saved
+ * 「去设置」 from a failed project remembers the project; once the model settings are saved
  * successfully (and pass validation) the app returns to that project, where the failed step shows
  * 「继续制作」 (the same retry API: new attempt_id + retry_of).
  */
@@ -17,7 +17,7 @@ export function returnAfterSave(search: string): string | null {
   return pid && /^[\w-]{1,128}$/.test(pid) ? `/project/${encodeURIComponent(pid)}?${CONTINUE_PARAM}=1` : null
 }
 
-/** The only save notification (R22 #173). A notification problem never turns a saved settings into a failure. */
+/** The only save notification. A notification problem never turns a saved settings into a failure.*/
 export function notifySettingsSaved(target: { dispatchEvent(e: Event): boolean } | undefined = typeof window === 'undefined' ? undefined : window) {
   try { target?.dispatchEvent(new Event(SETTINGS_SAVED_EVENT)) } catch { /* no DOM (tests / SSR) */ }
 }

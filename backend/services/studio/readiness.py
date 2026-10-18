@@ -139,12 +139,12 @@ def _ffmpeg() -> dict:
 def report() -> dict:
     settings = ai_models.for_editing()
     from backend.services.studio import planning
-    # One analysis-mode source for every field (R23 #233): the preference planning and the gate read
+    # One analysis-mode source for every field the preference planning and the gate read
     # (analysis_preferences.load, legacy file included), read once. Unreadable -> the document's own mode.
     mode = planning.preferred_analysis_mode() or settings.analysis_mode
     transcription = _transcription(settings)
     if not transcription.get('ok') and planning.transcription_may_be_skipped(mode):
-        # Visual route possible: the desktop does not block; the import gate decides per file (R21 code health).
+        # Visual route possible: the desktop does not block; the import gate decides per file (code health).
         transcription = {**transcription, 'skippable': True}
     checks = {
         'analysis': _analysis(settings),
@@ -195,7 +195,7 @@ LOCAL_TRANSCRIPTION_DOWNLOADING = '等待下载完成：转写模型正在下载
 LOCAL_TRANSCRIPTION_MODEL = '需要先下载转写模型：视频没有字幕，所选的本地 Whisper 模型还没下载。请一键安装（会下载模型），或改用云端转写后再导入。'
 
 
-# Waiting states keep their own code end to end (R23 #232): never reported as whisper_not_installed.
+# Waiting states keep their own code end to end never reported as whisper_not_installed.
 WAITING_CODES = ('whisper_installing', 'whisper_model_downloading')
 # #281: a missing / failed model is repaired by the same install prompt (runtime -> model download).
 GATE_CODES = ('whisper_not_installed', 'whisper_install_failed', 'whisper_model_missing', 'whisper_model_failed') + WAITING_CODES
@@ -205,7 +205,7 @@ class TranscriptionNotReady(ValueError):
     """1.5.7 gate refusal. Callers map exactly this (not any ValueError) to ``invalid_input``.
 
     ``code`` is the transcription check code (one of ``GATE_CODES``); HTTP callers send ``detail``
-    so the desktop maps the prompt from the code, never from the Chinese text (R20 #168)."""
+    so the desktop maps the prompt from the code, never from the Chinese text."""
     error_code = 'invalid_input'
 
     def __init__(self, code: str):

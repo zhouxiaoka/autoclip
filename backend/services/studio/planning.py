@@ -19,7 +19,7 @@ class Recommendation(BaseModel):
 
 
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
-# R11 #406: reason code + i18n key (frontend t()); the text is the zh source string.
+# reason code + i18n key (frontend t); the text is the zh source string.
 SOURCE_TOO_LONG_CODE = 'source_too_long_subtitle_route'
 VISUAL_SOURCE_TOO_LONG_MESSAGE = '画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。'
 assert VISUAL_MAX_SOURCE_SEC == 120 * 60  # keep the i18n key in sync with the limit
@@ -63,7 +63,7 @@ def final_goal(requested: str | None, analysis_mode: str, configured: bool, scre
 
 
 def resolve_route(analysis_mode: str, goal: str, duration: float | None, *, ai_screened: bool = False, degraded: bool = False) -> str:
-    """The one route rule (R21 code health): 'visual' or 'subtitle'. recommend() and the import gate both call it."""
+    """The one route rule (code health): 'visual' or 'subtitle'. recommendand the import gate both call it."""
     if degraded or duration is None or duration > VISUAL_MAX_SOURCE_SEC or goal == 'content':
         return 'subtitle'
     if analysis_mode == 'visual' or (analysis_mode == 'auto' and ai_screened):
@@ -74,7 +74,7 @@ def resolve_route(analysis_mode: str, goal: str, duration: float | None, *, ai_s
 def preferred_analysis_mode() -> str | None:
     """The analysis mode recommend() will read (``analysis_preferences.load``: new settings, else the legacy
     analysis-preferences.json). None when the saved preference is unreadable: recommend() then refuses on its
-    own before any paid call (R22 #208)."""
+    own before any paid call."""
     try:
         return analysis_preferences.load().analysis_mode
     except ValueError:
@@ -83,7 +83,7 @@ def preferred_analysis_mode() -> str | None:
 
 def transcription_may_be_skipped(analysis_mode: str | None = None) -> bool:
     """For the readiness report: visual mode with a vision model can run without ASR (the backend gate decides per file).
-    ``analysis_mode`` is the caller's ``preferred_analysis_mode()`` so the report reads it once (R23 #233)."""
+    ``analysis_mode`` is the caller's ``preferred_analysis_mode`` so the report reads it once."""
     if analysis_mode is None:
         analysis_mode = preferred_analysis_mode()
     return analysis_mode == 'visual' and vision_configured(analysis_mode)
@@ -170,7 +170,7 @@ def recommend(video: Path, options: ImportOptions):
     duration = source_duration(video, info)
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
-    # R3 (R11 #406): sources over 120 min go to the subtitle route BEFORE any vision config
+    # sources over 120 min go to the subtitle route BEFORE any vision config
     # check or screening, on the same provider, with a structured reason code + hint (auto
     # and visual alike). Subtitle/transcription readiness is verified up front.
     overlong = consent.analysis_mode != 'subtitle' and duration > VISUAL_MAX_SOURCE_SEC
@@ -263,12 +263,12 @@ def recommend(video: Path, options: ImportOptions):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
             if consent.analysis_mode == 'auto' and isinstance(error, intelligence.FrameExtractError):
-                # R11: local frame extraction failed inside sample(): its own code, not a vision outage.
+                # local frame extraction failed inside sample its own code, not a vision outage.
                 frame_degrade = True
             elif (consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError)
                     and not invalid_degrade):
                 # S5: only a vision-service failure is "vision unavailable"; a local ffmpeg/OS
-                # error is not a vision outage and records no degrade reason (R10 #406).
+                # error is not a vision outage and records no degrade reason.
                 screening_degrade = True
             if options.auto_start or screening_degrade or invalid_degrade or frame_degrade:
                 local_evidence, result = _local_recommendation(

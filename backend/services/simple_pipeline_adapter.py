@@ -467,7 +467,7 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
-            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # the chain still exists HERE; the one snapshot is built now and travels in the dict
             # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
             _carry_attribution(failed, e)
             upstream = getattr(e, "upstream_error_type", "") or (failed.get("attribution") or {}).get("upstream_error_type")
@@ -491,7 +491,7 @@ class SimplePipelineAdapter:
             status = http_status_of(e)
             if status is not None:
                 failed["http_status"] = status
-            # R29 I501: the chain still exists HERE; the one snapshot is built now and travels in the dict
+            # the chain still exists HERE; the one snapshot is built now and travels in the dict
             # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
             _carry_attribution(failed, e)
             return failed

@@ -30,7 +30,7 @@ import './quick-output.css'
 export default function StudioResults({ project, children, onCreateCollection, onReload }: { project: Project; children: ReactNode; onCreateCollection: () => void; onReload: () => void }) {
   useTranslation()
   const navigate = useNavigate()
-  // R20 #125: back from a successful settings save -> 「继续制作」 is the primary action.
+  // back from a successful settings save -> 「继续制作」 is the primary action.
   const returnedFromSettings = new URLSearchParams(useLocation().search).get(CONTINUE_PARAM) === '1'
   const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
   const [history, setHistory] = useState(false)
@@ -48,7 +48,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const failedCode = workspace.analysis?.error_code || workspace.generation?.error_code
   const sourceUnusable = workspace.analysis?.status === 'failed' && sourceFailure(failedCode)
   const whisperSettings = workspace.analysis?.status === 'failed' && !sourceUnusable && failureSettings(failedCode).label === '打开转写设置' ? failureSettings(failedCode) : null
-  // R28 #409: the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
+  // the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
   const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
     : workspace.generation?.status === 'completed' ? t('已按所选平台生成可发布成片。')

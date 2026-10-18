@@ -28,7 +28,7 @@ class _CallRoute:
     provider: Optional[LLMProvider]
     settings: Dict[str, Any]
     info: Dict[str, Any]
-    # R23 #415: provider + config_source of the connection this route was resolved from
+    # provider + config_source of the connection this route was resolved from
     # (failure_identity.connection_identity), frozen with the route; never re-read from settings.
     identity: Dict[str, Any] = field(default_factory=dict)
 
@@ -639,7 +639,7 @@ class LLMManager:
             raise RuntimeError("LLM candidate loop exhausted")
     
     def note_same_provider_degrade(self) -> int:
-        """R1 hook: increment ``degrade_count`` when switching to the next candidate.
+        """hook: increment ``degrade_count`` when switching to the next candidate.
 
         Isolated from ``call`` / ``call_with_retry`` so the fallback loop can
         rebase without touching emit plumbing. Only a non-negative count is

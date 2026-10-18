@@ -117,7 +117,7 @@ def model_call_error_code(error: Exception) -> str:
     from backend.core.llm_retry import studio_code_for
     from backend.core.upstream_errors import classify_exception, http_error_parts
 
-    frozen = frozen_error_code(error)  # R31 I562: the redaction boundary already decided it
+    frozen = frozen_error_code(error)  # the redaction boundary already decided it
     if frozen:
         return frozen
     info = classify_exception(error)
@@ -131,7 +131,7 @@ def model_call_error_code(error: Exception) -> str:
 def http_status_of(error: BaseException | None) -> int | None:
     """第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
 
-    R30 #415（Dong I563，和 I500 同一套遍历规则）：只有 failure_attribution.http_status_of 一处实现。
+    （ ，和 同一套遍历规则）：只有 failure_attribution.http_status_of 一处实现。
     只走显式 __cause__；脱敏边界冻结在安全异常上的 http_status 优先；不再走 __context__
     （处理旧 503 时又发生的新错误，不能把旧状态码带进新请求）。
     """
@@ -199,16 +199,16 @@ from backend.core.failure_attribution import AttributedError  # noqa: E402 - no 
 
 
 class AttributedPipelineFailure(AttributedError, PipelineFailure):
-    """R29: a PipelineFailure carrying the snapshot built where the chain was intact (``.attribution``)."""
+    """a PipelineFailure carrying the snapshot built where the chain was intact (``.attribution``)."""
 
 
 def cloud_transcription_failure(message, error: BaseException | None = None, http_status: int | None = None,
                                 upstream_error_type: str = "") -> PipelineFailure:
     """CloudTranscriptionError carries only our safe public text, never a provider body.
 
-    R29: the transcription boundary already built the snapshot (``error.attribution``); it is carried
+    the transcription boundary already built the snapshot (``error.attribution``); it is carried
     here as is and wins over this wrapper's code (which only picks the user hint), never re-judged.
-    R31 (I562): the code is the one the boundary froze (timeout / connection / llm_auth_invalid / ...),
+    the code is the one the boundary froze (timeout / connection / llm_auth_invalid /...),
     else ``provider_error``. The fine user cause (``invalid_key`` / ``insufficient_quota``) stays on
     ``upstream_error_type``. The user text depends ONLY on the code and the frozen HTTP status.
     A non-str ``message`` is the safe error itself (callers pass the exception)."""

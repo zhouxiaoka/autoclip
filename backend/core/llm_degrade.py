@@ -1,4 +1,4 @@
-"""Same-provider preset candidate fallback (1.5.7 R1).
+"""Same-provider preset candidate fallback (1.5.7 ).
 
 Thin helpers for ``LLMManager.call_with_retry``. Classification stays in
 ``upstream_errors``. This module does not persist settings, does not switch
@@ -164,7 +164,7 @@ def candidates_for_call(settings: Mapping[str, Any] | None, assignment: Any = No
 
 
 def call_note_same_provider_degrade(manager: Any = None) -> None:
-    """Call #375's ``note_same_provider_degrade`` when R2 is present.
+    """Call 's ``note_same_provider_degrade`` when is present.
 
     #375 is not on this branch. Prefer ``manager.note_same_provider_degrade``,
     else ``llm_telemetry.increment_degrade_count``. If the instance hook

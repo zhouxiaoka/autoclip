@@ -31,13 +31,13 @@ def project_or_404(project_id: str, db: Session):
         raise HTTPException(404, '项目不存在')
     return project
 
-from backend.core.failure_attribution import ModelResponseInvalid  # R29
+from backend.core.failure_attribution import ModelResponseInvalid  
 
 def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except store.ConflictError as error:
-        if getattr(error, 'error_code', None):  # R30: a coded refusal (frontend errorText maps the code)
+        if getattr(error, 'error_code', None):  # a coded refusal (frontend errorText maps the code)
             raise HTTPException(error.status, {'error_code': error.error_code, 'message': str(error)}) from None
         raise HTTPException(409, str(error)) from None
     except FileNotFoundError as error:
@@ -191,7 +191,7 @@ async def import_visual(
         raise
     pid = str(project.id)
     try:
-        # mkdir inside the try: a failure here still runs the staging cleanup below (R18 #75).
+        # mkdir inside the try: a failure here still runs the staging cleanup below.
         raw = store.directory(pid) / 'raw'
         raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
@@ -586,8 +586,8 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         raise HTTPException(404, '草稿不存在')
     try:
         result = intelligence.text_json('你是剪辑文案编辑。按用户要求优化 title 和 hook，保持事实；依据仅限原文与镜头证据。不能声称已修改镜头、声音或视频，也不能承诺投放效果。返回 {"title":"...","hook":"..."}。', {'instruction': body.instruction, 'language': body.draft.language, 'title': body.draft.title, 'hook': body.draft.hook, 'scenes': [s.model_dump() for s in body.draft.scenes]})
-        # R29 (Dong 11:09): the model's own reply failed our checks -> MODEL / invalid_response, no raw text.
-        # R31 I568: only the reply's own shape is judged (not a dict, a missing key, a field the schema
+        # (11:09): the model's own reply failed our checks -> MODEL / invalid_response, no raw text.
+        # only the reply's own shape is judged (not a dict, a missing key, a field the schema
         # rejects); a TypeError from our own code is not caught here and stays local/unexpected.
         if not isinstance(result, dict):
             raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试')

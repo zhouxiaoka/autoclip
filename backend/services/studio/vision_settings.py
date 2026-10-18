@@ -113,7 +113,7 @@ def effective():
         binding = settings.vision or settings.analysis
         from backend.services.studio.failure_identity import settings_identity
         return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
-                # R22 #195: the identity of THIS connection, frozen with the endpoint it resolves to.
+                # the identity of THIS connection, frozen with the endpoint it resolves to.
                 'identity': settings_identity(settings, 'vision'),
                 'mode': 'custom' if settings.vision else 'text_model', 'source': 'connections',
                 'text_model': binding.model if binding else '', 'timeout': settings.vision_timeout}
@@ -197,7 +197,7 @@ _tested_identity = contextvars.ContextVar('vision_tested_identity', default=None
 
 @contextmanager
 def testing_identity(identity):
-    """R25 #336: the identity of the saved connection a settings-page test runs on."""
+    """the identity of the saved connection a settings-page test runs on."""
     token = _tested_identity.set(dict(identity) if identity else None)
     try:
         yield
@@ -209,7 +209,7 @@ def test(body):
     from backend.services.studio.intelligence import vision_call
     import base64, struct, zlib
     config = _resolve(body)
-    identity = _tested_identity.get()  # R25 #336: else the sent config's identity
+    identity = _tested_identity.get()  # else the sent config's identity
     if identity:
         config = {**config, 'identity': dict(identity)}
     def chunk(kind, data):

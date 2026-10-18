@@ -144,7 +144,7 @@ def create_app(mode: str = "web") -> FastAPI:
     # 注册路由
     app.include_router(health_router, prefix="/api/health", tags=["health"])
     app.include_router(api_router, prefix="/api/v1")
-    # R16 #42: local-only shutdown intent from the desktop shell (token-guarded).
+    # local-only shutdown intent from the desktop shell (token-guarded).
     from backend.api.internal import router as internal_router
     app.include_router(internal_router, tags=["internal"])
     

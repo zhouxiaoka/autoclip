@@ -113,7 +113,7 @@ def by_key(data, key):
 
 
 def check_join(data, receipt, parent_attempt_id, key=None):
-    """R25 #343/#344: a request joining the open attempt passes the same parent check as the first one (the parent
+    """/#344: a request joining the open attempt passes the same parent check as the first one (the parent
     must exist, be a v4 attempt, and be the one the open attempt retries) and registers its own idempotency key,
     so replaying it after the attempt settled returns this receipt instead of creating another attempt."""
     if parent_attempt_id:
@@ -132,7 +132,7 @@ def bind_run(receipt, run_id):
 
 
 def own_outputs(data, variants):
-    """R27 #376/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
+    """/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
     open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only.
     Without an open attempt nothing is stamped. Already stamped outputs are never re-stamped."""
     receipt = current(data)
@@ -147,7 +147,7 @@ def own_outputs(data, variants):
 
 
 def own_drafts(data, drafts):
-    """R31 I540: drafts a manual confirmation creates are owned by the open (production) attempt, stored when they
+    """drafts a manual confirmation creates are owned by the open (production) attempt, stored when they
     are written - same rule as own_outputs. The stamp lives in the attempt record (draft_ids): the Draft schema is
     closed (extra='forbid') and drafts are copied into derived drafts, which must not inherit another run's stamp."""
     receipt = current(data)
@@ -158,7 +158,7 @@ def own_drafts(data, drafts):
 
 
 def inherit_plan(receipt, data, variant):
-    """R26 #364 / R27 #377: a variant retry re-renders an output, so it belongs to the plan that produced that
+    """/ a variant retry re-renders an output, so it belongs to the plan that produced that
     output (the variant's own stamp) and reports the outputs of the attempt that produced it - not the retry
     parent, which is just the latest failure (a re-screen may have failed in between). The source attempt's frozen
     enums go along in case its plan has been replaced since. A joined retry adds its variant's producer."""
@@ -186,7 +186,7 @@ def _inherit_source(receipt, data, variant):
 
 
 def bind_plan(receipt, plan):
-    """R25 #348: the plan this attempt actually runs (auto: written when screening starts production; manual: the
+    """the plan this attempt actually runs (auto: written when screening starts production; manual: the
     confirmed one). Only a bound plan's degrade_reason is frozen at settle - an attempt that fails before its own
     plan exists must not inherit the previous plan's reason."""
     if receipt is not None and isinstance(plan, dict) and plan.get('id'):
@@ -223,9 +223,9 @@ def settle(receipt, state, record, now=None, plan=None, base=None):
     causes = causes_of(record) if state in ('failed', 'partial') else []
     ranked = rank_failures([{'error_code': c['code'], 'upstream_error_type': c['upstream'], 'failure_stage': c['stage'], '_c': c} for c in causes])
     receipt.update(state=state, finished_at=now, causes=[r['_c'] for r in ranked])
-    receipt.pop('input', None)  # R31: an append's frozen input is only needed while it runs
+    receipt.pop('input', None)  # an append's frozen input is only needed while it runs
     own = plan if isinstance(plan, dict) and plan.get('id') and plan.get('id') == receipt.get('plan_id') else {}
-    # R25 #345/#347: everything the terminal event projects is frozen here - the frontend never mixes in the live
+    # /#347: everything the terminal event projects is frozen here - the frontend never mixes in the live
     # workspace or plan for a receipt (a historical receipt must not borrow the current state's numbers).
     receipt['summary'] = {**(base or {}), **{k: record[k] for k in SUMMARY_KEYS if k in record and record[k] is not None}}
     for key, value in (('recommendation_mode', own.get('mode')), ('analysis_mode', own.get('confirmed_analysis'))):
@@ -233,9 +233,9 @@ def settle(receipt, state, record, now=None, plan=None, base=None):
             receipt['summary'][key] = value
     if receipt.get('kind') == 'generation' and not receipt['summary'].get('route') and isinstance(own.get('recommended_analysis'), str):
         receipt['summary']['route'] = own['recommended_analysis']
-    for key, value in (receipt.get('inherited') or {}).items():  # R26 #364: the source plan, when it is not current
+    for key, value in (receipt.get('inherited') or {}).items():  # the source plan, when it is not current
         if key in PLAN_KEYS and not own:
-            receipt['summary'][key] = value  # R28 #411: the source output's plan wins over the live workspace route
+            receipt['summary'][key] = value  # the source output's plan wins over the live workspace route
     reason = own.get('degrade_reason') if own else (receipt.get('inherited') or {}).get('degrade_reason')
     if reason in DEGRADE_REASONS:
         receipt['degrade_reason'] = reason
@@ -261,7 +261,7 @@ def _millis(value):
 
 
 def generation_summary(data, variants=None, started=None) -> dict:
-    """R25 #347: the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
+    """the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
     (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
     all_variants = [v for v in (data.get('output_variants') or [] if variants is None else variants) if isinstance(v, dict)]
@@ -334,12 +334,12 @@ def round_outputs(data):
 
 
 def _owned_summary(data):
-    """R26 #363 / R27 #376 / R28 #409: output counts are those of round_outputs (the same scope settle_generation
+    """/ / output counts are those of round_outputs (the same scope settle_generation
     judges the status on). With no stamped output in scope the receipt keeps the request fields but no counts -
     unstamped outputs are not attributed by inference."""
     owned = round_outputs(data)
     started = (find(data, data['generation'].get('attempt_id')) or {}).get('created_at')
-    if not owned:  # R31 I534: no counts by inference, but the duration never depends on the output scope
+    if not owned:  # no counts by inference, but the duration never depends on the output scope
         return {k: v for k, v in generation_summary(data, started=started).items() if k in OUTPUT_FREE + ('duration_ms',)}
     return generation_summary(data, variants=owned, started=started)
 
@@ -354,7 +354,7 @@ def reconcile(data, now=None):
     if receipt['kind'] == 'generation':
         if generation.get('attempt_id') != receipt['attempt_id'] or generation.get('status') not in TERMINAL:
             return
-        # R28 #409: settle_generation and the receipt share round_outputs; the counts are taken from _owned_summary
+        # settle_generation and the receipt share round_outputs; the counts are taken from _owned_summary
         # (round_outputs again), so generation's completed_variant_count is not copied twice.
         record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS},
                   **{k: v for k, v in generation.items() if k != 'completed_variant_count'}}

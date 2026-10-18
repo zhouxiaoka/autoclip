@@ -426,7 +426,7 @@ _DNS_MARKERS = ('name or service not known', 'nodename nor servname', 'getaddrin
 def network_kind_of(exc: BaseException | None) -> str:
     """'dns' when a transport error is a name-resolution failure, '' otherwise.
     Only the kind leaves this function; the exception text (may hold a host) never does.
-    R31 (Dong 8f0e155c #3, the I563 rule): only the explicit ``__cause__`` chain is walked; an exception
+    (#3, the rule): only the explicit ``__cause__`` chain is walked; an exception
     that was merely being handled (an earlier DNS failure) never decides this one."""
     import socket
     seen = 0

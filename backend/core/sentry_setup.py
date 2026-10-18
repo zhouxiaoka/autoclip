@@ -42,7 +42,7 @@ def studio_error_code(error: Exception) -> str:
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
     from backend.core.failure_attribution import frozen_error_code
-    frozen = frozen_error_code(error)  # R31 I562: the code a redaction boundary froze (timeout/connection)
+    frozen = frozen_error_code(error)  # the code a redaction boundary froze (timeout/connection)
     if frozen in STUDIO_ERROR_CODES:
         return frozen
     # Whisper model download (whisper_model_manager.ModelDownloadFailed). Duck-typed so
@@ -56,7 +56,7 @@ def studio_error_code(error: Exception) -> str:
         return "timeout"
     from backend.core.file_lock import LockTimeout
     if isinstance(error, LockTimeout):
-        return "store_lock_timeout"  # R26 #390: a local product failure, never a model timeout
+        return "store_lock_timeout"  # a local product failure, never a model timeout
     # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
     # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
     try:
@@ -70,7 +70,7 @@ def studio_error_code(error: Exception) -> str:
         return "missing_resource"
     from backend.core.failure_attribution import ModelResponseInvalid
     if isinstance(error, ModelResponseInvalid):
-        return ModelResponseInvalid.error_code  # R29: 200 + content failed validation -> a model code
+        return ModelResponseInvalid.error_code  # 200 + content failed validation -> a model code
     if isinstance(error, ValueError):
         return "validation"
     return "unexpected"
@@ -82,7 +82,7 @@ _PIPELINE_FAILURE_STAGES = {"INGEST": "ingest", "SUBTITLE": "subtitle", "ANALYZE
 
 def studio_failure_context(error: Exception, phase: str) -> dict:
     """Where an automatic run failed and, for a MODEL failure only, the provider HTTP status/upstream type
-    (I455), without messages or URLs. Built by THE snapshot factory (failure_attribution.build_attribution)."""
+    without messages or URLs. Built by THE snapshot factory (failure_attribution.build_attribution)."""
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure
     from backend.core.failure_attribution import build_attribution, export_attribution
@@ -92,7 +92,7 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
     elif isinstance(error, VisionRequestError) and phase != "screening":
         stage = "vision"
     snap = build_attribution(error, failure_stage=stage)
-    fields = export_attribution(snap)  # R31 I565: THE serializer
+    fields = export_attribution(snap)  # THE serializer
     return {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
 
 
@@ -126,7 +126,7 @@ _privacy_lock = threading.Lock()
 def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[bool] = None) -> Path:
     """Single writer: only the backend API process writes privacy.json (settings endpoints);
     worker processes only read it.
-    R11 #392: atomic (temp file + os.replace) so a concurrent reader never sees a
+    atomic (temp file + os.replace) so a concurrent reader never sees a
     truncated privacy.json; read-modify-write is serialized in-process. An unreadable
     existing file keeps collection OFF unless this call sets analytics explicitly."""
     path = _privacy_path()
@@ -139,7 +139,7 @@ def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[b
                 loaded = json.loads(path.read_text(encoding="utf-8"))
                 current = loaded if isinstance(loaded, dict) else {"analytics": False, "crash_reports": False}
             except Exception:  # noqa: BLE001
-                # R12 #18: corrupt file => analytics AND crash reports default off; only the
+                # corrupt file => analytics AND crash reports default off; only the
                 # toggle named in this request changes below.
                 current = {"analytics": False, "crash_reports": False}
         if crash_reports is not None:
@@ -350,7 +350,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "pipeline_stage": PIPELINE_STAGES,
         "upstream_error_type": UPSTREAM_ERROR_TYPES,
         "failure_stage": FAILURE_STAGES,
-        "attribution_source": {"request", "phase", "local"},  # R26 #392
+        "attribution_source": {"request", "phase", "local"},  
         "provider": TELEMETRY_PROVIDERS | ASR_PROVIDERS,
     }
     clean_tags = {key: value for key, value in tags.items()
@@ -379,7 +379,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     return clean
 
 
-# I650: one machine stuck in a loop must not use up the project quota.
+# one machine stuck in a loop must not use up the project quota.
 EVENTS_PER_FINGERPRINT_PER_HOUR = 5
 _VOLUME_WINDOW_SECONDS = 3600.0
 _VOLUME_MAX_KEYS = 512
@@ -452,7 +452,7 @@ def _before_send_limited(event: dict, hint: Optional[dict] = None) -> Optional[d
 
 
 def clear_anonymous_user() -> None:
-    """R12 #17: drop Sentry user.id in this process now, without reading privacy.json."""
+    """drop Sentry user.id in this process now, without reading privacy.json."""
     if not _initialized:
         return
     try:
@@ -540,7 +540,7 @@ def init_sentry(mode: str = "web") -> bool:
     dsn = (os.getenv("SENTRY_DSN") or "").strip()
     if not dsn:
         return False
-    # I652: tests, source checkouts, web/Docker/scripts and tauri dev never init.
+    # tests, source checkouts, web/Docker/scripts and tauri dev never init.
     if not _packaged_desktop_reporting(mode):
         logger.info("非桌面正式版，跳过 Sentry")
         return False

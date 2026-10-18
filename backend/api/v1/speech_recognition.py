@@ -413,7 +413,7 @@ async def test_speech_service(request: TestSpeechServiceRequest):
             message=f"测试失败: {str(e)}"
         )
 
-# #418 R26: QA switch for on-device acceptance of #372 (download request 500 -> failed, retry, no resend).
+# QA switch for on-device acceptance of (download request 500 -> failed, retry, no resend).
 # Off unless this exact env var is "1" when the app starts; release builds never set it (locked by a test).
 QA_FAIL_MODEL_DOWNLOAD_ENV = "AUTOCLIP_QA_FAIL_MODEL_DOWNLOAD"
 
@@ -449,7 +449,7 @@ async def download_whisper_model(request: DownloadModelRequest):
         state = await model_manager.download_model(request.model)
     except Exception as e:
         logger.error(f"下载Whisper模型失败: {e}")
-        # #418 R27c I488: the one Studio capture path (consent, scope, tag whitelist); production Sentry has no
+        # R27c the one Studio capture path (consent, scope, tag whitelist); production Sentry has no
         # Starlette integration, so the raised HTTPException alone is never reported. The QA simulation never comes here.
         sentry_setup.capture_studio_exception(e, phase="model_download", http_status=500)
         raise HTTPException(status_code=500, detail=f"下载Whisper模型失败: {str(e)}")

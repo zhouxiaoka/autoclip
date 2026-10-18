@@ -117,7 +117,7 @@ def _designed_outro(width: int, height: int, params: dict) -> Path | None:
 def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True, report: dict | None = None) -> bool:
     """Append the branded outro atomically. If branding fails, the video is delivered without it:
     a finished render must never be lost to the end card. ``report['outro_seconds']`` receives the
-    duration of the outro actually used, so the caller can verify body + outro (R13/R14 #33)."""
+    duration of the outro actually used, so the caller can verify body + outro."""
     partial = destination.with_name(f'{destination.stem}.branding.part.mp4')
     partial.unlink(missing_ok=True)
     if not enabled:
@@ -132,7 +132,7 @@ def append_outro(source: Path, destination: Path, *, width: int, height: int, en
             report['outro_seconds'] = seconds
         return True
     except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
-        # R15 #36: no paths or command lines in the log, only the error class and a fixed reason.
+        # no paths or command lines in the log, only the error class and a fixed reason.
         reason = error.reason if isinstance(error, OutroDurationUnavailable) else type(error).__name__
         logging.getLogger(__name__).warning('Outro skipped: %s', reason)
         partial.unlink(missing_ok=True)
@@ -141,7 +141,7 @@ def append_outro(source: Path, destination: Path, *, width: int, height: int, en
 
 
 class OutroDurationUnavailable(ValueError):
-    """R15 #36: the outro's own duration could not be proven, so it is treated as not added."""
+    """the outro's own duration could not be proven, so it is treated as not added."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -190,7 +190,7 @@ def _append(source: Path, partial: Path, width: int, height: int) -> float:
         if outro is None:
             outro = Path(tmp) / 'outro.mp4'
             _text_outro(outro, width, height, params)
-        # R15 #36: prove the outro duration before concatenating. A probe timeout, garbage
+        # prove the outro duration before concatenating. A probe timeout, garbage
         # output or empty duration means the outro is not added (the validated body ships).
         try:
             seconds = _media_seconds(outro)

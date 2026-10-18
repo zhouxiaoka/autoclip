@@ -5,7 +5,7 @@ values only, and every entry (HTTP / CLI / MCP / Celery import / pipelines / con
 the result to its own protocol. HTTP entries call ``backend.api.v1.transcription_gate.run`` so the whole check (settings read, ffprobe,
 ffmpeg decode fallback) runs in the threadpool, never on the event loop.
 
-Invariants (each has an acceptance test in ``backend/tests/test_r158_preflight.py``):
+Invariants (each has an acceptance test in ``backend/tests/test_preflight.py``):
 
 - The material probe is tri-state: ``not_probed`` / ``readable`` / ``unreadable``. "We did not look" is never
   confused with "we looked and could not read it".

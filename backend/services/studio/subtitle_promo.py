@@ -1,5 +1,5 @@
 """Text-only promotional drafts grounded in existing subtitle selections."""
-from backend.core.failure_attribution import ModelResponseInvalid  # R29
+from backend.core.failure_attribution import ModelResponseInvalid  
 import uuid
 from pydantic import BaseModel, ConfigDict, Field
 from backend.services.studio import intelligence
@@ -45,7 +45,7 @@ def make_promos(project_id, clips, preferences, source_duration, instruction='')
         {'candidates': evidence, 'language': preferences.language, 'instruction': instruction[:1000]})
     try:
         response = PromoResponse.model_validate(answer)
-    except ValueError:  # R29: the model's answer failed the schema
+    except ValueError:  # the model's answer failed the schema
         raise ModelResponseInvalid('推广方案格式无效，请重试；原稿已保留') from None
     valid = {e['candidate'] for e in evidence}
     if any(choice.candidate not in valid for choice in response.drafts):

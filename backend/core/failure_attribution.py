@@ -1,6 +1,6 @@
-"""R27 #415: THE failure-attribution rule (Dong R26 design, 157/415-attribution-design.md).
+"""THE failure-attribution rule (design, 157/415-attribution-design.md).
 
-One classifier, one write-once snapshot, one reader. R29: the layer closest to the provider call, where
+One classifier, one write-once snapshot, one reader. the layer closest to the provider call, where
 the exception chain is still intact, builds the snapshot once; dicts, threads, store writes and events
 carry it unchanged (an ``AttributedError`` carries it on ``.attribution``):
 
@@ -11,7 +11,7 @@ carry it unchanged (an ``AttributedError`` carries it on ``.attribution``):
 - ``FailureAttribution``: the snapshot. ``local`` never carries ``http_status``/``upstream_error_type``
   (validated on construction: ``ValueError``). Identity is a provider/config_source pair or nothing.
 - ``write_attribution(record, snapshot)``: replaces the attribution group WHOLE (no merging).
-- ``export_attribution(source)`` (R31 I565; ``read_attribution`` is the same function): THE whitelist
+- ``export_attribution(source)`` (``read_attribution`` is the same function): THE whitelist
   serializer every emitter and reader uses; legacy half records are cleaned at read time only, never
   written back.
 
@@ -58,12 +58,12 @@ class Classification:
     kind: FailureKind
     decisive: BaseException | None = None
     record: Any = None  # the failed request's record; only ever set for MODEL
-    snapshot: Any = None  # R29: the snapshot an AttributedError carried (returned as is)
+    snapshot: Any = None  # the snapshot an AttributedError carried (returned as is)
     decided: bool = True  # False: LOCAL only because nothing in the chain decided (the fall-through)
 
 
 class AttributedError(Exception):
-    """R29 (Dong): the base of every redaction-boundary exception (``_LogSafeLLMError``,
+    """the base of every redaction-boundary exception (``_LogSafeLLMError``,
     ``CloudTranscriptionError``, ``ImageError``) and of a failure rebuilt across the Celery boundary.
 
     The boundary calls ``build_attribution`` ONCE on the original exception while its chain is intact,
@@ -72,11 +72,11 @@ class AttributedError(Exception):
     upstream_error_type, failure_stage): never a message, URL or body. ``classify_failure`` returns it as
     is. ``None`` (the class default): the raise site had no provider failure to attribute.
 
-    R30 (Dong I563): ``http_status`` is the provider's HTTP status FROZEN at the same boundary, by the same
+    ``http_status`` is the provider's HTTP status FROZEN at the same boundary, by the same
     construction (``attributed``), because ``from None`` leaves no ``__cause__`` to read it from later.
     ``http_status_of`` reads this field; None: no HTTP response came back (or none was observed).
 
-    R31 (Dong I562): ``error_code`` is the controlled studio code (``connection``/``timeout``/...,
+    ``error_code`` is the controlled studio code (``connection``/``timeout``/...,
     one of ``MODEL_ERROR_CODES``) FROZEN by the same ``attributed`` call, so a timeout and a refused
     connection stay apart after the redaction wrap. ``frozen_error_code`` reads it."""
     attribution: "FailureAttribution | None" = None
@@ -85,7 +85,7 @@ class AttributedError(Exception):
 
 
 class ProviderTransportError(Exception):
-    """R30 (Dong I567): a request that was SENT toward the provider and failed in transport (connect/read
+    """a request that was SENT toward the provider and failed in transport (connect/read
     timeout, a refused connection) or came back with an HTTP error status, seen by a redaction boundary
     around an SDK this module does not know (httpx/requests). The boundary builds one of these from the
     original exception INSIDE its ``except`` (type name and status only: no message, URL or body), lets
@@ -99,13 +99,13 @@ class ProviderTransportError(Exception):
 
 
 def valid_status(value) -> bool:
-    """R31 (Dong mid-review, I623): THE valid range of a provider HTTP status, everywhere a status is
+    """THE valid range of a provider HTTP status, everywhere a status is
     frozen or read: an error response, 400-599 (an int, not a bool). Nothing below 400 is ever frozen."""
     return type(value) is int and 400 <= value <= 599
 
 
 def _transport_code(kind: str, status: int | None, timed_out: bool) -> str:
-    """R31 I562: the controlled studio code of a transport failure, from its type and HTTP status ONLY
+    """the controlled studio code of a transport failure, from its type and HTTP status ONLY
     (never a body): no response -> ``timeout`` or ``connection``; else the shared status rule."""
     if status is None:
         return "timeout" if timed_out else "connection"
@@ -115,7 +115,7 @@ def _transport_code(kind: str, status: int | None, timed_out: bool) -> str:
 
 
 class ModelResponseInvalid(ValueError):
-    """R29 (Dong): the model answered (HTTP 200) but its content failed our validation (JSON that does not
+    """the model answered (HTTP 200) but its content failed our validation (JSON that does not
     parse, a schema/ID/range check). An explicit type, never a fallback: ``classify_failure`` judges it
     MODEL by ``isinstance`` and its studio error code is ``invalid_response``."""
     error_code = "invalid_response"
@@ -124,9 +124,9 @@ class ModelResponseInvalid(ValueError):
 def attributed(error: BaseException, snapshot: "FailureAttribution | None", *,
                http_status: int | None = None, error_code: str | None = None) -> BaseException:
     """THE construction of a redaction boundary's frozen fields on its safe exception (an
-    ``AttributedError``): the snapshot, (R30 I563) the provider's HTTP status when a response came
-    back, and (R31 I562) the controlled studio error code. Returns the exception. A status outside
-    ``valid_status`` (400-599, R31 I623) is not frozen; a code outside ``MODEL_ERROR_CODES`` is not
+    ``AttributedError``): the snapshot, the provider's HTTP status when a response came
+    back, and the controlled studio error code. Returns the exception. A status outside
+    ``valid_status`` (400-599, ) is not frozen; a code outside ``MODEL_ERROR_CODES`` is not
     frozen; an absent one leaves the field."""
     if snapshot is not None and not isinstance(snapshot, FailureAttribution):
         raise TypeError("attributed takes a FailureAttribution")
@@ -139,7 +139,7 @@ def attributed(error: BaseException, snapshot: "FailureAttribution | None", *,
 
 
 def frozen_error_code(error: BaseException | None) -> str | None:
-    """R31 I562: the studio code a redaction boundary froze on this safe error (``attributed``), else
+    """the studio code a redaction boundary froze on this safe error (``attributed``), else
     None. Only the error itself is read (its chain was dropped at the boundary)."""
     code = getattr(error, "error_code", None) if isinstance(error, AttributedError) else None
     return code if isinstance(code, str) and code in MODEL_ERROR_CODES else None
@@ -148,7 +148,7 @@ def frozen_error_code(error: BaseException | None) -> str | None:
 def with_request_record(error: BaseException, record) -> None:
     """The call boundary (llm_emit) attaches the failed request's record to the safe exception raised just
     inside it. A MODEL snapshot built at the redaction boundary had only the phase identity: THE factory
-    gives it the request's identity now (``build_attribution(request_record=)``, R30 I567). Kind, status
+    gives it the request's identity now (``build_attribution(request_record=)``, ). Kind, status
     and upstream type stay exactly as the boundary built them."""
     if not isinstance(error, AttributedError) or not isinstance(getattr(error, "attribution", None), FailureAttribution):
         return
@@ -157,7 +157,7 @@ def with_request_record(error: BaseException, record) -> None:
 
 
 def http_status_of(error: BaseException | None) -> int | None:
-    """R30 (Dong I563, one traversal rule with I500): THE provider HTTP status of a failure, 400-599 or None.
+    """(one traversal rule with ): THE provider HTTP status of a failure, 400-599 or None.
 
     Walks ``chain`` (the error, then its explicit ``__cause__`` links; never ``__context__``) and returns
     the first link's own status field: ``http_status`` (frozen on an ``AttributedError`` at its redaction
@@ -175,7 +175,7 @@ def http_status_of(error: BaseException | None) -> int | None:
 def chain(error: BaseException | None) -> Iterator[BaseException]:
     """The error, then its EXPLICIT ``__cause__`` links only (``raise ... from``), cycle-safe.
 
-    R29 I500: the implicit ``__context__`` (an exception that merely happened to be handled when this one
+    the implicit ``__context__`` (an exception that merely happened to be handled when this one
     was raised, e.g. the ``FileNotFoundError`` of a cache miss before the real request) is never walked:
     only a cause the code chose to attach can decide."""
     seen: set[int] = set()
@@ -196,7 +196,7 @@ def record_of(error: BaseException | None):
 
 
 def _local_types() -> tuple[type, ...]:
-    """Errors that are decisively LOCAL in ANY layer of the chain (I450): our own machine failed
+    """Errors that are decisively LOCAL in ANY layer of the chain our own machine failed
     (store lock, subprocess, disk full / read-only, permissions, missing file or directory)."""
     import subprocess
     from backend.core.file_lock import LockTimeout
@@ -240,7 +240,7 @@ def _api_types() -> tuple[type, ...]:
 
 def _sent_and_answered(link: BaseException) -> bool:
     """A request record on this link whose request was SENT and got an error back from the provider
-    (it carries the provider's HTTP status). A record alone is not proof (I450: a PermissionError raised
+    (it carries the provider's HTTP status). A record alone is not proof (a PermissionError raised
     inside the call before any network I/O also gets a record)."""
     record = getattr(link, _RECORD_ATTR, None)
     return record is not None and isinstance(getattr(record, "http_status", None), int)
@@ -257,7 +257,7 @@ def _is_model(link: BaseException, coded: tuple, api: tuple) -> bool:
 
 
 def classify_failure(error: BaseException | None) -> Classification:
-    """R28 (Dong R27 I450): LOCAL first, then MODEL, nothing else.
+    """LOCAL first, then MODEL, nothing else.
 
     1. any layer of the chain is a local error (lock timeout, subprocess, disk full, permissions, file not
        found, a local pipeline/vision code) -> LOCAL; no request record is read;
@@ -266,10 +266,10 @@ def classify_failure(error: BaseException | None) -> Classification:
        provider SDK, a pipeline/vision failure with a model code, or a request that was sent and answered
        with an error. The record of that request rides along;
     3. otherwise LOCAL (a status code or a record alone never makes a model failure); no error -> NONE.
-    R29: only the explicit ``__cause__`` chain is walked (I500). An ``AttributedError`` carrying a snapshot
+    only the explicit ``__cause__`` chain is walked. An ``AttributedError`` carrying a snapshot
     decides with that snapshot, returned unchanged (it was built where the chain was intact). A
     ``ModelResponseInvalid`` (200 + content failed validation) is MODEL. A connection error or timeout is
-    MODEL too (I505: the request was sent toward the provider); error_code tells them apart. R30 (I567):
+    MODEL too (the request was sent toward the provider); error_code tells them apart.
     a ``ProviderTransportError`` (a redaction boundary's view of an httpx/requests failure) is MODEL by
     ``isinstance``; this is the only place that decides it (no ``sent`` override in the factory)."""
     if error is None:
@@ -334,7 +334,7 @@ class FailureAttribution:
 
 
 def restore_attribution(fields: dict | None) -> FailureAttribution | None:
-    """R29 I501/I502: THE one restore point for a snapshot that crossed a boundary as fields (the adapter's
+    """/ THE one restore point for a snapshot that crossed a boundary as fields (the adapter's
     result dict across ``apply().get()``). The fields are taken whole, never re-judged; None if absent."""
     if not isinstance(fields, dict) or fields.get("attribution_source") not in SOURCES:
         return None
@@ -353,8 +353,8 @@ def build_attribution(error: BaseException | None = None, *, phase_identity: dic
       attempt's start identity; never a status/upstream;
     - no error -> the phase identity as ``phase`` (no status), or None when there is none.
     ``failure_stage`` defaults to the stage the job itself recorded on ``start_identity`` (its record).
-    R29: an error carrying a boundary snapshot (``AttributedError``) gets that snapshot back unchanged,
-    never re-judged. R30 (I567): the only two things ever added to a carried snapshot are added HERE, by
+    an error carrying a boundary snapshot (``AttributedError``) gets that snapshot back unchanged,
+    never re-judged. the only two things ever added to a carried snapshot are added HERE, by
     parameter: ``request_record`` (the call boundary's failed request) gives a ``phase`` snapshot that
     request's identity (-> ``request``), and a missing ``failure_stage`` is filled in."""
     if failure_stage is None and isinstance(start_identity, dict):
@@ -391,19 +391,19 @@ def build_attribution(error: BaseException | None = None, *, phase_identity: dic
     if error is None and not identity:
         return None
     if verdict.kind is not FailureKind.MODEL and not identity and not failure_stage:
-        return None  # R29: a MODEL failure always gets its snapshot (it must survive a redaction wrap)
+        return None  # a MODEL failure always gets its snapshot (it must survive a redaction wrap)
     return FailureAttribution._make(SOURCE_PHASE, identity, http_status=status, upstream_error_type=upstream,
                                     failure_stage=failure_stage)
 
 
 def _provider_status(error: BaseException | None) -> tuple[int | None, str | None]:
-    """The provider's HTTP status on the EXPLICIT chain (I500/I505: only a response actually received;
+    """The provider's HTTP status on the EXPLICIT chain (/ only a response actually received;
     a connection error or timeout has none), and its upstream type."""
     try:
         from backend.core.llm_telemetry import classify_run_upstream
     except ImportError:  # pragma: no cover
         return None, None
-    status = http_status_of(error)  # R30 I563: THE one status rule
+    status = http_status_of(error)  # THE one status rule
     upstream = classify_run_upstream(error, status)
     if not upstream and error is not None:
         # A boundary that never sent a request (missing ASR key) still froze an enum cause.
@@ -428,7 +428,7 @@ def has_snapshot(record: dict | None) -> bool:
 
 
 def is_failed_terminal(record: dict | None) -> bool | None:
-    """I451: the record ended in a failure when ``status`` OR ``outcome`` is failed/partial (``completed`` +
+    """the record ended in a failure when ``status`` OR ``outcome`` is failed/partial (``completed`` +
     ``outcome=partial`` is a valid partial). None: no status at all (legacy/summary) - undecided."""
     if not isinstance(record, dict):
         return False
@@ -446,7 +446,7 @@ def _valid(key: str, value: Any) -> bool:
 
 
 def export_attribution(source: "FailureAttribution | dict | None", *, failed: bool | None = None) -> dict[str, Any]:
-    """R31 (Dong I565): THE whitelist serializer. Every attribution that leaves a record or a snapshot
+    """THE whitelist serializer. Every attribution that leaves a record or a snapshot
     (Sentry tags/context, the PostHog run snapshot, the store's history summary and read projection, the
     stored group itself) goes through here; the frontend twin is ``pickAttribution`` (workflow.ts).
 
@@ -495,7 +495,7 @@ def project_attribution(record: dict | None) -> None:
     record.update(clean)
 
 
-# R23 #419 (PM rule, one rule with docs/analytics/success_rate.sql): which failure a multi-goal
+# (PM rule, one rule with docs/analytics/success_rate.sql): which failure a multi-goal
 # attempt is attributed to. Tiers come from the catalog's attribution.success_rate_v4. A cause is
 # user_hard (out of both denominators), user_x (out of the product denominator only) or product.
 # The primary cause is the first failure of the most product-like tier; the rest are secondary.
