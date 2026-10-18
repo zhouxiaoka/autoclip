@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Switch } from 'antd'
 import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
 import api, { speechApi } from '../../services/api'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { isTextOnly, mainConnection, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import { mainConnection, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
@@ -50,41 +49,6 @@ const ANCHORS: Record<string, string> = {
 const issueAnchor = (issue: SaveIssue) => (
   `ai-defaults-${issue.role}`
 )
-
-/**
- * Main AI service: provider, key, model (auto-recommended) and the frame-sampling switch.
- * Shared with the first-run card so both paths behave identically.
- */
-export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelSettingsStore; placement: 'settings_model' | 'home_setup'; showVisual?: boolean }) {
-  const { settings, lists, busy, listErrors } = m
-  const main = settings && mainConnection(settings)
-  if (!settings) return null
-  // First run: nothing is pre-selected. Key and model rows appear once a provider is chosen.
-  if (!main) return <ProviderFields placement={placement} onChoose={p => m.chooseProvider('analysis', p)} onEdit={() => undefined} />
-  const list = lists[main.id]
-  const model = settings.analysis?.model || ''
-  const visionIssue = visionFollowLacksCapability(settings, lists)
-  const hint = busy[main.id] && !model ? t('正在获取可用模型…')
-    : model && list && !list.preview ? t('已为你选好推荐模型，可随时更换。')
-    : t('填写 API Key 后自动选择推荐模型。')
-  return <>
-    <ProviderFields connection={main} placement={placement} keyHint={m.keyHints[main.id]} onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
-    <Row wide label={t('模型')} hint={hint}>
-      <ModelPicker role="analysis" model={model} capability={settings.analysis?.capability} connection={main} list={list} busy={!!busy[main.id]} listError={listErrors[main.id]} mode={settings.analysis_mode}
-        invalid={visionIssue}
-        onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto', model_source: 'user' } })}
-        onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
-        onRefresh={() => void m.discover(main, true)}
-        actions={<Btn variant="text" size="sm" disabled={!model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>} />
-    </Row>
-    {showVisual && <Row label={t('画面识别')} hint={isTextOnly(settings, lists)
-      ? t('当前模型仅支持文字，只能靠字幕切分。游戏画面、口播较少的内容建议换一个多模态模型再开启。')
-      : t('抽样几张画面理解动作与场景。游戏画面、口播较少的内容推荐开启，切分更准；费用略高。关闭后只发送字幕。')}>
-      <Switch checked={settings.analysis_mode !== 'subtitle'} onChange={m.setVisual} />
-    </Row>}
-    {showVisual && visionIssue && <p className="ac-note ac-note--error" role="alert">{t(VISION_HINT_KEY)}</p>}
-  </>
-}
 
 function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection; m: ModelSettingsStore; onBack: () => void }) {
   const { settings, lists, busy, listErrors } = m

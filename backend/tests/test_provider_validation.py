@@ -375,19 +375,14 @@ def test_inspect_without_a_saved_document_is_not_blocked():
 
 
 def test_text_only_vision_follow_saves_but_blocks_generation(monkeypatch):
-    from backend.services.provider_validation import (
-        VISION_BLOCK_MESSAGE, VISION_HINT_KEY, VISION_UNSUPPORTED, vision_follow_issue,
-    )
+    from backend.services.provider_validation import VISION_BLOCK_MESSAGE
     from backend.services.studio import readiness
     settings = ai.ModelSettings(
         connections=[_connection()],
         analysis=ai.Assignment(connection_id='c1', model='deepseek-flash', capability='text'),
         analysis_mode='auto',
     )
-    # D7: auto + text-only is not a readiness block (subtitle fallback). Issue
-    # stays None because vision_follow_lacks_capability is False in auto mode.
-    issue = vision_follow_issue(settings)
-    assert issue is None
+    # D7: auto + text-only is not a readiness block (subtitle fallback).
     assert ai.vision_follow_lacks_capability(settings) is False
     ai.save(settings)
     loaded = ai.load()
@@ -401,7 +396,6 @@ def test_text_only_vision_follow_saves_but_blocks_generation(monkeypatch):
     # Explicit visual mode still blocks:
     visual = settings.model_copy(update={'analysis_mode': 'visual'})
     assert ai.vision_follow_lacks_capability(visual) is True
-    assert vision_follow_issue(visual) is not None
     assert VISION_BLOCK_MESSAGE.startswith('画面理解')
 
 
@@ -421,7 +415,6 @@ def test_visual_mode_without_vision_saves_but_blocks_generation(monkeypatch):
 
 
 def test_subtitle_mode_text_model_does_not_block(monkeypatch):
-    from backend.services.provider_validation import vision_follow_issue
     from backend.services.studio import readiness
     settings = ai.ModelSettings(
         connections=[_connection()],
@@ -429,7 +422,7 @@ def test_subtitle_mode_text_model_does_not_block(monkeypatch):
         analysis_mode='subtitle',
         allow_visual_screening=False,
     )
-    assert vision_follow_issue(settings) is None
+    assert ai.vision_follow_lacks_capability(settings) is False
     ai.save(settings)
     monkeypatch.setattr(ai, 'for_editing', lambda: ai.load())
     assert readiness.report()['checks']['visual'] == {'ok': True, 'code': 'not_required', 'repair': 'none'}
@@ -437,32 +430,28 @@ def test_subtitle_mode_text_model_does_not_block(monkeypatch):
 
 
 def test_multimodal_follow_and_unresolved_auto_do_not_flag():
-    from backend.services.provider_validation import vision_follow_issue
     vision_ok = ai.ModelSettings(
         connections=[_connection(provider='openai', base_url='')],
         analysis=ai.Assignment(connection_id='c1', model='gpt-4o-mini', capability='auto'),
         analysis_mode='auto',
     )
-    assert vision_follow_issue(vision_ok) is None
     assert ai.vision_follow_lacks_capability(vision_ok) is False
     unresolved = ai.ModelSettings(
         connections=[_connection(provider='openai', base_url='')],
         analysis=ai.Assignment(connection_id='c1', model='o3-mini', capability='auto'),
         analysis_mode='auto',
     )
-    assert vision_follow_issue(unresolved) is None
+    assert ai.vision_follow_lacks_capability(unresolved) is False
     visual_unresolved = unresolved.model_copy(update={'analysis_mode': 'visual'})
-    assert vision_follow_issue(visual_unresolved) is not None
+    assert ai.vision_follow_lacks_capability(visual_unresolved) is True
 
 
 def test_vision_unsupported_is_not_an_upstream_type():
     from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
-    from backend.services.provider_validation import VISION_UNSUPPORTED
-    assert VISION_UNSUPPORTED not in UPSTREAM_ERROR_TYPES
+    assert 'vision_unsupported' not in UPSTREAM_ERROR_TYPES
 
 
 def test_dedicated_text_vision_assignment_is_flagged():
-    from backend.services.provider_validation import vision_follow_issue
     settings = ai.ModelSettings(
         connections=[_connection()],
         analysis=ai.Assignment(connection_id='c1', model='gpt-4o', capability='multimodal'),
@@ -471,10 +460,8 @@ def test_dedicated_text_vision_assignment_is_flagged():
     )
     # D7: auto does not flag; explicit visual does.
     assert ai.vision_follow_lacks_capability(settings) is False
-    assert vision_follow_issue(settings) is None
     visual = settings.model_copy(update={'analysis_mode': 'visual'})
     assert ai.vision_follow_lacks_capability(visual) is True
-    assert vision_follow_issue(visual) is not None
 
 
 def test_api88_wrong_stored_url_is_forced_to_the_preset(monkeypatch):

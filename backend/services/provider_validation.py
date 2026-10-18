@@ -44,9 +44,6 @@ PROBE_MAX_TOKENS = 16
 PROBE_REASONING_MAX_TOKENS = 256
 PROBE_TIMEOUT = 20.0
 
-# Local capability miss — not an upstream HTTP class, never stored on connection.validation_error_type.
-VISION_UNSUPPORTED = 'vision_unsupported'
-VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。'
 # E6: local model server (Ollama / LM Studio) not running -> connection refused on a local URL.
 LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。'
@@ -213,16 +210,6 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     if response.status_code >= 400:
         return _with_detail(_classify(response.status_code, text[:4000]), status)
     return None
-
-
-def vision_follow_issue(settings: ai_models.ModelSettings) -> ValidationResult | None:
-    """Failed result when the followed vision model lacks vision. Save remains allowed."""
-    if not ai_models.vision_follow_lacks_capability(settings):
-        return None
-    return ValidationResult(
-        ok=False, result='failed',
-        error_type=VISION_UNSUPPORTED, hint_key=VISION_HINT_KEY,
-    )
 
 
 def _is_loopback_url(url: str | None) -> bool:

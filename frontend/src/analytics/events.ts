@@ -75,15 +75,3 @@ export function trackSponsorLinkOpened(props: {
 }): void {
   trackEvent(AnalyticsEvent.SponsorLinkOpened, props)
 }
-
-export function trackApiKeyConfigured(props: {
-  provider: string
-  /** 不要传 key 明文，仅标记是否填写 */
-  hasKey: boolean
-}): void {
-  trackEvent(AnalyticsEvent.ApiKeyConfigured, props)
-}
-
-export function trackExampleProjectOpened(): void {
-  trackEvent(AnalyticsEvent.ExampleProjectOpened)
-}

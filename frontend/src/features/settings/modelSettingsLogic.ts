@@ -21,9 +21,6 @@ const OPENAI_URL = /^https:\/\/api\.openai\.com(?:\/v1)?\/?$/
 export const presetKey = (c: Connection): ProviderKey =>
   c.provider === 'openai' && c.base_url && !OPENAI_URL.test(c.base_url) ? 'compatible' : c.provider as ProviderKey
 
-/** Enough information to list models: a key, a custom address, or a keyless local preset. */
-export const canDiscover = (c: Connection) => !!(c.api_key || c.has_key || c.base_url || PROVIDERS[c.provider as ProviderKey]?.local)
-
 /** The connection can actually serve requests: credentials present, or a service that needs none. */
 export const connectionReady = (c: Connection) =>
   endpointProviderReady(c) && (!!(c.api_key || c.has_key) || !!PROVIDERS[c.provider as ProviderKey]?.local || (presetKey(c) === 'compatible' && !!c.base_url))

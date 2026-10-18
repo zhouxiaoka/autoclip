@@ -153,30 +153,12 @@ class ApiConfigManager {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${this.config.baseUrl}${normalizedPath}`;
   }
-
-  /**
-   * 健康检查
-   */
-  async healthCheck(): Promise<boolean> {
-    try {
-      const response = await fetch(this.buildUrl('/health'), {
-        method: 'GET',
-        timeout: 5000
-      } as any);
-      return response.ok;
-    } catch (error) {
-      console.warn('API 健康检查失败:', error);
-      return false;
-    }
-  }
 }
 
 // 导出单例实例
 export const apiConfigManager = ApiConfigManager.getInstance();
 
 // 导出便捷函数
-export const getApiBaseUrl = () => apiConfigManager.getBaseUrl();
 export const isApiReady = () => apiConfigManager.isReady();
 export const waitForApiReady = (timeout?: number) => apiConfigManager.waitForReady(timeout);
 export const buildApiUrl = (path: string) => apiConfigManager.buildUrl(path);
-export const checkApiHealth = () => apiConfigManager.healthCheck();
