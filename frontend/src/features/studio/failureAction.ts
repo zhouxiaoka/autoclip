@@ -1,3 +1,4 @@
+import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES } from '../../analytics/failureCodes'
 import { USER_CAUSE_REASONS } from '../../utils/llmFailure'
 /**
  * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
@@ -5,8 +6,7 @@ import { USER_CAUSE_REASONS } from '../../utils/llmFailure'
  * Mirrors event_catalog.json attribution.user_cause (contract-tested; same set the v4
  * success rate excludes as user cause).
  */
-export const USER_CAUSE_ERROR_CODES = ['authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured'] as const
-export const USER_CAUSE_UPSTREAM_TYPES = ['invalid_key', 'insufficient_quota', 'permission_denied'] as const
+export { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES }
 
 export const SETTINGS_DESTINATION = '/settings?section=analysis'
 /** Cloud transcription (ASR) credentials. SettingsPage maps `speech` to the transcription row;

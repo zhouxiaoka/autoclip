@@ -443,10 +443,14 @@ def _dashscope_bytes(data: dict[str, Any], session: requests.Session) -> bytes |
     output = data.get("output") if isinstance(data.get("output"), dict) else {}
     status = str(output.get("task_status") or "")
     if status in ("FAILED", "CANCELED", "UNKNOWN"):
-        message = str(output.get("message") or data.get("message") or "生图失败")
+        message = str(output.get("message") or data.get("message") or "")
         lowered = message.lower()
         unsupported = any(word in lowered for word in ("ref_img", "not support", "unsupported", "invalidparameter"))
-        raise ImageError(message[:300], unsupported_edit=unsupported)
+        if message:
+            logger.warning("DashScope image task %s omitted from UI: %s", status, message[:300])
+            from backend.core.failure_codes import sentence
+            raise ImageError(sentence("unexpected"), unsupported_edit=unsupported)
+        raise ImageError("生图失败", unsupported_edit=unsupported)
     results = output.get("results") if isinstance(output.get("results"), list) else []
     if results and isinstance(results[0], dict):
         item = results[0]

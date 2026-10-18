@@ -241,6 +241,7 @@ def test_frontend_contract_lists_stay_aligned():
     assert set(const_list("FAILURE_STAGES")) == telemetry.FAILURE_STAGES
     assert set(const_list("RUN_LEVEL_FIELDS")) == telemetry.RUN_LEVEL_FIELDS
     assert set(const_list("LLM_REQUEST_FIELDS")) == telemetry.LLM_REQUEST_FIELDS
+    messages = json.loads((Path(__file__).resolve().parents[1] / "core" / "failure_messages.json").read_text(encoding="utf-8"))
     for error_type, hint in HINT_KEYS.items():
-        assert f"{error_type.value}:" in text
-        assert hint in text
+        assert messages[error_type.value] == hint
+        assert hint not in text

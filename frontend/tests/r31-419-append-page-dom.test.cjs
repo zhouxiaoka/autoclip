@@ -74,6 +74,10 @@ async function mount(server, override = {}) {
       require: id => {
         if (id in external) return external[id]
         if (/\.css$/.test(id)) return {}
+        if (id === '@event-catalog' || id === '@failure-messages') {
+          const data = JSON.parse(fs.readFileSync(path.join(__dirname, id === '@event-catalog' ? '../../backend/core/event_catalog.json' : '../../backend/core/failure_messages.json'), 'utf8'))
+          return { default: data, __esModule: true }
+        }
         if (!id.startsWith('.')) throw new Error('Unexpected dependency: ' + id)
         const abs = path.resolve(path.dirname(file), id), key = path.relative(SRC, abs)
         if (key in stubs) return stubs[key]

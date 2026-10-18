@@ -6,7 +6,7 @@ function load(file, mocks) {
   const exports = {}
   runInSandbox(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports, require: name => mocks[name], Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
+  }).outputText, { exports, require: name => name === './failureCodes' ? require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts')) : mocks[name], Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
   return exports
 }
 test('automatic retry enrolls a fresh terminal watch on the same flow and deduplicates completion', async () => {

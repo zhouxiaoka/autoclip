@@ -6,13 +6,7 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function loadDraft() {
-  const file = path.join(__dirname, '../src/analytics/feedbackDraft.ts')
-  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText
-  const module = { exports: {} }
-  runInSandbox(code, { module, exports: module.exports, URLSearchParams })
-  return module.exports
+  return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/feedbackDraft.ts'))
 }
 
 const draftInput = {

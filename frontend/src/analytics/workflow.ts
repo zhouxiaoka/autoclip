@@ -1,3 +1,4 @@
+import { ERROR_CODE } from './failureCodes'
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
 export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string; attemptId?: string }
@@ -143,7 +144,6 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   // R25 #346: the backend receipt's per-project sequence; success_rate.sql orders a flow's attempts by it.
   if (typeof input.attempt_sequence === 'number' && Number.isInteger(input.attempt_sequence) && input.attempt_sequence >= 1) out.attempt_sequence = input.attempt_sequence
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
-  const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|store_lock_timeout|service_restarted)$/
   if (typeof input.error_code === 'string' && ERROR_CODE.test(input.error_code)) out.error_code = input.error_code
   // R23 #228: the other causes of a multi-goal failure, positional, comma-joined (primary is error_code / upstream_error_type).
   // Arrays from the backend, or the joined string when an already-safe payload is sanitized again.

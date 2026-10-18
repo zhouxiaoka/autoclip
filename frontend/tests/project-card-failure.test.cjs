@@ -30,6 +30,10 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
       module, exports: module.exports, console: { log() {} },
       require: (id) => {
         if (id in stubs) return stubs[id]
+        if (id === '@event-catalog' || id === '@failure-messages') {
+          const data = JSON.parse(fs.readFileSync(path.join(__dirname, id === '@event-catalog' ? '../../backend/core/event_catalog.json' : '../../backend/core/failure_messages.json'), 'utf8'))
+          return { default: data, __esModule: true }
+        }
         if (id.startsWith('.')) return load(path.resolve(path.dirname(file), `${id}.ts`))
         return require(id)
       },

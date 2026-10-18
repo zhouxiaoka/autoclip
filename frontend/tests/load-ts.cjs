@@ -5,6 +5,12 @@ const ts = require('typescript')
 
 const SETTINGS = path.join(__dirname, '../src/features/settings')
 const PRESETS = path.join(__dirname, '../../backend/presets/provider_presets.json')
+const EVENT_CATALOG = path.join(__dirname, '../../backend/core/event_catalog.json')
+const FAILURE_MESSAGES = path.join(__dirname, '../../backend/core/failure_messages.json')
+function jsonModule(file) {
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+  return { default: data, __esModule: true }
+}
 
 function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   const abs = path.isAbsolute(file) ? file : path.join(fromDir, file)
@@ -16,10 +22,9 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   const exports = {}
   const requireImpl = (id) => {
     if (id in mocks) return mocks[id]
-    if (id === '@provider-presets') {
-      const data = JSON.parse(fs.readFileSync(PRESETS, 'utf8'))
-      return { default: data, __esModule: true }
-    }
+    if (id === '@provider-presets') return jsonModule(PRESETS)
+    if (id === '@event-catalog') return jsonModule(EVENT_CATALOG)
+    if (id === '@failure-messages') return jsonModule(FAILURE_MESSAGES)
     if (id === 'react/jsx-runtime' || id === 'react') return require(id)
     if (id.startsWith('.')) {
       const resolved = path.join(path.dirname(abs), id)

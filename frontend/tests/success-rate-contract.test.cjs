@@ -1,19 +1,10 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
 const path = require('node:path')
-const { runInSandbox } = require('./vm-sandbox.cjs')
 const { loadTs } = require('./load-ts.cjs')
-const ts = require('typescript')
 
 function load() {
-  const file = path.join(__dirname, '../src/analytics/successRateContract.ts')
-  const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText
-  const module = { exports: {} }
-  runInSandbox(js, { exports: module.exports, module, URL }, { filename: file })
-  return module.exports
+  return loadTs(path.join(__dirname, '../src/analytics/successRateContract.ts'))
 }
 
 const contract = load()

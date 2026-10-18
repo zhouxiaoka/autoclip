@@ -76,9 +76,11 @@ def test_390_store_lock_timeout_is_its_own_product_code_not_a_model_timeout():
         assert 'store_lock_timeout' in attr['product_error_codes'], path
         assert 'store_lock_timeout' not in attr['user_caused_error_codes'] + attr['environment_error_codes']
     assert 'store_lock_timeout' in (ROOT / 'docs/analytics/TRACKING_PLAN.md').read_text(encoding='utf-8')
-    for path in ('frontend/src/analytics/feedbackDraft.ts', 'frontend/src/analytics/workflow.ts',
-                 'scripts/ingest_app_feedback.py'):
-        assert '|store_lock_timeout|' in (ROOT / path).read_text(encoding='utf-8'), path
+    from backend.core.failure_codes import error_code_pattern
+    assert error_code_pattern().fullmatch('store_lock_timeout')
+    for path in ('frontend/src/analytics/feedbackDraft.ts', 'frontend/src/analytics/workflow.ts'):
+        assert "failureCodes" in (ROOT / path).read_text(encoding='utf-8'), path
+    assert 'error_code_pattern' in (ROOT / 'scripts/ingest_app_feedback.py').read_text(encoding='utf-8')
 
 
 def test_394_new_phase_only_failure_replaces_older_request_attribution():

@@ -41,7 +41,8 @@ test('source_blocked download hint matches the backend constant and is translate
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/utils/download_recovery.py'),'utf8')
  const hint=src.match(/^SOURCE_BLOCKED_HINT = '([^']+)'$/m)[1]
  for(const lang of langs){assert.ok(catalogs[lang][hint],lang);if(lang!=='zh')assert.notEqual(catalogs[lang][hint],hint,lang)}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_blocked|'),file)
+ const codes = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+ assert.equal(codes.ERROR_CODE.test('source_blocked'), true)
 })
 test('source_too_short / source_no_audio messages match the backend constants and are translated in eight catalogs',()=>{
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/media_precheck.py'),'utf8')
@@ -49,7 +50,8 @@ test('source_too_short / source_no_audio messages match the backend constants an
  const messages=['TOO_SHORT_MESSAGE','NO_AUDIO_MESSAGE','NO_AUDIO_AFTER_SCREENING_MESSAGE','NO_AUDIO_VISUAL_MESSAGE'].map(literal)
  assert.equal(messages.length,4)
  for(const message of messages){assert.ok(message.length>20,message);for(const lang of langs){assert.ok(catalogs[lang][message],lang+message);if(lang!=='zh')assert.notEqual(catalogs[lang][message],message,lang)}}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_too_short|source_no_audio|'),file)
+ const codes = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+ assert.equal(codes.ERROR_CODE.test('source_too_short') && codes.ERROR_CODE.test('source_no_audio'), true)
 })
 test('restart recovery messages match the backend constants and are translated in eight catalogs (RC156 #13)',()=>{
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/store.py'),'utf8')
@@ -57,7 +59,9 @@ test('restart recovery messages match the backend constants and are translated i
  const keys=[restart,'服务已重启，请重试这条','服务已重启，请重新生成封面','服务已重启，请重新导出','服务已重启，请重试分析','重新生成']
  for(const key of keys)assert.ok(src.includes(key)||key==='重新生成',key)
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts','../../scripts/ingest_app_feedback.py'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|service_restarted)'),file)
+ const codes = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+ assert.equal(codes.ERROR_CODE.test('service_restarted'), true)
+ assert.ok(fs.readFileSync(path.resolve(__dirname, '../../scripts/ingest_app_feedback.py'), 'utf8').includes('error_code_pattern'))
 })
 test('Studio progress messages, including transcription progress, are translated in eight catalogs (RC156 #14)',()=>{
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/services/simple_pipeline_adapter.py'),'utf8')
@@ -69,9 +73,9 @@ test('Studio progress messages, including transcription progress, are translated
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
 })
 test('model-call environment failures are one fixed sentence translated in eight catalogs (RC156 c5)',()=>{
- const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/failures.py'),'utf8')
- const block=src.match(/MODEL_CALL_MESSAGES = \{([\s\S]*?)\n\}/)[1]
- const messages=[...block.matchAll(/"[a-z_]+": "([^"]+)"/g)].map(m=>m[1])
- assert.equal(messages.length,4)
+ const table=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../backend/core/failure_messages.json'),'utf8'))
+ const messages=['llm_auth_invalid','connection','timeout','rate_limited'].map(code=>table[code])
+ assert.equal(messages.length, 4)
+ assert.equal(table.llm_auth_invalid, table.invalid_key)
  for(const lang of langs)for(const key of messages){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key);assert.ok(!/Connection error|timed out/i.test(catalogs[lang][key]),lang)}
 })

@@ -28,6 +28,7 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === './failureCodes') return loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts'))
       if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
       if (id === './connectionTestCode' || id === '../../analytics/connectionTestCode') return load('connectionTestCode')
       if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))

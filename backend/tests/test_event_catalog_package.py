@@ -81,7 +81,9 @@ import sys
 from pathlib import Path
 import backend
 from backend.core.event_catalog import detect_arch, envelope_properties, normalize_os
+from backend.core.failure_codes import sentence, studio_codes
 assert Path(backend.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+assert 'llm_auth_invalid' in studio_codes() and sentence('invalid_key')
 props = envelope_properties()
 assert props == {
     'schema_version': 2, 'runtime': 'python', 'app_version': backend.__version__,

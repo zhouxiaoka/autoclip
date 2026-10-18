@@ -95,6 +95,10 @@
       "frame_extract_failed",
       "store_lock_timeout"
     ],
+    "download_error_code": [
+      "disk",
+      "corrupt"
+    ],
     "provider": [
       "api88",
       "infistar",
