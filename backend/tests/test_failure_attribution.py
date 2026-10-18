@@ -1771,6 +1771,7 @@ def _fail_with(pid, error, code):
     return store.read(pid)['analysis'], tags
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('error', [
     file_lock.LockTimeout(),                                               # #390 store lock
     subprocess.CalledProcessError(1, ['ffmpeg']),                          # ffmpeg
@@ -1785,6 +1786,7 @@ def test_392_non_model_failure_without_record_is_local(error):
     assert tags.get('attribution_source') == 'local' and 'http_status' not in tags
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_392_local_failure_raised_while_handling_a_model_error_is_still_local():
     _project__r25_415('pctx', {'status': 'running', 'phase': 'production', 'run_id': 'r'})
     with llm_emit.track_run():
@@ -1800,6 +1802,7 @@ def test_392_local_failure_raised_while_handling_a_model_error_is_still_local():
     assert analysis.get('attribution_source') == 'local' and analysis.get('http_status') is None
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_392_model_failure_without_record_still_takes_phase_identity():
     _project__r25_415('pmod', {'status': 'running', 'phase': 'production', 'run_id': 'r'})
     analysis, tags = _fail_with('pmod', PipelineFailure('ANALYZE', 'slow', code='timeout'), 'timeout')
@@ -1807,6 +1810,7 @@ def test_392_model_failure_without_record_still_takes_phase_identity():
     assert tags.get('provider') == 'glm' and tags.get('attribution_source') == 'phase'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_390_store_lock_timeout_is_its_own_product_code_not_a_model_timeout():
     error = file_lock.LockTimeout()
     assert studio_error_code(error) == 'store_lock_timeout' and 'store_lock_timeout' in STUDIO_ERROR_CODES
@@ -1823,6 +1827,7 @@ def test_390_store_lock_timeout_is_its_own_product_code_not_a_model_timeout():
     assert 'error_code_pattern' in (ROOT / 'scripts/ingest_app_feedback.py').read_text(encoding='utf-8')
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_394_new_phase_only_failure_replaces_older_request_attribution():
     _project__r25_415('p394', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -1853,6 +1858,7 @@ def test_394_new_phase_only_failure_replaces_older_request_attribution():
 
 # --- second pass (Dong R25-b): #393 P2, #397-#402, #394 status, #392 source surfaces ----------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_394_new_local_failure_drops_the_old_request_status():
     _project__r25_415('p394l', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -1869,6 +1875,7 @@ def test_394_new_local_failure_drops_the_old_request_status():
     assert analysis['attribution_source'] == 'local' and analysis.get('http_status') is None
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_397_failed_goal_request_survives_a_later_successful_goal(monkeypatch):
     from backend.services.studio import intelligence, jobs
     monkeypatch.setattr(jobs, 'mark_project', lambda *a, **k: None)
@@ -1886,6 +1893,7 @@ def test_397_failed_goal_request_survives_a_later_successful_goal(monkeypatch):
     assert analysis.get('attribution_source') == 'request'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_398_r29_i500_record_on_the_implicit_context_only_is_not_this_failures():
     """R29 I500 (Dong): only the explicit __cause__ chain is walked; a record that is only on the
     implicit __context__ belongs to an error that was merely being handled."""
@@ -1901,6 +1909,7 @@ def test_398_r29_i500_record_on_the_implicit_context_only_is_not_this_failures()
     assert found.get('provider') != 'glm' and found.get('attribution_source') == 'local', found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_399_half_identity_is_empty_on_read():
     store.directory('p399').mkdir(parents=True, exist_ok=True)
     path = store.directory('p399') / 'metadata' / 'studio.json'
@@ -1912,6 +1921,7 @@ def test_399_half_identity_is_empty_on_read():
         assert not any(data[name].get(k) for k in ('provider', 'config_source', 'model', 'base_url_host')), data[name]
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_400_history_keeps_model_host_and_source():
     _project__r25_415('p400', {'status': 'running', 'phase': 'production', 'run_id': 'r'})
     with llm_emit.track_run():
@@ -1923,6 +1933,7 @@ def test_400_history_keeps_model_host_and_source():
     assert (row.get('model'), row.get('base_url_host'), row.get('attribution_source')) == ('glm-4', 'glm.fixture.example', 'request')
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_401_render_that_cannot_write_its_failure_leaves_a_receipt_not_a_queued_job(monkeypatch):
     from backend.services.studio import jobs
     store.directory('p401').mkdir(parents=True, exist_ok=True)
@@ -1938,6 +1949,7 @@ def test_401_render_that_cannot_write_its_failure_leaves_a_receipt_not_a_queued_
     assert job['status'] == 'failed' and job['error_code'] == 'store_lock_timeout', job
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_402_attribution_does_not_need_python_311():
     source = (ROOT / 'backend/core/llm_emit.py').read_text(encoding='utf-8')
     assert 'sys.exception()' not in source
@@ -1961,6 +1973,7 @@ def _kimi_503():
 
 # --- I415: decision order local -> model -> request record --------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i415_lock_timeout_raised_while_handling_a_model_503_is_local():
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
@@ -1977,6 +1990,7 @@ def test_i415_lock_timeout_raised_while_handling_a_model_503_is_local():
     assert found.get('provider') != 'kimi'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i415_classify_failure_order_and_request_record():
     from backend.core.failure_attribution import FailureKind, classify_failure
     with llm_emit.track_run():
@@ -1992,6 +2006,7 @@ def test_i415_classify_failure_order_and_request_record():
     assert classify_failure(PipelineFailure('ANALYZE', 'x', code='timeout')).kind is FailureKind.MODEL
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i416_no_type_name_strings_and_one_classifier():
     class PipelineFailure2(Exception):
         code = 'timeout'
@@ -1999,6 +2014,7 @@ def test_i416_no_type_name_strings_and_one_classifier():
     assert llm_emit.is_model_error(PipelineFailure2()) is False
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i416_studio_failure_context_gives_a_lock_timeout_no_inner_upstream():
     from backend.core.sentry_setup import studio_failure_context
     with llm_emit.track_run():
@@ -2011,6 +2027,7 @@ def test_i416_studio_failure_context_gives_a_lock_timeout_no_inner_upstream():
 
 # --- snapshot: write once, whole, local without http/upstream ------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_snapshot_local_with_upstream_fields_raises_explicitly():
     from backend.core.failure_attribution import FailureAttribution
     with pytest.raises(ValueError):
@@ -2023,6 +2040,7 @@ def test_snapshot_local_with_upstream_fields_raises_explicitly():
     assert 'http_status' not in built.to_fields() and built.to_fields()['attribution_source'] == 'local'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_write_attribution_replaces_the_group_whole():
     from backend.core.failure_attribution import FailureAttribution, write_attribution
     record = {'status': 'failed', **KIMI, 'model': 'kimi-k2', 'http_status': 503,
@@ -2034,6 +2052,7 @@ def test_write_attribution_replaces_the_group_whole():
 
 # --- I417: a new phase failure keeps nothing of an older request's status ------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i417_new_phase_failure_drops_the_older_request_status():
     _project__r25_415('p417', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -2057,6 +2076,7 @@ def test_i417_new_phase_failure_drops_the_older_request_status():
 
 # --- I418: lock-timeout receipt recovery writes local -------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i418_receipt_recovery_writes_a_local_snapshot():
     _project__r25_415('p418', {'status': 'running', 'phase': 'production', 'run_id': 'r1', **GLM, 'model': 'glm-4',
                       'http_status': 503})
@@ -2080,6 +2100,7 @@ def _raw(pid, data):
     return root / 'studio.json'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i421_history_half_identity_and_local_status_are_cleaned_on_read_only():
     legacy = {'run_id': 'r0', 'analysis': {'run_id': 'r0', 'status': 'failed', 'provider': 'kimi',
                                            'http_status': 503, 'attribution_source': 'local'}}
@@ -2094,6 +2115,7 @@ def test_i421_history_half_identity_and_local_status_are_cleaned_on_read_only():
     assert path.read_text(encoding='utf-8') == before, 'the read wrote the cleanup back'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_history_summary_comes_from_read_attribution():
     _project__r25_415('ph', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -2187,6 +2209,7 @@ def _ts_reads(path):
     return out
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_grep_no_attribution_reads_outside_the_one_reader():
     offenders = []
     for path in [*(ROOT / 'backend/services/studio').glob('*.py'), ROOT / 'backend/core/llm_emit.py',
@@ -2197,6 +2220,7 @@ def test_grep_no_attribution_reads_outside_the_one_reader():
     assert offenders == [], '\n'.join(offenders)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_grep_guard_catches_direct_reads_of_every_field(tmp_path):
     probe = ROOT / 'backend/services/studio/_guard_probe_tmp.py'
     probe.write_text("def f(snapshot, found, record):\n    a = snapshot.get('http_status')\n"
@@ -2214,6 +2238,7 @@ def test_grep_guard_catches_direct_reads_of_every_field(tmp_path):
 
 # --- I422 / I424 --------------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i422_release_validation_splits_by_attribution_source():
     sql = (ROOT / 'docs/analytics/release_validation.sql').read_text(encoding='utf-8')
     block = sql[sql.index('1.5.7 成功率埋点'):sql.index('ORDER BY event, events DESC;')]
@@ -2225,6 +2250,7 @@ def test_i422_release_validation_splits_by_attribution_source():
 LOCALES = ('zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru')
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i424_lock_timeout_notice_in_all_8_locales():
     key = file_lock.LOCK_TIMEOUT_MESSAGE
     for lang in LOCALES:
@@ -2237,6 +2263,7 @@ def test_i424_lock_timeout_notice_in_all_8_locales():
     assert key in ts and "STORE_LOCK_TIMEOUT = 'store_lock_timeout'" in ts
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i415_a_non_decisive_wrapper_is_looked_through():
     """The walk goes INWARD past non-decisive links (unexpected/OSError) to the model failure."""
     from backend.core.failure_attribution import FailureKind, classify_failure
@@ -2272,6 +2299,7 @@ class _NotAProvider(Exception):
 
 # --- I450: no "status code or record means model" fallback; local in any layer first -----------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i450_status_code_alone_is_not_a_model_failure():  # kills M1
     wrapped = PipelineFailure('ANALYZE', 'x', code='unexpected')
     wrapped.__cause__ = _NotAProvider(404)
@@ -2279,6 +2307,7 @@ def test_i450_status_code_alone_is_not_a_model_failure():  # kills M1
     assert _attr(PipelineFailure('ANALYZE', 'x', code='unexpected', http_status=502))['attribution_source'] == 'local'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('local', [OSError(errno.ENOSPC, 'disk full'), PermissionError('denied'),
                                    FileNotFoundError('gone')], ids=['enospc', 'permission', 'not-found'])
 def test_i450_local_error_raised_while_handling_a_model_503_is_local(local):
@@ -2296,6 +2325,7 @@ def test_i450_local_error_raised_while_handling_a_model_503_is_local(local):
     assert 'http_status' not in found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i450_request_record_without_a_provider_answer_is_local():
     """A PermissionError inside the provider call before any network I/O gets a request record too."""
     def impl(*_a, **_k):
@@ -2309,6 +2339,7 @@ def test_i450_request_record_without_a_provider_answer_is_local():
     assert found['attribution_source'] == 'local' and found.get('provider') != 'kimi', found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i450_answered_request_stays_model():
     with llm_emit.track_run():
         error = _kimi_503()
@@ -2318,6 +2349,7 @@ def test_i450_answered_request_stays_model():
 
 # --- I460: the chain skips layers that cannot decide (behaviour, through llm_emit) --------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i460_walk_passes_non_deciding_layers_to_the_model_failure():
     inner = PipelineFailure('ANALYZE', 'slow', code='timeout')
     middle = RuntimeError('wrapped')
@@ -2328,12 +2360,14 @@ def test_i460_walk_passes_non_deciding_layers_to_the_model_failure():
     assert found['attribution_source'] == 'phase' and found['provider'] == 'glm', found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i460_store_lock_timeout_code_is_local_even_over_a_model_failure():  # kills M5
     outer = PipelineFailure('ANALYZE', 'lock', code='store_lock_timeout')
     outer.__cause__ = PipelineFailure('ANALYZE', 'slow', code='timeout')
     assert _attr(outer)['attribution_source'] == 'local'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i460_record_without_status_keeps_its_failure_fields():  # kills M3
     from backend.core.failure_attribution import read_attribution
     row = {'attribution_source': 'phase', **GLM, 'http_status': 503, 'failure_stage': 'analyze'}
@@ -2342,6 +2376,7 @@ def test_i460_record_without_status_keeps_its_failure_fields():  # kills M3
 
 # --- I451: completed + outcome=partial keeps its failure fields through read -> unrelated save --------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i451_partial_survives_read_and_an_unrelated_save():
     partial = {'status': 'completed', 'outcome': 'partial', 'phase': 'rendering', 'run_id': 'r1', **GLM,
                'attribution_source': 'phase', 'failure_stage': 'render', 'http_status': 503,
@@ -2359,6 +2394,7 @@ def test_i451_partial_survives_read_and_an_unrelated_save():
 
 # --- I452: no inference from equal values; wholesale replacement only ---------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i452_a_new_phase_failure_keeps_its_own_503_after_an_old_kimi_503():
     _project__r25_415('p452', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -2379,6 +2415,7 @@ def test_i452_a_new_phase_failure_keeps_its_own_503_after_an_old_kimi_503():
     assert analysis['http_status'] == 503, analysis
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i452_old_phase_503_is_replaced_by_a_new_failure_without_status():
     _project__r25_415('p452b', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -2399,6 +2436,7 @@ def test_i452_old_phase_503_is_replaced_by_a_new_failure_without_status():
 
 # --- I454: a render receipt is a local failure of the generation --------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i454_render_lock_timeout_receipt_writes_local_on_the_generation():
     store.directory('p454').mkdir(parents=True, exist_ok=True)
     store.write('p454', {'id': 'p454', 'generation': {'status': 'rendering', **GLM, 'model': 'glm-4'},
@@ -2418,6 +2456,7 @@ def test_i454_render_lock_timeout_receipt_writes_local_on_the_generation():
 
 # --- I455 / I457 / I458 --------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i455_local_context_has_no_http_status_either():
     with llm_emit.track_run():
         inner = _kimi_503()
@@ -2427,6 +2466,7 @@ def test_i455_local_context_has_no_http_status_either():
     assert 'http_status' not in context and 'upstream_error_type' not in context, context
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i457_no_unreachable_code_after_the_return():
     import ast
     import inspect
@@ -2436,6 +2476,7 @@ def test_i457_no_unreachable_code_after_the_return():
     assert 'classify_run_upstream' not in inspect.getsource(sentry_setup.studio_failure_context)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i458_release_validation_comment_says_local_is_not_responsibility():
     sql = (ROOT / 'docs/analytics/release_validation.sql').read_text(encoding='utf-8')
     assert 'local = 产品原因' not in sql
@@ -2444,6 +2485,7 @@ def test_i458_release_validation_comment_says_local_is_not_responsibility():
 
 # --- design: one factory --------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_one_snapshot_factory():
     for path in ('backend/core/llm_emit.py', 'backend/core/sentry_setup.py', 'backend/services/studio/store.py'):
         text = (ROOT / path).read_text(encoding='utf-8')
@@ -2453,6 +2495,7 @@ def test_one_snapshot_factory():
     assert 'build_attribution' in (ROOT / 'backend/services/studio/store.py').read_text(encoding='utf-8')
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i450_record_of_a_request_that_got_no_answer_is_not_a_model_failure():
     """Not a local error type either: a plain RuntimeError raised inside the call (no status, no SDK error)."""
     def impl(*_a, **_k):
@@ -2466,6 +2509,7 @@ def test_i450_record_of_a_request_that_got_no_answer_is_not_a_model_failure():
     assert found['attribution_source'] == 'local' and found.get('provider') != 'kimi', found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_factory_local_names_the_phase_identity_before_the_start_identity():
     from backend.core.failure_attribution import build_attribution
     snap = build_attribution(PermissionError('fixture'), phase_identity=GLM, start_identity=KIMI)
@@ -2517,6 +2561,7 @@ def _wrapped(outer, inner):
         return error
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i501_uncoded_wrapper_over_a_provider_503_stays_model_across_run_content(pipeline, monkeypatch):
     """probe P2 ①: PipelineFailure('unexpected') from APIStatusError(503) was rebuilt as LOCAL."""
     from backend.services.studio import jobs
@@ -2528,6 +2573,7 @@ def test_i501_uncoded_wrapper_over_a_provider_503_stays_model_across_run_content
     assert studio_failure_context(raised.value, 'production').get('http_status') == 503
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i501_provider_error_code_over_a_local_permission_error_stays_local(pipeline, monkeypatch):
     """②: the adapter judged LOCAL on the live chain; the rebuilt error must not become MODEL."""
     from backend.services.studio import jobs
@@ -2539,6 +2585,7 @@ def test_i501_provider_error_code_over_a_local_permission_error_stays_local(pipe
     assert 'http_status' not in studio_failure_context(raised.value, 'production')
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i501_the_failing_requests_record_crosses_the_bridge(pipeline, monkeypatch):
     """③: Kimi's 503 record must not be swapped for GLM's phase identity after apply().get()."""
     from backend.services.studio import jobs
@@ -2558,6 +2605,7 @@ def test_i501_the_failing_requests_record_crosses_the_bridge(pipeline, monkeypat
     assert (found.get('attribution_source'), found.get('provider'), found.get('http_status')) == ('request', 'kimi', 503), found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i501_restored_non_model_code_wrapping_a_503_is_model(pipeline, monkeypatch):
     """Restored (R28 deleted it): a non-model code (llm_connection) over the SDK's 503 keeps model + 503."""
     from backend.services.studio import jobs
@@ -2573,6 +2621,7 @@ def test_i501_restored_non_model_code_wrapping_a_503_is_model(pipeline, monkeypa
         'failure_stage': 'analyze', 'http_status': 503, 'upstream_error_type': 'upstream_unavailable'}
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i501_no_model_failure_boolean_and_no_rebuild_in_run_content():
     adapter = (ROOT / 'backend/services/simple_pipeline_adapter.py').read_text(encoding='utf-8')
     jobs = (ROOT / 'backend/services/studio/jobs.py').read_text(encoding='utf-8')
@@ -2582,6 +2631,7 @@ def test_i501_no_model_failure_boolean_and_no_rebuild_in_run_content():
 
 # --- I500: only the explicit __cause__ chain ------------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i500_a_503_sent_while_handling_a_cache_miss_is_model():
     try:
         try:
@@ -2596,6 +2646,7 @@ def test_i500_a_503_sent_while_handling_a_cache_miss_is_model():
     assert (found.get('attribution_source'), found.get('provider'), found.get('http_status')) == ('request', 'kimi', 503)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i500_an_explicit_local_cause_still_wins():
     error = _wrapped(RuntimeError('wrapper'), PermissionError(13, 'fixture'))
     assert classify_failure(error).kind is FailureKind.LOCAL
@@ -2603,6 +2654,7 @@ def test_i500_an_explicit_local_cause_still_wins():
 
 # --- I503: no "same failure" inference in the store ------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i503_a_new_local_error_in_the_same_run_with_the_same_code_replaces_the_old_503():
     _project__r25_415('p503', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     with llm_emit.track_run():
@@ -2622,6 +2674,7 @@ def test_i503_a_new_local_error_in_the_same_run_with_the_same_code_replaces_the_
     assert analysis.get('http_status') is None and analysis.get('upstream_error_type') is None, analysis
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i503_store_has_no_same_failure_rule():
     text = (ROOT / 'backend/services/studio/store.py').read_text(encoding='utf-8')
     assert "prior.get('error_code') == record.get('error_code')" not in text
@@ -2630,6 +2683,7 @@ def test_i503_store_has_no_same_failure_rule():
 
 # --- redaction boundaries: the snapshot is built before ``from None`` and rides on the safe error ------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_guard_a_provider_error_wrapped_once_by_the_redaction_boundary_is_still_model():
     from backend.core.llm_telemetry import log_safe_exception
     try:
@@ -2646,6 +2700,7 @@ def test_guard_a_provider_error_wrapped_once_by_the_redaction_boundary_is_still_
     assert SECRET_BODY__r29_415 not in json.dumps(found) and 'sk-r29' not in json.dumps(found)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_guard_a_connection_error_through_the_real_call_boundary_is_model_without_status():
     """I505 + boundary: openai APIConnectionError wrapped by log_safe_exception inside the observed call."""
     from backend.core.llm_telemetry import log_safe_exception
@@ -2667,6 +2722,7 @@ def test_guard_a_connection_error_through_the_real_call_boundary_is_model_withou
     assert 'http_status' not in found  # I505: no HTTP response, no status
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_guard_sentry_event_of_a_wrapped_provider_error_has_no_message_or_url_and_is_model():
     import sentry_sdk
     from sentry_sdk.utils import event_from_exception
@@ -2688,6 +2744,7 @@ def test_guard_sentry_event_of_a_wrapped_provider_error_has_no_message_or_url_an
     assert tags.get('http_status') == '503', tags
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_cloud_transcription_http_failure_carries_a_model_snapshot_through_the_adapter(cloud_adapter):
     import asyncio
     import httpx
@@ -2701,6 +2758,7 @@ def test_cloud_transcription_http_failure_carries_a_model_snapshot_through_the_a
     assert SECRET_BODY__r29_415 not in json.dumps(result, ensure_ascii=False)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_cloud_transcription_connection_failure_is_model_without_status(cloud_adapter):
     import asyncio
     import httpx
@@ -2725,6 +2783,7 @@ _INVALID_SITES = {
 }
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_model_response_invalid_raise_sites():
     """Every listed site raises the explicit type (intelligence 8 incl. refine + 2 duration sites, promo 3,
     render 2, llm_client 2); none raises a bare ValueError any more."""
@@ -2742,6 +2801,7 @@ def test_model_response_invalid_raise_sites():
     assert count == 15, count
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_model_response_invalid_is_model_with_invalid_response(monkeypatch):
     from backend.services.studio import intelligence
     with pytest.raises(ValueError) as dup:
@@ -2758,6 +2818,7 @@ def test_model_response_invalid_is_model_with_invalid_response(monkeypatch):
     assert found.get('attribution_source') == 'phase' and 'http_status' not in found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_model_response_invalid_from_text_json(monkeypatch):
     from backend.services.studio import intelligence
     from backend.utils import llm_client
@@ -2798,6 +2859,7 @@ def py_offences(source, rel='<memory>'):
     return out
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i502_ast_guard_backend_has_one_factory_and_one_reader():
     offenders = []
     for path in sorted((ROOT / 'backend').rglob('*.py')):
@@ -2808,6 +2870,7 @@ def test_i502_ast_guard_backend_has_one_factory_and_one_reader():
     assert not offenders, '\n'.join(offenders)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('source', [
     # D3 (Dong): a second constructor through an alias
     'from backend.core.failure_attribution import FailureAttribution as _FA\n_bypass = lambda **k: _FA._make(**k)\n',
@@ -2822,12 +2885,14 @@ def test_i502_ast_guard_catches_every_bypass(source):
     assert py_offences(source), source
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i502_ast_guard_allows_plain_writes():
     assert not py_offences("def f(record, s):\n    record['http_status'] = s\n    record.pop('attribution_source', None)\n")
 
 
 # --- I505 / I506 ----------------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('make, code', [(_connection_error, 'connection'), (_timeout_error, 'timeout')])
 def test_i505_connection_errors_and_timeouts_are_model_without_a_status(make, code):
     error = make()
@@ -2837,6 +2902,7 @@ def test_i505_connection_errors_and_timeouts_are_model_without_a_status(make, co
     assert found.get('attribution_source') == 'phase' and 'http_status' not in found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i505_status_only_on_the_implicit_context_is_not_written():
     try:
         try:
@@ -2848,12 +2914,14 @@ def test_i505_status_only_on_the_implicit_context_is_not_written():
     assert 'http_status' not in found, found
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i506_monitoring_doc_says_source_blocked_keeps_no_site_status():
     text = (ROOT / 'docs/analytics/STUDIO_MONITORING.md').read_text(encoding='utf-8')
     assert '`failure_stage=ingest` 和 `http_status`' not in text
     assert '**不记录**站点状态码' in text
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_redaction_boundary_returns_an_error_with_no_raw_chain():
     """log_safe_exception is also used without `raise … from None` (step1_outline), so the safe error itself
     must not link back to the raw provider error: no __cause__, and the formatted traceback has no raw text."""
@@ -2913,6 +2981,7 @@ def _unrelated_write_while_handling(pid, error, mutate):
 
 # --- I560: only a record that became failed IN THIS WRITE gets a snapshot --------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_an_unrelated_write_in_an_except_keeps_the_existing_failure_snapshot():
     _project__r25_415('p560a', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     before = _fail_with_kimi_503('p560a')
@@ -2920,6 +2989,7 @@ def test_i560_an_unrelated_write_in_an_except_keeps_the_existing_failure_snapsho
     assert _snap(store.read('p560a')['analysis']) == before
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_a_permission_error_while_updating_something_else_keeps_the_snapshot():
     _project__r25_415('p560p', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     before = _fail_with_kimi_503('p560p')
@@ -2927,6 +2997,7 @@ def test_i560_a_permission_error_while_updating_something_else_keeps_the_snapsho
     assert _snap(store.read('p560p')['analysis']) == before
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_a_partial_terminal_keeps_its_snapshot_on_an_unrelated_write():
     """completed + outcome=partial is a failed terminal (I451): it is not 'non-failed' before the write."""
     _project__r25_415('p560q', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
@@ -2938,6 +3009,7 @@ def test_i560_a_partial_terminal_keeps_its_snapshot_on_an_unrelated_write():
     assert _snap(store.read('p560q')['analysis']) == before
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_the_generation_snapshot_is_kept_too():
     store.directory('p560g').mkdir(parents=True, exist_ok=True)
     store.write('p560g', {'id': 'p560g', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r1', 'instance': store.INSTANCE},
@@ -2947,6 +3019,7 @@ def test_i560_the_generation_snapshot_is_kept_too():
     assert _snap(store.read('p560g')['generation']) == before
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_cover_dispatch_failure_does_not_rewrite_the_run_snapshot(monkeypatch):
     """jobs.request_ai_cover: cover_executor.submit fails -> _update_cover_job inside the except (jobs.py:952)."""
     from backend.services import cover
@@ -2968,11 +3041,13 @@ def test_i560_cover_dispatch_failure_does_not_rewrite_the_run_snapshot(monkeypat
     assert _snap(data['analysis']) == before
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_a_real_transition_still_stamps_the_snapshot():
     _project__r25_415('p560t', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     _fail_with_kimi_503('p560t')  # running -> failed with the 503 in hand: request/kimi/503
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_same_run_retry_goes_running_then_fails_again_replaces_the_snapshot():
     """Dong amendment 3: same run_id fails, the retry goes to running, fails again -> the 2nd failure's."""
     _project__r25_415('p560r', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
@@ -2985,6 +3060,7 @@ def test_i560_same_run_retry_goes_running_then_fails_again_replaces_the_snapshot
     assert analysis.get('http_status') is None and analysis.get('error_code') == 'timeout', analysis
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_a_failure_of_another_run_replaces_the_snapshot_without_passing_running():
     _project__r25_415('p560n', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     _fail_with_kimi_503('p560n')
@@ -3006,12 +3082,14 @@ def _connection_error_while_handling_a_503():
         return error
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i563_http_status_of_never_reads_the_implicit_context():
     error = _connection_error_while_handling_a_503()
     assert isinstance(error.__context__, ProviderError__r30_415) and error.__cause__ is None
     assert http_status_of(error) is None
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i563_an_old_503_does_not_leak_into_the_new_requests_record(monkeypatch):
     posted = []
     monkeypatch.setattr(llm_emit, '_post_event', lambda event, props: posted.append((event, props)))
@@ -3029,6 +3107,7 @@ def test_i563_an_old_503_does_not_leak_into_the_new_requests_record(monkeypatch)
     assert requests_posted and all(props.get('http_status') in (None, 0) for props in requests_posted), requests_posted
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i563_the_status_frozen_at_the_transcription_boundary_survives_from_none(cloud_adapter):
     case = cloud_adapter
     case.configure('qwen-audio-3.0-asr-flash', lambda request: httpx.Response(
@@ -3038,6 +3117,7 @@ def test_i563_the_status_frozen_at_the_transcription_boundary_survives_from_none
     assert SECRET_BODY__r30_415 not in json.dumps(result, ensure_ascii=False)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i563_the_log_safe_boundary_freezes_the_status_and_cuts_the_chain():
     from backend.core.llm_telemetry import log_safe_exception
     try:
@@ -3067,6 +3147,7 @@ def _recording_factory(monkeypatch, module):
     return calls
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i567_the_cover_boundary_lets_the_classifier_decide(monkeypatch):
     from backend.core import image_providers
     calls = _recording_factory(monkeypatch, image_providers)
@@ -3083,6 +3164,7 @@ def test_i567_the_cover_boundary_lets_the_classifier_decide(monkeypatch):
     assert raised.value.attribution.attribution_source == 'phase'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i567_the_transcription_boundary_lets_the_classifier_decide(cloud_adapter, monkeypatch):
     from backend.services import cloud_transcription
     calls = _recording_factory(monkeypatch, cloud_transcription)
@@ -3099,6 +3181,7 @@ def test_i567_the_transcription_boundary_lets_the_classifier_decide(cloud_adapte
         assert SECRET_URL__r30_415 not in str(seen)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i567_build_attribution_has_no_sent_override_and_with_request_record_uses_the_factory():
     assert 'sent' not in inspect.signature(failure_attribution.build_attribution).parameters
     source = inspect.getsource(failure_attribution.with_request_record)
@@ -3174,6 +3257,7 @@ def _boundary_errors():
     return out
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('with_product_filter', [True, False])
 def test_i567_sentry_envelope_of_a_boundary_error_has_no_message_url_or_key_in_any_exception(monkeypatch, with_product_filter):
     """Dong amendment 1: classification inside the boundary, ``from None`` outward. Every exception in the
@@ -3319,6 +3403,7 @@ def _frozen_code(error):
 
 # --- I561: a boundary snapshot names the connection THIS call used ------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i561_the_transcription_boundary_snapshot_carries_the_asr_connection_identity(cloud_adapter):
     case = cloud_adapter
     case.configure('qwen-audio-3.0-asr-flash', lambda request: httpx.Response(503, json={'error': {'message': SECRET_BODY__r31_415}}, request=request))
@@ -3341,6 +3426,7 @@ def _cover_call(raise_error, **kwargs):
     return raised.value
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i561_the_cover_boundary_snapshot_carries_the_image_config_it_sent():
     def boom():
         raise requests.exceptions.ConnectionError(f'HTTPSConnectionPool {SECRET_BODY__r31_415}')
@@ -3360,6 +3446,7 @@ def _openai_connection():
     return openai.APIConnectionError(message='Connection error.', request=httpx.Request('POST', 'https://kimi.fixture.example/v1/chat'))
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('make, code', [(_openai_timeout, 'timeout'), (_openai_connection, 'connection')])
 def test_i562_log_safe_keeps_timeout_and_connection_apart(make, code):
     from backend.core.llm_telemetry import log_safe_exception
@@ -3369,6 +3456,7 @@ def test_i562_log_safe_keeps_timeout_and_connection_apart(make, code):
     assert model_call_error_code(safe) == code
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('reply, code', [
     (lambda request: (_ for _ in ()).throw(httpx.ConnectError('private-network-detail', request=request)), 'connection'),
     (lambda request: (_ for _ in ()).throw(httpx.ReadTimeout('private-network-detail', request=request)), 'timeout'),
@@ -3381,6 +3469,7 @@ def test_i562_cloud_transcription_keeps_timeout_and_connection_apart(cloud_adapt
     assert result['error_code'] == code, result  # was: provider_error for both
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i562_lock_undecided_error_freezes_no_snapshot_and_no_code():
     """LOCK (X2): an error the chain cannot decide gets neither a snapshot nor a code at the boundary;
     the call boundary's request record decides it later."""
@@ -3392,6 +3481,7 @@ def test_i562_lock_undecided_error_freezes_no_snapshot_and_no_code():
 
 # --- Dong 8f0e155c #1: the ASR user text depends only on error_code and status ---------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_dong1_cloud_transcription_text_never_carries_upstream_text(cloud_adapter):
     """LOCK. Two 503s with different bodies give the same user text; a body that LOOKS like a key error
     ('invalid api key') never changes the code or hint. Only status and the frozen code decide."""
@@ -3415,6 +3505,7 @@ def test_dong1_cloud_transcription_text_never_carries_upstream_text(cloud_adapte
 
 # --- Dong 8f0e155c #2 + I621: the cover status is frozen; HTTP errors are not LOCAL ----------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_dong2_lock_cover_freezes_the_status_the_library_response_carries():
     """LOCK (D2/D3): requests supplies a real Response; its status is frozen on the safe error AND in the
     snapshot, with the controlled code."""
@@ -3432,6 +3523,7 @@ def test_dong2_lock_cover_freezes_the_status_the_library_response_carries():
     assert SECRET_BODY__r31_415 not in str(error) and error.__cause__ is None
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i621_cover_http_error_status_is_model_with_status_and_no_provider_body():
     from backend.core import image_providers
     resp = SimpleNamespace(status_code=503, json=lambda: {'error': {'message': SECRET_BODY__r31_415}}, text=SECRET_BODY__r31_415)
@@ -3444,6 +3536,7 @@ def test_i621_cover_http_error_status_is_model_with_status_and_no_provider_body(
     assert SECRET_BODY__r31_415 not in str(error) and 'HTTP 503' in str(error)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i621_cover_unsupported_edit_is_still_detected_without_echoing_the_body():
     from backend.core import image_providers
     resp = SimpleNamespace(status_code=400, json=lambda: {'error': {'message': 'edits not supported for this model'}}, text='')
@@ -3453,6 +3546,7 @@ def test_i621_cover_unsupported_edit_is_still_detected_without_echoing_the_body(
     assert 'not supported' not in str(raised.value)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i621_a_2xx_that_is_not_an_object_is_an_invalid_model_response():
     from backend.core import image_providers
     resp = SimpleNamespace(status_code=200, json=lambda: [SECRET_BODY__r31_415], text='')
@@ -3464,6 +3558,7 @@ def test_i621_a_2xx_that_is_not_an_object_is_an_invalid_model_response():
 
 # --- I566 X5 / X10: errors raised before anything was sent are LOCAL -----------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('error', [
     requests.exceptions.InvalidHeader('Invalid leading whitespace in header value'),
     requests.exceptions.InvalidJSONError('Object of type bytes is not JSON serializable'),
@@ -3480,6 +3575,7 @@ def test_x10_cover_request_never_sent_is_local(error):
     assert safe.http_status is None and _frozen_code(safe) is None
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_x10_a_response_that_failed_to_parse_is_the_models_side():
     def boom():
         raise requests.exceptions.JSONDecodeError('Expecting value', 'not json', 0)
@@ -3490,6 +3586,7 @@ def test_x10_a_response_that_failed_to_parse_is_the_models_side():
 
 # --- I566 X9: a request identity never lands on a LOCAL snapshot ----------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_x9_lock_request_record_does_not_reidentify_a_local_snapshot():
     from backend.core.failure_attribution import AttributedError, FailureAttribution, attributed, with_request_record
 
@@ -3511,6 +3608,7 @@ class _RateLimited(Exception):
         self.headers = {'retry-after': '7'}
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_dong3_retry_after_never_comes_from_an_earlier_unrelated_429():
     from backend.core.llm_retry import retry_after_from_error
     try:
@@ -3523,6 +3621,7 @@ def test_dong3_retry_after_never_comes_from_an_earlier_unrelated_429():
         assert retry_after_from_error(error) is None  # was 7.0
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_dong3_retry_after_still_follows_an_explicit_cause():
     from backend.core.llm_retry import retry_after_from_error
     try:
@@ -3534,6 +3633,7 @@ def test_dong3_retry_after_still_follows_an_explicit_cause():
         assert retry_after_from_error(error) == 7.0
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_dong3_network_kind_never_comes_from_an_earlier_dns_failure():
     from backend.core.upstream_errors import network_kind_of
     try:
@@ -3545,6 +3645,7 @@ def test_dong3_network_kind_never_comes_from_an_earlier_dns_failure():
         assert network_kind_of(error) == ''  # was 'dns'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_dong3_network_kind_real_httpx_dns_failure_is_still_dns(monkeypatch):
     """httpx/httpcore attach the gaierror as an explicit cause: the real library still reads as dns."""
     from backend.core.upstream_errors import network_kind_of
@@ -3560,6 +3661,7 @@ def test_dong3_network_kind_real_httpx_dns_failure_is_still_dns(monkeypatch):
 
 # --- I568: only the reply's shape is the model's fault --------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i568_our_own_type_error_in_the_rewrite_route_is_not_invalid_response(client, monkeypatch):
     from backend.api.v1 import studio as studio_api
     from backend.services.studio import intelligence
@@ -3578,6 +3680,7 @@ def test_i568_our_own_type_error_in_the_rewrite_route_is_not_invalid_response(cl
     assert studio_error_code(seen[0]) != 'invalid_response'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i568_a_reply_that_is_not_an_object_is_still_invalid_response(client, monkeypatch):
     from backend.api.v1 import studio as studio_api
     from backend.services.studio import intelligence
@@ -3600,6 +3703,7 @@ def _refusing_executor(monkeypatch):
     monkeypatch.setattr(jobs, 'executor', Refusing())
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i620_real_inspect_dispatch_rejection_keeps_the_previous_failure_snapshot(monkeypatch):
     from backend.services.studio import jobs, readiness
     _project__r25_415('p620i', {'status': 'running', 'phase': 'screening', 'run_id': 'r1'})
@@ -3617,6 +3721,7 @@ def test_i620_real_inspect_dispatch_rejection_keeps_the_previous_failure_snapsho
     assert _snap(after) == before  # was: overwritten with local/glm
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i620_real_confirm_dispatch_rejection_writes_the_previous_state_back_unchanged(monkeypatch):
     from backend.services.studio import intelligence, jobs, readiness
     from backend.services.studio.models import ConfirmPlan
@@ -3638,6 +3743,7 @@ def test_i620_real_confirm_dispatch_rejection_writes_the_previous_state_back_unc
 
 # --- I622: failed -> failed in the same attempt carries the STORED group forward ------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i622_a_writer_that_rebuilds_the_failed_record_keeps_the_stored_snapshot():
     _project__r25_415('p622', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     before = _fail_with_kimi_503('p622')
@@ -3648,6 +3754,7 @@ def test_i622_a_writer_that_rebuilds_the_failed_record_keeps_the_stored_snapshot
     assert _snap(store.read('p622')['analysis']) == before  # was: no snapshot at all
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i622_lock_same_attempt_error_code_change_keeps_the_snapshot_and_takes_the_new_code():
     """LOCK of the current rule (Dong I622 B/C): the snapshot stays the stored one; error_code is the
     writer's. No inference reconciles them."""
@@ -3660,6 +3767,7 @@ def test_i622_lock_same_attempt_error_code_change_keeps_the_snapshot_and_takes_t
 
 # --- I623: one construction, one valid status range -----------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i623_cloud_transcription_failure_freezes_the_status_on_itself():
     from backend.pipeline.failures import cloud_transcription_failure
     from backend.services.cloud_transcription import CloudTranscriptionError
@@ -3669,6 +3777,7 @@ def test_i623_cloud_transcription_failure_freezes_the_status_on_itself():
     assert failure.http_status == 503  # was None (only reachable through a caller's ``from e``)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('status', [200, 302, 399, True])
 def test_i623_a_non_error_status_is_never_frozen(status):
     from backend.core.failure_attribution import AttributedError, ProviderTransportError, attributed
@@ -3679,6 +3788,7 @@ def test_i623_a_non_error_status_is_never_frozen(status):
     assert ProviderTransportError('HTTPStatus', http_status=status).http_status is None
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i623_run_content_freezes_the_adapter_status_through_attributed(monkeypatch, tmp_path):
     """LOCK (mut31 M623-2): run_content freezes through attributed(), so a 302 never lands."""
     from backend.services.studio import jobs
@@ -3694,6 +3804,7 @@ def test_i623_run_content_freezes_the_adapter_status_through_attributed(monkeypa
 
 # --- I624: Dong's D1 / D4 -------------------------------------------------------------------------------
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i624_d1_a_generation_failure_of_another_run_replaces_the_snapshot():
     """LOCK, kills Dong D1."""
     store.directory('p624g').mkdir(parents=True, exist_ok=True)
@@ -3706,6 +3817,7 @@ def test_i624_d1_a_generation_failure_of_another_run_replaces_the_snapshot():
     assert (generation.get('attribution_source'), generation.get('provider'), generation.get('http_status')) == ('local', 'glm', None), generation
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i624_d4_a_request_record_fills_its_own_failure_stage():
     """LOCK, kills Dong D4."""
     from backend.core.failure_attribution import AttributedError, FailureAttribution, attributed, with_request_record
@@ -3718,6 +3830,7 @@ def test_i624_d4_a_request_record_fills_its_own_failure_stage():
     assert (error.attribution.attribution_source, error.attribution.failure_stage) == ('request', 'analyze')
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i562_the_pipeline_code_reader_takes_the_code_the_cover_boundary_froze():
     """model_call_error_code reads the frozen code first: the safe ImageError's own text/type says nothing."""
     from backend.pipeline.failures import model_call_error_code
@@ -3729,6 +3842,7 @@ def test_i562_the_pipeline_code_reader_takes_the_code_the_cover_boundary_froze()
     assert studio_error_code(error) == 'timeout'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_x4_lock_the_asr_pipeline_wrapper_carries_the_boundary_snapshot_itself():
     """LOCK (X4): the snapshot rides on the wrapper by THE construction, not via a caller's ``from e``."""
     from backend.core.failure_attribution import FailureAttribution
@@ -3774,6 +3888,7 @@ def _dirty_error():
     return error
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('status', ['503;drop', '503', True, 302, 600, 503.0])
 def test_i565_the_serializer_copies_only_whitelisted_valid_fields(status):
     out = export_attribution({**DIRTY, 'status': 'failed', 'http_status': status})
@@ -3783,11 +3898,13 @@ def test_i565_the_serializer_copies_only_whitelisted_valid_fields(status):
     assert export_attribution({**DIRTY, 'status': 'failed', 'http_status': 503})['http_status'] == 503
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_the_serializer_drops_an_unknown_source_and_a_half_identity():
     out = export_attribution({'status': 'failed', 'attribution_source': 'guess', 'provider': 'kimi', 'model': 'm'})
     assert out == {}
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_store_read_projection_and_history_summary_carry_only_whitelisted_fields():
     pid = 'p565'
     store.directory(pid).mkdir(parents=True, exist_ok=True)
@@ -3805,6 +3922,7 @@ def test_i565_store_read_projection_and_history_summary_carry_only_whitelisted_f
     assert row.get('provider') == 'kimi' and 'http_status' not in row
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_llm_emit_exits_carry_only_whitelisted_valid_fields():
     error = _dirty_error()
     fields = llm_emit.attribution(error)
@@ -3818,6 +3936,7 @@ def test_i565_llm_emit_exits_carry_only_whitelisted_valid_fields():
     _no_secret(tags)
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_sentry_failure_context_and_envelope_carry_only_whitelisted_valid_fields():
     error = _dirty_error()
     context = sentry_setup.studio_failure_context(error, 'analyze')
@@ -3828,6 +3947,7 @@ def test_i565_sentry_failure_context_and_envelope_carry_only_whitelisted_valid_f
         _no_secret({k: event.get(k) for k in ('tags', 'contexts', 'extra')})
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_write_attribution_stores_only_whitelisted_valid_fields():
     record = {'status': 'failed', 'raw_message': 'kept, not an attribution field'}
     failure_attribution.write_attribution(record, _dirty_error().attribution)
@@ -3835,6 +3955,7 @@ def test_i565_write_attribution_stores_only_whitelisted_valid_fields():
     assert set(record) - {'status', 'raw_message'} <= WHITELIST__r31_415_payload
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_sentry_tags_take_no_identity_from_a_snapshot_whose_pair_is_invalid():
     """THE serializer's pair rule: provider/config_source that are not strings -> no identity at all, so
     model and host (valid on their own) do not go out as somebody's identity."""
@@ -3846,6 +3967,7 @@ def test_i565_sentry_tags_take_no_identity_from_a_snapshot_whose_pair_is_invalid
     assert tags.get('http_status') == '503'
 
 
+@pytest.mark.usefixtures('isolated__r22_415')
 def test_i565_history_summary_of_a_dirty_terminal_the_writer_hands_in():
     """A writer hands a dirty failed terminal to store.write (no error in hand: the group it carries stays);
     its history row is built through THE serializer, not copied."""

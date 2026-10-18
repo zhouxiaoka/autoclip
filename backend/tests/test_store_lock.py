@@ -20,7 +20,7 @@ from backend.tests.test_failure_attribution import (  # noqa: F401
     isolated__r22_415 as isolated,
 )
 
-pytestmark = pytest.mark.store_lock
+pytestmark = [pytest.mark.store_lock, pytest.mark.usefixtures('isolated')]
 ROOT = Path(__file__).resolve().parents[2]
 SLACK = 0.12
 
