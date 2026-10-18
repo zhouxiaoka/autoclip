@@ -25,6 +25,7 @@ def _lock_path():
 # R25 #415 #335: every project writer AND the shutdown-marker scan->delete hold this lock; it also
 # excludes CLI/MCP child processes writing the same data directory (file lock with a timeout).
 lock = ProcessLock(_lock_path)
+_deferred_terminals = threading.local()
 from backend.core.launch_token import instance_id as _shell_instance_id  # noqa: E402
 INSTANCE = _shell_instance_id() or uuid.uuid4().hex  # R19 #98: shell-assigned when launched by the desktop app
 
@@ -387,6 +388,39 @@ def _serialized(fn):
         with lock:
             return fn(*args, **kwargs)
     return run
+
+
+def _defer_terminals(pending):
+    """Queue success-rate payloads while the store lock is held. The outermost release sends them."""
+    if not pending:
+        return
+    queued = getattr(_deferred_terminals, 'events', None)
+    if queued is None:
+        _deferred_terminals.events = queued = []
+    queued.extend(pending)
+
+
+def _deliver_deferred_terminals():
+    pending = getattr(_deferred_terminals, 'events', None)
+    if not pending:
+        return
+    _deferred_terminals.events = None
+    from backend.core.project_cancellation import shutting_down
+    if shutting_down():
+        threading.Thread(target=_post_deferred_terminals, args=(pending,), name='studio-terminal-event', daemon=True).start()
+        return
+    _post_deferred_terminals(pending)
+
+
+def _post_deferred_terminals(pending):
+    try:
+        from backend.services.studio import attempts
+        attempts.flush_terminal_events(pending)
+    except Exception:
+        logger.warning('Studio terminal event was not delivered')
+
+
+lock.after_release = _deliver_deferred_terminals
 
 
 def _replace_state(temporary, destination):
@@ -967,7 +1001,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
             usage_checkpoint[0].update(usage_checkpoint[1])
         _observe_worker_write(path, previous, data)
         _io_failures.pop(path, None)
-        attempts.flush_terminal_events(pending)
+        _defer_terminals(pending)  # send after the outermost lock release, never while this write holds it
     except OSError:
         if refs is not None:
             rollback_refs(refs)  # R24 #293: the surviving studio.json keeps its references protected
