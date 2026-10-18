@@ -23,10 +23,10 @@ const DESKTOP_WINDOW = { __TAURI_INTERNALS__: {} }
 test('I652: frontend Sentry initializes only in the packaged desktop production build', () => {
   const DSN = 'https://public@example.invalid/1'
   const cases = [
-    ['packaged desktop production build', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.8' }, DESKTOP_WINDOW, 1],
-    ['dev server / tauri dev', { PROD: false, DEV: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.8' }, DESKTOP_WINDOW, 0],
+    ['packaged desktop production build', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.7' }, DESKTOP_WINDOW, 1],
+    ['dev server / tauri dev', { PROD: false, DEV: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.7' }, DESKTOP_WINDOW, 0],
     ['unknown release', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '' }, DESKTOP_WINDOW, 0],
-    ['production bundle opened in a browser tab', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.8' }, {}, 0],
+    ['production bundle opened in a browser tab', { PROD: true, VITE_PUBLIC_SENTRY_DSN: DSN, VITE_APP_VERSION: '1.5.7' }, {}, 0],
   ]
   for (const [name, env, window, expected] of cases) {
     let inits = 0
@@ -101,13 +101,13 @@ test('the same new version is offered at most once a day; a newer version can re
   const store = new Map()
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) }
   assert.equal(schedule.areRemindersEnabled(storage), true)
-  assert.equal(schedule.shouldRemind(storage, '1.5.8', 1_000), true)
-  schedule.rememberReminder(storage, '1.5.8', 1_000)
-  assert.equal(store.get('autoclip.updater.lastRemindedVersion'), '1.5.8')
+  assert.equal(schedule.shouldRemind(storage, '1.5.7', 1_000), true)
+  schedule.rememberReminder(storage, '1.5.7', 1_000)
+  assert.equal(store.get('autoclip.updater.lastRemindedVersion'), '1.5.7')
   assert.equal(store.get('autoclip.updater.lastRemindedAt'), '1000')
-  assert.equal(schedule.shouldRemind(storage, '1.5.8', 1_000 + 60_000), false)
-  assert.equal(schedule.shouldRemind(storage, '1.5.8', 1_000 + schedule.UPDATE_CHECK_INTERVAL_MS - 1), false)
-  assert.equal(schedule.shouldRemind(storage, '1.5.8', 1_000 + schedule.UPDATE_CHECK_INTERVAL_MS), true)
+  assert.equal(schedule.shouldRemind(storage, '1.5.7', 1_000 + 60_000), false)
+  assert.equal(schedule.shouldRemind(storage, '1.5.7', 1_000 + schedule.UPDATE_CHECK_INTERVAL_MS - 1), false)
+  assert.equal(schedule.shouldRemind(storage, '1.5.7', 1_000 + schedule.UPDATE_CHECK_INTERVAL_MS), true)
   assert.equal(schedule.shouldRemind(storage, '1.5.9', 1_000 + 60_000), true)
 })
 test('turning off reminders skips automatic checks and does not prompt', async () => {
@@ -117,11 +117,11 @@ test('turning off reminders skips automatic checks and does not prompt', async (
   schedule.writeRemindersEnabled(storage, false)
   assert.equal(schedule.areRemindersEnabled(storage), false)
   assert.equal(schedule.shouldCheckAutomatically(storage, 1_000), false)
-  assert.equal(schedule.shouldRemind(storage, '1.5.8', 1_000), false)
+  assert.equal(schedule.shouldRemind(storage, '1.5.7', 1_000), false)
   let calls = 0
   const updater = load('updater', {
     '../utils/desktopMode': { isDesktopMode: async () => true },
-    '@tauri-apps/plugin-updater': { check: async () => { calls += 1; return { version: '1.5.8', close() {} } } },
+    '@tauri-apps/plugin-updater': { check: async () => { calls += 1; return { version: '1.5.7', close() {} } } },
   }, { localStorage: storage })
   assert.equal(await updater.maybeCheckForUpdate(), null)
   assert.equal(calls, 0)
@@ -133,11 +133,11 @@ test('already reminding the same version today does not offer it again even if t
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) }
   const now = Date.now()
   schedule.rememberSuccessfulCheck(storage, now, 'available')
-  schedule.rememberReminder(storage, '1.5.8', now)
+  schedule.rememberReminder(storage, '1.5.7', now)
   let closed = 0
   const updater = load('updater', {
     '../utils/desktopMode': { isDesktopMode: async () => true },
-    '@tauri-apps/plugin-updater': { check: async () => ({ version: '1.5.8', close() { closed += 1 } }) },
+    '@tauri-apps/plugin-updater': { check: async () => ({ version: '1.5.7', close() { closed += 1 } }) },
   }, { localStorage: storage })
   assert.equal(await updater.maybeCheckForUpdate(), null)
   assert.equal(closed, 1)

@@ -41,7 +41,7 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
   AND event = 'studio_generation_finished'
   AND properties.outcome = 'error';
 
--- 1.5.8 成功率埋点：失败必带阶段；按服务商拆分用 run 级 provider，不用设置页最后保存值。
+-- 1.5.7 成功率埋点：失败必带阶段；按服务商拆分用 run 级 provider，不用设置页最后保存值。
 -- R27 #415 I422：按 attribution_source 拆。local = 非模型归因，统计责任仍按错误码判断（如 source_blocked 照旧剔除）；local 时 provider 置空，
 -- 只表示"用过这个连接"，不算这个服务商失败；request/phase 才按服务商看。
 SELECT event, properties.attribution_source AS attribution_source,

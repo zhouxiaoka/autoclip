@@ -91,8 +91,8 @@ def run_step(tmp_path, files, env_extra=None, script_text=None, nsis_targets=Non
 
 
 OK_SAMPLES = {
-    'single': {'AutoClip_1.5.8_x64-setup.exe': b'one'},
-    'multiple-nested': {'AutoClip_1.5.8_x64-setup.exe': b'a', 'beta-setup.exe': b'b', 'sub/Zed-setup.exe': b'c',
+    'single': {'AutoClip_1.5.7_x64-setup.exe': b'one'},
+    'multiple-nested': {'AutoClip_1.5.7_x64-setup.exe': b'a', 'beta-setup.exe': b'b', 'sub/Zed-setup.exe': b'c',
                         'sub/deep/_x-setup.exe': b'd'},
     'mixed-case': {'a_lower-setup.exe': b'1', 'B_upper-setup.exe': b'2', 'A_upper-setup.exe': b'3', 'b-setup.exe': b'4',
                    'sub/Ab-setup.exe': b'5', 'aB-setup.exe': b'6'},
@@ -116,7 +116,7 @@ def test_step_output_is_byte_identical_to_exe_provenance_py(tmp_path, files):
 
 
 def test_real_tauri_config_expects_one_installer(tmp_path):
-    done = run_step(tmp_path, {'AutoClip_1.5.8_x64-setup.exe': b'one'})
+    done = run_step(tmp_path, {'AutoClip_1.5.7_x64-setup.exe': b'one'})
     assert done.returncode == 0, done.stderr
     assert (tmp_path / 'windows-exe-provenance.json').read_bytes() == reference(tmp_path)
 
@@ -128,7 +128,7 @@ def test_real_tauri_config_expects_one_installer(tmp_path):
     ({'AutoClip-setup.exe': b'1'}, {'GITHUB_RUN_ID': ''}, 'GITHUB_RUN_ID'),
     ({'AutoClip-setup.exe': b'1'}, {'GITHUB_RUN_ID': 'abc'}, 'GITHUB_RUN_ID'),
     ({'AutoClip-setup.exe': b'1'}, {'GITHUB_SHA': ''}, 'GITHUB_SHA'),
-    ({'剪辑助手_1.5.8_x64-setup.exe': b'zh'}, None, 'non-ASCII installer name'),
+    ({'剪辑助手_1.5.7_x64-setup.exe': b'zh'}, None, 'non-ASCII installer name'),
     ({'🎬-setup.exe': b'emoji', 'A-setup.exe': b'a'}, None, 'non-ASCII installer name'),
     ({'e\u0301-setup.exe': b'nfd', '\u00e9-setup.exe': b'nfc'}, None, 'non-ASCII installer name'),
     ({'.hidden/\u00e9-setup.exe': b'h'}, None, 'non-ASCII installer name'),

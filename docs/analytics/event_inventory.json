@@ -35,9 +35,9 @@
   },
   "dates": {
     "plan_effective": "2026-10-14",
-    "close_transition": "1.5.8",
-    "stop_legacy_emit": "1.5.8",
-    "delete_wrappers": "1.5.8"
+    "close_transition": "1.5.7",
+    "stop_legacy_emit": "1.5.7",
+    "delete_wrappers": "1.5.7"
   },
   "ignore": [
     "$pageview",
@@ -56,9 +56,9 @@
     ]
   },
   "transition": {
-    "milestone": "1.5.8",
+    "milestone": "1.5.7",
     "keep_query_maps": true,
-    "note": "Query maps stay for 1.5.7 history. Producers must be single-track in 1.5.8.",
+    "note": "Query maps stay for earlier internal builds. Split those from this production package with analytics_environment (validation or development versus production), not app_version. Producers in this 1.5.7 release are single-track.",
     "tasks": {
       "single_os_enum": {
         "title": "Single os enum across all producers",
@@ -125,7 +125,7 @@
       },
       "legacy_stopped_or_tagged": {
         "title": "Legacy events stopped or tagged legacy=true",
-        "accept": "Any still-emitted section 8.2/8.3 event includes legacy=true; dead wrappers deleted in 1.5.8"
+        "accept": "Any still-emitted section 8.2/8.3 event includes legacy=true; dead wrappers deleted in 1.5.7"
       }
     }
   },
@@ -567,183 +567,183 @@
       "domain": "legacy",
       "legacy": true,
       "merge": "provider_connection_test_requested",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "provider_test_accepted": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": null,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "provider_test_request_failed": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": null,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "provider_test_finished": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "provider_connection_test_finished",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "import_requested": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_import_requested",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "import_accepted": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_import_accepted",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "import_request_failed": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_import_request_failed",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "import_finished": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_import_accepted",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "processing_requested": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "processing_accepted": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "processing_request_failed": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "processing_started": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "processing_finished": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "processing_task_observed": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "media_download_requested": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_download_requested",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "media_download_accepted": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "media_download_request_failed": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_download_failed",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "media_download_received": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "media_download_saved": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_download_saved",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "publish_export_requested": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_export_requested",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "publish_export_accepted": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_export_accepted",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "publish_export_request_failed": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_export_request_failed",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "publish_export_finished": {
       "status": "legacy",
       "domain": "legacy",
       "legacy": true,
       "merge": "studio_export_finished",
-      "stop": "1.5.8"
+      "stop": "1.5.7"
     },
     "clips_exported": {
       "status": "deprecated",
       "domain": "legacy",
-      "stop": "1.5.8",
-      "delete": "1.5.8"
+      "stop": "1.5.7",
+      "delete": "1.5.7"
     },
     "video_imported": {
       "status": "deprecated",
       "domain": "legacy",
-      "stop": "1.5.8",
-      "delete": "1.5.8"
+      "stop": "1.5.7",
+      "delete": "1.5.7"
     },
     "processing_failed": {
       "status": "deprecated",
       "domain": "legacy",
-      "stop": "1.5.8",
-      "delete": "1.5.8"
+      "stop": "1.5.7",
+      "delete": "1.5.7"
     },
     "api_key_configured": {
       "status": "deprecated",
       "domain": "legacy",
       "emitted": false,
-      "delete": "1.5.8"
+      "delete": "1.5.7"
     },
     "example_project_opened": {
       "status": "deprecated",
       "domain": "legacy",
       "emitted": false,
-      "delete": "1.5.8"
+      "delete": "1.5.7"
     },
     "studio_one_click_started": {
       "status": "keep",

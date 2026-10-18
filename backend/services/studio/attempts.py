@@ -1,4 +1,4 @@
-"""Business attempts are owned by the backend (1.5.8 #419 rewrite, design-retro "Attempt 回执模型").
+"""Business attempts are owned by the backend (1.5.7 #419 rewrite, design-retro "Attempt 回执模型").
 
 One AttemptReceipt per v4 success-rate attempt, persisted in the project's studio.json in the same atomic
 write as the business state it describes:
@@ -39,7 +39,7 @@ class RetryRejected(ConflictError):
 
 
 class AppendRejected(RetryRejected):
-    """1.5.8 does not append platforms. The refusal carries an error_code the API returns as HTTP 409.
+    """1.5.7 does not append platforms. The refusal carries an error_code the API returns as HTTP 409.
     Nothing is created."""
 
     def __init__(self, message, error_code, status=409):

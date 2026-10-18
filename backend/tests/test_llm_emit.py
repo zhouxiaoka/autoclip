@@ -1,4 +1,4 @@
-"""1.5.8 Line A: request/run telemetry, ASR probe, reserved validation hook, privacy."""
+"""1.5.7 Line A: request/run telemetry, ASR probe, reserved validation hook, privacy."""
 import json
 
 import pytest

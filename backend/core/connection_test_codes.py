@@ -1,4 +1,4 @@
-"""Closed error_code set for provider connection tests (1.5.8 success-rate must-have).
+"""Closed error_code set for provider connection tests (1.5.7 success-rate must-have).
 
 Telemetry carries only this code plus an integer upstream HTTP status. Never the URL, key,
 path, upstream body or message. Classification stays within the tested provider.

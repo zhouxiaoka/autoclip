@@ -1,4 +1,4 @@
-"""1.5.8 success-rate must-have: every connection-test failure carries a closed-set error_code
+"""1.5.7 success-rate must-have: every connection-test failure carries a closed-set error_code
 and an integer upstream status; never the URL, key, path or upstream body."""
 import json
 import socket
@@ -203,7 +203,7 @@ def test_http_endpoint_success_payload_has_status_and_code(monkeypatch):
     _assert_safe(response.text)
 
 
-# --- 1.5.8 (B): config_source enum + terminal identity ---------------------------------------
+# --- 1.5.7 (B): config_source enum + terminal identity ---------------------------------------
 
 def test_config_source_enum_never_carries_strings():
     from backend.core.provider_presets import get_provider

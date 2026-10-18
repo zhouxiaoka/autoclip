@@ -145,7 +145,7 @@ async def submit_task(
             if not input_video_path:
                 raise HTTPException(status_code=400, detail="任务缺少 input_video_path 配置")
             from backend.api.v1 import transcription_gate
-            # 1.5.8 gate before anything is queued (R18 #72), off the event loop (R23 #230).
+            # 1.5.7 gate before anything is queued (R18 #72), off the event loop (R23 #230).
             # Only the SRT the queue receives counts; input.srt beside the video is not passed on (R19 #114).
             await transcription_gate.for_paths(input_video_path, input_srt_path, sibling_srt=False)
             result = queue_service.submit_video_processing_task(
@@ -187,7 +187,7 @@ async def retry_task(
             raise HTTPException(status_code=404, detail="任务不存在")
         if str(task.task_type.value if hasattr(task.task_type, "value") else task.task_type) == "video_processing":
             from backend.api.v1 import transcription_gate
-            # 1.5.8 gate before resetting the task, off the event loop (R23 #230)
+            # 1.5.7 gate before resetting the task, off the event loop (R23 #230)
             await transcription_gate.for_paths(_get_task_config_value(task, "input_video_path"), _get_task_config_value(task, "input_srt_path"), sibling_srt=False)
         
         # 重置任务状态并重新提交

@@ -57,7 +57,7 @@ def _chain(order=('ok', 'bad')):
 def _rows(events):
     return [(f'u{i}', e['event'], 'person-1', datetime(2026, 10, 10, 10, i),
              {**e['props'], 'analytics_environment': 'production', 'runtime': 'desktop',
-              'app_version': e['props'].get('app_version') or '1.5.8'}) for i, e in enumerate(events)]
+              'app_version': e['props'].get('app_version') or '1.5.7'}) for i, e in enumerate(events)]
 
 
 def test_events_are_projections_of_backend_receipts():

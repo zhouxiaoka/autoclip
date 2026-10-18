@@ -170,7 +170,7 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
         except SourceRejected as e:  # #284: the source's own code, never folded into invalid_input / failed
             _job_update(req.project_id, status="failed", error_code=e.code, error=str(e)[:500])
             return _jobs[req.project_id]
-        except TranscriptionNotReady as e:  # only the 1.5.8 gate; other ValueErrors are product failures (R18 #77)
+        except TranscriptionNotReady as e:  # only the 1.5.7 gate; other ValueErrors are product failures (R18 #77)
             _job_update(req.project_id, status="failed", error_code="invalid_input", error=str(e)[:500])
             return _jobs[req.project_id]
         except Exception as e:  # noqa: BLE001

@@ -88,7 +88,7 @@ async def upload_files(
             }
         )
         
-        # 1.5.8: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
+        # 1.5.7: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
         staged = await _stage_for_gate(video_file, has_srt=bool(srt_file))
 
         # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（R18 #75）。

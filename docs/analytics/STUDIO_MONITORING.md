@@ -44,7 +44,7 @@
 
 保留固定标签 area=studio、phase、analysis_mode、goal、error_code、runtime、app_mode、build_environment。后端保留 desktop/web 的 environment，桌面启动器显式注入 production/development 的 build_environment，其他部署可设置 `AUTOCLIP_BUILD_ENVIRONMENT`，未设置时 unknown。前端 environment 延续 production/development。
 
-1.5.8（I650–I652）起控制上报量：只有打包后的桌面正式版或验收版初始化 Sentry。后端要求 mode=desktop、release 已知，且 `AUTOCLIP_BUILD_ENVIRONMENT` 恰好是 production 或 validation；前端要求 PROD 构建、版本号已知且运行在 Tauri 里。pytest、带 `backend/tests` 的源码树、未设置构建环境、web/Docker/脚本、`tauri dev` 和浏览器标签页一律不初始化，即使环境里有 `SENTRY_DSN`。SDK 端按客户端指纹（显式 fingerprint，否则异常类型加模块/函数，不含行号和正文）限流，每个进程每小时同一指纹最多 5 条；轮询接口 `get_processing_status`、`get_ai_models` 出错每个进程只报一次。已丢弃的事件不占额度。Windows asyncio Proactor 的断连噪音直接丢弃，且调用栈里不能有 `backend` 帧：ConnectionResetError（WinError 10054，以及 Proactor 改写成该类型的 64 / 995）、ConnectionAbortedError（10053）和 BrokenPipeError（109）。同一类型出现在业务代码里，或从 Proactor 回调进入后端后抛出，照报。已发出的旧版本安装包不受影响，服务端限速另定。
+1.5.7（I650–I652）起控制上报量：只有打包后的桌面正式版或验收版初始化 Sentry。后端要求 mode=desktop、release 已知，且 `AUTOCLIP_BUILD_ENVIRONMENT` 恰好是 production 或 validation；前端要求 PROD 构建、版本号已知且运行在 Tauri 里。pytest、带 `backend/tests` 的源码树、未设置构建环境、web/Docker/脚本、`tauri dev` 和浏览器标签页一律不初始化，即使环境里有 `SENTRY_DSN`。SDK 端按客户端指纹（显式 fingerprint，否则异常类型加模块/函数，不含行号和正文）限流，每个进程每小时同一指纹最多 5 条；轮询接口 `get_processing_status`、`get_ai_models` 出错每个进程只报一次。已丢弃的事件不占额度。Windows asyncio Proactor 的断连噪音直接丢弃，且调用栈里不能有 `backend` 帧：ConnectionResetError（WinError 10054，以及 Proactor 改写成该类型的 64 / 995）、ConnectionAbortedError（10053）和 BrokenPipeError（109）。同一类型出现在业务代码里，或从 Proactor 回调进入后端后抛出，照报。已发出的旧版本安装包不受影响，服务端限速另定。
 
 1.5.2 候选的告警补充修复增加后端 `pipeline_stage` 标签，只允许 INGEST、SUBTITLE、ANALYZE、HIGHLIGHT、EXPORT、DONE。内容任务返回有阶段但没有错误码的结构化失败时保留该阶段；仍按原有异常规则上报，不隐藏未知故障。大纲模型请求失败使用已有的受控失败码，无法解析的回答归为 invalid_response；不增加请求重放。快速视觉推荐的抽帧进程失败、超时或文件错误会保留 screening 告警并降级到字幕方案，不能阻止导入。此补充尚未发布，已存在的 1.5.1 安装包不会自动获得这些改动。
 
@@ -76,4 +76,4 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 
 自动制作在生成任何版本之前失败时，结果页的「重试」重新使用该项目已保存的导入选项和原素材；已有版本失败继续使用单条重试。恢复尝试沿用 flow_id，但重新登记 studio_generation_finished 的 attempt_id，终态按尝试去重。验收必须先看到真实失败码，再修正前置条件、从页面重试成功，并在 validation 查询中看到同一 flow 的失败与成功；不能把两个事件计成两个独立流程。
 
-1.5.8 R11：画面采样（`intelligence.sample()` 及其时长探测）里 ffmpeg 抽帧失败或超时，统一为 `FrameExtractError`，错误码 `frame_extract_failed`（属 `STUDIO_ERROR_CODES`，产品失败，计入成功率分母），阶段 `sample`；不再记为视觉服务不可用。AUTO 初筛遇到它时改走字幕，方案记 `degrade_reason=frame_extract_subtitle_fallback`；素材超过 120 分钟时在视觉配置检查和初筛之前就走字幕，记 `degrade_reason=source_too_long_subtitle_route`。这两个是成功出片上的降级原因，不是失败码。
+1.5.7 R11：画面采样（`intelligence.sample()` 及其时长探测）里 ffmpeg 抽帧失败或超时，统一为 `FrameExtractError`，错误码 `frame_extract_failed`（属 `STUDIO_ERROR_CODES`，产品失败，计入成功率分母），阶段 `sample`；不再记为视觉服务不可用。AUTO 初筛遇到它时改走字幕，方案记 `degrade_reason=frame_extract_subtitle_fallback`；素材超过 120 分钟时在视觉配置检查和初筛之前就走字幕，记 `degrade_reason=source_too_long_subtitle_route`。这两个是成功出片上的降级原因，不是失败码。

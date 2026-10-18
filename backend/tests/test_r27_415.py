@@ -306,7 +306,7 @@ def test_grep_guard_catches_direct_reads_of_every_field(tmp_path):
 
 def test_i422_release_validation_splits_by_attribution_source():
     sql = (ROOT / 'docs/analytics/release_validation.sql').read_text(encoding='utf-8')
-    block = sql[sql.index('1.5.8 成功率埋点'):sql.index('ORDER BY event, events DESC;')]
+    block = sql[sql.index('1.5.7 成功率埋点'):sql.index('ORDER BY event, events DESC;')]
     assert 'properties.attribution_source AS attribution_source' in block
     assert "if(toString(properties.attribution_source) = 'local', NULL, properties.provider)" in block
     assert 'GROUP BY event, attribution_source, provider' in block

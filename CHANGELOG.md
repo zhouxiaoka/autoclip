@@ -7,9 +7,11 @@
 
 ## [未发布]
 
-- 上游模型返回 401/403 时使用独立失败码 `llm_auth_invalid`，显示八语密钥无效/过期提示；未配置密钥仍使用 `llm_not_configured`。同步事件白名单和成功率查询。
+_（本周尚无改动）_
 
-## [1.5.8] - 2026-10-14
+## [1.5.7] - 2026-10-18
+
+- 上游模型返回 401/403 时使用独立失败码 `llm_auth_invalid`，显示八语密钥无效/过期提示；未配置密钥仍使用 `llm_not_configured`。同步事件白名单和成功率查询。
 
 - 自定义服务商获取模型列表接入专用 `/models` 客户端，失败不再用缓存或目录冒充成功；修改地址或密钥后忽略旧响应。控制台主机和地址锁定统一读取预设目录，允许 Infistar API 主机；ASR 时间戳支持由后端适配器决定。移除无效的场景复选框，获取列表的错误不回显地址或密钥。
 
@@ -24,7 +26,7 @@
 
 - 埋点生产者收口：`os` 只发 `macos`/`windows`/`linux`，出片/设置终态 `outcome` 只发 `success`/`error`/`partial`，版本只报 `app_version`，QA/MCP/反馈补齐公共信封，旧事件打 `legacy=true`。不发 key、完整 URL、用户路径、标题、转写；`feedback_submitted` 仍可带用户正文和联系方式。
 - 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API `deepseek-v4-flash`，Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-3.5-flash-lite`，DashScope `qwen-flash`）。88API 门槛地址为 `https://api.88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%。Live 先 fail-closed（任一服务商失败、缺/空/无法解析的报告、或条数少于计划必须红），再叠加用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。**fail-closed 已核对；88API 单探针（`api.88api.ai` + `deepseek-v4-flash`）已通过，完整发版仍走分层 live。**
-- 模型设置增加 `source=preset|user`（连接地址 `base_url_source`、用途模型 `model_source`）。旧文件已填的模型记为 `user`（不自动降级）；迁不了的用途保留 API Key，重置为该服务商推荐默认，并提示一次。预设表更新只影响新连接，已保存的连接冻结，有更新时提示。不含密钥、完整 URL 或用户正文。（1.5.8 P3）
+- 模型设置增加 `source=preset|user`（连接地址 `base_url_source`、用途模型 `model_source`）。旧文件已填的模型记为 `user`（不自动降级）；迁不了的用途保留 API Key，重置为该服务商推荐默认，并提示一次。预设表更新只影响新连接，已保存的连接冻结，有更新时提示。不含密钥、完整 URL 或用户正文。（1.5.7 P3）
 - 设置页与自定义服务商「获取模型列表」改为自写的 `/models` 拉取：OpenAI 兼容 / Anthropic / Gemini 分页、15 秒超时、最多 20 页 / 2000 条；错误走现有 `upstream_errors` 分层（地址、密钥、超时、断连），不回传密钥、完整 URL 或上游原文。账号列表与预设 `candidates` 求交后回填下拉（推荐在前，只信账号；自定义无候选则用账号列表）。校验与 `POST /settings/ai-models/fetch-list` 共用同一实现。
 
 - 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）
@@ -38,13 +40,11 @@
 
 - 设置页 API Key 保存和输入去掉首尾空格（含换行），避免粘贴时带上空格导致 401。
 
-- 重试与付费前预检引用 `classify_upstream_error`：只对 `rate_limited` / `upstream_unavailable` / `timeout` / `connection` 重试，每种最多再试 2 次（不含首次请求）；401/402/403/404 及余额、权限、模型不存在不再重试，按分类提示。429 遵守 Retry-After，否则按 2/4/8/16/32 秒加抖动退避，并把并发减半；单块失败等其余块跑完，不拖垮整单。后端在付费调用（含画面初筛）之前检查转写是否就绪，未就绪直接拦下；API / MCP / CLI 同一条闸门。（1.5.8 线 C）
-- `model_source=preset` 时，同服务商候选按固定顺序（赞助商 → 热门 → 其他）在频率限制（`limit_requests` / `rate_limit_exceeded`）后换下一个型号；额度不足不换；手选与缺省 `source` 不自动降级。候选型号只作用于当次调用，不改共享 `settings` / `current_provider`。#358 每种可重试错误最多再试 2 次的预算跨候选共用，不按候选重置；每个分块最多 6 次 HTTP（含 `LLM_SDK_MAX_RETRIES`）。不改用户配置，不换服务商。（1.5.8 R1）
+- 重试与付费前预检引用 `classify_upstream_error`：只对 `rate_limited` / `upstream_unavailable` / `timeout` / `connection` 重试，每种最多再试 2 次（不含首次请求）；401/402/403/404 及余额、权限、模型不存在不再重试，按分类提示。429 遵守 Retry-After，否则按 2/4/8/16/32 秒加抖动退避，并把并发减半；单块失败等其余块跑完，不拖垮整单。后端在付费调用（含画面初筛）之前检查转写是否就绪，未就绪直接拦下；API / MCP / CLI 同一条闸门。（1.5.7 线 C）
+- `model_source=preset` 时，同服务商候选按固定顺序（赞助商 → 热门 → 其他）在频率限制（`limit_requests` / `rate_limit_exceeded`）后换下一个型号；额度不足不换；手选与缺省 `source` 不自动降级。候选型号只作用于当次调用，不改共享 `settings` / `current_provider`。#358 每种可重试错误最多再试 2 次的预算跨候选共用，不按候选重置；每个分块最多 6 次 HTTP（含 `LLM_SDK_MAX_RETRIES`）。不改用户配置，不换服务商。（1.5.7 R1）
 
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 - 设置页保存前做接入校验：识别控制台域名、截掉误贴的 `/chat/completions`；88API / Infistar / DeepSeek / Gemini / 百炼 / OpenAI 锁定预设地址，只有「自定义兼容」和本机可改。地址规范化复用已合入的 `provider_url`（只改写、不拦截保存）；Key strip 已由 #360 落地，本分支不再重复实现。保存前 `GET /models` 再对所选模型发约 16 token 的真实小请求，按第 0 步 `upstream_errors` 分类提示（地址错、密钥无效、无权限/分组、余额不足、模型不存在）。校验失败仍可保存但标红，生成前拦住；通过后用 `/models` 回填模型下拉。埋点 `provider_validation_finished`（`provider`、`base_url_host`、`result` 为 success/failed/skipped、`upstream_error_type`，不上报密钥或完整 URL）。
-
-## [1.5.7] - 2026-10-10
 
 - Whisper 模型下载完成后，导入前检查立刻显示转写就绪：下载线程已校验完整快照时直接采用这个结果，不再等磁盘重扫。Windows 验收里看到的「下载完仍提示缺模型」主要是验收脚本在下载前就读了检查结果（仓库脚本已改为下载后再读）；检查与下载用的是同一缓存目录（含 hf-mirror 回退）。（1.5.7 Windows 验收）
 
@@ -549,8 +549,7 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.8...HEAD
-- [1.5.8]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...v1.5.8
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...HEAD
 - [1.5.7]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.6...v1.5.7
 - [1.5.6]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.6
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3

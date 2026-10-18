@@ -1,5 +1,5 @@
 /**
- * 1.5.8: closed error_code set for provider_connection_test_finished.
+ * 1.5.7: closed error_code set for provider_connection_test_finished.
  * Only this code and an integer upstream HTTP status leave the app — never URL, key, path,
  * upstream body or message. Classification stays within the tested provider.
  */

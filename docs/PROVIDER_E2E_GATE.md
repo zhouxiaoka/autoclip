@@ -2,7 +2,7 @@
 
 > **验收冻结：** fail-closed 已在 verify live（Actions `38514864277`）核对。Gemini 默认 `gemini-3.5-flash-lite` 已通过。88API 单探针（Actions `38516691310`，`https://api.88api.ai/v1` + `deepseek-v4-flash`）已通过。完整发版仍要走分层 live，**不要只靠这一条探针放行**。mock 套件本身仍可用来挡回归。
 
-1.5.8 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
+1.5.7 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
 
 同一份 workflow 也可单独触发（PR / 分支 push / 候选 tag / 夜间定时 / `workflow_dispatch`）。**fork 的 PR 整门都不跑**，避免把 environment 密钥暴露给外部仓库。
 

@@ -128,7 +128,7 @@ _TESTS_DIR = Path(__file__).resolve().parent
 
 @pytest.fixture(autouse=True)
 def _whisper_installed_by_default(monkeypatch, request):
-    # 1.5.8 R19 #115: with no settings document the import gate assumes the default local Whisper.
+    # 1.5.7 R19 #115: with no settings document the import gate assumes the default local Whisper.
     # CI has no Whisper, so every suite runs with "local Whisper installed, model on disk" simulated;
     # the gate code itself still runs everywhere and passes because its condition is not met.
     # Tests that exercise the Whisper state functions themselves carry @pytest.mark.own_whisper_status.

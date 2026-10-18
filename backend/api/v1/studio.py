@@ -171,7 +171,7 @@ async def import_visual(
             await subtitle.close()
     staged = None
     if video:
-        # 1.5.8: block before creating a project when local Whisper is required but missing.
+        # 1.5.7: block before creating a project when local Whisper is required but missing.
         try:
             staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
         except HTTPException:
@@ -447,7 +447,7 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # 1.5.8: always refused, no attempt
+    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # 1.5.7: always refused, no attempt
 
 
 def _variant_job(project_id: str, variant_id: str):

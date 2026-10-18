@@ -36,7 +36,7 @@ def _denominators(analysis):
     from datetime import datetime
     props = {'attempt_id': 't-aaaaaaaaaaaa', 'flow_id': 't-ffffffffffff', 'outcome': 'error',
              'error_code': analysis.get('error_code'), 'upstream_error_type': analysis.get('upstream_error_type'),
-             'failure_stage': analysis.get('failure_stage'), 'app_version': '1.5.8',
+             'failure_stage': analysis.get('failure_stage'), 'app_version': '1.5.7',
              'analytics_environment': 'production', 'runtime': 'desktop'}
     [row] = run_sql(figure(1, params=WINDOW), [('u1', 'studio_production_finished', 'person-1', datetime(2026, 10, 10, 10), props)])
     return row['q_all'], row['q_prod']

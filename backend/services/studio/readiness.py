@@ -202,7 +202,7 @@ GATE_CODES = ('whisper_not_installed', 'whisper_install_failed', 'whisper_model_
 
 
 class TranscriptionNotReady(ValueError):
-    """1.5.8 gate refusal. Callers map exactly this (not any ValueError) to ``invalid_input``.
+    """1.5.7 gate refusal. Callers map exactly this (not any ValueError) to ``invalid_input``.
 
     ``code`` is the transcription check code (one of ``GATE_CODES``); HTTP callers send ``detail``
     so the desktop maps the prompt from the code, never from the Chinese text (R20 #168)."""

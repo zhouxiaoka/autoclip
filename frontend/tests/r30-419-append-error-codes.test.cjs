@@ -1,4 +1,4 @@
-// 1.5.8 refuses append-platform with one code. The page translates it; the lifecycle codes are gone.
+// 1.5.7 refuses append-platform with one code. The page translates it; the lifecycle codes are gone.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')

@@ -1,4 +1,4 @@
-"""1.5.8 terminal-event identity: provider slug + config_source enum, never URL/key/custom names.
+"""1.5.7 terminal-event identity: provider slug + config_source enum, never URL/key/custom names.
 
 ``provider`` is a catalog slug (or ``other``); ``config_source`` is ``preset`` when the role's
 connection uses the catalog base URL and a catalog model id, else ``customized``.

@@ -617,7 +617,7 @@ class ProviderE2ECostControlTests(unittest.TestCase):
 
     def test_resolve_mode_from_event(self):
         self.assertEqual(matrix.resolve_mode({'GITHUB_EVENT_NAME': 'schedule'}), 'nightly')
-        self.assertEqual(matrix.resolve_mode({'GITHUB_REF': 'refs/tags/v1.5.8'}), 'prerelease')
+        self.assertEqual(matrix.resolve_mode({'GITHUB_REF': 'refs/tags/v1.5.7'}), 'prerelease')
         self.assertEqual(matrix.resolve_mode({'INPUT_FULL': 'true'}), 'prerelease')
         self.assertEqual(matrix.resolve_mode({'PROVIDER_E2E_MODE': 'verify'}), 'verify')
         self.assertEqual(matrix.resolve_mode({'PROVIDER_E2E_MODE': 'api88'}), 'api88')

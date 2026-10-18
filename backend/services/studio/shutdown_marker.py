@@ -1,4 +1,4 @@
-"""1.5.8 / R16 #42: tell a clean quit/update from a lost parent or a crash when a run is recovered
+"""1.5.7 / R16 #42: tell a clean quit/update from a lost parent or a crash when a run is recovered
 as service_restarted.
 
 - Normal quit / update: the desktop shell (Rust BackendManager::stop) calls

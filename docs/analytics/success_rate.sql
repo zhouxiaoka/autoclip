@@ -1,4 +1,4 @@
--- 1.5.8 出片成功率（v4 口径）。#416 的 SQL 可以单独合入，也可以先于 #419（没有 retry_of 的终态各自成 flow，没有 attempt_sequence 按 0）。线上看板 insight uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 尚未更新，要按重试链取末次等本 PR 合入后同步。本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。
+-- 1.5.7 出片成功率（v4 口径）。#416 的 SQL 可以单独合入，也可以先于 #419（没有 retry_of 的终态各自成 flow，没有 attempt_sequence 按 0）。线上看板 insight uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 尚未更新，要按重试链取末次等本 PR 合入后同步。本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。
 -- 口径见 docs/analytics/TRACKING_PLAN.md §6–§7。所有查询共用同一个 base / c 定义。
 --
 -- 分母为 0（稀疏的日期 / 版本 / 空窗口）时比率返回 NULL，不是 NaN（R20 #142：nullIf(分母, 0)）。
@@ -25,7 +25,13 @@
 --   两个口径都算产品失败（不剔除）：whisper_not_installed、service_restarted、model_not_found、bad_endpoint
 --   （error_code 或 upstream_error_type）。
 -- 只看 analytics_environment = 'production' 且 runtime = 'desktop'，排除内部 cohort。
---   frame_extract_failed（本地抽帧失败，1.5.8 R11）是产品失败，计入两个口径的分母，不在任何剔除列表里。
+-- 同一 app_version 不能把此前的内部测试包和这次要发的正式包分开（两边都可能是 1.5.7）。
+-- 正式包看 analytics_environment = 'production'（来自构建环境 AUTOCLIP_BUILD_ENVIRONMENT=production）。
+-- validation / development 是内部测试或源码运行，上面的过滤已经排除。
+-- 打成 production 的内部账号仍靠 {internal_cohort_id} 排除。
+-- 事件上没有 commit 或构建时间，这里不新增字段。
+-- 图 5 仍按 app_version 分组，只用来分开真正不同的对外版本（例如 1.5.6 与 1.5.7）。
+--   frame_extract_failed（本地抽帧失败，1.5.7 R11）是产品失败，计入两个口径的分母，不在任何剔除列表里。
 --   frame_extract_subtitle_fallback / source_too_long_subtitle_route / vision_*_subtitle_fallback 是成功出片上的
 --   degrade_reason（降级走字幕），不是失败码，见图 6。
 

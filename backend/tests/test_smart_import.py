@@ -41,8 +41,8 @@ def queue_export_record(project_id, draft, job_id, expected):
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
-def test_append_platforms_is_unavailable_in_1_5_8(client, root, monkeypatch):
-    """The old append entry reused saved drafts. 1.5.8 refuses it before any attempt, derive, or render."""
+def test_append_platforms_is_unavailable_in_1_5_7(client, root, monkeypatch):
+    """The old append entry reused saved drafts. 1.5.7 refuses it before any attempt, derive, or render."""
     from backend.services.studio.models import Draft, Scene
     original = Draft(id='base', title='Saved output', scenes=[Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
     store.write('p1', {

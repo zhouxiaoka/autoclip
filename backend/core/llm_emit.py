@@ -1,4 +1,4 @@
-"""Line A emitters for 1.5.8 success-rate events.
+"""Line A emitters for 1.5.7 success-rate events.
 
 Schema and sanitizers stay in ``llm_telemetry``; classification stays in
 ``upstream_errors``. This module only posts allowlisted properties.
