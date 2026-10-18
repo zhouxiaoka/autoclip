@@ -14,13 +14,18 @@ PRESETS = Path(__file__).resolve().parents[1] / 'presets' / 'provider_presets.js
 
 SCRIPT = r"""
 const fs=require('fs'),path=require('path'),vm=require('vm'),ts=require('typescript')
+const {loadTs}=require('./tests/load-ts.cjs')
 const [kind,id,run,presets]=process.argv.slice(1)
 const snapshot=JSON.parse(fs.readFileSync(0,'utf8'))
 const exports={}
 const deps={'@provider-presets':{__esModule:true,default:JSON.parse(fs.readFileSync(presets,'utf8'))}}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join('src','analytics','workflow.ts'),'utf8'),
  {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,
- {exports,Date,Math,JSON,Number,Array,Object,Map,Set,String,URL,require:(d)=>{if(d in deps)return deps[d];throw new Error('dep '+d)}})
+ {exports,Date,Math,JSON,Number,Array,Object,Map,Set,String,URL,require:(d)=>{
+  if(d==='./failureCodes') return loadTs(path.resolve('src/analytics/failureCodes.ts'))
+  if(d in deps)return deps[d]
+  throw new Error('dep '+d)
+ }})
 const events=[],storage=new Map()
 const tracker=new exports.WorkflowTracker({getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
  ()=>true,(name,props)=>{events.push({name,props});return true})

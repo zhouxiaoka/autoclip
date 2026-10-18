@@ -16,12 +16,16 @@ REASONS = ['frame_extract_subtitle_fallback', 'source_too_long_subtitle_route']
 
 SCRIPT = r"""
 const fs=require('fs'),path=require('path'),vm=require('vm'),ts=require('typescript')
+const {loadTs}=require('./tests/load-ts.cjs')
 const [kind,id,run]=process.argv.slice(1)
 const snapshot=JSON.parse(fs.readFileSync(0,'utf8'))
 const exports={}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join('src','analytics','workflow.ts'),'utf8'),
  {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,
- {exports,Date,Math,JSON,Number,Array,Object,Map,Set,String,URL,require:()=>{throw new Error('dep')}})
+ {exports,Date,Math,JSON,Number,Array,Object,Map,Set,String,URL,require:(id)=>{
+  if(id==='./failureCodes') return loadTs(path.resolve('src/analytics/failureCodes.ts'))
+  throw new Error('dep '+id)
+ }})
 const events=[],storage=new Map()
 const tracker=new exports.WorkflowTracker({getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
  ()=>true,(name,props)=>{events.push({name,props});return true})

@@ -128,4 +128,4 @@ def test_dashscope_failed_text_is_not_the_image_error(caplog):
     assert str(caught.value) == failure_codes.sentence("unexpected")
     assert "sk-cover-secret" not in str(caught.value)
     assert caught.value.unsupported_edit is True
-    assert secret in caplog.text
+    assert "omitted from UI" in caplog.text and "ref_img not support" in caplog.text

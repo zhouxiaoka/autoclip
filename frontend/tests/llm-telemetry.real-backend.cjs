@@ -17,6 +17,7 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === './failureCodes') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts'))
       throw new Error(`Unexpected dependency: ${id}`)
     },
     ...globals,

@@ -60,8 +60,6 @@ CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
 def _model_call_messages() -> dict[str, str]:
     from backend.core.failure_codes import sentence
     return {code: sentence(code) for code in ("llm_auth_invalid", "connection", "timeout", "rate_limited")}
-
-
 MODEL_CALL_MESSAGES = _model_call_messages()
 
 
