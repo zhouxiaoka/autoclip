@@ -6,7 +6,8 @@ from backend.core.event_catalog import load_catalog
 logger = logging.getLogger(__name__)
 _HTTP, _DUMP, _CJK = re.compile(r"^http_[45][0-9]{2}$"), re.compile(r"FAILED|Traceback|Exception|HTTP Error|Error code|sk-", re.I), re.compile(r"[\u4e00-\u9fff]")
 def _enum(name):
-    return frozenset(load_catalog()["enums"][name])
+    values = (load_catalog().get("enums") or {}).get(name) or json.loads(Path(__file__).with_name("event_catalog.json").read_text(encoding="utf-8"))["enums"][name]
+    return frozenset(values)
 def studio_codes(): return _enum("studio_error_code")
 def download_codes(): return _enum("download_error_code")
 def sentry_codes(): return (studio_codes() - {"unknown", "multiple"}) | download_codes()

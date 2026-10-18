@@ -52,6 +52,19 @@ def test_codes_come_from_both_catalogs():
 
 
 @pytest.mark.stdlib_only
+def test_missing_catalog_override_keeps_packaged_codes(monkeypatch, tmp_path):
+    from backend.core.event_catalog import reload_catalog
+    monkeypatch.setenv("AUTOCLIP_EVENT_CATALOG", str(tmp_path / "missing-catalog.json"))
+    reload_catalog()
+    try:
+        assert "unexpected" in failure_codes.sentry_codes()
+        assert failure_codes.download_codes() == {"disk", "corrupt"}
+    finally:
+        monkeypatch.delenv("AUTOCLIP_EVENT_CATALOG", raising=False)
+        reload_catalog()
+
+
+@pytest.mark.stdlib_only
 def test_frontend_and_ingest_patterns_match_the_catalog():
     pattern = failure_codes.error_code_pattern()
     studio = failure_codes.studio_codes()
