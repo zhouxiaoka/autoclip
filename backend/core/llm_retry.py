@@ -49,8 +49,8 @@ def parse_retry_after(value: object) -> float | None:
 
 
 def retry_after_from_error(error: BaseException) -> float | None:
-    """The provider's Retry-After on the error or its EXPLICIT ``__cause__`` links (R31, Dong 8f0e155c #3,
-    the I563 rule): an exception that was merely being handled (an earlier, unrelated 429) never lends
+    """The provider's Retry-After on the error or its EXPLICIT ``__cause__`` links (#3,
+    the rule): an exception that was merely being handled (an earlier, unrelated 429) never lends
     its Retry-After to this one."""
     seen: set[int] = set()
     current: BaseException | None = error

@@ -103,7 +103,7 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
 
 
 def _freeze_phase_identity(project_id):
-    """R22 #223: a run phase's worker starts from the identity its start record froze, so snapshots
+    """a run phase's worker starts from the identity its start record froze, so snapshots
     and Sentry taken before the first model request name that connection (not today's settings)."""
     try:
         data = json.loads((store.directory(project_id) / 'metadata' / 'studio.json').read_text(encoding='utf-8'))
@@ -429,7 +429,7 @@ from backend.pipeline.failures import AttributedPipelineFailure as ContentPipeli
 
 
 class ContentRunError(AttributedError, RuntimeError):
-    """R29 I501: an uncoded content pipeline failure rebuilt across apply().get(), with its snapshot."""
+    """an uncoded content pipeline failure rebuilt across apply.get, with its snapshot."""
 
 
 def run_content(project_id, video):
@@ -447,7 +447,7 @@ def run_content(project_id, video):
         # The original exception does not survive apply().get(): the adapter records the provider
         # HTTP status in the result dict and it is carried back here (RC156 Win QA #1).
         # The original exception does not survive apply().get(): the adapter built the one attribution
-        # snapshot while the chain existed and it rides in the dict (R29 I501); it is restored here whole.
+        # snapshot while the chain existed and it rides in the dict; it is restored here whole.
         from backend.core.failure_attribution import attributed, restore_attribution
         status = failure.get('http_status')
         code = failure.get('error_code') or ''
@@ -1097,7 +1097,7 @@ def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_i
 
 
 def _initial_derive(project_id, plan, video, generation, platforms, branding, skipped):
-    """The first generation's derive step: content drafts -> platform variants (unchanged R30 loop)."""
+    """The first generation's derive step: content drafts -> platform variants (unchanged loop)."""
     produced = _content_drafts(project_id, plan, video)
     if isinstance(produced, tuple):
         base_drafts, events, coverage = produced
@@ -1402,9 +1402,9 @@ def _variant_attempt(data, retry, variant):
         parent = _retry_parent(data, (retry or {}).get('parent_attempt_id'))
         receipt = attempts.open_attempt(data, 'generation', trigger='variant_retry', parent=parent,
                                         run_id=uuid.uuid4().hex, key=(retry or {}).get('key'), now=store.now())
-    # R27 #377: the plan and outputs come from the attempt that produced THIS variant, not the retry parent
+    # the plan and outputs come from the attempt that produced THIS variant, not the retry parent
     attempts.inherit_plan(receipt, data, variant)
-    variant['redone_by_attempt'] = receipt['attempt_id']  # R31 I541: this round is judged on what it redid
+    variant['redone_by_attempt'] = receipt['attempt_id']  # this round is judged on what it redid
     data['generation']['attempt_id'] = receipt['attempt_id']
     return receipt
 
@@ -1545,7 +1545,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
-            store.write(project_id, previous, _recover_previous=False, restore=True)  # I620: rollback is not a transition
+            store.write(project_id, previous, _recover_previous=False, restore=True)  # rollback is not a transition
             raise ValueError(message) from None
 
         return state['analysis']['run_id']
@@ -1573,7 +1573,7 @@ def _inspect(project_id, options, url, browser):
                 data.update(plan=plan, analysis={**production_identity, **({SCREENING_KEY: screening} if screening else {}), 'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
                 receipt = attempts.current(data)
                 if receipt and receipt.get('attempt_id') == (data.get('generation') or {}).get('attempt_id'):
-                    attempts.bind_plan(receipt, plan)  # R25 #348: this attempt's own plan
+                    attempts.bind_plan(receipt, plan)  # this attempt's own plan
                 data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan), **store.attempt_identity(data.get('analysis')))
                 return run_id
             run_id = store.change(project_id, start_automatic)
@@ -1658,7 +1658,7 @@ def confirm_project(project_id, body):
             attempts.bind_run(pending, state['analysis']['run_id'])
         else:
             pending = attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
-        attempts.bind_plan(pending, plan)  # R25 #348: the confirmed plan is this attempt's own
+        attempts.bind_plan(pending, plan)  # the confirmed plan is this attempt's own
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
@@ -1668,7 +1668,7 @@ def confirm_project(project_id, body):
             capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
-            store.write(project_id, previous, _recover_previous=False, restore=True)  # I620: rollback is not a transition
+            store.write(project_id, previous, _recover_previous=False, restore=True)  # rollback is not a transition
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 
         return state['analysis']['run_id']
@@ -1676,7 +1676,7 @@ def confirm_project(project_id, body):
 
 def _add_confirmed_drafts(data, drafts):
     rows = [{**d, 'updated_at': store.now()} for d in drafts]
-    attempts.own_drafts(data, rows)  # R31 I540: owned by this confirmation's attempt
+    attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
     data['drafts'].extend(rows)
 
 
@@ -1773,7 +1773,7 @@ def _produce_selected(project_id, plan):
         held = None
         if errors:
             result['error'] = '；'.join(errors)
-            # R23 #228: the primary cause is the first product failure, else the first user one; the rest go along.
+            # the primary cause is the first product failure, else the first user one; the rest go along.
             # The snapshot written below is that same cause. A secondary goal's request record must not
             # replace the primary's stage or upstream (and a later success still cannot, #397).
             from backend.core.failure_attribution import rank_failures
@@ -1789,7 +1789,7 @@ def _produce_selected(project_id, plan):
             if others:
                 result['secondary_error_codes'] = [f['error_code'] for f in others]
                 result['secondary_upstream_error_types'] = [f.get('upstream_error_type') or '' for f in others]
-                # R24: page only (not an event field) - which settings row fixes a secondary user cause.
+                # page only (not an event field) - which settings row fixes a secondary user cause.
                 result['secondary_failure_stages'] = [f.get('failure_stage') or '' for f in others]
         from backend.core.llm_emit import failure_in_hand
         with failure_in_hand(held):

@@ -23,7 +23,7 @@ async def process_project(
 ):
     """开始处理项目"""
     from backend.api.v1 import transcription_gate
-    await transcription_gate.for_project(project_id)  # off the event loop (R23 #230)
+    await transcription_gate.for_project(project_id)  # off the event loop
     try:
         result = processing_service.process_project(project_id)
         return {

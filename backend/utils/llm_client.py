@@ -1,7 +1,7 @@
 """
 大模型客户端 - 兼容性包装器，使用新的LLM管理器
 """
-from backend.core.failure_attribution import ModelResponseInvalid  # R29
+from backend.core.failure_attribution import ModelResponseInvalid  
 import json
 import os
 import re
@@ -254,7 +254,7 @@ class LLMClient:
                         return json.loads(fixed_json)
                     except json.JSONDecodeError as final_e:
                         logger.error("最终尝试解析失败: %s length=%s", sanitize_exception_text(final_e), len(response))
-                        # R29: the model answered (200) with content that is not JSON: a model failure.
+                        # the model answered (200) with content that is not JSON: a model failure.
                         raise ModelResponseInvalid(f"无法从响应中解析出有效的JSON length={len(response)}") from None
             
             # 如果连通用正则都找不到，就彻底失败

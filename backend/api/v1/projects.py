@@ -42,7 +42,7 @@ def get_websocket_service():
 
 async def _transcription_gate(video_path, srt_path) -> None:
     from backend.api.v1 import transcription_gate
-    await transcription_gate.for_paths(video_path, srt_path)  # off the event loop (R23 #230)
+    await transcription_gate.for_paths(video_path, srt_path)  # off the event loop
 
 
 async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
@@ -91,7 +91,7 @@ async def upload_files(
         # 1.5.7: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
         staged = await _stage_for_gate(video_file, has_srt=bool(srt_file))
 
-        # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（R18 #75）。
+        # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（ ）。
         try:
             project = project_service.create_project(project_data)
 
@@ -556,7 +556,7 @@ async def retry_processing(
         if project.status.value not in ["failed", "completed", "processing", "pending"]:
             raise HTTPException(status_code=400, detail="Project is not in failed, completed, processing, or pending status")
         from backend.api.v1 import transcription_gate
-        await transcription_gate.for_project(project_id)  # gate before touching project status, off the loop (R23 #230)
+        await transcription_gate.for_project(project_id)  # gate before touching project status, off the loop
         
         # 重置项目状态
         project_service.update_project_status(project_id, "pending")

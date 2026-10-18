@@ -79,7 +79,7 @@ class _DegradeAcc:
 
 @dataclass(frozen=True)
 class RequestRecord:
-    """R25 #415: ONE immutable record per model request. provider/config_source come as a pair from
+    """ONE immutable record per model request. provider/config_source come as a pair from
     the connection frozen at request start; model/host/status/upstream are that SAME request's. A failed
     request's record rides on its exception; persistence and Sentry read only it (never stitched)."""
     seq: int
@@ -105,7 +105,7 @@ class RequestRecord:
 _RECORD_ATTR = "_autoclip_request_record"
 ATTRIBUTION_SOURCE_REQUEST = "request"
 ATTRIBUTION_SOURCE_PHASE = "phase"
-ATTRIBUTION_SOURCE_LOCAL = "local"  # R26 #392: no provider is blamed
+ATTRIBUTION_SOURCE_LOCAL = "local"  # no provider is blamed
 ATTRIBUTION_SOURCES = frozenset({ATTRIBUTION_SOURCE_REQUEST, ATTRIBUTION_SOURCE_PHASE, ATTRIBUTION_SOURCE_LOCAL})
 
 
@@ -118,10 +118,10 @@ def _attach_record(error: BaseException | None, record: RequestRecord) -> None:
     except (AttributeError, TypeError):  # exotic exception types without __dict__
         pass
     from backend.core.failure_attribution import with_request_record
-    with_request_record(error, record)  # R29: a redaction-boundary snapshot takes the request's identity
+    with_request_record(error, record)  # a redaction-boundary snapshot takes the request's identity
 
 
-from backend.core.failure_attribution import chain as _chain, record_of  # noqa: E402,F401 - R27: one home
+from backend.core.failure_attribution import chain as _chain, record_of  # noqa: E402,F401 - - one home
 
 
 @dataclass
@@ -135,7 +135,7 @@ class _RunAcc:
     last_degrade: int = 0
     persisted_usage: dict = field(default_factory=dict)
     seq: int = 0
-    # R22 #223 / R24 #291: identity the current phase froze at its start from ONE connection.
+    # / identity the current phase froze at its start from ONE connection.
     phase_identity: dict = field(default_factory=dict)
     # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
@@ -190,7 +190,7 @@ def current_retry_count() -> int:
 
 
 def increment_degrade_count() -> int:
-    """Count one same-provider candidate fallback. R1 calls this when switching models.
+    """Count one same-provider candidate fallback. calls this when switching models.
 
     Uses a lock-protected per-run cell. ``copy_context()`` (parallel chunks) only
     copies the run id, so two degrades cannot both write 1. Integer only — no
@@ -321,7 +321,7 @@ def request_finished(
 ) -> dict[str, Any]:
     """Sanitize one request, update the run accumulator, and post llm_request_finished.
 
-    ``identity`` is the request's connection identity frozen when the request STARTED (R22 #195)."""
+    ``identity`` is the request's connection identity frozen when the request STARTED."""
     try:
         properties = _request_properties(
             provider=provider, model=model, base_url=base_url, kind=kind, stage=stage,
@@ -333,7 +333,7 @@ def request_finished(
             error=error,
         )
         if not identity:
-            # R24 #297: no frozen identity -> the config this request sent (one rule, never settings).
+            # no frozen identity -> the config this request sent (one rule, never settings).
             from backend.services.studio.failure_identity import sent_identity
             identity = sent_identity(properties.get("provider"), base_url, properties.get("model"))
         _remember_run(properties, role="vision" if kind == "vision" else "analysis", identity=identity, error=error)
@@ -347,7 +347,7 @@ def request_finished(
 def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any = None, **kwargs: Any):
     """Wrap LLMProvider.call. ``prompt`` / ``input_data`` stay in the callee only."""
     started = time.monotonic()
-    # R23 #415: the identity of the route's own connection, frozen when the route was resolved (same
+    # the identity of the route's own connection, frozen when the route was resolved (same
     # as vision). Never read settings here: a save between route and send must not move attribution.
     identity = dict((_call_ctx.get() or {}).get("identity") or {})
     base_url = _provider_base_url(provider)
@@ -355,7 +355,7 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
     model = bound_request_model(getattr(provider, "model_name", None))
     name = _provider_label(provider, base_url)
     if not identity:
-        # R24 #297: no frozen identity -> the config this request actually sends; never settings.
+        # no frozen identity -> the config this request actually sends; never settings.
         from backend.services.studio.failure_identity import sent_identity
         identity = sent_identity(name, base_url, model)
     try:
@@ -402,7 +402,7 @@ def emit_vision_request(
             except (TypeError, IndexError, AttributeError):
                 finish_reason = None
         outcome = "error" if error is not None else "success"
-        # R24 #297: one rule with text: frozen identity, else the config actually sent; never settings.
+        # one rule with text: frozen identity, else the config actually sent; never settings.
         identity = identity or config.get("identity") or sent_vision_identity(config)
         return request_finished(
             provider=identity.get("provider"),
@@ -493,7 +493,7 @@ _held_failure: contextvars.ContextVar[BaseException | None] = contextvars.Contex
 
 @contextmanager
 def failure_in_hand(error: BaseException | None):
-    """R26 #397: a failure caught earlier (e.g. one goal's 503 while a later goal succeeded) stays the
+    """a failure caught earlier (e.g. one goal's 503 while a later goal succeeded) stays the
     error that attribution reads for writes inside this block, so its request record is persisted."""
     token = _held_failure.set(error)
     try:
@@ -509,13 +509,13 @@ def failure_now() -> BaseException | None:
 
 def attribution_snapshot(error: BaseException | None = None, *, failure_stage: str | None = None,
                          start_identity: dict | None = None, phase_identity: dict | None = None):
-    """R28 #415: this run's failure-attribution snapshot, from THE factory
+    """this run's failure-attribution snapshot, from THE factory
     (``failure_attribution.build_attribution``); this only supplies the error and the frozen phase.
-    R31 (I561): a redaction boundary that knows the connection its call used passes that identity
+    a redaction boundary that knows the connection its call used passes that identity
     (``phase_identity``, a provider/config_source pair); it wins over the run's frozen phase identity."""
     from backend.core.failure_attribution import _paired_identity, build_attribution
     if error is None:
-        error = failure_now()  # R26 #402: 3.10; #397: a failure held past its except
+        error = failure_now()  # 3.10; a failure held past its except
     phase: dict[str, Any] = _paired_identity(phase_identity)
     acc = _run_acc.get()
     if not phase and acc is not None:
@@ -526,7 +526,7 @@ def attribution_snapshot(error: BaseException | None = None, *, failure_stage: s
 
 
 def attribution(error: BaseException | None = None) -> dict[str, Any]:
-    """The snapshot as fields ({} when there is none), via THE serializer (R31 I565)."""
+    """The snapshot as fields ({} when there is none), via THE serializer."""
     from backend.core.failure_attribution import export_attribution
     return export_attribution(attribution_snapshot(error))
 
@@ -535,7 +535,7 @@ from backend.core.failure_attribution import MODEL_ERROR_CODES  # noqa: E402,F40
 
 
 def is_model_error(error: BaseException | None) -> bool:
-    """R27 I416: a thin wrapper; the one rule is ``failure_attribution.classify_failure``."""
+    """a thin wrapper; the one rule is ``failure_attribution.classify_failure``."""
     from backend.core.failure_attribution import FailureKind, classify_failure
     return classify_failure(error).kind is FailureKind.MODEL
 
@@ -543,10 +543,10 @@ def is_model_error(error: BaseException | None) -> bool:
 def run_snapshot(project_id: str | None = None, *, error: BaseException | None = None,
                  with_source: bool = False) -> dict[str, Any]:
     """Sanitized run-level fields for generation / production / Sentry tags. Identity fields come
-    whole from ``attribution`` (R25 #415); settings are never read."""
+    whole from ``attribution``; settings are never read."""
     from backend.core.failure_attribution import export_attribution
     acc = _run_acc.get()
-    fields = export_attribution(attribution_snapshot(error))  # R31 I565: THE serializer, no field read off
+    fields = export_attribution(attribution_snapshot(error))  # THE serializer, no field read off
     raw: dict[str, Any] = {
         "provider": fields.get("provider"),
         "model": _safe_model(fields.get("model")),
@@ -585,7 +585,7 @@ def run_snapshot(project_id: str | None = None, *, error: BaseException | None =
     out.pop("success_rate_schema_version", None)
     if not (out.get("provider") and out.get("config_source")):
         for key in ("provider", "config_source", "model", "base_url_host"):
-            out.pop(key, None)  # R25 #415: a pair or nothing
+            out.pop(key, None)  # a pair or nothing
     if with_source and fields.get("attribution_source"):
         out["attribution_source"] = fields["attribution_source"]
     return {key: value for key, value in out.items()
@@ -622,14 +622,14 @@ def configured_connection_fields(*, role: str = "analysis") -> dict[str, Any]:
 
 
 def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, str]:
-    """Allowlisted string tags only. R25 #415: read the failed request's record whole; the exception's
+    """Allowlisted string tags only. read the failed request's record whole; the exception's
     own status is never pasted onto another request's identity."""
     from backend.core.failure_attribution import export_attribution
     tags: dict[str, str] = {}
-    fields = export_attribution(attribution_snapshot(error))  # R28 one snapshot; R31 I565 THE serializer
+    fields = export_attribution(attribution_snapshot(error))  # one snapshot; THE serializer
     stage = normalize_failure_stage(fields.get("failure_stage") or phase)
     if fields.get("attribution_source"):
-        tags["attribution_source"] = fields["attribution_source"]  # R26 #392
+        tags["attribution_source"] = fields["attribution_source"]  
     if stage:
         tags["failure_stage"] = stage
     values = {key: fields.get(key) for key in ("provider", "upstream_error_type", "base_url_host", "model")}
@@ -690,14 +690,14 @@ def _request_properties(
 
 
 def freeze_phase_identity(identity: dict | None) -> None:
-    """R22 #223: the identity a phase froze at its start; run snapshots and Sentry use it until a
+    """the identity a phase froze at its start; run snapshots and Sentry use it until a
     request has run in this run accumulator."""
     acc = _run_acc.get()
     if acc is None:
         return
     from backend.services.studio.failure_identity import PHASE_KEY, frozen_phase
     identity = identity if isinstance(identity, dict) else {}
-    # R24 #291: provider/source/model/host of the ONE connection the phase froze; {} when incomplete.
+    # provider/source/model/host of the ONE connection the phase froze; {} when incomplete.
     whole = frozen_phase(identity.get(PHASE_KEY)) or frozen_phase(identity)
     with acc.lock:
         acc.phase_identity = whole
@@ -846,7 +846,7 @@ def _provider_label(provider: Any, base_url: str) -> str:
         return "siliconflow"
     host = schema.hostname_of_base_url(base_url) or ""
     try:
-        # R20 #138: the provider catalog is the only slug source (no private alias table here).
+        # the provider catalog is the only slug source (no private alias table here).
         from backend.core.cloud_presets import is_api88_host
         from backend.core.provider_presets import iter_providers
         if is_api88_host(host):
@@ -866,7 +866,7 @@ def _provider_label(provider: Any, base_url: str) -> str:
 
 
 def sent_vision_identity(config: dict | None) -> dict:
-    """R24 #297: identity of the vision config actually sent (no settings read)."""
+    """identity of the vision config actually sent (no settings read)."""
     config = config or {}
     from backend.services.studio.failure_identity import sent_identity
     base = config.get("base_url") if isinstance(config.get("base_url"), str) else ""

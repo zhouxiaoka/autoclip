@@ -1,6 +1,6 @@
 // R14 #32 / R25 (#419): the AUTO path through the real studioApi.import entry and the real observer, fed the
 // workspace snapshots the REAL backend wrote (store -> attempt receipt -> GET /studio/{pid}). Driven by
-// backend/tests/test_r26_419_auto_degrade_real_entry.py, which produces the snapshots; no receipt is synthesized
+// backend/tests/test_studio_attempts.py, which produces the snapshots; no receipt is synthesized
 // here (the old version built receipts from the live plan and could not prove the freeze).
 // stdin: {"run_id": str, "project_id": str, "snapshots": [workspace, ...]}  stdout: [{event, props}, ...]
 const assert = require('node:assert/strict')

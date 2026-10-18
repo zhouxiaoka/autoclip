@@ -1,4 +1,4 @@
-"""R16 #42: local-only endpoints the desktop shell calls; never part of the public /api/v1 surface."""
+"""local-only endpoints the desktop shell calls; never part of the public /api/v1 surface."""
 from __future__ import annotations
 
 import hmac

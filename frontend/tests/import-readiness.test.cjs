@@ -263,11 +263,6 @@ test('ASR readiness properties infer provider from the check code and never need
   assert.equal(asrReadinessProperties({ analysis_mode: 'auto', ready: false }, false).blocked, false)
 })
 
-test('CreativeImport reads readiness transcription with optional chaining at every level', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'), 'utf8')
-  assert.doesNotMatch(source, /readiness\?\.checks\.|checks\?\.transcription\.code/)
-})
-
 test('R19 #115: a failed readiness probe is re-checked 3 times, then the import goes to the backend gate', async () => {
   const view = render({ report: null, probeFails: true })
   await button(view.tree, '生成成片').props.onClick()

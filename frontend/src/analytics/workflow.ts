@@ -137,11 +137,11 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
       for (const goal of ['content', 'highlight', 'promo']) out[`${prefix}_${goal}`] = valid.includes(goal)
     }
   }
-  // R25 #346: the backend receipt's per-project sequence; success_rate.sql orders a flow's attempts by it.
+  // the backend receipt's per-project sequence; success_rate.sql orders a flow's attempts by it.
   if (typeof input.attempt_sequence === 'number' && Number.isInteger(input.attempt_sequence) && input.attempt_sequence >= 1) out.attempt_sequence = input.attempt_sequence
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
   if (typeof input.error_code === 'string' && ERROR_CODE.test(input.error_code)) out.error_code = input.error_code
-  // R23 #228: the other causes of a multi-goal failure, positional, comma-joined (primary is error_code / upstream_error_type).
+  // the other causes of a multi-goal failure, positional, comma-joined (primary is error_code / upstream_error_type).
   // Arrays from the backend, or the joined string when an already-safe payload is sanitized again.
   const causes = (v: unknown): unknown[] | undefined => Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : undefined
   const codes = causes(input.secondary_error_codes), upstreams = causes(input.secondary_upstream_error_types)
@@ -201,7 +201,7 @@ export interface StudioSnapshot {
 }
 
 /** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
-/** R22 #220: screening's own provider/config_source. Production re-freezes ``analysis.provider`` by its
+/** screening's own provider/config_source. Production re-freezes ``analysis.provider`` by its
  * route, so screen_finished reads the identity screening stored apart (older records: the flat fields). */
 export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string; config_source?: string } {
   const analysis = snapshot.analysis
@@ -216,7 +216,7 @@ type Attributed = { attribution_source?: string; provider?: string; config_sourc
 const ATTRIBUTION_SOURCES = ['request', 'phase', 'local']
 const FAILED = ['failed', 'partial']
 
-/** I451: same rule as backend failure_attribution.is_failed_terminal: status OR outcome failed/partial
+/** same rule as backend failure_attribution.is_failed_terminal: status OR outcome failed/partial
  * (completed + outcome=partial is a valid partial); no status at all -> undecided (null). */
 export function isFailedTerminal(record: Attributed): boolean | null {
   if (!record) return false
@@ -224,7 +224,7 @@ export function isFailedTerminal(record: Attributed): boolean | null {
   return record.status ? false : null
 }
 
-/** R31 (Dong I565): THE frontend attribution serializer (twin of backend failure_attribution
+/** THE frontend attribution serializer (twin of backend failure_attribution
  * export_attribution). The only keys that can come out, copied one by one and type-checked. */
 export const ATTRIBUTION_KEYS = Object.freeze(['provider', 'config_source', 'model', 'base_url_host', 'attribution_source', 'http_status', 'upstream_error_type', 'failure_stage'] as const)
 const IDENTITY_KEYS = ['provider', 'config_source', 'model', 'base_url_host'] as const
@@ -235,10 +235,10 @@ function validAttributionValue(key: string, value: unknown): boolean {
   return typeof value === 'string' && value !== ''
 }
 
-/** R28 #415 (I453): THE frontend attribution reader, the same rules as backend read_attribution. It reads
+/** THE frontend attribution reader, the same rules as backend read_attribution. It reads
  * ONE record's snapshot: the caller picks the record (the event's own terminal), never several.
  * Identity only as a provider/config_source pair; failure fields only on a failed (or undecided) terminal,
- * and never status/upstream on ``local``. R31 (I565): an explicit whitelist (ATTRIBUTION_KEYS), every value
+ * and never status/upstream on ``local``. an explicit whitelist (ATTRIBUTION_KEYS), every value
  * type-checked, the result frozen; ``omitIdentity`` serves screen events (their identity is screening's own). */
 export function pickAttribution(record: Attributed, options: { omitIdentity?: boolean } = {}): Readonly<Record<string, unknown>> {
   if (!record) return Object.freeze({})
@@ -392,7 +392,7 @@ export class WorkflowTracker {
     if (!assigned || w.kind !== 'studio-generation') return
     const ready = firstClipReady(snapshot)
     if (!ready) return
-    // Dedupe by the real generation (created_at), not by the watch: a retry's new watch must not re-report it (R21 #159).
+    // Dedupe by the real generation (created_at), not by the watch: a retry's new watch must not re-report it.
     const pid = w.projectId || w.id, identity = String(snapshot.generation?.created_at || '').slice(0, 64)
     const c = this.contexts[pid]
     if (!identity || c?.firstClips?.includes(identity)) return
@@ -412,7 +412,7 @@ export class WorkflowTracker {
     const v4 = w.kind === 'studio-generation' || w.kind === 'studio-production'
     if (w.runId && w.kind !== 'studio-variant' && !v4) {
       const receipt = snapshot.analysis_history?.find(r => r.run_id === w.runId)
-      // R24 #292: a replayed run reads its OWN receipt; never borrow the current round's screening identity.
+      // a replayed run reads its OWN receipt; never borrow the current round's screening identity.
       if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis, generation: snapshot.generation && { ...snapshot.generation, screening_identity: undefined } }
       else if (snapshot.analysis?.run_id !== w.runId && w.kind !== 'studio-export') return
     }
@@ -426,7 +426,7 @@ export class WorkflowTracker {
       this.observeCoverJob(w, job)
       return
     } else if (w.kind === 'studio-variant') {
-      // runId is the attempt identity the API returned: render job, render attempt, or preparation run (R21 #158).
+      // runId is the attempt identity the API returned: render job, render attempt, or preparation run.
       const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || [v.render_job_id, v.render_attempt_id, v.preparation_run_id].includes(w.runId)))
       const job = snapshot.jobs?.find(j => j.job_id === variant?.render_job_id)
       if (variant && ['completed', 'failed'].includes(variant.status)) {
@@ -441,7 +441,7 @@ export class WorkflowTracker {
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
-      // R27 I420: the screen event carries the analysis record's attribution (incl. attribution_source) via
+      // the screen event carries the analysis record's attribution (incl. attribution_source) via
       // pickAttribution; the identity is still screening's own.
       details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, ...pickAttribution(snapshot.analysis, { omitIdentity: true }), ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')

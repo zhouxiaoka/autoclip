@@ -326,7 +326,7 @@ def _resolve_inputs(req: RunRequest) -> None:
 def place_video(req: RunRequest, link: bool = True) -> Path:
     """
     建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。不做门禁：
-    调用方（prepare_project、quick output）各自在建项入口判一次（R20 #148）。
+    调用方（prepare_project、quick output）各自在建项入口判一次（ ）。
     """
     _resolve_inputs(req)
     return _place_resolved(req, link)

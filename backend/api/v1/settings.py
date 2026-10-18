@@ -116,7 +116,7 @@ def test_connection_assignment(body: ConnectionTestRequest):
             endpoint = ai_models.chat_endpoint(connection, body.model)
             from backend.services.studio.failure_identity import connection_identity
             from backend.services.studio.vision_settings import testing_identity
-            # R25 #336: the tested connection's own identity, never inferred from its hostname.
+            # the tested connection's own identity, never inferred from its hostname.
             with testing_identity(connection_identity(connection, body.model)):
                 vision = test(VisionSettingsInput(mode='custom', **endpoint))
             if not (vision.get('success') or vision.get('ok')):
@@ -317,9 +317,9 @@ async def put_analytics_consent(body: AnalyticsConsent):
     from backend.core.sentry_setup import clear_anonymous_user, sync_anonymous_user, write_privacy
     from backend.services.studio.qa.telemetry import set_runtime_analytics_off
     if not body.enabled:
-        # R12 #17: stop collection in this process (API + worker threads) and drop the Sentry
+        # stop collection in this process (API + worker threads) and drop the Sentry
         # identity BEFORE touching disk; a failed write leaves it off.
-        # R13 #30 (known limit): the runtime flag is in-process only. Standalone worker
+        # (known limit): the runtime flag is in-process only. Standalone worker
         # processes (e.g. a separate Celery/CLI worker) learn the preference solely by
         # re-reading privacy.json, so if the disk write below fails they cannot be reached
         # and keep the last persisted value until the write succeeds (the UI keeps retrying OFF).

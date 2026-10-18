@@ -76,7 +76,7 @@ def begin_shutdown() -> None:
     global _shutting_down
     with _lock:
         _shutting_down = True
-    # R16 #42: no shutdown marker here; this runs on a clean quit and on parent loss alike.
+    # no shutdown marker here; this runs on a clean quit and on parent loss alike.
     # The shell's shutdown-intent call writes ``clean``; parent_watch writes ``parent_lost``.
 
 

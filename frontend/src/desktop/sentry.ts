@@ -35,7 +35,7 @@ export function isCrashReportsEnabled(): boolean {
   }
 }
 
-/** I652: only the packaged desktop production build reports (not `vite dev`, not a browser tab). */
+/** only the packaged desktop production build reports (not `vite dev`, not a browser tab).*/
 function isPackagedDesktop(): boolean {
   return Boolean(import.meta.env.PROD) && Boolean(import.meta.env.VITE_APP_VERSION) &&
     typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)

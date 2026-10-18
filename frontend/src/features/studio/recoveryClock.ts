@@ -1,4 +1,4 @@
-/** #418 R29: the one timing rule of the install-recovery wait (R29 contract, approved by Dong 2026-10-17 11:49).
+/** the one timing rule of the install-recovery wait (contract, approved by 2026-10-17 11:49).
  *
  * The wait has two outcomes besides continuing: `offline` (no answer for OFFLINE_MS of counted time) and `timeout`
  * (no progress for STALL_MS of counted time). Every observation (the end of a round) counts the time since the

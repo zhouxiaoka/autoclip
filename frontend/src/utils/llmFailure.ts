@@ -4,11 +4,11 @@ import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 
-/** R27 I424: the lock-timeout notice is an i18n key in all 8 locales (backend file_lock.LOCK_TIMEOUT_MESSAGE). */
+/** the lock-timeout notice is an i18n key in all 8 locales (backend file_lock.LOCK_TIMEOUT_MESSAGE).*/
 export const STORE_LOCK_TIMEOUT = 'store_lock_timeout'
 export const STORE_LOCK_TIMEOUT_TEXT = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
 
-/** The one user-cause reason table (R22): studio 「去设置」 reads it. Project cards only swap llm_auth_invalid. */
+/** The one user-cause reason table studio 「去设置」 reads it. Project cards only swap llm_auth_invalid.*/
 export const USER_CAUSE_REASONS: Record<string, string> = Object.fromEntries(
   [...new Set([...USER_CAUSE_ERROR_CODES, ...USER_CAUSE_UPSTREAM_TYPES])].map(code => [code, USER_MESSAGES[code]]),
 )

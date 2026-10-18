@@ -130,7 +130,7 @@ const filenameFromDisposition = (contentDisposition: string | undefined, fallbac
 api.interceptors.request.use(
   async (config) => {
     if (isTauriRuntime() && !apiConfigManager.isReady()) {
-      // #418 R28 I514: a cancelled request stops waiting for the desktop backend config at once.
+      // a cancelled request stops waiting for the desktop backend config at once.
       await apiConfigManager.waitForReady(undefined, config.signal as AbortSignal | undefined)
       if (config.signal?.aborted) throw new axios.CanceledError(undefined, undefined, config)
     }
@@ -801,7 +801,7 @@ export interface WhisperModel {
   downloadProgress?: number | null
   localPath?: string | null
   errorMessage?: string | null
-  /** R12: stable code; UI translates by code (8 locales). */
+  /** stable code; UI translates by code (8 locales).*/
   errorCode?: 'whisper_download_failed' | string | null
   source?: 'huggingface' | 'hf-mirror' | 'custom' | null
 }

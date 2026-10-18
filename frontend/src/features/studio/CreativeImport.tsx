@@ -202,7 +202,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     return true
   }
   const arm = (trigger: 'paste' | 'drop', next: { url?: string; file?: File }) => {
-    // R21 #166: drop, global paste and the file picker all come through here; while a submit is running
+    // drop, global paste and the file picker all come through here; while a submit is running
     // (including its readiness re-check) the source is locked, so what is shown is what gets uploaded.
     if (starting.current) return
     if (next.file) { setFile(next.file); setUrl(''); setSource('file') }
@@ -219,14 +219,14 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null) => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
-    // R20 #166: one busy state from the click on. The re-probe below can wait, and the inputs stay locked
+    // one busy state from the click on. The re-probe below can wait, and the inputs stay locked
     // (busy disables them) so the request carries exactly what the user saw when they clicked.
     starting.current = true
     setBusy(true)
     try {
       let report = fresh ?? readiness
       if (settled && !report) {
-        // R19 #115 (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
+        // (PM): re-check up to 3 times; still unknown -> send the import and let the backend gate answer (422).
         report = await probeReadiness(() => studioApi.readiness())
         if (report) setReadiness(report)
       }
@@ -265,7 +265,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       void onImported().catch(() => undefined)
       navigate(`/project/${result.project_id}`)
     } catch (e) {
-      // R20 #168: the backend gate sends a stable code; the prompt is chosen from it, never from the text.
+      // the backend gate sends a stable code; the prompt is chosen from it, never from the text.
       const code = errorCode(e)
       if (isRecoveryCode(code)) { setError(''); resumeSubmit.current = true; recover.open(code as string, readiness?.checks?.transcription?.model) }
       else setError(t(errorText(e)))  // includes coded source refusals (source_unreadable ...): shown at once

@@ -1,4 +1,4 @@
-"""R25 #415 #335: one cross-process exclusive lock with a timeout (POSIX flock / Windows msvcrt).
+"""one cross-process exclusive lock with a timeout (POSIX flock / Windows msvcrt).
 
 Known limits: flock is per open file description (callers also hold a thread lock); on network or
 cloud-synced folders the OS may not enforce it."""
@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 LOCK_TIMEOUT_CODE = 'store_lock_timeout'
-# R26 #390: what the user sees. A local busy store, never phrased as a provider/model timeout.
+# what the user sees. A local busy store, never phrased as a provider/model timeout.
 LOCK_TIMEOUT_MESSAGE = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
 DEFAULT_TIMEOUT = 10.0
 _POLL = 0.05
@@ -99,7 +99,7 @@ class ProcessLock:
         self.after_release = None  # runs only after the outermost holder has dropped both locks
 
     def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
-        # R27 I414: ONE deadline for both stages, computed on entry; the file lock only gets what the
+        # ONE deadline for both stages, computed on entry; the file lock only gets what the
         # in-process wait left. Default timeout: either stage raises LockTimeout. Explicit timeout: either
         # stage returns False (RLock semantics). Non-blocking never waits.
         explicit = blocking and timeout >= 0

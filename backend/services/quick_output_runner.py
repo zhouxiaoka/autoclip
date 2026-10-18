@@ -54,7 +54,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
     create_tables()
     if not url:
         from backend.services.studio import preflight
-        # One decision for the route quick output really runs (Studio jobs honour analysis_mode). R19 #113
+        # One decision for the route quick output really runs (Studio jobs honour analysis_mode).
         preflight.check(preflight.ResolvedInputs(video, subtitle, entry='studio', goal=options.goal))
     with SessionLocal() as db:
         project = ProjectService(db).create_project(ProjectCreate(

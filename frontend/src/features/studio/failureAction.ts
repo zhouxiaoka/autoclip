@@ -55,7 +55,7 @@ export function analysisPageFailure(
   }
 }
 
-/** R24 (PM rule): page hint and stats are separate. Stats keep the product-first primary cause
+/** (PM rule): page hint and stats are separate. Stats keep the product-first primary cause
  * (backend failure_attribution); the page leads with the first cause the user can fix (e.g. auth),
  * because retrying cannot fix it. Primary first, then secondaries in recorded order. */
 export function pageFailureAction(info: PageFailureInfo): FailureAction {

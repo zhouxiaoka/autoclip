@@ -91,7 +91,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
   const now = options.now ?? (() => typeof performance !== 'undefined' ? performance.now() : Date.now())
   const pollMs = options.pollMs ?? POLL_MS
   let state: RecoveryState = { phase: 'idle', percent: null }
-  let clock: Clock = startClock(now()) // R29: the only timing state (recoveryClock.ts)
+  let clock: Clock = startClock(now()) // the only timing state (recoveryClock.ts)
   let resume: Waiting = 'installing'
   let ownsInstall = false // this controller started the install: it carries the runtime on to the model download
   const listeners = new Set<(s: RecoveryState) => void>()
@@ -114,7 +114,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
   let current = newRound()
   /** open / close / install / retry: the old round is aborted (its requests are cancelled) and a new one starts. */
   const startRound = () => { current.ctrl.abort(); current = newRound(); clock = startClock(now()); ownsInstall = false; return current }
-  /** The one write of a round's result. I510: step() settling and this write are several microtasks apart
+  /** The one write of a round's result. stepsettling and this write are several microtasks apart
    * (probe -> runRound, fromCheck -> runRound); a close() / dispose() in between is stopped only here. */
   const commit = (signal: AbortSignal, next: Next) => {
     if (signal.aborted) return
@@ -123,7 +123,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     publish(next.view)
     if (next.ready && options.onReady) options.onReady(next.report ?? null) // #232: continue by itself, once
   }
-  /** Every request of a round goes through here. I511: the round is checked before the request is made, and the
+  /** Every request of a round goes through here. the round is checked before the request is made, and the
    * round stops at once when it ends while waiting (no state, no callbacks). */
   const step = <T>(signal: AbortSignal, request: () => Promise<T>): Promise<T> => new Promise<T>((resolve, reject) => {
     if (signal.aborted) { reject(ABORTED); return }
@@ -167,7 +167,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     }
     return { view: { phase: phaseOfCode(check.code), percent: null, model }, owns }
   }
-  /** R29: the one timing input of a round, taken right before its one commit. The cap uses the waiting cadence
+  /** the one timing input of a round, taken right before its one commit. The cap uses the waiting cadence
    * (pollMs): once failed for being offline the counts decide nothing (only an answer resumes the wait). */
   const tick = (answered: boolean, progressed: boolean) => observe(clock,
     { now: now(), answered, progressed, pollMs, readTimeoutMs: READINESS_TIMEOUT_MS },
@@ -243,7 +243,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     /** Retry after failed / timeout: same path as install (a new round, the unreachable time starts over). */
     async retry() { await controller.install() },
     /** One poll; returns the new state. Waiting phases time out after stallMs of observed time without progress.
-     * A round already reading is shared, never doubled (I485). */
+     * A round already reading is shared, never doubled.*/
     poll(): Promise<RecoveryState> {
       const round = current
       if (round.ctrl.signal.aborted) return Promise.resolve(state)

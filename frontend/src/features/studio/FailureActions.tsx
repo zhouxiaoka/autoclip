@@ -8,7 +8,7 @@ export type FailureInfo = PageFailureInfo & { error?: string | null }
 export type FailureButton = { key: 'continue' | 'settings' | 'retry'; label: string; cta: boolean }
 export type FailurePlan = { message: string; destination: string | null; buttons: FailureButton[] }
 
-/** The failed step's state, computed once (R22 code health): one message, each button at most once, explicit order. */
+/** The failed step's state, computed once (code health): one message, each button at most once, explicit order.*/
 export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSettings: boolean): FailurePlan {
   const action = pageFailureAction(info)
   if (action.kind === 'retry') return { message: llmFailureText(info.error, info.error_code), destination: null, buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [] }

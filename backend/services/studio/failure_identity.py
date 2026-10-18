@@ -43,7 +43,7 @@ IDENTITY_KEYS = ('provider', 'config_source')
 
 
 def connection_identity(connection, model: str | None, *, full: bool = False) -> dict:
-    """THE identity rule (R22 code health): provider slug + config_source of one saved connection and
+    """THE identity rule (code health): provider slug + config_source of one saved connection and
     the model bound on it. Phase starts, request starts, run snapshots and Sentry all go through here."""
     if connection is None:
         return {}
@@ -60,7 +60,7 @@ def connection_identity(connection, model: str | None, *, full: bool = False) ->
 
 
 def _connection_fields(connection, model) -> dict:
-    """R24 #291: model + host of the SAME connection, so a phase can freeze its whole identity."""
+    """model + host of the SAME connection, so a phase can freeze its whole identity."""
     from backend.core.llm_telemetry import hostname_of_base_url
     out = {}
     host = None
@@ -78,7 +78,7 @@ def _connection_fields(connection, model) -> dict:
 
 
 def sent_identity(provider: str | None, base_url: str | None, model: str | None) -> dict:
-    """R24 #297: identity of the config a request ACTUALLY sent, for requests without a frozen
+    """identity of the config a request ACTUALLY sent, for requests without a frozen
     connection identity (env / legacy config, unsaved test forms). Never reads settings."""
     from backend.core.llm_telemetry import sanitize_provider
     slug = sanitize_provider(str(provider or '').strip().lower()) or 'other'
@@ -118,7 +118,7 @@ def _complete(source) -> bool:
 
 
 def frozen(*sources) -> dict:
-    """provider + config_source recorded at attempt start, as ONE pair (R24 #296): the first source
+    """provider + config_source recorded at attempt start, as ONE pair the first source
     that carries BOTH wins whole; fields are never stitched across sources. None complete -> {}."""
     for source in sources:
         if _complete(source):
@@ -131,14 +131,14 @@ PHASE_KEY = 'phase_connection'
 
 
 def frozen_phase(source) -> dict:
-    """R24 #291: provider/config_source/model/host a phase froze from ONE connection; {} if incomplete."""
+    """provider/config_source/model/host a phase froze from ONE connection; {} if incomplete."""
     if not _complete(source):
         return {}
     return {key: source[key] for key in PHASE_KEYS if isinstance(source.get(key), str) and source[key]}
 
 
 def role_for(phase: str, plan: dict | None = None, goals=None) -> str:
-    """R21 #194: the role whose connection a phase actually calls. One rule for every start/terminal.
+    """the role whose connection a phase actually calls. One rule for every start/terminal.
 
     - screening: its only model call is the quick visual screening -> ``vision``.
     - production / rendering: the visual route runs the vision model unless every goal is ``content``
@@ -158,7 +158,7 @@ def role_for(phase: str, plan: dict | None = None, goals=None) -> str:
 
 def phase_identity(phase: str, plan: dict | None = None, goals=None) -> dict:
     """provider + config_source frozen at a phase start, from the role that phase runs on (#194).
-    R24 #291: also ``phase_connection`` = the same connection's model/host, so a failure before any
+    also ``phase_connection`` = the same connection's model/host, so a failure before any
     request names one connection, never today's settings."""
     identity = provider_identity(role_for(phase, plan, goals), full=True)
     pair = {key: identity[key] for key in IDENTITY_KEYS if key in identity}
@@ -169,7 +169,7 @@ SCREENING_KEY = 'screening_identity'
 
 
 def screening_identity(analysis, generation=None) -> dict:
-    """R22 #220: the screening phase's own identity. It is stored apart from ``analysis.provider`` so
+    """the screening phase's own identity. It is stored apart from ``analysis.provider`` so
     production re-freezing by its route never rewrites what screening ran on."""
     analysis = analysis if isinstance(analysis, dict) else {}
     generation = generation if isinstance(generation, dict) else {}

@@ -69,7 +69,7 @@ def _reason(error: BaseException, where: str) -> str:
 
 
 def find_orphans(processes: Optional[Iterable] = None, uncertain: Optional[dict] = None) -> list:
-    """R31 (I559): each process is judged in its own ``try`` (environment read AND owner check), so one
+    """each process is judged in its own ``try`` (environment read AND owner check), so one
     process psutil cannot read never ends the scan. Every process skipped because the answer was unclear
     is counted by reason into ``uncertain`` (``environ_access_denied``, ``owner_unclear``, ...)."""
     import psutil
@@ -115,10 +115,10 @@ LAST_RESULT: dict = {}
 def reap_orphans(timeout: float = 3.0) -> int:
     """Kill orphaned AutoClip ffmpeg/ffprobe. Returns how many were found. Never raises.
 
-    R11: outcomes are counted separately — exited (gone after kill), access_denied (kill
+    outcomes are counted separately — exited (gone after kill), access_denied (kill
     refused), still_alive (kill sent but the process outlived the wait) — and logged so a
     support log tells "nothing to do" from "could not clean up".
-    R31 (I559): processes skipped because the answer was unclear are counted by reason in
+    processes skipped because the answer was unclear are counted by reason in
     ``LAST_RESULT['uncertain']`` and logged; an exception that ends the whole scan is recorded by type
     in ``LAST_RESULT['error']``. Both keys appear only when there is something to report.
     """

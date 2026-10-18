@@ -1,5 +1,5 @@
 // #419 real chain: backend workspace snapshots + the backend's retry-command response (JSON on stdin, produced by
-// backend/tests/test_r25_419_receipt_chain_duckdb.py through the real store/jobs) -> real tracker + real studio api +
+// backend/tests/test_studio_attempts.py through the real store/jobs) -> real tracker + real studio api +
 // real StudioResults 「重试这条」 button -> captured events (stdout) -> the real v4 SQL in the Python test.
 const { setup, renderResults } = require('./studio-harness.cjs')
 

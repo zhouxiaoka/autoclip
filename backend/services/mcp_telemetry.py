@@ -33,7 +33,7 @@ TOOLS = frozenset({
 })
 ERROR_CODES = frozenset({
     'none', 'unknown', 'interrupted', 'failed', 'cancelled', 'invalid_input', 'disabled', 'timeout',
-    # R24 #284: source (user-caused) failures keep their own code so callers and the success rate see them.
+    # source (user-caused) failures keep their own code so callers and the success rate see them.
     'source_unreadable', 'source_too_short', 'source_no_audio',
 })
 TERMINAL = frozenset({'completed', 'partial', 'failed', 'interrupted', 'cancelled'})

@@ -4,7 +4,7 @@ Keep the bundled Windows runtime's cleanup sequence, but tolerate a peer reset
 from socket.shutdown(). Do not change loop policy: Proactor is required for
 asyncio subprocess support on Windows. Sentry drops ConnectionResetError
 (WinError 10054), ConnectionAbortedError (10053) and BrokenPipeError (109)
-only when the stack is asyncio.proactor_events (I651, sentry_setup). The same
+only when the stack is asyncio.proactor_events (sentry_setup). The same
 types raised anywhere else are reported.
 
 Based on CPython's Lib/asyncio/proactor_events.py (PSF license).

@@ -30,7 +30,7 @@ CHUNK_ATTEMPTS = 3  # parallel uploads meet rate limits more often: a busy chunk
 
 
 def _retryable(error: Exception) -> bool:
-    """Classified first (R22 #170): only transient upstream types are retried, never a user cause such as
+    """Classified first only transient upstream types are retried, never a user cause such as
     insufficient_quota behind a 429; a bare 429 / 5xx without a recognised body stays retryable."""
     if isinstance(error, CloudTranscriptionError):
         from backend.core.upstream_errors import is_retryable
@@ -53,7 +53,7 @@ def _upstream_type(status, body):
 
 def _check_status(response):
     """The one place an HTTP error is classified. Called while the (stream) response is still open, so the
-    body is readable (R22 #169); only the enum and status leave this function, never the body."""
+    body is readable; only the enum and status leave this function, never the body."""
     if not response.is_error:
         return
     try:
@@ -68,7 +68,7 @@ def _check_status(response):
 class CloudTranscriptionError(AttributedError, RuntimeError):
     """Safe public text only. ``http_status`` / ``upstream_error_type`` are enums/ints, never provider bodies.
 
-    R29: a provider failure carries the snapshot built from the original exception (``.attribution``)
+    a provider failure carries the snapshot built from the original exception (``.attribution``)
     before ``from None``; a local one (no key, no audio) carries none. ``error_code`` is the coarse studio
     code (``studio_code_for``), so a rejected key stays ``llm_auth_invalid`` and the fine cause stays upstream."""
 
@@ -82,16 +82,16 @@ class CloudTranscriptionError(AttributedError, RuntimeError):
         if self.upstream_error_type or self.http_status is not None:
             from backend.core.llm_retry import studio_code_for
             code = studio_code_for(self.upstream_error_type or 'unknown', self.http_status)
-            # R22 #171: a plain 429 stays provider_error; rate_limited is the upstream enum, not the studio code.
+            # a plain 429 stays provider_error; rate_limited is the upstream enum, not the studio code.
             self.error_code = 'provider_error' if code == 'rate_limited' else code
 
 
 def _provider_failure(message: str, original: BaseException, identity: dict | None = None) -> CloudTranscriptionError:
     """The redaction boundary: ``original`` is already the content-free view built inside the ``except``
     (a ``ProviderTransportError`` with the type name and, when an HTTP response came back, its status; or
-    a ``ModelResponseInvalid``). THE classifier decides it (R30 I567: no ``sent`` override); the snapshot,
-    the HTTP status (I563) and the controlled error code (R31 I562) are frozen on the safe error, which the
-    caller raises ``from None``. R31 (I561): ``identity`` is the transcription connection THIS call used,
+    a ``ModelResponseInvalid``). THE classifier decides it (no ``sent`` override); the snapshot,
+    the HTTP status and the controlled error code are frozen on the safe error, which the
+    caller raises ``from None``. ``identity`` is the transcription connection THIS call used,
     frozen once in ``transcribe`` (``connection_identity``), so the snapshot names who answered."""
     from backend.core.llm_emit import attribution_snapshot
     snap = attribution_snapshot(original, failure_stage='subtitle', phase_identity=identity)
@@ -199,7 +199,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
         segments = []
         from backend.core.llm_providers import is_local_url
         from backend.services.studio.failure_identity import connection_identity
-        identity = connection_identity(connection, selection.model, full=True)  # I561: this call's connection
+        identity = connection_identity(connection, selection.model, full=True)  # this call's connection
         try:
             # Cut every chunk first, then upload them side by side: one request after another made a
             # three-hour talk ~60 sequential round trips. Offsets come from exact sample counts.

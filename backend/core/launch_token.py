@@ -1,4 +1,4 @@
-"""R16 #42: per-launch shutdown-intent secret from the desktop shell.
+"""per-launch shutdown-intent secret from the desktop shell.
 
 Read from the environment exactly once, as early as the ``backend`` package is imported, and
 popped right away so no child process (ffmpeg, Whisper/SenseVoice, Playwright Chrome, Celery)
@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 
 TOKEN_ENV = 'AUTOCLIP_SHUTDOWN_TOKEN'
-# R19 #98: per-launch instance id chosen by the shell (not a secret) so it can leave an "intent not
+# per-launch instance id chosen by the shell (not a secret) so it can leave an "intent not
 # acknowledged" record for exactly this process; popped too so child Python processes get their own.
 INSTANCE_ENV = 'AUTOCLIP_INSTANCE_ID'
 _token = ''

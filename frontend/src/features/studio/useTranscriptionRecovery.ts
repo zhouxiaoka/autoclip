@@ -13,7 +13,7 @@ export function useTranscriptionRecovery(api: RecoveryApi, options: ControllerOp
   const controller = ref.current
   const [state, setState] = useState<RecoveryState>(controller.state)
   useEffect(() => controller.subscribe(setState), [controller])
-  // #418 R27b I426: unmount disposes the controller, so an answer still in flight writes nothing and never continues.
+  // R27b unmount disposes the controller, so an answer still in flight writes nothing and never continues.
   useEffect(() => { controller.activate(); return () => controller.dispose() }, [controller])
   const waiting = state.phase === 'installing' || state.phase === 'downloading'
   const offline = state.phase === 'failed' && !!state.offline // #403: keep polling slowly (first tick after offlinePollMs, A7), continue when back

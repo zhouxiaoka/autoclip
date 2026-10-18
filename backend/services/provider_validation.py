@@ -213,7 +213,7 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
 
 
 def _is_loopback_url(url: str | None) -> bool:
-    """R10 #399: only this machine counts. LAN IPs, link-local and ``.local`` gateways are
+    """only this machine counts. LAN IPs, link-local and ``.local`` gateways are
     remote self-hosted services, so "start local Ollama" would mislead there. (Proxy
     bypass still uses the wider ``is_local_url``.)"""
     if not url:

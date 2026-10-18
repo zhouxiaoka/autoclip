@@ -137,9 +137,9 @@ class ModelStatus(str, Enum):
     NOT_FOUND = "not_found"
 
 
-# R11: stable reason code; the message below is also the zh i18n key (8 locales).
+# stable reason code; the message below is also the zh i18n key (8 locales).
 WHISPER_DOWNLOAD_ERROR_CODE = "whisper_download_failed"
-# User-facing download failure (R2): status API must never echo raw exception text
+# User-facing download failure status API must never echo raw exception text
 # (URLs, query tokens, auth). Full detail stays in logs only.
 WHISPER_DOWNLOAD_USER_ERROR = (
     "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，"

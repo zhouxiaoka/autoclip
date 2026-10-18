@@ -101,19 +101,19 @@ function publishAnonymousId(): void {
  * toggle cannot leave UI=off / backend=on (one in-flight request, then sync to latest).
  */
 /**
- * R11 #392: the preference the backend should hold. If the saved preference cannot be
+ * the preference the backend should hold. If the saved preference cannot be
  * read (localStorage throws) and the user has not chosen in this session, only "off"
  * may be sent — never "on".
  */
 function consentIntent(): boolean {
   if (!POSTHOG_KEY) return false
-  // R12 #19: re-read the shared storage on every send/retry. Another window may have turned
+  // re-read the shared storage on every send/retry. Another window may have turned
   // analytics off since this one queued an "on"; storage OFF always wins over a stale intent.
-  // R13 #26: an explicit session OFF wins even when the storage write failed and storage
+  // an explicit session OFF wins even when the storage write failed and storage
   // still reads the old "on" — otherwise "off" would never be sent.
   if (preferenceOverride === false) return false
   try {
-    // Shared storage OFF still vetoes a stale session/queued "on" (R12 #19).
+    // Shared storage OFF still vetoes a stale session/queued "on".
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
     return false
@@ -131,7 +131,7 @@ function publishConsent(): void {
       && !apiConfigManager.isReady()) return
   // Already in sync and nothing in flight. publishedConsent === undefined means the
   // backend state is unknown (fresh launch, or a PUT whose response was lost), so the
-  // latest preference is always sent — including "on" (R10: startup sync, lost response).
+  // latest preference is always sent — including "on" (startup sync, lost response).
   if (inflightConsent === undefined && publishedConsent === enabled) return
   // One in-flight PUT at a time; finish() re-enters with the latest UI value.
   if (inflightConsent !== undefined) return
@@ -163,7 +163,7 @@ function publishConsent(): void {
       return
     }
     if (!consentIntent() && typeof setTimeout === 'function') {
-      // R11: an opt-out never gives up. Keep retrying (capped) until the API recovers.
+      // an opt-out never gives up. Keep retrying (capped) until the API recovers.
       if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
       consentRetryTimer = setTimeout(() => {
         consentRetryTimer = undefined
@@ -316,7 +316,7 @@ export function isAnalyticsEnabled(): boolean {
   try {
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
-    // R12 #16: an unreadable preference keeps SDK init, capture, flags and identity OFF.
+    // an unreadable preference keeps SDK init, capture, flags and identity OFF.
     return false
   }
 }
@@ -327,7 +327,7 @@ export function isAnalyticsEnabled(): boolean {
  */
 export function initAnalytics(): void {
   if (initialized) return
-  // R10 P2: sync the persisted preference (on or off) once the backend is ready.
+  // P2: sync the persisted preference (on or off) once the backend is ready.
   publishConsent()
   if (!POSTHOG_KEY) {
     if (import.meta.env.DEV) {

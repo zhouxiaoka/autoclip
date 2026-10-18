@@ -1,4 +1,4 @@
-"""1.5.7 import gate: the one HTTP shape of a refusal (422 with a stable ``code``, R20 #168 / R21)."""
+"""1.5.7 import gate: the one HTTP shape of a refusal (422 with a stable ``code``, / )."""
 from fastapi import HTTPException
 
 

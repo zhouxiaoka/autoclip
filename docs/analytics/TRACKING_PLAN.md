@@ -436,7 +436,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 | 10 | 收数健康 | Trends | 核心事件列表 | 按 event 分列 | 无收数先查同意/发布，不判产品失败 |
 | 11 | 按版本成功率 | SQL insight | 同图 1 | `success_rate.sql` 图 5 | 每个 `app_version` 一行；与图 1 同一口径 |
 
-图 1–4、11 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 沿 `retry_of` 取最后一次 attempt、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率、按版本）。该 SQL 在 CI 里用 DuckDB 对合成数据真实执行（`backend/tests/test_r16_success_rate_duckdb.py`）。本文件不再复制 SQL，避免两份漂移。
+图 1–4、11 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 沿 `retry_of` 取最后一次 attempt、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率、按版本）。该 SQL 在 CI 里用 DuckDB 对合成数据真实执行（`backend/tests/test_success_rate.py`）。本文件不再复制 SQL，避免两份漂移。
 
 可审查 SQL 副本放在 `docs/analytics/success_rate.sql`（与本规范一起落地）。线上看板建好后把 insight 链接回写本节，仿照 [`dashboards-20260930/README.md`](dashboards-20260930/README.md)。
 
