@@ -1380,7 +1380,7 @@ test('R13 #26: shared storage OFF still vetoes a stale session ON', async () => 
   assert.equal(puts.at(-1), false)
 })
 
-test('1.5.8 connection-test failure keeps closed error_code, integer status and config_source only', () => {
+test('1.5.7 connection-test failure keeps closed error_code, integer status and config_source only', () => {
   const s=setup();const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   x.trackExperience('provider_connection_test_finished', { outcome:'failed', error_code:'dns', http_status:503, config_source:'customized', base_url:'https://gw.example/v1', api_key:'sk-secret', detail:'upstream private' })
   x.trackExperience('provider_connection_test_finished', { outcome:'failed', error_code:'https://leak', http_status:'503', config_source:'https://gw.example' })
@@ -1390,7 +1390,7 @@ test('1.5.8 connection-test failure keeps closed error_code, integer status and 
   assert.equal(bad.error_code, undefined); assert.equal(bad.http_status, undefined); assert.equal(bad.config_source, undefined)
 })
 
-test('1.5.8 connection-test codes: 422 local validation, gemini-style results, transport', () => {
+test('1.5.7 connection-test codes: 422 local validation, gemini-style results, transport', () => {
   const c = load('connectionTestCode')
   const r422 = (detail) => ({ response: { status: 422, data: { detail } } })
   assert.equal(c.codeFromRequestError(r422('请填写 API Key')), 'empty_key')

@@ -314,7 +314,7 @@
       }
     },
     "user_cause": {
-      "_doc": "Shared user-cause classification (1.5.8). Same set the v4 overall success rate excludes as user cause (minus cancellation). Studio failed-state UI shows 「去设置」 instead of Retry for these; success_rate.sql / contract tests must match.",
+      "_doc": "Shared user-cause classification (1.5.7). Same set the v4 overall success rate excludes as user cause (minus cancellation). Studio failed-state UI shows 「去设置」 instead of Retry for these; success_rate.sql / contract tests must match.",
       "error_codes": [
         "authentication",
         "llm_auth_invalid",
@@ -688,7 +688,7 @@
           "max_items": 3
         },
         "trigger": {
-          "description": "Backend AttemptReceipt trigger, copied from the receipt. 1.5.8 emits initial, retry, and variant_retry. append_platform stays in the enum and is not emitted (append-platform is a 1.5.9 follow-up).",
+          "description": "Backend AttemptReceipt trigger, copied from the receipt. 1.5.7 emits initial, retry, and variant_retry. append_platform stays in the enum and is not emitted (append-platform is a 1.5.9 follow-up).",
           "values": "attempt_trigger"
         }
       }

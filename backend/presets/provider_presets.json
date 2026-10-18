@@ -2,7 +2,7 @@
   "schema_version": 1,
   "version": 1,
   "issued_at": "2026-10-14T00:00:00Z",
-  "notes": "Single product catalog for AutoClip 1.5.8. Existing AutoClip defaults are preserved. International endpoints follow public docs and the MIT-licensed @earendil-works/pi-ai 0.99.2 catalog (Copyright Earendil Works / Mario Zechner); this is a compiled snapshot, not a verbatim dump. Domestic and sponsor rows are first-party. Trademarked names identify the vendor only.",
+  "notes": "Single product catalog for AutoClip 1.5.7. Existing AutoClip defaults are preserved. International endpoints follow public docs and the MIT-licensed @earendil-works/pi-ai 0.99.2 catalog (Copyright Earendil Works / Mario Zechner); this is a compiled snapshot, not a verbatim dump. Domestic and sponsor rows are first-party. Trademarked names identify the vendor only.",
   "local_context_hint": "本机或局域网模型：长视频请把上下文长度调到 16384 以上，否则字幕会被截断。",
   "aliases": {
     "88api": "api88",

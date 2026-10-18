@@ -218,6 +218,6 @@ test('W157-N3: cache is stamped with the app version and a remote false still wi
   assert.equal(cache.values.pkg_templates_v1, false)
   const again = load({ analytics: true, now: () => t + 1000, version: '1.5.7', storage })
   assert.equal(again.flags.flagEnabled('pkg_templates_v1'), false)
-  const upgraded = load({ analytics: true, now: () => t + 1000, version: '1.5.8', storage })
+  const upgraded = load({ analytics: true, now: () => t + 1000, version: '9.9.9', storage })
   assert.equal(upgraded.flags.flagEnabled('pkg_templates_v1'), true)
 })

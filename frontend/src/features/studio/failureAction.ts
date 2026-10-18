@@ -1,6 +1,6 @@
 import { USER_CAUSE_REASONS } from '../../utils/llmFailure'
 /**
- * 1.5.8 failed-state action. User-attributable causes (bad/expired key, no balance, no model
+ * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
  * configured, key lacks permission) cannot be fixed by retrying: show 「去设置」 instead.
  * Mirrors event_catalog.json attribution.user_cause (contract-tested; same set the v4
  * success rate excludes as user cause).

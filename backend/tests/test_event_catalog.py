@@ -71,7 +71,7 @@ def test_sentry_initializes_without_catalog(unavailable_catalog, monkeypatch, tm
     # Missing catalog must not break the packaged desktop path. This process is pytest
     # inside a checkout, so the two refusals are stubbed; the real refusals are in
     # test_sentry_volume.
-    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.7')
     monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
     monkeypatch.setattr(sentry_setup, '_under_pytest', lambda: False)
     monkeypatch.setattr(sentry_setup, '_running_from_source_tree', lambda: False)
@@ -170,7 +170,7 @@ def test_producers_are_all_registered():
 def test_emitted_line_a_events_match_catalog(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
     monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
-    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.8")
+    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.7")
     monkeypatch.setenv("AUTOCLIP_BUILD_ENVIRONMENT", "validation")
     monkeypatch.delenv("VITE_PUBLIC_POSTHOG_KEY", raising=False)
     (tmp_path / "privacy.json").write_text('{"analytics":true}', encoding="utf-8")
@@ -201,7 +201,7 @@ def test_emitted_line_a_events_match_catalog(monkeypatch, tmp_path):
     for row in bodies:
         errors = event_catalog.validate_event(row["event"], row["properties"], envelope=True)
         assert errors == [], (row["event"], errors)
-        assert row["properties"]["app_version"] == "1.5.8"
+        assert row["properties"]["app_version"] == "1.5.7"
         assert row["properties"]["os"] in {"macos", "windows", "linux", "unknown"}
         assert row["properties"]["analytics_environment"] == "validation"
         assert row["distinct_id"] == "018f6b2a-7c3d-7b2a-8c11-111111111111"

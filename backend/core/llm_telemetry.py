@@ -1,4 +1,4 @@
-"""成功率埋点字段契约（1.5.8）。
+"""成功率埋点字段契约（1.5.7）。
 
 定义 run 级与 ``llm_request_finished`` 级允许字段，以及脱敏 helper。
 本模块提供字段白名单与 ``sanitize_*``。事件发送在 ``llm_emit``（经 ``__getattr__``

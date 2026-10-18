@@ -1,5 +1,5 @@
 /**
- * 1.5.8 成功率契约：与 backend/core/upstream_errors.py、llm_telemetry.py 对齐。
+ * 1.5.7 成功率契约：与 backend/core/upstream_errors.py、llm_telemetry.py 对齐。
  * 只提供枚举、事件名和脱敏。不改现有 capture / safeStudioProperties 行为。
  */
 export const SUCCESS_RATE_SCHEMA_VERSION = 1

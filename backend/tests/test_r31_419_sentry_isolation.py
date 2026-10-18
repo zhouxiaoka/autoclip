@@ -52,7 +52,7 @@ def test_b_a_test_that_sets_a_dsn_itself_does_not_initialize(monkeypatch, tmp_pa
     calls = []
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.setenv('SENTRY_DSN', FAKE_DSN)
-    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.7')
     monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
     monkeypatch.setattr(sentry_sdk, 'init', lambda **options: calls.append(options) or real_init(**{**options, 'transport': CountingTransport}))
     assert sentry_setup.init_sentry('web') is False

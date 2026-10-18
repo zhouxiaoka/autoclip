@@ -1235,7 +1235,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
 
 
 def append_platform_variants(project_id, platforms, branding):
-    """1.5.8 does not append platforms. Refuse before any read of the workspace that could open an attempt,
+    """1.5.7 does not append platforms. Refuse before any read of the workspace that could open an attempt,
     freeze input, or schedule work. The route and this function are the only entry points; both stop here.
     Follow-up: 1.5.9."""
     del project_id, platforms, branding
@@ -1770,7 +1770,7 @@ def _produce_selected(project_id, plan):
     errors = []
     error_codes = []
     goal_errors = []
-    contexts = []  # 1.5.8: failure_stage / http_status / upstream_error_type per failed goal (no text)
+    contexts = []  # 1.5.7: failure_stage / http_status / upstream_error_type per failed goal (no text)
     diagnostics = []
     visual_error = None
     events = coverage = None

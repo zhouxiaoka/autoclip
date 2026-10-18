@@ -28,7 +28,7 @@ function harness() {
 const failedGen = { material_origin: 'user', generation: { status: 'failed', error_code: 'service_restarted' }, analysis: { status: 'failed', phase: 'production', error_code: 'service_restarted' } }
 const okGen = { ...failedGen, generation: { status: 'completed' }, analysis: { status: 'completed' } }
 
-test('1.5.8 retry_of only from the Retry button and only when the previous attempt failed', async () => {
+test('1.5.7 retry_of only from the Retry button and only when the previous attempt failed', async () => {
   // not from a plain re-analyze / re-plan restart
   let h = harness()
   h.tracker.watch('studio-generation', 'p1'); h.tracker.observeStudio(h.watchOf('studio-generation'), failedGen)
@@ -48,7 +48,7 @@ test('1.5.8 retry_of only from the Retry button and only when the previous attem
   assert.equal(h.watchOf('studio-generation').properties.retry_of, undefined)
 })
 
-test('1.5.8 failed-state action per code: user-cause codes get 「去设置」 + reason, everything else keeps Retry', () => {
+test('1.5.7 failed-state action per code: user-cause codes get 「去设置」 + reason, everything else keeps Retry', () => {
   const fs = require('node:fs')
   const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
   const settings = { authentication: 'API Key 无效或已过期，请到设置里更新后再试', llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试', invalid_key: 'API Key 无效或已过期，请到设置里更新后再试', insufficient_quota: '服务商账户余额不足，请充值或换一个服务商', llm_not_configured: '还没有配置可用的模型，请先到设置里添加' }

@@ -83,7 +83,7 @@ process.stdout.write(JSON.stringify(events))
 
     def insert(self, device, event, outcome=None, age=1, person=None, **props):
         properties = {
-            'app_version': '1.5.8', 'studio_schema_version': 2, 'analytics_environment': 'production',
+            'app_version': '1.5.7', 'studio_schema_version': 2, 'analytics_environment': 'production',
             'material_origin': 'user', 'runtime': 'tauri', 'outcome': outcome,
             'flow_id': device, 'artifact_id': device, 'completed_variant_count': 1,
         }

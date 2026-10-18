@@ -493,7 +493,7 @@ def test_r28_i520_background_download_failure_is_reported_once_without_text_url_
     monkeypatch.setattr(sentry_setup, "sync_anonymous_user", lambda *a, **k: None)
     monkeypatch.setenv("SENTRY_DSN", "https://k@o0.ingest.sentry.io/0")  # memory transport: nothing leaves the box
     # I652 refuses pytest and a source checkout. Stub only those two refusals.
-    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.8")
+    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.7")
     monkeypatch.setenv("AUTOCLIP_BUILD_ENVIRONMENT", "production")
     monkeypatch.setattr(sentry_setup, "_under_pytest", lambda: False)
     monkeypatch.setattr(sentry_setup, "_running_from_source_tree", lambda: False)

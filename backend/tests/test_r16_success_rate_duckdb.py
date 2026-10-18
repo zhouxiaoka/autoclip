@@ -19,7 +19,7 @@ class Events:
         self.rows, self.n = [], 0
 
     def add(self, person, minutes, event='studio_generation_finished', env='production', runtime='desktop',
-            app_version='1.5.8', **props):
+            app_version='1.5.7', **props):
         self.n += 1
         props = {'analytics_environment': env, 'runtime': runtime, 'app_version': app_version, **props}
         self.rows.append((f'u{self.n:04d}', event, person, DAY + timedelta(minutes=minutes), props))
@@ -48,14 +48,17 @@ def fixture():
     e.add('D', 1, attempt_id='d1', flow_id='FD', outcome='error', error_code='invalid_key')
     # E: product-only exclusion (connection) and a partial delivery.
     e.add('E', 0, attempt_id='e1', flow_id='FE', outcome='error', error_code='connection')
-    e.add('E', 3, attempt_id='e2', flow_id='FE2', outcome='partial', error_code='render', app_version='1.5.7')
+    e.add('E', 3, attempt_id='e2', flow_id='FE2', outcome='partial', error_code='render', app_version='1.5.6')
     # Duplicate terminal rows for one attempt: last row wins (attempt was error, then completed).
-    e.add('F', 0, event='studio_production_finished', attempt_id='f1', flow_id='FF', outcome='error', error_code='render', app_version='1.5.7')
-    e.add('F', 1, attempt_id='f1', flow_id='FF', outcome='completed', app_version='1.5.7')
+    e.add('F', 0, event='studio_production_finished', attempt_id='f1', flow_id='FF', outcome='error', error_code='render', app_version='1.5.6')
+    e.add('F', 1, attempt_id='f1', flow_id='FF', outcome='completed', app_version='1.5.6')
     # Noise that must be filtered out.
     e.add('staff', 0, attempt_id='s1', flow_id='FS', outcome='completed')
     e.add('G', 0, attempt_id='g1', flow_id='FG', outcome='error', runtime='web')
     e.add('G', 0, attempt_id='g2', flow_id='FG2', outcome='error', env='development')
+    # Same app_version as the public package, but an internal test build (validation).
+    # Figure 5 keeps it out via analytics_environment, not via a second version string.
+    e.add('G', 2, attempt_id='g4', flow_id='FG4', outcome='completed', env='validation')
     e.add('G', 60 * 24 * 10, attempt_id='g3', flow_id='FG3', outcome='error')
     e.add('G', 1, event='llm_request_finished', outcome='error', upstream_error_type='timeout', provider='deepseek')
     return e
@@ -132,14 +135,15 @@ def test_upstream_diagnostic():
 
 def test_per_version_query():
     rows = {r['app_version']: r for r in fixture().run(statements()[4])}
-    assert set(rows) == {'1.5.7', '1.5.8'}
-    # 1.5.7: e2 P, f1 S -> ok 1, q_all 2, q_prod 2; flows FE2 P, FF S -> 1/2
-    assert {k: rows['1.5.7'][k] for k in ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')} == {
+    assert set(rows) == {'1.5.6', '1.5.7'}
+    # 1.5.6: e2 P, f1 S -> ok 1, q_all 2, q_prod 2; flows FE2 P, FF S -> 1/2
+    assert {k: rows['1.5.6'][k] for k in ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')} == {
         'ok': 1, 'q_all': 2, 'q_prod': 2, 'flow_ok': 1, 'fq_all': 2, 'fq_prod': 2}
-    # 1.5.8: 12 attempts, ok 4, q_all 11, q_prod 10; flows FA S, FB E, FC E, FI S, FD hard, FE x -> 2/5, 2/4
-    assert {k: rows['1.5.8'][k] for k in ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')} == {
+    # 1.5.7 production: 12 attempts, ok 4, q_all 11, q_prod 10; flows FA S, FB E, FC E, FI S, FD hard, FE x -> 2/5, 2/4
+    # The validation 1.5.7 row (g4) is not in this bucket.
+    assert {k: rows['1.5.7'][k] for k in ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')} == {
         'ok': 4, 'q_all': 11, 'q_prod': 10, 'flow_ok': 2, 'fq_all': 5, 'fq_prod': 4}
-    assert rows['1.5.7']['partial_delivery_rate'] == 0.5
+    assert rows['1.5.6']['partial_delivery_rate'] == 0.5
 
 
 def test_per_version_last_any_mutation_is_caught():
@@ -147,7 +151,7 @@ def test_per_version_last_any_mutation_is_caught():
     old = "argMax(o, ord) AS fo"
     assert old in stmt
     rows = {r['app_version']: r for r in fixture().run(stmt.replace(old, "if(max(o = 'success'), 'success', 'error') AS fo"))}
-    assert rows['1.5.8']['flow_ok'] != 2
+    assert rows['1.5.7']['flow_ok'] != 2
 
 
 # --- R18 #70/#71: every v4 exclusion rule and every forced product failure, mutated one by one ---
@@ -294,7 +298,7 @@ def _fig3(rows):
 
 
 def _fig5(rows):
-    assert len(rows) == 1 and rows[0]['app_version'] == '1.5.8'
+    assert len(rows) == 1 and rows[0]['app_version'] == '1.5.7'
     return {k: rows[0][k] for k in RATE_KEYS}
 
 
@@ -459,7 +463,7 @@ def test_362_unprovable_legacy_flow_is_unknown_and_out_of_the_flow_denominator()
     assert (day['flow_ok'], day['fq_all'], day['overall_flow_rate'], day['unknown_flows']) == (3, 7, 0.429, 1)
     assert day['q_all'] == EXPECTED_DAY['q_all'] + 2 and day['ok'] == EXPECTED_DAY['ok'] + 1  # attempts still count
     rows = {r['app_version']: r for r in _legacy_out_of_order(fixture(), retry_linked=False).run(statements()[4])}
-    assert (rows['1.5.8']['flow_ok'], rows['1.5.8']['fq_all'], rows['1.5.8']['unknown_flows']) == (2, 5, 1)
+    assert (rows['1.5.7']['flow_ok'], rows['1.5.7']['fq_all'], rows['1.5.7']['unknown_flows']) == (2, 5, 1)
 
 
 def test_362_retry_linked_legacy_flow_takes_the_chain_end_whatever_the_arrival_order():

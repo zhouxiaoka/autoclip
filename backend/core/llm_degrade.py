@@ -1,4 +1,4 @@
-"""Same-provider preset candidate fallback (1.5.8 R1).
+"""Same-provider preset candidate fallback (1.5.7 R1).
 
 Thin helpers for ``LLMManager.call_with_retry``. Classification stays in
 ``upstream_errors``. This module does not persist settings, does not switch

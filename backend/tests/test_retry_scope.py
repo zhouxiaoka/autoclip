@@ -1,4 +1,4 @@
-"""1.5.8 retry scope. Appending platforms does not run. An attempt with no outputs of its own is not
+"""1.5.7 retry scope. Appending platforms does not run. An attempt with no outputs of its own is not
 recorded completed from older renders. A refused dispatch does not fail a newer attempt."""
 import pytest
 

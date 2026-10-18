@@ -304,6 +304,6 @@ EXTRA_TELEMETRY_PROVIDERS: Tuple[str, ...] = ("compatible", "other")
 
 
 def telemetry_provider_slugs() -> Tuple[str, ...]:
-    """1.5.8 single source for the telemetry ``provider`` enum: every catalog preset id, in catalog
+    """1.5.7 single source for the telemetry ``provider`` enum: every catalog preset id, in catalog
     order, plus ``compatible`` / ``other``. Frontend and event_catalog.json derive the same list."""
     return tuple(get_catalog().providers) + EXTRA_TELEMETRY_PROVIDERS

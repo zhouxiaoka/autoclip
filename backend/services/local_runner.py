@@ -302,7 +302,7 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
 
 def prepare_project(req: RunRequest, link: bool = True) -> Path:
     """
-    CLI / MCP 建项入口：先跑 1.5.8 门禁（content 路线），再把视频放进 raw/（见 place_video）。
+    CLI / MCP 建项入口：先跑 1.5.7 门禁（content 路线），再把视频放进 raw/（见 place_video）。
     返回 raw 里的视频路径。
     """
     _resolve_inputs(req)

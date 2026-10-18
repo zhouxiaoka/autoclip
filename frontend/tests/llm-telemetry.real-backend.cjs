@@ -183,7 +183,7 @@ test('Sentry keeps only a valid anonymous id and drops emails', () => {
   const module = { exports: {} }
   runInSandbox(js, {
     exports: module.exports, module, console,
-    __env: { PROD: true, VITE_PUBLIC_SENTRY_DSN: 'https://public@example.invalid/1', VITE_APP_VERSION: '1.5.8' },
+    __env: { PROD: true, VITE_PUBLIC_SENTRY_DSN: 'https://public@example.invalid/1', VITE_APP_VERSION: '1.5.7' },
     require: (id) => {
       if (id === '@sentry/react') return {
         init: (cfg) => { config = cfg },

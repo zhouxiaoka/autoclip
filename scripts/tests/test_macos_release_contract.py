@@ -13,7 +13,7 @@ import macos_release_contract as contract
 PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleShortVersionString</key><string>1.5.8</string>
+<key>CFBundleShortVersionString</key><string>1.5.7</string>
 </dict></plist>
 """
 
@@ -31,7 +31,7 @@ class ReleaseContractTests(unittest.TestCase):
     def test_plist_version_and_production_are_the_only_keys(self):
         env = contract.release_launcher_env(self.resources)
         self.assertEqual(env, {
-            "AUTOCLIP_APP_VERSION": "1.5.8",
+            "AUTOCLIP_APP_VERSION": "1.5.7",
             "AUTOCLIP_BUILD_ENVIRONMENT": "production",
         })
 
@@ -46,7 +46,7 @@ class ReleaseContractTests(unittest.TestCase):
                 "AUTOCLIP_APP_VERSION": "0.0.1",
                 "SENTRY_DSN": "https://public@example.invalid/0",
             }, self.resources)
-        self.assertEqual(env["AUTOCLIP_APP_VERSION"], "1.5.8")
+        self.assertEqual(env["AUTOCLIP_APP_VERSION"], "1.5.7")
         self.assertEqual(env["AUTOCLIP_BUILD_ENVIRONMENT"], "production")
         self.assertEqual(env["SENTRY_DSN"], "https://public@example.invalid/0")
         self.assertNotIn("AUTOCLIP_ENABLE_SENTRY", env)
@@ -56,7 +56,7 @@ class ReleaseContractTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             contract.release_launcher_env(self.resources)
         (self.resources.parents[1] / "Info.plist").write_text(
-            PLIST.replace("1.5.8", "unknown"), encoding="utf-8")
+            PLIST.replace("1.5.7", "unknown"), encoding="utf-8")
         with self.assertRaises(SystemExit):
             contract.release_launcher_env(self.resources)
 

@@ -49,7 +49,7 @@ def _child_env(tmp_path, **overrides):
            and key not in {'PYTEST_CURRENT_TEST', 'PYTEST_ADDOPTS'}}
     env.update(AUTOCLIP_APP_DIR=str(tmp_path), AUTOCLIP_DATA_DIR=str(tmp_path),
                AUTOCLIP_MODE='desktop', AUTOCLIP_BUILD_ENVIRONMENT='production',
-               AUTOCLIP_APP_VERSION='1.5.8', SENTRY_DSN='https://public@example.invalid/1',
+               AUTOCLIP_APP_VERSION='1.5.7', SENTRY_DSN='https://public@example.invalid/1',
                AUTOCLIP_EVENT_CATALOG=str(tmp_path / 'missing-catalog.json'),
                DATABASE_URL='sqlite:///' + str(tmp_path / 'isolated.sqlite'),
                PYTHONDONTWRITEBYTECODE='1')
@@ -277,7 +277,7 @@ def test_i652_pytest_never_inits_even_when_the_layout_looks_packaged(monkeypatch
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.setenv('SENTRY_DSN', 'https://public@example.invalid/1')
     monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
-    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.8')
+    monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.7')
     monkeypatch.setattr(sentry_setup, '_running_from_source_tree', lambda: False)
     monkeypatch.setattr(sentry_setup, '_initialized', False)
     monkeypatch.setattr(sentry_sdk, 'init', lambda **options: calls.append(options))
@@ -288,14 +288,14 @@ def test_i652_pytest_never_inits_even_when_the_layout_looks_packaged(monkeypatch
 
 
 @pytest.mark.parametrize('mode, build, version, expected', [
-    ('web', 'production', '1.5.8', False),              # Docker / script / pip
-    ('desktop', 'development', '1.5.8', False),         # launcher debug build (tauri dev)
-    ('desktop', 'unknown', '1.5.8', False),             # source default when the env is unset
-    ('desktop', '', '1.5.8', False),
+    ('web', 'production', '1.5.7', False),              # Docker / script / pip
+    ('desktop', 'development', '1.5.7', False),         # launcher debug build (tauri dev)
+    ('desktop', 'unknown', '1.5.7', False),             # source default when the env is unset
+    ('desktop', '', '1.5.7', False),
     ('desktop', 'production', None, False),             # release unknown
     ('desktop', 'production', 'unknown', False),
-    ('desktop', 'production', '1.5.8', True),           # packaged desktop production build
-    ('desktop', 'validation', '1.5.8', True),           # packaged acceptance build
+    ('desktop', 'production', '1.5.7', True),           # packaged desktop production build
+    ('desktop', 'validation', '1.5.7', True),           # packaged acceptance build
 ])
 def test_i652_initializes_only_in_packaged_desktop_build(monkeypatch, tmp_path, mode, build, version, expected):
     import sentry_sdk
@@ -318,5 +318,5 @@ def test_i652_initializes_only_in_packaged_desktop_build(monkeypatch, tmp_path, 
     assert len(calls) == (1 if expected else 0)
     if expected:
         assert calls[0]['environment'] == 'desktop'
-        assert calls[0]['release'] == 'autoclip-backend@1.5.8'
+        assert calls[0]['release'] == 'autoclip-backend@1.5.7'
         assert calls[0]['before_send'].__name__ == '_before_send_limited'

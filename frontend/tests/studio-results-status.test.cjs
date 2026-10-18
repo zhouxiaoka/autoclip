@@ -124,7 +124,7 @@ test('R24 #231: an unreadable source is shown at once as a source problem: no sp
 })
 
 for (const [code, automatic] of [['llm_auth_invalid', true], ['insufficient_quota', true], ['llm_not_configured', false], ['invalid_key', true]]) {
-  test(`1.5.8 user-cause failure ${code} shows 「去设置」 with reason, no direct retry`, () => {
+  test(`1.5.7 user-cause failure ${code} shows 「去设置」 with reason, no direct retry`, () => {
     const buttons = []
     const html = render(automatic, 'production', 'failed', buttons, [], code)
     assert.equal(buttons.some(b => b.children === '重试'), false)
@@ -137,7 +137,7 @@ for (const [code, automatic] of [['llm_auth_invalid', true], ['insufficient_quot
   })
 }
 for (const code of ['service_restarted', 'timeout', 'provider_error', 'model_not_found']) {
-  test(`1.5.8 non-user failure ${code} keeps Retry and no 「去设置」`, () => {
+  test(`1.5.7 non-user failure ${code} keeps Retry and no 「去设置」`, () => {
     const buttons = []
     render(true, 'production', 'failed', buttons, [], code)
     assert.ok(buttons.some(b => b.children === '重试'))
@@ -146,7 +146,7 @@ for (const code of ['service_restarted', 'timeout', 'provider_error', 'model_not
 }
 
 for (const [stage, destination] of [['subtitle', '/settings?section=speech'], ['analyze', '/settings?section=analysis'], ['screening', '/settings?section=analysis'], [undefined, '/settings?section=analysis']]) {
-  test(`1.5.8 「去设置」 for a user-cause failure at stage ${stage} opens ${destination}`, () => {
+  test(`1.5.7 「去设置」 for a user-cause failure at stage ${stage} opens ${destination}`, () => {
     const buttons = []
     render(true, 'production', 'failed', buttons, [], 'invalid_key', stage)
     navigations.length = 0
@@ -155,7 +155,7 @@ for (const [stage, destination] of [['subtitle', '/settings?section=speech'], ['
   })
 }
 
-test('1.5.8 settings page resolves both 「去设置」 targets to their own rows (no fallback to the top)', () => {
+test('1.5.7 settings page resolves both 「去设置」 targets to their own rows (no fallback to the top)', () => {
   const page = fs.readFileSync(path.join(__dirname, '../src/pages/SettingsPage.tsx'), 'utf8')
   const aliases = page.slice(page.indexOf('const SECTION_ALIASES'), page.indexOf('}\n', page.indexOf('const SECTION_ALIASES')))
   assert.match(aliases, /analysis: \{ section: 'ai', anchor: 'ai-defaults-analysis' \}/)
@@ -167,12 +167,12 @@ test('1.5.8 settings page resolves both 「去设置」 targets to their own row
   }
 })
 
-test('1.5.8 manual failed run hides Retry once a collection exists (R18 82)', () => {
+test('1.5.7 manual failed run hides Retry once a collection exists (R18 82)', () => {
   const src = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
   assert.ok(src.includes('project.collections?.length || workspace.jobs?.some'))
 })
 for (const [code, stage, destination] of [['authentication', 'subtitle', '/settings?section=speech'], ['provider_error', 'subtitle', null]]) {
-  test(`1.5.8 cloud ASR ${code} at ${stage} -> ${destination || 'Retry'} (R18 80)`, () => {
+  test(`1.5.7 cloud ASR ${code} at ${stage} -> ${destination || 'Retry'} (R18 80)`, () => {
     const buttons = []
     render(true, 'production', 'failed', buttons, [], code, stage)
     const go = buttons.find(b => b.children === '去设置')
@@ -264,7 +264,7 @@ test('R29 #444 the re-run line shows only for a completed round with earlier fai
   assert.doesNotMatch(at({ status: 'partial', not_redone_failed_count: 2 }), NEW)
 })
 
-test('1.5.8 results page has no control that appends platforms', () => {
+test('1.5.7 results page has no control that appends platforms', () => {
   const html = render(true, 'rendering', 'completed')
   assert.doesNotMatch(html, /追加平台/)
 })

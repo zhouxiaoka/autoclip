@@ -1,5 +1,5 @@
 // A lost retry response is recovered from the workspace snapshot (adoptOpenAttempt). A failure reaches the
-// page through the receipt bound to that analysis run (receiptFailureInfo). 1.5.8 does not append platforms.
+// page through the receipt bound to that analysis run (receiptFailureInfo). 1.5.7 does not append platforms.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')

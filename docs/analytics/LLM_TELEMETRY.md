@@ -1,4 +1,4 @@
-# 1.5.8 出片成功率埋点（线 A）
+# 1.5.7 出片成功率埋点（线 A）
 
 机读目录：[`event_catalog.json`](event_catalog.json)。未登记事件或缺必填字段，校验测试失败。
 
@@ -81,7 +81,7 @@ run / generation 的 `http_status` 与 `upstream_error_type` 以最近一次请�
 
 ## 查询
 
-见 `docs/analytics/release_validation.sql` 末尾「1.5.8 成功率埋点」。失败事件缺 `error_code` 或 `failure_stage` 视为收数缺陷，不是失败原因。
+见 `docs/analytics/release_validation.sql` 末尾「1.5.7 成功率埋点」。失败事件缺 `error_code` 或 `failure_stage` 视为收数缺陷，不是失败原因。
 
 S5：仅 AUTO 模式的视觉校验失败或初筛不可用时，方案保存 `degrade_reason=vision_unavailable_subtitle_fallback`，`studio_screen_finished` 与 `studio_generation_finished` 从该方案读取并按尝试去重。此字段只接受这个固定代码，不发送原因正文；不计入同服务商模型候选切换的 `degrade_count`。用户手动选择视觉仍阻断，不切换服务商。
 

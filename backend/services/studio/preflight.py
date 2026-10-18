@@ -1,4 +1,4 @@
-"""The one preflight for every execution entry (1.5.8 #418 rewrite, design-retro.md).
+"""The one preflight for every execution entry (1.5.7 #418 rewrite, design-retro.md).
 
 One resolution gives ``ResolvedInputs + MaterialProbe + SettingsSnapshot``; ``preflight()`` decides from those three
 values only, and every entry (HTTP / CLI / MCP / Celery import / pipelines / confirm) calls it and only converts

@@ -19,7 +19,7 @@ import { applyCustomProvider, mergeCustomList, type CustomProviderDraft } from '
 import { notifySettingsSaved } from '../studio/settingsReturn'
 
 
-/** 1.5.8: every failed connection test carries a closed-set code (+ integer HTTP status). */
+/** 1.5.7: every failed connection test carries a closed-set code (+ integer HTTP status). */
 function connectionTestFailure(value: ValidationResult): Record<string, unknown> {
   const status = safeHttpStatus(value.http_status)
   return { error_code: codeFromResult(value), ...(status ? { http_status: status } : {}) }

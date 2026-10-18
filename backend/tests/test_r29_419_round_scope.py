@@ -1,5 +1,5 @@
 """R29 #419: missing attempt record falls back to the whole workspace; on_demand-only scope; N and error
-wording stay on this round. Real store.settle_generation. Appending platforms is out of 1.5.8."""
+wording stay on this round. Real store.settle_generation. Appending platforms is out of 1.5.7."""
 from backend.services.studio import attempts, store
 
 
