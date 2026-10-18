@@ -15,7 +15,7 @@ function load(rel) {
 }
 
 const style = load('features/studio/editingStyle.ts')
-const workflow = load('analytics/workflow.ts')
+const workflow = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts'))
 
 test('a manual style wins and a bad recommendation stays editorial', () => {
   const decision = (manual, recommended, current) => JSON.parse(JSON.stringify(style.selectionAfterRecommendation(manual, recommended, current)))

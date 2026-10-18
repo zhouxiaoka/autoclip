@@ -805,7 +805,7 @@ def settle_generation(data):
     if all(item['status'] in ('completed', 'failed') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
         outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
-        from backend.core.sentry_setup import STUDIO_ERROR_CODES
+        from backend.core.failure_codes import sentry_codes
         jobs = {job['job_id']: job for job in data.get('jobs', [])}
         # R24 #265: one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
         from backend.core.failure_attribution import rank_failures
@@ -815,7 +815,7 @@ def settle_generation(data):
                 job = jobs.get(item.get('render_job_id'), {})
                 code = item.get('error_code') or job.get('error_code')
                 upstream = item.get('upstream_error_type') or job.get('upstream_error_type')
-                failures.append({'error_code': code if isinstance(code, str) and code in STUDIO_ERROR_CODES else 'unexpected',
+                failures.append({'error_code': code if isinstance(code, str) and code in sentry_codes() else 'unexpected',
                                  **({'upstream_error_type': upstream} if isinstance(upstream, str) and upstream else {})})
         if not variants:
             failures.append({'error_code': 'validation'})
@@ -934,8 +934,8 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
 def _ensure_failure_identity(data):
     """failed/partial records always carry a known error_code and failure_stage."""
     from backend.core.llm_telemetry import FAILURE_STAGES, normalize_failure_stage
-    from backend.core.sentry_setup import STUDIO_ERROR_CODES
-    valid = STUDIO_ERROR_CODES | {'multiple'}
+    from backend.core.failure_codes import stored_codes
+    valid = stored_codes()
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
     analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
     hint = None

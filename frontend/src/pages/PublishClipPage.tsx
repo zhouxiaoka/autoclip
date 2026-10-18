@@ -209,7 +209,7 @@ const PublishClipPage: React.FC = () => {
       if (coverJob.current !== session) return
       if ('url' in started && started.url) {
         setCover(started as CoverView)
-        if (started.warning) setCoverHint(String(started.warning))
+        if (started.warning) setCoverHint(t(String(started.warning)))
         return
       }
       const jobId = (started as { job_id: string }).job_id
@@ -219,11 +219,11 @@ const PublishClipPage: React.FC = () => {
         const job = await coverApi.job(jobId)
         if (job.status === 'completed' && job.result) {
           setCover(job.result)
-          if (job.result.warning) setCoverHint(job.result.warning)
+          if (job.result.warning) setCoverHint(t(job.result.warning))
           return
         }
         if (job.status === 'failed' || job.status === 'cancelled') {
-          setCoverHint(job.error || t("封面生成失败，发布时会用截帧"))
+          setCoverHint(t(job.error || "封面生成失败，发布时会用截帧"))
           return
         }
       }

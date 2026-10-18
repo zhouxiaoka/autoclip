@@ -26,7 +26,7 @@ const overrides = load('../src/features/studio/overrides.ts', {
   '../../analytics/flags': { flagAssigned: () => false },
   '../../analytics/studio': { trackAutoChoiceOverridden() {} },
 })
-const workflow = load('../src/analytics/workflow.ts')
+const workflow = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts'))
 
 function memory() {
   const data = new Map()

@@ -9,6 +9,7 @@ const { runInSandbox } = require('../vm-sandbox.cjs')
 function load(file, mocks) {
   const exports = {}
   const resolve = name => {
+    if (name === './failureCodes') return require('../load-ts.cjs').loadTs(path.resolve(__dirname, '../../src/analytics/failureCodes.ts'))
     if (name in mocks) return mocks[name]
     // Real pure helpers (errorText, successRateContract, …) load from source too.
     const base = path.join(path.dirname(file), name)

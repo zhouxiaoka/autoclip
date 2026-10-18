@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from backend.core.failure_codes import user_visible_error
 from backend.core.image_providers import (
     ImageError,
     ImageRequest,
@@ -693,7 +694,7 @@ def generate_cover(
                     )
                     method = "local_overlay"
         except ImageError as exc:
-            warning = f"生图失败，已改成本地排版或截帧：{exc}"
+            warning = "生图失败，已改成本地排版或截帧：" + user_visible_error(exc)
             logger.warning("封面生图失败: %s", exc)
             if getattr(exc, "unsupported_edit", False) and frame is not None:
                 # 不能图生图：背景用截帧，本地写字
@@ -870,14 +871,14 @@ def _run_job(job_id: str, params: dict[str, Any]) -> None:
                     force_local=True,
                     cancel=_cancel.get(job_id),
                 )
-                fallback["warning"] = str(exc)
+                fallback["warning"] = user_visible_error(exc)
                 job.update(status="completed", result=fallback)
             except Exception as fallback_exc:  # noqa: BLE001
-                job.update(status="failed", error=str(exc) or str(fallback_exc))
+                job.update(status="failed", error=user_visible_error(exc) or user_visible_error(fallback_exc))
         _remember_job(job)
     except Exception as exc:  # noqa: BLE001
         logger.exception("封面任务失败")
-        job.update(status="failed", error=str(exc))
+        job.update(status="failed", error=user_visible_error(exc))
         _remember_job(job)
     finally:
         _cancel.pop(job_id, None)

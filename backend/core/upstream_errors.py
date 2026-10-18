@@ -33,21 +33,12 @@ class UpstreamErrorType(str, Enum):
 
 UPSTREAM_ERROR_TYPES: frozenset[str] = frozenset(item.value for item in UpstreamErrorType)
 
-# 中文句子即前端 i18n catalog key（八语必须同步）。
-# timeout / connection / rate_limited 与 pipeline.failures.MODEL_CALL_MESSAGES 同句，避免两套文案。
-HINT_KEYS: dict[UpstreamErrorType, str] = {
-    UpstreamErrorType.INVALID_KEY: "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。",
-    UpstreamErrorType.INSUFFICIENT_QUOTA: "账户余额或令牌额度不足，请充值或更换令牌后再试。",
-    UpstreamErrorType.PERMISSION_DENIED: "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。",
-    UpstreamErrorType.MODEL_NOT_FOUND: "当前分组或服务下没有这个模型，请换一个模型或分组。",
-    UpstreamErrorType.BAD_ENDPOINT: "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。",
-    UpstreamErrorType.RATE_LIMITED: "提供商限制了请求频率或额度，请检查配额并稍后重试。",
-    UpstreamErrorType.UPSTREAM_UNAVAILABLE: "模型服务暂时不可用，请稍后重试。",
-    UpstreamErrorType.TIMEOUT: "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
-    UpstreamErrorType.CONNECTION: "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
-    UpstreamErrorType.OUTPUT_TRUNCATED: "模型输出被截断，请稍后重试或换一个模型。",
-    UpstreamErrorType.UNKNOWN: "模型服务返回了无法识别的错误，请检查配置后重试。",
-}
+def _hint_keys() -> dict[UpstreamErrorType, str]:
+    from backend.core.failure_codes import sentence
+    return {item: sentence(item.value) for item in UpstreamErrorType}
+
+
+HINT_KEYS: dict[UpstreamErrorType, str] = _hint_keys()
 
 # 瞬时故障才重试。401/402/403/404、余额、权限、地址错、截断、未知一律不重试。
 RETRYABLE_TYPES: frozenset[UpstreamErrorType] = frozenset({

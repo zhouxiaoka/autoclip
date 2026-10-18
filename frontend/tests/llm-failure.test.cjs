@@ -2,17 +2,10 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { runInSandbox } = require('./vm-sandbox.cjs')
-const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
 function loadClassifier() {
-  const file = path.join(__dirname, '../src/utils/llmFailure.ts')
-  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText
-  const module = { exports: {} }
-  runInSandbox(code, { module, exports: module.exports })
-  return module.exports
+  return loadTs(path.join(__dirname, '../src/utils/llmFailure.ts'))
 }
 
 const { classifyLlmKeyFailure } = loadClassifier()

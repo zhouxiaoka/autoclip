@@ -56,4 +56,4 @@ include = ["backend", "backend.*"]
 exclude = ["backend.tests", "backend.tests.*"]
 
 [tool.setuptools.package-data]
-backend = ["prompt/*.txt", "prompt/**/*.txt", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.json", "assets/models/*.onnx", "assets/models/*-LICENSE.txt", "assets/outro/*.mp4", "core/infistar_models.json", "core/event_catalog.json", "presets/*.json"]
+backend = ["prompt/*.txt", "prompt/**/*.txt", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.json", "assets/models/*.onnx", "assets/models/*-LICENSE.txt", "assets/outro/*.mp4", "core/infistar_models.json", "core/event_catalog.json", "core/failure_messages.json", "presets/*.json"]

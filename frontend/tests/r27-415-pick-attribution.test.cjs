@@ -12,7 +12,10 @@ function load(name) {
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
   const module = { exports: {} }
   runInSandbox(js, { exports: module.exports, module, Date, Math, console, __env: { DEV: false },
-    require: (id) => { throw new Error(`Unexpected dependency: ${id}`) } }, { filename: file })
+    require: (id) => {
+      if (id === './failureCodes') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts'))
+      throw new Error(`Unexpected dependency: ${id}`)
+    } }, { filename: file })
   return module.exports
 }
 const workflow = load('workflow')

@@ -79,10 +79,7 @@ test('frontend producers are all registered in the catalog', () => {
 test('trackAsrReadiness payload matches the catalog', () => {
   const workflowSource = fs.readFileSync(path.join(__dirname, '../src/analytics/workflow.ts'), 'utf8')
   const studioSource = fs.readFileSync(path.join(__dirname, '../src/analytics/studio.ts'), 'utf8')
-  const workflow = { exports: {} }
-  runInSandbox(ts.transpileModule(workflowSource, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports: workflow.exports, module: workflow, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
+  const workflow = { exports: require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts')) }
   const events = []
   const studioModule = { exports: {} }
   runInSandbox(ts.transpileModule(studioSource, {

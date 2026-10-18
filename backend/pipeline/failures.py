@@ -57,15 +57,12 @@ HINT_BRING_OWN_KEY = (
     "密钥在该提供商的控制台申请，只保存在这台机器上。"
 )
 CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
-# Environment failures of a model call: one fixed, translatable sentence for the user
-# (catalog key in all 8 locales). The provider's own text ("Connection error.",
-# "Request timed out.") stays in the log only (RC156 Win QA c5).
-MODEL_CALL_MESSAGES = {
-    "llm_auth_invalid": "API Key 无效或已过期，请检查后重试",
-    "connection": "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
-    "timeout": "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
-    "rate_limited": "提供商限制了请求频率或额度，请检查配额并稍后重试。",
-}
+def _model_call_messages() -> dict[str, str]:
+    from backend.core.failure_codes import sentence
+    return {code: sentence(code) for code in ("llm_auth_invalid", "connection", "timeout", "rate_limited")}
+
+
+MODEL_CALL_MESSAGES = _model_call_messages()
 
 
 def looks_like_llm_setup_error(text: str) -> bool:

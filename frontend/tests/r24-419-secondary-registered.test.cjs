@@ -23,8 +23,13 @@ test('R24 #2: both secondary fields are registered on both terminals (descriptio
 })
 
 test('R24 #2: the registered allow-lists are the ones the sanitizer enforces', () => {
-  const regex = src.match(/const ERROR_CODE = \/\^\(([^)]*)\)\$\//)[1].split('|').filter(c => !c.startsWith('http_'))
-  assert.deepEqual([...catalog.enums.studio_error_code].sort(), [...regex].sort())
+  const codes = loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+  assert.equal(src.includes('const ERROR_CODE = /^'), false)
+  assert.deepEqual([...catalog.enums.studio_error_code].sort(), [...codes.STUDIO_ERROR_CODES].sort())
+  for (const code of catalog.enums.studio_error_code) assert.equal(codes.ERROR_CODE.test(code), true, code)
+  assert.equal(codes.ERROR_CODE.test('http_429'), true)
+  assert.equal(codes.ERROR_CODE.test('disk'), false)
+  assert.equal(codes.ERROR_CODE.test('not_a_code'), false)
   assert.equal(catalog.events.studio_production_finished.optional_properties.secondary_upstream_error_types.values, 'upstream_error_type')
 })
 

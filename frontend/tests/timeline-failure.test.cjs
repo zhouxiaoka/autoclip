@@ -16,7 +16,7 @@ function load(relativePath) {
 }
 
 const { classifyTimelineEmpty } = load('../src/utils/timelineFailure.ts')
-const { classifyLlmKeyFailure } = load('../src/utils/llmFailure.ts')
+const { classifyLlmKeyFailure } = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/utils/llmFailure.ts'))
 const { classifySubtitleFailure } = load('../src/utils/subtitleFailure.ts')
 
 // 与 backend empty_timeline_failure().user_message() 一致；CLI 会把它写进 last_error。

@@ -24,7 +24,7 @@ const paste = load('../src/features/studio/pasteStart.ts')
 const readiness = load('../src/features/studio/importReadiness.ts')
 const legacy = load('../src/features/studio/legacyEntrypoints.ts')
 const preferences = load('../src/features/studio/importPreferencesStore.ts', { './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '', portrait_style: 'auto' } } })
-const workflow = load('../src/analytics/workflow.ts')
+const workflow = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts'))
 
 function storage() {
   const data = new Map()

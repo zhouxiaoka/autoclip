@@ -6,10 +6,7 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function loadWorkflow() {
-  const source = fs.readFileSync(path.join(__dirname, '../src/analytics/workflow.ts'), 'utf8')
-  const exports = {}
-  runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
-  return exports
+  return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts'))
 }
 
 const workflow = loadWorkflow()

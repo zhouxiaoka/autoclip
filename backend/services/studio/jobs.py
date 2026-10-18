@@ -2,6 +2,7 @@ import json
 import logging
 import shutil
 from time import monotonic, sleep
+from backend.core.failure_codes import user_visible_error
 from backend.core.sentry_setup import capture_studio_exception, studio_error_code, studio_failure_context
 from copy import deepcopy
 import uuid
@@ -226,7 +227,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
             _schedule_qa()
             return
         try:
-            message = str(error)[:700]
+            message = user_visible_error(error)
             update(status='failed', error=message, error_code=studio_error_code(error), duration_ms=round((monotonic() - started) * 1000))
             _sync_variant_status(project_id, job_id, 'failed', message)
         except FileNotFoundError:
@@ -1088,7 +1089,7 @@ def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_i
     capture_studio_exception(error, 'production')
     code = studio_error_code(error)
     context = studio_failure_context(error, 'production')
-    error_text = str(error)[:700]
+    error_text = user_visible_error(error)
     def fail(data):
         if not _still_this_run(data, attempt_id, run_id):
             return False
@@ -1609,10 +1610,8 @@ def _inspect(project_id, options, url, browser):
         store.raise_owned_read_error(error)
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
-        # A PipelineFailure keeps its hint (e.g. "到「设置 → 转写」安装 Whisper"), not only str(error) (R22 #212).
-        from backend.pipeline.failures import PipelineFailure
-        text = error.user_message() if isinstance(error, PipelineFailure) else str(error)
-        failure = {'status':'failed','phase':'screening','error':text[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
+        text = user_visible_error(error)
+        failure = {'status':'failed','phase':'screening','error':text, 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         if getattr(error, 'probe_detail', None):
             failure['probe_detail'] = error.probe_detail
         context = studio_failure_context(error, 'screening')
@@ -1778,7 +1777,7 @@ def _produce_selected(project_id, plan):
                 if all(error is not previous_error for previous_error in reported):
                     capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'), goal=goal)
                     reported.append(error)
-                errors.append(labels[goal] + '：' + str(error)[:500])
+                errors.append(labels[goal] + '：' + user_visible_error(error)[:500])
                 if isinstance(error, VisionRequestError):
                     diagnostics.append({'goal':goal, **error.diagnostics()})
         result = {'status':'failed' if errors else 'completed', 'created_at':store.now(),
@@ -1818,7 +1817,7 @@ def _produce_selected(project_id, plan):
     except Exception as error:
         store.raise_owned_read_error(error)
         capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'))
-        failure = {'status':'failed','error':str(error)[:700], 'error_code':studio_error_code(error),
+        failure = {'status':'failed','error':user_visible_error(error), 'error_code':studio_error_code(error),
             'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
             'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
             'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000),
