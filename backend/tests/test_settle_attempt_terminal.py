@@ -1,6 +1,9 @@
 """Success-rate terminals are posted by settle_attempt, once, even if the frontend is gone."""
 import json
+import threading
+import time
 
+from backend.core import project_cancellation
 from backend.services.studio import attempts, jobs, store
 
 
@@ -114,3 +117,86 @@ def test_read_does_not_persist_an_interrupted_run(tmp_path, monkeypatch):
     healed = store.recover('p')
     assert healed['generation']['status'] == 'failed'
     assert json.loads(path.read_text(encoding='utf-8'))['generation']['status'] == 'failed'
+
+
+def test_stuck_post_does_not_hold_the_studio_lock(tmp_path, monkeypatch):
+    """发送卡住时，别的线程不用等 PostHog 就能拿到工作室锁。外层 with lock 也一样。"""
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    posted = []
+    entered, release_send = threading.Event(), threading.Event()
+
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        entered.set()
+        assert release_send.wait(5)
+        raise OSError('tests do not send')
+
+    monkeypatch.setattr('urllib.request.urlopen', fake)
+    _open()
+    acquired, errors = {}, []
+
+    def finish(data):
+        data['output_variants'][0]['status'] = 'completed'
+        return store.settle_attempt(data, kind='finish')
+
+    def writer():
+        try:
+            with store.lock:
+                assert store.change('p', finish) is True
+        except Exception as error:  # noqa: BLE001 - surface the writer failure on the main thread
+            errors.append(error)
+            release_send.set()
+
+    def other():
+        if not entered.wait(3):
+            acquired['error'] = 'send did not start'
+            return
+        started = time.monotonic()
+        try:
+            store.lock.acquire()
+        except Exception as error:  # noqa: BLE001
+            acquired['error'] = type(error).__name__
+            release_send.set()
+            return
+        acquired['elapsed'] = time.monotonic() - started
+        store.lock.release()
+        release_send.set()
+
+    worker, waiter = threading.Thread(target=writer), threading.Thread(target=other)
+    worker.start()
+    waiter.start()
+    worker.join(8)
+    waiter.join(8)
+    release_send.set()
+    assert not errors, errors
+    assert acquired.get('error') is None
+    assert acquired['elapsed'] < 1.0
+    assert len(posted) == 1 and posted[0]['properties']['$insert_id'].endswith(':finished')
+    assert store.change('p', finish) is False
+    assert len(posted) == 1
+    assert store.read('p')['generation']['status'] == 'completed'
+
+
+def test_shutdown_does_not_wait_for_a_stuck_post(monkeypatch):
+    started, release, done = threading.Event(), threading.Event(), threading.Event()
+
+    def slow(pending):
+        started.set()
+        release.wait(3)
+        done.set()
+
+    monkeypatch.setattr(store, '_post_deferred_terminals', slow)
+    project_cancellation._shutting_down = True
+    store._deferred_terminals.events = [{'event': 'studio_generation_finished', 'properties': {}}]
+    try:
+        began = time.monotonic()
+        store._deliver_deferred_terminals()
+        elapsed = time.monotonic() - began
+        assert elapsed < 0.5
+        assert started.wait(2)
+    finally:
+        project_cancellation._shutting_down = False
+        release.set()
+    assert done.wait(2)
+    assert store._deferred_terminals.events is None

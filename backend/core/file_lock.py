@@ -96,6 +96,7 @@ class ProcessLock:
         self._thread = threading.RLock()
         self._depth = 0
         self._handle = None
+        self.after_release = None  # runs only after the outermost holder has dropped both locks
 
     def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
         # R27 I414: ONE deadline for both stages, computed on entry; the file lock only gets what the
@@ -125,10 +126,17 @@ class ProcessLock:
 
     def release(self) -> None:
         self._depth -= 1
-        if self._depth == 0 and self._handle is not None:
+        finished = self._depth == 0
+        if finished and self._handle is not None:
             handle, self._handle = self._handle, None
             release(handle)
+        hook = self.after_release if finished else None
         self._thread.release()
+        if hook is not None:
+            try:
+                hook()
+            except Exception:
+                logger.warning('Lock release hook failed')
 
     def _is_owned(self) -> bool:
         return self._thread._is_owned()
