@@ -1,6 +1,6 @@
 import { t } from '../../i18n'
 
-export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
+export type ProviderKey = 'minimax' | 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string }
 type CloudPreset = { baseUrl: string; defaultModel: string }
 export type SponsorId = 'infistar' | 'api88'
@@ -14,6 +14,7 @@ const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
   { key: 'local', label: () => t("本机运行") },
 ]
 export const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; group: ProviderGroup; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor }> = {
+  minimax: { name: 'MiniMax', short: 'MiniMax', hint: 'MiniMax official OpenAI-compatible API.', group: 'cloud', apiKeyField: 'minimax_api_key', placeholder: '…', keyUrl: 'https://platform.minimax.io/' },
   dashscope: { get name() { return t("阿里云百炼") }, get short() { return t("阿里云百炼") }, get hint() { return t("阿里云百炼官方服务，接口地址已预设。") }, group: 'cloud', apiKeyField: 'dashscope_api_key', placeholder: 'sk-…', keyUrl: 'https://bailian.console.aliyun.com/' },
   openai: { name: 'OpenAI', short: 'OpenAI', get hint() { return t('OpenAI 官方服务，接口地址已预设。') }, group: 'cloud', apiKeyField: 'openai_api_key', placeholder: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys' },
   compatible: { get name() { return t('自定义 OpenAI 兼容接口') }, get short() { return t('自定义兼容接口') }, get hint() { return t('适用于 OpenRouter、第三方网关或自建服务。') }, group: 'compatible', apiKeyField: 'openai_api_key', get placeholder() { return t('sk-…（自建服务可留空）') }, keyUrl: '' },

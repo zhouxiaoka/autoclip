@@ -31,6 +31,10 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "qwen-vl-max",
         "qwen-vl-plus",
     ],
+    "minimax": [
+        "MiniMax-M3",
+        "MiniMax-M2.7",
+    ],
     "openai": [
         "gpt-5.6-sol",
         "gpt-5.6-terra",
@@ -83,6 +87,7 @@ CURATED_MODELS: Dict[str, List[str]] = {
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
+    "minimax": "MiniMax-M3",
     "dashscope": "qwen-plus",
     "openai": "gpt-5-mini",
     "gemini": "gemini-3.8-flash",
@@ -96,6 +101,7 @@ DEFAULT_MODELS: Dict[str, str] = {
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
+    "minimax": "MiniMax",
     "dashscope": "通义千问",
     "openai": "OpenAI",
     "gemini": "Gemini",

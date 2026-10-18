@@ -126,6 +126,7 @@ class LLMManager:
                         default_settings.update({
                             "dashscope_api_key": api_keys.get("dashscope", ""),
                             "openai_api_key": api_keys.get("openai", ""),
+                            "minimax_api_key": api_keys.get("minimax", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
                             "siliconflow_api_key": api_keys.get("siliconflow", ""),
                             "deepseek_api_key": api_keys.get("deepseek", ""),
@@ -220,6 +221,7 @@ class LLMManager:
     _ENV_KEY_FALLBACKS = {
         "dashscope_api_key": ("API_DASHSCOPE_API_KEY", "DASHSCOPE_API_KEY"),
         "openai_api_key": ("API_OPENAI_API_KEY", "OPENAI_API_KEY"),
+        "minimax_api_key": ("API_MINIMAX_API_KEY", "MINIMAX_API_KEY"),
         "gemini_api_key": ("API_GEMINI_API_KEY", "GEMINI_API_KEY"),
         "siliconflow_api_key": ("API_SILICONFLOW_API_KEY", "SILICONFLOW_API_KEY"),
         "deepseek_api_key": ("API_DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY"),
@@ -307,6 +309,8 @@ class LLMManager:
 
     def _get_provider_kwargs(self, provider_type: ProviderType) -> Dict[str, Any]:
         """提供商构造参数：OpenAI 兼容接口的 base_url；通义千问国际站也复用同一个字段（走兼容模式）"""
+        if provider_type == ProviderType.MINIMAX:
+            return {"base_url": (self.settings.get("minimax_base_url") or "https://api.minimax.io/v1").strip()}
         if provider_type == ProviderType.OPENAI:
             base_url = (self.settings.get("openai_base_url") or "").strip()
             if base_url:
@@ -367,6 +371,7 @@ class LLMManager:
         key_mapping = {
             ProviderType.DASHSCOPE: "dashscope_api_key",
             ProviderType.OPENAI: "openai_api_key",
+            ProviderType.MINIMAX: "minimax_api_key",
             ProviderType.GEMINI: "gemini_api_key",
             ProviderType.SILICONFLOW: "siliconflow_api_key",
         }
@@ -396,6 +401,7 @@ class LLMManager:
             key_mapping = {
                 ProviderType.DASHSCOPE: "dashscope_api_key",
                 ProviderType.OPENAI: "openai_api_key",
+            ProviderType.MINIMAX: "minimax_api_key",
                 ProviderType.GEMINI: "gemini_api_key",
                 ProviderType.SILICONFLOW: "siliconflow_api_key",
             }
