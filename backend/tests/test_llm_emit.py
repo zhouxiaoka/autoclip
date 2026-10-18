@@ -85,7 +85,7 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
         assert response.content == '{"ok":true}'
         with pytest.raises(_StatusError) as caught:
             provider.call("private prompt", fail=True)
-        snapshot = telem.run_snapshot(error=caught.value)  # R25 #415: the failed request's own record
+        snapshot = telem.run_snapshot(error=caught.value)  # the failed request's own record
     events = [row for row in capture if row["event"] == "llm_request_finished"]
     assert len(events) == 2
     ok, failed = events
@@ -127,7 +127,7 @@ def test_consecutive_failures_keep_latest_error_in_run_and_store(capture, monkey
         error = _StatusError("fixture", second_status) if second_status else TimeoutError()
         telem.request_finished(provider="openai", outcome="error", error=error, stage="production", retries=1)
         snapshot = telem.run_snapshot(error=error)
-        try:  # R25 #415: the failure is written while its exception is handled (as the job workers do)
+        try:  # the failure is written while its exception is handled (as the job workers do)
             raise error
         except Exception:
             store.write("p1", {
@@ -195,7 +195,7 @@ def test_reused_store_records_clear_stale_failure_telemetry(capture, monkeypatch
     with telem.track_run():
         with pytest.raises(_StatusError) as caught:
             provider.call("fixture", fail=True)
-        try:  # R25 #415: written while the failure is handled
+        try:  # written while the failure is handled
             raise caught.value
         except _StatusError:
             store.write("p1", state)
@@ -414,7 +414,7 @@ def test_failed_store_write_always_has_error_code_and_failure_stage(tmp_path, mo
 
 def test_source_blocked_is_not_an_upstream_model_error():
     error = PipelineFailure("INGEST", "hint", code="source_blocked", http_status=403)
-    assert studio_failure_context(error, "screening") == {"failure_stage": "ingest"}  # R28 I450/I455: local carries no status
+    assert studio_failure_context(error, "screening") == {"failure_stage": "ingest"}  # local carries no status
 
 
 @pytest.mark.stdlib_only
@@ -445,7 +445,7 @@ def test_sentry_tags_are_allowlisted_strings():
             provider="api88", model="gpt-4o-mini", base_url="https://88api.ai/v1",
             outcome="error", http_status=429, error=error, failure_stage="analyze", duration_ms=9,
         )
-        tags = telem.sentry_tags_for_error(error, "analyze")  # R25 #415: the same failure's record
+        tags = telem.sentry_tags_for_error(error, "analyze")  # the same failure's record
     assert tags["provider"] == "api88"
     assert tags["upstream_error_type"] == "rate_limited"
     assert tags["failure_stage"] == "analyze"

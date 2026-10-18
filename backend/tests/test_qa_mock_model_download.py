@@ -1,4 +1,4 @@
-"""#418 R26: the QA 500 switch for the model download request is off by default and only exact "1" enables it."""
+"""the QA 500 switch for the model download request is off by default and only exact "1" enables it."""
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -69,9 +69,9 @@ def test_endpoint_docstring_is_kept():
 
 
 def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
-    """#406 + R27b I427: with the production Sentry init (init_sentry, production before_send, no Starlette
-    integration added) the QA simulated 500 sends 0 Sentry events and 0 success-rate events, and a real model
-    download 500 is reported exactly once, carrying only the error code and status (no message, no path)."""
+    """+ : with the production Sentry init (init_sentry, production before_send, no Starlette
+integration added) the QA simulated 500 sends 0 Sentry events and 0 success-rate events, and a real model
+download 500 is reported exactly once, carrying only the error code and status (no message, no path)."""
     import sentry_sdk
     from backend.core import llm_emit, sentry_setup
 
@@ -94,7 +94,7 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
     monkeypatch.setattr(sentry_setup, 'crash_reports_enabled', lambda: True)
     monkeypatch.setattr(sentry_setup, 'sync_anonymous_user', lambda *a, **k: None)
     monkeypatch.setenv('SENTRY_DSN', 'https://k@o0.ingest.sentry.io/0')
-    # I652 refuses pytest and a source checkout. Stub only those two refusals.
+    # refuses pytest and a source checkout. Stub only those two refusals.
     monkeypatch.setenv('AUTOCLIP_APP_VERSION', '1.5.7')
     monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')
     monkeypatch.setattr(sentry_setup, '_under_pytest', lambda: False)
@@ -117,7 +117,7 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
 
         class Broken:
             async def download_model(self, model):
-                # what the real manager raises for an unknown model (Dong's curl method, model=no_such_model)
+                # what the real manager raises for an unknown model (curl method, model=no_such_model)
                 raise ValueError('不支持的模型: no_such_model at /Users/someone/models/base.pt')
         monkeypatch.setattr(sr, 'get_model_manager', lambda: Broken())
         assert http.post('/api/v1/whisper-models/download', json={'model': 'no_such_model'}).status_code == 500
@@ -127,7 +127,7 @@ def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
         text = str(event)
         assert 'no_such_model' not in text and '/Users/' not in text and 'base.pt' not in text and '不支持' not in text
         tags = event.get('tags', {})
-        # R27c I488: the one capture path, capture_studio_exception(phase="model_download", http_status=500)
+        # the one capture path, capture_studio_exception(phase="model_download", http_status=500)
         assert tags.get('area') == 'studio' and tags.get('phase') == 'model_download', tags
         assert tags.get('error_code') == 'validation' and tags.get('http_status') == '500', tags
         assert tags.get('attribution_source') == 'local', tags  # local ValueError: no request identity
@@ -153,8 +153,8 @@ def test_switch_affects_only_the_model_download(monkeypatch):
 
 
 def test_one_capture_path_r27c_i488(monkeypatch):
-    """R27c I488: speech_recognition has no capture of its own (no sentry_sdk, no private _initialized read); the
-    download route goes through sentry_setup.capture_studio_exception, whose phase whitelist knows model_download."""
+    """speech_recognition has no capture of its own (no sentry_sdk, no private _initialized read); the
+download route goes through sentry_setup.capture_studio_exception, whose phase whitelist knows model_download."""
     from pathlib import Path
     from backend.core import sentry_setup
     src = Path(sr.__file__).read_text(encoding='utf-8')
@@ -169,7 +169,7 @@ def test_one_capture_path_r27c_i488(monkeypatch):
 
 
 def test_capture_studio_exception_http_status_tag(monkeypatch):
-    """R27c I488: the optional http_status parameter becomes the http_status tag; omitted, no tag is set."""
+    """the optional http_status parameter becomes the http_status tag; omitted, no tag is set."""
     import sentry_sdk
     from backend.core import sentry_setup
     seen = []

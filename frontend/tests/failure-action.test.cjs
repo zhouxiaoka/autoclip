@@ -39,7 +39,7 @@ const fs = require('node:fs')
 const { loadTs } = require('./load-ts.cjs')
 const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
 
-// PM rule (R24): stats stay product-first; the page leads with any cause the user can fix.
+// PM rule : stats stay product-first; the page leads with any cause the user can fix.
 // Shape = backend analysis record for content(ASR 401) + highlight(vision timeout), either goal order.
 const record = { error: 'x', error_code: 'timeout', failure_stage: 'vision', upstream_error_type: null,
   secondary_error_codes: ['authentication'], secondary_upstream_error_types: ['invalid_key'], secondary_failure_stages: ['subtitle'] }

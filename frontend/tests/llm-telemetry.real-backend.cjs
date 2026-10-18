@@ -87,7 +87,7 @@ test('generation and production finished carry run identity; failures keep stage
     plan: { id: 'plan', confirmed_analysis: 'subtitle' },
     analysis: {
       status: 'failed', outcome: 'failed', failure_stage: 'analyze', error_code: 'authentication',
-      provider: 'openai', config_source: 'preset', model: 'gpt-4o-mini', base_url_host: 'api.openai.com',  // R27: identity is a pair
+      provider: 'openai', config_source: 'preset', model: 'gpt-4o-mini', base_url_host: 'api.openai.com',  // identity is a pair
       upstream_error_type: 'invalid_key', http_status: 401, billable_calls_before_failure: 0,
     },
   })
@@ -174,7 +174,7 @@ test('Sentry keeps only a valid anonymous id and drops emails', () => {
       throw new Error(id)
     },
     localStorage: { getItem: () => null, setItem() {} },
-    window: { __TAURI_INTERNALS__: {} }, // I652: packaged desktop build
+    window: { __TAURI_INTERNALS__: {} }, // packaged desktop build
   })
   module.exports.initSentry()
   module.exports.setAnonymousUser('018f6b2a-7c3d-7b2a-8c11-111111111111')

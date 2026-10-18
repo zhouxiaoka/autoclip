@@ -1,4 +1,4 @@
-"""R1: same-provider preset degrade, frequency-only, 6-HTTP chunk cap."""
+"""same-provider preset degrade, frequency-only, 6-HTTP chunk cap."""
 import json
 import threading
 from types import SimpleNamespace
@@ -297,7 +297,7 @@ def test_degrade_works_when_r2_hook_missing_or_raises(monkeypatch):
         return "ok"
 
     manager = _manager(flaky, source="preset", model="qwen-plus")
-    # The integrated manager has the R2 hook; explicitly exercise its absence.
+    # The integrated manager has the hook; explicitly exercise its absence.
     manager.note_same_provider_degrade = None
     assert manager.call_with_retry("p") == "ok"
 

@@ -1,9 +1,7 @@
-"""I650–I652: keep one looping machine, Proactor noise and non-production builds out of Sentry.
-
+"""keep one looping machine, Proactor noise and non-production builds out of Sentry.
 The end-to-end cases run the real SDK in a separate interpreter with a recording
 transport (fake DSN, nothing leaves the box), so the global client never leaks
-into other tests.
-"""
+into other tests."""
 import json
 import os
 from pathlib import Path

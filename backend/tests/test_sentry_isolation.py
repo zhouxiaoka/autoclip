@@ -8,16 +8,13 @@ from pathlib import Path
 import pytest
 
 from backend.core import sentry_setup
-"""R31-pre #419 I538: tests never inherit SENTRY_DSN, and nothing init_sentry() does outlives a test.
-
-create_app() calls init_sentry(), which reads SENTRY_DSN from the environment, binds the sentry_sdk client
+"""pre #419 : tests never inherit SENTRY_DSN, and nothing init_sentry does outlives a test.
+create_app calls init_sentry, which reads SENTRY_DSN from the environment, binds the sentry_sdk client
 and sets the module-level `_initialized` for the whole process. Before the conftest fixture
 `_no_ambient_sentry` (now `_no_ambient_telemetry`), a DSN in the developer's shell made the create_app tests (test_422_beginner_hint's
-client fixture, test_r7_d1_d7, test_r8_e1_e5) turn the SDK on for real - sending test events - and the
+client fixture, test_r7_d1_d7, test_r8_e1_e5) turn the SDK on for real sending test events and the
 later test_sentry_setup::test_init_sentry_noop_without_dsn failed in a full run.
-
-The DSN used here is always a fake (example.invalid) and every client gets a counting fake transport.
-"""
+The DSN used here is always a fake (example.invalid) and every client gets a counting fake transport."""
 
 ROOT = Path(__file__).resolve().parents[2]
 FAKE_DSN = 'https://public@example.invalid/1'
@@ -45,7 +42,7 @@ def test_a_dsn_in_the_environment_never_reaches_sentry_from_tests(polluter, tmp_
 
 
 def test_b_a_test_that_sets_a_dsn_itself_does_not_initialize(monkeypatch, tmp_path):
-    """I652: pytest must not init Sentry, even when the test sets a release-shaped environment."""
+    """pytest must not init Sentry, even when the test sets a release-shaped environment."""
     import sentry_sdk
     from backend.tests.sentry_leak_probe import CountingTransport
     real_init = sentry_sdk.init
@@ -67,8 +64,7 @@ def test_c_next_test_starts_without_a_dsn_or_an_initialized_flag(monkeypatch, tm
     assert 'SENTRY_DSN' not in os.environ
     assert sentry_setup._initialized is False and not sentry_sdk.get_client().is_active()
     assert sentry_setup.init_sentry('desktop') is False
-"""#419 I538 extension (Dong): tests never inherit a Sentry DSN or a PostHog key - conftest `_no_ambient_telemetry`.
-
+"""extension : tests never inherit a Sentry DSN or a PostHog key conftest `_no_ambient_telemetry`.
 A child pytest runs telemetry_workload_419 (create_app + the QA, LLM and MCP PostHog events) with a fake DSN and a
 fake PostHog key under every env name the code reads. With the fixture: 0 network calls, Sentry never initialized,
 no PostHog worker started. The probe refuses every connection, so nothing leaves the machine either way.

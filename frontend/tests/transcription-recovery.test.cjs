@@ -357,7 +357,7 @@ test('#404 prompt: background installing stays hidden, background failed / timeo
   await act(async () => root.unmount())
 })
 
-// ---- #418 R27b I426: rounds, one poll in flight, dispose on unmount, round signal ----
+// 418 : rounds, one poll in flight, dispose on unmount, round signal
 function deferredApi() {
   const st = { live: 0, max: 0, calls: 0, pending: [], reply: () => check('whisper_installing') }
   const api = {
@@ -429,8 +429,8 @@ test('I426 dispose while a poll is in flight: no state change and no onReady aft
 })
 
 
-// ---- I428: Dong's surviving mutations (ported to the derived view fields) ----
-// ---- I428: Dong's 5 surviving mutations ----
+// surviving mutations (ported to the derived view fields)
+// 5 surviving mutations
 test('I428 a 500 between outages resets the streak (20s down, one 500, 20s down -> still waiting)', async () => {
   const { clock, api } = clockedApi()
   const c = await startWait(api, clock)
@@ -463,7 +463,7 @@ test('I428 retry restarts the unreachable timer (25s down, retry, 10s down -> st
   assert.ok(!phases.includes('failed'), `the old streak is not inherited: ${phases}`)
 })
 
-// ---- #418 R27c I486: one fake clock (monotonic `now` + a timer scheduler) and one fake request layer ----
+// 418 : one fake clock (monotonic `now` + a timer scheduler) and one fake request layer
 // The scheduler fires due timers in time order, setting clock.t to each due time; `wake(ms)` is a machine sleep: the
 // clock jumps and every overdue timer fires late, at the wake time. Hook tests run each timer inside act().
 function fakeClock(start = 0) {
@@ -540,7 +540,7 @@ async function waitingOn(clock, t, extra = {}) {
 }
 
 test('R27c wiring (source): one probe call site, no timer race in the controller; both pages pass the round signal through probeConfig', () => {
-  // The 5s timeout itself is asserted by behaviour ('R28 readiness timeout 5s (behaviour, fake timers)').
+  // The 5s timeout itself is asserted by behaviour (' readiness timeout 5s (behaviour, fake timers)').
   const src = fs.readFileSync(path.join(dir, 'transcriptionRecovery.ts'), 'utf8')
   assert.equal((src.match(/api\.readiness\(/g) || []).length, 1, 'one probe call site')
   assert.doesNotMatch(src, /setTimer|clearTimer|setTimeout|Promise\.race/, 'no timer race in the controller: axios times the probe out and aborts it')
@@ -883,8 +883,7 @@ test('I426 hook: leaving offline and coming back continues once, with one readin
   } finally { await h.unmount() }
 })
 
-// ---- #418 R28 (Dong's R27c review I490-I499 -> I510-I519) ----
-/** Runs `fn` after `hops` microtasks once `p` settled (the timing of Dong's n2probe / i491 scripts). */
+/* Runs `fn` after `hops` microtasks once `p` settled (the timing of n2probe / i491 scripts). */
 const afterHops = (p, hops, fn) => { let q = p.then(() => {}, () => {}); for (let i = 0; i < hops; i++) q = q.then(() => {}); q.then(fn) }
 
 test('R28 I510 (N2): close() in the microtasks between a settled request and the commit writes nothing, no onReport / onReady', async () => {
@@ -1274,7 +1273,7 @@ test('R28 I516: a closed own install reopened from whisper_installing does not i
 
 // transcription-recovery.test.cjs
 ;(() => {
-// #418 R29: the timing contract of the install-recovery wait (157/418-r29-plan.md, Dong 11:49: cap = 2 x pollMs +
+// the timing contract of the install-recovery wait (157/418-r29-plan.md, 11:49: cap = 2 x pollMs +
 // 2 x READINESS_TIMEOUT_MS = 14s, OFFLINE_MS 30s). Every cell asserts the exact observation N that reaches the outcome
 // and that observation N-1 still continues. Runs against the real controller with a virtual clock: each request
 // advances the clock by its duration, the page waits T between the end of a round and the next poll.
@@ -1326,16 +1325,16 @@ const MATRIX = [
   [2 * S,    'down',  5],   // g7 c7 -> 35s
   [2 * S,    'up0',   300], // c2 -> exactly 600s (>= boundary)
   [2 * S,    'slow',  51],  // g11.8 c11.8 -> 601.8s (the 14s cap keeps this column at 10 minutes)
-  [4100,     'down',  4],   // g9.1 -> 36.4s (R28 E: never ended)
+  [4100,     'down',  4],   // g9.1 -> 36.4s (E: never ended)
   [4100,     'up0',   147], // c4.1 -> 602.7s
   [4100,     'slow',  44],  // g13.9 -> 611.6s
   [9 * S,    'down',  3],   // g14 c14 -> 42s
   [9 * S,    'up0',   67],  // c9 -> 603s
   [9 * S,    'slow',  43],  // g18.8 c14 -> 808.4s
-  [60 * S,   'down',  3],   // g65 c14 -> 195s (R28 G: never ended)
+  [60 * S,   'down',  3],   // g65 c14 -> 195s (G: never ended)
   [60 * S,   'up0',   43],  // c14 -> 43 min
   [60 * S,   'slow',  43],  // g69.8 c14 -> 50 min
-  [2 * S,    'down15', 3],  // one round of 15s (Dong): g17 c14 -> 51s
+  [2 * S,    'down15', 3],  // one round of 15s : g17 c14 -> 51s
   [2 * S,    'up15',  43],  // g17 c14 -> 731s
   [1 * S,    'down',  5],   // g6 -> exactly 30s (>= boundary of OFFLINE_MS)
   [1 * S,    'up0',   600], // c1 -> exactly 600s
@@ -1439,7 +1438,7 @@ test('R29 recoveryClock.observe (pure): counted = clamp(now - lastAt, 0, 2 x pol
 
 // transcription-recovery.test.cjs
 ;(() => {
-// R20 #166 #167: render the real CreativeImport (real React + happy-dom, real importReadiness, real errorText,
+// render the real CreativeImport (real React + happy-dom, real importReadiness, real errorText,
 // real TranscriptionGatePrompt) and assert what the user sees, not the arguments passed to setError.
 const { test, before, after } = require('node:test')
 const assert = require('node:assert/strict')
@@ -1520,7 +1519,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     './importPreferencesStore': { readImportPreferences: () => null },
     './studio.css': {}, './quick-output.css': {},
   }
-  // R22 #209: with autostart the real pasteStart decides, so a global paste really reaches arm() and its lock.
+  // with autostart the real pasteStart decides, so a global paste really reaches arm and its lock.
   if (autostart) delete mocks['./pasteStart']
   const CreativeImport = load('CreativeImport.tsx', mocks, clock).default
   const host = document.createElement('div')
@@ -1677,7 +1676,7 @@ test('R22 #209: real paste-to-start: an idle paste swaps the source, a paste dur
   act(() => view.root.unmount())
 })
 
-// ---- R24 #232: waiting for a Whisper install / model download never traps the user (real render)
+// 232: waiting for a Whisper install / model download never traps the user (real render)
 function fakeClock() {
   let now = 1_000_000
   const timers = []
@@ -1763,7 +1762,7 @@ test('R24 #232: a stalled download times out into retry (model download again) o
   await openWaiting(view)
   for (let i = 0; i < 5; i++) await clock.advance(2000)
   assert.equal(button(view.host, '重试'), undefined, 'not a timeout yet')
-  // R28 I515: the clock jumps 10 minutes at once (no polls in between: unobserved) -> NO timeout, polling goes on
+  // the clock jumps 10 minutes at once (no polls in between: unobserved) -> NO timeout, polling goes on
   await clock.advance(10 * 60 * 1000)
   await clock.advance(2000)
   assert.doesNotMatch(view.host.textContent, /长时间没有进展/, 'a 10-minute jump is not 10 observed minutes')
@@ -1908,7 +1907,7 @@ test('#372: model download 500 on the page shows failed with retry; polling does
 
 // transcription-recovery.test.cjs
 ;(() => {
-// R23 #211 / #232: render the real PlanSummary (real React + happy-dom, real importReadiness, real errorText,
+// render the real PlanSummary (real React + happy-dom, real importReadiness, real errorText,
 // real TranscriptionGatePrompt). A coded gate 422 on confirm must open the install prompt chosen by code,
 // and the waiting states (installing / model downloading) must show the wait prompt, never "install".
 const { test, before, after } = require('node:test')

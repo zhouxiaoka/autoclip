@@ -281,7 +281,7 @@ def test_restart_after_clean_shutdown_reports_clean():
     data = _stale(old)
     assert store._recover_interrupted_run(data)
     assert data['analysis']['shutdown_kind'] == 'clean'
-    # R16 #42: begin_shutdown also runs on parent loss, so it must not claim a clean quit.
+    # begin_shutdown also runs on parent loss, so it must not claim a clean quit.
     project_cancellation.begin_shutdown()
     try:
         from backend.services.studio.shutdown_marker import shutdown_kind
@@ -294,7 +294,7 @@ def test_restart_without_marker_reports_crash_or_unknown():
     from backend.services.studio import store
     data = _stale('b' * 32)
     assert store._recover_interrupted_run(data)
-    assert data['analysis']['shutdown_kind'] == 'crash'  # R16 #42: missing marker = crash
+    assert data['analysis']['shutdown_kind'] == 'crash'  # missing marker = crash
     data = _stale('legacy-instance')
     assert store._recover_interrupted_run(data)
     assert data['analysis']['shutdown_kind'] == 'unknown'  # not a valid instance id

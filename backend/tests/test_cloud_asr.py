@@ -6,7 +6,7 @@ from backend.core.sentry_setup import studio_error_code, studio_failure_context
 from backend.pipeline.failures import cloud_transcription_failure
 from backend.services.cloud_transcription import CloudTranscriptionError
 from backend.services.studio import jobs
-"""R18 80/81: cloud ASR HTTP errors keep status + upstream_error_type; history keeps stage/upstream."""
+"""80/81: cloud ASR HTTP errors keep status + upstream_error_type; history keeps stage/upstream."""
 
 
 @pytest.mark.parametrize('status,upstream,code', [
@@ -26,7 +26,7 @@ def test_cloud_asr_http_error_keeps_status_and_type(status, upstream, code):
 
 
 def test_missing_asr_key_real_transcribe_path_is_user_cause(tmp_path):
-    """R19 #109: real cloud_transcription.transcribe with an empty key; dropping the invalid_key tag must fail this."""
+    """real cloud_transcription.transcribe with an empty key; dropping the invalid_key tag must fail this."""
     from backend.services import ai_model_settings as ai
     from backend.services import cloud_transcription as ct
     settings = ai.ModelSettings(connections=[ai.Connection(id='asr', name='ASR', provider='openai', api_key='')],
@@ -60,7 +60,7 @@ def test_adapter_result_and_run_content_round_trip_upstream(monkeypatch, tmp_pat
 
 
 def _real_store_jobs(monkeypatch, state, tmp_path):
-    """R20 #110: the REAL studio store (atomic write to metadata/studio.json + analysis_history summaries)."""
+    """the REAL studio store (atomic write to metadata/studio.json + analysis_history summaries)."""
     from backend.services.studio import store
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
     store.directory('p').mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ def _assert_history_row(data, run_id):
     rows = [r for r in data['analysis_history'] if r['run_id'] == run_id]
     assert len(rows) == 1, data['analysis_history']
     assert rows[0]['analysis']['status'] == 'failed' and rows[0]['analysis']['error_code'] == 'llm_auth_invalid'
-    # R22 110: the history row itself (what 107/the observer reads for an older run) keeps the context
+    # 110: the history row itself (what 107/the observer reads for an older run) keeps the context
     row = rows[0]['analysis']
     assert (row.get('failure_stage'), row.get('http_status'), row.get('upstream_error_type')) == ('subtitle', 401, 'invalid_key'), row
 
@@ -92,7 +92,7 @@ def _asr_401():
 
 
 def test_screening_failure_history_keeps_stage_status_upstream(monkeypatch, tmp_path):
-    """R19 #110 (behavior): a real _inspect failure writes stage/status/upstream into analysis history."""
+    """a real _inspect failure writes stage/status/upstream into analysis history."""
     store = _real_store_jobs(monkeypatch, {'analysis': {'status': 'running', 'phase': 'screening', 'run_id': 'run-s'}, 'generation': {}}, tmp_path)
     import backend.services.studio.planning as planning
     def boom(*a, **k):
@@ -110,7 +110,7 @@ def test_screening_failure_history_keeps_stage_status_upstream(monkeypatch, tmp_
 
 @pytest.mark.parametrize('goals', [['content'], ['content', 'highlight']])
 def test_manual_produce_selected_failure_keeps_stage_status_upstream(monkeypatch, tmp_path, goals):
-    """R19 #106: manual-mode _produce_selected persists the context so 「去设置」 can point at speech."""
+    """manual-mode _produce_selected persists the context so 「去设置」 can point at speech."""
     store = _real_store_jobs(monkeypatch, {'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'run-p'}}, tmp_path)
     def fail(*a, **k):
         raise _asr_401()
@@ -125,8 +125,8 @@ def test_manual_produce_selected_failure_keeps_stage_status_upstream(monkeypatch
 
 @pytest.mark.parametrize('where', ['source', 'mark_project'])
 def test_r20_126_produce_selected_outer_exception_keeps_stage_status_upstream(monkeypatch, tmp_path, where):
-    """R20 #126: an error outside the per-goal loop (source lookup / project marking) takes the outer branch;
-    it must persist the same context, so manual-mode 「去设置」 still points at speech."""
+    """an error outside the per-goal loop (source lookup / project marking) takes the outer branch;
+it must persist the same context, so manual-mode 「去设置」 still points at speech."""
     store = _real_store_jobs(monkeypatch, {'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'run-o'}}, tmp_path)
     calls = []
     def boom(*a, **k):

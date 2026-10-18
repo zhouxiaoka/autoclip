@@ -10,7 +10,7 @@ def test_intel_macos_build_script_targets_x86_64():
     assert 'PBS_TRIPLE="aarch64-apple-darwin"' in arm
     assert 'PBS_TRIPLE="x86_64-apple-darwin"' in intel
     assert '_x64.dmg' in intel and '_aarch64.dmg' not in intel
-    # I595: each script reads its own pinned ffmpeg file, and the Intel pin is an x86_64 build.
+    # each script reads its own pinned ffmpeg file, and the Intel pin is an x86_64 build.
     assert 'scripts/ffmpeg-macos-x64.env' in intel and 'ffmpeg-macos-arm64.env' not in intel
     assert 'scripts/ffmpeg-macos-arm64.env' in arm and 'ffmpeg-macos-x64.env' not in arm
     intel_pin = (ROOT / 'scripts/ffmpeg-macos-x64.env').read_text()

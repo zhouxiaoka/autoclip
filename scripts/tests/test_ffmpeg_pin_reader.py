@@ -1,10 +1,8 @@
-"""I590/I591: the bash and pwsh pinned-ffmpeg readers apply one rule.
-
+"""/: the bash and pwsh pinned-ffmpeg readers apply one rule.
 The same samples go through scripts/lib/ffmpeg_pin.sh (read_ffmpeg_pin) and
 scripts/lib/ffmpeg_pin.ps1. Bad samples must be rejected by BOTH; good samples
 must be accepted by both with identical values. pwsh is preinstalled on GitHub's
-ubuntu runners; without it the pwsh half fails under CI and is skipped locally.
-"""
+ubuntu runners; without it the pwsh half fails under CI and is skipped locally."""
 import os
 import shutil
 import subprocess
@@ -109,7 +107,7 @@ class FfmpegPinReaderTest(unittest.TestCase):
                     if result.returncode == 0:
                         self.fail(f'{shell} accepted bad sample {name}: {parse(result.stdout)}')
                     if name.startswith('bom'):
-                        # I591: both readers reject a BOM explicitly instead of stripping it.
+                        # both readers reject a BOM explicitly instead of stripping it.
                         self.assertIn('BOM', result.stderr.decode(errors='replace'))
 
     def test_good_samples_accepted_with_identical_values(self):

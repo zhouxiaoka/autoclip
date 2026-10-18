@@ -149,7 +149,7 @@ test('a watch from before receipts is pinned to the attempt it first saw, not to
 
 // studio-attempts.test.cjs
 ;(() => {
-// R25 #345/#347: the v4 terminal is projected from the receipt only - flow_id is the receipt's (two backend flows
+// the v4 terminal is projected from the receipt only flow_id is the receipt's (two backend flows
 // stay two flows; clearing browser storage does not change it) and a historical receipt never borrows the live
 // workspace's counts or plan.
 const { test } = require('node:test')
@@ -213,7 +213,7 @@ test('#346: the terminal carries the receipt sequence as attempt_sequence, regis
 
 // studio-attempts.test.cjs
 ;(() => {
-// R19 #108: partial page 「重试这条」 -> real StudioResults onRetry -> real studioApi -> real tracker.
+// partial page 「重试这条」 -> real StudioResults onRetry -> real studioApi -> real tracker.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), ts = require('typescript')
@@ -288,14 +288,14 @@ test('a failed retry shows its own cause on the page (receipt bound to the analy
   assert.equal(info?.error_code, 'invalid_key')
   assert.equal(pageFailureAction(info).kind, 'settings')          // the page leads to the settings fix, not a silent close
   assert.equal(receiptFailureInfo([{ ...failed, run_id: null }], undefined), null)   // 913f416d's shape: nothing matched
-  // R31 review: the StudioResults source-text regexes were removed; the page wiring is proven by rendering in
+  // review: the StudioResults source-text regexes were removed; the page wiring is proven by rendering in
   // studio-attempts.test.cjs.
 })
 })()
 
 // studio-attempts.test.cjs
 ;(() => {
-// R31 #419 Dong addition 2 (round 31 review): rendering-level proof, replacing the StudioResults source-text regexes.
+// addition 2 (round 31 review): rendering-level proof, replacing the StudioResults source-text regexes.
 // The real StudioResults page is mounted in happy-dom with react-dom/client, together with its real data hook
 // (useWorkspace + pollWorkspace), the real failure UI (FailureActions, failureAction, llmFailure, settingsReturn) and
 // the real tracker singleton from analytics/observer.ts driven by the real startWorkflowObserver poll. Only the HTTP

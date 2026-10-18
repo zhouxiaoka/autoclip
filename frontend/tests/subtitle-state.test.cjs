@@ -1,4 +1,4 @@
-// R10 #396: preview, export confirm and subtitle_enabled telemetry read one effective state.
+// preview, export confirm and subtitle_enabled telemetry read one effective state.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path')
@@ -13,7 +13,7 @@ test('effective subtitle state: packaging captions_enabled, else draft.subtitles
   assert.equal(effectiveSubtitles({ subtitles: true, packaging: { captions_enabled: false } }), false)
   assert.equal(effectiveSubtitles({ subtitles: true, packaging: { captions_enabled: true } }), true)
   assert.equal(effectiveSubtitles({ subtitles: true, packaging: {} }), true) // older drafts
-  // R11: with packaging, captions_enabled decides (backend ignores draft.subtitles there).
+  // with packaging, captions_enabled decides (backend ignores draft.subtitles there).
   assert.equal(effectiveSubtitles({ subtitles: false, packaging: { captions_enabled: true } }), true)
   assert.equal(effectiveSubtitles(undefined), false)
 })

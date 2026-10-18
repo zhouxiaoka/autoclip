@@ -12,7 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.v1 import settings as settings_api
-"""R11 #392: privacy.json writes are atomic; unreadable privacy never allows collection."""
+"""privacy.json writes are atomic; unreadable privacy never allows collection."""
 
 
 def test_concurrent_reader_never_sees_collection_allowed_while_opted_out(tmp_path, monkeypatch):
@@ -63,7 +63,7 @@ def test_corrupt_file_rewritten_for_crash_reports_stays_opted_out(tmp_path, monk
     (tmp_path / 'privacy.json').write_text('{oops', encoding='utf-8')
     sentry_setup.write_privacy(crash_reports=True)
     assert telemetry._analytics_allowed() is False
-"""R12 #392 items 17, 18, 20."""
+"""items 17, 18, 20."""
 
 ROOT = Path(__file__).resolve().parents[2]
 

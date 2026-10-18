@@ -1,4 +1,4 @@
-"""R17 #59 root cause: a log line interleaved into "PORT=N<newline>" made the e2e harness miss the
+"""root cause: a log line interleaved into "PORT=N<newline>" made the e2e harness miss the
 port and time out ("desktop backend did not print PORT="). The fake backend below reproduces the
 exact interleaving seen in CI and on the box: stdout "PORT=N", then a stderr log line, then "\n"."""
 import sys

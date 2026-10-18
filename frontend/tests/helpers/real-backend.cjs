@@ -1,4 +1,4 @@
-// R25 (replaces helpers/backend-receipts.cjs, which copied backend receipt rules into the tests): telemetry tests
+// (replaces helpers/backend-receipts.cjs, which copied backend receipt rules into the tests): telemetry tests
 // that observe bare workspace snapshots get the attempt receipt from the REAL backend. Each terminal snapshot is
 // written through backend/tests/receipt_bridge.py (attempts.open_attempt -> store.write -> attempts.reconcile), and
 // the receipt it settled is attached to the snapshot the observer sees. No receipt rule is reimplemented here;

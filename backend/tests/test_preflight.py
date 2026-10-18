@@ -358,7 +358,7 @@ def test_i10_service_layer_never_imports_the_api_layer():
         elif isinstance(node, ast.Import):
             names.extend(alias.name for alias in node.names)
     assert not [n for n in names if n.startswith('backend.api')], names
-"""#418 R27 #408: preflight uses media_precheck through its public interface, never a private (_name) function."""
+"""preflight uses media_precheck through its public interface, never a private (_name) function."""
 
 PREFLIGHT = Path(__file__).resolve().parents[1] / 'services' / 'studio' / 'preflight.py'
 

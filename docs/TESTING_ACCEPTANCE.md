@@ -37,7 +37,7 @@ python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
 
 | 组 | 自动阻断项 |
 |---|---|
-| contracts | 版本一致、八语 README/链接、发布验收校验器的负例回归 |
+| contracts | 版本一致、八语 README/链接、发布验收校验器的负例回归、审查轮次文件名和注释、目录外的错误码 |
 | backend | 媒体测试依赖就绪、Python 正确性 lint（E9/F63/F7/F82）、全部后端 pytest、离线剪辑质量约束 |
 | frontend | ESLint、TypeScript、全部前端测试、生产构建（禁止测试时上传 sourcemap） |
 | CI 额外项 | Windows IOCP/进程树/桌面编译、真实 YuNet 并发检测与 SenseVoice 状态文件、安装 wheel 的取景/字体、源码启动与停止、Docker 生产/开发链路 |

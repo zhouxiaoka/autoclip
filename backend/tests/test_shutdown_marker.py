@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.services.studio import store
-"""R16 #40 (attempt identity from start to every terminal), #43 (restart mid-render records
+"""(attempt identity from start to every terminal), #43 (restart mid-render records
 shutdown_kind), #42 (clean marker only from the shell's shutdown intent; parent loss is its own kind)."""
 
 START = {'provider': 'deepseek', 'config_source': 'preset'}
@@ -35,7 +35,7 @@ def _variant(vid, status, code=None):
 
 def test_attempt_identity_prefers_start_and_ignores_junk():
     assert store.attempt_identity({**START, 'x': 1}, LATER) == START
-    # R24 #296: a pair is never stitched from parts; no complete source -> unknown.
+    # a pair is never stitched from parts; no complete source -> unknown.
     assert store.attempt_identity(None, {'provider': ''}, {'config_source': 'preset'}) == {}
 
 
@@ -165,7 +165,7 @@ def test_shell_shutdown_intent_marks_clean_and_does_not_shut_down(monkeypatch, k
     from backend.services.studio.shutdown_marker import _root
     assert (_root() / store.INSTANCE).read_text() == kind
     assert _kind_now() == 'clean'
-    # R19 #99: classifying does not delete; only release() after the terminal is written does.
+    # classifying does not delete; only release after the terminal is written does.
     assert (_root() / store.INSTANCE).exists()
     from backend.services.studio.shutdown_marker import release
     release(store.INSTANCE)
@@ -251,7 +251,7 @@ def test_marker_write_is_atomic(monkeypatch):
     assert calls and calls[0][1].endswith(store.INSTANCE) and calls[0][0].endswith('.tmp')
 
 
-# --- Dong / PM conditions on the shutdown token -------------------------------------------
+# PM conditions on the shutdown token
 
 def test_missing_header_is_403(monkeypatch):
     with _client(monkeypatch) as client:

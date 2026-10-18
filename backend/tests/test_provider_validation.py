@@ -613,7 +613,7 @@ def test_e6_local_service_down_hint_exists_in_all_eight_locales():
             assert 'Ollama' in text, f'{lang} should name Ollama'
 
 
-# R10 #399: only loopback counts as "this machine"; LAN / .local gateways keep the generic hint.
+# only loopback counts as "this machine"; LAN / .local gateways keep the generic hint.
 @pytest.mark.parametrize('base,local', [
     ('http://127.0.0.1:11434/v1', True),
     ('http://127.8.0.1:11434/v1', True),

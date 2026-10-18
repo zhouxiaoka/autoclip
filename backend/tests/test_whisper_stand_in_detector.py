@@ -1,4 +1,4 @@
-"""R21 #176: an unmarked test that reads the conftest Whisper stand-in directly fails, whatever the import
+"""an unmarked test that reads the conftest Whisper stand-in directly fails, whatever the import
 style (module alias, from-import) or directory (sub-packages); marked tests and product-code callers pass.
 Runs a child pytest against the real backend/tests/conftest.py fixture."""
 import subprocess

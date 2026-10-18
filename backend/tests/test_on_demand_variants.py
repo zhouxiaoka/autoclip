@@ -130,7 +130,7 @@ def test_a_failed_preparation_settles_the_generation_and_retry_prepares_again(mo
     returned = jobs.retry_variant('p1', 'v1')
     variant = state['output_variants'][0]
     assert submitted == [jobs._produce_on_demand] and variant['status'] == 'preparing' and 'needs_prepare' not in variant
-    # R21 #158 contract with frontend api.ts: needs_prepare returns no render_job_id; the attempt identity
+    # contract with frontend api.ts: needs_prepare returns no render_job_id; the attempt identity
     # is the fresh preparation_run_id, which store.variant_identity carries on into the render.
     assert 'render_job_id' not in returned and 'render_attempt_id' not in returned
     assert returned['preparation_run_id'] and returned['preparation_run_id'] == variant['preparation_run_id']
@@ -340,7 +340,7 @@ def test_render_dispatch_rejection_settles_and_can_retry(monkeypatch):
     assert state['output_variants'][0]['status'] == 'failed'
     assert 'private' not in state['output_variants'][0]['error']
     returned = jobs.retry_variant('p1', 'v1')
-    # R21 #158: the queued retry carries its fresh render_attempt_id (render_job_id may not exist yet)
+    # the queued retry carries its fresh render_attempt_id (render_job_id may not exist yet)
     assert returned['render_attempt_id']
     assert state['output_variants'][0]['render_job_id'] == 'retry-job'
     assert state['output_variants'][0]['render_attempt_id'] == returned['render_attempt_id']

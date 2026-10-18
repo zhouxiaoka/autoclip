@@ -135,7 +135,7 @@ def test_user_data_removal_deletes_exactly_the_gui_checkbox_directories():
 def test_silent_delete_appdata_and_gui_checkbox_share_one_removal_block():
     body = _macro('AUTOCLIP_DELETE_USER_DATA')
     block = body[body.index('${If} $R9 = 1'):body.index('Pop $R9')]
-    # Both decisions only set $R9; the one removal block (all three directories) follows.
+    # Both decisions only set $; the one removal block (all three directories) follows.
     assert sum(line == '${If} $R9 = 1' for line in body) == 1
     assert [line for line in block if line.startswith('RMDir')] == [f'RMDir /r "{path}"' for path in USER_DATA_DIRS]
 

@@ -78,7 +78,7 @@ def test_tail_recovery_is_bounded_and_never_sends_a_partial_or_stale_set(tmp_pat
     else:
         with pytest.raises(intelligence.FrameExtractError) as caught:
             intelligence.sample(video, [0, .5, 1, 1.9], folder, width=160)
-        # R11 #406: local frame extraction has its own code (not a vision outage).
+        # local frame extraction has its own code (not a vision outage).
         assert caught.value.code == 'frame_extract_failed'
         assert ('超时' in str(caught.value)) == (failure == 'timeout')
         assert len(tail_seeks) == (1 if failure == 'timeout' else 2)

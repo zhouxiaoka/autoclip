@@ -759,7 +759,7 @@ def test_link_import_refused_by_site_records_source_blocked_in_chinese(client, m
     assert state['analysis']['error'] == download_recovery.SOURCE_BLOCKED_HINT
     generation = state['generation']
     assert generation['status'] == 'failed' and generation['error_code'] == 'source_blocked'
-    # R27 #415 (Dong R26 design): a site refusal is a LOCAL failure; the local snapshot carries no
+    # (design): a site refusal is a LOCAL failure; the local snapshot carries no
     # http_status/upstream (the 412 belongs to the site, never to a provider).
     assert generation['failure_stage'] == 'ingest' and 'http_status' not in generation
     assert generation['attribution_source'] == 'local' and 'upstream_error_type' not in generation

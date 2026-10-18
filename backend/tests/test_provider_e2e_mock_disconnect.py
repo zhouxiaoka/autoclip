@@ -1,4 +1,4 @@
-"""R17 #59: the mock provider must stop on client disconnect instead of writing into a closed
+"""the mock provider must stop on client disconnect instead of writing into a closed
 socket (BrokenPipe traceback in mock-e2e logs)."""
 import http.client
 import io

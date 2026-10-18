@@ -66,7 +66,7 @@ def test_install_error_is_not_reported_as_not_installed(monkeypatch):
         whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
 
 
-@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state (R20 #165)
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state (#165)
 def test_installed_runtime_still_reports_installed_after_a_previous_error(monkeypatch):
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: True)
     whisper_runtime._set_state(status="error", progress=12, message="安装失败", log_tail="")

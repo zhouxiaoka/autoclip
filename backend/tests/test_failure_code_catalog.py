@@ -148,7 +148,7 @@ from pathlib import Path
 
 from backend.core import event_catalog, sentry_setup
 from backend.services.studio import planning
-"""R11 #406 follow-up: new codes are classified consistently in the catalog, success-rate SQL
+"""follow-up: new codes are classified consistently in the catalog, success-rate SQL
 and analytics docs. frame_extract_failed is a counted (product) failure; the subtitle-route /
 fallback codes are degrade reasons on successful runs, never failures."""
 DEGRADES = {

@@ -65,7 +65,7 @@ test('POST failures never retry a mutation', async () => {
   assert.deepEqual(delays, [])
 })
 
-// ---- #418 R27c: retry:false (a generic config flag, not a URL special case) and abort during the retry wait ----
+// 418 : retry:false (a generic config flag, not a URL special case) and abort during the retry wait
 const netError = config => new axios.AxiosError('Network Error', 'ERR_NETWORK', config)
 
 test('R27c a retry:false GET that hits a network error is sent exactly once', async () => {
@@ -134,7 +134,7 @@ test('R27c I481 the readiness probe the recovery controller uses is one request:
   const sent = []
   api.defaults.adapter = async config => { sent.push({ url: config.url, timeout: config.timeout, signal: config.signal }); if (sent.length > 6) throw failure(config, 400); throw failure(config, 500) }
   const ctrl = new AbortController()
-  // before R27c the controller read studioApi.readiness(); the fallback lets this test fail on behaviour there
+  // before the controller read studioApi.readiness; the fallback lets this test fail on behaviour there
   const probe = studioApi.readinessProbe ? signal => studioApi.readinessProbe(signal) : () => studioApi.readiness()
   await assert.rejects(probe(ctrl.signal), e => e.response?.status === 500)
   assert.equal(sent.length, 1, `one attempt, the 500 is not swallowed by retries (sent ${sent.length})`)

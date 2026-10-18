@@ -1,4 +1,4 @@
-// R12 #13: Whisper download failure copy is chosen by errorCode and translated in 8 locales.
+// Whisper download failure copy is chosen by errorCode and translated in 8 locales.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path')
@@ -13,7 +13,7 @@ test('errorCode selects translated copy; unknown code falls back to the server m
   assert.equal(whisperModelErrorText(t, {}), '')
 })
 
-// R14 #31: mount the real SpeechRecognitionConfig in a DOM (happy-dom + react-dom/client), with
+// mount the real SpeechRecognitionConfig in a DOM (happy-dom + react-dom/client), with
 // its real state logic. Only the HTTP layer is mocked, with backend-shaped responses.
 const React = require('react')
 const { runInSandbox } = require('./vm-sandbox.cjs')
@@ -41,7 +41,7 @@ async function mount(lang, errorCode, source = fs.readFileSync(SOURCE, 'utf8')) 
   const t = (key, vars) => String(cat[key] || key).replace(/\{\{(\w+)\}\}/g, (_, k) => (vars || {})[k] ?? '')
   const Window = await loadWindow()
   const window = new Window({ url: 'http://localhost/' })
-  // R15 #35: Node 21+ makes global.navigator a getter-only accessor, so plain assignment throws.
+  // Node 21+ makes global.navigator a getter-only accessor, so plain assignment throws.
   // Swap the property descriptors and always restore them in finally.
   const restore = installGlobals({ window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true })
   try {
