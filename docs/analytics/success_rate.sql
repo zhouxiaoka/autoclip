@@ -6,9 +6,10 @@
 --   {date_from}          固定 UTC 起点（含），例如 '2026-10-09 00:00:00'
 --   {date_to}            固定 UTC 终点（不含），例如 '2026-10-16 00:00:00'
 --   {internal_cohort_id} 内部账号 cohort id（project 450605 当前为 641509）
---   {release_1_5_7}      1.5.7 正式发布时间（UTC，含），带单引号的 'YYYY-MM-DD HH:MM:SS'。
---                        执行 RELEASE_CHECKLIST.md 3.5 Promote 的人，把 GitHub Release 的 published_at
---                        填进 PostHog 项目 450605 看板「AutoClip｜1.5.7 出片成功率」里本文件的每一条 insight
+--   {release_1_5_7}      1.5.7 正式发布时间（UTC，含）。GitHub Release 的 published_at 形如
+--                        YYYY-MM-DDTHH:MM:SSZ，填成带单引号的 'YYYY-MM-DD HH:MM:SS'（去掉 T 和 Z）。
+--                        执行 RELEASE_CHECKLIST.md 3.5 Promote 的人，把它填进 PostHog 项目 450605
+--                        看板「AutoClip｜1.5.7 出片成功率」里本文件的每一条 insight
 --                        （version_releases 中 1.5.7 那一行的 released_at_text）。本文件不写死日期。
 --                        空字符串 '' 表示还没填：这一版的事件全部不计入。1.5.6 及更早不在表里。
 --
