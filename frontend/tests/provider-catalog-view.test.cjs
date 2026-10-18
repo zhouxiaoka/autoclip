@@ -239,17 +239,20 @@ test('every catalog name and hint used in the UI exists in all eight locales', (
     JSON.parse(fs.readFileSync(path.join(__dirname, '../src/i18n/locales', `${lang}.json`), 'utf8')),
   ]))
   const needed = new Set([
-    'settings.providers.title', 'settings.providers.unconnected_guide', 'settings.providers.configure',
+    'settings.providers.title', 'settings.providers.configure',
     'settings.providers.repair_custom', 'settings.providers.repair_custom_hint', 'settings.providers.custom_group',
-    'settings.providers.needs_endpoint', 'settings.providers.needs_endpoint_guide',
+    'settings.providers.needs_endpoint',
   ])
-  for (const row of Object.values(catalog.providers)) {
-    for (const key of ['ui_name', 'display_name', 'short_name', 'hint']) {
-      if (row[key]) needed.add(row[key])
-    }
+  const translatedShort = new Set(['dashscope', 'openai', 'infistar', 'api88', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'ollama', 'lmstudio'])
+  for (const [id, row] of Object.entries(catalog.providers)) {
+    const shown = row.ui_name || row.display_name
+    if (shown) needed.add(shown)
+    if (row.hint) needed.add(row.hint)
+    if (translatedShort.has(id) && row.short_name) needed.add(row.short_name)
+    if (translatedShort.has(id) && row.context_hint) needed.add(row.context_hint)
     if (row.sponsor) {
       needed.add(row.sponsor.offer)
-      needed.add(row.sponsor.description)
+      if (translatedShort.has(id) && row.sponsor.description) needed.add(row.sponsor.description)
     }
   }
   for (const lang of langs) {

@@ -50,10 +50,3 @@ export function beginStyleRecommendation(key: string, load: (signal: AbortSignal
     publish({ key, status: 'ready', result, latencyMs: Math.max(0, Date.now() - started) })
   }).finally(() => clearTimeout(killer))
 }
-
-/** Tests reset the module cache. */
-export function resetStyleRecommendation() {
-  controller?.abort()
-  token += 1
-  snapshot = idle
-}

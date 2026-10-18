@@ -42,15 +42,6 @@ export function normalizeOs(value?: string | null, catalog?: Catalog): string | 
   return allowed.includes(mapped) ? mapped : undefined
 }
 
-export function detectOs(): string {
-  if (typeof navigator === 'undefined') return 'unknown'
-  const ua = navigator.userAgent
-  if (/Mac/i.test(ua)) return 'macos'
-  if (/Win/i.test(ua)) return 'windows'
-  if (/Linux/i.test(ua)) return 'linux'
-  return 'unknown'
-}
-
 export function listedEvents(catalog: Catalog): Set<string> {
   const names = new Set(Object.keys(catalog.events || {}))
   for (const family of Object.values(catalog.families || {})) {

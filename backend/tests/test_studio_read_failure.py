@@ -420,7 +420,7 @@ class GatedCalls:
         self.pool.shutdown(wait=True)
 
 
-@pytest.mark.parametrize('worker', ['_inspect', '_auto_generate', '_analyze', '_produce_selected', '_produce_on_demand', '_ai_cover_job'])
+@pytest.mark.parametrize('worker', ['_inspect', '_auto_generate', '_produce_selected', '_produce_on_demand', '_ai_cover_job'])
 def test_each_accepted_caller_recovers_and_a_real_retry_can_complete(project, monkeypatch, worker):
     from copy import deepcopy
     from backend.services.studio.models import ImportOptions, ConfirmPlan, Preferences
@@ -445,8 +445,6 @@ def test_each_accepted_caller_recovers_and_a_real_retry_can_complete(project, mo
     def accepted():
         if worker in ('_inspect', '_auto_generate'):
             return jobs.inspect_project('p1', options)
-        if worker == '_analyze':
-            return jobs.analyze_project('p1', Preferences())
         if worker == '_produce_selected':
             return jobs.confirm_project('p1', ConfirmPlan(plan_id=store.read('p1')['plan']['id'], analysis_mode='subtitle', goals=['content']))
         if worker == '_produce_on_demand':
@@ -684,11 +682,9 @@ def test_restart_recovers_only_the_exact_durable_render_claim_and_association(pr
 
 
 @pytest.mark.parametrize('consent', [False, True])
-@pytest.mark.parametrize('worker', ['analysis', 'cover'])
-def test_owned_background_read_error_reports_once_with_consent_and_safe_tags(project, monkeypatch, consent, worker):
+def test_owned_background_read_error_reports_once_with_consent_and_safe_tags(project, monkeypatch, consent):
     import sentry_sdk
     from backend.core import sentry_setup
-    from backend.services.studio.models import Preferences
     (project.root.parent.parent / 'privacy.json').write_text(json.dumps({'crash_reports': consent}))
     monkeypatch.setattr(sentry_setup, '_initialized', True)
     monkeypatch.setattr(jobs, 'capture_studio_exception', sentry_setup.capture_studio_exception)
@@ -698,32 +694,24 @@ def test_owned_background_read_error_reports_once_with_consent_and_safe_tags(pro
         event = sentry_setup.before_send({'tags': tags, 'exception': {'values': [{'type': type(error).__name__, 'value': str(error)}]}})
         captured.append(event)
     monkeypatch.setattr(sentry_sdk, 'capture_exception', capture)
-    monkeypatch.setattr(jobs.intelligence, 'ready', lambda: True)
-    monkeypatch.setattr(jobs, 'analyze', lambda video, prefs, stage, *args: (stage('Synthetic stage') or [], {}))
     store.change('p1', lambda data: data.update(analysis=None))
     executor = GatedCalls()
     monkeypatch.setattr(jobs, 'executor', executor)
     monkeypatch.setattr(jobs, 'cover_executor', executor)
     from backend.services import cover
     monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=True))
-    control = deny_reads(project, monkeypatch, 'once' if worker == 'cover' else 'persistent')
+    control = deny_reads(project, monkeypatch, 'once')
     try:
-        if worker == 'cover':
-            jobs.request_ai_cover('p1', 'ready')
-        else:
-            jobs.analyze_project('p1', Preferences())
+        jobs.request_ai_cover('p1', 'ready')
         control.blocked = True
         executor.drain()
         control.blocked = False
         state = store.read('p1')
-        if worker == 'cover':
-            assert state['output_variants'][0]['cover_job']['status'] == 'failed'
-            assert state['output_variants'][0]['status'] == 'completed'
-        else:
-            assert state['analysis']['status'] == 'failed'
+        assert state['output_variants'][0]['cover_job']['status'] == 'failed'
+        assert state['output_variants'][0]['status'] == 'completed'
         assert len(captured) == int(consent)
         if consent:
-            assert captured[0]['tags']['phase'] == ('production' if worker == 'cover' else 'analysis')
+            assert captured[0]['tags']['phase'] == 'production'
             assert captured[0]['tags']['error_code'] == 'unexpected'
             assert 'controlled metadata' not in str(captured[0])
     finally:
@@ -834,10 +822,10 @@ def test_unaccepted_export_read_denial_creates_no_worker_or_receipt(project, mon
         executor.close()
 
 
-@pytest.mark.parametrize('public', ['inspect', 'analyze', 'confirm', 'preparation', 'cover', 'export'])
+@pytest.mark.parametrize('public', ['inspect', 'confirm', 'preparation', 'cover', 'export'])
 def test_each_persisted_reservation_rejection_recovers_without_a_phantom_worker(project, monkeypatch, public):
     from copy import deepcopy
-    from backend.services.studio.models import ImportOptions, ConfirmPlan, Preferences
+    from backend.services.studio.models import ImportOptions, ConfirmPlan
     plan = inert_worker_services(project, monkeypatch)
     def initial(data):
         data['analysis'] = {'status': 'awaiting_confirmation', 'run_id': 'prior'} if public == 'confirm' else None
@@ -860,8 +848,6 @@ def test_each_persisted_reservation_rejection_recovers_without_a_phantom_worker(
     def request():
         if public == 'inspect':
             return jobs.inspect_project('p1', ImportOptions(auto_start=False, platforms=['original']))
-        if public == 'analyze':
-            return jobs.analyze_project('p1', Preferences())
         if public == 'confirm':
             return jobs.confirm_project('p1', ConfirmPlan(plan_id=store.read('p1')['plan']['id'], goals=['content'], analysis_mode='subtitle'))
         if public == 'preparation':

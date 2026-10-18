@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { runInSandbox } = require('./vm-sandbox.cjs')
+const { loadTs } = require('./load-ts.cjs')
 const ts = require('typescript')
 
 function load() {
@@ -17,7 +18,6 @@ function load() {
 
 const contract = load()
 const SECRET = 'sk-live-secret-should-never-leak'
-const PROMPT = '用户口播：把这段广告词发到抖音'
 
 test('hostname helper keeps domain only and never returns a key or path', () => {
   assert.equal(contract.hostnameOfBaseUrl('https://88api.ai/v1/chat/completions'), '88api.ai')
@@ -28,47 +28,9 @@ test('hostname helper keeps domain only and never returns a key or path', () => 
   assert.equal(JSON.stringify(contract.hostnameOfBaseUrl(`https://88api.ai/v1?api_key=${SECRET}`)).includes('sk-'), false)
 })
 
-test('sanitizeModel keeps real ids and redacts secrets disguised as models', () => {
-  assert.equal(contract.sanitizeModel('gpt-4o-mini'), 'gpt-4o-mini')
-  assert.equal(contract.sanitizeModel('Qwen/Qwen2.5-7B-Instruct'), 'Qwen/Qwen2.5-7B-Instruct')
-  assert.equal(contract.sanitizeModel('https://api.openai.com/v1'), 'redacted')
-  assert.equal(contract.sanitizeModel(SECRET), 'redacted')
-  assert.equal(contract.sanitizeModel('api.openai.com/v1/models'), 'redacted')
-  assert.equal(contract.sanitizeModel('用户口播把这段广告词发到抖音'), 'redacted')
-  assert.equal(contract.sanitizeModel(''), undefined)
-})
-
-test('request sanitizer drops secrets, prompts and full URLs', () => {
-  const props = contract.sanitizeLlmRequestProperties({
-    provider: 'api88',
-    model: 'gpt-4o-mini',
-    base_url: `https://user:${SECRET}@88api.ai/v1/chat/completions?api_key=${SECRET}`,
-    kind: 'vision',
-    stage: 'screening',
-    http_status: 403,
-    upstream_error_type: 'permission_denied',
-    prompt_tokens: 80,
-    retry_count: 0,
-    degrade_count: 1,
-    duration_ms: 12,
-    outcome: 'error',
-    api_key: SECRET,
-    prompt: PROMPT,
-    url: 'https://88api.ai/v1/chat/completions',
-  })
-  const dumped = JSON.stringify(props)
-  assert.equal(props.success_rate_schema_version, 1)
-  assert.equal(props.provider, 'api88')
-  assert.equal(props.base_url_host, '88api.ai')
-  assert.equal(props.upstream_error_type, 'permission_denied')
-  assert.equal(props.degrade_count, 1)
-  assert.equal(dumped.includes(SECRET), false)
-  assert.equal(dumped.includes(PROMPT), false)
-  assert.equal(dumped.includes('/v1'), false)
-})
-
-test('run sanitizer rejects unknown enums and success HTTP statuses', () => {
-  const props = contract.sanitizeRunProperties({
+test('studio send path rejects unknown enums and success HTTP statuses', () => {
+  const workflow = loadTs(path.join(__dirname, '../src/analytics/workflow.ts'))
+  const props = workflow.safeStudioProperties({
     provider: 'mystery',
     model: 'ok-model',
     failure_stage: 'private-stage',

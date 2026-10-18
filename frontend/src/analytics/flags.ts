@@ -68,12 +68,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 function currentAppVersion(): string {
   return String(import.meta.env.VITE_APP_VERSION || '').trim().replace(/^v/i, '') || 'unknown'
 }
-let appVersion: () => string = currentAppVersion
-
-/** Test seam for the version that owns the flag cache. */
-export function bindFlagAppVersion(next: (() => string) | null) {
-  appVersion = next ?? currentAppVersion
-}
+const appVersion: () => string = currentAppVersion
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
@@ -112,10 +107,6 @@ export function bindFlagStorage(next: StorageLike) {
 
 export function bindFlagClock(next: () => number) {
   clock = next
-}
-
-export function isFlagName(value: string): value is FlagName {
-  return (FLAG_NAMES as readonly string[]).includes(value)
 }
 
 /** Safe mode value. Default-on features (1.5.7 editing styles, MCP v2) still go off. */

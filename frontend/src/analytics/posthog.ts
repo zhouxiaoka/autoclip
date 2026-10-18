@@ -223,10 +223,6 @@ export function markRemoteFlagsResponse(errorsLoading?: boolean): void {
   if (!errorsLoading) remoteFlagsFresh = true
   notifyRemoteFlags()
 }
-/** Test seam. */
-export function resetRemoteFlagsFresh(): void {
-  remoteFlagsFresh = false
-}
 function notifyRemoteFlags() {
   for (const listener of remoteFlagListeners) {
     try { listener() } catch { /* flag subscribers cannot break analytics */ }

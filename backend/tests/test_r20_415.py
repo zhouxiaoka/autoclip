@@ -30,13 +30,6 @@ def test_136_vision_attempt_identity_comes_from_the_vision_connection(two_connec
     assert failure_identity.provider_identity('vision') == {'provider': 'kimi', 'config_source': 'customized'}
 
 
-def test_136_visual_analysis_freezes_vision_identity_at_start():
-    import inspect
-    from backend.services.studio import jobs
-    begin = inspect.getsource(jobs.analyze_project)
-    assert "provider_identity('vision')" in begin
-
-
 def test_137_run_sanitizer_keeps_config_source_and_drops_garbage():
     assert schema.sanitize_run_properties({'config_source': 'preset'})['config_source'] == 'preset'
     assert schema.sanitize_run_properties({'config_source': 'customized'})['config_source'] == 'customized'
@@ -52,12 +45,10 @@ def test_137_run_snapshot_carries_config_source(two_connections):
     assert set(snap) <= set(schema.RUN_LEVEL_FIELDS)
 
 
-def test_137_frontend_run_sanitizer_keeps_config_source():
+def test_137_frontend_send_path_keeps_config_source():
     from pathlib import Path
-    src = (Path(__file__).resolve().parents[2] / 'frontend/src/analytics/successRateContract.ts').read_text(encoding='utf-8')
-    assert "CONFIG_SOURCES = ['preset', 'customized']" in src
-    run = src[src.index("kind === 'run'"):]
-    assert "putEnum(out, raw, 'config_source', CONFIG_SOURCES)" in run[:400]
+    src = (Path(__file__).resolve().parents[2] / 'frontend/src/analytics/workflow.ts').read_text(encoding='utf-8')
+    assert "config_source: ['preset', 'customized']" in src
 
 
 @pytest.mark.parametrize('preset', [p.id for p in iter_providers()])

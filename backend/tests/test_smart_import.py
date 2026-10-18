@@ -191,17 +191,6 @@ def test_auto_start_creates_platform_variants_without_confirmation(client, sourc
     assert state['analysis']['status'] != 'awaiting_confirmation'
 
 
-def test_async_analysis_failure_persists_error_after_exception_scope(client, monkeypatch):
-    monkeypatch.setattr(jobs, 'executor', Immediate())
-    monkeypatch.setattr(intelligence, 'ready', lambda: True)
-    monkeypatch.setattr(jobs, 'analyze', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('analysis failed')))
-
-    jobs.analyze_project('p1', ImportOptions(goal='highlight'))
-    state = client.get('/studio/p1').json()
-    assert state['analysis']['status'] == 'failed'
-    assert state['analysis']['error'] == 'analysis failed'
-
-
 def test_import_persists_platform_and_branding_contract_without_auto_start(client, source, monkeypatch):
     monkeypatch.setattr(jobs, 'executor', Immediate())
     monkeypatch.setattr(intelligence, 'ready', lambda: False)

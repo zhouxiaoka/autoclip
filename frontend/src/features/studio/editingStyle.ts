@@ -36,10 +36,6 @@ export function templateImportFields(enabled: boolean, value: string | undefined
   return recommended_template ? { html_template, recommended_template } : { html_template }
 }
 
-export function isEditingStyle(value: unknown): value is EditingStyle {
-  return value === 'editorial' || value === 'street' || value === 'classic'
-}
-
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? value as T : fallback
 }

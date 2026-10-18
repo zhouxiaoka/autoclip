@@ -235,24 +235,6 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         if render_saved:
             store.mark_render_finished(project_id, job_id)
 
-def analyze_project(project_id, prefs, url=None, browser=None):
-    def begin(data):
-        if (data.get('analysis') or {}).get('status') == 'running':
-            raise ValueError('视觉分析正在运行')
-        from backend.services.studio.failure_identity import provider_identity
-        data['analysis'] = {**provider_identity('vision'), 'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
-        return data['analysis']['run_id']
-    run_id = store.change(project_id, begin)
-    try:
-        executor.submit(_analyze, project_id, prefs, url, browser, _io_receipt=('analysis', run_id, 'analysis'))
-    except Exception as error:
-        store.remember_submission_rejection(project_id, ('analysis', run_id, 'analysis'), error_code=studio_error_code(error))
-        capture_studio_exception(error, 'dispatch')
-        message = '分析任务未能启动，请重试；原素材与已有成片已保留'
-        failure = {'status': 'failed', 'error': message, 'error_code': studio_error_code(error)}
-        store.change(project_id, lambda data: data.update(analysis=failure))
-        raise ValueError(message) from None
-
 def mark_project(project_id, status, **config):
     from backend.core.database import SessionLocal
     from backend.models.project import Project, ProjectStatus
@@ -265,48 +247,6 @@ def mark_project(project_id, status, **config):
                 from datetime import datetime, timezone
                 p.completed_at = datetime.now(timezone.utc)
             db.commit()
-
-@_tracked('visual_analysis')
-def _analyze(project_id, prefs, url, browser):
-    try:
-        mark_project(project_id, 'processing')
-        if url:
-            with llm_usage.timed('download'):
-                download(project_id, url, browser)
-        video = source(project_id)
-        def stage(message):
-            store.change(project_id, lambda data: data['analysis'].update(message=message))
-        instruction = getattr(prefs, 'instruction', '')
-        from backend.services.studio import intelligence
-        if not intelligence.ready():
-            raise ValueError('此方案需要视觉模型，请在设置中配置后重试；原素材已保留')
-        events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
-        stage('组织推广开头与成片草稿' if prefs.goal == 'promo' else '整理高光成片草稿')
-        drafts = make_drafts(events, prefs, instruction, source_duration=intelligence._probe(video).get('duration'))
-        if (video.parent / 'input.srt').exists():
-            for draft in drafts:
-                draft['subtitles'] = True
-        def complete(data):
-            data['events'] = [e.model_dump() for e in events]
-            data['drafts'].extend({**d, 'updated_at': store.now()} for d in drafts)
-            data['analysis'] = {**store.attempt_identity(data.get('analysis')), 'status': 'completed', 'coverage': coverage, 'created_at': store.now()}
-        store.change(project_id, complete)
-        mark_project(project_id, 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
-    except Exception as error:
-        store.raise_owned_read_error(error)
-        logger.warning('Studio analysis failed: %s', type(error).__name__)
-        capture_studio_exception(error, 'analysis')
-        message = str(error)[:700]
-        diagnostics = [error.diagnostics()] if isinstance(error, VisionRequestError) else None
-        def failed(data):
-            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'failed', 'error': message}
-            if diagnostics:
-                data['analysis']['diagnostics'] = diagnostics
-        try:
-            store.change(project_id, failed)
-            mark_project(project_id, 'completed' if store.read(project_id)['drafts'] else 'failed')
-        except FileNotFoundError:
-            pass
 
 def download_progress_hook(project_id, min_interval=1.0):
     """把 yt-dlp 的下载百分比写进 analysis.percent。

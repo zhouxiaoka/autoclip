@@ -347,21 +347,6 @@ def test_render_dispatch_rejection_settles_and_can_retry(monkeypatch):
     assert len(calls) == 2
 
 
-def test_visual_analysis_dispatch_rejection_is_retryable(monkeypatch):
-    from backend.services.studio.models import Preferences
-    state = {'drafts': [{'id': 'prior'}], 'analysis': None}
-    monkeypatch.setattr(store, 'change', lambda _pid, fn: fn(state))
-    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda *_a: None)
-    def reject(*args, **kwargs):
-        raise RuntimeError('private executor details')
-    monkeypatch.setattr(jobs.executor, 'submit', reject)
-    with pytest.raises(ValueError, match='未能启动'):
-        jobs.analyze_project('p1', Preferences())
-    assert state['analysis']['status'] == 'failed'
-    assert state['drafts'] == [{'id': 'prior'}]
-    assert 'private' not in state['analysis']['error']
-
-
 @pytest.mark.parametrize('claimed_status', ['queued', 'running', 'completed'])
 def test_stale_failed_retry_preserves_a_concurrent_claim(tmp_path, monkeypatch, claimed_status):
     monkeypatch.setattr(store, 'get_projects_directory', lambda: tmp_path)
