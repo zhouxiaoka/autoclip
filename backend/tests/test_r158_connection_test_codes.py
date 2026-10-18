@@ -249,7 +249,7 @@ def test_restarted_analysis_without_instance_records_code_and_stage(phase, stage
         analysis['phase'] = phase
     store.directory('p158').mkdir(parents=True, exist_ok=True)
     store.write('p158', {'id': 'p158', 'analysis': analysis})
-    data = store.read('p158')
+    data = store.recover('p158')
     assert data['analysis']['status'] == 'failed'
     assert data['analysis']['error_code'] == store.RESTART_CODE
     assert data['analysis']['failure_stage'] == stage

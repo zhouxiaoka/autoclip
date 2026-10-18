@@ -97,6 +97,6 @@ def test_a_version_interrupted_mid_render_becomes_retryable_after_a_restart(tmp_
         'generation': {'status': 'rendering'}, 'analysis': {'status': 'running', 'instance': 'old'},
         'jobs': [{'job_id': 'j1', 'status': 'running', 'instance': 'old'}],
         'output_variants': [{'id': 'v1', 'status': 'queued', 'render_job_id': 'j1'}, {'id': 'v2', 'status': 'on_demand'}]}))
-    data = store.read('p1')
+    data = store.recover('p1')
     assert data['output_variants'][0]['status'] == 'failed'
     assert data['generation']['status'] == 'failed', 'the results page does not say it is still rendering'

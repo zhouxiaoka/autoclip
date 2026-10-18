@@ -178,7 +178,7 @@ def test_i454_render_lock_timeout_receipt_writes_local_on_the_generation():
     path = store.directory('p454') / 'metadata' / 'studio.json'
     store._append_receipt(path, {'identity': ('render', 'j1'), 'pending': {},
                                  'message': file_lock.LOCK_TIMEOUT_MESSAGE, 'error_code': file_lock.LOCK_TIMEOUT_CODE})
-    state = store.read('p454')
+    state = store.recover('p454')
     generation = state['generation']
     assert generation['status'] == 'failed' and generation['error_code'] == 'store_lock_timeout'
     assert generation['attribution_source'] == 'local' and generation['provider'] == 'glm', generation

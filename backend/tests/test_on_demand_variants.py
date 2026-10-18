@@ -141,7 +141,7 @@ def test_a_variant_left_preparing_by_a_previous_run_can_be_retried(tmp_path, mon
     meta = tmp_path / 'p1' / 'metadata'
     meta.mkdir(parents=True)
     (meta / 'studio.json').write_text(json.dumps({'output_variants': [{'id': 'v1', 'status': 'preparing', 'instance': 'old'}]}))
-    variant = store.read('p1')['output_variants'][0]
+    variant = store.recover('p1')['output_variants'][0]
     assert variant['status'] == 'failed' and variant['needs_prepare']
 
 

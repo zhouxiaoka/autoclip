@@ -587,7 +587,8 @@ def test_confirmation_dispatch_failure_preserves_staging_and_allows_explicit_ret
     assert failed.status_code == 422
     assert '重试确认' in failed.json()['detail']
     assert 'private executor' not in failed.text
-    assert store.read(pid) == before
+    assert store.read(pid) == before  # a read does not apply or clear the receipt
+    assert store.recover(pid) == before  # a stale receipt does not rewrite the saved terminal
     assert not store.has_pending_receipts(pid)
     assert output.read_bytes() == b'previous export'
     assert (store.directory(pid)/'raw/input.mp4').read_bytes() == source.read_bytes()
@@ -699,7 +700,8 @@ def test_rescreen_dispatch_failure_preserves_plan_and_exports(client, source, mo
     assert response.status_code == 422
     with SessionLocal() as db:
         assert db.get(Project, pid).processing_config == config
-    assert store.read(pid) == before
+    assert store.read(pid) == before  # a read does not apply or clear the receipt
+    assert store.recover(pid) == before  # a stale receipt does not rewrite the saved terminal
     assert not store.has_pending_receipts(pid)
     monkeypatch.setattr(jobs, 'executor', Immediate())
     assert rescreen().status_code == 200
@@ -946,7 +948,7 @@ def test_rejected_reservation_survives_a_denied_exact_rollback(client, source, m
         assert persisted['analysis']['status'] == 'running'
         assert persisted['analysis']['run_id'] == identity[1]
         blocked['active'] = False
-        state = store.read(pid)
+        state = store.recover(pid)
         assert state['analysis']['status'] == 'failed'
         assert state['analysis']['run_id'] == identity[1] and state['analysis']['phase'] == identity[2]
         assert state['analysis']['error_code'] == 'unexpected'

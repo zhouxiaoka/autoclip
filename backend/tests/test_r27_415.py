@@ -150,7 +150,7 @@ def test_i418_receipt_recovery_writes_a_local_snapshot():
     path = store.directory('p418') / 'metadata' / 'studio.json'
     store._append_receipt(path, {'identity': ('analysis', 'r1', 'production'), 'pending': {},
                                  'message': file_lock.LOCK_TIMEOUT_MESSAGE, 'error_code': file_lock.LOCK_TIMEOUT_CODE})
-    analysis = store.read('p418')['analysis']
+    analysis = store.recover('p418')['analysis']
     assert analysis['status'] == 'failed' and analysis['error_code'] == 'store_lock_timeout'
     assert analysis['attribution_source'] == 'local' and analysis['provider'] == 'glm'
     assert 'http_status' not in analysis
@@ -219,6 +219,8 @@ NOT_SNAPSHOT_READERS = {
     ('backend/services/studio/jobs.py', '_produce_selected'): 'ranks multi-goal causes; does not assemble a snapshot',
     ('backend/services/studio/attempts.py', '_cause'): 'copies a settled cause onto the attempt receipt',
     ('backend/services/studio/attempts.py', 'settle'): 'writes the ranked cause onto the attempt receipt',
+    ('backend/services/studio/attempts.py', '_terminal_event'): 'copies fields already stored on the settled receipt',
+    ('backend/services/studio/store.py', 'settle_attempt'): 'writes the caller failure_stage onto the one terminal record',
     ('backend/services/studio/store.py', 'settle_generation'): 'ranks variant failures for the generation cause',
     ('backend/services/studio/store.py', '_ensure_failure_identity'): "normalizes the job's own error_code/stage",
     ('backend/services/studio/store.py', 'fill'): "normalizes the job's own error_code/stage",

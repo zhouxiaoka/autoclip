@@ -1,4 +1,4 @@
--- 1.5.7 出片成功率（v4 口径）。终态事件 studio_generation_finished / studio_production_finished 由后端
+-- 1.5.7 出片成功率（v4 口径）。终态事件由后端发送，看板合入后同步。studio_generation_finished / studio_production_finished 由后端
 -- settle_attempt 在落盘后各发一次（runtime=desktop，analytics_environment 仍是 AUTOCLIP_BUILD_ENVIRONMENT）。
 -- 前端不再发这两条，避免和后端重复计入分母。分子和分母都是这两条终态，没有单独的起始事件要搬家。
 -- 本文件在 #416 之上按 (attempt_sequence, leaf, ts) 取末次，并输出 unknown_flows / 图 6。查询本身不改。

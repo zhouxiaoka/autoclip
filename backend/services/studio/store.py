@@ -1115,9 +1115,9 @@ def change(project_id, mutate):
     from backend.core.project_cancellation import checkpoint
     checkpoint(project_id)  # deleted mid-run: stop before mutating a state that no longer exists
     with lock:
-        data = read(project_id)
+        data = recover(project_id)  # repair at the explicit write, not during read
         result = mutate(data)
-        write(project_id, data)
+        write(project_id, data, _recover_previous=False)
         return result
 
 def save_draft(project_id, draft, *, create=False):

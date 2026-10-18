@@ -87,12 +87,17 @@ def test_failure_terminal_is_idempotent_and_off_when_telemetry_is_off(tmp_path, 
         receipt = attempts.open_attempt(data, 'generation', now=store.now())
         data['generation'] = {'status': 'rendering', 'attempt_id': receipt['attempt_id'], 'auto_start': True,
                               'requested_platforms': ['douyin'], 'created_at': store.now()}
-        data['output_variants'] = [{'id': 'v1', 'draft_id': 'd1', 'strategy_id': 'douyin', 'status': 'completed',
+        data['output_variants'] = [{'id': 'v1', 'draft_id': 'd1', 'strategy_id': 'douyin', 'status': 'running',
                                     'produced_by_attempt': receipt['attempt_id']}]
         data.setdefault('drafts', [])
         data.setdefault('jobs', [])
     store.change('q', open_quiet)
-    assert store.change('q', lambda data: store.settle_attempt(data, kind='finish')) is True
+
+    def finish_quiet(data):
+        data['output_variants'][0]['status'] = 'completed'
+        return store.settle_attempt(data, kind='finish')
+
+    assert store.change('q', finish_quiet) is True
     assert posted == []  # 有 key，但遥测关闭，新的终态也不发
 
 
