@@ -38,6 +38,7 @@ test('quick import submits platform targets, branding and auto-starts to results
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
   './importReadiness':loadReadiness(),'./TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},'./studio.css':{},'./quick-output.css':{},
+  '../settings/OutputCaptionsSetting':{OutputCaptionsSwitch:()=>null},
  })
  const tree=nodes(component({onImported:async()=>{}}))
  await tree.find(node=>node.type==='button'&&node.props?.variant==='cta').props.onClick()
