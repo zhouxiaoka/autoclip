@@ -12,7 +12,7 @@ export default function AppSwitchRow({
   read: () => Promise<boolean>
   write: (value: boolean) => Promise<boolean>
 }) {
-  const [enabled, setEnabled] = useState(true)
+  const [enabled, setEnabled] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -39,6 +39,6 @@ export default function AppSwitchRow({
   }
   return <Row label={label} hint={hint}>
     {failed ? <Btn size="sm" onClick={() => void load()}>{t('重试')}</Btn> :
-      <Switch aria-label={label} checked={enabled} disabled={!loaded} loading={saving || !loaded} onChange={value => void save(value)} />}
+      loaded && <Switch aria-label={label} checked={enabled} loading={saving} onChange={value => void save(value)} />}
   </Row>
 }

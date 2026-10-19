@@ -12,7 +12,7 @@ from functools import wraps
 from time import sleep
 from pathlib import Path
 
-from backend.core.failure_codes import UserFacingError
+from backend.core.failure_codes import UserFacingError, sentence
 from backend.core.path_utils import get_projects_directory
 
 from backend.core.file_lock import LOCK_TIMEOUT_CODE, LOCK_TIMEOUT_MESSAGE, LockTimeout, ProcessLock  # noqa: E402
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 IO_FAILURE_MESSAGE = '无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留'
 # A worker owned by a previous process can never finish (RC156 Win QA #13). The project
 # must end failed with a readable reason, retryable through the existing analyze path.
-RESTART_MESSAGE = '服务已重启，请重新生成'
+RESTART_MESSAGE = sentence('service_restarted')
 RESTART_CODE = 'service_restarted'
 # Content-free terminal patches, scoped to the exact project path. A worker
 # must remain retryable even when persisting its failure is also denied.
@@ -489,7 +489,7 @@ def recover(project_id: str):
             job['cover_pending'] = False
             cover_finished = True
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
-            job.update(status='failed', error='服务已重启，请重新导出', error_code=RESTART_CODE)
+            job.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE)
             interrupted.add(job.get('job_id'))
     linked = _apply_saved_render_links(data)
     abandoned_claim = False
@@ -497,19 +497,19 @@ def recover(project_id: str):
     for variant in data['output_variants']:
         cover_job = variant.get('cover_job') or {}
         if cover_job.get('status') in ('queued', 'running') and cover_job.get('instance') != INSTANCE:
-            cover_job.update(status='failed', error='服务已重启，请重新生成封面')
+            cover_job.update(status='failed', error=RESTART_MESSAGE)
             settle = True
         if variant.get('status') == 'queued' and not variant.get('render_job_id') and variant.get('render_dispatch_claimed') and variant.get('render_dispatch_instance') != INSTANCE:
-            variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
+            variant.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE)
             variant.pop('render_dispatch_claimed', None)
             variant.pop('render_dispatch_instance', None)
             abandoned_claim = True
             settle = True
         elif variant.get('status') == 'preparing' and variant.get('instance') != INSTANCE:
-            variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE, needs_prepare=True)
+            variant.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, needs_prepare=True)
             settle = True
         elif variant.get('status') in ('queued', 'running') and variant.get('render_job_id') in interrupted:
-            variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
+            variant.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE)
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
@@ -521,7 +521,7 @@ def recover(project_id: str):
     analysis = data.get('analysis')
     if isinstance(analysis, dict) and analysis.get('status') == 'running' and not analysis.get('instance'):
         stage = analysis.get('phase') if analysis.get('phase') in ('screening', 'production') else 'other'
-        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind='unknown')
+        analysis.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, shutdown_kind='unknown')
     if patched:
         try:
             write(project_id, data)
@@ -792,7 +792,7 @@ def _recover_interrupted_run(data):
             for variant in variants:
                 # Created but never handed to a render worker before the process ended.
                 if variant.get('status') == 'queued' and not variant.get('render_job_id'):
-                    variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
+                    variant.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE)
         settle_generation(data)
         if generation.get('status') != 'rendering':
             _record_restart_shutdown_kind(data, (analysis or {}).get('instance'))
@@ -809,12 +809,12 @@ def _recover_interrupted_run(data):
                             'failure_stage': stage, 'shutdown_kind': kind, **identity, **carry_screening(analysis, generation)}
         return True
     if analysis and _stale_analysis(analysis):
-        # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
+        # Manual (confirmation) flows and visual analysis persist the same catalog sentence.
         for key in ('message', 'percent', 'instance'):
             analysis.pop(key, None)
         phase = analysis.get('phase')
         stage = phase if phase in ('screening', 'production') else 'render' if phase == 'rendering' else 'other'
-        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind=kind)
+        analysis.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, shutdown_kind=kind)
         return True
     return False
 

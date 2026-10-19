@@ -28,6 +28,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+from backend.core.failure_codes import sentence
+
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
@@ -67,7 +69,7 @@ class ServiceRestarted(RuntimeError):
     """The desktop shell exited; no new work or completed receipts may be committed."""
 
     def __init__(self):
-        super().__init__('服务已重启，请重新生成')
+        super().__init__(sentence('service_restarted'))
 
 
 def begin_shutdown() -> None:

@@ -21,6 +21,9 @@ from pydantic import BaseModel, ConfigDict, StrictBool
 from backend.services.publish_export import resolve_cjk_font
 from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
+logger = logging.getLogger(__name__)
+_unreadable_logged = False
+
 OUTRO_SECONDS = 1.8
 OUTRO_VERSION = "v5"
 OUTRO_DIR = Path(__file__).resolve().parents[1] / 'assets' / 'outro'
@@ -40,7 +43,21 @@ def settings_path() -> Path:
 
 def load_settings() -> BrandingSettings:
     path = settings_path()
-    return BrandingSettings.model_validate_json(path.read_text(encoding='utf-8')) if path.exists() else BrandingSettings()
+    if not path.exists():
+        return BrandingSettings()
+    try:
+        return BrandingSettings.model_validate_json(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        _warn_unreadable()
+        return BrandingSettings()
+
+
+def _warn_unreadable() -> None:
+    global _unreadable_logged
+    if _unreadable_logged:
+        return
+    _unreadable_logged = True
+    logger.warning('output-branding.json is unreadable; outro stays on')
 
 
 def save_settings(settings: BrandingSettings) -> BrandingSettings:

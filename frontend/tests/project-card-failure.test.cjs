@@ -67,12 +67,13 @@ test('successful retry does not show a stale failure', () => {
 test('restart-interrupted automatic project shows its reason and regenerates from the project page (RC156 #13)', async () => {
   const visited = []
   const buttons = {}
-  const html = renderCard('failed', '服务已重启，请重新生成', null, {
+  const restart = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8')).service_restarted
+  const html = renderCard('failed', restart, null, {
     project: { error_code: 'service_restarted', settings: { smart_import: { auto_start: true }, studio_generation_status: 'failed' } },
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, (to) => visited.push(to))
   assert.match(html, /role="alert"/)
-  assert.match(html, /服务已重启，请重新生成/)
+  assert.ok(html.includes(restart))
   assert.match(html, />重新生成</)
   await buttons['重新生成']()
   assert.deepEqual(visited, ['/project/test'])

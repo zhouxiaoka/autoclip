@@ -170,7 +170,8 @@ def test_lost_parent_fences_children_started_after_the_shutdown_snapshot(monkeyp
     def snapshot():
         # The old implementation allows this render to spawn during shutdown,
         # after terminate_children took its one snapshot of the process tree.
-        with pytest.raises(RuntimeError, match='服务已重启'):
+        from backend.core.failure_codes import sentence
+        with pytest.raises(RuntimeError, match=re.escape(sentence('service_restarted'))):
             with project_cancellation.bind('late-render'):
                 project_cancellation.run([sys.executable, '-c',
                     'import pathlib,sys; pathlib.Path(sys.argv[1]).touch()', str(late_output)])
