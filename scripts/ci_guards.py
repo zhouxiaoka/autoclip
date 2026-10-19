@@ -2,7 +2,8 @@
 """Lightweight CI guards for the 1.5.7 closeout.
 
 Blocking: review-round test filenames, review ids in comments and docstrings,
-and product error-code literals outside event_catalog.json. The line-count
+product error-code literals outside event_catalog.json (including quoted keys),
+and a second literal copy of a catalog error-code table. The line-count
 table is written to the PR job summary and never fails the run.
 """
 from __future__ import annotations
@@ -26,80 +27,12 @@ SKIP_PARTS = {'node_modules', '__pycache__', 'dist', '.venv', 'venv'}
 PRODUCT_ROOTS = ('backend', 'frontend/src', 'scripts')
 # HTTP response constants (VALIDATION_ERROR) are not catalog error codes.
 _CATALOG_CODE = re.compile(r'^[a-z][a-z0-9_]*$')
-_ERROR_LITERAL = re.compile(r'''(?:error_code|errorCode)\s*[:=]\s*['"]([A-Za-z0-9_]+)['"]''')
+# A quoted key is the same assignment as a bare name.
+_ERROR_LITERAL = re.compile(r'''['"]?(?:error_code|errorCode)['"]?\s*[:=]\s*['"]([A-Za-z0-9_]+)['"]''')
 # A review label is R or I plus the round digits (optional single letter) or the reviewer name.
 # Bare status codes, version numbers and ordinary words do not match.
 _REVIEW_ID = re.compile(r"\b(?:R\d{1,2}[a-z]?|I\d{3,4}|Dong(?:'s)?)\b")
 _REVIEW_FILE = re.compile(r'^(?:test_[ri]\d|r\d+[-_.]|i\d+[-_.])', re.IGNORECASE)
-
-
-# A leading "#12/#34 for #56." is the merged-module index, not the reason.
-_LEADING_INDEX = re.compile(
-    r'^(?:[ \t]*#\d+(?:[ \t]*[/#+\-–—][ \t]*#\d+)*[ \t.]*'
-    r'(?:for[ \t]+#\d+[ \t.]*)?)+'
-)
-_BEHAVIOR_TAG = re.compile(r'^\((?:behavior|behaviour)\)\s*:?\s*', re.IGNORECASE)
-_DECOR_LEAD = re.compile(r'^[ \t\-–—=|#/]{2,}[ \t]*:?[ \t]*|^[ \t:;,\-–—]+')
-_DECOR_TAIL = re.compile(r'[ \t]*[\-–—=|#/]{2,}[ \t]*$')
-
-
-def clean_review_text(text: str) -> str:
-    """Drop review ids from a comment or docstring. Keep the sentence that says why."""
-    if _REVIEW_ID.search(text) is None:
-        return text
-    cleaned = _REVIEW_ID.sub('', text)
-    cleaned = re.sub(r'\(\s*:\s*', '(', cleaned)
-    cleaned = re.sub(r'\bafter\s+\.', 'on the fixed side.', cleaned)
-    cleaned = re.sub(r'\bafter\s+at\b', 'on the fixed side at', cleaned)
-    cleaned = re.sub(r'\s+-\s+', ' ', cleaned)
-    cleaned = re.sub(r'\s*-\s*,', ',', cleaned)
-    cleaned = re.sub(r'\(\s*,\s*', '(', cleaned)
-    cleaned = re.sub(r'\s+,', ',', cleaned)
-    cleaned = re.sub(r'\(\s+\)', '', cleaned)
-    cleaned = re.sub(r'\(\s+', '(', cleaned)
-    cleaned = re.sub(r'\s+\)', ')', cleaned)
-    lines = []
-    for line in cleaned.splitlines():
-        line = re.sub(r'^\s*\*\s?', '', line)
-        line = _LEADING_INDEX.sub('', line)
-        line = _DECOR_TAIL.sub('', line)
-        line = _DECOR_LEAD.sub('', line)
-        line = re.sub(r'^\(\s*\+\s*', '', line)
-        line = re.sub(r'[ \t]{2,}', ' ', line).strip()
-        line = _BEHAVIOR_TAG.sub('', line)
-        line = re.sub(r'\(\s*\)', '', line).strip()
-        if re.match(r'Moved here from\b', line):
-            continue
-        words = re.findall(r'[A-Za-z\u4e00-\u9fff]{2,}', line)
-        if words and not all(word.lower() == 'review' for word in words):
-            lines.append(line)
-    return '\n'.join(lines).strip()
-
-
-def _split_string_token(token: str) -> tuple[str, str, str]:
-    """Return (prefix, quote, body) for a Python string token, including r/b/f/u prefixes."""
-    prefix = ''
-    match = re.match(r'^[rRuUbBfF]{1,2}', token)
-    if match and token[match.end():match.end() + 1] in '"\'':
-        prefix = token[:match.end()]
-        token = token[match.end():]
-    quote = token[:3] if token.startswith(("'''", '"""')) else token[:1]
-    if quote in {'"', "'", '"""', "'''"} and token.endswith(quote) and len(token) >= 2 * len(quote):
-        body = token[len(quote):-len(quote)]
-    else:
-        body = token[len(quote):]
-    return prefix, quote, body
-
-
-def _offsets(source: str) -> list[int]:
-    offsets = [0]
-    for line in source.splitlines(keepends=True):
-        offsets.append(offsets[-1] + len(line))
-    return offsets
-
-
-def _pos(offsets: list[int], line: int, col: int) -> int:
-    return offsets[line - 1] + col
 
 
 def _expr_string_starts(source: str) -> set[tuple[int, int]]:
@@ -115,30 +48,9 @@ def _expr_string_starts(source: str) -> set[tuple[int, int]]:
     return starts
 
 
-def _python_spans(source: str) -> list[tuple[int, int, str]]:
-    """Comment and docstring spans as (start, end, replacement) for review ids."""
-    offsets = _offsets(source)
-    doc_starts = _expr_string_starts(source)
-    spans = []
-    try:
-        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
-    except tokenize.TokenError:
-        return spans
-    for tok in tokens:
-        if tok.type == tokenize.COMMENT and _REVIEW_ID.search(tok.string):
-            inner = clean_review_text(tok.string[1:])
-            new = f'# {inner}' if inner else ''
-            spans.append((_pos(offsets, *tok.start), _pos(offsets, *tok.end), new))
-        elif tok.type == tokenize.STRING and tok.start in doc_starts and _REVIEW_ID.search(tok.string):
-            prefix, quote, body = _split_string_token(tok.string)
-            inner = clean_review_text(body)
-            new = f'{prefix}{quote}{inner}{quote}' if inner else ''
-            spans.append((_pos(offsets, *tok.start), _pos(offsets, *tok.end), new))
-    return spans
-
-
-def _js_spans(source: str) -> list[tuple[int, int, str]]:
-    spans = []
+def _js_review_lines(source: str) -> list[int]:
+    """Line numbers of review ids in JS comments. Strings are skipped."""
+    lines = []
     i, n = 0, len(source)
     while i < n:
         char = source[i]
@@ -166,66 +78,17 @@ def _js_spans(source: str) -> list[tuple[int, int, str]]:
                     break
                 i += 1
             continue
-        if source.startswith('//', i):
-            end = source.find('\n', i)
-            end = n if end < 0 else end
-            text = source[i + 2:end]
+        if source.startswith('//', i) or source.startswith('/*', i):
+            block = source.startswith('/*', i)
+            end = source.find('*/', i + 2) if block else source.find('\n', i)
+            end = n if end < 0 else (end + 2 if block else end)
+            text = source[i + 2:end - (2 if block else 0)]
             if _REVIEW_ID.search(text):
-                inner = clean_review_text(text)
-                spans.append((i, end, f'// {inner}' if inner else ''))
-            i = end
-            continue
-        if source.startswith('/*', i):
-            end = source.find('*/', i + 2)
-            end = n if end < 0 else end + 2
-            text = source[i + 2:end - 2]
-            if _REVIEW_ID.search(text):
-                inner = clean_review_text(text)
-                spans.append((i, end, f'/* {inner} */' if inner else ''))
+                lines.append(source[:i].count('\n') + 1)
             i = end
             continue
         i += 1
-    return spans
-
-
-def _drop_blank_note(source: str, start: int, end: int) -> tuple[int, int]:
-    """When a note is the whole line, remove that line instead of leaving a blank."""
-    line_start = source.rfind('\n', 0, start) + 1
-    if source[line_start:start].strip():
-        return start, end
-    if end < len(source) and source[end] == '\n':
-        end += 1
-    return line_start, end
-
-
-def _apply(source: str, spans: list[tuple[int, int, str]]) -> str:
-    pieces = []
-    prev = 0
-    for start, end, new in spans:
-        if new == '' and start >= prev:
-            start, end = _drop_blank_note(source, start, end)
-            if start < prev:
-                start = prev
-        if start < prev:
-            continue
-        pieces.append(source[prev:start])
-        pieces.append(new)
-        prev = max(prev, end)
-    pieces.append(source[prev:])
-    return ''.join(pieces)
-
-
-def rewrite_review_notes(root: Path = ROOT) -> list[str]:
-    """One-shot cleaner. CI only checks; it does not rewrite the tree."""
-    changed = []
-    for path in _note_files(root):
-        source = path.read_text(encoding='utf-8')
-        spans = _python_spans(source) if path.suffix == '.py' else _js_spans(source)
-        if not spans:
-            continue
-        path.write_text(_apply(source, spans), encoding='utf-8')
-        changed.append(str(path.relative_to(root)))
-    return changed
+    return lines
 
 
 def _note_files(root: Path):
@@ -262,7 +125,6 @@ def review_notes(root: Path = ROOT) -> list[str]:
     for path in _note_files(root):
         source = path.read_text(encoding='utf-8')
         if path.suffix == '.py':
-            offsets = _offsets(source)
             doc_starts = _expr_string_starts(source)
             try:
                 tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
@@ -273,8 +135,7 @@ def review_notes(root: Path = ROOT) -> list[str]:
                     if _REVIEW_ID.search(tok.string):
                         found.append(f'{path.relative_to(root)}:{tok.start[0]}')
         else:
-            for start, _end, _new in _js_spans(source):
-                line = source[:start].count('\n') + 1
+            for line in _js_review_lines(source):
                 found.append(f'{path.relative_to(root)}:{line}')
     return found
 
@@ -296,13 +157,117 @@ def _mcp_error_codes() -> set[str]:
 
 
 def _catalog_error_codes() -> set[str]:
+    """Enums named *_error_code, plus the attribution list user_caused_error_codes."""
     from backend.core.event_catalog import load_catalog
-    enums = load_catalog().get('enums') or {}
+    catalog = load_catalog()
+    enums = catalog.get('enums') or {}
     allowed = set()
     for name, values in enums.items():
         if isinstance(name, str) and name.endswith('_error_code') and isinstance(values, list):
             allowed.update(value for value in values if isinstance(value, str))
+    caused = (catalog.get('attribution') or {}).get('user_caused_error_codes') or []
+    if isinstance(caused, list):
+        allowed.update(value for value in caused if isinstance(value, str))
     return allowed
+
+
+def _catalog_error_sets() -> list[tuple[str, set[str]]]:
+    """Named error-code tables. A second literal copy of one of these is a handwritten set."""
+    from backend.core.event_catalog import load_catalog
+    catalog = load_catalog()
+    tables = []
+    for name, values in (catalog.get('enums') or {}).items():
+        if isinstance(name, str) and name.endswith('_error_code') and isinstance(values, list):
+            codes = {value for value in values if isinstance(value, str)}
+            if len(codes) >= 3:
+                tables.append((f'enums.{name}', codes))
+    caused = (catalog.get('attribution') or {}).get('user_caused_error_codes') or []
+    if isinstance(caused, list):
+        codes = {value for value in caused if isinstance(value, str)}
+        if len(codes) >= 3:
+            tables.append(('attribution.user_caused_error_codes', codes))
+    return tables
+
+
+def _literal_strings(node):
+    if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
+        values = []
+        for elt in node.elts:
+            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                values.append(elt.value)
+            else:
+                return None
+        return values
+    if isinstance(node, ast.Call) and node.args:
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, 'attr', None)
+        if name in {'frozenset', 'set', 'tuple', 'list'}:
+            return _literal_strings(node.args[0])
+    return None
+
+
+def _python_code_sets(path: Path) -> list[tuple[int, set[str]]]:
+    try:
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+    except SyntaxError:
+        return []
+    found = []
+    for node in ast.walk(tree):
+        value = None
+        lineno = getattr(node, 'lineno', 1)
+        if isinstance(node, ast.Assign):
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            value = node.value
+        if value is None:
+            continue
+        values = _literal_strings(value)
+        if values and len(values) >= 3:
+            found.append((lineno, set(values)))
+    return found
+
+
+_TS_COLLECTION = re.compile(
+    r'(?m)^[ \t]*(?:export[ \t]+)?(?:const|let)[ \t]+[A-Za-z0-9_]+[ \t]*(?::[^\n=]+)?=[ \t]*\[([^\]]*)\]'
+)
+_QUOTED = re.compile(r'''['"]([A-Za-z0-9_]+)['"]''')
+
+
+def _ts_code_sets(path: Path) -> list[tuple[int, set[str]]]:
+    text = path.read_text(encoding='utf-8')
+    found = []
+    for match in _TS_COLLECTION.finditer(text):
+        values = _QUOTED.findall(match.group(1))
+        if len(values) >= 3:
+            found.append((text[:match.start()].count('\n') + 1, set(values)))
+    return found
+
+
+def handwritten_error_code_sets(root: Path = ROOT) -> list[str]:
+    """A literal collection that equals a catalog error-code table is a second copy."""
+    tables = _catalog_error_sets()
+    found = []
+    for name in PRODUCT_ROOTS:
+        base = root / name
+        if not base.exists():
+            continue
+        for path in base.rglob('*'):
+            if not path.is_file() or path.name in {'event_catalog.json', 'failure_messages.json'}:
+                continue
+            if any(part in SKIP_PARTS or part == 'tests' for part in path.parts) or path.name.startswith('test_'):
+                continue
+            if path.suffix == '.py':
+                collections = _python_code_sets(path)
+            elif path.suffix in {'.ts', '.tsx', '.js', '.cjs'}:
+                collections = _ts_code_sets(path)
+            else:
+                continue
+            for line, codes in collections:
+                for label, table in tables:
+                    if codes == table:
+                        found.append(f'{path.relative_to(root)}:{line}: duplicates {label}')
+                        break
+    return found
 
 
 def error_code_literal_allowed(code: str, catalog: set[str], mcp: set[str]) -> bool:
@@ -405,6 +370,9 @@ def main() -> int:
     literals = error_code_literals()
     if literals:
         problems.append('错误码字面量不在目录里:\n' + '\n'.join(literals))
+    copies = handwritten_error_code_sets()
+    if copies:
+        problems.append('手写错误码集合:\n' + '\n'.join(copies))
     if problems:
         print('\n\n'.join(problems), file=sys.stderr)
         return 1

@@ -31,6 +31,10 @@ function load(name, mocks = {}, globals = {}) {
       if (id === './failureCodes') return loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts'))
       if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
       if (id === './connectionTestCode' || id === '../../analytics/connectionTestCode') return load('connectionTestCode')
+      if (id === '@event-catalog') {
+        const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/core/event_catalog.json'), 'utf8'))
+        return { default: data, __esModule: true }
+      }
       if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))
       if (id === './runtime') return load('runtime', {}, globals)
       if (id === '../utils/apiConfig') {
