@@ -1,8 +1,9 @@
 """Durable queue for studio terminal events.
 
 The settle path writes the payload here before it returns. A background thread
-posts it. A successful post or an HTTP 4xx rejection removes it; other failures
-are retried in this process, then left for the next start. The same
+posts it. A successful post or a permanent HTTP 4xx rejection removes it.
+408, 429, 5xx and network errors are retried in this process, then left for
+the next start. The same
 ``$insert_id`` is kept, and the settle time is sent as the capture timestamp.
 Nothing is written when there is no project key. Telemetry switched off drops
 the queue and does not post.

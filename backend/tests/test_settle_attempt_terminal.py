@@ -5,6 +5,8 @@ import threading
 import time
 from urllib.error import HTTPError
 
+import pytest
+
 from backend.core import project_cancellation
 from backend.services.studio import attempts, jobs, store
 from backend.services.studio import terminal_outbox
@@ -363,6 +365,53 @@ def test_rejected_terminal_is_dropped_without_retry(tmp_path, monkeypatch):
     assert store.change('p', finish) is True
     assert wait_until_idle()
     assert len(calls) == 1
+    assert pending_ids() == []
+
+
+@pytest.mark.parametrize('status', [408, 429])
+def test_request_timeout_and_rate_limit_stay_queued(tmp_path, monkeypatch, status):
+    """408 和 429 与 5xx 一样：本进程退避后仍留在队列，下次启动还能补发。"""
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    sleeps = []
+    real_sleep = time.sleep
+
+    def pause(seconds):
+        if seconds >= 1:
+            sleeps.append(seconds)
+            return
+        real_sleep(seconds)
+
+    monkeypatch.setattr(terminal_outbox.time, 'sleep', pause)
+    calls = []
+
+    def limited(req, timeout=0):
+        calls.append(json.loads(req.data.decode()))
+        raise HTTPError(req.full_url, status, 'later', {}, io.BytesIO(b''))
+
+    monkeypatch.setattr('urllib.request.urlopen', limited)
+    _open()
+
+    def finish(data):
+        data['output_variants'][0]['status'] = 'completed'
+        return store.settle_attempt(data, kind='finish')
+
+    assert store.change('p', finish) is True
+    assert wait_until_idle()
+    assert sleeps == list(terminal_outbox._RETRY_DELAYS)
+    assert len(calls) == 1 + len(terminal_outbox._RETRY_DELAYS)
+    assert pending_ids() == [calls[0]['properties']['$insert_id']]
+
+    posted = []
+
+    def online(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        return _Response()
+
+    monkeypatch.setattr('urllib.request.urlopen', online)
+    replay_unsent()
+    assert wait_until_idle()
+    assert len(posted) == 1
     assert pending_ids() == []
 
 
