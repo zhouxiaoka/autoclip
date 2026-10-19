@@ -14,6 +14,11 @@
       "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
       "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da"
     },
+    "NotoSansSC-Medium.ttf": {
+      "derived_from": "NotoSansSC.ttf",
+      "wght": 500,
+      "sha256": "af289ee1eb13c9514d8dfa44667553c84563b7bc7fe5c9e1bafd52c16a576fe5"
+    },
     "BarlowCondensed-OFL.txt": {
       "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/barlowcondensed/OFL.txt",
       "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f"

@@ -46,7 +46,7 @@ def verify_installed(args):
         "color=black:s=1080x1920:d=1", "-vf", graph, "-frames:v", "1", "-f", "null", "-",
     ], capture_output=True, text=True, timeout=30, check=True)
     selections = "\n".join(line for line in font_check.stderr.splitlines() if "fontselect:" in line)
-    assert "NotoSansSC" in selections, selections
+    assert "NotoSansSC-Medium" in selections, selections
     assert "failed to find any fallback" not in selections, selections
 
     # Scan actual frame pairs, not stored tracks from a previously completed job.
