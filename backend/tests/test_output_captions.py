@@ -1,9 +1,11 @@
 """The global burn-captions switch is snapshotted onto a generation and honored by both derive paths."""
+import logging
 from copy import deepcopy
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.api.v1.studio import call
 from backend.services import output_captions
 from backend.services.studio import jobs, store
 from backend.services.studio.models import Scene
@@ -19,6 +21,22 @@ def test_settings_api_defaults_to_on_and_persists_off():
         assert api.put('/settings/output-captions', json={'enabled': False}).json() == {'enabled': False}
         assert api.get('/settings/output-captions').json() == {'enabled': False}
         assert api.put('/settings/output-captions', json={'enabled': 'true'}).status_code == 422
+    assert output_captions.load_settings().enabled is False
+
+
+def test_unreadable_captions_file_stays_on_and_logs_once(caplog):
+    path = output_captions.settings_path()
+    output_captions._unreadable_logged = False
+    path.write_text('{', encoding='utf-8')
+    with caplog.at_level(logging.WARNING, logger='backend.services.output_captions'):
+        assert output_captions.load_settings().enabled is True
+        assert call(output_captions.load_settings).enabled is True
+        path.write_text('{"enabled":"yes"}', encoding='utf-8')
+        assert output_captions.load_settings().enabled is True
+    assert [record.message for record in caplog.records if record.name == 'backend.services.output_captions'] == [
+        'output-captions.json is unreadable; captions stay on',
+    ]
+    path.write_text('{"enabled":false}', encoding='utf-8')
     assert output_captions.load_settings().enabled is False
 
 
