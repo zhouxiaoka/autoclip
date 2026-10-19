@@ -164,16 +164,79 @@ def test_receipts_carry_no_user_content():
         assert set(receipt) <= allowed and 'idempotency_key' not in receipt
 
 
-@pytest.mark.usefixtures('env')
-def test_a_run_killed_by_a_restart_settles_its_attempt_as_failed():
-    pid = flow.new_project(); flow.auto_import(pid)
+def _kill_previous_process(pid):
     path = store.directory(pid) / 'metadata' / 'studio.json'
     data = json.loads(path.read_text())
     data['analysis']['instance'] = 'previous-process'
     path.write_text(json.dumps(data))
+
+
+@pytest.mark.usefixtures('env')
+def test_a_run_killed_by_a_restart_settles_its_attempt_as_failed():
+    pid = flow.new_project(); flow.auto_import(pid)
+    _kill_previous_process(pid)
     store.recover(pid)  # startup recovery persists the terminal; a plain read does not
     [receipt] = flow.receipts(pid)
     assert receipt['state'] == 'failed' and receipt['error_code'] == store.RESTART_CODE
+
+
+@pytest.mark.usefixtures('env')
+def test_a_new_import_settles_the_interrupted_attempt_before_opening_another():
+    pid = flow.new_project(); flow.auto_import(pid)
+    _kill_previous_process(pid)
+    jobs.inspect_project(pid, flow.AUTO)
+    first, last = flow.receipts(pid)[0], flow.receipts(pid)[-1]
+    assert first['state'] == 'failed' and first['error_code'] == store.RESTART_CODE
+    assert last['state'] == 'open' and last['attempt_id'] != first['attempt_id']
+
+
+@pytest.mark.usefixtures('env')
+def test_confirm_settles_the_interrupted_attempt_before_the_conflict():
+    from backend.services.studio.models import ConfirmPlan
+    pid = flow.new_project(); flow.auto_import(pid)
+    _kill_previous_process(pid)
+    with pytest.raises(store.ConflictError):
+        jobs.confirm_project(pid, ConfirmPlan(plan_id='missing', goals=['content']))
+    [receipt] = flow.receipts(pid)
+    assert receipt['state'] == 'failed' and receipt['error_code'] == store.RESTART_CODE
+
+
+@pytest.mark.usefixtures('env')
+def test_editing_the_plan_settles_the_interrupted_attempt_before_refusing(monkeypatch):
+    from fastapi import HTTPException
+    from backend.api.v1 import studio as studio_api
+    pid = flow.new_project(); flow.auto_import(pid)
+    _kill_previous_process(pid)
+    project = type('Project', (), {'project_metadata': {}, 'processing_config': {}})()
+    monkeypatch.setattr(studio_api, 'project_or_404', lambda *_a, **_k: project)
+    with pytest.raises(HTTPException) as raised:
+        studio_api.correct_plan(pid, flow.AUTO, type('DB', (), {'commit': lambda self: None})())
+    assert raised.value.status_code == 404
+    [receipt] = flow.receipts(pid)
+    assert receipt['state'] == 'failed' and receipt['error_code'] == store.RESTART_CODE
+
+
+@pytest.mark.usefixtures('env')
+def test_a_live_run_is_still_refused_and_its_attempt_stays_open():
+    pid = flow.new_project(); flow.auto_import(pid)
+    with pytest.raises(ValueError, match='当前任务正在运行'):
+        jobs.inspect_project(pid, flow.AUTO)
+    [receipt] = flow.receipts(pid)
+    assert receipt['state'] == 'open'
+
+
+@pytest.mark.usefixtures('env')
+def test_editing_a_live_plan_is_still_refused(monkeypatch):
+    from fastapi import HTTPException
+    from backend.api.v1 import studio as studio_api
+    pid = flow.new_project(); flow.auto_import(pid)
+    project = type('Project', (), {'project_metadata': {}, 'processing_config': {}})()
+    monkeypatch.setattr(studio_api, 'project_or_404', lambda *_a, **_k: project)
+    with pytest.raises(HTTPException) as raised:
+        studio_api.correct_plan(pid, flow.AUTO, type('DB', (), {'commit': lambda self: None})())
+    assert raised.value.status_code == 409
+    [receipt] = flow.receipts(pid)
+    assert receipt['state'] == 'open'
 
 
 @pytest.mark.usefixtures('env')

@@ -412,7 +412,7 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
     project = project_or_404(project_id, db)
     # Keep the check, requested preferences and job reservation atomic with other submissions.
     with store.lock:
-        if (store.read(project_id).get('analysis') or {}).get('status') == 'running':
+        if (store.recover(project_id).get('analysis') or {}).get('status') == 'running':
             raise HTTPException(409, '当前分析尚未结束，完成后可修改方案；已有草稿会保留')
         url = None
         try:

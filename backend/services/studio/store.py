@@ -441,7 +441,7 @@ def directory(project_id: str) -> Path:
     return get_projects_directory() / project_id
 
 @_serialized
-def read(project_id: str, *, recover: bool = True):  # recover is ignored; persistence is recover()
+def read(project_id: str):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
         _io_failures.pop(path, None)
@@ -476,7 +476,7 @@ def read(project_id: str, *, recover: bool = True):  # recover is ignored; persi
 @_serialized
 def recover(project_id: str):
     path = directory(project_id) / 'metadata' / 'studio.json'
-    data = read(project_id, recover=False)
+    data = read(project_id)
     if not path.exists() or producer_alive(data.get('generation')):
         return data  # a live CLI / MCP producer owns its run
     interrupted = set()
@@ -523,7 +523,7 @@ def recover(project_id: str):
         analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind='unknown')
     if patched:
         try:
-            write(project_id, data, _recover_previous=False)
+            write(project_id, data)
         except OSError:
             logger.warning('Studio terminal receipt persistence deferred')
         else:
@@ -937,7 +937,7 @@ def settle_attempt(data, kind='finish', previous=None, **kw):
 
 
 @_serialized
-def write(project_id, data, *, _recover_previous=True, restore=False):
+def write(project_id, data, *, restore=False):
     """``restore=True`` ``data`` is a state read earlier, written back as is to undo a
     reservation nobody accepted (a rejected dispatch). It is not a state transition: no attribution
     snapshot is stamped and every record keeps the attribution group it carries."""
@@ -950,7 +950,7 @@ def write(project_id, data, *, _recover_previous=True, restore=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     # Preserve content-free execution receipts in the same atomic write as business state.
     # Re-screening must not destroy an unobserved production terminal.
-    previous = read(project_id, recover=_recover_previous) if path.exists() else {}
+    previous = read(project_id) if path.exists() else {}
     _apply_read_receipts(path, data)
     _ensure_failure_identity(data)
     usage_checkpoint = _attach_run_telemetry(data, project_id, previous, restore=restore)
@@ -1144,7 +1144,7 @@ def change(project_id, mutate):
     with lock:
         data = recover(project_id)  # repair at the explicit write, not during read
         result = mutate(data)
-        write(project_id, data, _recover_previous=False)
+        write(project_id, data)
         return result
 
 def save_draft(project_id, draft, *, create=False):

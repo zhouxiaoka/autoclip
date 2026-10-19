@@ -81,7 +81,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
 def status(project_id: str, *, export_kits: bool = False) -> dict:
     from backend.services.studio import store, publish_kit
     from backend.services.platform_strategy import platform_strategy
-    state = store.read(project_id, recover=False)
+    state = store.read(project_id)
     generation = state.get('generation')
     if not generation:
         raise FileNotFoundError('一键出片项目不存在')

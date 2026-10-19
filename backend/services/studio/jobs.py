@@ -1487,7 +1487,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
     # Reserve and dispatch together so another request cannot observe an
     # accepted task before submission succeeds. Preserve existing exports/plan.
     with store.lock:
-        previous = store.read(project_id)
+        previous = store.recover(project_id)
         if retry is not None:
             again = attempts.by_key(previous, retry.get('key'))
             if again:  # the same click again: same receipt, nothing dispatched twice
@@ -1545,7 +1545,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
-            store.write(project_id, previous, _recover_previous=False, restore=True)  # rollback is not a transition
+            store.write(project_id, previous, restore=True)  # rollback is not a transition
             raise ValueError(message) from None
 
         return state['analysis']['run_id']
@@ -1617,7 +1617,7 @@ def confirm_project(project_id, body):
     from backend.services.studio import readiness
     readiness.ensure_analysis_usable()
     with store.lock:
-        state = store.read(project_id)
+        state = store.recover(project_id)
         plan = state.get('plan') or {}
         if plan.get('id') != body.plan_id or (state.get('analysis') or {}).get('status') != 'awaiting_confirmation':
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
@@ -1668,7 +1668,7 @@ def confirm_project(project_id, body):
             capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
-            store.write(project_id, previous, _recover_previous=False, restore=True)  # rollback is not a transition
+            store.write(project_id, previous, restore=True)  # rollback is not a transition
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 
         return state['analysis']['run_id']

@@ -935,7 +935,7 @@ def _records__r22_415(names, base=1000):
 
 def _write_project(pid, instance):
     store.directory(pid).mkdir(parents=True, exist_ok=True)
-    store.write(pid, {'id': pid, 'analysis': {'status': 'running', 'phase': 'production', 'instance': instance}}, _recover_previous=False)
+    store.write(pid, {'id': pid, 'analysis': {'status': 'running', 'phase': 'production', 'instance': instance}})
     return store.directory(pid) / 'metadata' / 'studio.json'
 
 
@@ -984,7 +984,7 @@ def test_221_ledger_follows_the_state_and_release_uses_it():
     assert json.loads(ledger.read_text()) == [A]
     shutdown_marker.release(A)
     assert (root / A).exists()                                   # still referenced
-    store.write('p', {'id': 'p', 'analysis': {'status': 'failed', 'phase': 'production'}}, _recover_previous=False)
+    store.write('p', {'id': 'p', 'analysis': {'status': 'failed', 'phase': 'production'}})
     assert json.loads(ledger.read_text()) == []
     shutdown_marker.release(A)
     assert not (root / A).exists()
@@ -1291,7 +1291,7 @@ def test_220_history_receipt_of_a_settled_run_carries_its_own_screening_identity
             'generation': {'status': 'rendering', 'auto_start': True, **SCREEN},
             'output_variants': [{'id': 'v', 'status': 'completed'}]}
     store.settle_generation(data)
-    store.write('h', data, _recover_previous=False)
+    store.write('h', data)
     saved = json.loads((store.directory('h') / 'metadata' / 'studio.json').read_text(encoding='utf-8'))
     receipt = next(r for r in saved['analysis_history'] if r['run_id'] == 'r1')
     assert receipt['analysis']['screening_identity'] == EYES
@@ -1301,7 +1301,7 @@ def test_220_history_receipt_of_a_settled_run_carries_its_own_screening_identity
 
 def _project__r24_415(pid, instance):
     store.directory(pid).mkdir(parents=True, exist_ok=True)
-    store.write(pid, {'id': pid, 'analysis': {'status': 'running', 'phase': 'production', 'instance': instance}}, _recover_previous=False)
+    store.write(pid, {'id': pid, 'analysis': {'status': 'running', 'phase': 'production', 'instance': instance}})
     meta = store.directory(pid) / 'metadata'
     return meta / 'studio.json', meta / store.REFS_NAME
 
@@ -1317,7 +1317,7 @@ def test_293_failed_studio_replace_keeps_the_ledger_protecting_the_surviving_sta
         return real(tmp, dest)
     monkeypatch.setattr(store, '_replace_state', failing)
     with pytest.raises(OSError):
-        store.write('p', {'id': 'p', 'analysis': {'status': 'failed', 'phase': 'production'}}, _recover_previous=False)
+        store.write('p', {'id': 'p', 'analysis': {'status': 'failed', 'phase': 'production'}})
     assert store._read_refs(ledger) == {A__r24_415}
     state.write_text('{not json', encoding='utf-8')     # studio.json briefly unreadable
     assert A__r24_415 in store.reference_index()
@@ -1334,7 +1334,7 @@ def test_293_failed_replace_rolls_the_ledger_back_to_exactly_what_the_surviving_
         return real(tmp, dest)
     monkeypatch.setattr(store, '_replace_state', failing)
     with pytest.raises(OSError):
-        store.write('p', {'id': 'p', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}}, _recover_previous=False)
+        store.write('p', {'id': 'p', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}})
     assert store._read_refs(ledger) == {A__r24_415}               # B never reached disk: it must not pin a record
 
 
@@ -1342,7 +1342,7 @@ def test_293_failed_replace_rolls_the_ledger_back_to_exactly_what_the_surviving_
 def test_293_a_wrong_ledger_heals_on_the_next_write_even_if_references_did_not_change():
     state, ledger = _project__r24_415('p', A__r24_415)
     ledger.write_text('[]', encoding='ascii')           # e.g. an earlier failed ledger write
-    store.write('p', json.loads(state.read_text(encoding='utf-8')), _recover_previous=False)
+    store.write('p', json.loads(state.read_text(encoding='utf-8')))
     assert store._read_refs(ledger) == {A__r24_415}
 
 
@@ -1357,7 +1357,7 @@ def test_293_ledger_holds_old_and_new_references_while_studio_json_is_replaced(m
             seen['ledger'] = store._read_refs(ledger)
         return real(tmp, dest)
     monkeypatch.setattr(store, '_replace_state', spy)
-    store.write('p', {'id': 'p', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}}, _recover_previous=False)
+    store.write('p', {'id': 'p', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}})
     assert seen['ledger'] == {A__r24_415, B__r24_415}
     assert store._read_refs(ledger) == {B__r24_415}
 
@@ -1429,7 +1429,7 @@ def _project__r25_415(pid, analysis):
     store.directory(pid).mkdir(parents=True, exist_ok=True)
     if analysis.get('status') == 'running':
         analysis = {'instance': store.INSTANCE, **analysis}           # a live worker, not a restart
-    store.write(pid, {'id': pid, 'analysis': analysis}, _recover_previous=False)
+    store.write(pid, {'id': pid, 'analysis': analysis})
 
 
 # --- #331: concurrent map_chunks, A fails 503, B succeeds later ---------------------------------
@@ -1556,7 +1556,7 @@ def test_334_failed_ledger_prepare_does_not_commit_studio_json(monkeypatch):
         return real(path, text, encoding)
     monkeypatch.setattr(store, '_publish', ledger_down)
     with pytest.raises(OSError):
-        store.write('p334', {'id': 'p334', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}}, _recover_previous=False)
+        store.write('p334', {'id': 'p334', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}})
     assert json.loads(state.read_text(encoding='utf-8'))['analysis']['instance'] == A__r24_415
     ledger = store._read_refs(state.with_name(store.REFS_NAME))
     assert A__r24_415 in ledger and B__r24_415 not in ledger                         # every reference on disk is protected
@@ -1626,7 +1626,7 @@ def test_337_dir_fsync_failure_keeps_the_ledger_union(monkeypatch):
             raise OSError('fixture: directory fsync unavailable')
         return real_open(path, flags, *args)
     monkeypatch.setattr(store.os, 'open', no_dir_fsync)
-    store.write('p337', {'id': 'p337', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}}, _recover_previous=False)
+    store.write('p337', {'id': 'p337', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B__r24_415}})
     monkeypatch.setattr(store.os, 'open', real_open)
     ledger = store._read_refs(store.directory('p337') / 'metadata' / store.REFS_NAME)
     assert ledger == {A__r24_415, B__r24_415}
@@ -1914,7 +1914,7 @@ def test_399_half_identity_is_empty_on_read():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({'id': 'p399', 'analysis': {'status': 'completed', 'provider': 'kimi', 'model': 'kimi-k2'},
                                 'generation': {'status': 'completed', 'config_source': 'preset'}}), encoding='utf-8')
-    data = store.read('p399', recover=False)
+    data = store.read('p399')
     for name in ('analysis', 'generation'):
         assert not any(data[name].get(k) for k in ('provider', 'config_source', 'model', 'base_url_host')), data[name]
 
@@ -1935,8 +1935,7 @@ def test_400_history_keeps_model_host_and_source():
 def test_401_render_that_cannot_write_its_failure_leaves_a_receipt_not_a_queued_job(monkeypatch):
     from backend.services.studio import jobs
     store.directory('p401').mkdir(parents=True, exist_ok=True)
-    store.write('p401', {'id': 'p401', 'jobs': [{'job_id': 'j1', 'status': 'queued', 'instance': store.INSTANCE}]},
-                _recover_previous=False)
+    store.write('p401', {'id': 'p401', 'jobs': [{'job_id': 'j1', 'status': 'queued', 'instance': store.INSTANCE}]})
     real_change = store.change
     monkeypatch.setattr(store, 'change', lambda *a, **k: (_ for _ in ()).throw(file_lock.LockTimeout()))
     with pytest.raises(file_lock.LockTimeout):
@@ -2106,7 +2105,7 @@ def test_i421_history_half_identity_and_local_status_are_cleaned_on_read_only():
                                       'attribution_source': 'local', 'upstream_error_type': 'invalid_key'},
                          'analysis_history': [legacy]})
     before = path.read_text(encoding='utf-8')
-    state = store.read('p421', recover=False)
+    state = store.read('p421')
     row = state['analysis_history'][0]['analysis']
     assert 'provider' not in row and 'http_status' not in row and row['attribution_source'] == 'local'
     assert 'provider' not in state['analysis'] and 'upstream_error_type' not in state['analysis']
@@ -2382,9 +2381,9 @@ def test_i451_partial_survives_read_and_an_unrelated_save():
     root.mkdir(parents=True, exist_ok=True)
     (root / 'studio.json').write_text(json.dumps({'id': 'p451', 'analysis': partial, 'analysis_history': [
         {'run_id': 'r0', 'analysis': {**partial, 'run_id': 'r0'}}]}), encoding='utf-8')
-    assert store.read('p451', recover=False)['analysis']['failure_stage'] == 'render'
+    assert store.read('p451')['analysis']['failure_stage'] == 'render'
     store.change('p451', lambda d: d['jobs'].append({'job_id': 'j', 'status': 'completed'}))
-    state = store.read('p451', recover=False)
+    state = store.read('p451')
     for row in (state['analysis'], state['analysis_history'][0]['analysis']):
         assert row['failure_stage'] == 'render' and row['http_status'] == 503, row
 
@@ -2439,8 +2438,7 @@ def test_i454_render_lock_timeout_receipt_writes_local_on_the_generation():
     store.write('p454', {'id': 'p454', 'generation': {'status': 'rendering', **GLM, 'model': 'glm-4'},
                          'analysis': {'status': 'running', 'phase': 'rendering', 'run_id': 'r1', 'instance': store.INSTANCE, **GLM},
                          'jobs': [{'job_id': 'j1', 'status': 'running', 'instance': store.INSTANCE}],
-                         'output_variants': [{'id': 'v1', 'status': 'running', 'render_job_id': 'j1'}]},
-                _recover_previous=False)
+                         'output_variants': [{'id': 'v1', 'status': 'running', 'render_job_id': 'j1'}]})
     path = store.directory('p454') / 'metadata' / 'studio.json'
     store._append_receipt(path, {'identity': ('render', 'j1'), 'pending': {},
                                  'message': file_lock.LOCK_TIMEOUT_MESSAGE, 'error_code': file_lock.LOCK_TIMEOUT_CODE})
@@ -3008,7 +3006,7 @@ def test_i560_a_partial_terminal_keeps_its_snapshot_on_an_unrelated_write():
 def test_i560_the_generation_snapshot_is_kept_too():
     store.directory('p560g').mkdir(parents=True, exist_ok=True)
     store.write('p560g', {'id': 'p560g', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r1', 'instance': store.INSTANCE},
-                          'generation': {'status': 'production', 'created_at': '2026-10-17T03:00:00Z'}}, _recover_previous=False)
+                          'generation': {'status': 'production', 'created_at': '2026-10-17T03:00:00Z'}})
     before = _fail_with_kimi_503('p560g', name='generation', finished_at='2026-10-17T03:01:00Z')
     _unrelated_write_while_handling('p560g', RuntimeError('local'), lambda d: d.update(note='x'))
     assert _snap(store.read('p560g')['generation']) == before
@@ -3719,7 +3717,7 @@ def test_i620_real_confirm_dispatch_rejection_writes_the_previous_state_back_unc
     from backend.services.studio.models import ConfirmPlan
     store.directory('p620c').mkdir(parents=True, exist_ok=True)
     store.write('p620c', {'id': 'p620c', 'analysis': {'status': 'awaiting_confirmation', 'run_id': 'r1', 'phase': 'screening'},
-                          'plan': {'id': 'plan', 'recommended_analysis': 'visual', 'preferences': {}}}, _recover_previous=False)
+                          'plan': {'id': 'plan', 'recommended_analysis': 'visual', 'preferences': {}}})
     before = store.read('p620c')['analysis']
     monkeypatch.setattr(readiness, 'ensure_analysis_usable', lambda *a, **k: None)
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
@@ -3800,7 +3798,7 @@ def test_i624_d1_a_generation_failure_of_another_run_replaces_the_snapshot():
     """LOCK, kills D1."""
     store.directory('p624g').mkdir(parents=True, exist_ok=True)
     store.write('p624g', {'id': 'p624g', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r1', 'instance': store.INSTANCE},
-                          'generation': {'status': 'production', 'created_at': '2026-10-17T03:00:00Z'}}, _recover_previous=False)
+                          'generation': {'status': 'production', 'created_at': '2026-10-17T03:00:00Z'}})
     _fail_with_kimi_503('p624g', name='generation', finished_at='2026-10-17T03:01:00Z')
     _unrelated_write_while_handling('p624g', RuntimeError('local GLM'),
                                     lambda d: d['generation'].update(status='failed', created_at='2026-10-17T04:00:00Z'))
@@ -3898,14 +3896,14 @@ def test_i565_the_serializer_drops_an_unknown_source_and_a_half_identity():
 def test_i565_store_read_projection_and_history_summary_carry_only_whitelisted_fields():
     pid = 'p565'
     store.directory(pid).mkdir(parents=True, exist_ok=True)
-    store.write(pid, {'id': pid, 'analysis': {'status': 'running', 'run_id': 'r1', 'phase': 'screening'}}, _recover_previous=False)
+    store.write(pid, {'id': pid, 'analysis': {'status': 'running', 'run_id': 'r1', 'phase': 'screening'}})
     path = store.directory(pid) / 'metadata' / 'studio.json'
     raw = json.loads(path.read_text())
     raw['analysis'] = {**raw['analysis'], **DIRTY, 'status': 'failed', 'error_code': 'provider_error'}
     path.write_text(json.dumps(raw))
     read = store.read(pid)['analysis']
     assert read.get('http_status') is None and read.get('provider') == 'kimi'
-    store.write(pid, {**store.read(pid), 'analysis': {'status': 'running', 'run_id': 'r2', 'phase': 'screening'}}, _recover_previous=False)
+    store.write(pid, {**store.read(pid), 'analysis': {'status': 'running', 'run_id': 'r2', 'phase': 'screening'}})
     row = next(r for r in store.read(pid).get('analysis_history', []) if r['run_id'] == 'r1')['analysis']
     assert set(row) & set(DIRTY) <= WHITELIST__r31_415_payload
     _no_secret(row)
@@ -3964,7 +3962,7 @@ def test_i565_history_summary_of_a_dirty_terminal_the_writer_hands_in():
     pid = 'p565w'
     store.directory(pid).mkdir(parents=True, exist_ok=True)
     store.write(pid, {'id': pid, 'analysis': {**DIRTY, 'status': 'failed', 'run_id': 'r1', 'phase': 'screening',
-                                              'error_code': 'provider_error'}}, _recover_previous=False)
+                                              'error_code': 'provider_error'}})
     stored = json.loads((store.directory(pid) / 'metadata' / 'studio.json').read_text())  # what is on disk
     for row in (next(r for r in store.read(pid).get('analysis_history', []) if r['run_id'] == 'r1')['analysis'],
                 next(r for r in stored.get('analysis_history', []) if r['run_id'] == 'r1')['analysis']):
