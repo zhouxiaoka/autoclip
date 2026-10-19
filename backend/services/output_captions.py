@@ -6,11 +6,15 @@ that is already underway, including its on-demand variants.
 """
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, StrictBool
+
+logger = logging.getLogger(__name__)
+_unreadable_logged = False
 
 
 class CaptionSettings(BaseModel):
@@ -25,7 +29,21 @@ def settings_path() -> Path:
 
 def load_settings() -> CaptionSettings:
     path = settings_path()
-    return CaptionSettings.model_validate_json(path.read_text(encoding='utf-8')) if path.exists() else CaptionSettings()
+    if not path.exists():
+        return CaptionSettings()
+    try:
+        return CaptionSettings.model_validate_json(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        _warn_unreadable()
+        return CaptionSettings()
+
+
+def _warn_unreadable() -> None:
+    global _unreadable_logged
+    if _unreadable_logged:
+        return
+    _unreadable_logged = True
+    logger.warning('output-captions.json is unreadable; captions stay on')
 
 
 def save_settings(settings: CaptionSettings) -> CaptionSettings:
