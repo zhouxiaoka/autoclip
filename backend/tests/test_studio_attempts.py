@@ -271,6 +271,8 @@ def _chain(posted, order=('ok', 'bad')):
     partial = flow.workspace(pid)
     response = flow.retry_variant(pid, 'bad', 'click-1')
     flow.render_outcome(pid, {k: ('completed', None, None) for k in order})
+    from backend.services.studio.terminal_outbox import wait_until_idle
+    assert wait_until_idle()
     result = _node({'pid': pid, 'import_run': run, 'partial': partial, 'retry_response': response,
                     'retry_variant': 'bad', 'final': flow.workspace(pid)})
     assert not [e for e in result['events'] if e['event'] in ('studio_generation_finished', 'studio_production_finished')]
@@ -410,6 +412,8 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
     assert 'degrade_reason' not in late['plan'] and late['plan']['id'] != receipt.get('plan_id')
     late['output_variants'] = [late['output_variants'][0]]  # the live workspace moved on (one variant left)
     snapshots += [late, json.loads(json.dumps(late))]
+    from backend.services.studio.terminal_outbox import wait_until_idle
+    assert wait_until_idle()
     [finished] = [body for body in posted if body['event'] == 'studio_generation_finished']
     assert [body['event'] for body in posted if body['event'] == 'studio_generation_finished'] == ['studio_generation_finished']
     events = _frontend(pid, run, snapshots)

@@ -111,6 +111,11 @@ def create_app(mode: str = "web") -> FastAPI:
         except Exception:
             logger.exception("Studio 重启恢复失败，打开项目时会再次尝试")
         try:
+            from backend.services.studio.terminal_outbox import replay_unsent
+            replay_unsent()
+        except Exception:
+            logger.exception("未发出的终态事件补发失败")
+        try:
             # 只清 projects 根下、库里没有对应行的残留目录；库读失败则什么都不删（RC156 PR4）
             from backend.services.project_orphan_cleanup import cleanup_orphan_project_directories
             cleanup_orphan_project_directories()
