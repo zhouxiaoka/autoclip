@@ -691,6 +691,8 @@ def test_identity_survives_history_to_terminal(project, phase, kind, watch_id, m
         assert posted == []
     store.write(project, state)
     if phase == 'production':
+        from backend.services.studio.terminal_outbox import wait_until_idle
+        assert wait_until_idle()
         bodies = [item for item in posted if item['event'] == 'studio_production_finished']
         assert len(bodies) == 1, posted
         for key, value in identity.items():
@@ -790,6 +792,8 @@ def test_degrade_reason_reaches_terminal_event_from_stored_record(project, reaso
     done.update({k: v for k, v in _terminal(reason, auto).items() if k != 'generation'})
     done['generation'] = {**_terminal(reason, auto)['generation'], **({'attempt_id': opened['attempt_id']} if auto else {})}
     store.write(project, done)
+    from backend.services.studio.terminal_outbox import wait_until_idle
+    assert wait_until_idle()
     assert len(posted) == 1, posted
     assert posted[0]['properties']['degrade_reason'] == reason
     # The live run moves on (re-screen / plan rewrite); only the persisted terminal record

@@ -405,19 +405,12 @@ def _deliver_deferred_terminals():
     if not pending:
         return
     _deferred_terminals.events = None
-    from backend.core.project_cancellation import shutting_down
-    if shutting_down():
-        threading.Thread(target=_post_deferred_terminals, args=(pending,), name='studio-terminal-event', daemon=True).start()
-        return
     _post_deferred_terminals(pending)
 
 
 def _post_deferred_terminals(pending):
-    try:
-        from backend.services.studio import attempts
-        attempts.flush_terminal_events(pending)
-    except Exception:
-        logger.warning('Studio terminal event was not delivered')
+    from backend.services.studio.terminal_outbox import accept
+    accept(pending)
 
 
 lock.after_release = _deliver_deferred_terminals

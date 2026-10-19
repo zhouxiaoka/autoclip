@@ -751,16 +751,16 @@ def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: 
             acc.billable += 1
 
 
-def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None) -> None:
+def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None) -> bool:
     from backend.core.event_catalog import envelope_properties, validate_event
     from backend.services.studio.qa import telemetry as qa_telemetry
     key = qa_telemetry._key()
     if not key or not qa_telemetry._analytics_allowed():
-        return
+        return False
     blob = json.dumps(properties, ensure_ascii=False)
     if "sk-" in blob.lower() or "authorization" in blob.lower():
         logger.warning("refusing to post an event that looks like it contains a secret")
-        return
+        return False
     posted = {
         **properties,
         **(envelope if envelope is not None else envelope_properties()),
@@ -781,9 +781,10 @@ def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, A
     )
     try:
         with urllib.request.urlopen(request, timeout=1.5):
-            return
+            return True
     except (OSError, TypeError, ValueError, urllib.error.URLError):
         logger.warning("%s was not delivered", event)
+        return False
 
 
 def _current_stage() -> str:

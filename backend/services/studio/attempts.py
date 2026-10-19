@@ -391,24 +391,5 @@ def note_settled_terminals(data, previous):
 
 
 def flush_terminal_events(pending):
-    if not pending:
-        return
-    import logging, os
-    from backend.core.event_catalog import analytics_environment, app_version, detect_arch, detect_os, validate_event
-    from backend.core.llm_emit import _post_event
-    envelope = {'schema_version': 2, 'runtime': 'desktop' if os.environ.get('AUTOCLIP_MODE') == 'desktop' else 'web', 'app_version': app_version(), 'os': detect_os(), 'arch': detect_arch(), 'analytics_environment': analytics_environment()}
-    for item in pending:
-        name, props = item.get('event'), dict(item.get('properties') or {})
-        if name not in ('studio_generation_finished', 'studio_production_finished'):
-            continue
-        for _ in range(6):  # a bad optional field must not drop the terminal
-            bad = [p.split('.', 1)[-1].split('=', 1)[0].split(' ', 1)[0] for p in validate_event(name, {**props, **envelope, 'studio_schema_version': 2}, envelope=True) if any(s in p for s in (' not in ', 'secret', 'URL'))]
-            if not [props.pop(key, None) for key in bad if key not in ('outcome', 'error_code', 'failure_stage')]:
-                break
-        if validate_event(name, {**props, **envelope, 'studio_schema_version': 2}, envelope=True):
-            logging.getLogger(__name__).warning('%s failed catalog checks', name)
-            continue
-        if name == 'studio_generation_finished':
-            _post_event('studio_generation_finished', props, envelope=envelope)
-        else:
-            _post_event('studio_production_finished', props, envelope=envelope)
+    from backend.services.studio.terminal_outbox import accept
+    accept(pending)
