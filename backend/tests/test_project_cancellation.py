@@ -532,4 +532,4 @@ def test_disk_marker_keeps_a_finished_render_from_being_completed(tmp_path, monk
          'snapshot': draft.model_dump()}
     ], 'analysis': None, 'output_variants': [], 'events': []})
     assert jobs._render('p-mark', draft, 'j1') is None
-    assert store.read('p-mark', recover=False)['jobs'][0]['status'] == 'cancelled'
+    assert store.read('p-mark')['jobs'][0]['status'] == 'cancelled'

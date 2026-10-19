@@ -344,7 +344,7 @@ def test_home_first_recovery_is_durable_and_raw_observer_does_not_consume_receip
         executor.gates[project.draft.id].set()
         executor.futures[0].result(timeout=3)
         control.blocked = False
-        assert store.read('p1', recover=False)['generation']['status'] == 'rendering'
+        assert store.read('p1')['generation']['status'] == 'rendering'
         assert project.path.read_bytes() == original
         assert store.has_pending_receipts('p1')
         listing = project.client.get('/projects/')
@@ -587,7 +587,7 @@ def test_old_receipt_and_late_binding_cannot_mutate_later_attempts(project, monk
         data['output_variants'][1].update(status='preparing', preparation_run_id='new-prep', render_attempt_id='new-render', instance=store.INSTANCE)
         data['output_variants'][0]['cover_job'] = {'job_id': 'new-cover', 'status': 'queued', 'instance': store.INSTANCE}
     store.change('p1', prepare)
-    before = store.read('p1', recover=False)
+    before = store.read('p1')
     path = project.path
     # This identity-only replay exercises cached receipts after another accepted
     # attempt supersedes their saved IDs; no exception text or content is cached.
@@ -875,7 +875,7 @@ def test_each_persisted_reservation_rejection_recovers_without_a_phantom_worker(
         else:
             assert state['analysis']['status'] == 'failed'
         assert not store.has_pending_receipts('p1')
-        assert json.loads(project.path.read_bytes()) == store.read('p1', recover=False)
+        assert json.loads(project.path.read_bytes()) == store.read('p1')
         for name in ('executor', 'cover_executor', 'render_executor'):
             monkeypatch.setattr(jobs, name, executor)
         if public == 'preparation':
@@ -913,4 +913,4 @@ def test_malformed_optional_saved_links_are_ignored_without_rewriting_state(proj
     assert project.client.get('/studio/p1').status_code == 200
     assert project.client.get('/projects/').status_code == 200
     assert project.path.read_bytes() == original
-    assert store.read('p1', recover=False)['jobs'][0]['variant_links'] == links
+    assert store.read('p1')['jobs'][0]['variant_links'] == links
