@@ -97,6 +97,12 @@ impl BackendManager {
         if let Some(dsn) = option_env!("SENTRY_DSN") {
             cmd.env("SENTRY_DSN", dsn);
         }
+        // 和前端同一个项目 key。空值不传，后端遥测保持关闭。只走环境变量，不进 argv，也不写日志。
+        if let Some(key) = option_env!("VITE_PUBLIC_POSTHOG_KEY") {
+            if !key.is_empty() {
+                cmd.env("AUTOCLIP_POSTHOG_KEY", key);
+            }
+        }
 
         // Point the backend at the bundled ffmpeg/ffprobe when present.
         // The backend's ffmpeg_utils reads these env vars before falling back
