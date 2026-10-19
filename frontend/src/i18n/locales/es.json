@@ -1540,6 +1540,8 @@
   "正在准备取景与包装": "Preparando encuadre y diseño",
   "自动添加品牌片尾": "Añadir automáticamente un cierre de marca",
   "默认开启，为自动成片及修改后的导出添加 1.8 秒 AutoClip 动画。关闭后不影响已生成的视频。": "Activado por defecto. Añade una animación de AutoClip de 1,8 segundos a los vídeos automáticos y a sus exportaciones editadas. Desactivarlo no cambia los vídeos existentes.",
+  "自动成片压字幕": "Incrustar subtítulos en los vídeos automáticos",
+  "默认开启。关闭后，新建的自动成片不压字幕，标题仍在。已有项目不受影响，单条成片可以在编辑里重新打开字幕。": "Activado por defecto. Si lo apagas, los vídeos automáticos nuevos no llevan subtítulos incrustados y los títulos siguen. Los proyectos ya creados no cambian, y un clip puede volver a activarlos en el editor.",
   "竖版版式": "Diseño vertical",
   "按平台默认": "Predeterminado de la plataforma",
   "访谈式（人物窗口）": "Entrevista (ventana del hablante)",

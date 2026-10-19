@@ -262,6 +262,8 @@ export interface BilibiliDownloadTask {
 export const settingsApi = {
   getOutputBranding: (): Promise<{ enabled: boolean }> => api.get('/settings/output-branding'),
   setOutputBranding: (enabled: boolean): Promise<{ enabled: boolean }> => api.put('/settings/output-branding', { enabled }),
+  getOutputCaptions: (): Promise<{ enabled: boolean }> => api.get('/settings/output-captions'),
+  setOutputCaptions: (enabled: boolean): Promise<{ enabled: boolean }> => api.put('/settings/output-captions', { enabled }),
   // 获取系统配置
   getSettings: (): Promise<any> => {
     return api.get('/settings')

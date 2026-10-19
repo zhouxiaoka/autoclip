@@ -69,6 +69,18 @@ def _flag(draft, name: str, default=False):
     return getattr(draft, name, default)
 
 
+def _captions_drawn(draft, packaging) -> bool:
+    """Template captions follow packaging.captions_enabled. A bare draft follows draft.subtitles.
+
+    Packaging used to count as captions whenever it existed, so a clip with the switch off
+    still ran the captions-over-face check.
+    """
+    if packaging is None:
+        return bool(_flag(draft, 'subtitles', False))
+    enabled = packaging.get('captions_enabled', True) if isinstance(packaging, dict) else getattr(packaging, 'captions_enabled', True)
+    return enabled is not False
+
+
 def _words(source: Path | None) -> list[dict] | None:
     if source is None:
         return None
@@ -111,7 +123,7 @@ def _context(project_id: str, draft, result, strategy_id: str) -> Context:
         height=int(_num(result.get('height'), 0)),
         strategy_id=strategy_id or 'original',
         words=_words(source),
-        captions=bool(_flag(draft, 'subtitles', False) or (packaging is not None)),
+        captions=_captions_drawn(draft, packaging),
         title=bool(hook or title_lines),
         packaged=packaging is not None,
         title_y=_num(_flag(draft, 'title_y', 0.12), 0.12),

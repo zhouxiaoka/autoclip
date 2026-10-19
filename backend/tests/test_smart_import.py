@@ -206,6 +206,7 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
     assert state['generation'] == {
         'requested_platforms': ['tiktok'],
         'branding': {'outro_enabled': False, 'outro_version': 'v1'},
+        'output_captions': True,
         'auto_start': False,
         'portrait_style': 'auto',
         'template': 'classic',

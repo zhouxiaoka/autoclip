@@ -105,8 +105,9 @@ def _qa_stays_off_for_unrelated_renders(monkeypatch, request):
 def _isolated_branding_settings(tmp_path, monkeypatch, request):
     if request.node.get_closest_marker("stdlib_only"):
         return
-    from backend.services import output_branding
+    from backend.services import output_branding, output_captions
     monkeypatch.setattr(output_branding, 'settings_path', lambda: tmp_path / 'output-branding.json')
+    monkeypatch.setattr(output_captions, 'settings_path', lambda: tmp_path / 'output-captions.json')
 
 
 @pytest.fixture(autouse=True)
