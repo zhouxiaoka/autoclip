@@ -26,6 +26,11 @@ from urllib.request import Request, urlopen
 
 sys.dont_write_bytecode = True
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from posthog_bundle_check import (  # noqa: E402
+    assert_binary_contains_posthog_key,
+    assert_packaged_telemetry_identity,
+)
 # CI 控制台默认 cp1252，打印中文会直接崩；桌面端由 Rust 注入 PYTHONUTF8，这里自己兜住
 for stream in (sys.stdout, sys.stderr):
     try:
@@ -58,6 +63,7 @@ root = Path(tempfile.mkdtemp(prefix="autoclip-win-smoke-"))
 os.environ.update(
     AUTOCLIP_APP_DIR=str(root / "data"), AUTOCLIP_DATA_DIR=str(root / "data"),
     AUTOCLIP_DESKTOP_MODE="true", AUTOCLIP_MODE="desktop",
+    AUTOCLIP_BUILD_ENVIRONMENT="production",
     DATABASE_URL="sqlite:///" + str(root / "smoke.sqlite").replace("\\", "/"),
     SENTRY_DSN="", PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
     AUTOCLIP_FFMPEG_PATH=str(ffmpeg), AUTOCLIP_FFPROBE_PATH=str(ffprobe),
@@ -67,6 +73,7 @@ os.environ.update(
 os.chdir(resources)
 sys.path.insert(0, str(resources))
 report = {"python": sys.version.split()[0], "resources": str(resources)}
+assert_packaged_telemetry_identity()
 from windows_python_crt import verify as verify_python_crt
 report['python_crt'] = verify_python_crt(resources / 'python')
 
@@ -99,6 +106,7 @@ if args.launch_desktop:
     apps = [p for p in resources.parent.glob('*.exe') if 'uninstall' not in p.name.lower()]
     assert len(apps) == 1, f"无法唯一定位安装后的应用: {apps}"
     from windows_desktop_crt import verify
+    assert_binary_contains_posthog_key(apps[0], os.environ.get("VITE_PUBLIC_POSTHOG_KEY", ""))
     report['desktop_crt'] = verify(apps[0])
     assert report['desktop_crt']['status'] == 'passed', report['desktop_crt']
     command = [str(apps[0])]

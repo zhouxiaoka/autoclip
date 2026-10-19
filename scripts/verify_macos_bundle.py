@@ -21,6 +21,11 @@ import hashlib
 import tempfile
 
 from macos_release_contract import apply_release_launcher_env
+from posthog_bundle_check import (
+    assert_binary_contains_posthog_key,
+    assert_packaged_telemetry_identity,
+    macos_desktop_binary,
+)
 
 parser = argparse.ArgumentParser(description="Offline macOS bundled-runtime smoke check; run with the bundle's python/bin/python3.")
 parser.add_argument('--resources', type=Path, required=True, help='App Contents/Resources/resources directory')
@@ -79,6 +84,8 @@ runpy.run_module('backend.desktop_main', run_name='__main__')
 # Direct python has neither launcher value, so the packaged gate refuses.
 # Supply the release pair from the built app. No extra enable flag: source
 # trees and pytest still return false inside init_sentry.
+# Read the project key before the child env clears it. The assertion never prints it.
+assert_binary_contains_posthog_key(macos_desktop_binary(resources), os.environ.get('VITE_PUBLIC_POSTHOG_KEY', ''))
 child_env = apply_release_launcher_env(dict(
     os.environ, SENTRY_DSN='https://public@example.invalid/0',
     AUTOCLIP_EVENT_CATALOG='', AUTOCLIP_PARENT_PID='',
@@ -86,6 +93,8 @@ child_env = apply_release_launcher_env(dict(
 print('Sentry launch contract:',
       {key: child_env[key] for key in ('AUTOCLIP_APP_VERSION', 'AUTOCLIP_BUILD_ENVIRONMENT')},
       flush=True)
+os.environ['AUTOCLIP_BUILD_ENVIRONMENT'] = child_env['AUTOCLIP_BUILD_ENVIRONMENT']
+assert_packaged_telemetry_identity()
 backend_log = root/'backend-smoke.log'
 log_handle = backend_log.open('w')
 proc=subprocess.Popen([sys.executable,'-B','-c',bootstrap],cwd=resources,env=child_env,stdout=log_handle,stderr=subprocess.STDOUT,text=True)

@@ -158,8 +158,9 @@ jobs:
           # PostHog analytics. The phc_ key is a public client key (it ships in
           # the frontend bundle anyway), but we keep it in repo Secrets so it's
           # easy to rotate and not hard-coded. Set this secret in
-          # Settings -> Secrets and variables -> Actions. If unset, the build
-          # still succeeds and analytics is a no-op at runtime.
+          # Settings -> Secrets and variables -> Actions. cargo inherits this
+          # environment, so Rust option_env! can pass the same key to the backend.
+          # If unset, the build still succeeds and analytics is a no-op at runtime.
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
           VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
@@ -172,6 +173,8 @@ jobs:
 
       - name: Verify shipped macOS runtime before publishing
         shell: bash
+        env:
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
         run: |
           set -euo pipefail
           APP="src-tauri/target/release/bundle/macos/AutoClip Desktop.app"
@@ -255,6 +258,7 @@ jobs:
 
       - name: Build desktop app (PBS route)
         env:
+          # cargo inherits this. Rust option_env! passes the same key the frontend build uses.
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
           VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
@@ -330,6 +334,7 @@ jobs:
         shell: pwsh
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
