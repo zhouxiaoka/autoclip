@@ -68,7 +68,8 @@ WITH version_releases AS (
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
-    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+    -- HogQL 未匹配的 LEFT JOIN 得到 '' 而不是 NULL，表外版本（1.5.6 及更早）也要放行。
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), chained AS (
   -- retry chain: follow retry_of up to 4 hops to the chain root, the flow is the root's flow.
@@ -134,7 +135,8 @@ WITH version_releases AS (
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
-    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+    -- HogQL 未匹配的 LEFT JOIN 得到 '' 而不是 NULL，表外版本（1.5.6 及更早）也要放行。
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), c AS (
   SELECT *,
@@ -175,7 +177,8 @@ WITH version_releases AS (
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
-    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+    -- HogQL 未匹配的 LEFT JOIN 得到 '' 而不是 NULL，表外版本（1.5.6 及更早）也要放行。
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), c AS (
   SELECT *,
@@ -208,7 +211,8 @@ WHERE event = 'llm_request_finished'
   AND timestamp >= toDateTime({date_from}, 'UTC')
   AND timestamp < toDateTime({date_to}, 'UTC')
   AND person_id NOT IN COHORT {internal_cohort_id}
-  AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+  -- HogQL 未匹配的 LEFT JOIN 得到 '' 而不是 NULL，表外版本（1.5.6 及更早）也要放行。
+  AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
 GROUP BY provider, upstream_error_type
 ORDER BY events DESC;
 
@@ -239,7 +243,8 @@ WITH version_releases AS (
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
-    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+    -- HogQL 未匹配的 LEFT JOIN 得到 '' 而不是 NULL，表外版本（1.5.6 及更早）也要放行。
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 ), chained AS (
   -- retry chain: follow retry_of up to 4 hops to the chain root, the flow is the root's flow.
@@ -303,7 +308,8 @@ FROM (
     AND timestamp >= toDateTime({date_from}, 'UTC')
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
-    AND (vr.app_version IS NULL OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+    -- HogQL 未匹配的 LEFT JOIN 得到 '' 而不是 NULL，表外版本（1.5.6 及更早）也要放行。
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   GROUP BY aid
 )
 WHERE o_raw IN ('completed', 'success')
