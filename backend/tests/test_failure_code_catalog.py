@@ -89,8 +89,13 @@ def test_frontend_and_ingest_patterns_match_the_catalog():
 @pytest.mark.stdlib_only
 def test_one_sentence_per_code_and_no_retired_copies():
     table = failure_codes.messages()
-    allowed = failure_codes.studio_codes() | UPSTREAM_ERROR_TYPES
-    assert set(table) <= allowed
+    required = failure_codes.studio_codes() | failure_codes.download_codes() | UPSTREAM_ERROR_TYPES
+    assert required <= set(table)
+    assert set(table) <= required
+    assert "更换令牌" in table["insufficient_quota"]
+    assert "服务商控制台" in table["permission_denied"] and "勾选模型" in table["permission_denied"]
+    for code in ("missing_resource", "disk", "corrupt", "frame_extract_failed", "source_unreadable"):
+        assert "模型" not in table[code] and "设置" not in table[code], code
     assert table["invalid_key"] == table["llm_auth_invalid"] == table["authentication"]
     assert table["unexpected"] == table["provider_error"] == table["unknown"]
     assert HINT_KEYS[UpstreamErrorType.INVALID_KEY] == table["invalid_key"]
@@ -128,6 +133,18 @@ def test_provider_text_stays_out_of_the_user_message(caplog):
     assert raw in caplog.text
     kept = failure_codes.user_visible_error(ValueError("视觉模型不可用，请配置后重新确认；原素材已保留"))
     assert kept.startswith("视觉模型不可用")
+    chinese = failure_codes.user_visible_error(RuntimeError("服务商返回：账户余额不足，请到控制台充值后再试"))
+    assert chinese == failure_codes.sentence("unexpected")
+    assert "控制台" not in chinese and "余额" not in chinese
+    import errno, subprocess
+    missing = failure_codes.user_visible_error(FileNotFoundError("/tmp/missing.mp4"))
+    full = failure_codes.user_visible_error(OSError(errno.ENOSPC, "No space left on device"))
+    render = failure_codes.user_visible_error(subprocess.CalledProcessError(1, ["ffmpeg"]))
+    assert missing == failure_codes.sentence("missing_resource")
+    assert full == failure_codes.sentence("disk")
+    assert render == failure_codes.sentence("frame_extract_failed")
+    for text in (missing, full, render):
+        assert "模型" not in text and "设置" not in text
     failure = PipelineFailure("ANALYZE", failure_codes.sentence("llm_auth_invalid"), code="llm_auth_invalid")
     assert failure_codes.user_visible_error(failure) == failure_codes.sentence("llm_auth_invalid")
 

@@ -20,12 +20,12 @@ test('R21 #162: vision-stage user-cause failure sends 「去设置」 to the vis
 })
 
 test('R21 #163: precise upstream type wins over the coarse error_code (one classification)', () => {
-  const perm = '这个 API Key 没有该模型的使用权限，请到设置里更换'
+  const perm = '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。'
   assert.equal(fa.failureAction('llm_auth_invalid', 'permission_denied').reason, perm)
   assert.equal(fa.failureAction('authentication', 'permission_denied').reason, perm)
-  assert.equal(fa.failureAction('llm_auth_invalid', 'insufficient_quota').reason, '服务商账户余额不足，请充值或换一个服务商')
+  assert.equal(fa.failureAction('llm_auth_invalid', 'insufficient_quota').reason, '余额或令牌额度不足，请充值或更换令牌后再试。')
   // non-user upstream does not erase a user-cause code
-  assert.equal(fa.failureAction('insufficient_quota', 'rate_limited').reason, '服务商账户余额不足，请充值或换一个服务商')
+  assert.equal(fa.failureAction('insufficient_quota', 'rate_limited').reason, '余额或令牌额度不足，请充值或更换令牌后再试。')
   assert.equal(fa.failureAction('timeout', 'rate_limited').kind, 'retry')
 })
 })()
