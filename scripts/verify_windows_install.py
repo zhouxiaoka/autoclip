@@ -55,7 +55,7 @@ if not Path(sys.executable).resolve().is_relative_to(resources / "python"):
 
 ffmpeg = resources / "ffmpeg" / "ffmpeg.exe"
 ffprobe = resources / "ffmpeg" / "ffprobe.exe"
-for required in (resources / "backend" / "desktop_main.py", ffmpeg, ffprobe):
+for required in (resources / "backend" / "desktop_main.py", resources / "backend" / "core" / "failure_messages.json", resources / "backend" / "assets" / "fonts" / "NotoSansSC-Medium.ttf", ffmpeg, ffprobe):
     if not required.is_file():
         raise SystemExit(f"安装目录缺少文件: {required}")
 

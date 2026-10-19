@@ -668,6 +668,7 @@ def _posted(monkeypatch):
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
+    monkeypatch.setattr('backend.services.studio.terminal_outbox._RETRY_DELAYS', ())
     return posted
 
 

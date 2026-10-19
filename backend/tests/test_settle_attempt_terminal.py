@@ -1,10 +1,13 @@
 """Success-rate terminals are posted by settle_attempt, once, even if the frontend is gone."""
+import io
 import json
 import threading
 import time
+from urllib.error import HTTPError
 
 from backend.core import project_cancellation
 from backend.services.studio import attempts, jobs, store
+from backend.services.studio import terminal_outbox
 from backend.services.studio.terminal_outbox import pending_ids, replay_unsent, wait_until_idle
 
 
@@ -27,6 +30,7 @@ def _capture(monkeypatch):
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
+    monkeypatch.setattr('backend.services.studio.terminal_outbox._RETRY_DELAYS', ())
     return posted
 
 
@@ -82,6 +86,8 @@ def test_failure_terminal_is_idempotent_and_off_when_telemetry_is_off(tmp_path, 
     assert store.change('p', fail) is True
     assert store.change('p', fail) is False
     assert posted == []  # 没有 key，不发
+    assert pending_ids() == []
+    assert not (tmp_path / 'terminal-outbox.json').exists()
     assert store.read('p')['generation']['error'] == '服务商原始报错 sk-secret'
     assert store.read('p')['generation']['error_code'] == 'timeout'
     monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
@@ -129,6 +135,7 @@ def test_stuck_post_does_not_hold_the_studio_lock(tmp_path, monkeypatch):
     """发送卡住时，别的线程不用等 PostHog 就能拿到工作室锁。外层 with lock 也一样。"""
     _project(tmp_path, monkeypatch)
     monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    monkeypatch.setattr('backend.services.studio.terminal_outbox._RETRY_DELAYS', ())
     posted = []
     entered, release_send = threading.Event(), threading.Event()
 
@@ -236,10 +243,12 @@ def test_offline_settle_replays_once_after_restart(tmp_path, monkeypatch):
 
     def offline(req, timeout=0):
         seen.append(json.loads(req.data.decode()))
-        time.sleep(1.2)
+        if len(seen) == 1:
+            time.sleep(1.2)
         raise OSError('offline')
 
     monkeypatch.setattr('urllib.request.urlopen', offline)
+    monkeypatch.setattr('backend.services.studio.terminal_outbox._RETRY_DELAYS', (0, 0, 0))
     _open()
 
     def finish(data):
@@ -250,7 +259,7 @@ def test_offline_settle_replays_once_after_restart(tmp_path, monkeypatch):
     assert store.change('p', finish) is True
     assert time.monotonic() - began < 0.8
     assert wait_until_idle(4)
-    assert len(seen) == 1
+    assert len(seen) == 1 + 3
     insert_id = seen[0]['properties']['$insert_id']
     assert insert_id.endswith(':finished')
     assert pending_ids() == [insert_id]
@@ -271,3 +280,137 @@ def test_offline_settle_replays_once_after_restart(tmp_path, monkeypatch):
     replay_unsent()
     assert wait_until_idle()
     assert len(posted) == 1
+
+
+def test_queued_terminal_keeps_the_settle_time(tmp_path, monkeypatch):
+    """补发用结算当时的时间，发布前的事件不会被算进发布之后。"""
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    posted = _capture(monkeypatch)
+    _open()
+
+    def finish(data):
+        data['output_variants'][0]['status'] = 'completed'
+        return store.settle_attempt(data, kind='finish')
+
+    assert store.change('p', finish) is True
+    assert wait_until_idle()
+    queued = json.loads((tmp_path / 'terminal-outbox.json').read_text(encoding='utf-8'))['pending'][0]
+    assert posted[0]['timestamp'] == queued['timestamp']
+    assert posted[0]['timestamp'].endswith('Z')
+    (tmp_path / 'terminal-outbox.json').write_text(json.dumps({'pending': [{
+        'insert_id': 'studio-v1:before-release:finished',
+        'event': 'studio_generation_finished',
+        'properties': {'outcome': 'success', '$insert_id': 'studio-v1:before-release:finished'},
+        'envelope': {},
+        'timestamp': '2026-01-01T00:00:00Z',
+    }]}), encoding='utf-8')
+
+    def online(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        return _Response()
+
+    monkeypatch.setattr('urllib.request.urlopen', online)
+    replay_unsent()
+    assert wait_until_idle()
+    assert posted[-1]['timestamp'] == '2026-01-01T00:00:00Z'
+    assert pending_ids() == []
+    (tmp_path / 'terminal-outbox.json').write_text(json.dumps({'pending': [{
+        'insert_id': 'studio-v1:no-stamp:finished',
+        'event': 'studio_generation_finished',
+        'properties': {'outcome': 'success', '$insert_id': 'studio-v1:no-stamp:finished'},
+        'envelope': {},
+    }]}), encoding='utf-8')
+    replay_unsent()
+    assert wait_until_idle()
+    assert 'timestamp' not in posted[-1]
+    assert pending_ids() == []
+
+
+def test_terminal_queue_drops_the_oldest_when_full(tmp_path, monkeypatch):
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    monkeypatch.setattr(terminal_outbox, '_kick', lambda: None)
+    limit = terminal_outbox._QUEUE_LIMIT
+    terminal_outbox.accept([
+        {'event': 'studio_generation_finished', 'properties': {
+            'outcome': 'success', '$insert_id': f'studio-v1:t{i}:finished',
+        }}
+        for i in range(limit + 5)
+    ])
+    queued = pending_ids()
+    assert len(queued) == limit
+    assert queued[0] == 'studio-v1:t5:finished'
+    assert queued[-1] == f'studio-v1:t{limit + 4}:finished'
+
+
+def test_rejected_terminal_is_dropped_without_retry(tmp_path, monkeypatch):
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    calls = []
+
+    def rejected(req, timeout=0):
+        calls.append(json.loads(req.data.decode()))
+        raise HTTPError(req.full_url, 400, 'bad', {}, io.BytesIO(b''))
+
+    monkeypatch.setattr('urllib.request.urlopen', rejected)
+    _open()
+
+    def finish(data):
+        data['output_variants'][0]['status'] = 'completed'
+        return store.settle_attempt(data, kind='finish')
+
+    assert store.change('p', finish) is True
+    assert wait_until_idle()
+    assert len(calls) == 1
+    assert pending_ids() == []
+
+
+def test_server_error_retries_with_backoff_then_stays_queued(tmp_path, monkeypatch):
+    _project(tmp_path, monkeypatch)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    sleeps = []
+    real_sleep = time.sleep
+
+    def pause(seconds):
+        if seconds >= 1:
+            sleeps.append(seconds)
+            return
+        real_sleep(seconds)
+
+    monkeypatch.setattr(terminal_outbox.time, 'sleep', pause)
+    calls = []
+
+    def unavailable(req, timeout=0):
+        calls.append(json.loads(req.data.decode()))
+        raise HTTPError(req.full_url, 500, 'unavailable', {}, io.BytesIO(b''))
+
+    monkeypatch.setattr('urllib.request.urlopen', unavailable)
+    _open()
+
+    def finish(data):
+        data['output_variants'][0]['status'] = 'completed'
+        return store.settle_attempt(data, kind='finish')
+
+    assert store.change('p', finish) is True
+    assert wait_until_idle()
+    assert sleeps == list(terminal_outbox._RETRY_DELAYS)
+    assert len(calls) == 1 + len(terminal_outbox._RETRY_DELAYS)
+    assert pending_ids() == [calls[0]['properties']['$insert_id']]
+
+    posted = []
+
+    def online(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        return _Response()
+
+    monkeypatch.setattr('urllib.request.urlopen', online)
+    replay_unsent()
+    assert wait_until_idle()
+    assert len(posted) == 1
+    assert pending_ids() == []
+    assert sleeps == list(terminal_outbox._RETRY_DELAYS)
+
+
+def test_flush_terminal_events_is_gone():
+    assert not hasattr(attempts, 'flush_terminal_events')

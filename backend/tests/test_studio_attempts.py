@@ -312,6 +312,7 @@ def env__r25_419_receipt_chain_duckdb(tmp_path, monkeypatch):
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
+    monkeypatch.setattr('backend.services.studio.terminal_outbox._RETRY_DELAYS', ())
     return posted
 
 
@@ -455,6 +456,7 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
+    monkeypatch.setattr('backend.services.studio.terminal_outbox._RETRY_DELAYS', ())
     monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
     monkeypatch.setenv('AUTOCLIP_MODE', 'desktop')
     monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'production')

@@ -388,8 +388,3 @@ def _terminal_event(receipt):
 def note_settled_terminals(data, previous):
     prior = {a.get('attempt_id'): a.get('state') for a in ((previous or {}).get('attempts') or []) if isinstance(a, dict)}
     return [_terminal_event(r) for r in (data.get('attempts') or []) if isinstance(r, dict) and r.get('state') in TERMINAL and prior.get(r.get('attempt_id')) == 'open']
-
-
-def flush_terminal_events(pending):
-    from backend.services.studio.terminal_outbox import accept
-    accept(pending)
