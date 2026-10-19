@@ -13,6 +13,7 @@ import logging
 import sys
 import threading
 import time
+from collections import deque
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -337,7 +338,7 @@ def request_finished(
             from backend.services.studio.failure_identity import sent_identity
             identity = sent_identity(properties.get("provider"), base_url, properties.get("model"))
         _remember_run(properties, role="vision" if kind == "vision" else "analysis", identity=identity, error=error)
-        _post_event(schema.EVENT_LLM_REQUEST_FINISHED, properties)
+        _submit_event(schema.EVENT_LLM_REQUEST_FINISHED, properties)
         return properties
     except Exception:  # noqa: BLE001 - telemetry must not break a model call
         logger.warning("llm_request_finished was not recorded")
@@ -448,7 +449,7 @@ def emit_asr_readiness_checked(
             "has_subtitle": bool(has_subtitle),
             "blocked": bool(blocked),
         })
-        _post_event(schema.EVENT_ASR_READINESS_CHECKED, properties)
+        _submit_event(schema.EVENT_ASR_READINESS_CHECKED, properties)
         return properties
     except Exception:  # noqa: BLE001
         logger.warning("asr_readiness_checked was not recorded")
@@ -475,7 +476,7 @@ def emit_provider_validation_finished(
             ),
         }
         properties = schema.sanitize_provider_validation_properties(raw)
-        _post_event(schema.EVENT_PROVIDER_VALIDATION_FINISHED, properties)
+        _submit_event(schema.EVENT_PROVIDER_VALIDATION_FINISHED, properties)
         return properties
     except Exception:  # noqa: BLE001
         logger.warning("provider_validation_finished was not recorded")
@@ -749,6 +750,84 @@ def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: 
         acc.reasoning_tokens += int(properties.get("reasoning_tokens") or 0)
         if not failed:
             acc.billable += 1
+
+
+# Non-terminal events only. Terminal studio events stay on terminal_outbox and call _post_event themselves.
+_EVENT_LIMIT = 64
+_events: deque = deque()
+_events_guard = threading.Lock()
+_events_wake = threading.Event()
+_events_idle = threading.Event()
+_events_idle.set()
+_events_sending = False
+_events_worker: threading.Thread | None = None
+
+
+def _submit_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None) -> bool:
+    """Queue one non-terminal event. Returns when the item is queued, never when the network finishes."""
+    from backend.services.studio.qa import telemetry as qa_telemetry
+    if not qa_telemetry._key() or not qa_telemetry._analytics_allowed():
+        return False
+    try:
+        blob = json.dumps(properties, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return False
+    if "sk-" in blob.lower() or "authorization" in blob.lower():
+        logger.warning("refusing to post an event that looks like it contains a secret")
+        return False
+    global _events_worker
+    with _events_guard:
+        if len(_events) >= _EVENT_LIMIT:
+            _events.popleft()
+            logger.warning("llm event queue dropped the oldest item")
+        _events.append((event, properties, envelope))
+        _events_idle.clear()
+        if _events_worker is None or not _events_worker.is_alive():
+            _events_worker = threading.Thread(target=_drain_events, name="studio-llm-event", daemon=True)
+            _events_worker.start()
+    _events_wake.set()
+    return True
+
+
+def _drain_events() -> None:
+    global _events_sending
+    while True:
+        with _events_guard:
+            if _events:
+                event, properties, envelope = _events.popleft()
+                _events_sending = True
+            else:
+                _events_sending = False
+                _events_idle.set()
+                event = None
+        if event is None:
+            _events_wake.wait()
+            _events_wake.clear()
+            continue
+        try:
+            if envelope is None:
+                _post_event(event, properties)
+            else:
+                _post_event(event, properties, envelope=envelope)
+        except Exception:  # noqa: BLE001 - a telemetry failure must not kill the sender
+            logger.warning("%s was not delivered", event)
+        finally:
+            with _events_guard:
+                _events_sending = False
+                if not _events:
+                    _events_idle.set()
+
+
+def wait_until_idle(timeout: float = 3) -> bool:
+    """Test helper: block until queued non-terminal events have been handed to the sender."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with _events_guard:
+            if not _events and not _events_sending:
+                return True
+        _events_idle.wait(0.02)
+    with _events_guard:
+        return not _events and not _events_sending
 
 
 def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None) -> bool:
