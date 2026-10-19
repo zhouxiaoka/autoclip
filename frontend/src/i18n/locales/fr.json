@@ -1542,6 +1542,7 @@
   "默认开启，为自动成片及修改后的导出添加 1.8 秒 AutoClip 动画。关闭后不影响已生成的视频。": "Activé par défaut. Ajoute une animation AutoClip de 1,8 seconde aux vidéos automatiques et à leurs exports modifiés. La désactivation ne change pas les vidéos existantes.",
   "自动成片压字幕": "Incruster les sous-titres des vidéos automatiques",
   "默认开启。关闭后，新建的自动成片不压字幕，标题仍在。已有项目不受影响，单条成片可以在编辑里重新打开字幕。": "Activé par défaut. Une fois désactivé, les nouvelles vidéos automatiques n’incrusteront pas de sous-titres et les titres restent. Les projets déjà créés ne changent pas, et un extrait peut réactiver les sous-titres dans l’éditeur.",
+  "关闭后成片不带字幕，标题保留": "Désactivé : la vidéo n’a pas de sous-titres, le titre reste.",
   "竖版版式": "Mise en page verticale",
   "按平台默认": "Par défaut pour la plateforme",
   "访谈式（人物窗口）": "Entretien (fenêtre de l’intervenant)",
