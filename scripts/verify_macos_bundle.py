@@ -37,7 +37,7 @@ if not Path(sys.executable).resolve().is_relative_to(resources / 'python'):
 args.output_parent.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='autoclip-bundle-smoke-', dir=args.output_parent)).resolve()
 print('Isolated evidence directory:', root, flush=True)
-for required in ['backend/desktop_main.py', 'backend/core/event_catalog.json', 'ffmpeg/ffmpeg', 'ffmpeg/ffprobe']:
+for required in ['backend/desktop_main.py', 'backend/core/event_catalog.json', 'backend/core/failure_messages.json', 'backend/assets/fonts/NotoSansSC-Medium.ttf', 'ffmpeg/ffmpeg', 'ffmpeg/ffprobe']:
     if not (resources / required).is_file():
         parser.error('Missing bundled runtime file: ' + required)
 os.environ.update(AUTOCLIP_DATA_DIR=str(root/'data'),AUTOCLIP_APP_DIR=str(root/'data'),AUTOCLIP_DESKTOP_MODE='true',AUTOCLIP_MODE='desktop',DATABASE_URL='sqlite:///'+str(root/'isolated.sqlite'),SENTRY_DSN='',AUTOCLIP_FFMPEG_PATH=str(resources/'ffmpeg/ffmpeg'),AUTOCLIP_FFPROBE_PATH=str(resources/'ffmpeg/ffprobe'))

@@ -415,6 +415,7 @@ def test_asr_and_validation_hooks_are_allowlisted(capture):
     assert validation["upstream_error_type"] == "invalid_key"
     events = {row["event"] for row in capture}
     assert events == {schema.EVENT_ASR_READINESS_CHECKED, schema.EVENT_PROVIDER_VALIDATION_FINISHED}
+    assert all("timestamp" not in row for row in capture)
     assert "chat/completions" not in json.dumps(capture)
 
 

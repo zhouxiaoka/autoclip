@@ -830,7 +830,12 @@ def wait_until_idle(timeout: float = 3) -> bool:
         return not _events and not _events_sending
 
 
-def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None) -> bool:
+class Rejected(Exception):
+    """The capture endpoint refused this payload (HTTP 4xx). Do not retry it."""
+
+
+def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None,
+                timestamp: str | None = None) -> bool:
     from backend.core.event_catalog import envelope_properties, validate_event
     from backend.services.studio.qa import telemetry as qa_telemetry
     key = qa_telemetry._key()
@@ -848,12 +853,15 @@ def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, A
     problems = validate_event(event, posted, envelope=True)
     if problems:
         logger.warning("%s failed catalog checks: %s", event, "; ".join(problems))
-    body = json.dumps({
+    payload = {
         "api_key": key,
         "event": event,
         "distinct_id": qa_telemetry.anonymous_distinct_id(),
         "properties": posted,
-    }).encode()
+    }
+    if timestamp:
+        payload["timestamp"] = timestamp
+    body = json.dumps(payload).encode()
     request = urllib.request.Request(
         f"{qa_telemetry._HOST}/capture/", data=body,
         headers={"Content-Type": "application/json"}, method="POST",
@@ -861,6 +869,12 @@ def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, A
     try:
         with urllib.request.urlopen(request, timeout=1.5):
             return True
+    except urllib.error.HTTPError as error:
+        if 400 <= int(getattr(error, "code", 0) or 0) < 500:
+            logger.warning("%s was rejected", event)
+            raise Rejected(error.code) from None
+        logger.warning("%s was not delivered", event)
+        return False
     except (OSError, TypeError, ValueError, urllib.error.URLError):
         logger.warning("%s was not delivered", event)
         return False

@@ -1,9 +1,11 @@
 """Durable queue for studio terminal events.
 
 The settle path writes the payload here before it returns. A background thread
-posts it, and only a successful post removes it. The next process start sends
-anything still waiting. The same ``$insert_id`` is kept for the whole life of
-the payload. Telemetry switched off drops the queue and does not post.
+posts it. A successful post or an HTTP 4xx rejection removes it; other failures
+are retried in this process, then left for the next start. The same
+``$insert_id`` is kept, and the settle time is sent as the capture timestamp.
+Nothing is written when there is no project key. Telemetry switched off drops
+the queue and does not post.
 """
 from __future__ import annotations
 
@@ -13,15 +15,19 @@ import os
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+_QUEUE_LIMIT = 64
+_RETRY_DELAYS = (1.0, 2.0, 4.0)
 _file = threading.Lock()
 _state = threading.Lock()
 _running = False
 _again = False
 _attempted: set[str] = set()
+_tries: dict[str, int] = {}
 _memory: list[dict] = []
 
 
@@ -104,6 +110,7 @@ def _prepare(pending) -> list[dict]:
         'arch': detect_arch(),
         'analytics_environment': analytics_environment(),
     }
+    stamped = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     prepared = []
     for item in pending:
         name, props = item.get('event'), dict(item.get('properties') or {})
@@ -121,7 +128,10 @@ def _prepare(pending) -> list[dict]:
         insert_id = props.get('$insert_id')
         if not isinstance(insert_id, str) or not insert_id:
             continue
-        prepared.append({'insert_id': insert_id, 'event': name, 'properties': props, 'envelope': envelope})
+        prepared.append({
+            'insert_id': insert_id, 'event': name, 'properties': props,
+            'envelope': envelope, 'timestamp': stamped,
+        })
     return prepared
 
 
@@ -136,6 +146,10 @@ def _append(items: list[dict]) -> None:
                 continue
             current.append(item)
             seen.add(item['insert_id'])
+        overflow = len(current) - _QUEUE_LIMIT
+        if overflow > 0:
+            del current[:overflow]
+            logger.warning('terminal outbox dropped %s oldest item(s)', overflow)
         _write(current)
 
 
@@ -147,6 +161,9 @@ def accept(pending) -> None:
         if _suppressed():
             _clear()
             return
+        from backend.services.studio.qa import telemetry
+        if not telemetry._key():
+            return
         _append(_prepare(pending))
         if _allowed():
             _kick()
@@ -156,13 +173,14 @@ def accept(pending) -> None:
 
 def replay_unsent() -> None:
     """Send payloads left by an earlier process. The caller does not wait."""
-    global _attempted
+    global _attempted, _tries
     try:
         if _suppressed():
             _clear()
             return
         with _state:
             _attempted = set()
+            _tries = {}
         if _allowed() and _read():
             _kick()
     except Exception:  # noqa: BLE001
@@ -209,28 +227,58 @@ def _kick() -> None:
 
 
 def _send_pending() -> None:
-    from backend.core.llm_emit import _post_event
+    global _again
+    from backend.core.llm_emit import Rejected, _post_event
     if _suppressed() or not _allowed():
         if _suppressed():
             _clear()
         return
     with _file:
         batch = _read()
+    delay = None
     for item in batch:
         if _suppressed():
             _clear()
             return
+        insert_id = item['insert_id']
         with _state:
-            if item['insert_id'] in _attempted:
+            if insert_id in _attempted:
                 continue
-            _attempted.add(item['insert_id'])
         properties = item.get('properties') if isinstance(item.get('properties'), dict) else {}
         blob = json.dumps(properties, ensure_ascii=False)
         if 'sk-' in blob.lower() or 'authorization' in blob.lower():
-            _drop(item['insert_id'])
+            _drop(insert_id)
             continue
-        if _post_event(item['event'], properties, envelope=item.get('envelope') if isinstance(item.get('envelope'), dict) else None):
-            _drop(item['insert_id'])
+        envelope = item.get('envelope') if isinstance(item.get('envelope'), dict) else None
+        stamp = item.get('timestamp') if isinstance(item.get('timestamp'), str) and item.get('timestamp') else None
+        try:
+            sent = _post_event(item['event'], properties, envelope=envelope, timestamp=stamp)
+        except Rejected:
+            _forget(insert_id)
+            _drop(insert_id)
+            continue
+        if sent:
+            _forget(insert_id)
+            _drop(insert_id)
+            continue
+        with _state:
+            count = _tries.get(insert_id, 0)
+            if count < len(_RETRY_DELAYS):
+                wait = _RETRY_DELAYS[count]
+                _tries[insert_id] = count + 1
+                delay = wait if delay is None else min(delay, wait)
+            else:
+                _attempted.add(insert_id)
+                _tries.pop(insert_id, None)
+    if delay is not None:
+        time.sleep(delay)
+        with _state:
+            _again = True
+
+
+def _forget(insert_id: str) -> None:
+    with _state:
+        _tries.pop(insert_id, None)
 
 
 def _drop(insert_id: str) -> None:

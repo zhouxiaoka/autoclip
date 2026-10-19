@@ -33,6 +33,10 @@ def verify_installed(args):
     from backend.services.studio.models import Packaging, Scene
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
     assert packaging_render.FONT_DIR.resolve().is_relative_to(root)
+    medium = packaging_render.FONT_DIR / "NotoSansSC-Medium.ttf"
+    assert medium.is_file() and medium.resolve().is_relative_to(root), "wheel is missing Noto Sans SC Medium"
+    failure_messages = Path(backend.__file__).resolve().parent / "core" / "failure_messages.json"
+    assert failure_messages.is_file() and failure_messages.resolve().is_relative_to(root), "wheel is missing failure_messages.json"
     scene = Scene(id="font", start=0, end=1)
     packaging = Packaging(template="podcast_en", audience_language="zh",
                           title_lines=["中文字体测试"],
