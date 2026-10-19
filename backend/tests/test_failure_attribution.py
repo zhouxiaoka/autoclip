@@ -697,7 +697,7 @@ def test_201_settled_state_does_not_keep_the_record(data, monkeypatch):
 def test_201_preset_provider_survives_the_real_request_sender(monkeypatch):
     from backend.core.provider_presets import iter_providers
     sent = []
-    monkeypatch.setattr(llm_emit, '_post_event', lambda event, props: sent.append(props))
+    monkeypatch.setattr(llm_emit, '_submit_event', lambda event, props: sent.append(props))
     for preset in [p.id for p in iter_providers()]:
         llm_emit.request_finished(provider=preset, model='m', kind='text', outcome='success')
     assert [p['provider'] for p in sent] == [p.id for p in iter_providers()]
@@ -843,7 +843,7 @@ def test_223_snapshot_and_sentry_before_any_request_use_the_phase_identity(autom
 @pytest.fixture
 def posted(monkeypatch):
     events = []
-    monkeypatch.setattr(llm_emit, '_post_event', lambda event, props: events.append((event, props)))
+    monkeypatch.setattr(llm_emit, '_submit_event', lambda event, props: events.append((event, props)))
     return events
 
 
@@ -1015,6 +1015,7 @@ def test_201_every_preset_provider_leaves_through_the_real_sender(monkeypatch):
     presets = [p.id for p in iter_providers()]
     for preset in presets:
         llm_emit.request_finished(provider=preset, model='m', kind='text', outcome='success')
+    assert llm_emit.wait_until_idle()
     assert [b['properties']['provider'] for b in bodies] == presets
     assert {b['event'] for b in bodies} == {'llm_request_finished'}
     assert warnings == []                                        # catalog checks passed on the wire
@@ -3085,7 +3086,7 @@ def test_i563_http_status_of_never_reads_the_implicit_context():
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i563_an_old_503_does_not_leak_into_the_new_requests_record(monkeypatch):
     posted = []
-    monkeypatch.setattr(llm_emit, '_post_event', lambda event, props: posted.append((event, props)))
+    monkeypatch.setattr(llm_emit, '_submit_event', lambda event, props: posted.append((event, props)))
 
     def impl(*_a, **_k):
         raise _connection_error_while_handling_a_503()

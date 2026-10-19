@@ -197,6 +197,7 @@ def test_emitted_line_a_events_match_catalog(monkeypatch, tmp_path):
     telem.emit_asr_readiness_checked(
         provider="whisper_local", code="whisper_not_installed", has_subtitle=False, blocked=True)
     telem.emit_provider_validation_finished(provider="api88", result="skipped")
+    assert telem.wait_until_idle()
     assert bodies
     for row in bodies:
         errors = event_catalog.validate_event(row["event"], row["properties"], envelope=True)

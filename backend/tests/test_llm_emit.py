@@ -46,7 +46,31 @@ def capture(monkeypatch, tmp_path):
     (tmp_path / "privacy.json").write_text('{"analytics":true}', encoding="utf-8")
     (tmp_path / "analytics.json").write_text(
         '{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}', encoding="utf-8")
-    bodies = []
+    class _Bodies(list):
+        def _ready(self):
+            telem.wait_until_idle()
+
+        def __iter__(self):
+            self._ready()
+            return super().__iter__()
+
+        def __len__(self):
+            self._ready()
+            return super().__len__()
+
+        def __getitem__(self, item):
+            self._ready()
+            return super().__getitem__(item)
+
+        def __eq__(self, other):
+            self._ready()
+            return super().__eq__(other)
+
+        def __bool__(self):
+            self._ready()
+            return super().__bool__()
+
+    bodies = _Bodies()
 
     class Resp:
         def __enter__(self):
@@ -451,3 +475,99 @@ def test_sentry_tags_are_allowlisted_strings():
     assert tags["failure_stage"] == "analyze"
     assert tags["http_status"] == "429"
     assert "sk-" not in json.dumps(tags)
+
+
+def _analytics_dir(monkeypatch, tmp_path, *, key="phc_test", analytics=True):
+    monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
+    if key:
+        monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", key)
+    else:
+        monkeypatch.delenv("AUTOCLIP_POSTHOG_KEY", raising=False)
+    monkeypatch.delenv("VITE_PUBLIC_POSTHOG_KEY", raising=False)
+    (tmp_path / "privacy.json").write_text(
+        json.dumps({"analytics": analytics}), encoding="utf-8")
+    (tmp_path / "analytics.json").write_text(
+        '{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}', encoding="utf-8")
+
+
+class _Quiet:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def test_model_call_does_not_wait_for_the_network(monkeypatch, tmp_path):
+    import threading
+    import time
+    _analytics_dir(monkeypatch, tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def urlopen(req, timeout=0):
+        entered.set()
+        release.wait(5)
+        return _Quiet()
+
+    monkeypatch.setattr(telem.urllib.request, "urlopen", urlopen)
+    try:
+        started = time.monotonic()
+        props = telem.request_finished(provider="openai", outcome="success", http_status=200, duration_ms=4)
+        elapsed = time.monotonic() - started
+        assert props["outcome"] == "success"
+        assert elapsed < 0.3
+    finally:
+        release.set()
+        assert telem.wait_until_idle()
+    assert entered.is_set()
+
+
+def test_model_call_does_not_queue_without_a_key_or_consent(monkeypatch, tmp_path):
+    def urlopen(req, timeout=0):
+        raise AssertionError("network")
+
+    monkeypatch.setattr(telem.urllib.request, "urlopen", urlopen)
+    _analytics_dir(monkeypatch, tmp_path, key="")
+    telem.request_finished(provider="openai", outcome="success", http_status=200)
+    assert telem.wait_until_idle()
+    with telem._events_guard:
+        assert len(telem._events) == 0
+    _analytics_dir(monkeypatch, tmp_path, analytics=False)
+    telem.request_finished(provider="openai", outcome="success", http_status=200)
+    telem.emit_asr_readiness_checked(provider="whisper_local", code="whisper_not_installed", has_subtitle=False, blocked=True)
+    assert telem.wait_until_idle()
+    with telem._events_guard:
+        assert len(telem._events) == 0
+
+
+def test_llm_event_queue_drops_the_oldest_when_full(monkeypatch, tmp_path):
+    import threading
+    _analytics_dir(monkeypatch, tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+    seen = []
+
+    def urlopen(req, timeout=0):
+        seen.append(json.loads(req.data.decode())["properties"]["duration_ms"])
+        entered.set()
+        release.wait(5)
+        return _Quiet()
+
+    monkeypatch.setattr(telem.urllib.request, "urlopen", urlopen)
+    try:
+        telem.request_finished(provider="openai", outcome="success", http_status=200, duration_ms=900_000)
+        assert entered.wait(2)
+        for i in range(telem._EVENT_LIMIT + 5):
+            telem.request_finished(provider="openai", outcome="success", http_status=200, duration_ms=i)
+        with telem._events_guard:
+            queued = [item[1]["duration_ms"] for item in telem._events]
+        assert len(queued) == telem._EVENT_LIMIT
+        assert queued[0] == 5
+        assert queued[-1] == telem._EVENT_LIMIT + 4
+    finally:
+        release.set()
+        assert telem.wait_until_idle()
+    assert 900_000 in seen
+    assert 0 not in seen
+    assert telem._EVENT_LIMIT + 4 in seen
