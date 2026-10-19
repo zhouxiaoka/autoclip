@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.services.publish_export import (
     SUBTITLE_STYLES,
+    cjk_font_family,
     portrait_subtitle_style,
     ExportRequest,
     _build_filter,
@@ -173,3 +174,18 @@ def test_subtitle_styles_reach_the_ffmpeg_filter(tmp_path):
     default_graph, _ = _build_filter(req, {"layout": "fit", "w": 1080, "h": 1920}, srt, None, None)
     unknown_graph, _ = _build_filter(req, {"layout": "fit", "w": 1080, "h": 1920}, srt, None, None, "nope")
     assert default_graph == unknown_graph, "unknown styles fall back to the clean default"
+
+
+def test_plain_export_names_the_resolved_font_and_sets_the_bundled_fonts_dir(tmp_path):
+    from backend.services.studio.packaging_render import FONT_DIR
+    srt = tmp_path / "a.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\n字\n", encoding="utf-8")
+    req = ExportRequest("p", "c", layout="fit")
+    spec = {"layout": "fit", "w": 1920, "h": 1080}
+    windows, _ = _build_filter(req, spec, srt, None, Path("C:/Windows/Fonts/msyh.ttc"))
+    mac, _ = _build_filter(req, spec, srt, None, Path("/System/Library/Fonts/PingFang.ttc"))
+    assert "FontName=Microsoft YaHei" in windows and "PingFang" not in windows
+    assert "FontName=PingFang SC" in mac and "Microsoft YaHei" not in mac
+    fontsdir = f"fontsdir='{str(FONT_DIR.resolve()).replace(chr(92), '/')}'"
+    assert fontsdir in windows and fontsdir in mac
+    assert cjk_font_family(Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")) == "Noto Sans CJK SC"

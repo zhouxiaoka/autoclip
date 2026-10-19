@@ -223,8 +223,12 @@ def test_packaged_cjk_loads_bundled_font_in_real_ffmpeg(tmp_path):
                             capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode == 0, result.stderr
     selections = '\n'.join(line for line in result.stderr.splitlines() if 'fontselect:' in line)
-    assert 'NotoSansSC' in selections, selections
+    assert 'NotoSansSC-Medium' in selections, selections
+    assert 'NotoSansSC.ttf' not in selections, selections
     assert 'failed to find any fallback' not in selections, selections
+    assert pr.FONT == 'Noto Sans SC Medium'
+    assert 'Noto Sans SC Medium' in ass.read_text(encoding='utf-8')
+    assert 'Noto Sans SC Thin' not in ass.read_text(encoding='utf-8')
 
 
 @pytest.mark.parametrize('at,fit', [(0.25, False), (0.75, True), (1.25, False)])

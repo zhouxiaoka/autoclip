@@ -13,9 +13,11 @@ from pathlib import Path
 from backend.services.studio.models import Draft, Packaging, Scene
 
 FONT_DIR = Path(__file__).resolve().parents[2] / 'assets' / 'fonts'
-# Use the bundled variable font's actual family (name ID 1). Its preferred
-# family (name ID 16) silently falls back on CoreText and older Fontconfig.
-FONT = 'Noto Sans SC Thin'
+# Static medium face (name ID 1). The variable file's name ID 1 is "Noto Sans SC Thin"
+# and its default axis is wght 100, so libass drew every style at the thinnest weight.
+# The preferred family "Noto Sans SC" still falls back on CoreText. Pillow title art
+# keeps the variable file and sets its own axis.
+FONT = 'Noto Sans SC Medium'
 W, H = 1080, 1920
 WIN_Y, WIN_H = 560, 810
 WHITE, SUB, INK, INK_SOFT = '&H00E6EAEC', '&H009BA2A6', '&H00191A1A', '&H26191A1A'
