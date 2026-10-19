@@ -128,7 +128,7 @@ test('X2: opting out tells the backend so Sentry drops user.id; startup syncs th
   ph.initAnalytics()
   ph.setAnalyticsEnabled(true)
   await new Promise(resolve => setImmediate(resolve))
-  // R10 P2: the backend state is unknown at launch, so the saved "on" is synced once.
+  // P2: the backend state is unknown at launch, so the saved "on" is synced once.
   assert.deepEqual(consent(), [true])
   ph.setAnalyticsEnabled(false)
   await new Promise(resolve => setImmediate(resolve))
@@ -215,7 +215,7 @@ test('X2r: consent is marked sent only after success and failed PUTs retry', asy
   respondOk = true
   ph.initAnalytics()
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(puts.splice(0), [true]) // R10 P2 startup sync
+  assert.deepEqual(puts.splice(0), [true]) // P2 startup sync
   respondOk = false
   ph.setAnalyticsEnabled(false)
   await new Promise(resolve => setImmediate(resolve))
@@ -250,7 +250,7 @@ test('X2r: rapid toggle serializes so the backend ends on the latest UI value', 
   })
   ph.initAnalytics()
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(puts.splice(0), [true]) // R10 P2 startup sync
+  assert.deepEqual(puts.splice(0), [true]) // P2 startup sync
   pending.splice(0)[0]({ ok: true })
   await new Promise(resolve => setImmediate(resolve))
   ph.setAnalyticsEnabled(false) // in-flight: false
@@ -528,7 +528,7 @@ test('SDK exceptions and unavailable storage cannot break business or override o
   const blocked = { getItem() { throw Error('blocked') }, setItem() { throw Error('blocked') } }
   const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: blocked, window: {} })
   ph.initAnalytics(); ph.trackPageview('/project/private?key=secret')
-  // R12 #16: unreadable preference => nothing initialised or captured until the user opts in.
+  // unreadable preference => nothing initialised or captured until the user opts in.
   assert.equal(config, undefined)
   assert.equal(captured.length, 0)
   ph.setAnalyticsEnabled(true); ph.trackPageview('/project/private?key=secret')

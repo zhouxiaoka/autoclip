@@ -1,4 +1,4 @@
-"""Workload for test_r32_419_telemetry_isolation (#419 I538): run only in a child pytest, never collected by a
+"""Workload for test_r32_419_telemetry_isolation (#419): run only in a child pytest, never collected by a
 normal run (no test_ prefix). Exercises every backend telemetry entry with whatever DSN / PostHog key the
 environment carries: create_app (init_sentry), the QA event, the LLM event and the MCP event."""
 import os

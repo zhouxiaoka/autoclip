@@ -10,7 +10,7 @@ from backend.tests.test_studio import root  # noqa: F401
 import json
 import subprocess
 from pathlib import Path
-"""R3/R4 (R10): overlong sources route to subtitles with a visible tip; only vision-service
+""": overlong sources route to subtitles with a visible tip; only vision-service
 failures are classified as vision unavailable (S5)."""
 
 TALK = {
@@ -87,8 +87,8 @@ def test_r4_auto_parse_failure_still_uses_invalid_tip(source, monkeypatch):
     plan = planning.recommend(source, ImportOptions(auto_start=True))
     assert plan['degrade_reason'] == planning.VISION_INVALID_FALLBACK_CODE
     assert planning.VISION_INVALID_FALLBACK_MESSAGE in plan['reason']
-"""R11 #406: >120 min routes to subtitles before any vision check; frame-extract failures
-inside the real sample() have their own code; new hints are reason codes with 8 locales."""
+""">120 min routes to subtitles before any vision check; frame-extract failures
+inside the real sample have their own code; new hints are reason codes with 8 locales."""
 
 
 def _long(monkeypatch, seconds=8000.0):

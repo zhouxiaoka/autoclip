@@ -33,8 +33,8 @@ def test_successful_encoder_with_invalid_output_cannot_replace_saved_video(tmp_p
 
 
 def test_truncated_output_fails_full_decode_and_keeps_previous_video(tmp_path, monkeypatch):
-    """R11 #413: header/probe can look fine on a truncated mp4 (faststart moov up front);
-    only a full decode catches it. Not published, old output kept, temp files cleaned."""
+    """header/probe can look fine on a truncated mp4 (faststart moov up front);
+only a full decode catches it. Not published, old output kept, temp files cleaned."""
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     source = tmp_path / 'source.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=s=320x240:r=30:d=4',

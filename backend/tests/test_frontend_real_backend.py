@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-"""R25: frontend telemetry suites whose v4 terminals need a backend receipt run here, where the backend runtime
+"""frontend telemetry suites whose v4 terminals need a backend receipt run here, where the backend runtime
 exists. Their receipts come from the real backend (backend/tests/receipt_bridge.py via
 frontend/tests/helpers/real-backend.cjs) instead of the deleted helpers/backend-receipts.cjs copy of its rules."""
 

@@ -21,6 +21,7 @@ def checks(group: str, python: str):
             ('versions', [python, 'scripts/bump_version.py', '--check'], ROOT),
             ('readmes', [python, 'scripts/check_readmes.py'], ROOT),
             ('tracking_inventory', [python, 'scripts/check_tracking_inventory.py'], ROOT),
+            ('ci_guards', [python, 'scripts/ci_guards.py'], ROOT),
             ('release_gate_tests', [python, '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py'], ROOT),
         ],
         'redline': [
@@ -31,7 +32,7 @@ def checks(group: str, python: str):
         'backend': [
             ('media_test_dependencies', [python, '-c', "import cv2, numpy, shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required'"], ROOT),
             # Correctness rules are blocking; existing style debt is reported separately in CI.
-            ('python_correctness', [python, '-m', 'ruff', 'check', '--no-cache', '--select', 'E9,F63,F7,F82', 'backend', 'scripts/quality_gate.py', 'scripts/release_acceptance.py', 'scripts/internal_acceptance.py', 'scripts/provider_e2e', 'scripts/tests'], ROOT),
+            ('python_correctness', [python, '-m', 'ruff', 'check', '--no-cache', '--select', 'E9,F63,F7,F82', 'backend', 'scripts/quality_gate.py', 'scripts/ci_guards.py', 'scripts/release_acceptance.py', 'scripts/internal_acceptance.py', 'scripts/provider_e2e', 'scripts/tests'], ROOT),
             # Run the order-sensitive regression in a fresh process as well as the full suite.
             ('llm_hot_reload_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests/test_llm_hot_reload.py', '-q', '-r', 's'], ROOT),
             ('backend_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests', '-q', '-r', 's'], ROOT),

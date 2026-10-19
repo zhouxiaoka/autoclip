@@ -1,6 +1,5 @@
 """Store lock + read-receipt tests, selected by the ``store_lock`` marker (never by file name / round):
-the Windows CI job runs ``pytest backend/tests/test_store_lock.py -m store_lock`` against msvcrt.locking.
-Moved here from test_r25_415/test_r26_415 (#335/#393) plus R27 I414 (one deadline) and I419 (receipts)."""
+the Windows CI job runs ``pytest backend/tests/test_store_lock.py -m store_lock`` against msvcrt.locking."""
 import subprocess
 import sys
 import textwrap
@@ -41,7 +40,7 @@ def test_335_prune_waits_for_a_writer_in_another_process(tmp_path):
 
 
 def test_335_release_waits_for_a_writer_in_another_process(tmp_path):
-    """Closes R24 m5 (release without store.lock survived)."""
+    """Closes m5 (release without store.lock survived)."""
     root = shutdown_marker._root()
     _records(root, 1)
     name = f'{0:032x}'
@@ -70,11 +69,11 @@ def test_335_lock_timeout_raises_a_coded_error(tmp_path, monkeypatch):
     finally:
         child.wait(30)
     assert getattr(caught.value, 'code', None) == 'store_lock_timeout'
-    assert studio_error_code(caught.value) == 'store_lock_timeout'  # R26 #390
+    assert studio_error_code(caught.value) == 'store_lock_timeout'  
 
 
 def test_335_release_deletes_only_while_holding_the_store_lock(monkeypatch):
-    """R24 m5: the reference scan alone being locked is not enough; the unlink must be too."""
+    """m5: the reference scan alone being locked is not enough; the unlink must be too."""
     root = shutdown_marker._root()
     _records(root, 1)
     name = f'{0:032x}'
@@ -133,7 +132,7 @@ def test_393_default_acquire_bounds_the_in_process_wait_with_the_same_code(monke
         other.join(10)
 
 
-# --- R27 I414: thread lock and file lock share ONE deadline -------------------------------------------
+# thread lock and file lock share ONE deadline
 
 def _hold_file_in_child(path, seconds):
     ready = path.with_suffix('.ready')
@@ -215,7 +214,7 @@ def test_i414_explicit_timeout_on_the_thread_stage_also_returns_false(tmp_path):
         holder.join(10)
 
 
-# --- R27 I419: read and clear receipts under _receipt_mutex; only handled receipts go ------------------
+# read and clear receipts under _receipt_mutex; only handled receipts go
 
 def test_i419_receipt_appended_during_a_read_survives_its_clear(monkeypatch):
     _project('p419', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
@@ -256,7 +255,7 @@ def test_i419_receipt_carries_no_unread_lock_timeout_flag():
 
 
 def test_r27_phase_frozen_is_gone():
-    """R27: write-only ``phase_frozen`` removed (phase_identity being non-empty is the freeze)."""
+    """write-only ``phase_frozen`` removed (phase_identity being non-empty is the freeze)."""
     from backend.core import llm_emit
     assert 'phase_frozen' not in (ROOT / 'backend/core/llm_emit.py').read_text(encoding='utf-8')
     assert not hasattr(llm_emit._RunAcc(), 'phase_frozen')

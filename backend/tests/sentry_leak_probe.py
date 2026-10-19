@@ -1,5 +1,4 @@
-"""pytest plugin for test_r31_419_sentry_isolation (R31-pre #419 I538), loaded with -p in a child pytest run.
-
+"""pytest plugin for test_r31_419_sentry_isolation (-pre #419), loaded with -p in a child pytest run.
 Every sentry_sdk.init gets a counting fake transport, so nothing can leave the machine. After each test
 it records whether an SDK client is still bound or sentry_setup still thinks it is initialized, and asks
 the bound client (if any) to capture one exception; results go to $SENTRY_PROBE_OUT as JSON."""

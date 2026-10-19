@@ -75,7 +75,7 @@ test('S5 telemetry accepts only the fixed degrade reason code',()=>{
  assert.equal(workflow.safeStudioProperties({degrade_reason:MESSAGE}).degrade_reason,undefined)
 })
 
-// R12 #14: the new R11 reasons reach the terminal event on both auto and manual-confirm entries.
+// the new reasons reach the terminal event on both auto and manual-confirm entries.
 for(const reason of ['frame_extract_subtitle_fallback','source_too_long_subtitle_route']){
  for(const entry of ['auto','manual']){
   test(`R12 ${entry} entry: terminal event carries ${reason} once`,()=>{

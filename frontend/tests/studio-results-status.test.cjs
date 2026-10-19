@@ -189,7 +189,7 @@ test('R19 #106 manual mode: transcription 401 (authentication @ subtitle) -> 「
   assert.deepEqual(navigations, ['/settings?section=speech&return_project=test'])
 })
 
-// R20 #125: after an auth failure the user fixes the key; there must be a way to continue the same project.
+// after an auth failure the user fixes the key; there must be a way to continue the same project.
 test('R20 #125 auth failure: 「继续制作」 sits beside 「去设置」 and reuses the retry API (retry=true)', async () => {
   routeSearch.value = ''
   const buttons = [], calls = []
@@ -252,7 +252,7 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '这个 API Key 没有该模型的使用权限，请到设置里更换')
 })
 
-// R29 #444: the results-page line for "this re-run finished, N earlier failures" shows only when the round completed
+// the results-page line for "this re-run finished, N earlier failures" shows only when the round completed
 // and settle's not_redone_failed_count > 0; otherwise the original wording.
 test('R29 #444 the re-run line shows only for a completed round with earlier failures left', () => {
   const NEW = /本次重跑已完成，之前还有/, DONE = /已按所选平台生成可发布成片/

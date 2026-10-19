@@ -219,11 +219,10 @@ def test_settle_picks_the_tier_primary_even_from_an_unranked_record():
     assert receipt['error_code'] == 'timeout' and receipt['failure_stage'] == 'analyze'
     assert [c['code'] for c in receipt['causes']] == ['timeout', 'authentication']
     assert receipt['secondary_upstream_error_types'] == ['invalid_key'] and receipt['secondary_failure_stages'] == ['subtitle']
-"""#419 acceptance, the real chain (design-retro: store -> history -> observer -> send -> official SQL).
-
+"""acceptance, the real chain (design-retro: store -> history -> observer -> send -> official SQL).
 The real backend (store + jobs, executor stubbed) produces the partial generation, the retry-command response and
 the final state; the real frontend tracker/api/StudioResults button project them into events; the repo's
-docs/analytics/success_rate.sql (DuckDB adapter) counts them. Replaces the R20 flow test whose events came from
+docs/analytics/success_rate.sql (DuckDB adapter) counts them. Replaces the flow test whose events came from
 frontend-invented attempts."""
 
 IN_CI = bool(os.environ.get('CI'))
@@ -333,8 +332,8 @@ def test_mutation_guard_without_the_receipt_retry_of_it_is_two_flows(fig, env__r
 @pytest.mark.parametrize('fig', [1, 5])
 @pytest.mark.usefixtures('env__r25_419_receipt_chain_duckdb')
 def test_346_out_of_order_observation_is_still_one_successful_flow(fig, env__r25_419_receipt_chain_duckdb):
-    """R25 #346 on the real chain: the retry's terminal is observed BEFORE the partial one (offline client); the
-    events carry the receipt sequence and success_rate.sql orders by it, so figures 1 and 5 stay at 100%."""
+    """on the real chain: the retry's terminal is observed BEFORE the partial one (offline client); the
+events carry the receipt sequence and success_rate.sql orders by it, so figures 1 and 5 stay at 100%."""
     result, receipts = _chain(env__r25_419_receipt_chain_duckdb)
     gen = [e for e in result['events'] if e['event'] == 'studio_generation_finished']
     assert [e['props']['attempt_sequence'] for e in gen] == [r['sequence'] for r in receipts] == [1, 2]
@@ -348,7 +347,7 @@ def test_346_out_of_order_observation_is_still_one_successful_flow(fig, env__r25
         e['props']['flow_id'] = gen[0]['props']['flow_id'] if e in gen else e['props'].get('flow_id')
     [row] = run_sql(figure(fig, SQL, WINDOW), _rows(reordered))
     assert (row['flow_ok'] or 0, row['fq_all'] or 0, row['unknown_flows']) == (0, 0, 1)
-"""R25 (replaces frontend/tests/auto-degrade-real-entry.test.cjs): degrade_reason freeze proven on the real chain.
+"""(replaces frontend/tests/auto-degrade-real-entry.test.cjs): degrade_reason freeze proven on the real chain.
 The REAL backend writes the state (inspect_project -> _inspect -> settle_generation -> store.write -> receipt) and
 GET /studio/{pid} snapshots are fed to the REAL frontend import entry + observer (helpers/auto-degrade-entry.cjs).
 The observer first sees the terminal only after a re-screen replaced the plan (plan2, no reason): only a reason
@@ -420,7 +419,7 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
     assert finished['props']['flow_id'] == receipt['flow_id']  # #345: the backend flow, not the browser context
     assert finished['props']['completed_variant_count'] == 2 and finished['props']['variant_count'] == 2  # #347
     assert finished['props']['recommendation_mode'] == 'local' and finished['props']['route'] == 'subtitle'
-"""R25 #348: the degrade_reason frozen in a receipt comes from that attempt's own plan. The automatic run goes
+"""the degrade_reason frozen in a receipt comes from that attempt's own plan. The automatic run goes
 through the real _inspect (planning stubbed only at recommend) so the plan is bound where production writes it; a
 retry whose screening fails before a new plan exists must not freeze the previous plan's reason."""
 
@@ -518,7 +517,7 @@ def test_365_manual_confirm_binds_the_confirmed_plan_without_test_prebinding(mon
     flow.production_finished(pid, 'completed')
     [receipt] = flow.receipts(pid)
     assert receipt['state'] == 'completed' and receipt['degrade_reason'] == 'source_too_long_subtitle_route'
-"""R26 #367: the generation summary rules live only in backend attempts.generation_summary (frozen into the
+"""the generation summary rules live only in backend attempts.generation_summary (frozen into the
 receipt). These are the cases frontend/tests used to assert on the deleted workflow.generationSummary copy."""
 
 SNAPSHOT = {
@@ -570,7 +569,7 @@ def test_a_rank_skip_is_classic_and_not_a_downgrade():
 def test_recommendation_fields_are_kept():
     s = generation_summary({'generation': {'recommended_template': 'editorial', 'accepted_recommendation': False}, 'output_variants': [], 'jobs': [], 'drafts': []})
     assert s['recommended_template'] == 'editorial' and s['accepted_recommendation'] is False
-"""R25 #343/#344: a second 「重试这条」 joining the open variant-retry attempt goes through the same parent check and
+"""a second 「重试这条」 joining the open variant-retry attempt goes through the same parent check and
 idempotency registration as the first request."""
 
 
@@ -616,7 +615,7 @@ def test_joined_key_is_not_in_the_public_receipt():
     pid = flow.new_project(); _partial(pid)
     flow.retry_variant(pid, 'bad1', 'c1'); flow.retry_variant(pid, 'bad2', 'c2')
     assert all('joined_keys' not in r for r in flow.workspace(pid)['attempts'])
-"""R25 #342 (P1): the manual production path through the REAL entry (confirm_project -> _produce_selected), with
+"""(P1): the manual production path through the REAL entry (confirm_project -> _produce_selected), with
 no run_id / phase pre-filled by the test. The worker's terminal write carries neither (store.write inherits them
 from the running record), so the receipt must settle after that identity and the run telemetry are filled in:
 it reaches its terminal, a retry is accepted, and the frozen receipt carries the last call's telemetry."""
@@ -668,7 +667,7 @@ def test_342_real_manual_failure_can_be_retried(monkeypatch):
     first = flow.receipts(pid)[0]
     jobs.inspect_project(pid, flow.MANUAL, retry={'key': 'm1', 'parent_attempt_id': first['attempt_id']})
     assert flow.receipts(pid)[1]['retry_of'] == first['attempt_id']
-"""R27 #376/#377 (design: output ownership is stored, not inferred). Every output variant records the attempt
+"""(design: output ownership is stored, not inferred). Every output variant records the attempt
 that produced it (produced_by_attempt) and that attempt's plan (produced_by_plan) when it is created. A receipt's
 summary counts only outputs owned by this attempt (or, for a variant retry, by the attempt whose outputs it
 re-renders); a variant retry takes its plan from the retried variant itself, never from "the latest failure".
@@ -718,8 +717,7 @@ def test_376_outputs_carry_the_attempt_and_plan_that_produced_them(monkeypatch):
 
 @pytest.mark.usefixtures('env__r27_419_output_owner')
 def test_376_new_plan_failing_before_its_outputs_does_not_freeze_the_previous_outputs(monkeypatch):
-    """Dong/sol/astra: a re-screen builds and binds a new plan, then fails in production before any output -
-    the receipt used to freeze the previous run's variant=2/completed=1/failed=1 because it had a plan_id."""
+    """/sol/astra: a re-screen builds and binds a new plan, then fails in production before any output the receipt used to freeze the previous run's variant=2/completed=1/failed=1 because it had a plan_id."""
     pid = flow.new_project()
     _plan_a, first = _plan_a_partial(pid, monkeypatch)
     plan_b = _screen_and_plan(pid, monkeypatch, PLAN_B, retry={'key': 'r1', 'parent_attempt_id': first['attempt_id']})
@@ -757,20 +755,20 @@ def test_377_variant_retry_counts_the_retried_outputs(monkeypatch):
     pid = flow.new_project()
     _plan_a, _first, retried = _rescreen_fails_then_retry_a_variant(pid, monkeypatch)
     assert (retried['summary']['variant_count'], retried['summary']['completed_variant_count'],
-            retried['summary']['failed_variant_count']) == (1, 1, 0)   # R31 I541: only 'bad' (redone); was (2, 2, 0)
+            retried['summary']['failed_variant_count']) == (1, 1, 0)   # only 'bad' (redone); was (2, 2, 0)
 
 
 @pytest.mark.usefixtures('env__r27_419_output_owner')
 def test_377_variant_retry_counts_do_not_depend_on_the_plan_id(monkeypatch):
     """The direct variant retry (no re-screen in between): its output counts come from output ownership, so the
-    plan id is asserted on its own (the R26 m3 mutation - inherit without plan_id - survived every test)."""
+plan id is asserted on its own (the m3 mutation inherit without plan_id survived every test)."""
     pid = flow.new_project()
     plan_a, first = _plan_a_partial(pid, monkeypatch)
     flow.retry_variant(pid, 'bad', 'v1')
     flow.render_outcome(pid, {'ok': ('completed', None, None), 'bad': ('completed', None, None)})
     retried = flow.receipts(pid)[1]
     assert retried['plan_id'] == plan_a and retried['retry_of'] == first['attempt_id']
-    assert (retried['summary']['variant_count'], retried['summary']['completed_variant_count']) == (1, 1)   # R31 I541; was (2, 2)
+    assert (retried['summary']['variant_count'], retried['summary']['completed_variant_count']) == (1, 1)   # ; was (2, 2)
 
 
 @pytest.mark.usefixtures('env__r27_419_output_owner')
@@ -796,13 +794,13 @@ def test_376_a_rerun_counts_only_its_own_outputs_next_to_the_previous_ones(monke
     assert len(store.read(pid)['output_variants']) == 3              # plan A's two outputs are still there
     second = flow.receipts(pid)[1]
     # counts only: the generation outcome itself is still judged over the workspace by store.settle_generation
-    # (plan A's failed output makes this 'partial') - reported to Dong as a separate finding, not changed here.
+    # (plan A's failed output makes this 'partial') reported to as a separate finding, not changed here.
     assert (second['summary']['variant_count'], second['summary']['completed_variant_count'],
             second['summary']['failed_variant_count']) == (1, 1, 0)
-"""R27 #378: the test bridge (receipt_bridge.py) must not manufacture a premise the real entry never has. The real
+"""the test bridge (receipt_bridge.py) must not manufacture a premise the real entry never has. The real
 entry binds the plan only when screening hands over to production (jobs._inspect.start_automatic) and stamps outputs
 only when production creates them, so a snapshot that failed in screening carries neither the stored plan's
-mode/route/degrade_reason nor the workspace's output counts - whatever plan and outputs are lying around."""
+mode/route/degrade_reason nor the workspace's output counts whatever plan and outputs are lying around."""
 
 PLAN = {'id': 'p-old', 'mode': 'ai', 'recommended_analysis': 'visual', 'confirmed_analysis': 'visual',
         'degrade_reason': 'vision_unavailable_subtitle_fallback'}
@@ -840,7 +838,7 @@ def test_378_production_snapshot_is_bound_and_owns_its_outputs_like_the_real_ent
                       'generation': {'status': 'partial'}, 'analysis': {'status': 'completed', 'phase': 'production'}})
     assert receipt['state'] == 'partial' and receipt['degrade_reason'] == PLAN['degrade_reason']
     assert (receipt['summary']['recommendation_mode'], receipt['summary']['variant_count'], receipt['summary']['completed_variant_count']) == ('ai', 2, 1)
-"""R29 #419: missing attempt record falls back to the whole workspace; on_demand-only scope; N and error
+"""missing attempt record falls back to the whole workspace; on_demand-only scope; N and error
 wording stay on this round. Real store.settle_generation. Appending platforms is out of 1.5.7."""
 
 
@@ -849,12 +847,12 @@ def _data(attempt_id, variants, records=()):
             'attempts': [dict(r) for r in records]}
 
 
-# --- I440: only attempt_id is left, the record is gone -> whole workspace ---
+# only attempt_id is left, the record is gone -> whole workspace
 
 def test_i440_missing_record_with_stamps_left_is_judged_on_the_whole_workspace():
     data = _data('t-gone', [{'id': 'a', 'status': 'completed', 'produced_by_attempt': 't-gone'},
                             {'id': 'b', 'status': 'failed', 'error_code': 'timeout', 'produced_by_attempt': 't-old'}])
-    assert attempts.round_outputs(data) is None   # R31: owners_of removed (scope = this attempt's stamps only)
+    assert attempts.round_outputs(data) is None   # owners_of removed (scope = this attempt's stamps only)
     store.settle_generation(data)
     assert (data['generation']['status'], data['generation']['error_code']) == ('partial', 'timeout')   # not 'completed'
 
@@ -866,7 +864,7 @@ def test_i440_missing_record_with_only_on_demand_stamped_is_not_a_validation_fai
     assert data['generation']['status'] == 'completed' and data['generation'].get('error_code') != 'validation'
 
 
-# --- I442: a recorded round whose stamped outputs are all on_demand -> validation (unchanged behaviour) ---
+# a recorded round whose stamped outputs are all on_demand -> validation (unchanged behaviour)
 
 def test_i442_recorded_round_with_only_on_demand_outputs_is_validation():
     data = _data('t-1', [{'id': 'a', 'status': 'on_demand', 'produced_by_attempt': 't-1'},
@@ -877,7 +875,7 @@ def test_i442_recorded_round_with_only_on_demand_outputs_is_validation():
     assert data['generation']['error'] == '没有自动生成的成片，可选择备选片段继续生成'
 
 
-# --- I444: N counts only failed outputs outside the round; the error text comes from the round only ---
+# N counts only failed outputs outside the round; the error text comes from the round only
 
 def test_i444_not_redone_counts_only_failed_outside_outputs():
     data = _data('t-2', [{'id': 'old-bad', 'status': 'failed', 'produced_by_attempt': 't-1'},
@@ -896,7 +894,7 @@ def test_i444_error_text_comes_from_this_round_only():
     store.settle_generation(data)
     assert data['generation']['status'] == 'failed' and data['generation'].get('error') != 'OLD-ROUND'
     assert data['analysis'].get('error') != 'OLD-ROUND'
-"""R28 #409-#413. One scope rule (attempts.round_outputs) judges a generation round: store.settle_generation's
+"""One scope rule (attempts.round_outputs) judges a generation round: store.settle_generation's
 status / counts / error code / wording / 'all done' gate and the receipt summary. Real inspect_project, _inspect,
 retry_variant, store.write; only planning.recommend and the executor are stubbed."""
 
@@ -941,7 +939,7 @@ def test_409b_retrying_one_of_two_failures_is_judged_on_the_redone_one(monkeypat
     flow.retry_variant(pid, 'b1', 'v1')
     flow.render_outcome(pid, {'b1': OK})
     data, receipt = store.read(pid), flow.receipts(pid)[1]
-    # R31 I541 (Dong 10:42): a 「重试这条」 round is judged only on what it redid (redone_by_attempt) - b2 belongs to
+    # (10:42): a 「重试这条」 round is judged only on what it redid (redone_by_attempt) b2 belongs to
     # the earlier round. Was: ('partial', 'timeout', 'partial') with b2 in scope and N == 0.
     assert (data['generation']['status'], data['generation'].get('error_code'), receipt['state']) == ('completed', None, 'completed')
     assert data['generation']['not_redone_failed_count'] == 1             # b2: an earlier round's failure, not redone
@@ -973,7 +971,7 @@ def test_409d_variant_retry_of_an_unstamped_output_is_never_a_validation_failure
     flow.render_outcome(pid, {'bad': OK})
     data, receipt = store.read(pid), flow.receipts(pid)[1]
     assert data['generation']['status'] == 'completed' and data['generation'].get('error_code') != 'validation'
-    # R31 I541: the retried output is stamped redone_by_attempt when it is retried, so the receipt counts it (a stored
+    # the retried output is stamped redone_by_attempt when it is retried, so the receipt counts it (a stored
     # stamp, not an inference). Was: no counts at all ('variant_count' not in summary).
     assert receipt['state'] == 'completed' and (receipt['summary'].get('variant_count'), receipt['summary'].get('completed_variant_count')) == (1, 1)
 
@@ -991,7 +989,7 @@ def test_409e_previous_round_queued_leftover_does_not_block_this_round(monkeypat
     store.change(pid, lambda d: [r.update(state='failed') for r in attempts.receipts(d) if r['attempt_id'] == first['attempt_id']])
     data, receipt = _rerun(pid, monkeypatch, flow.receipts(pid)[0], {'new': OK})
     assert data['generation']['status'] == 'completed' and receipt['state'] == 'completed'
-    assert data['generation']['not_redone_failed_count'] == 0             # R29 #444: a queued leftover is not N
+    assert data['generation']['not_redone_failed_count'] == 0             # a queued leftover is not N
     store.change(pid, lambda d: next(v for v in d['output_variants'] if v['id'] == 'stuck').update(status='completed'))
     assert store.read(pid)['generation']['status'] == 'completed'          # the leftover finishing later changes nothing
 
@@ -1055,7 +1053,7 @@ def test_413_joined_variant_retries_from_two_plans_keep_the_first_plan(monkeypat
 @pytest.mark.usefixtures('env__r27_419_output_owner')
 def test_409b_variant_retry_is_judged_on_the_round_it_redid(monkeypatch):
     """A partial -> re-run B partial -> 「重试这条」 on A's failed output succeeds: the retry is judged on A's outputs
-    R31 I541: the round is the output it redid (redone_by_attempt); A's other outputs and B's failure are not its."""
+the round is the output it redid (redone_by_attempt); A's other outputs and B's failure are not its."""
     pid = flow.new_project()
     _plan_a, first = _plan_a_partial(pid, monkeypatch)
     _screen_and_plan(pid, monkeypatch, PLAN_B, retry={'key': 'r1', 'parent_attempt_id': first['attempt_id']})
@@ -1063,6 +1061,6 @@ def test_409b_variant_retry_is_judged_on_the_round_it_redid(monkeypatch):
     flow.retry_variant(pid, 'bad', 'v1')
     flow.render_outcome(pid, {'bad': OK})
     data, receipt = store.read(pid), flow.receipts(pid)[-1]
-    # R31 I541: only the output this retry redid; A's earlier completed output is not this round's. Was: variant_count 2.
+    # only the output this retry redid; A's earlier completed output is not this round's. Was: variant_count 2.
     assert (data['generation']['status'], receipt['state'], receipt['summary']['variant_count']) == ('completed', 'completed', 1)
     assert data['generation']['not_redone_failed_count'] == 1          # B's failed output, still listed

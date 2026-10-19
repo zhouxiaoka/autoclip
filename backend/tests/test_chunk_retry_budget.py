@@ -1,4 +1,4 @@
-"""R4: count SDK HTTP sends across the whole outline chunk lifecycle."""
+"""count SDK HTTP sends across the whole outline chunk lifecycle."""
 import json
 from collections import Counter
 from types import SimpleNamespace

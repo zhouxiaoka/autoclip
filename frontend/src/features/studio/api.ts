@@ -39,8 +39,8 @@ export const studioApi = {
     captureBusinessEvent('studio_auto_frame_finished', safeStudioProperties({ ...props, outcome: 'completed', framing_outcome: framed ? 'framed' : 'no_detection', framed_count: framed, scene_count: result.scenes.length, fit_count: result.scenes.reduce((n,s) => n + s.fit_shots, 0) }))
   }, { ...workflow.context(pid), trigger, ...draftProperties(draft) }),
   readiness: (): Promise<ImportReadiness> => api.get('/studio/readiness'),
-  /** R27c / the install-recovery probe (probeConfig: one attempt, READINESS_TIMEOUT_MS, the round's
-   * signal); every HTTP answer (even a 500) is seen. */
+  /* the install-recovery probe (probeConfig: one attempt, READINESS_TIMEOUT_MS, the round's
+signal); every HTTP answer (even a 500) is seen. */
   readinessProbe: (signal: AbortSignal): Promise<ImportReadiness> => api.get('/studio/readiness', probeConfig(signal)),
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),

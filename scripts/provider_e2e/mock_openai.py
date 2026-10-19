@@ -245,7 +245,7 @@ class MockHandler(BaseHTTPRequestHandler):
         if fault == 'slow':
             self.server.state.hit('slow')
             # Stop as soon as the client goes away (backend killed / client timeout) instead of
-            # sleeping blind and then writing into a closed socket (BrokenPipe traceback, R17 #59).
+            # sleeping blind and then writing into a closed socket (BrokenPipe traceback, #59).
             if not self._wait_or_disconnect(self.server.state.slow_seconds):
                 event['client_disconnected'] = True
                 self.server.state.record(event)

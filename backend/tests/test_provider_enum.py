@@ -11,7 +11,7 @@ from backend.core import event_catalog, llm_telemetry
 from backend.core.provider_presets import get_catalog, telemetry_provider_slugs
 from backend.services import ai_model_settings as ai
 from backend.services.studio import failure_identity
-"""R16 #41: telemetry provider enum = every preset in provider_presets.json (+ compatible/other),
+"""telemetry provider enum = every preset in provider_presets.json (+ compatible/other),
 one source for backend, frontend and event_catalog.json. No known preset falls into 'other'."""
 
 ROOT = Path(__file__).resolve().parents[2]

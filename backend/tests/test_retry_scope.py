@@ -30,7 +30,7 @@ def test_append_entry_refuses_and_changes_nothing(client, root):
 
 
 def test_open_retry_with_no_own_output_is_not_completed_from_older_renders():
-    """I640: generation.status is shared. Flipping it to rendering must not settle this attempt on older outputs."""
+    """generation.status is shared. Flipping it to rendering must not settle this attempt on older outputs."""
     state = {
         'generation': {'attempt_id': 't-retry', 'status': 'rendering', 'auto_start': True},
         'attempts': [{'attempt_id': 't-retry', 'kind': 'generation', 'state': 'open', 'sequence': 2,
@@ -63,7 +63,7 @@ def test_dispatch_rejection_fails_only_the_attempt_still_current(root, monkeypat
 
 
 def test_dispatch_rejection_does_not_close_a_newer_attempt(root, monkeypatch):
-    """I643: fail_automatic used to write generation with no attempt/run check."""
+    """fail_automatic used to write generation with no attempt/run check."""
     _project()
     monkeypatch.setattr(jobs, 'mark_project', lambda *a, **k: None)
 

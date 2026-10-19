@@ -49,7 +49,7 @@ def test_reload_detects_different_saves_with_identical_mtime(tmp_path, monkeypat
 
 
 def test_reload_after_two_model_settings_saves_with_identical_mtime(tmp_path, monkeypatch):
-    """R7: a second persisted save must reload even within one filesystem tick."""
+    """a second persisted save must reload even within one filesystem tick."""
     monkeypatch.setenv("AUTOCLIP_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
     monkeypatch.setattr(LLMManager, "_sync_config_if_needed", lambda self: None)

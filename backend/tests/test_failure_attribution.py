@@ -44,7 +44,7 @@ from backend.core.sentry_setup import STUDIO_ERROR_CODES, studio_error_code
 from backend.services.studio import failure_identity, store
 
 
-# --- the only readers: guard (R28 I456: every snapshot field, .get and [] reads, any variable name) ------
+# the only readers: guard (every snapshot field, .get and [] reads, any variable name)
 
 import ast  # noqa: E402
 import errno
@@ -69,7 +69,7 @@ from backend.pipeline.failures import http_status_of
 
 from backend.core import failure_attribution, llm_emit, sentry_setup
 from backend.core.failure_attribution import AttributedError, FailureAttribution, SNAPSHOT_FIELDS, export_attribution
-"""R19 #95/#97/#99/#100/#101 for #415: each test fails on 3f8863cd and passes after the fix."""
+"""each test fails on 3f8863cd and passes after the fix."""
 
 ROOT = Path(__file__).resolve().parents[2]
 START = {'provider': 'deepseek', 'config_source': 'preset'}
@@ -99,7 +99,6 @@ def _project(pid, data):
     (meta / 'studio.json').write_text(json.dumps(data), encoding='utf-8')
 
 
-# --- #95 (R16 #40) ---------------------------------------------------------------------------
 
 @pytest.mark.usefixtures('isolated')
 def test_95_snapshot_provider_never_overwrites_start_identity(monkeypatch):
@@ -108,7 +107,7 @@ def test_95_snapshot_provider_never_overwrites_start_identity(monkeypatch):
     store.change('p95', lambda d: d['analysis'].update(status='failed', error_code='timeout', failure_stage='production'))
     analysis = store.read('p95')['analysis']
     assert {k: analysis.get(k) for k in START} == START
-    # R25 #415: an unpaired snapshot identity reads as empty and called_provider is no longer written.
+    # an unpaired snapshot identity reads as empty and called_provider is no longer written.
     assert 'called_provider' not in analysis
     history = store.read('p95')['analysis_history'][-1]['analysis']
     assert history['provider'] == 'deepseek' and history['config_source'] == 'preset'
@@ -116,13 +115,13 @@ def test_95_snapshot_provider_never_overwrites_start_identity(monkeypatch):
 
 @pytest.mark.usefixtures('isolated')
 def test_95_snapshot_still_fills_identity_when_start_had_none(monkeypatch):
-    # R25 #415: the identity fills whole from ONE attribution (a lone provider would read as empty).
-    # R28: the store takes the snapshot from THE factory (llm_emit.attribution_snapshot), with the error in hand.
+    # the identity fills whole from ONE attribution (a lone provider would read as empty).
+    # the store takes the snapshot from THE factory (llm_emit.attribution_snapshot), with the error in hand.
     from backend.core import llm_emit
     from backend.core.failure_attribution import build_attribution
     monkeypatch.setattr(llm_emit, 'attribution_snapshot', lambda *a, **k: build_attribution(
         PipelineFailure('ANALYZE', 'slow', code='timeout'), phase_identity={'provider': 'kimi', 'config_source': 'customized'}))
-    # R30 I560: a live worker's run (its instance), not a stale one that read() recovers as already failed
+    # a live worker's run (its instance), not a stale one that read recovers as already failed
     # (service_restarted) before this write: the snapshot is stamped on the running -> failed transition.
     _project('p95b', {'id': 'p95b', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r', 'instance': store.INSTANCE}})
     try:
@@ -156,7 +155,7 @@ def test_95_manual_production_terminals_keep_start_identity(monkeypatch, fail):
     assert {k: analysis.get(k) for k in START} == START, analysis
 
 
-# --- #97 (R16 #43) / #99: real store.read() on a project left mid-render by a dead process ------
+# 97 (#43) / #99: real store.read on a project left mid-render by a dead process
 
 def _mid_render(pid):
     _project(pid, {'id': pid,
@@ -258,7 +257,7 @@ def test_101_unconfigured_token_rejects_every_request(monkeypatch, header):
 # --- #98: the shell got no 200 in time (timeout / non-200) -> unknown, never crash ----------------
 
 def _unacked(tmp_path, instance):
-    path = tmp_path / 'shutdown_markers' / instance  # R20 #134: same dir/record as the marker
+    path = tmp_path / 'shutdown_markers' / instance  # same dir/record as the marker
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('unacked', encoding='ascii')
     return path
@@ -313,7 +312,7 @@ def test_98_backend_uses_and_pops_the_shell_instance_id(tmp_path):
     assert re.search(r'INSTANCE=[0-9a-f]{32}\n', done.stdout) and '../' not in done.stdout
 
 
-# --- R20 #99 / #134: one record per instance, released only when no project references it ----------
+# 99 / #134: one record per instance, released only when no project references it
 
 def _two_projects_mid_render():
     _mid_render('pa')
@@ -360,11 +359,11 @@ def test_r20_134_prune_bounds_records_but_keeps_referenced_ones(monkeypatch, tmp
     for i, name in enumerate([OLD] + [f'{i:032x}' for i in range(1, 8)]):
         (root / name).write_text('unacked', encoding='ascii')
         _os.utime(root / name, (1000 + i, 1000 + i))
-    shutdown_marker.prune()                 # R21 #202: pruning moved from mark() to startup
+    shutdown_marker.prune()                 # pruning moved from mark to startup
     left = {p.name for p in root.iterdir()}
     assert OLD in left                      # still needed by an unrecovered project
     assert len(left) == 3 + 1               # newest _KEEP + the referenced one
-"""R20 #136/#137/#138 for #415: each test fails on 6fbacce3 and passes after the fix."""
+"""each test fails on 6fbacce3 and passes after the fix."""
 
 
 @pytest.fixture
@@ -396,7 +395,7 @@ def test_137_run_sanitizer_keeps_config_source_and_drops_garbage():
 
 
 def test_137_run_snapshot_carries_config_source(two_connections):
-    # R25 #415: inside a run the identity is the frozen phase connection (settings are never read).
+    # inside a run the identity is the frozen phase connection (settings are never read).
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity(failure_identity.phase_identity('production', {'confirmed_analysis': 'subtitle'}))
         snap = llm_emit.run_snapshot()
@@ -425,11 +424,11 @@ def test_138_siliconflow_is_not_compatible_on_the_real_sender():
 def test_138_no_private_alias_table_in_llm_emit():
     assert not hasattr(llm_emit, '_PROVIDER_ALIASES')
     assert llm_emit._provider_name('88api') == 'api88'   # catalog alias still resolves
-"""R21 #194-#202 for #415: each test fails on c6938ff8 and passes after the fix."""
+"""each test fails on c6938ff8 and passes after the fix."""
 
 
 def _provider_down():
-    """R28 I450: a provider failure is a request that was SENT and answered with an error (a status)."""
+    """a provider failure is a request that was SENT and answered with an error (a status)."""
     return type('ProviderDown', (RuntimeError,), {'status_code': 500})('fixture')
 TEXT = {'provider': 'deepseek', 'config_source': 'preset'}
 EYES = {'provider': 'kimi', 'config_source': 'customized'}
@@ -468,8 +467,8 @@ def _project__r21_415(pid, data):
 
 
 def _vision_failure():
-    # R22 #195: vision_call freezes the identity before it sends; the emitter only carries it.
-    # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
+    # vision_call freezes the identity before it sends; the emitter only carries it.
+    # a failure is attributed through the record its exception carries (not 'latest request').
     error = _provider_down()
     llm_emit.emit_vision_request(config={'model': 'private-vision-model', 'base_url': 'https://vision.fixture.example/v1'},
                                  started=time.monotonic(), error=error,
@@ -500,7 +499,7 @@ def test_194_role_follows_phase_and_route(phase, plan, goals, role):
 
 
 def test_194_screening_and_visual_production_freeze_the_vision_identity(two_connections__r21_415):
-    pair = failure_identity.frozen  # R24 #291: the phase also freezes model/host under phase_connection
+    pair = failure_identity.frozen  # the phase also freezes model/host under phase_connection
     assert pair(failure_identity.phase_identity('screening')) == EYES
     assert pair(failure_identity.phase_identity('production', VISUAL_PLAN, ['highlight'])) == EYES
     assert pair(failure_identity.phase_identity('production', VISUAL_PLAN, ['content'])) == TEXT
@@ -619,7 +618,7 @@ def test_202_prune_scans_projects_once_however_many_records(monkeypatch):
     assert len(list(root.iterdir())) == 1
 
 
-# --- #198 (R22 #221: the mtime rule is gone; see test_r22_415 for the reference ledger) ------------
+# 198 (#221: the mtime rule is gone; see test_r22_415 for the reference ledger)
 
 @pytest.mark.usefixtures('isolated__r21_415')
 def test_198_release_is_not_blocked_by_an_unrelated_unreadable_project(tmp_path):
@@ -702,7 +701,7 @@ def test_201_preset_provider_survives_the_real_request_sender(monkeypatch):
     for preset in [p.id for p in iter_providers()]:
         llm_emit.request_finished(provider=preset, model='m', kind='text', outcome='success')
     assert [p['provider'] for p in sent] == [p.id for p in iter_providers()]
-"""R22 #195/#198/#201/#220-#224 for #415. Behavioural: every test drives the real entry point
+"""Behavioural: every test drives the real entry point
 (inspect_project -> _inspect -> _auto_generate, vision_call, observe_provider_call, store.write,
 shutdown_marker.prune, the final _post_event exit). Each fails on 9f3d0b62."""
 OTHER = {'provider': 'glm', 'config_source': 'customized'}
@@ -858,7 +857,7 @@ def _vision_request(monkeypatch, during=None):
     monkeypatch.setattr(intelligence.urllib.request, 'urlopen', urlopen)
     with pytest.raises(intelligence.VisionRequestError) as caught:
         intelligence.vision_call([{'type': 'text', 'text': 'fixture'}])
-    return caught.value  # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
+    return caught.value  # a failure is attributed through the record its exception carries (not 'latest request').
 
 
 @pytest.mark.usefixtures('isolated__r22_415')
@@ -873,7 +872,7 @@ def test_195_settings_changed_while_a_vision_request_is_in_flight_do_not_move_it
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_195_each_request_freezes_its_own_identity_and_the_latest_request_is_named(monkeypatch, posted):
-    # R24 #224/#290: this used to assert "first request of the role wins" (EYES), which pinned the bug:
+    # this used to assert "first request of the role wins" (EYES), which pinned the bug:
     # the second request really ran on GLM, so the run names GLM, with GLM's model/host.
     _settings()
     with llm_emit.track_run():
@@ -893,7 +892,7 @@ class _TextProvider:
 def _text_request():
     def impl(*_a, **_k):
         raise _provider_down()
-    with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError) as caught:  # R23: route identity
+    with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError) as caught:  # route identity
         llm_emit.observe_provider_call(_TextProvider(), impl, 'p')
     return caught.value
 
@@ -1019,7 +1018,7 @@ def test_201_every_preset_provider_leaves_through_the_real_sender(monkeypatch):
     assert [b['properties']['provider'] for b in bodies] == presets
     assert {b['event'] for b in bodies} == {'llm_request_finished'}
     assert warnings == []                                        # catalog checks passed on the wire
-"""R23 #415 (Dong): a text request's identity is the connection of the route it was resolved on
+""": a text request's identity is the connection of the route it was resolved on
 (failure_identity.connection_identity, frozen with the route like vision), never settings re-read at
 send time. Drives the real LLMManager route -> call -> provider.call -> observe_provider_call path.
 Fails on f5921576 (observe_provider_call read settings before sending)."""
@@ -1059,7 +1058,7 @@ def _run(manager, route):
     with llm_emit.track_run():
         with pytest.raises(Exception) as caught:
             manager.call('p', _route=route)
-        # R25 #415: a failure is attributed through the record its exception carries (not 'latest request').
+        # a failure is attributed through the record its exception carries (not 'latest request').
         return llm_emit.run_snapshot(error=caught.value), llm_emit.sentry_tags_for_error(caught.value, 'analyze')
 
 
@@ -1093,8 +1092,7 @@ def test_r23_route_carries_the_one_identity_rule():
     route = LLMManager()._snapshot_call_route()
     assert route.identity == TEXT
     assert 'identity' not in route.settings and '_route_identity' not in route.settings  # never saved
-"""R24 #415 (Dong R23): the three design-retro invariants, each through the real entry point.
-
+"""the three design-retro invariants, each through the real entry point.
 1) a failure names ONE request (#290/#224/#291); 2) provider + config_source are one pair from one
 connection, never stitched, never re-read from settings (#296/#297); 3) the instance ledger releases a
 reference only after studio.json is durable, under the writers' lock (#293/#294/#295). Plus #292.
@@ -1147,7 +1145,7 @@ def test_290_same_role_second_request_fails_snapshot_and_sentry_name_that_reques
     with llm_emit.track_run():
         _text(TEXT, 'https://api.deepseek.com', 'deepseek-flash')                       # DeepSeek OK
         error = _text(OTHER, 'https://other.fixture.example/v1', 'glm-4', status=503)  # GLM 503
-        # R25 #415: the failure is read from the record its exception carries.
+        # the failure is read from the record its exception carries.
         snap = llm_emit.run_snapshot(error=error)
         tags = llm_emit.sentry_tags_for_error(error, 'analyze')
     assert _who(snap) == {**OTHER, 'model': 'glm-4', 'base_url_host': 'other.fixture.example', 'http_status': 503}
@@ -1160,7 +1158,7 @@ def test_290_a_later_success_clears_the_earlier_failure_of_another_connection(po
         _text(OTHER, 'https://other.fixture.example/v1', 'glm-4', status=503)
         _text(TEXT, 'https://api.deepseek.com', 'deepseek-flash')
         snap = llm_emit.run_snapshot()
-    # R25 #415: with no failure being handled the snapshot names no request at all (no phase frozen
+    # with no failure being handled the snapshot names no request at all (no phase frozen
     # here), so neither GLM's 503 nor a "latest request" identity can leak into it.
     assert _who(snap) == dict.fromkeys(('provider', 'config_source', 'model', 'base_url_host', 'http_status'))
     assert not snap.get('upstream_error_type')
@@ -1184,7 +1182,7 @@ def test_224_same_role_vision_requests_on_two_connections_name_the_latest_one_wh
         _vision(monkeypatch)
         _settings__r24_415(vision='other')                       # the NEXT request really runs on GLM
         error = _vision(monkeypatch)
-        snap = llm_emit.run_snapshot(error=error)       # R25 #415: the failing request's record
+        snap = llm_emit.run_snapshot(error=error)       # the failing request's record
     assert _who(snap)['provider'] == 'glm' and _who(snap)['config_source'] == 'customized'
     assert snap.get('model') == 'private-other-model' and snap.get('base_url_host') == 'other.fixture.example'
 
@@ -1238,7 +1236,7 @@ def test_297_text_request_without_frozen_identity_uses_the_config_it_sent(monkey
         with pytest.raises(_Status) as caught:
             llm_emit.observe_provider_call(_provider('https://api.deepseek.com', 'deepseek-flash'),
                                            lambda *_a, **_k: (_ for _ in ()).throw(_Status(503)), 'p')
-        snap = llm_emit.run_snapshot(error=caught.value)  # R25 #415
+        snap = llm_emit.run_snapshot(error=caught.value)  
     assert {k: snap.get(k) for k in TEXT} == TEXT
     assert [p for e, p in posted if e == 'llm_request_finished'][-1]['provider'] == 'deepseek'
     assert reads == []
@@ -1257,7 +1255,7 @@ def test_297_vision_test_of_an_unsaved_form_is_attributed_to_the_form_not_saved_
     with llm_emit.track_run():
         with pytest.raises(intelligence.VisionRequestError) as caught:
             intelligence.vision_call([{'type': 'text', 'text': 'fixture'}], config=form)
-        snap = llm_emit.run_snapshot(error=caught.value)  # R25 #415
+        snap = llm_emit.run_snapshot(error=caught.value)  
     request = [p for e, p in posted if e == 'llm_request_finished'][-1]
     assert request['provider'] == 'deepseek'
     assert {k: snap.get(k) for k in TEXT} == TEXT
@@ -1400,7 +1398,7 @@ def test_295_state_and_ledger_are_fsynced_before_and_after_the_replace(monkeypat
     _project__r24_415('p', A__r24_415)
     expected = 4 if os.name != 'nt' else 2               # tmp studio + ledger tmp (+ their dirs)
     assert len(synced) >= expected
-"""R25 #415 (Dong R24 design v2): one immutable record per request; a failure carries ITS record;
+"""(design v2): one immutable record per request; a failure carries ITS record;
 persistence, snapshots and Sentry read only it; identity is written whole or not at all; the ledger
 never commits after a failed prepare or shrinks without durability; one cross-process store lock.
 Every test fails on 156bc36a on an assertion (not an import)."""
@@ -1466,8 +1464,8 @@ def test_331_concurrent_chunk_failure_is_attributed_to_the_failing_request_every
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_331_rewrapped_failure_keeps_its_request_record(posted):
-    """R25-a, R29 I500: the record is found up the explicit __cause__ chain (raise from). ``from None``
-    cuts it: a boundary that cuts the chain must carry the snapshot itself (AttributedError)."""
+    """a, : the record is found up the explicit __cause__ chain (raise from). ``from None``
+cuts it: a boundary that cuts the chain must carry the snapshot itself (AttributedError)."""
     from backend.pipeline.failures import PipelineFailure
     _project__r25_415('pwrap', {'status': 'running', 'phase': 'production', 'run_id': 'r'})
     with llm_emit.track_run():
@@ -1495,7 +1493,7 @@ def test_331_failure_without_request_record_falls_back_to_phase_and_says_so():
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: phase, **GLM})
         from backend.pipeline.failures import PipelineFailure
-        try:  # R26 #392: only a MODEL failure without a record falls back to the phase identity
+        try:  # only a MODEL failure without a record falls back to the phase identity
             raise PipelineFailure('ANALYZE', 'model timed out before a record existed', code='timeout')
         except PipelineFailure:
             store.change('pphase', lambda d: d['analysis'].update(status='failed', error_code='timeout'))
@@ -1649,7 +1647,7 @@ def test_338_tracking_plan_states_the_failing_request_rule():
     assert 'attribution_source=request' in text
 
 
-# --- R24 m4: Windows fsync needs a writable descriptor (platform independent check) ---------------
+# m4: Windows fsync needs a writable descriptor (platform independent check)
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_295_file_fsync_opens_read_write(monkeypatch, tmp_path):
@@ -1672,7 +1670,7 @@ def test_331_an_outer_observed_layer_never_replaces_the_failing_requests_record(
             llm_emit.observe_provider_call(_provider('https://glm.fixture.example/v1', 'glm-4'), outer, 'p')
         tags = llm_emit.sentry_tags_for_error(caught.value, 'analyze')
     assert (tags.get('provider'), tags.get('model'), tags.get('http_status')) == ('kimi', 'kimi-k2', '503')
-"""R29 #415: the cloud-transcription redaction boundary builds the snapshot; the legacy import path
+"""the cloud-transcription redaction boundary builds the snapshot; the legacy import path
 (import_processing) carries it instead of rebuilding from the safe text. Separate module: no store fixture."""
 
 SECRET_BODY = 'r29-private-asr-body'
@@ -1690,7 +1688,7 @@ def test_import_subtitle_failure_keeps_the_transcription_snapshot(cloud_adapter)
     assert classify_failure(caught.value).kind is FailureKind.MODEL
     failure = import_subtitle_failure(caught.value)
     assert studio_failure_context(failure, 'production').get('http_status') == 503
-"""R29 #415 increment (Dong 11:09): the rewrite route's checks on the model's own reply (a missing key, a
+"""increment (11:09): the rewrite route's checks on the model's own reply (a missing key, a
 Draft that fails validation) are ModelResponseInvalid -> MODEL / invalid_response, snapshot only; neither the
 HTTP response nor the Sentry payload carries the raw model text. Fails on 0b6da07a on an assertion."""
 
@@ -1730,7 +1728,7 @@ def test_rewrite_route_invalid_model_reply_is_model_invalid_response_without_raw
     assert sentry_setup.studio_error_code(error) == 'invalid_response'
     assert event['tags']['error_code'] == 'invalid_response' and event['tags']['phase'] == 'rewrite'
     assert RAW not in json.dumps(event, default=str)
-"""R24 #265: settle_generation no longer writes 'multiple' (it entered the success-rate denominator:
+"""settle_generation no longer writes 'multiple' (it entered the success-rate denominator:
 llm_auth_invalid + authentication became a product failure). Primary via failure_attribution."""
 
 
@@ -1752,7 +1750,7 @@ def test_265_product_cause_wins_whatever_the_order():
         store.settle_generation(d)
         assert d['generation']['error_code'] == 'timeout' and d['analysis']['error_code'] == 'timeout', d
         assert d['analysis']['secondary_error_codes'] == ['authentication']
-"""R26 #415 (Dong R25 review #390-#394): without a request record only a MODEL failure takes the
+"""(review #390-#394): without a request record only a MODEL failure takes the
 phase identity, everything else is local; store_lock_timeout is its own product code; a
 non-blocking lock attempt returns at once; a new phase-only failure replaces an older request
 attribution. Every test fails on 6e11ce73 on an assertion."""
@@ -1837,11 +1835,11 @@ def test_394_new_phase_only_failure_replaces_older_request_attribution():
             store.change('p394', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
     first = store.read('p394')['analysis']
     assert first['provider'] == 'kimi' and first['attribution_source'] == 'request'
-    # R29 I503: no "same failure" inference; without an error in hand the snapshot stays.
+    # no "same failure" inference; without an error in hand the snapshot stays.
     store.change('p394', lambda d: d['analysis'].update(message='no error in hand'))
     assert store.read('p394')['analysis']['provider'] == 'kimi'
-    # R30 I560 (Dong R29, assertion changed from 'glm'): an unrelated write of an already-failed record
-    # with another error in hand is NOT a new failure: the snapshot stays (R29 overwrote it).
+    # (assertion changed from 'glm'): an unrelated write of an already-failed record
+    # with another error in hand is NOT a new failure: the snapshot stays (overwrote it).
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
@@ -1856,7 +1854,7 @@ def test_394_new_phase_only_failure_replaces_older_request_attribution():
     assert analysis.get('http_status') != 503
 
 
-# --- second pass (Dong R25-b): #393 P2, #397-#402, #394 status, #392 source surfaces ----------------
+# second pass (-b): #393 P2, #397-#402, #394 status, #392 source surfaces
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_394_new_local_failure_drops_the_old_request_status():
@@ -1895,8 +1893,8 @@ def test_397_failed_goal_request_survives_a_later_successful_goal(monkeypatch):
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_398_r29_i500_record_on_the_implicit_context_only_is_not_this_failures():
-    """R29 I500 (Dong): only the explicit __cause__ chain is walked; a record that is only on the
-    implicit __context__ belongs to an error that was merely being handled."""
+    """: only the explicit __cause__ chain is walked; a record that is only on the
+implicit __context__ belongs to an error that was merely being handled."""
     with llm_emit.track_run():
         try:
             _call(GLM, 'https://glm.fixture.example/v1', 'glm-4', status=503)
@@ -1958,8 +1956,8 @@ def test_402_attribution_does_not_need_python_311():
             _call(GLM, 'https://glm.fixture.example/v1', 'glm-4', status=503)
         except Exception:  # noqa: BLE001
             assert llm_emit.attribution().get('provider') == 'glm'
-"""R27 #415 (Dong R26 design, 157/415-attribution-design.md): one classifier, one write-once snapshot,
-one reader. I415-I418, I420-I422, I424 + design points. Each test fails on 49575864 on an assertion
+"""(design, 157/415-attribution-design.md): one classifier, one write-once snapshot,
+one reader.,, + design points. Each test fails on 49575864 on an assertion
 (module-not-found aside: the failure_attribution tests also pin the rule's behaviour through llm_emit/store)."""
 
 
@@ -1971,7 +1969,7 @@ def _kimi_503():
     raise AssertionError('no 503')
 
 
-# --- I415: decision order local -> model -> request record --------------------------------------------
+# decision order local -> model -> request record
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i415_lock_timeout_raised_while_handling_a_model_503_is_local():
@@ -2050,7 +2048,7 @@ def test_write_attribution_replaces_the_group_whole():
                       'attribution_source': 'phase'}
 
 
-# --- I417: a new phase failure keeps nothing of an older request's status ------------------------------
+# a new phase failure keeps nothing of an older request's status
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i417_new_phase_failure_drops_the_older_request_status():
@@ -2062,7 +2060,7 @@ def test_i417_new_phase_failure_drops_the_older_request_status():
         except Exception:  # noqa: BLE001
             store.change('p417', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
     assert store.read('p417')['analysis']['attribution_source'] == 'request'
-    store.change('p417', lambda d: d['analysis'].update(status='running'))  # R30 I560: the retry starts (a real transition)
+    store.change('p417', lambda d: d['analysis'].update(status='running'))  # the retry starts (a real transition)
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
@@ -2074,7 +2072,7 @@ def test_i417_new_phase_failure_drops_the_older_request_status():
     assert 'http_status' not in analysis and 'upstream_error_type' not in analysis, analysis
 
 
-# --- I418: lock-timeout receipt recovery writes local -------------------------------------------------
+# lock-timeout receipt recovery writes local
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i418_receipt_recovery_writes_a_local_snapshot():
@@ -2091,7 +2089,7 @@ def test_i418_receipt_recovery_writes_a_local_snapshot():
     assert on_disk['attribution_source'] == 'local'
 
 
-# --- I421 / read-time cleanup, never written back ------------------------------------------------------
+# read-time cleanup, never written back
 
 def _raw(pid, data):
     root = store.directory(pid) / 'metadata'
@@ -2203,7 +2201,7 @@ def _ts_reads(path):
         if re.match(r'\s*(type |export type |\w+\?: \{|  (analysis|generation)\?:)', code):
             continue  # type declarations
         if re.match(r'\s*(export )?const [A-Z_]+ = ', code):
-            continue  # R31 I565: a key-list constant (ATTRIBUTION_KEYS) names keys, it reads no record
+            continue  # a key-list constant (ATTRIBUTION_KEYS) names keys, it reads no record
         if _TS_READ.search(code):
             out.append(f'{path.relative_to(ROOT)}:{no}: {line.strip()}')
     return out
@@ -2236,7 +2234,6 @@ def test_grep_guard_catches_direct_reads_of_every_field(tmp_path):
     assert not _TS_READ.search('failure_stage?: string')
 
 
-# --- I422 / I424 --------------------------------------------------------------------------------------
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i422_release_validation_splits_by_attribution_source():
@@ -2274,11 +2271,11 @@ def test_i415_a_non_decisive_wrapper_is_looked_through():
     wrapper.__cause__.__cause__ = inner
     verdict = classify_failure(wrapper)
     assert verdict.kind is FailureKind.MODEL and verdict.record is not None
-    # R28 I450: a local error in ANY layer is judged first, even under a model-coded wrapper
+    # a local error in ANY layer is judged first, even under a model-coded wrapper
     outer = PipelineFailure('ANALYZE', 'x', code='provider_error')
     outer.__cause__ = subprocess.CalledProcessError(1, ['ffmpeg'])
     assert classify_failure(outer).kind is FailureKind.LOCAL
-"""R28 #415 (Dong R27 I450-I458, I460): model only when a request was sent and the provider answered with
+""": model only when a request was sent and the provider answered with
 an error; a local error in any layer first; one snapshot factory; no value inference; one-record readers;
 completed+partial is a failure terminal; render receipts are local. Fail-before evidence: before-*.txt in
 mut415-r28 (run against 9ce045c2)."""
@@ -2297,7 +2294,7 @@ class _NotAProvider(Exception):
         self.status_code = status
 
 
-# --- I450: no "status code or record means model" fallback; local in any layer first -----------------
+# no "status code or record means model" fallback; local in any layer first
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i450_status_code_alone_is_not_a_model_failure():  # kills M1
@@ -2347,7 +2344,7 @@ def test_i450_answered_request_stays_model():
     assert found['attribution_source'] == 'request' and found['provider'] == 'kimi' and found['http_status'] == 503
 
 
-# --- I460: the chain skips layers that cannot decide (behaviour, through llm_emit) --------------------
+# the chain skips layers that cannot decide (behaviour, through llm_emit)
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i460_walk_passes_non_deciding_layers_to_the_model_failure():
@@ -2374,7 +2371,7 @@ def test_i460_record_without_status_keeps_its_failure_fields():  # kills M3
     assert read_attribution(row)['http_status'] == 503 and read_attribution(row)['failure_stage'] == 'analyze'
 
 
-# --- I451: completed + outcome=partial keeps its failure fields through read -> unrelated save --------
+# completed + outcome=partial keeps its failure fields through read -> unrelated save
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i451_partial_survives_read_and_an_unrelated_save():
@@ -2392,7 +2389,7 @@ def test_i451_partial_survives_read_and_an_unrelated_save():
         assert row['failure_stage'] == 'render' and row['http_status'] == 503, row
 
 
-# --- I452: no inference from equal values; wholesale replacement only ---------------------------------
+# no inference from equal values; wholesale replacement only
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i452_a_new_phase_failure_keeps_its_own_503_after_an_old_kimi_503():
@@ -2403,7 +2400,7 @@ def test_i452_a_new_phase_failure_keeps_its_own_503_after_an_old_kimi_503():
             raise error
         except Exception:  # noqa: BLE001
             store.change('p452', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
-    store.change('p452', lambda d: d['analysis'].update(status='running'))  # R30 I560: the retry starts (a real transition)
+    store.change('p452', lambda d: d['analysis'].update(status='running'))  # the retry starts (a real transition)
     with llm_emit.track_run():
         llm_emit.freeze_phase_identity({failure_identity.PHASE_KEY: VISION, **GLM})
         try:
@@ -2425,7 +2422,7 @@ def test_i452_old_phase_503_is_replaced_by_a_new_failure_without_status():
         except PipelineFailure:
             store.change('p452b', lambda d: d['analysis'].update(status='failed', error_code='provider_error'))
         assert store.read('p452b')['analysis']['http_status'] == 503
-        store.change('p452b', lambda d: d['analysis'].update(status='running'))  # R30 I560: the retry starts (a real transition)
+        store.change('p452b', lambda d: d['analysis'].update(status='running'))  # the retry starts (a real transition)
         try:
             raise PipelineFailure('ANALYZE', 'slow', code='timeout')
         except PipelineFailure:
@@ -2434,7 +2431,7 @@ def test_i452_old_phase_503_is_replaced_by_a_new_failure_without_status():
     assert 'http_status' not in analysis and 'upstream_error_type' not in analysis, analysis
 
 
-# --- I454: a render receipt is a local failure of the generation --------------------------------------
+# a render receipt is a local failure of the generation
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i454_render_lock_timeout_receipt_writes_local_on_the_generation():
@@ -2454,7 +2451,6 @@ def test_i454_render_lock_timeout_receipt_writes_local_on_the_generation():
     assert state['analysis']['attribution_source'] == 'local'
 
 
-# --- I455 / I457 / I458 --------------------------------------------------------------------------------
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i455_local_context_has_no_http_status_either():
@@ -2514,10 +2510,10 @@ def test_factory_local_names_the_phase_identity_before_the_start_identity():
     from backend.core.failure_attribution import build_attribution
     snap = build_attribution(PermissionError('fixture'), phase_identity=GLM, start_identity=KIMI)
     assert (snap.attribution_source, snap.provider, snap.http_status) == ('local', GLM['provider'], None)
-"""R29 #415 (Dong R28 I500-I506 + the redaction-boundary decision): the layer closest to the provider call,
+"""The redaction-boundary decision: the layer closest to the provider call,
 where the exception chain is still intact, builds the attribution snapshot ONCE; dicts, threads, store
 writes and events carry it unchanged. Every test here fails on 9ce045c2 on an assertion, or is proven by a
-mutation (157/mut415-r29). Nothing here imports a symbol that only exists after R29."""
+mutation (157/mut415-r29). Nothing here imports a symbol that only exists on the fixed side."""
 SECRET_URL = 'https://kimi.fixture.example/v1/chat?api_key=sk-r29-SECRET-0000'
 SECRET_BODY__r29_415 = 'r29-private-provider-body'
 
@@ -2549,7 +2545,7 @@ def _attr__r29_415(error, phase=GLM):
         return llm_emit.attribution(error)
 
 
-# --- I501: the adapter builds the snapshot; it crosses apply().get() whole ----------------------------
+# the adapter builds the snapshot; it crosses apply.get whole
 
 def _wrapped(outer, inner):
     try:
@@ -2607,7 +2603,7 @@ def test_i501_the_failing_requests_record_crosses_the_bridge(pipeline, monkeypat
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i501_restored_non_model_code_wrapping_a_503_is_model(pipeline, monkeypatch):
-    """Restored (R28 deleted it): a non-model code (llm_connection) over the SDK's 503 keeps model + 503."""
+    """Restored (deleted it): a non-model code (llm_connection) over the SDK's 503 keeps model + 503."""
     from backend.services.studio import jobs
     mod, video = pipeline
     failure = PipelineFailure('ANALYZE', '无法连接模型服务。', code='llm_connection')
@@ -2629,7 +2625,7 @@ def test_i501_no_model_failure_boolean_and_no_rebuild_in_run_content():
     assert "'provider_error' if" not in jobs
 
 
-# --- I500: only the explicit __cause__ chain ------------------------------------------------------------
+# only the explicit __cause__ chain
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i500_a_503_sent_while_handling_a_cache_miss_is_model():
@@ -2652,7 +2648,7 @@ def test_i500_an_explicit_local_cause_still_wins():
     assert classify_failure(error).kind is FailureKind.LOCAL
 
 
-# --- I503: no "same failure" inference in the store ------------------------------------------------------
+# no "same failure" inference in the store
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i503_a_new_local_error_in_the_same_run_with_the_same_code_replaces_the_old_503():
@@ -2663,7 +2659,7 @@ def test_i503_a_new_local_error_in_the_same_run_with_the_same_code_replaces_the_
         except Exception:  # noqa: BLE001
             store.change('p503', lambda d: d['analysis'].update(status='failed', error_code='unexpected'))
         assert store.read('p503')['analysis'].get('http_status') == 503
-        # R30 I560: the retry of the same run starts (a real transition), then fails with the same code.
+        # the retry of the same run starts (a real transition), then fails with the same code.
         store.change('p503', lambda d: d['analysis'].update(status='running'))
         try:
             raise PermissionError(13, 'fixture: a new local failure, same run, same code')
@@ -2702,7 +2698,7 @@ def test_guard_a_provider_error_wrapped_once_by_the_redaction_boundary_is_still_
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_guard_a_connection_error_through_the_real_call_boundary_is_model_without_status():
-    """I505 + boundary: openai APIConnectionError wrapped by log_safe_exception inside the observed call."""
+    """+ boundary: openai APIConnectionError wrapped by log_safe_exception inside the observed call."""
     from backend.core.llm_telemetry import log_safe_exception
 
     def impl(*_a, **_k):
@@ -2719,7 +2715,7 @@ def test_guard_a_connection_error_through_the_real_call_boundary_is_model_withou
             found = llm_emit.attribution(error)
     assert verdict.kind is FailureKind.MODEL
     assert (found.get('attribution_source'), found.get('provider')) == ('request', 'kimi'), found
-    assert 'http_status' not in found  # I505: no HTTP response, no status
+    assert 'http_status' not in found  # no HTTP response, no status
 
 
 @pytest.mark.usefixtures('isolated__r22_415')
@@ -2831,9 +2827,9 @@ def test_model_response_invalid_from_text_json(monkeypatch):
     assert studio_error_code(caught.value) == 'invalid_response'
 
 
-# --- I502: the single factory / single reader guard is an AST scan ----------------------------------------
+# the single factory / single reader guard is an AST scan
 
-# R31 (Dong I565): the variable-name reader heuristic (REC / READ_KEYS, ~60 lines) is deleted: the runtime
+# the variable-name reader heuristic (REC / READ_KEYS, ~60 lines) is deleted: the runtime
 # payload tests (test_r31_415_payload.py, frontend failure-attribution.test.cjs) are the guarantee now. What
 # stays here is the cheap structural part: one factory, one restore point.
 FACTORY_NAMES = {'FailureAttribution', '_make', 'from_fields'}
@@ -2872,13 +2868,13 @@ def test_i502_ast_guard_backend_has_one_factory_and_one_reader():
 
 @pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('source', [
-    # D3 (Dong): a second constructor through an alias
+    # D3 : a second constructor through an alias
     'from backend.core.failure_attribution import FailureAttribution as _FA\n_bypass = lambda **k: _FA._make(**k)\n',
     # astra/sol: an alias of the class, then a direct construction
     'from backend.core import failure_attribution as fa\nSnapshot = fa.FailureAttribution\nsnap = Snapshot("local")\n',
     # a dynamic getattr on the module
     'import importlib\nm = importlib.import_module("backend.core.failure_attribution")\nS = getattr(m, "FailureAttribution")\n',
-    # a restore under an import alias, outside run_content (R29 mutation G5)
+    # a restore under an import alias, outside run_content (mutation G5)
     'from backend.core.failure_attribution import restore_attribution as _ra\n_y = lambda f: _ra(f)\n',
 ])
 def test_i502_ast_guard_catches_every_bypass(source):
@@ -2890,7 +2886,6 @@ def test_i502_ast_guard_allows_plain_writes():
     assert not py_offences("def f(record, s):\n    record['http_status'] = s\n    record.pop('attribution_source', None)\n")
 
 
-# --- I505 / I506 ----------------------------------------------------------------------------------------
 
 @pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('make, code', [(_connection_error, 'connection'), (_timeout_error, 'timeout')])
@@ -2935,12 +2930,12 @@ def test_redaction_boundary_returns_an_error_with_no_raw_chain():
     text = ''.join(traceback.format_exception(type(safe), safe, safe.__traceback__))
     assert SECRET_URL not in text and 'Connection error' not in text
     assert classify_failure(safe).kind is FailureKind.MODEL
-"""R30 #415 (Dong R29 NO-GO, plan 157/415-r30-plan.md + Dong's 3 binding amendments): I560 (a store write
-stamps a snapshot only on a record that became failed in THAT write), I563 (one HTTP-status rule: the
+"""(NO-GO, plan 157/415-r30-plan.md + 3 binding amendments): (a store write
+stamps a snapshot only on a record that became failed in THAT write), (one HTTP-status rule: the
 status frozen at the redaction boundary, else the explicit ``__cause__`` chain; never ``__context__``),
-I567 (one classification: no ``sent`` override; the boundary classifies inside, raises ``from None``).
+(one classification: no ``sent`` override; the boundary classifies inside, raises ``from None``).
 Each test fails on df53c89d on an assertion, or is proven by a mutation (157/mut415-r30). Nothing here
-imports a symbol that only exists after R30."""
+imports a symbol that only exists on the fixed side."""
 SECRET_URL__r30_415 = 'https://kimi.fixture.example/v1/chat?api_key=sk-r30-SECRET-0000'
 SECRET_BODY__r30_415 = 'r30-private-provider-body'
 SNAPSHOT_KEYS = ('attribution_source', 'provider', 'config_source', 'model', 'base_url_host', 'http_status',
@@ -2979,7 +2974,7 @@ def _unrelated_write_while_handling(pid, error, mutate):
             store.change(pid, mutate)
 
 
-# --- I560: only a record that became failed IN THIS WRITE gets a snapshot --------------------------------
+# only a record that became failed IN THIS WRITE gets a snapshot
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_an_unrelated_write_in_an_except_keeps_the_existing_failure_snapshot():
@@ -2999,7 +2994,7 @@ def test_i560_a_permission_error_while_updating_something_else_keeps_the_snapsho
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_a_partial_terminal_keeps_its_snapshot_on_an_unrelated_write():
-    """completed + outcome=partial is a failed terminal (I451): it is not 'non-failed' before the write."""
+    """completed + outcome=partial is a failed terminal : it is not 'non-failed' before the write."""
     _project__r25_415('p560q', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     _fail_with_kimi_503('p560q')
     store.change('p560q', lambda d: d['analysis'].update(status='completed', outcome='partial'))
@@ -3049,7 +3044,7 @@ def test_i560_a_real_transition_still_stamps_the_snapshot():
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i560_same_run_retry_goes_running_then_fails_again_replaces_the_snapshot():
-    """Dong amendment 3: same run_id fails, the retry goes to running, fails again -> the 2nd failure's."""
+    """amendment 3: same run_id fails, the retry goes to running, fails again -> the 2nd failure's."""
     _project__r25_415('p560r', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     _fail_with_kimi_503('p560r')
     store.change('p560r', lambda d: d['analysis'].update(status='running'))
@@ -3070,7 +3065,7 @@ def test_i560_a_failure_of_another_run_replaces_the_snapshot_without_passing_run
     assert (analysis.get('attribution_source'), analysis.get('provider'), analysis.get('http_status')) == ('phase', 'glm', None), analysis
 
 
-# --- I563: one status rule; an old 503 never leaks into a new request --------------------------------
+# one status rule; an old 503 never leaks into a new request
 
 def _connection_error_while_handling_a_503():
     try:
@@ -3131,10 +3126,10 @@ def test_i563_the_log_safe_boundary_freezes_the_status_and_cuts_the_chain():
         assert getattr(safe, 'http_status', None) == 429
 
 
-# --- I567: one classification; boundaries classify inside and raise from None -------------------------
+# one classification; boundaries classify inside and raise from None
 
 def _recording_factory(monkeypatch, module):
-    # R31 (I561): the boundaries now reach THE factory through llm_emit.attribution_snapshot (to pass the
+    # : the boundaries now reach THE factory through llm_emit.attribution_snapshot (to pass the
     # call's identity), which imports it from failure_attribution at call time: record it there.
     from backend.core import failure_attribution
     calls = []
@@ -3260,8 +3255,8 @@ def _boundary_errors():
 @pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('with_product_filter', [True, False])
 def test_i567_sentry_envelope_of_a_boundary_error_has_no_message_url_or_key_in_any_exception(monkeypatch, with_product_filter):
-    """Dong amendment 1: classification inside the boundary, ``from None`` outward. Every exception in the
-    envelope, chained ones included, is checked; also with the SDK's raw serialization (no before_send)."""
+    """amendment 1: classification inside the boundary, ``from None`` outward. Every exception in the
+envelope, chained ones included, is checked; also with the SDK's raw serialization (no before_send)."""
     monkeypatch.delenv('SENTRY_DSN', raising=False)
     for error in _boundary_errors():
         events = _envelope_events(error, with_product_filter=with_product_filter)
@@ -3276,13 +3271,11 @@ def test_i567_sentry_envelope_of_a_boundary_error_has_no_message_url_or_key_in_a
             secrets.append('kimi.fixture.example')
         for secret in secrets:
             assert secret not in text, (type(error).__name__, secret)
-"""R23 #228/#229 for #419.
-
-#228 (PM rule): a multi-goal failure is a product failure as soon as one cause is a product cause; it
+"""(PM rule): a multi-goal failure is a product failure as soon as one cause is a product cause; it
 leaves a denominator only when every cause is a user cause for it. The primary cause is the first failure
 of the most product-like tier, the rest go along as secondary causes. Checked end to end: real
 _produce_selected -> analysis record -> the real success_rate.sql. Fails on 1a518570 (order decided).
-#229: one SQL adapter for every success-rate test."""
+one SQL adapter for every success-rate test."""
 
 pytest.importorskip('duckdb')
 WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00'", 'internal_cohort_id': '641509',
@@ -3369,8 +3362,8 @@ def test_229_one_sql_adapter():
 
 @pytest.mark.parametrize('goals', [['content', 'highlight'], ['highlight', 'content']])
 def test_r24_page_gets_the_user_cause_stage_while_event_primary_stays_product(monkeypatch, tmp_path, goals):
-    """R24 PM rule: page and stats are separate. The record keeps the product primary (timeout/vision) for the
-    event, and carries each secondary cause's stage so the page can send 「去设置」 to the right row."""
+    """PM rule: page and stats are separate. The record keeps the product primary (timeout/vision) for the
+event, and carries each secondary cause's stage so the page can send 「去设置」 to the right row."""
     a = _produce__r23_419_attribution(monkeypatch, tmp_path, goals, intelligence.VisionRequestError('timeout', '视觉模型请求超时'))
     assert a['error_code'] == 'timeout' and a['failure_stage'] == 'vision'
     assert a['secondary_error_codes'] == ['llm_auth_invalid'] and a['secondary_upstream_error_types'] == ['invalid_key']
@@ -3378,7 +3371,7 @@ def test_r24_page_gets_the_user_cause_stage_while_event_primary_stays_product(mo
 
 
 def test_267_history_row_keeps_the_secondary_causes(monkeypatch, tmp_path):
-    """R24 #267: the analysis_history allow-list kept error_code but dropped the secondary causes."""
+    """the analysis_history allow-list kept error_code but dropped the secondary causes."""
     _produce__r23_419_attribution(monkeypatch, tmp_path, ['content', 'highlight'], intelligence.VisionRequestError('timeout', '视觉模型请求超时'))
     from backend.services.studio import store as s
     data = _on_disk(s)
@@ -3386,11 +3379,10 @@ def test_267_history_row_keeps_the_secondary_causes(monkeypatch, tmp_path):
     assert row['analysis']['error_code'] == 'timeout'
     assert row['analysis']['secondary_error_codes'] == ['llm_auth_invalid'], row
     assert row['analysis']['secondary_upstream_error_types'] == ['invalid_key']
-"""R31 #415 full head (Dong R30 plan approval + 8f0e155c decisions + mid-review I620-I624, I566 X10).
-
+"""full head (plan approval + 8f0e155c decisions).
 Each fix test fails on 8f0e155c on an assertion (157/mut415-r30/before-8f0e155c-*.txt); tests marked LOCK
-pass on 8f0e155c too and are proven by a targeted mutation instead (mut31.sh / Dong's mut30-dong.sh).
-Nothing here imports a symbol that only exists after R31 at module level."""
+pass on 8f0e155c too and are proven by a targeted mutation instead (mut31.sh / mut30-dong.sh).
+Nothing here imports a symbol that only exists on the fixed side at module level."""
 
 SECRET_BODY__r31_415 = 'r31-private-provider-body sk-r31-SECRET-0000 /Users/someone/clip.mp4'
 WHITELIST = {'provider', 'config_source', 'model', 'base_url_host', 'attribution_source', 'http_status',
@@ -3401,7 +3393,7 @@ def _frozen_code(error):
     return getattr(error, 'error_code', None)
 
 
-# --- I561: a boundary snapshot names the connection THIS call used ------------------------------------
+# a boundary snapshot names the connection THIS call used
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i561_the_transcription_boundary_snapshot_carries_the_asr_connection_identity(cloud_adapter):
@@ -3436,7 +3428,7 @@ def test_i561_the_cover_boundary_snapshot_carries_the_image_config_it_sent():
         ('phase', 'openai', 'gpt-image-1', 'api.openai.com'), snap
 
 
-# --- I562: the controlled code survives the redaction wrap --------------------------------------------
+# the controlled code survives the redaction wrap
 
 def _openai_timeout():
     return openai.APITimeoutError(request=httpx.Request('POST', 'https://kimi.fixture.example/v1/chat'))
@@ -3479,7 +3471,7 @@ def test_i562_lock_undecided_error_freezes_no_snapshot_and_no_code():
     assert _frozen_code(safe) is None
 
 
-# --- Dong 8f0e155c #1: the ASR user text depends only on error_code and status ---------------------------
+# 8f0e155c #1: the ASR user text depends only on error_code and status
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_dong1_cloud_transcription_text_never_carries_upstream_text(cloud_adapter):
@@ -3503,7 +3495,7 @@ def test_dong1_cloud_transcription_text_never_carries_upstream_text(cloud_adapte
     assert 'invalid api key' not in failure.user_message().lower()
 
 
-# --- Dong 8f0e155c #2 + I621: the cover status is frozen; HTTP errors are not LOCAL ----------------------
+# 8f0e155c #2 + : the cover status is frozen; HTTP errors are not LOCAL
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_dong2_lock_cover_freezes_the_status_the_library_response_carries():
@@ -3556,7 +3548,7 @@ def test_i621_a_2xx_that_is_not_an_object_is_an_invalid_model_response():
     assert studio_error_code(raised.value) == 'invalid_response'
 
 
-# --- I566 X5 / X10: errors raised before anything was sent are LOCAL -----------------------------------
+# X5 / X10: errors raised before anything was sent are LOCAL
 
 @pytest.mark.usefixtures('isolated__r22_415')
 @pytest.mark.parametrize('error', [
@@ -3584,7 +3576,7 @@ def test_x10_a_response_that_failed_to_parse_is_the_models_side():
     assert studio_error_code(safe) == 'invalid_response'
 
 
-# --- I566 X9: a request identity never lands on a LOCAL snapshot ----------------------------------------
+# X9: a request identity never lands on a LOCAL snapshot
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_x9_lock_request_record_does_not_reidentify_a_local_snapshot():
@@ -3600,7 +3592,7 @@ def test_x9_lock_request_record_does_not_reidentify_a_local_snapshot():
     assert error.attribution.provider == GLM['provider'] and error.attribution.http_status is None
 
 
-# --- Dong 8f0e155c #3: Retry-After and DNS kind follow only __cause__ -----------------------------------
+# 8f0e155c #3: Retry-After and DNS kind follow only __cause__
 
 class _RateLimited(Exception):
     def __init__(self):
@@ -3659,7 +3651,7 @@ def test_dong3_network_kind_real_httpx_dns_failure_is_still_dns(monkeypatch):
     assert network_kind_of(raised.value) == 'dns'
 
 
-# --- I568: only the reply's shape is the model's fault --------------------------------------------------
+# only the reply's shape is the model's fault
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i568_our_own_type_error_in_the_rewrite_route_is_not_invalid_response(client, monkeypatch):
@@ -3692,7 +3684,7 @@ def test_i568_a_reply_that_is_not_an_object_is_still_invalid_response(client, mo
     assert studio_error_code(seen[0]) == 'invalid_response'
 
 
-# --- I620: a rollback write is not a transition ---------------------------------------------------------
+# a rollback write is not a transition
 
 def _refusing_executor(monkeypatch):
     from backend.services.studio import jobs
@@ -3741,7 +3733,7 @@ def test_i620_real_confirm_dispatch_rejection_writes_the_previous_state_back_unc
     assert _snap(after) == _snap(before)  # was: the dispatch error's local/glm identity written onto it
 
 
-# --- I622: failed -> failed in the same attempt carries the STORED group forward ------------------------
+# failed -> failed in the same attempt carries the STORED group forward
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i622_a_writer_that_rebuilds_the_failed_record_keeps_the_stored_snapshot():
@@ -3756,8 +3748,8 @@ def test_i622_a_writer_that_rebuilds_the_failed_record_keeps_the_stored_snapshot
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i622_lock_same_attempt_error_code_change_keeps_the_snapshot_and_takes_the_new_code():
-    """LOCK of the current rule (Dong I622 B/C): the snapshot stays the stored one; error_code is the
-    writer's. No inference reconciles them."""
+    """LOCK of the current rule (B/C): the snapshot stays the stored one; error_code is the
+writer's. No inference reconciles them."""
     _project__r25_415('p622b', {'status': 'running', 'phase': 'production', 'run_id': 'r1'})
     before = _fail_with_kimi_503('p622b')
     _unrelated_write_while_handling('p622b', RuntimeError('local'), lambda d: d['analysis'].update(error_code='timeout'))
@@ -3765,7 +3757,7 @@ def test_i622_lock_same_attempt_error_code_change_keeps_the_snapshot_and_takes_t
     assert after == {**before, 'error_code': 'timeout'}
 
 
-# --- I623: one construction, one valid status range -----------------------------------------------------
+# one construction, one valid status range
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i623_cloud_transcription_failure_freezes_the_status_on_itself():
@@ -3802,11 +3794,10 @@ def test_i623_run_content_freezes_the_adapter_status_through_attributed(monkeypa
     assert raised.value.http_status is None  # 302 is not an error status (was frozen by hand: 302)
 
 
-# --- I624: Dong's D1 / D4 -------------------------------------------------------------------------------
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i624_d1_a_generation_failure_of_another_run_replaces_the_snapshot():
-    """LOCK, kills Dong D1."""
+    """LOCK, kills D1."""
     store.directory('p624g').mkdir(parents=True, exist_ok=True)
     store.write('p624g', {'id': 'p624g', 'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r1', 'instance': store.INSTANCE},
                           'generation': {'status': 'production', 'created_at': '2026-10-17T03:00:00Z'}}, _recover_previous=False)
@@ -3819,7 +3810,7 @@ def test_i624_d1_a_generation_failure_of_another_run_replaces_the_snapshot():
 
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_i624_d4_a_request_record_fills_its_own_failure_stage():
-    """LOCK, kills Dong D4."""
+    """LOCK, kills D4."""
     from backend.core.failure_attribution import AttributedError, FailureAttribution, attributed, with_request_record
 
     class Safe(AttributedError, RuntimeError):
@@ -3855,8 +3846,7 @@ def test_x4_lock_the_asr_pipeline_wrapper_carries_the_boundary_snapshot_itself()
     assert failure.__cause__ is None
     assert failure.attribution == snap
     assert classify_failure(failure).kind is FailureKind.MODEL
-"""R31 #415 I565 (Dong): runtime payload tests replace the reader AST heuristic as the primary guard.
-
+""": runtime payload tests replace the reader AST heuristic as the primary guard.
 A dirty record / snapshot (extra keys, a string status, a bool status, an unknown source, a URL-ish prose
 value in a non-whitelisted key) goes through every exit: the store read projection, the history summary,
 llm_emit.attribution / run_snapshot / sentry_tags_for_error, sentry_setup.studio_failure_context and the

@@ -95,7 +95,7 @@ def test_rate_limits_and_server_errors_are_retried_but_auth_errors_are_not(monke
     from backend.services import cloud_transcription as ct
 
     def status(code, body=b''):
-        # R22 #170: the retry decision sees the error _check_status classified (the real path)
+        # the retry decision sees the error _check_status classified (the real path)
         request = httpx.Request('POST', 'https://asr.example.com')
         try:
             ct._check_status(httpx.Response(code, request=request, content=body))

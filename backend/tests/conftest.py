@@ -49,11 +49,11 @@ TELEMETRY_ENV = ('SENTRY_DSN', 'VITE_PUBLIC_SENTRY_DSN', 'SENTRY_AUTH_TOKEN', 'A
 
 @pytest.fixture(autouse=True)
 def _no_ambient_telemetry(monkeypatch, request):
-    # R31-pre #419 I538: create_app() calls init_sentry(), which reads SENTRY_DSN from the
+    # pre #419 : create_app calls init_sentry, which reads SENTRY_DSN from the
     # environment and sets the module-level `_initialized` for the rest of the process.
     # With a DSN in the developer's shell, any create_app test turned the SDK on for real
     # (sending test events) and left `_initialized` True and the SDK client bound, so later
-    # "no DSN -> no-op" checks failed. R32 (Dong): the same for PostHog - the QA, LLM and MCP
+    # "no DSN -> no-op" checks failed. : the same for PostHog the QA, LLM and MCP
     # events post whenever AUTOCLIP_POSTHOG_KEY / VITE_PUBLIC_POSTHOG_KEY is set. Telemetry is
     # off under pytest: tests never inherit a DSN or a key; a test that wants one sets it with
     # monkeypatch (and stubs urlopen), and whatever init_sentry() bound is undone here.
@@ -128,11 +128,11 @@ _TESTS_DIR = Path(__file__).resolve().parent
 
 @pytest.fixture(autouse=True)
 def _whisper_installed_by_default(monkeypatch, request):
-    # 1.5.7 R19 #115: with no settings document the import gate assumes the default local Whisper.
+    # 1.5.7 #115: with no settings document the import gate assumes the default local Whisper.
     # CI has no Whisper, so every suite runs with "local Whisper installed, model on disk" simulated;
     # the gate code itself still runs everywhere and passes because its condition is not met.
     # Tests that exercise the Whisper state functions themselves carry @pytest.mark.own_whisper_status.
-    # R21 #176: detected at runtime, whatever the import style or directory: if test code calls the
+    # detected at runtime, whatever the import style or directory: if test code calls the
     # stand-in directly and the test is not marked, the test fails here instead of passing on the stand-in.
     if request.node.get_closest_marker("stdlib_only") or request.node.get_closest_marker("own_whisper_status"):
         yield

@@ -124,7 +124,7 @@ def test_site_refusal_is_source_blocked_with_translated_hint(monkeypatch, url, m
     for leaked in ('BiliBili', 'HTTP Error', 'Precondition', 'Forbidden', 'invalid', 'b23'):
         assert leaked not in str(error)
     assert studio_error_code(error) == 'source_blocked'
-    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest'}  # R28 I450/I455: local, no status
+    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest'}  # local, no status
 
 
 def test_youtube_403_still_retries_format_once_before_source_blocked(monkeypatch):

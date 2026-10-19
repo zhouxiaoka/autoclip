@@ -81,7 +81,7 @@ def test_real_cloud_http_failure_keeps_provider_status(cloud_adapter, model, sta
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    # R31 I562: the coarse studio code is frozen from the status (401 -> llm_auth_invalid).
+    # the coarse studio code is frozen from the status (401 -> llm_auth_invalid).
     # The fine user cause stays on upstream_error_type (invalid_key); both are user_hard in v4.
     assert result['error_code'] == {409: 'provider_error', 401: 'llm_auth_invalid', 500: 'provider_error'}[status]
     assert result['http_status'] == status
@@ -114,7 +114,7 @@ def test_real_cloud_non_http_failure_has_no_local_install_advice(cloud_adapter, 
     result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed'
     assert result['stage'] == 'SUBTITLE'
-    # R31 I562: connection and invalid replies keep their own codes (were provider_error)
+    # connection and invalid replies keep their own codes (were provider_error)
     assert result['error_code'] == {'connection': 'connection', 'invalid_response': 'invalid_response',
                                     'empty': 'provider_error'}[kind]
     assert '云端转写' in result['error']
@@ -247,15 +247,15 @@ def test_legacy_import_preserves_typed_cloud_failure(cloud_adapter, model, monke
 @pytest.mark.parametrize('body', [{'error': {'message': 'Insufficient balance raw-provider-secret-body'}},
                                   {'error': {'code': 'insufficient_quota', 'message': 'raw-provider-secret-body'}}])
 def test_r20_124_asr_429_insufficient_balance_is_quota_not_rate_limit(cloud_adapter, model, body, caplog):
-    """R20 #124: HTTP 429 + 'insufficient balance' is a user cause (insufficient_quota), never rate_limited; no raw text."""
+    """HTTP 429 + 'insufficient balance' is a user cause (insufficient_quota), never rate_limited; no raw text."""
     case = cloud_adapter
     case.configure(model, lambda request: httpx.Response(429, json=body, request=request))
     with caplog.at_level(logging.INFO, logger=pipeline.__name__):
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
     assert result['status'] == 'failed' and result['http_status'] == 429
     assert result['upstream_error_type'] == 'insufficient_quota'
-    assert result['error_code'] == 'provider_error'  # R22 #171: one code vocabulary; the user cause is upstream_error_type
-    assert len(case.requests) == 1                   # R22 #170: no balance is never re-uploaded
+    assert result['error_code'] == 'provider_error'  # one code vocabulary; the user cause is upstream_error_type
+    assert len(case.requests) == 1                   # no balance is never re-uploaded
     assert 'raw-provider-secret-body' not in str(result) and 'raw-provider-secret-body' not in caplog.text
     assert 'Insufficient balance' not in str(result)
 
@@ -269,7 +269,7 @@ def test_r20_124_plain_429_stays_rate_limited(cloud_adapter, model):
 
 
 class _LiveStream(httpx.SyncByteStream):
-    """R22 #169: a real network-like body - not pre-read, unreadable once the response is closed."""
+    """a real network-like body not pre-read, unreadable once the response is closed."""
     def __init__(self, body: bytes):
         self.body, self.closed = body, False
 

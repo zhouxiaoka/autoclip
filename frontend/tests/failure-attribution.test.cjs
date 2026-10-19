@@ -2,7 +2,7 @@
 
 // failure-attribution.test.cjs
 ;(() => {
-// R25 #415: a stored identity is ONE record; terminal events never stitch run and analysis fields.
+// a stored identity is ONE record; terminal events never stitch run and analysis fields.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), ts = require('typescript')
@@ -48,7 +48,7 @@ test('#332 a half screening_identity is ignored; the paired flat identity is use
 
 // failure-attribution.test.cjs
 ;(() => {
-// R26 #415 #392: attribution_source (request | phase | local) reaches the studio events; nothing else.
+// attribution_source (request | phase | local) reaches the studio events; nothing else.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -97,7 +97,7 @@ test('catalog registers the enum on the three studio terminal events', () => {
 
 // failure-attribution.test.cjs
 ;(() => {
-// R27 #415 I420 + design: every studio finished event reads attribution through pickAttribution (one record, whole).
+// + design: every studio finished event reads attribution through pickAttribution (one record, whole).
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -211,7 +211,7 @@ test('I424: a store_lock_timeout failure shows the i18n key', () => {
 
 // failure-attribution.test.cjs
 ;(() => {
-// R29 #415 (Dong R28 I502, I504): terminal events follow isFailedTerminal; the one-reader guard is an AST scan.
+// : terminal events follow isFailedTerminal; the one-reader guard is an AST scan.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -274,8 +274,8 @@ test('I504: a partial production receipt emits its terminal event', () => {
   assert.equal(events.find(e => e.event === 'studio_production_finished'), undefined)
 })
 
-// --- I502: AST guard over frontend/src: studio records' attribution is read only inside pickAttribution ---
-// R31 (Dong I565): AUXILIARY only. The primary guard is the runtime payload test (failure-attribution.test.cjs):
+// AST guard over frontend/src: studio records' attribution is read only inside pickAttribution
+// AUXILIARY only. The primary guard is the runtime payload test (failure-attribution.test.cjs):
 // whatever the code looks like, the event properties carry only ATTRIBUTION_KEYS with valid values.
 const KEYS = new Set(['attribution_source', 'http_status', 'upstream_error_type', 'provider', 'config_source', 'model', 'base_url_host'])
 const REC = /^(analysis|generation|run|record|terminal|workspace)$/
@@ -340,7 +340,7 @@ test('I502 (auxiliary): the AST guard catches .model, destructuring, element acc
 
 // failure-attribution.test.cjs
 ;(() => {
-// R31 #415 (Dong I565): runtime payload tests are the primary guard for the frontend serializer.
+// runtime payload tests are the primary guard for the frontend serializer.
 // Dirty studio records go through the real WorkflowTracker; every terminal event's attribution properties
 // must be a subset of ATTRIBUTION_KEYS with valid values, whatever the reader code looks like.
 const { test } = require('node:test')

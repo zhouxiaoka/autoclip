@@ -1,5 +1,4 @@
-"""The ONE ClickHouse/HogQL -> DuckDB adapter for docs/analytics/success_rate.sql (R23 #229).
-
+"""The ONE ClickHouse/HogQL -> DuckDB adapter for docs/analytics/success_rate.sql (#229).
 Syntax only, no semantic change. Every SQL test reads the repo file through this module."""
 import re
 from pathlib import Path

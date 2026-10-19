@@ -34,7 +34,7 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(blob.includes('/Users'), false)
 })
 
-// R26 #367: the rank-skip summary rule is asserted on backend attempts.generation_summary
+// the rank-skip summary rule is asserted on backend attempts.generation_summary
 // (backend/tests/test_studio_attempts.py); the frontend no longer derives summaries.
 
 test('override event helper keeps enums and drops free text', () => {

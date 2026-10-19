@@ -23,7 +23,7 @@ import openai
 
 
 class ProviderError(openai.APIStatusError):
-    # R28 (Dong R27 I450): a status alone no longer means 'model'; a provider answer is an openai.APIError.
+    # a status alone no longer means 'model'; a provider answer is an openai.APIError.
     def __init__(self, message, status_code):
         Exception.__init__(self, message)
         self.status_code = status_code
@@ -153,7 +153,7 @@ def test_failure_without_status_and_out_of_range_values_add_nothing(pipeline, mo
 
 
 def test_r28_i450_a_status_on_a_non_provider_error_is_not_a_model_failure(pipeline, monkeypatch):
-    # R28 (Dong R27 I450): only a request that was sent and answered is "model"; a bare status is not.
+    # only a request that was sent and answered is "model"; a bare status is not.
     from backend.core.sentry_setup import studio_failure_context
     from backend.services.studio import jobs
     mod, video = pipeline

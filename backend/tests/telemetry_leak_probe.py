@@ -1,5 +1,4 @@
-"""pytest plugin for test_r32_419_telemetry_isolation (#419 I538 extension), loaded with -p in a child pytest run.
-
+"""pytest plugin for test_r32_419_telemetry_isolation (#419 extension), loaded with -p in a child pytest run.
 Nothing can leave the machine: every sentry_sdk.init gets a counting fake transport, and urllib.request.urlopen /
 non-loopback socket connects are counted and refused (loopback is refused and counted apart). After the run it records how many network calls were attempted, how many
 times Sentry was initialized, whether a Sentry client is still bound and whether the MCP telemetry worker (the only

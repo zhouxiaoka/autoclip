@@ -14,7 +14,7 @@ from backend.tests.test_studio import root, source, client
 
 
 def test_subtitle_import_screening_ignores_failed_vision(client, source, monkeypatch):
-    """R3: import must finish its real screening worker with a failed vision binding."""
+    """import must finish its real screening worker with a failed vision binding."""
     from backend.services.studio import intelligence
 
     ai.save(ai.ModelSettings(

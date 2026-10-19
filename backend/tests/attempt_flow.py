@@ -41,7 +41,7 @@ def render_outcome(pid, statuses):
         data.setdefault('drafts', [])
         data['analysis'] = {**(data.get('analysis') or {}), 'status': 'running', 'phase': 'rendering'}
         data['generation'].update(status='rendering')
-        # R27 #376/#377: an output that already exists keeps the attempt that produced it (a variant retry re-renders
+        # an output that already exists keeps the attempt that produced it (a variant retry re-renders
         # it); a new one is produced by the open attempt and stamped by the same product call jobs.py persists with.
         existing = {v.get('id'): v for v in data.get('output_variants') or []}
         variants, created = [], []

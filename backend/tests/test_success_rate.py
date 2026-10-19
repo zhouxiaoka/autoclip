@@ -6,10 +6,10 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from backend.tests.success_rate_sql import COHORT, PARAMS, SQL, run_sql, statements, to_duckdb  # noqa: F401 (R23 #229: one adapter)
+from backend.tests.success_rate_sql import COHORT, PARAMS, SQL, run_sql, statements, to_duckdb  # noqa: F401 (#229: one adapter)
 
 
-# --- R18 #70/#71: every v4 exclusion rule and every forced product failure, mutated one by one ---
+# 70/#71: every v4 exclusion rule and every forced product failure, mutated one by one
 
 import json  # noqa: E402
 import json
@@ -19,7 +19,7 @@ import subprocess
 from backend.services.studio import store
 
 from backend.services.studio import attempts, store
-"""R16 #46/#47: execute docs/analytics/success_rate.sql for real (DuckDB with a small ClickHouse/HogQL
+"""execute docs/analytics/success_rate.sql for real (DuckDB with a small ClickHouse/HogQL
 shim) on synthetic events. Expected numbers are computed by hand below; mutations of the per-flow
 definition (last -> any success, last -> first, ignoring retry_of) must change them."""
 
@@ -186,7 +186,7 @@ def test_per_version_last_any_mutation_is_caught():
     assert rows['1.5.7']['flow_ok'] != 2
 
 V4 = json.loads((ROOT / 'docs/analytics/event_catalog.json').read_text(encoding='utf-8'))['attribution']['success_rate_v4']
-# R19 #104: every forced product failure also in upstream_error_type form.
+# every forced product failure also in upstream_error_type form.
 PRODUCT_FAILURE_UPSTREAM = ('model_not_found', 'bad_endpoint', 'whisper_not_installed', 'service_restarted')
 
 
@@ -201,7 +201,7 @@ def exclusion_fixture():
     one(outcome='completed')
     one(outcome='success')
     one(outcome='cancelled')                                            # user_hard: outcome
-    one(outcome='canceled')                                             # ... US spelling alias (R20 #140)
+    one(outcome='canceled')                                             # ... US spelling alias (#140)
     for code in V4['overall_excluded_error_codes']:                     # user_hard: error_code
         one(outcome='error', error_code=code)
     for kind in V4['overall_excluded_upstream_types']:                  # user_hard: upstream auth/quota
@@ -240,7 +240,7 @@ def test_every_exclusion_and_product_failure_lands_in_the_right_denominator():
     # 2 ok; hard (N_HARD) out of both; user_x (N_X) only out of product; forced failures (N_PF) in both.
     assert _excl() == EXPECTED_EXCL
     assert (N_HARD, N_X, N_PF) == (12, 5, 8)
-    # R19 #104: 8 forced product failures -> all/product denominators 15/10.
+    # 8 forced product failures -> all/product denominators 15/10.
     assert (EXPECTED_EXCL['q_all'], EXPECTED_EXCL['q_prod']) == (15, 10)
     assert set(PRODUCT_FAILURE_UPSTREAM) == set(V4['product_failure_codes'])
 
@@ -277,7 +277,7 @@ EXTRA_EC = r"user_hard OR ec IN \(([^)]*)\)\) AS user_x"
 
 def _mutations():
     out = {'cancel no longer excluded': lambda s: re.sub(r"\(o = 'cancelled'\s*OR", '(false OR', s, count=1),
-           # R20 #140: dropping the US-spelling alias must be caught in every figure.
+           # dropping the US-spelling alias must be caught in every figure.
            "'canceled' alias dropped": lambda s: s.replace("o_raw IN ('cancelled', 'canceled')", "o_raw IN ('cancelled')")}
     for code in V4['overall_excluded_error_codes']:
         out[f'error_code {code} no longer excluded'] = lambda s, c=code: _list_mutation(s, HARD_EC, lambda xs: [x for x in xs if x != c])
@@ -305,7 +305,7 @@ def test_each_exclusion_rule_mutation_is_caught(name):
     assert _excl(mutated) != EXPECTED_EXCL, name
 
 
-# --- R19 #103: the same rule mutations must be caught in every figure that carries the rules (1, 2, 3, 5),
+# 103: the same rule mutations must be caught in every figure that carries the rules (1, 2, 3, 5),
 # each figure mutated on its own (the other statements stay intact). ---
 
 RATE_KEYS = ('ok', 'q_all', 'q_prod', 'flow_ok', 'fq_all', 'fq_prod')
@@ -352,7 +352,7 @@ def test_each_rule_mutation_is_caught_in_every_figure(figure, name):
     assert extract(exclusion_fixture().run(mutated)) != baseline, (figure, name)
 
 
-# --- R20 #142: an empty denominator yields NULL, never NaN/inf --------------------------------------
+# 142: an empty denominator yields NULL, never NaN/inf
 
 def _only_product_excluded():
     """One person whose only attempt is a product-only exclusion: product denominators are 0."""
@@ -383,7 +383,7 @@ def test_142_every_rate_division_is_guarded():
         assert re.fullmatch(r'[\w.]+ / nullIf\([\w.]+', expr.strip()), expr
 
 
-# --- R21 #203: the overall (全量) denominators can be 0 too: NULL, never 0% -------------------------
+# 203: the overall (全量) denominators can be 0 too: NULL, never 0%
 
 OVERALL_RATES = ('overall_attempt_rate', 'overall_flow_rate')
 ALL_RATES = (*OVERALL_RATES, 'product_attempt_rate', 'product_flow_rate', 'partial_delivery_rate')
@@ -423,7 +423,7 @@ def test_203_empty_window_has_no_zero_rate():
 
 @pytest.mark.parametrize('column', [*OVERALL_RATES, 'overall_first_rate'])
 def test_203_zero_filling_an_overall_rate_is_caught(column):
-    """R21 #203 mutation (survived R21): ifNull(<overall rate>, 0) must fail the NULL regression."""
+    """mutation (survived): ifNull(<overall rate>, 0) must fail the NULL regression."""
     pattern = re.compile(r'round\(([^\n]*?)\) AS ' + column + r'\b')
     mutated = pattern.sub(lambda m: f'ifNull(round({m.group(1)}), 0) AS {column}', SQL)
     assert mutated != SQL
@@ -431,7 +431,7 @@ def test_203_zero_filling_an_overall_rate_is_caught(column):
         _assert_all_excluded_is_null(statements(mutated))
 
 
-# --- R25 #346: the flow's last attempt is the backend sequence, not the observation time ---
+# 346: the flow's last attempt is the backend sequence, not the observation time
 
 def _out_of_order():
     """partial -> retry completed, but the retry's terminal is observed BEFORE the partial (offline client, replay)."""
@@ -464,8 +464,8 @@ def test_346_legacy_rows_without_sequence_still_order_by_time():
     assert e.run(statements()[0])[0]['flow_ok'] == 1
 
 
-# --- R26 #362: legacy flows (no attempt_sequence) ---
-# The R16 fixture() has no attempt_sequence at all: it IS the legacy data set. Its hand counts (EXPECTED_DAY,
+# 362: legacy flows (no attempt_sequence)
+# The fixture has no attempt_sequence at all: it IS the legacy data set. Its hand counts (EXPECTED_DAY,
 # per-version) are the pre-#346 SQL results and are asserted unchanged above; here the unknown column is 0.
 
 @pytest.mark.parametrize('figure', [0, 4])
@@ -523,7 +523,7 @@ def test_362_legacy_rule_mutations_are_caught(figure, name):
     assert any(got(c) != want(c) for c in cases), name
 
 
-# --- R27 #380 (PM P3-b): the documented ordering key is the SQL's real key, (seq, leaf, ts) ---
+# 380 (PM P3-b): the documented ordering key is the SQL's real key, (seq, leaf, ts)
 
 ORD = '(ifNull(seq, 0), leaf, ts) AS ord'
 
@@ -537,7 +537,7 @@ def test_380_header_and_tracking_plan_name_the_real_ordering_key():
     assert '(attempt_sequence, leaf, ts)' in plan, 'TRACKING_PLAN §6.1 must spell out the ordering key'
 
 
-# --- R27 #381 (PM P3-c): one flow mixing attempts with and without attempt_sequence ---
+# 381 (PM P3-c): one flow mixing attempts with and without attempt_sequence
 
 def _mixed(retry_linked, old_outcome, new_outcome):
     """z1 is a pre-#419 attempt (no sequence), z2 a newer retry WITH a sequence, same flow. z2's terminal is
@@ -551,7 +551,7 @@ def _mixed(retry_linked, old_outcome, new_outcome):
 
 
 MIXED_CASES = [  # (retry_linked, z1 old, z2 new sequenced) -> flow_ok; the sequenced attempt always wins, never unknown
-    (True, 'error', 'completed', 1),     # Dong: old unsequenced, new sequenced retry_of old -> new wins
+    (True, 'error', 'completed', 1),     # old unsequenced, new sequenced retry_of old -> new wins
     (False, 'error', 'completed', 1),
     (False, 'completed', 'error', 0),    # the later-observed unsequenced success must not win
 ]
@@ -584,7 +584,7 @@ def test_381_mixed_flow_mutations_are_caught(figure, name):
     assert old in stmt
     mutated = stmt.replace(old, new)
     assert any(_mixed_result(mutated, c) != (c[3], 1, 0) for c in MIXED_CASES), name
-"""R21 #204/#205 for #416: the tracking plan must not claim the live dashboard already shows NULL as
+"""the tracking plan must not claim the live dashboard already shows NULL as
 empty. #416's SQL is valid without #419's retry_of producer and can merge on its own."""
 
 PLAN = (Path(__file__).resolve().parents[2] / 'docs/analytics/TRACKING_PLAN.md').read_text(encoding='utf-8')
@@ -604,13 +604,13 @@ def test_205_416_can_merge_without_419_producer():
 
 
 def test_225_sql_header_does_not_claim_live_dashboard_is_aligned():
-    """R22 #225: the live insights are synced after this file merges, so line 1 must not say they
-    already match. Fails on 101deaf4."""
+    """the live insights are synced after this file merges, so line 1 must not say they
+already match. Fails on 101deaf4."""
     sql = (Path(__file__).resolve().parents[2] / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
     header = sql.splitlines()[0]
     assert '对齐' not in header
     assert '合入后同步' in header
-"""R16 #39: run identity survives analysis_history and reaches the terminal event on the real
+"""run identity survives analysis_history and reaches the terminal event on the real
 path: store.write -> later run replaces live analysis -> store.read -> frontend WorkflowTracker."""
 
 FRONTEND = Path(__file__).resolve().parents[2] / 'frontend'
@@ -652,7 +652,7 @@ def project(tmp_path, monkeypatch):
 
 def _capture(kind, watch_id, snapshot):
     if not shutil.which('node') or not (FRONTEND / 'node_modules' / 'typescript').is_dir():
-        # R19 #102: never skip (quality_gate treats an unexpected skip as BLOCKED). The frontend toolchain
+        # never skip (quality_gate treats an unexpected skip as BLOCKED). The frontend toolchain
         # is a required test dependency: `cd frontend && npm ci` (docs/TESTING_ACCEPTANCE.md).
         pytest.fail('frontend toolchain missing: run `cd frontend && npm ci` (node + frontend/node_modules/typescript are required)')
     done = subprocess.run(['node', '-e', SCRIPT, kind, watch_id, 'run', str(PRESETS)], input=json.dumps(snapshot),
@@ -714,9 +714,9 @@ def test_identity_survives_history_to_terminal(project, phase, kind, watch_id, m
     props = finished[0]['props']
     for key, value in identity.items():
         assert props.get(key) == value, (key, props)
-"""R13 #25 (#406): degrade_reason survives the terminal record (analysis_history allowlist) and
+"""(#406): degrade_reason survives the terminal record (analysis_history allowlist) and
 reaches the frontend terminal event on the real path: store -> frontend read -> capture.
-#419: the terminal is a projection of the backend attempt receipt; the reason is frozen in the receipt at settle
+the terminal is a projection of the backend attempt receipt; the reason is frozen in the receipt at settle
 from that attempt's own plan, so a later re-screen (plan2, no reason) cannot drop or change it."""
 REASONS = ['frame_extract_subtitle_fallback', 'source_too_long_subtitle_route']
 
@@ -774,7 +774,7 @@ def test_degrade_reason_reaches_terminal_event_from_stored_record(project, reaso
     def start(data):
         data.update(seed)
         receipt = attempts.open_attempt(data, receipt_kind, run_id='run')
-        attempts.bind_plan(receipt, data['plan'])  # R25 #348: what _inspect / confirm_project do for the attempt's own plan
+        attempts.bind_plan(receipt, data['plan'])  # what _inspect / confirm_project do for the attempt's own plan
         opened.update(receipt)
         if auto:
             data['generation']['attempt_id'] = opened['attempt_id']

@@ -449,7 +449,7 @@ async def download_whisper_model(request: DownloadModelRequest):
         state = await model_manager.download_model(request.model)
     except Exception as e:
         logger.error(f"下载Whisper模型失败: {e}")
-        # R27c the one Studio capture path (consent, scope, tag whitelist); production Sentry has no
+        # the one Studio capture path (consent, scope, tag whitelist); production Sentry has no
         # Starlette integration, so the raised HTTPException alone is never reported. The QA simulation never comes here.
         sentry_setup.capture_studio_exception(e, phase="model_download", http_status=500)
         raise HTTPException(status_code=500, detail=f"下载Whisper模型失败: {str(e)}")

@@ -278,7 +278,7 @@ def generation_summary(data, variants=None, started=None) -> dict:
         return (templates.get(v.get('draft_id')) or {}).get('template') in ('interview_zh', 'podcast_en')
     completed = [(v, jobs.get(v.get('render_job_id') or '')) for v in variants if v.get('status') == 'completed']
     count = lambda test: sum(1 for v in variants if test(v))
-    # R29b: duration_ms runs from THIS attempt's start (an appended round never includes earlier rounds)
+    # duration_ms runs from THIS attempt's start (an appended round never includes earlier rounds)
     created, finished = _millis(started) or _millis(generation.get('created_at')), _millis(generation.get('finished_at'))
     branding = generation.get('branding') if isinstance(generation.get('branding'), dict) else {}
     out = {

@@ -165,16 +165,16 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         argv = [str(part) for part in cmd]
         text = kwargs.get('text') or kwargs.get('universal_newlines')
         if _is_ffprobe(argv):
-            # R14 #33 / R15 #38: simulated value. The fake outro-duration probe returns 1.0 s; no real
+            # simulated value. The fake outro-duration probe returns 1.0 s; no real
             # outro is measured here (real media is covered in test_r15_outro_probe.py).
             body = json.dumps({'format': {'duration': '1.0'}} if 'stream=duration:format=duration' in argv else PROBE)
             stdout = body if text else body.encode()
             return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr='' if text else b'')
-        if argv[-3:] == ['-f', 'null', '-']:  # R11/R12 decode validation
-            # R11 #413 decode-only validation of the staged output: not an encoder argv.
+        if argv[-3:] == ['-f', 'null', '-']:  # decode validation
+            # decode-only validation of the staged output: not an encoder argv.
             decodes.append(argv)
             seconds = float(PROBE.get('format', {}).get('duration') or 0)
-            # R13 #27 / R15 #38: simulated values. The body (.part.mp4) is decoded alone before the
+            # simulated values. The body (.part.mp4) is decoded alone before the
             # outro; the fake decode of .ready.part.mp4 reports 30 extra frames (the simulated 1 s outro).
             frames = 999 + (30 if _input_after(argv, '-i').endswith('.ready.part.mp4') else 0)
             body = f'frame={frames}\nout_time_us={int(seconds * 1_000_000)}\nprogress=end\n'

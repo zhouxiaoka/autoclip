@@ -16,7 +16,7 @@ import {
 // 扩展Axios配置类型
 declare module 'axios' {
   interface AxiosRequestConfig {
-    /** #418 R27c: false = a single attempt (the caller polls on its own, e.g. the readiness probe). */
+    /* false = a single attempt (the caller polls on its own, e.g. the readiness probe). */
     retry?: boolean
   }
   interface InternalAxiosRequestConfig {
@@ -55,7 +55,7 @@ const shouldRetry = (error: any): boolean => {
 
 const getRetryDelay = (retryCount: number): number => 300 * Math.pow(2, retryCount)
 
-/** #418 R27c: the wait before a retry ends at once when the request's signal aborts; nothing more is sent. */
+/* the wait before a retry ends at once when the request's signal aborts; nothing more is sent. */
 const waitForRetry = (ms: number, config: any) => new Promise<void>((resolve, reject) => {
   const signal: AbortSignal | undefined = config?.signal
   const cancelled = () => new axios.CanceledError(undefined, config)

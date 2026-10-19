@@ -449,7 +449,7 @@ def test_e3_model_source_api_round_trip(monkeypatch, tmp_path):
 
 
 def test_r2_status_api_never_echoes_raw_download_exception(monkeypatch, tmp_path):
-    """R2: exception text with URL/query must not reach GET status errorMessage."""
+    """exception text with URL/query must not reach GET status errorMessage."""
     secret = "tok_leaked_credential_r2"
     url = f"https://huggingface.co/models/x?token={secret}"
 
@@ -492,7 +492,7 @@ def test_r28_i520_background_download_failure_is_reported_once_without_text_url_
     monkeypatch.setattr(sentry_setup, "crash_reports_enabled", lambda: True)
     monkeypatch.setattr(sentry_setup, "sync_anonymous_user", lambda *a, **k: None)
     monkeypatch.setenv("SENTRY_DSN", "https://k@o0.ingest.sentry.io/0")  # memory transport: nothing leaves the box
-    # I652 refuses pytest and a source checkout. Stub only those two refusals.
+    # refuses pytest and a source checkout. Stub only those two refusals.
     monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.7")
     monkeypatch.setenv("AUTOCLIP_BUILD_ENVIRONMENT", "production")
     monkeypatch.setattr(sentry_setup, "_under_pytest", lambda: False)

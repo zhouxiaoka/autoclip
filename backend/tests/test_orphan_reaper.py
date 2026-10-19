@@ -53,10 +53,10 @@ class _FakeProc:
 
 
 def _dead_owner_token():
-    """R31 (I559): deterministic by construction: this test process's pid with a create time 1000 s
-    earlier than its real one, so that owner is dead by definition (the PID-reuse rule). A child that
-    just exited is not: on Windows its process object can linger (open handles), psutil then still
-    returns its create time and the owner reads as alive (CI jobs 117267399378, 117289886647)."""
+    """: deterministic by construction: this test process's pid with a create time 1000 s
+earlier than its real one, so that owner is dead by definition (the PID-reuse rule). A child that
+just exited is not: on Windows its process object can linger (open handles), psutil then still
+returns its create time and the owner reads as alive (CI jobs 117267399378, 117289886647)."""
     return f'{os.getpid()}:{psutil.Process().create_time() - 1000:.3f}'
 
 
@@ -105,7 +105,7 @@ def test_desktop_main_hooks_reaper_before_start():
     assert src.index('orphan_reaper.reap_orphans()') < src.index('manager.start()')
 
 
-# --- R10 #393: independent live owner, PID reuse, AccessDenied ---------------------------
+# 393: independent live owner, PID reuse, AccessDenied
 
 @pytest.fixture
 def live_owner():
@@ -230,7 +230,7 @@ def test_startup_marks_environment_before_starting_services(monkeypatch):
     assert token and token == orphan_reaper._owner_token(psutil.Process())
 
 
-# --- R31 #415 I559: one try per process; uncertain reasons reach LAST_RESULT and the log --------------
+# 415 : one try per process; uncertain reasons reach LAST_RESULT and the log
 
 def test_i559_dead_owner_token_is_dead_by_construction():
     pid, created = orphan_reaper._parse(_dead_owner_token())

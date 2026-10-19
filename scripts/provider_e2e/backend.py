@@ -59,7 +59,7 @@ class DesktopBackend:
         self.base_url = ''
         self._log = None
         self.log_path = data_dir / 'logs' / 'provider-e2e-backend.log'
-        # R17 #59: stdout (PORT=/BACKEND_URL= announcements) gets its own file. With stdout and
+        # stdout (PORT=/BACKEND_URL= announcements) gets its own file. With stdout and
         # stderr merged, a log line from another thread could land between print()'s "PORT=N"
         # and its newline ("PORT=444652026-10-16 ... INFO"), the port never parsed and the case
         # timed out after 120 s. The desktop app already reads them as separate pipes.

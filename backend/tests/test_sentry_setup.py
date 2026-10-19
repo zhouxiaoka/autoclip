@@ -163,7 +163,7 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
 
 class _ProviderStatusError(__import__("openai").APIStatusError):
     """A provider answer (openai.APIStatusError): the HTTP status lives on `status_code`."""
-    # R28 (Dong R27 I450): a status alone no longer means 'model'; a provider answer is an openai.APIError.
+    # a status alone no longer means 'model'; a provider answer is an openai.APIError.
 
     def __init__(self, message, status_code):
         Exception.__init__(self, message)
@@ -189,7 +189,7 @@ def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
     assert 'private' not in json.dumps(context)
 
     # Two levels deep (provider error re-wrapped by a client layer): explicit chaining is followed.
-    # R29 I500: an implicit __context__ is not this failure's cause and is never walked.
+    # an implicit __context__ is not this failure's cause and is never walked.
     def client_layer(explicit):
         try:
             raise _ProviderStatusError('private body', 502)

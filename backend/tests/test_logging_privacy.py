@@ -8,7 +8,7 @@ import openai
 import pytest
 
 from backend.core.log_redaction import redact_text
-"""R2: real SDK traffic and pipeline diagnostics must not expose private data."""
+"""real SDK traffic and pipeline diagnostics must not expose private data."""
 
 BODY = "fixture-private-title-subtitle-response"
 KEY = "sk-fixture-private-sdk-key"
@@ -170,7 +170,7 @@ def test_score_and_collection_save_logs_hide_paths_and_missing_outline(tmp_path,
     engine = object.__new__(ClusteringEngine)
     assert engine.save_collections([], tmp_path / "collections.json").exists()
     assert_private_data_absent(caplog.text, tmp_path)
-"""R10-R1: Digest / quoted-with-space Authorization and spaced api_key values must not leak."""
+"""Digest / quoted-with-space Authorization and spaced api_key values must not leak."""
 
 FAKE = "FAKEsecretTOKEN123"  # not a real key
 

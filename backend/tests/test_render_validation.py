@@ -11,7 +11,7 @@ from backend.services.studio.models import Draft, Scene
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import logging
-"""R12 #413 items 21/22: decoded extent must match; decode timeout keeps the timeout code."""
+"""items 21/22: decoded extent must match; decode timeout keeps the timeout code."""
 
 
 def _clip(path, seconds):
@@ -44,12 +44,12 @@ def _run(monkeypatch, delivered, claimed, *, outro=False, decode=None):
     monkeypatch.setattr(render, '_probe', lambda _p: {'duration': claimed, 'width': 320, 'height': 240, 'fps': 30})
     if outro:
         def append(source, destination, *, report=None, **_k):
-            # R13 #27: a real outro adds length after the (separately validated) body.
+            # a real outro adds length after the (separately validated) body.
             listing = destination.with_name('outro-list.txt')
             listing.write_text(f"file '{source}'\nfile '{delivered}'\n")
             subprocess.run(['ffmpeg', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing),
                             '-c', 'copy', '-y', str(destination)], check=True, capture_output=True)
-            if report is not None:  # R15 #36: an applied outro always reports its proven duration
+            if report is not None:  # an applied outro always reports its proven duration
                 report['outro_seconds'] = float(subprocess.run(
                     ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(delivered)],
                     check=True, capture_output=True, text=True).stdout)
@@ -118,7 +118,7 @@ def test_decode_timeout_keeps_timeout_code_through_the_render_task(env, monkeypa
     assert job['error_code'] == 'timeout'
     assert output.read_bytes() == b'previous saved video'
     assert real_render is render.render_draft
-"""R13 #413: body validated alone before the outro (#27), full audio+video decode (#28),
+"""body validated alone before the outro (#27), full audio+video decode (#28),
 and a decode timeout recorded in the isolated SQLite project index (#29)."""
 
 
@@ -277,7 +277,7 @@ def test_r14_success_is_exactly_body_with_outro_appended(env, monkeypatch):
 
 
 def test_r14_real_append_outro_reports_the_outro_duration_actually_used(tmp_path, monkeypatch):
-    # R15 #37: keep the outro cache out of the default data directory.
+    # keep the outro cache out of the default data directory.
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
     monkeypatch.setattr(output_branding, '_cache_dir', lambda: _tmp_cache(tmp_path))
     body = _clip__r13_render_validation(tmp_path / 'body.mp4', 2, audio=True)
@@ -293,9 +293,9 @@ def _tmp_cache(tmp_path):
     path = tmp_path / 'outro-cache'
     path.mkdir(parents=True, exist_ok=True)
     return path
-"""R15 #36: an outro whose duration cannot be probed is "not added" (validated body ships,
-append_outro returns False, warning shown, reason logged). R15 #38: real media covers the
-1.8 s designed outro and the 1 s text-fallback outro. R15 #37: outro cache lives in tmp_path."""
+"""an outro whose duration cannot be probed is "not added" (validated body ships,
+append_outro returns False, warning shown, reason logged). #38: real media covers the
+1.8 s designed outro and the 1 s text-fallback outro. #37: outro cache lives in tmp_path."""
 
 WARNING = '品牌片尾未能添加，已保留成片'
 

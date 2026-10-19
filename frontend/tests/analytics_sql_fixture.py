@@ -160,10 +160,10 @@ process.stdout.write(JSON.stringify(events))
         for i in range(1, hops + 1):
             self.assertIn(f'LEFT JOIN base p{i} ON ', body)
         self.assertNotIn(f'LEFT JOIN base p{hops + 1} ', body)
-        # R25 #346: last attempt by the backend sequence (observation time breaks ties only).
+        # last attempt by the backend sequence (observation time breaks ties only).
         self.assertEqual(v4['flow_definition']['order_property'], 'attempt_sequence')
         self.assertIn('max(toInt(properties.attempt_sequence)) AS seq', body)
-        self.assertEqual(body.count('(ifNull(seq, 0), leaf, ts) AS ord'), 2)  # R26 #362: then the retry_of chain end
+        self.assertEqual(body.count('(ifNull(seq, 0), leaf, ts) AS ord'), 2)  # then the retry_of chain end
         self.assertIn('SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, ord) AS fo', body)
         self.assertEqual(body.count('AS unknown_flows'), 2)
         for rate in ('overall_attempt_rate', 'product_attempt_rate', 'overall_flow_rate', 'product_flow_rate'):
@@ -218,7 +218,7 @@ process.stdout.write(JSON.stringify(events))
                 self.assertEqual(row['real_render_within_7d_devices'], expected)
 
     def test_sample_followup_excludes_internal_renders_and_empty_cohort_changes_nothing(self):
-        # R20 #141: a device seen on the sample as a normal person, whose real render is by an internal person.
+        # a device seen on the sample as a normal person, whose real render is by an internal person.
         self.insert('shared', 'example_project_viewed', age=9, person='p1', experience_schema_version=1)
         self.insert('shared', 'studio_export_finished', 'success', age=8, person='internal')
         self.insert('user', 'example_project_viewed', age=9, person='p2', experience_schema_version=1)

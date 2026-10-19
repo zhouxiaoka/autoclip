@@ -37,7 +37,7 @@ const SNAPSHOT={
 }
 
 test('receipt summary fields keep enums and drop content',()=>{
- // R26 #367: the counting rules are asserted on backend attempts.generation_summary; here only the sanitizer.
+ // the counting rules are asserted on backend attempts.generation_summary; here only the sanitizer.
  const props=workflow.safeStudioProperties({variant_count:3,outro_unknown_count:1,portrait_style:'podcast',title:'Private title',name:'Sam Altman',template:'interview_zh',packaging_style:'boxed',framing:'speaker',warnings:['private error']})
  assert.equal(JSON.stringify(props).includes('Private'),false)
  assert.equal(JSON.stringify(props).includes('private'),false)
@@ -98,7 +98,7 @@ test('automatic auth failures retain their code and pass catalog validation with
  }
 })
 
-// R25: receipts come from the real backend, which always persists the generation's own code (_inspect writes it;
+// receipts come from the real backend, which always persists the generation's own code (_inspect writes it;
 // store._ensure_failure_identity normalizes anything outside STUDIO_ERROR_CODES to 'unexpected').
 test('automatic failures report the persisted code and never an unrecognized one',()=>{
  for(const code of ['subtitle_setup','private arbitrary message']){
