@@ -1,15 +1,13 @@
+import catalog from '@event-catalog'
+
 /**
  * 1.5.7: closed error_code set for provider_connection_test_finished.
  * Only this code and an integer upstream HTTP status leave the app — never URL, key, path,
  * upstream body or message. Classification stays within the tested provider.
+ * The list is event_catalog.json enums.connection_test_error_code.
  */
-export const CONNECTION_TEST_ERROR_CODES = [
-  'empty_key', 'invalid_key', 'insufficient_quota', 'permission_denied',
-  'bad_base_url', 'model_not_found', 'rate_limited', 'http_5xx', 'timeout',
-  'dns', 'cors', 'network', 'vision_unsupported', 'output_truncated',
-  'invalid_request', 'unknown',
-] as const
-export type ConnectionTestErrorCode = typeof CONNECTION_TEST_ERROR_CODES[number]
+export const CONNECTION_TEST_ERROR_CODES: readonly string[] = catalog.enums.connection_test_error_code
+export type ConnectionTestErrorCode = (typeof CONNECTION_TEST_ERROR_CODES)[number]
 
 const BY_TYPE: Record<string, ConnectionTestErrorCode> = {
   invalid_key: 'invalid_key', insufficient_quota: 'insufficient_quota', permission_denied: 'permission_denied',

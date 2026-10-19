@@ -40,6 +40,8 @@ def test_codes_come_from_both_catalogs():
     packaged, docs = _catalogs()
     assert packaged == docs
     assert failure_codes.studio_codes() == set(packaged["enums"]["studio_error_code"]) == set(load_catalog()["enums"]["studio_error_code"])
+    from backend.core.connection_test_codes import CONNECTION_TEST_ERROR_CODES
+    assert set(CONNECTION_TEST_ERROR_CODES) == set(packaged["enums"]["connection_test_error_code"])
     assert failure_codes.download_codes() == set(packaged["enums"]["download_error_code"]) == {"disk", "corrupt"}
     assert failure_codes.sentry_codes() == HISTORICAL_SENTRY == set(STUDIO_ERROR_CODES)
     assert failure_codes.stored_codes() == HISTORICAL_SENTRY | {"multiple"}

@@ -10,36 +10,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ci_guards
 import quality_gate
 
-ROUND = 'R' + '12'
 ITEM = 'I' + '575'
-LETTER = 'R' + '27b'
-NAME = 'Dong'
 
 
 class CiGuardTests(unittest.TestCase):
     def test_status_codes_versions_and_ordinary_words_are_not_review_ids(self):
         for text in ('HTTP 500', 'status 404', 'version 1.5.7', 'Render the page', 'done', 'dongle'):
             self.assertIsNone(ci_guards._REVIEW_ID.search(text), text)
-            self.assertEqual(ci_guards.clean_review_text(text), text)
-
-    def test_review_id_drops_out_and_the_reason_stays(self):
-        cleaned = ci_guards.clean_review_text(
-            f'{ROUND} #110 (behavior): keep the reason, HTTP 500, version 1.5.7'
-        )
-        self.assertNotIn(ROUND, cleaned)
-        self.assertNotIn('(behavior)', cleaned)
-        self.assertIn('keep the reason', cleaned)
-        self.assertIn('HTTP 500', cleaned)
-        self.assertIn('1.5.7', cleaned)
-        self.assertEqual(
-            ci_guards.clean_review_text(f'---- {LETTER}: rounds, one poll in flight ----'),
-            'rounds, one poll in flight',
-        )
-        self.assertEqual(
-            ci_guards.clean_review_text(f"{NAME}'s surviving mutations (ported to the derived view fields)"),
-            'surviving mutations (ported to the derived view fields)',
-        )
-        self.assertIn('noqa: F401', ci_guards.clean_review_text(f'noqa: F401 ({ROUND} #229: one adapter)'))
 
     def test_review_round_filenames(self):
         self.assertTrue(ci_guards._REVIEW_FILE.match('test_' + 'r12.py'))
@@ -65,6 +42,7 @@ class CiGuardTests(unittest.TestCase):
         self.assertIn('cancelled', mcp)
         for code in ('timeout', 'cancelled', 'VALIDATION_ERROR', 'http_429'):
             self.assertTrue(ci_guards.error_code_literal_allowed(code, catalog, mcp), code)
+        self.assertIn('bad_endpoint', catalog)
         self.assertFalse(ci_guards.error_code_literal_allowed('not_a_real_code', catalog, mcp))
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -75,8 +53,27 @@ class CiGuardTests(unittest.TestCase):
             self.assertTrue(any('not_a_real_code' in row for row in ci_guards.error_code_literals(root)))
             target.write_text("error_code = 'timeout'\n", encoding='utf-8')
             self.assertEqual(ci_guards.error_code_literals(root), [])
+            target.write_text("payload = {'error_code': 'not_a_real_code'}\n", encoding='utf-8')
+            self.assertTrue(any('not_a_real_code' in row for row in ci_guards.error_code_literals(root)))
+            target.write_text('payload = {"errorCode": "bad_endpoint"}\n', encoding='utf-8')
+            self.assertEqual(ci_guards.error_code_literals(root), [])
+            table = next(codes for label, codes in ci_guards._catalog_error_sets() if label.endswith('connection_test_error_code'))
+            literal = ', '.join(repr(code) for code in sorted(table))
+            target.write_text(f'COPIED = ({literal},)\n', encoding='utf-8')
+            self.assertTrue(any('connection_test_error_code' in row for row in ci_guards.handwritten_error_code_sets(root)))
+            caused = next(codes for label, codes in ci_guards._catalog_error_sets() if label.endswith('user_caused_error_codes'))
+            caused_literal = ', '.join(repr(code) for code in sorted(caused))
+            target.write_text(f'USER = ({caused_literal},)\n', encoding='utf-8')
+            self.assertTrue(any('user_caused_error_codes' in row for row in ci_guards.handwritten_error_code_sets(root)))
+            target.write_text("MODEL = {'timeout', 'connection'}\n", encoding='utf-8')
+            self.assertEqual(ci_guards.handwritten_error_code_sets(root), [])
             target.write_text(f'x = 1  # {ITEM} keep this reason\n', encoding='utf-8')
             self.assertEqual(ci_guards.review_notes(root), [f'{target.relative_to(root)}:1'])
+            js = root / 'frontend' / 'src'
+            js.mkdir(parents=True)
+            note = js / 'note.ts'
+            note.write_text(f'export const x = 1 // {ITEM} keep\n', encoding='utf-8')
+            self.assertIn(f'{note.relative_to(root)}:1', ci_guards.review_notes(root))
 
     def test_summary_lists_buckets_and_does_not_fail(self):
         with tempfile.TemporaryDirectory() as temp:

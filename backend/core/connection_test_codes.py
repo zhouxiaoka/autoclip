@@ -5,12 +5,21 @@ path, upstream body or message. Classification stays within the tested provider.
 """
 from __future__ import annotations
 
-CONNECTION_TEST_ERROR_CODES: tuple[str, ...] = (
-    'empty_key', 'invalid_key', 'insufficient_quota', 'permission_denied',
-    'bad_base_url', 'model_not_found', 'rate_limited', 'http_5xx', 'timeout',
-    'dns', 'cors', 'network', 'vision_unsupported', 'output_truncated',
-    'invalid_request', 'unknown',
-)
+import json
+from pathlib import Path
+
+from backend.core.event_catalog import load_catalog
+
+
+def connection_test_error_codes() -> tuple[str, ...]:
+    """The catalog enum. Callers do not keep a second copy of the list."""
+    values = (load_catalog().get('enums') or {}).get('connection_test_error_code')
+    if not isinstance(values, list) or not values:
+        values = json.loads(Path(__file__).resolve().with_name('event_catalog.json').read_text(encoding='utf-8'))['enums']['connection_test_error_code']
+    return tuple(value for value in values if isinstance(value, str))
+
+
+CONNECTION_TEST_ERROR_CODES: tuple[str, ...] = connection_test_error_codes()
 
 _BY_TYPE = {
     'invalid_key': 'invalid_key',
