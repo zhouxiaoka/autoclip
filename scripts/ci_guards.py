@@ -3,19 +3,21 @@
 
 Blocking: review-round test filenames, review ids in comments and docstrings,
 product error-code literals outside event_catalog.json (including quoted keys),
-and a second literal copy of a catalog error-code table. The line-count
+a second literal copy of a catalog error-code table, and a Python string
+that copies a failure_messages.json sentence. The line-count
 table is written to the PR job summary and never fails the run.
 """
 from __future__ import annotations
 
 import ast
+import io
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 import tokenize
-import io
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -356,6 +358,33 @@ def write_summary(counts: dict[str, list[int]] | None) -> None:
         handle.write('\n'.join(lines) + '\n')
 
 
+def catalog_sentence_copies(root: Path = ROOT) -> list[str]:
+    """A Python string equal to a catalog sentence is a second copy of that sentence."""
+    table = root / 'backend' / 'core' / 'failure_messages.json'
+    if not table.is_file():
+        return []
+    sentences = {text for text in json.loads(table.read_text(encoding='utf-8')).values() if isinstance(text, str) and text}
+    found = []
+    base = root / 'backend'
+    for path in base.rglob('*.py'):
+        if any(part in SKIP_PARTS or part == 'tests' for part in path.parts) or path.name.startswith('test_'):
+            continue
+        try:
+            tokens = tokenize.tokenize(io.BytesIO(path.read_bytes()).readline)
+        except (tokenize.TokenError, SyntaxError, UnicodeError):
+            continue
+        for token in tokens:
+            if token.type != tokenize.STRING:
+                continue
+            try:
+                value = ast.literal_eval(token.string)
+            except (SyntaxError, ValueError):
+                continue
+            if isinstance(value, str) and value in sentences:
+                found.append(f'{path.relative_to(root)}:{token.start[0]}: {value}')
+    return found
+
+
 def main() -> int:
     base = os.environ.get('GITHUB_BASE_REF', '')
     if base:
@@ -373,6 +402,9 @@ def main() -> int:
     copies = handwritten_error_code_sets()
     if copies:
         problems.append('手写错误码集合:\n' + '\n'.join(copies))
+    sentences = catalog_sentence_copies()
+    if sentences:
+        problems.append('手写失败文案:\n' + '\n'.join(sentences))
     if problems:
         print('\n\n'.join(problems), file=sys.stderr)
         return 1

@@ -4,8 +4,9 @@ Studio workers run in this process's thread pools. When the app is killed during
 screening, the content (LLM) pipeline or a render, nothing ever finishes that run:
 the generation stayed in production and the project index showed processing (or
 completed, before #8) with no reason. At startup every such project is read with
-recovery, which persists a failed terminal with 「服务已重启，请重新生成」, and the
-project index is synced so the home card shows failed and a way back in.
+recovery, which persists a failed terminal with the catalog sentence for
+service_restarted, and the project index is synced so the home card shows
+failed and a way back in.
 """
 import json
 import logging

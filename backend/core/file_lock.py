@@ -10,9 +10,11 @@ import threading
 import time
 from pathlib import Path
 
+from backend.core.failure_codes import sentence
+
 LOCK_TIMEOUT_CODE = 'store_lock_timeout'
 # what the user sees. A local busy store, never phrased as a provider/model timeout.
-LOCK_TIMEOUT_MESSAGE = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
+LOCK_TIMEOUT_MESSAGE = sentence('store_lock_timeout')
 DEFAULT_TIMEOUT = 10.0
 _POLL = 0.05
 logger = logging.getLogger(__name__)

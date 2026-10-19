@@ -1,4 +1,5 @@
 """Locks for review-round filenames, review ids in notes, and catalog error codes."""
+import json
 import os
 from pathlib import Path
 import sys
@@ -74,6 +75,27 @@ class CiGuardTests(unittest.TestCase):
             note = js / 'note.ts'
             note.write_text(f'export const x = 1 // {ITEM} keep\n', encoding='utf-8')
             self.assertIn(f'{note.relative_to(root)}:1', ci_guards.review_notes(root))
+
+    def test_catalog_sentence_copies_are_flagged(self):
+        self.assertEqual(ci_guards.catalog_sentence_copies(), [])
+        sentence = '应用刚重启，这次制作已中断，请重试。'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            catalog = root / 'backend' / 'core'
+            catalog.mkdir(parents=True)
+            (catalog / 'failure_messages.json').write_text(
+                json.dumps({'service_restarted': sentence}), encoding='utf-8')
+            sample = root / 'backend' / 'sample.py'
+            sample.write_text(f'error = {sentence!r}\n', encoding='utf-8')
+            self.assertTrue(any('sample.py' in row for row in ci_guards.catalog_sentence_copies(root)))
+            sample.write_text("error = sentence('service_restarted')\n", encoding='utf-8')
+            self.assertEqual(ci_guards.catalog_sentence_copies(root), [])
+            sample.write_text(f'# {sentence}\nnote = {("prefix " + sentence)!r}\n', encoding='utf-8')
+            self.assertEqual(ci_guards.catalog_sentence_copies(root), [])
+            tests = root / 'backend' / 'tests'
+            tests.mkdir()
+            (tests / 'test_copy.py').write_text(f'error = {sentence!r}\n', encoding='utf-8')
+            self.assertEqual(ci_guards.catalog_sentence_copies(root), [])
 
     def test_summary_lists_buckets_and_does_not_fail(self):
         with tempfile.TemporaryDirectory() as temp:
