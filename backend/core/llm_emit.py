@@ -831,7 +831,7 @@ def wait_until_idle(timeout: float = 3) -> bool:
 
 
 class Rejected(Exception):
-    """The capture endpoint refused this payload (HTTP 4xx). Do not retry it."""
+    """The capture endpoint refused this payload. 408 and 429 are not refusals."""
 
 
 def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, Any] | None = None,
@@ -870,9 +870,10 @@ def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, A
         with urllib.request.urlopen(request, timeout=1.5):
             return True
     except urllib.error.HTTPError as error:
-        if 400 <= int(getattr(error, "code", 0) or 0) < 500:
+        status = int(getattr(error, "code", 0) or 0)
+        if 400 <= status < 500 and status not in (408, 429):
             logger.warning("%s was rejected", event)
-            raise Rejected(error.code) from None
+            raise Rejected(status) from None
         logger.warning("%s was not delivered", event)
         return False
     except (OSError, TypeError, ValueError, urllib.error.URLError):
