@@ -467,7 +467,17 @@ def run_content(project_id, video):
 
     return clips
 
-def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
+def _snapshotted_captions(generation) -> bool:
+    """The burn-captions switch frozen when this generation started.
+
+    A project written before the switch has no field and keeps the historical default, on.
+    """
+    if not isinstance(generation, dict) or 'output_captions' not in generation:
+        return True
+    return bool(generation['output_captions'])
+
+
+def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None, output_captions=True):
     """Materialize platform packaging defaults without reinterpreting content.
 
     When the source already has subtitles in the picture, do not stack a second track, and
@@ -495,6 +505,14 @@ def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
         value['language'] = strategy.audience_language
     if burned_subtitles:
         value['subtitles'] = False
+    if not output_captions:
+        # The per-draft editor still flips these flags back on for one clip. Cues stay,
+        # so turning captions back on burns the lines that were already written.
+        value['subtitles'] = False
+        packaging = value.get('packaging')
+        if packaging is not None:
+            current = packaging.model_dump() if hasattr(packaging, 'model_dump') else dict(packaging)
+            value['packaging'] = {**current, 'captions_enabled': False}
     # The template version follows the new title style: a draft derived for one platform (comic, v6)
     # must not carry a version the next platform's style rejects (card only supports v1).
     version = value.get('title_template_version', 1)
@@ -1148,7 +1166,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
             value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         layout = 'crop' if use_html and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
-        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(generation))
         derived_drafts.append(draft.model_dump())
         variants.append({
             'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': draft.revision,
@@ -1348,7 +1366,7 @@ def _produce_on_demand(project_id, variant_id):
         value = _apply_packaging(project_id, value, strategy_id, burned, {})
         posts = _posts_for(project_id, [(strategy_id, value)], {})
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
-        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None).model_dump()
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 
         def ready(data):
             for index, item in enumerate(data['drafts']):
@@ -1497,11 +1515,13 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             raise ValueError('当前任务正在运行，请稍后再试')
         state = deepcopy(previous)
         state.setdefault('schema_version', 2)
+        from backend.services.output_captions import load_settings as load_output_captions
         from backend.services.studio.template_choice import style_for_request
         style = style_for_request(getattr(options, 'html_template', None), features)
         state['generation'] = {
             'requested_platforms': list(options.platforms),
             'branding': options.branding.model_dump(),
+            'output_captions': load_output_captions().enabled,
             'auto_start': options.auto_start,
             'portrait_style': options.portrait_style,
             **({'html_template': options.html_template} if getattr(options, 'html_template', None) else {}),
