@@ -1,4 +1,5 @@
 """Versioned deterministic title artwork shared by preview and FFmpeg export."""
+from backend.core.failure_codes import UserFacingError
 import io
 from functools import lru_cache
 import re
@@ -36,8 +37,8 @@ def lines_for(text, font, max_width):
 
 def _artwork_v1(text, style, w, h, scale=1, y=.12, accent=None):
     if w<16 or h<16 or w*h>16777216:
-        raise ValueError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
-    if style not in STYLES: raise ValueError('未知文字模板')
+        raise UserFacingError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
+    if style not in STYLES: raise UserFacingError('未知文字模板')
     if not text.strip(): return Image.new('RGBA',(w,h))
     if all(ord(c)<0x250 for c in text): text=text.upper()
     color=accent or ACCENTS[style]
@@ -49,7 +50,7 @@ def _artwork_v1(text, style, w, h, scale=1, y=.12, accent=None):
         lines=lines_for(text,font,width)
         if len(lines)<=3: break
         size-=3
-        if size<min_size: raise ValueError('开头文字太长，请缩短或减少换行（最多三行）')
+        if size<min_size: raise UserFacingError('开头文字太长，请缩短或减少换行（最多三行）')
     bounds=[font.getbbox(line,stroke_width=0) for line in lines]
     line_h=max(b[3]-b[1] for b in bounds)
     gap=round(size*.13)
@@ -102,7 +103,7 @@ def artwork(text, style, w, h, scale=1, y=.12, accent=None, version=1):
     if version == 3:
         from backend.services.studio.title_art_v3 import artwork as artwork_v3
         return artwork_v3(text, style, w, h, scale, y, accent)
-    raise ValueError('不支持的文字模板版本')
+    raise UserFacingError('不支持的文字模板版本')
 
 
 def png_bytes(text, style, w, h, **options):

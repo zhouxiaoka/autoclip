@@ -18,6 +18,7 @@ Invariants (each has an acceptance test in ``backend/tests/test_preflight.py``):
 """
 from __future__ import annotations
 
+from backend.core.failure_codes import UserFacingError
 import enum
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -256,7 +257,7 @@ def enforce(result: PreflightResult) -> PreflightResult:
     if result.transcription_code is not None:
         raise readiness.TranscriptionNotReady(result.transcription_code)
     if result.asr_failure is not None:
-        raise ValueError(result.asr_failure.user_message())
+        raise UserFacingError(result.asr_failure.user_message())
     return result
 
 

@@ -99,7 +99,9 @@ def test_one_sentence_per_code_and_no_retired_copies():
     for code in ("missing_resource", "disk", "corrupt", "frame_extract_failed", "source_unreadable"):
         assert "模型" not in table[code] and "设置" not in table[code], code
     assert table["invalid_key"] == table["llm_auth_invalid"] == table["authentication"]
-    assert table["unexpected"] == table["provider_error"] == table["unknown"]
+    assert table["unexpected"] == table["unknown"]
+    assert "模型" not in table["unexpected"] and "设置" not in table["unexpected"] and "配置" not in table["unexpected"]
+    assert "模型" in table["provider_error"]
     assert HINT_KEYS[UpstreamErrorType.INVALID_KEY] == table["invalid_key"]
     assert HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA] == table["insufficient_quota"]
     assert HINT_KEYS[UpstreamErrorType.PERMISSION_DENIED] == table["permission_denied"]
@@ -133,7 +135,10 @@ def test_provider_text_stays_out_of_the_user_message(caplog):
     assert visible == failure_codes.sentence("unexpected")
     assert "sk-secret" not in visible and "Incorrect API key" not in visible
     assert raw in caplog.text
-    kept = failure_codes.user_visible_error(ValueError("视觉模型不可用，请配置后重新确认；原素材已保留"))
+    authored = "视觉模型不可用，请配置后重新确认；原素材已保留"
+    assert failure_codes.user_visible_error(ValueError(authored)) == failure_codes.sentence("validation")
+    assert "视觉模型不可用" not in failure_codes.user_visible_error(ValueError(authored))
+    kept = failure_codes.user_visible_error(failure_codes.UserFacingError(authored))
     assert kept.startswith("视觉模型不可用")
     chinese = failure_codes.user_visible_error(RuntimeError("服务商返回：账户余额不足，请到控制台充值后再试"))
     assert chinese == failure_codes.sentence("unexpected")
@@ -149,6 +154,34 @@ def test_provider_text_stays_out_of_the_user_message(caplog):
         assert "模型" not in text and "设置" not in text
     failure = PipelineFailure("ANALYZE", failure_codes.sentence("llm_auth_invalid"), code="llm_auth_invalid")
     assert failure_codes.user_visible_error(failure) == failure_codes.sentence("llm_auth_invalid")
+    catalog = failure_codes.sentence("invalid_response")
+    assert failure_codes.user_visible_error(ValueError(catalog)) == catalog
+
+
+@pytest.mark.stdlib_only
+def test_model_dumps_and_internal_value_errors_stay_out_of_the_ui():
+    import json
+    from backend.services.studio.planning import Recommendation
+    try:
+        Recommendation.model_validate({"content_type": "nope", "goal": "highlight", "reason": "画面说明", "confidence": 0.5})
+    except Exception as caught:
+        dump = caught
+    else:
+        raise AssertionError("expected a validation error")
+    visible = failure_codes.user_visible_error(dump)
+    assert visible == failure_codes.sentence("validation")
+    assert "nope" not in visible and "画面说明" not in visible and str(dump) not in visible
+    try:
+        json.loads("{")
+    except json.JSONDecodeError as caught:
+        raw = caught
+    visible = failure_codes.user_visible_error(raw)
+    assert visible == failure_codes.sentence("validation")
+    assert str(raw) not in visible and "Expecting" not in visible
+    english = ValueError("Expected a JSON object")
+    visible = failure_codes.user_visible_error(english)
+    assert visible == failure_codes.sentence("validation")
+    assert "Expected a JSON object" not in visible and "JSON" not in visible
 
 
 @pytest.mark.stdlib_only

@@ -1,4 +1,5 @@
 """Render immutable draft snapshots using the existing ffmpeg layout/subtitle code."""
+from backend.core.failure_codes import UserFacingError
 from backend.core.failure_attribution import ModelResponseInvalid  
 import os
 import math
@@ -113,12 +114,12 @@ def _decoded_video_seconds(path, fps, expected) -> float:
              '-i', str(path), '-f', 'null', '-'],
             check=True, capture_output=True, timeout=max(120, (expected or 0) * 2))
     except (subprocess.CalledProcessError, OSError):
-        raise ValueError('渲染输出无效，请重新导出') from None
+        raise UserFacingError('渲染输出无效，请重新导出') from None
     if (decoded.stderr or b'').strip():
-        raise ValueError('渲染输出无效，请重新导出')
+        raise UserFacingError('渲染输出无效，请重新导出')
     _seconds, frames = _decoded_extent(decoded.stdout)
     if frames <= 0:
-        raise ValueError('渲染输出无效，请重新导出')
+        raise UserFacingError('渲染输出无效，请重新导出')
     return frames / (fps if fps and fps > 0 else 30)
 
 
@@ -127,7 +128,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     validate_scenes(draft.scenes, info.get('duration', 0))
     w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
     if not w or not h:
-        raise ValueError('无法读取原视频尺寸')
+        raise UserFacingError('无法读取原视频尺寸')
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
     warnings = []
     draft = recover_empty_packaging(project_id, draft, warnings)
@@ -155,7 +156,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             e['text'] = t
     font = resolve_cjk_font()
     if hook and draft.title_style not in title_art.STYLES and not font:
-        raise ValueError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
+        raise UserFacingError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
     if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
     project_cancellation.checkpoint(project_id)
@@ -342,7 +343,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                 body_fps = body_probe.get('fps') or 30
                 body_seconds = _decoded_video_seconds(partial, body_fps, sum(durations))
                 if body_seconds < sum(durations) - _tolerance(body_fps):
-                    raise ValueError('渲染输出无效，请重新导出')
+                    raise UserFacingError('渲染输出无效，请重新导出')
             outro_report = {}
             outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
@@ -357,7 +358,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         if (not ready.is_file() or ready.stat().st_size == 0 or
                 not math.isfinite(duration) or duration <= 0 or
                 not validated.get('width') or not validated.get('height')):
-            raise ValueError('渲染输出无效，请重新导出')
+            raise UserFacingError('渲染输出无效，请重新导出')
         # probe metadata survives a truncated mp4 (faststart moov up front); only a
         # full decode proves every frame is readable before the file replaces the saved video.
         # a clean cut at a packet boundary decodes without errors but short, so the
@@ -369,16 +370,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         if (decoded_seconds < duration - tolerance
                 or decoded_seconds < sum(durations) - tolerance
                 or (outro_applied and body_seconds is not None and decoded_seconds <= body_seconds)):
-            raise ValueError('渲染输出无效，请重新导出')
+            raise UserFacingError('渲染输出无效，请重新导出')
         # with the outro, the total must match body + the outro actually used
         # (|decoded - (body + outro)| <= 0.5 s); container metadata alone can look normal.
         # an applied outro always carries a positive duration; never skip the check.
         outro_seconds = outro_report.get('outro_seconds') if outro_applied else None
         if outro_applied and (not isinstance(outro_seconds, (int, float)) or not math.isfinite(outro_seconds) or outro_seconds <= 0):
-            raise ValueError('渲染输出无效，请重新导出')
+            raise UserFacingError('渲染输出无效，请重新导出')
         if (outro_applied and body_seconds is not None
                 and abs(decoded_seconds - (body_seconds + outro_seconds)) > 0.5):
-            raise ValueError('渲染输出无效，请重新导出')
+            raise UserFacingError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)
         os.replace(ready, output)
         result = {'title': draft.title, 'duration': duration, 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}

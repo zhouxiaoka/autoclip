@@ -12,6 +12,7 @@ from functools import wraps
 from time import sleep
 from pathlib import Path
 
+from backend.core.failure_codes import UserFacingError
 from backend.core.path_utils import get_projects_directory
 
 from backend.core.file_lock import LOCK_TIMEOUT_CODE, LOCK_TIMEOUT_MESSAGE, LockTimeout, ProcessLock  # noqa: E402
@@ -437,7 +438,7 @@ def now():
 
 def directory(project_id: str) -> Path:
     if not re.fullmatch(r'[a-zA-Z0-9_-]{1,100}', project_id):
-        raise ValueError('无效项目 ID')
+        raise UserFacingError('无效项目 ID')
     return get_projects_directory() / project_id
 
 @_serialized

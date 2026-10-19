@@ -2,7 +2,7 @@ import json
 import logging
 import shutil
 from time import monotonic, sleep
-from backend.core.failure_codes import user_visible_error
+from backend.core.failure_codes import UserFacingError, user_visible_error
 from backend.core.sentry_setup import capture_studio_exception, studio_error_code, studio_failure_context
 from copy import deepcopy
 import uuid
@@ -98,7 +98,7 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
                 def failed(data):
                     next(j for j in data['jobs'] if j['job_id'] == job['job_id']).update(status='failed', error=message, error_code=code)
                 store.change(project_id, failed)
-                raise ValueError(message) from None
+                raise UserFacingError(message) from None
         return {k: v for k, v in added.items() if k not in ('instance', 'snapshot', 'variant_links')}
 
 
@@ -463,7 +463,7 @@ def run_content(project_id, video):
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
     if not clips:
-        raise ValueError('没有提取到可用内容片段，请检查语音/字幕，或修改方案为精彩高光')
+        raise UserFacingError('没有提取到可用内容片段，请检查语音/字幕，或修改方案为精彩高光')
 
     return clips
 
@@ -616,12 +616,12 @@ def _content_drafts(project_id, plan, video):
                 subtitles=True,
             ).model_dump(), SCORE_KEY: _score(clip)})
         if not drafts:
-            raise ValueError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
+            raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
         return drafts
     if route != 'visual':
-        raise ValueError('没有可用的自动分析路径，请检查模型设置后重试')
+        raise UserFacingError('没有可用的自动分析路径，请检查模型设置后重试')
     if not intelligence.ready():
-        raise ValueError('请先在设置中配置视觉理解模型')
+        raise UserFacingError('请先在设置中配置视觉理解模型')
     try:
         events, coverage = analyze(video, prefs)
         drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
@@ -1181,7 +1181,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
         })
     _queue_best_first(variants)
     if not variants:
-        raise ValueError('所选平台没有可生成的完整内容版本')
+        raise UserFacingError('所选平台没有可生成的完整内容版本')
     return derived_drafts, variants, events
 
 
@@ -1315,7 +1315,7 @@ def produce_variant(project_id, variant_id):
         if not item:
             raise FileNotFoundError('成片版本不存在')
         if item.get('status') != 'on_demand':
-            raise ValueError('这条成片已经在生成或已完成')
+            raise UserFacingError('这条成片已经在生成或已完成')
         if not any(draft['id'] == item['draft_id'] for draft in data.get('drafts', [])):
             raise FileNotFoundError('来源草稿不存在')
         return _start_preparing(data, item)
@@ -1350,7 +1350,7 @@ def _submit_on_demand(project_id, variant_id, attempt_id):
             _finish_generation(data)
         store.change(project_id, failed)
         sync_project_completion(project_id)
-        raise ValueError(message) from None
+        raise UserFacingError(message) from None
 
 
 @_tracked('production')
@@ -1435,7 +1435,7 @@ def retry_variant(project_id, variant_id, retry=None):
     if not variant:
         raise FileNotFoundError('成片版本不存在')
     if variant.get('status') != 'failed':
-        raise ValueError('只有失败的成片版本可以重试')
+        raise UserFacingError('只有失败的成片版本可以重试')
     raw = next((item for item in state.get('drafts', []) if item['id'] == variant['draft_id']), None)
     if not raw:
         raise FileNotFoundError('来源草稿不存在')
@@ -1443,7 +1443,7 @@ def retry_variant(project_id, variant_id, retry=None):
         def prepare(data):
             item = next(value for value in data['output_variants'] if value['id'] == variant_id)
             if item.get('status') != 'failed':
-                raise ValueError('只有失败的成片版本可以重试')
+                raise UserFacingError('只有失败的成片版本可以重试')
             receipt = _variant_attempt(data, retry, item)
             data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
             return _start_preparing(data, item)
@@ -1453,7 +1453,7 @@ def retry_variant(project_id, variant_id, retry=None):
     def update(data):
         item = next(value for value in data['output_variants'] if value['id'] == variant_id)
         if item.get('status') != 'failed':
-            raise ValueError('只有失败的成片版本可以重试')
+            raise UserFacingError('只有失败的成片版本可以重试')
         item.update(status='queued', render_attempt_id=uuid.uuid4().hex)
         item.pop('render_dispatch_claimed', None)
         item.pop('render_dispatch_instance', None)
@@ -1512,7 +1512,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
                 return again.get('run_id')
             parent = _retry_parent(previous, retry.get('parent_attempt_id'))
         if (previous.get('analysis') or {}).get('status') == 'running':
-            raise ValueError('当前任务正在运行，请稍后再试')
+            raise UserFacingError('当前任务正在运行，请稍后再试')
         state = deepcopy(previous)
         state.setdefault('schema_version', 2)
         from backend.services.output_captions import load_settings as load_output_captions
@@ -1566,7 +1566,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             # This unaccepted reservation must not enter terminal history before rollback.
             store.write(project_id, previous, restore=True)  # rollback is not a transition
-            raise ValueError(message) from None
+            raise UserFacingError(message) from None
 
         return state['analysis']['run_id']
 
@@ -1643,11 +1643,11 @@ def confirm_project(project_id, body):
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
         route = body.analysis_mode or plan.get('recommended_analysis', 'subtitle')
         if route == 'visual' and body.goals == ['content']:
-            raise ValueError('内容切片当前使用字幕分析，请选择字幕模式后确认')
+            raise UserFacingError('内容切片当前使用字幕分析，请选择字幕模式后确认')
         if route == 'visual':
             from backend.services.studio import intelligence
             if not intelligence.ready():
-                raise ValueError('视觉模型不可用，请配置后重新确认；原素材已保留')
+                raise UserFacingError('视觉模型不可用，请配置后重新确认；原素材已保留')
         if route == 'subtitle' or 'content' in body.goals:
             # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
             # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
@@ -1689,7 +1689,7 @@ def confirm_project(project_id, body):
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
             store.write(project_id, previous, restore=True)  # rollback is not a transition
-            raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+            raise UserFacingError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 
         return state['analysis']['run_id']
 
@@ -1748,9 +1748,9 @@ def _produce_selected(project_id, plan):
                     succeeded_goals.append(goal)
                     continue
                 if plan.get('confirmed_analysis', 'subtitle') != 'visual':
-                    raise ValueError('此确认未授权视觉分析；请重新选择处理方式')
+                    raise UserFacingError('此确认未授权视觉分析；请重新选择处理方式')
                 if not intelligence.ready():
-                    raise ValueError('请先在设置中配置视觉理解模型')
+                    raise UserFacingError('请先在设置中配置视觉理解模型')
                 if visual_error is not None:
                     raise visual_error
                 if events is None:

@@ -21,11 +21,14 @@ def sentence(code):
     table = messages(); return table.get(code) or table["unknown"]
 def _omit(error):
     logger.warning("provider text omitted from UI (%s): %s", type(error).__name__, str(error)[:700])
+class UserFacingError(ValueError):
+    """A sentence we wrote for the screen. Other ValueErrors use the catalog sentence."""
 def _keep_authored(error, text):
-    # ValueError / cover / image wrappers carry copy we wrote. Provider bodies stay out, including Chinese.
+    # Only copy we wrote, or a catalog sentence. pydantic ValidationError and JSONDecodeError
+    # are ValueErrors; their text is a dump, not a sentence for the user.
     if not text or _DUMP.search(text) or "sk-" in text: return False
-    if isinstance(error, ValueError): return True
-    return type(error).__name__ in {"CoverError", "ImageError"}
+    if type(error).__name__ in {"UserFacingError", "CoverError", "ImageError"}: return True
+    return text in messages().values()
 def _local_sentence_code(error):
     """ffmpeg, a full disk and a missing file get a local sentence, never the model-settings one."""
     import errno, subprocess

@@ -1,4 +1,5 @@
 """Recommend a workflow from bounded visual evidence; explicit preferences always win."""
+from backend.core.failure_codes import UserFacingError
 from pathlib import Path
 import subprocess
 import tempfile
@@ -208,7 +209,7 @@ def recommend(video: Path, options: ImportOptions):
         local_evidence, result = _local_recommendation(video, duration)
     elif not configured:
         if options.auto_start and consent.analysis_mode == 'visual':
-            raise ValueError('视觉模型尚未配置，请在设置中配置后重试；原素材已保留')
+            raise UserFacingError('视觉模型尚未配置，请在设置中配置后重试；原素材已保留')
         mode = 'fallback'
         result = Recommendation(content_type='other', goal='content',
             reason='尚未配置视觉模型，无法自动判断；请手动选择制作类型，或在设置中配置后重新识别。', confidence=0, suggested_goals=[])
