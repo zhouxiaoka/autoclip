@@ -2,6 +2,7 @@
 
 Frozen separately from earlier presets so saved drafts remain reproducible.
 """
+from backend.core.failure_codes import UserFacingError
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageColor
 from .title_art import FONTS, font_for, lines_for
 
@@ -25,7 +26,7 @@ def _face(line, size, width, punch=False):
 
 def artwork(text, w, h, scale=1, y=.12, accent=None, *, punch=False):
     if w < 16 or h < 16 or w*h > 16777216:
-        raise ValueError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
+        raise UserFacingError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
     canvas = Image.new('RGBA', (w, h))
     if not text.strip():
         return canvas
@@ -40,7 +41,7 @@ def artwork(text, w, h, scale=1, y=.12, accent=None, *, punch=False):
             break
         size -= 3
         if size < max(12, w*.045):
-            raise ValueError('开头文字太长，请缩短或减少换行（最多三行）')
+            raise UserFacingError('开头文字太长，请缩短或减少换行（最多三行）')
     faces = [_face(line, size, w*(.76 if i<len(lines)-1 else .82)*scale, punch=punch)
              for i, line in enumerate(lines)]
     if punch and len(faces) > 1:

@@ -1673,6 +1673,7 @@
   "模型服务暂时不可用，请稍后重试。": "El servicio del modelo no está disponible temporalmente. Inténtalo de nuevo más tarde.",
   "模型输出被截断，请稍后重试或换一个模型。": "La salida del modelo se cortó. Inténtalo más tarde o cambia de modelo.",
   "模型服务返回了无法识别的错误，请检查配置后重试。": "El servicio del modelo devolvió un error no reconocido. Revisa la configuración e inténtalo de nuevo.",
+  "这次处理没有完成，请重试。": "Este paso no terminó. Inténtalo de nuevo.",
   "这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。": "Esta es la URL de la consola o del sitio, no la API del modelo. Elige el proveedor correcto o usa Compatible personalizado e introduce un endpoint con /v1.",
   "此 key 看起来属于 {{name}}。当前仍使用你选择的服务商，不会自动改。": "Esta clave parece de {{name}}. Seguiremos con el proveedor que elegiste; no lo cambiaremos automáticamente.",
   "去 88API 获取密钥": "Obtener una clave de 88API",

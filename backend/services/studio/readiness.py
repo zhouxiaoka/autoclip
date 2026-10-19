@@ -1,6 +1,7 @@
 """Import-time readiness: saved settings and local runtimes only. No paid calls."""
 from __future__ import annotations
 
+from backend.core.failure_codes import UserFacingError
 from pathlib import Path
 
 from backend.core.local_presets import LOCAL_PRESETS
@@ -44,16 +45,16 @@ def ensure_analysis_usable() -> None:
         settings = ai_models.load()
     except Exception:
         # Validation errors may contain private settings values. Expose only this message.
-        raise ValueError('已保存的模型配置需要修复，请到「设置 → 模型」重新选择服务和模型并保存后再生成。') from None
+        raise UserFacingError('已保存的模型配置需要修复，请到「设置 → 模型」重新选择服务和模型并保存后再生成。') from None
     if settings is None:
         return
     ai_models.require_analysis(settings)
     check = _analysis(settings)
     if check['code'] == 'validation_failed':
-        raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
+        raise UserFacingError('当前模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
     if ai_models.vision_follow_lacks_capability(settings):
         from backend.services.provider_validation import VISION_BLOCK_MESSAGE
-        raise ValueError(VISION_BLOCK_MESSAGE)
+        raise UserFacingError(VISION_BLOCK_MESSAGE)
 
 
 def _transcription(settings: ai_models.ModelSettings) -> dict:

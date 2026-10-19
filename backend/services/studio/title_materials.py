@@ -1,4 +1,5 @@
 """Deterministic ink materials, grid typography, and shared glass masks."""
+from backend.core.failure_codes import UserFacingError
 import io
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from backend.services.studio.title_art import FONTS, font_for, lines_for
@@ -70,7 +71,7 @@ def pixel_artwork(text,w,h,scale=1,y=.12,accent=None):
     # via a 20px thresholded Noto grid; this is explicitly a raster fallback.
     font=ImageFont.truetype(str(FONTS/'PressStart2P-Regular.ttf'),8) if latin else font_for(text,20)
     lines=lines_for(text,font,96 if latin else 120)
-    if len(lines)>3:raise ValueError('开头文字太长，请缩短或减少换行（最多三行）')
+    if len(lines)>3:raise UserFacingError('开头文字太长，请缩短或减少换行（最多三行）')
     masks=[]
     for line in lines:
         b=font.getbbox(line)
@@ -117,7 +118,7 @@ def frosted_layers(text,w,h,scale=1,y=.12,accent=None):
         heights=[font.getbbox(line)[3]-font.getbbox(line)[1] for line in lines]
         if len(lines)<=3 and sum(heights)+gap*(len(lines)-1)+pad*2<=h*.28:break
         size-=3
-        if size<minimum:raise ValueError('开头文字太长，请缩短或减少换行（最多三行）')
+        if size<minimum:raise UserFacingError('开头文字太长，请缩短或减少换行（最多三行）')
     cw=round(w*.84);ch=sum(heights)+gap*(len(lines)-1)+pad*2
     left=(w-cw)//2;top=max(round(h*.04),min(round(h*(y-.05)),h-round(h*.10)-ch));radius=max(4,round(w*.047))
     box=(left,top,left+cw,top+ch)
@@ -142,8 +143,8 @@ def frosted_layers(text,w,h,scale=1,y=.12,accent=None):
 
 
 def backdrop_png(text,style,w,h,scale=1,y=.12,accent=None,version=3):
-    if style!='frosted' or version not in (3,6):raise ValueError('仅磨砂字幕卡支持背景遮罩')
-    if w<16 or h<16 or w*h>16777216:raise ValueError('文字模板支持最大 1600 万像素画布')
+    if style!='frosted' or version not in (3,6):raise UserFacingError('仅磨砂字幕卡支持背景遮罩')
+    if w<16 or h<16 or w*h>16777216:raise UserFacingError('文字模板支持最大 1600 万像素画布')
     if version == 6:
         from .title_art_v6 import frosted_layers as layers
     else:

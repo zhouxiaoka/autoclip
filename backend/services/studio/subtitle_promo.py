@@ -1,4 +1,5 @@
 """Text-only promotional drafts grounded in existing subtitle selections."""
+from backend.core.failure_codes import UserFacingError
 from backend.core.failure_attribution import ModelResponseInvalid  
 import uuid
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,7 +36,7 @@ def make_promos(project_id, clips, preferences, source_duration, instruction='')
         if transcript:
             evidence.append({'candidate': i, 'transcript': transcript})
     if not evidence:
-        raise ValueError('推广草稿需要可用字幕证据，请检查字幕后重试；原素材已保留')
+        raise UserFacingError('推广草稿需要可用字幕证据，请检查字幕后重试；原素材已保留')
     answer = intelligence.text_json(
         '根据字幕证据选择适合分享推广的完整片段，输出1至3条草稿。'
         '返回 {"drafts":[{"candidate":0,"title":"标题","hook":"简短开头文字"}]}。'

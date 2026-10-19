@@ -1,4 +1,5 @@
 """Glossy ink, pixel arcade and genuine backdrop glass, version 3."""
+from backend.core.failure_codes import UserFacingError
 from PIL import Image, ImageDraw
 from backend.services.studio.title_materials import gloss_text, gradient_shape, pixel_artwork, frosted_layers
 from backend.services.studio.title_art import ACCENTS, STYLES, font_for, lines_for
@@ -6,9 +7,9 @@ from backend.services.studio.title_art import ACCENTS, STYLES, font_for, lines_f
 
 def artwork(text, style, w, h, scale=1, y=.12, accent=None):
     if w < 16 or h < 16 or w*h > 16777216:
-        raise ValueError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
+        raise UserFacingError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
     if style not in STYLES:
-        raise ValueError('未知文字模板')
+        raise UserFacingError('未知文字模板')
     if style == 'pixel':
         return pixel_artwork(text, w, h, scale, y, accent)
     if style == 'frosted':
@@ -30,7 +31,7 @@ def artwork(text, style, w, h, scale=1, y=.12, accent=None):
             break
         size -= 3
         if size < minimum:
-            raise ValueError('开头文字太长，请缩短或减少换行（最多三行）')
+            raise UserFacingError('开头文字太长，请缩短或减少换行（最多三行）')
     sizes = []
     for i, line in enumerate(lines):
         # Two-line headlines fill a broad block; the payoff gets the larger face.
