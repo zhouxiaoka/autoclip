@@ -334,7 +334,9 @@ def test_model_failure_falls_back_to_local_or_frame(data_dir, fake_frame, monkey
     )
     assert result["ok"]
     assert result["method"] in ("local_overlay", "frame")
-    assert result.get("warning")
+    from backend.services.cover import COVER_IMAGE_FALLBACK
+    assert result.get("warning") == COVER_IMAGE_FALLBACK
+    assert "upstream" not in (result.get("warning_detail") or "")
 
 
 class _TextSettings:
@@ -477,7 +479,11 @@ def test_request_failure_still_produces_local_cover_without_private_error(data_d
     assert result['ok'] and result['method'] in ('local_overlay', 'frame')
     assert Path(result['path']).read_bytes().startswith(b'\xff\xd8')
     assert len(calls) == 1  # A failed paid request is not replayed automatically.
-    assert result['warning'] and 'private-' not in result['warning'] and 'synthetic-key' not in result['warning']
+    from backend.services.cover import COVER_IMAGE_FALLBACK
+    detail = result.get('warning_detail') or ''
+    assert result['warning'] == COVER_IMAGE_FALLBACK
+    assert 'private-' not in result['warning'] and 'private-' not in detail
+    assert 'synthetic-key' not in result['warning'] and 'synthetic-key' not in detail
 
 
 def test_ocr_connection_failure_preserves_already_generated_cover(data_dir, fake_frame):

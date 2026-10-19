@@ -55,7 +55,7 @@ test('1.5.7 retry_of only from the Retry button and only when the previous attem
 test('1.5.7 failed-state action per code: user-cause codes get 「去设置」 + reason, everything else keeps Retry', () => {
   const fs = require('node:fs')
   const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
-  const settings = { authentication: 'API Key 无效或已过期，请到设置里更新后再试', llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试', invalid_key: 'API Key 无效或已过期，请到设置里更新后再试', insufficient_quota: '服务商账户余额不足，请充值或换一个服务商', llm_not_configured: '还没有配置可用的模型，请先到设置里添加' }
+  const settings = { authentication: 'API Key 无效或已过期，请到设置里更新后再试', llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试', invalid_key: 'API Key 无效或已过期，请到设置里更新后再试', insufficient_quota: '余额或令牌额度不足，请充值或更换令牌后再试。', llm_not_configured: '还没有配置可用的模型，请先到设置里添加' }
   for (const [code, reason] of Object.entries(settings)) {
     assert.deepEqual({ ...fa.failureAction(code) }, { kind: 'settings', reason, destination: '/settings?section=analysis' }, code)
   }
@@ -79,7 +79,7 @@ test('1.5.7 failed-state action per code: user-cause codes get 「去设置」 +
   // reasons + button copy in all 8 locales
   for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
-    for (const key of ['去设置', '继续制作', ...new Set([...Object.values(settings), '这个 API Key 没有该模型的使用权限，请到设置里更换'])]) assert.ok(data[key], `${lang}: ${key}`)
+    for (const key of ['去设置', '继续制作', ...new Set([...Object.values(settings), '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。'])]) assert.ok(data[key], `${lang}: ${key}`)
   }
   // UI wiring: rendered behaviour (FailureActions) is covered in studio-results-status
 })

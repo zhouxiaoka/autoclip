@@ -249,7 +249,7 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, false, true)), ['settings*'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
-  assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '这个 API Key 没有该模型的使用权限，请到设置里更换')
+  assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。')
 })
 
 // the results-page line for "this re-run finished, N earlier failures" shows only when the round completed
