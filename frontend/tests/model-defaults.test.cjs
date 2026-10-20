@@ -39,16 +39,25 @@ test('recommendations only select models returned by the service', () => {
   assert.equal(defaultModel('dashscope', [{ id: 'new-image-protocol', image: true }], true), '')
   assert.equal(defaultModel('infistar', [], false), '')
 })
-test('88API and Infistar prefer a listed vision model, then fall back to one the account actually has', () => {
+test('88API and Infistar prefer domestic vision models, then fall back to one the account actually has', () => {
   const listed = [
     { id: 'text-only', analysis: true, capability: 'text' },
+    { id: 'qwen3.8-max', analysis: true, capability: 'multimodal' },
+    { id: 'qwen3.8-flash', analysis: true, capability: 'multimodal' },
+    { id: 'doubao-seed-2-1-pro-260628', analysis: true, capability: 'multimodal' },
+    { id: 'doubao-seed-2-1-turbo-260628', analysis: true, capability: 'multimodal' },
     { id: 'gemini-3.8-flash', analysis: true, capability: 'multimodal' },
     { id: 'gemini-3.5-flash-lite', analysis: true, capability: 'multimodal' },
     { id: 'gemini-3.5-flash', analysis: true, capability: 'multimodal' },
   ]
-  assert.equal(defaultModel('api88', listed), 'gemini-3.8-flash')
-  assert.equal(defaultModel('api88', listed.filter(model => model.id !== 'gemini-3.8-flash')), 'gemini-3.5-flash')
-  assert.equal(defaultModel('infistar', listed), 'gemini-3.5-flash-lite')
+  const without = (...ids) => listed.filter(model => !ids.includes(model.id))
+  assert.equal(defaultModel('api88', listed), 'qwen3.8-flash')
+  assert.equal(defaultModel('api88', without('qwen3.8-flash')), 'qwen3.8-max')
+  assert.equal(defaultModel('api88', without('qwen3.8-flash', 'qwen3.8-max')), 'gemini-3.8-flash')
+  assert.equal(defaultModel('infistar', listed), 'doubao-seed-2-1-turbo-260628')
+  assert.equal(defaultModel('infistar', without('doubao-seed-2-1-turbo-260628')), 'doubao-seed-2-1-pro-260628')
+  assert.equal(defaultModel('infistar', without('doubao-seed-2-1-turbo-260628', 'doubao-seed-2-1-pro-260628')), 'qwen3.8-flash')
+  assert.equal(defaultModel('infistar', without('doubao-seed-2-1-turbo-260628', 'doubao-seed-2-1-pro-260628', 'qwen3.8-flash', 'qwen3.8-max')), 'gemini-3.5-flash-lite')
   const withoutRecommendations = [
     { id: 'text-only', analysis: true, capability: 'text' },
     { id: 'account-vision', analysis: true, capability: 'multimodal' },

@@ -72,8 +72,15 @@ def test_existing_product_defaults_are_preserved():
     # Gateway defaults stay empty. Recommendations are preference order only.
     assert cloud_presets.CLOUD_PRESETS["infistar"].default_model == ""
     for provider, models in {
-        "api88": ("gemini-3.8-flash", "gemini-3.5-flash"),
-        "infistar": ("gemini-3.5-flash-lite", "gemini-3.8-flash"),
+        "api88": ("qwen3.8-flash", "qwen3.8-max", "gemini-3.8-flash", "gemini-3.5-flash"),
+        "infistar": (
+            "doubao-seed-2-1-turbo-260628",
+            "doubao-seed-2-1-pro-260628",
+            "qwen3.8-flash",
+            "qwen3.8-max",
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
+        ),
     }.items():
         assert provider_presets.candidates_for(provider, "analysis") == models
         assert provider_presets.candidates_for(provider, "vision") == models
