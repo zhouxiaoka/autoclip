@@ -114,7 +114,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   return <Dialog open={open} onClose={later} title={t('选择 AI 服务商')}
     description={connecting
       ? t('在浏览器完成注册后，把 API 密钥粘贴到下方。')
-      : t('AutoClip 通过 AI 服务商理解视频、提取精彩片段。字幕在本机免费生成。')}
+      : `${t('AutoClip 通过 AI 服务商理解视频、提取精彩片段。')} ${t('没有字幕的素材第一次要先安装本地转写组件：默认 base 模型 141 MB，运行时 Windows 约 81 MB、Mac 约 54 MB。国内网络大约 14 分钟。')}`}
     footer={<div className="ac-setup-foot">
       {connecting
         ? <Btn variant="text" size="sm" onClick={() => setStep('choose')}>{t('返回')}</Btn>
