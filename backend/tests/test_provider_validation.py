@@ -507,6 +507,54 @@ def test_non_chat_connection_checks_account_access_without_chat_probe(monkeypatc
     assert calls == [('GET', 'https://gw.example/v1/models')]
 
 
+@pytest.mark.parametrize('model', [
+    'qwen-audio-3.1-asr-flash', 'qwen-audio-3.0-asr-flash', 'fun-asr-flash-2026-06-15',
+])
+def test_dashscope_sync_asr_passes_when_absent_from_the_account_list(monkeypatch, model):
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append((method, url))
+        assert method == 'GET'
+        return _FakeResponse(200, {'data': [{'id': 'qwen-plus'}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        _connection(provider='dashscope', base_url='', name='百炼'),
+        model, purpose='transcription',
+    )
+    assert result.ok is True
+    assert calls == [('GET', 'https://dashscope.aliyuncs.com/compatible-mode/v1/models')]
+
+
+def test_dashscope_sync_asr_still_rejects_a_bad_key(monkeypatch):
+    def handler(method, url, headers, body):
+        assert method == 'GET'
+        return _FakeResponse(401, {'error': {'message': 'Incorrect API key provided'}})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        _connection(provider='dashscope', base_url='', name='百炼'),
+        'qwen-audio-3.1-asr-flash', purpose='transcription',
+    )
+    assert result.ok is False
+    assert result.error_type == 'invalid_key'
+
+
+def test_unadapted_or_non_bailian_asr_still_requires_the_account_list(monkeypatch):
+    def handler(method, url, headers, body):
+        return _FakeResponse(200, {'data': [{'id': 'qwen-plus'}]})
+
+    _patch_httpx(monkeypatch, handler)
+    missing = validate_connection(
+        _connection(provider='dashscope', base_url='', name='百炼'),
+        'paraformer-v2', purpose='transcription',
+    )
+    assert missing.ok is False and missing.error_type == 'model_not_found'
+    other = validate_connection(_connection(), 'qwen-audio-3.1-asr-flash', purpose='transcription')
+    assert other.ok is False and other.error_type == 'model_not_found'
+
+
 @pytest.mark.parametrize('purpose', ['cover', 'transcription'])
 @pytest.mark.parametrize('status,expected', [(401, 'invalid_key'), (200, 'model_not_found')])
 def test_non_chat_access_never_accepts_unauthorized_or_unlisted_models(monkeypatch, purpose, status, expected):

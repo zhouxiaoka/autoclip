@@ -54,8 +54,13 @@ test('ASR defaults exclude unsupported timestamps and preserve explicit choices'
   const state = { ...blank(), transcription: { provider: 'cloud', connection_id: 'main', model: '' } }
   const entries = [{ id: 'filetrans', asr: true, asr_supported: false }, { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true }]
   assert.equal(applyModelDefaults(state, connection, entries, false).transcription.model, 'qwen-audio-3.0-asr-flash')
+  const both = [...entries, { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true }]
+  assert.equal(applyModelDefaults(state, connection, both, false).transcription.model, 'qwen-audio-3.1-asr-flash')
   state.transcription.model = 'custom'
   assert.equal(applyModelDefaults(state, connection, entries, false).transcription.model, 'custom')
+  const local = { ...blank(), transcription: { provider: 'whisper_local', model: 'base', model_source: 'user' } }
+  assert.equal(applyModelDefaults(local, connection, both, false).transcription.provider, 'whisper_local')
+  assert.equal(applyModelDefaults(local, connection, both, false).transcription.model, 'base')
 })
 
 test('subtitle and smart mode accept every analysis model; only explicit visual excludes text-only and unknown', () => {

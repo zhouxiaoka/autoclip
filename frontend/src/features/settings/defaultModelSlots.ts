@@ -212,6 +212,25 @@ export function applyCoverOff(settings: ModelSettings): ModelSettings {
   return { ...settings, cover_enabled: false }
 }
 
+/** 「改用云端转写」: a configured Bailian connection gets the recommended ASR model.
+ * No connection (or no key) opens the Bailian setup instead of inventing one. */
+export function applyBailianCloudTranscription(
+  settings: ModelSettings,
+  lists: Record<string, ModelList> = {},
+): { kind: 'selected'; settings: ModelSettings } | { kind: 'add'; provider: 'dashscope' } {
+  const preset = getProvider('dashscope')
+  const connection = preset ? findCatalogConnection(settings, preset) : undefined
+  const ready = !!connection && endpointProviderReady(connection) && !!(connection.api_key?.trim() || connection.has_key)
+  if (!preset || !connection || !ready) return { kind: 'add', provider: 'dashscope' }
+  const fitting = (lists[connection.id]?.models || []).filter(entry => entry.asr && entry.asr_supported && !entry.asr_preview)
+  const preferred = preset.candidates.asr || []
+  const model = (fitting.length
+    ? preferred.find(id => fitting.some(entry => entry.id === id)) || fitting[0]?.id
+    : preferred[0]) || ''
+  if (!model) return { kind: 'add', provider: 'dashscope' }
+  return { kind: 'selected', settings: applySmartSelection(settings, 'transcription', model, connection.id) }
+}
+
 export function applyLocalTranscription(
   settings: ModelSettings, provider: 'whisper_local' | 'sensevoice_local', model: string,
 ): ModelSettings {

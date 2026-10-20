@@ -1226,6 +1226,7 @@
   "供应商": "Provider",
   "清除密钥": "Clear key",
   "获取 API Key": "Get an API key",
+  "作者推荐链接": "作者のおすすめリンク",
   "留空使用供应商默认地址": "空欄ならプロバイダーの既定エンドポイントを使います",
   "生图接口设置": "Image API settings",
   "自定义生图服务需与所选接口协议兼容。": "Custom image services must support the selected API protocol.",

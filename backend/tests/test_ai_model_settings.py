@@ -552,6 +552,27 @@ def test_public_catalog_outage_preserves_preview(monkeypatch):
     assert '缓存' in result['warning']
 
 
+def test_dashscope_sync_asr_missing_from_models_stays_selectable(monkeypatch):
+    async def fetch(url, **kwargs):
+        assert url.endswith('/models')
+        return {'data': [{'id': 'qwen-plus'}]}
+
+    async def metadata():
+        return None
+
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', fetch)
+    monkeypatch.setattr(registry, '_ensure_metadata', metadata)
+    connection = ai.Connection(id='ds-asr', name='百炼', provider='dashscope', api_key='sk-test')
+    result = asyncio.run(registry.discover(connection, refresh=True))
+    by_id = {item['id']: item for item in result['models']}
+    for name in ('qwen-audio-3.1-asr-flash', 'qwen-audio-3.0-asr-flash', 'fun-asr-flash-2026-06-15'):
+        assert by_id[name]['asr'] is True
+        assert by_id[name]['asr_supported'] is True
+        assert by_id[name]['asr_preview'] is False
+    assert by_id['qwen-audio-3.1-asr-flash-filetrans']['asr_preview'] is True
+    assert not result.get('preview')
+
+
 def test_official_preview_does_not_call_authenticated_models_endpoint(monkeypatch):
     async def metadata():
         return None

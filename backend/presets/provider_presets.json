@@ -180,6 +180,7 @@
         "image"
       ],
       "docs_url": "https://bailian.console.aliyun.com/",
+      "referral": "https://www.aliyun.com/benefit?userCode=qmyj6jch",
       "default_model": "qwen-plus",
       "catalog": [
         "qwen3.8-max",
@@ -219,7 +220,10 @@
           "wanx2.1-t2i-turbo",
           "wanx2.1-t2i-plus"
         ],
-        "asr": []
+        "asr": [
+          "qwen-audio-3.1-asr-flash",
+          "qwen-audio-3.0-asr-flash"
+        ]
       },
       "auth": "api_key",
       "locked": true

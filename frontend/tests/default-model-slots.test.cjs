@@ -66,6 +66,48 @@ test('a live list without a suitable model does not invent catalog candidates', 
   assert.equal(emptyCover.length, 0)
 })
 
+test('untouched visibility keeps recommended Bailian transcription models, including 3.1', () => {
+  const vis = loadTs('modelVisibility.ts', {})
+  const ds = conn('ds', 'dashscope')
+  const models = [
+    { id: 'qwen-plus', analysis: true, image: false },
+    { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true, asr_preview: false },
+    { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true, asr_preview: false },
+    { id: 'qwen-audio-preview', asr: true, asr_supported: true, asr_preview: true },
+  ]
+  const state = settings({ connections: [ds] })
+  const rec = plain(vis.recommendedModelIds(state, ds, models))
+  assert.ok(rec.includes('qwen-audio-3.1-asr-flash'))
+  assert.ok(rec.includes('qwen-audio-3.0-asr-flash'))
+  assert.equal(rec.includes('qwen-audio-preview'), false)
+  const groups = slots.collectModelGroups(state, { ds: { source: 'live', models } }, 'transcription').map(group => group.modelId)
+  assert.ok(groups.includes('qwen-audio-3.1-asr-flash'))
+  assert.ok(groups.includes('qwen-audio-3.0-asr-flash'))
+  assert.equal(groups.includes('qwen-audio-preview'), false)
+})
+
+test('switch to cloud transcription sets Bailian 3.1, or opens Bailian when there is no key', () => {
+  const chosen = slots.applyBailianCloudTranscription(settings())
+  assert.equal(chosen.kind, 'selected')
+  assert.equal(chosen.settings.transcription.provider, 'cloud')
+  assert.equal(chosen.settings.transcription.model, 'qwen-audio-3.1-asr-flash')
+  assert.equal(chosen.settings.transcription.connection_id, 'ds')
+  assert.equal(chosen.settings.transcription.model_source, 'preset')
+  const onlyOlder = slots.applyBailianCloudTranscription(settings(), {
+    ds: { source: 'live', models: [
+      { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true, asr_preview: true },
+      { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true, asr_preview: false },
+    ] },
+  })
+  assert.equal(onlyOlder.settings.transcription.model, 'qwen-audio-3.0-asr-flash')
+  const missing = slots.applyBailianCloudTranscription(settings({ connections: [conn('infi', 'infistar')] }))
+  assert.deepEqual(plain(missing), { kind: 'add', provider: 'dashscope' })
+  const noKey = slots.applyBailianCloudTranscription(settings({
+    connections: [conn('ds', 'dashscope', { api_key: '', has_key: false })],
+  }))
+  assert.equal(noKey.kind, 'add')
+})
+
 test('cloud transcription only lists models with a supported, non-preview ASR route', () => {
   const asrLists = {
     ds: { source: 'live', models: [

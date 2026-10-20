@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
@@ -15,6 +15,7 @@ import {
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
 import DefaultModels from './DefaultModels'
+import { applyBailianCloudTranscription } from './defaultModelSlots'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
@@ -109,6 +110,15 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   useEffect(() => {
     setSelectedId(catalogPreset(requestedProvider)?.id || null)
   }, [requestedProvider])
+
+  const cloudChoice = useRef(false)
+  useEffect(() => {
+    if (requestedProvider !== 'cloud' || !settings || cloudChoice.current) return
+    cloudChoice.current = true
+    const result = applyBailianCloudTranscription(settings, m.lists)
+    if (result.kind === 'selected') m.update({ transcription: result.settings.transcription })
+    else setSelectedId('dashscope')
+  }, [requestedProvider, settings])
 
   const [customOpen, setCustomOpen] = useState(false)
   useEffect(() => {

@@ -1226,6 +1226,7 @@
   "供应商": "Provider",
   "清除密钥": "Clear key",
   "获取 API Key": "Get an API key",
+  "作者推荐链接": "작성자 추천 링크",
   "留空使用供应商默认地址": "비워 두면 제공업체 기본 엔드포인트를 사용합니다",
   "生图接口设置": "Image API settings",
   "自定义生图服务需与所选接口协议兼容。": "Custom image services must support the selected API protocol.",
