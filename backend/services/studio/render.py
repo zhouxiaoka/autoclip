@@ -103,12 +103,12 @@ def _apply_cue_translation(hook, entries, title, aligned):
     return hook
 
 
-def _translate_hook_and_cues(language, hook, entries):
+def _translate_hook_and_cues(language, hook, entries, warnings):
     """Translate by cue number. One retry, then source text fills any gap."""
     payload = [{'n': index, 'text': entry.get('text', '')} for index, entry in enumerate(entries, start=1)]
     source_count = len(entries)
     best = None
-    for attempt in range(2):
+    for _ in range(2):
         title, aligned, returned = _parse_translated_cues(text_json(
             _SUBTITLE_TRANSLATION_PROMPT, {'language': language, 'title': hook, 'cues': payload},
         ), source_count)
@@ -116,14 +116,14 @@ def _translate_hook_and_cues(language, hook, entries):
             return _apply_cue_translation(hook, entries, title, aligned)
         if best is None or len(aligned) >= len(best[1]):
             best = (title, aligned, returned)
-        if attempt == 0:
-            continue
     title, aligned, returned = best
     missing = source_count - len(aligned)
     logger.warning(
         'subtitle translation mismatch source_count=%s returned_count=%s missing_count=%s',
         source_count, returned, missing,
     )
+    if missing > 0:
+        warnings.append('部分字幕未能翻译，已保留原文')
     return _apply_cue_translation(hook, entries, title, aligned)
 
 
@@ -221,7 +221,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     entries = [e.copy() for e in entries if any(to_seconds(e['start_time']) < s.end and to_seconds(e['end_time']) > s.start for s in draft.scenes)]
     hook = '' if packaged else draft.hook
     if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
-        hook = _translate_hook_and_cues(draft.language, hook, entries)
+        hook = _translate_hook_and_cues(draft.language, hook, entries, warnings)
     font = resolve_cjk_font()
     if hook and draft.title_style not in title_art.STYLES and not font:
         raise UserFacingError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')

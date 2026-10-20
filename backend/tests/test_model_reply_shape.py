@@ -89,13 +89,14 @@ def _translate(monkeypatch, replies, caplog):
 
     monkeypatch.setattr(render, 'text_json', fake)
     entries = _cues()
+    warnings = []
     with caplog.at_level(logging.WARNING, logger='backend.services.studio.render'):
-        hook = render._translate_hook_and_cues('zh', 'Opening', entries)
-    return hook, entries, calls, caplog.text
+        hook = render._translate_hook_and_cues('zh', 'Opening', entries, warnings)
+    return hook, entries, calls, caplog.text, warnings
 
 
 def test_subtitle_translation_exact_numbered_match(monkeypatch, caplog):
-    hook, entries, calls, logged = _translate(monkeypatch, [
+    hook, entries, calls, logged, warnings = _translate(monkeypatch, [
         {'title': '标题', 'cues': [{'n': 1, 'text': '你好'}, {'n': 2, 'text': '世界'}]},
     ], caplog)
     assert hook == '标题'
@@ -104,10 +105,11 @@ def test_subtitle_translation_exact_numbered_match(monkeypatch, caplog):
     assert calls[0][1]['cues'] == [{'n': 1, 'text': 'hello'}, {'n': 2, 'text': 'world'}]
     assert 'n' in calls[0][0]
     assert 'mismatch' not in logged
+    assert warnings == []
 
 
 def test_subtitle_translation_fewer_cues_keeps_the_source_line(monkeypatch, caplog):
-    hook, entries, calls, logged = _translate(monkeypatch, [
+    hook, entries, calls, logged, warnings = _translate(monkeypatch, [
         {'title': '标题', 'cues': [{'n': 2, 'text': '世界'}]},
     ], caplog)
     assert hook == '标题'
@@ -115,10 +117,11 @@ def test_subtitle_translation_fewer_cues_keeps_the_source_line(monkeypatch, capl
     assert len(calls) == 2
     assert 'source_count=2 returned_count=1 missing_count=1' in logged
     assert 'hello' not in logged and '世界' not in logged and SECRET not in logged
+    assert warnings == ['部分字幕未能翻译，已保留原文']
 
 
 def test_subtitle_translation_more_cues_ignores_the_extra(monkeypatch, caplog):
-    hook, entries, calls, logged = _translate(monkeypatch, [
+    hook, entries, calls, logged, warnings = _translate(monkeypatch, [
         {'title': '标题', 'cues': [{'n': 1, 'text': '你好'}, {'n': 2, 'text': '世界'}, {'n': 9, 'text': '多余'}]},
     ], caplog)
     assert hook == '标题'
@@ -126,20 +129,22 @@ def test_subtitle_translation_more_cues_ignores_the_extra(monkeypatch, caplog):
     assert len(calls) == 2
     assert 'source_count=2 returned_count=3 missing_count=0' in logged
     assert '多余' not in logged
+    assert warnings == []
 
 
 def test_subtitle_translation_merged_line_keeps_the_other_source(monkeypatch, caplog):
-    _hook, entries, calls, logged = _translate(monkeypatch, [
+    _hook, entries, calls, logged, warnings = _translate(monkeypatch, [
         {'title': '标题', 'cues': [{'n': 1, 'text': '你好世界'}]},
     ], caplog)
     assert [entry['text'] for entry in entries] == ['你好世界', 'world']
     assert len(calls) == 2
     assert 'returned_count=1 missing_count=1' in logged
     assert '你好世界' not in logged and 'world' not in logged
+    assert warnings == ['部分字幕未能翻译，已保留原文']
 
 
 def test_subtitle_translation_retries_once_then_falls_back(monkeypatch, caplog):
-    hook, entries, calls, logged = _translate(monkeypatch, [
+    hook, entries, calls, logged, warnings = _translate(monkeypatch, [
         {'title': SECRET, 'subtitles': None, 'leak': SECRET},
         {'title': '标题', 'cues': 'not-a-list', 'leak': SECRET},
     ], caplog)
@@ -148,3 +153,5 @@ def test_subtitle_translation_retries_once_then_falls_back(monkeypatch, caplog):
     assert len(calls) == 2
     assert 'source_count=2 returned_count=0 missing_count=2' in logged
     assert SECRET not in hook and SECRET not in logged
+    assert warnings == ['部分字幕未能翻译，已保留原文']
+    assert '2' not in warnings[0] and SECRET not in warnings[0]
