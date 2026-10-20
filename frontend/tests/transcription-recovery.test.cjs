@@ -175,12 +175,14 @@ test('the view: each phase has its exit (install / cloud, progress + settings, c
   const log = []
   const base = { busy: false, onInstall: () => log.push('install'), onRetry: () => log.push('retry'), onContinue: () => log.push('continue'), navigate: to => log.push(to) }
   let v = render({ ...base, state: { phase: 'install_required', percent: null } })
-  assert.match(v.host.textContent, /141 MB/)
+  assert.match(v.host.textContent, /220 MB/)
+  assert.match(v.host.textContent, /不想等可以改用云端转写/)
   act(() => v.button('一键安装').click()); act(() => v.button('改用云端转写').click()); v.unmount()
   v = render({ ...base, state: { phase: 'downloading', percent: 42 } })
   assert.equal(v.host.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '42')
   assert.match(v.host.textContent, /正在下载转写模型/)
-  assert.match(v.host.textContent, /141 MB/)
+  assert.match(v.host.textContent, /220 MB/)
+  assert.doesNotMatch(v.host.textContent, /不想等可以改用云端转写/)
   act(() => v.button('打开转写设置').click()); v.unmount()
   v = render({ ...base, state: { phase: 'ready', percent: 100 } })
   act(() => v.button('继续导入').click()); v.unmount()
@@ -193,10 +195,16 @@ test('install prompt copy exists in all 8 languages', () => {
   const keys = ['需要先安装本地转写', '视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。', '一键安装', '改用云端转写',
     '等待安装完成', '本地 Whisper 正在安装，装好后再开始。', '正在下载转写模型，下载完成后即可继续。', '本地转写已就绪，可以继续导入。', '继续导入',
     '安装或模型下载失败，可以重试，或到转写设置里查看。', '安装长时间没有进展，可以重试，或到转写设置里查看。', '打开转写设置', '已完成 {{percent}}%',
-    '没有字幕的素材第一次要先安装本地转写组件：默认 base 模型 141 MB，运行时 Windows 约 81 MB、Mac 约 54 MB。国内网络大约 14 分钟。']
+    '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。',
+    '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。',
+    '没有字幕的视频需要转写：可以在本机免费转写（第一次要下载约 220 MB），也可以用云端转写，更快。']
+  const slowNetwork = keys.slice(-3)
   for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     for (const key of keys) assert.ok(typeof data[key] === 'string' && data[key].length > 0, `${lang}: ${key}`)
+    if (lang !== 'zh') {
+      for (const key of slowNetwork) assert.doesNotMatch(data[key], /China|中国|Chine|Кита|중국/)
+    }
   }
 })
 

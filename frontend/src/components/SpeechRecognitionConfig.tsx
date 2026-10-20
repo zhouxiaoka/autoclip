@@ -142,7 +142,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
       ready={ready}
       preparing={installing || downloading || preparing}
       progress={installing ? runtime?.progress ?? 5 : selected?.downloadProgress ?? 0}
-      hint={runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? whisperModelErrorText(t, selected) : t('没有字幕的素材第一次要先安装本地转写组件：默认 base 模型 141 MB，运行时 Windows 约 81 MB、Mac 约 54 MB。国内网络大约 14 分钟。')}
+      hint={runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? whisperModelErrorText(t, selected) : t('没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。')}
       busyHint={installing ? t('正在准备组件…') : t('正在下载模型…')}
       disabled={runtime?.platform_supported === false || loading || !runtime}
       onPrepare={() => void prepare()} />
