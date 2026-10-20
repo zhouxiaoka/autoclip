@@ -183,7 +183,10 @@ def test_long_platform_queues_its_only_eligible_clip_below_global_top_ten(monkey
     variant = state['output_variants'][0]
     assert variant['status'] == 'queued' and variant['render_job_id'] == 'job0'
     assert state['generation']['status'] == 'rendering'
-    assert len(state['generation']['skipped']) == 10
+    # generation.skipped is one row per platform that produced nothing. The long clip
+    # was queued, so YouTube landscape is not skipped. The ten short drafts are ineligible
+    # and never become variants; they are not ten copies of that platform warning.
+    assert state['generation']['skipped'] == []
     state['jobs'][0]['status'] = 'completed'
     jobs._sync_variant_status('p1', 'job0', 'completed')
     assert state['generation']['status'] == 'completed'

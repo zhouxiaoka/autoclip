@@ -48,7 +48,7 @@ def run(monkeypatch, outcome, clips_only):
     from backend.tasks import processing
 
     class Adapter:
-        async def process_project_sync(self, video, srt, clips_only=False):
+        async def process_project_sync(self, video, srt, clips_only=False, platform_min_sec=None, platform_min_label=''):
             if isinstance(outcome, Exception):
                 raise outcome
             return outcome

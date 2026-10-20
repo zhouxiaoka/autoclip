@@ -57,6 +57,13 @@ function uiLocale() {
   try { return getLocale() } catch { return 'en' }
 }
 
+const YOUTUBE_LONG_MIN_SEC = 180
+
+function longFormNotice(durationSec: number | null) {
+  if (durationSec != null && durationSec < YOUTUBE_LONG_MIN_SEC) return t('这段素材不足 3 分钟，做不了 YouTube 横屏。')
+  return t('YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过，其他平台仍会生成。')
+}
+
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
   if (reason === 'analysis') return readiness?.checks?.analysis?.code === 'validation_failed'
@@ -93,11 +100,31 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [platformOpen, setPlatformOpen] = useState(false)
   const [pending, setPending] = useState<{ trigger: 'paste' | 'drop' } | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [longGate, setLongGate] = useState<{ open: boolean; durationSec: number | null; trigger: 'paste' | 'drop' | 'button' }>({ open: false, durationSec: null, trigger: 'button' })
+  useEffect(() => {
+    if (source !== 'file' || !file) {
+      setLongGate(prev => prev.durationSec == null ? prev : { ...prev, durationSec: null })
+      return
+    }
+    let cancel = false
+    let objectUrl = ''
+    try { objectUrl = URL.createObjectURL(file) } catch { return }
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    const finish = (durationSec: number | null) => {
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = '' }
+      if (!cancel) setLongGate(prev => ({ ...prev, durationSec }))
+    }
+    video.onloadedmetadata = () => finish(Number.isFinite(video.duration) ? video.duration : null)
+    video.onerror = () => finish(null)
+    video.src = objectUrl
+    return () => { cancel = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [file, source])
   const platformSource = useRef<PlatformSource>(initialPlatforms.current.source)
   const overridden = useRef(false)
   const starting = useRef(false)
   const recoverRef = useRef<RecoveryController>(null as unknown as RecoveryController)
-  const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button', fresh?: ImportReadiness | null) => Promise<void>>(async () => {})
+  const submitRef = useRef<(trigger: 'paste' | 'drop' | 'button', fresh?: ImportReadiness | null, confirmed?: boolean) => Promise<void>>(async () => {})
   const allowLink = flagEnabled('link_import_without_whisper')
   const dropZone = flagEnabled('import_drop_zone')
   const hidePreferences = flagEnabled('hide_legacy_entrypoints')
@@ -175,6 +202,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const repairing = recovery.phase === 'installing' || recovery.phase === 'downloading'
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
+    if (!next.includes('youtube_long')) setLongGate(prev => prev.open ? { ...prev, open: false } : prev)
     if (remembered) writeRememberedPlatforms(next)
     else platformSource.current = 'user'
     if (samePlatforms(next, initialPlatforms.current.platforms)) return
@@ -217,9 +245,14 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     setPending(null)
     if (trigger) trackOneClickUndone({ trigger }, flagAssigned('one_click_paste_start'))
   }
-  const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null) => {
+  const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null, confirmed = false) => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
+    if (platforms.includes('youtube_long') && !confirmed) {
+      if (!readyToStart(trigger, undefined, fresh ?? readiness)) return
+      setLongGate(prev => ({ ...prev, open: true, trigger }))
+      return
+    }
     // one busy state from the click on. The re-probe below can wait, and the inputs stay locked
     // (busy disables them) so the request carries exactly what the user saw when they clicked.
     starting.current = true
@@ -282,6 +315,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (importUrlKind(text)) arm('paste', { url: text.trim() })
   }
   const names = platforms.map(platformLabel).join(uiLocale().toLowerCase().startsWith('zh') ? '、' : ', ')
+  const youtubeLongOnlyTooShort = longGate.durationSec != null && longGate.durationSec < YOUTUBE_LONG_MIN_SEC && platforms.length > 0 && platforms.every(platform => platform === 'youtube_long')
   return <section className="ac-creative-import">
     <h1 className="ac-title">{t("放入视频，直接生成可发布成片。")}</h1>
     <p className="studio-muted">{t("选择发布平台，AI 会自动挑选内容、完成剪辑与渲染。生成后可直接下载或继续编辑。")}</p>
@@ -310,6 +344,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}
+      {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec)}</p>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
       <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
@@ -320,5 +355,6 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       <label className="studio-field">{t("已有字幕（选填）")}<input type="file" accept=".srt" aria-label={t("已有字幕")} onChange={e=>setSubtitle(e.target.files?.[0] || null)}/>{subtitle&&<small>{subtitle.name}<button className="studio-link" onClick={()=>setSubtitle(null)}>{t("移除")}</button></small>}</label>
       {source==='link'&&<details className="studio-details"><summary>{t("下载遇到登录限制时")}</summary><label className="studio-field">{t("使用浏览器登录状态")}<select value={browser} onChange={e=>setBrowser(e.target.value)}><option value="">{t("不使用")}</option>{['chrome','edge','safari','firefox'].map(b=><option key={b}>{b}</option>)}</select></label><p className="studio-muted">{t("仅在下载需要登录时选择，不会自动读取浏览器 Cookie。")}</p></details>}
     </Dialog>
+    <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec)} {t('请再选一个其他平台。')}</> : longFormNotice(longGate.durationSec)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />
   </section>
 }
