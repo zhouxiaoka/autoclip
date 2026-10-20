@@ -25,6 +25,7 @@ export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetr
   if (state.phase === 'install_required') return <div className="studio-readiness" role="alertdialog" aria-label={t('需要先安装本地转写')}>
     <b>{t('需要先安装本地转写')}</b>
     <span>{t('视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。')}</span>
+    <span>{t('没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。')}</span>
     <div className="studio-actions">
       <Btn size="sm" disabled={busy} onClick={() => void onInstall()}>{t('一键安装')}</Btn>
       <Btn size="sm" disabled={busy} onClick={() => navigate(CLOUD_TRANSCRIPTION_DESTINATION)}>{t('改用云端转写')}</Btn>
@@ -44,6 +45,9 @@ export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetr
       </div>
     </> : <>
       <span>{t(state.phase === 'downloading' ? '正在下载转写模型，下载完成后即可继续。' : '本地 Whisper 正在安装，装好后再开始。')}</span>
+      <span className="studio-muted">{t(state.phase === 'downloading'
+        ? '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。'
+        : '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。')}</span>
       {state.unreachable && <span className="studio-muted">{t('暂时连不上本地后端，正在重试…')}</span>}
       {state.percent != null && <span className="studio-muted" role="progressbar" aria-valuenow={state.percent} aria-valuemin={0} aria-valuemax={100}>{t('已完成 {{percent}}%', { percent: state.percent })}</span>}
       <div className="studio-actions"><Btn size="sm" onClick={settings}>{t('打开转写设置')}</Btn></div>

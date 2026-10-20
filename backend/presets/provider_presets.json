@@ -74,8 +74,18 @@
       },
       "kind": "preset",
       "candidates": {
-        "analysis": [],
-        "vision": [],
+        "analysis": [
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.8-flash",
+          "gemini-3.5-flash"
+        ],
+        "vision": [
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.8-flash",
+          "gemini-3.5-flash"
+        ],
         "asr": [
           "whisper-1"
         ],
@@ -127,8 +137,22 @@
       },
       "kind": "preset",
       "candidates": {
-        "analysis": [],
-        "vision": [],
+        "analysis": [
+          "doubao-seed-2-1-turbo-260628",
+          "doubao-seed-2-1-pro-260628",
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
+        "vision": [
+          "doubao-seed-2-1-turbo-260628",
+          "doubao-seed-2-1-pro-260628",
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
         "asr": [],
         "image": []
       },
