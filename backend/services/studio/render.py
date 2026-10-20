@@ -1,6 +1,6 @@
 """Render immutable draft snapshots using the existing ffmpeg layout/subtitle code."""
 from backend.core.failure_codes import UserFacingError
-from backend.core.failure_attribution import ModelResponseInvalid  
+import logging
 import os
 import math
 import subprocess
@@ -16,6 +16,13 @@ from backend.services.studio.store import directory
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 from backend.core import project_cancellation
+
+logger = logging.getLogger(__name__)
+_SUBTITLE_TRANSLATION_PROMPT = (
+    '将 title 和 cues 翻译成指定语言。cues 是带编号 n 的字幕，按编号逐条翻译，'
+    '不要合并、拆分或增删条目，不添加事实。'
+    '只返回 {"title":"...","cues":[{"n":1,"text":"..."}]}。'
+)
 
 
 def _mask_captions(graph, band):
@@ -47,6 +54,77 @@ def _needs_translation(language, hook, entries):
     if hook and (foreign_for('en', hook) if language == 'en' else not CJK.search(hook)):
         return True
     return False
+
+
+def _cue_number(value, fallback):
+    if type(value) is int:
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return fallback
+
+
+def _parse_translated_cues(translated, count):
+    """Map cue number to text. A list of strings is numbered by position."""
+    if not isinstance(translated, dict):
+        return None, {}, 0
+    title = translated.get('title')
+    title = title if isinstance(title, str) and len(title) <= 500 else None
+    raw = translated.get('cues')
+    if not isinstance(raw, list):
+        raw = translated.get('subtitles')
+    if not isinstance(raw, list):
+        return title, {}, 0
+    aligned = {}
+    returned = 0
+    for index, item in enumerate(raw, start=1):
+        if isinstance(item, str):
+            number, text = index, item
+        elif isinstance(item, dict):
+            number = _cue_number(item.get('n', item.get('id', item.get('index'))), index)
+            text = item.get('text')
+        else:
+            continue
+        if not isinstance(text, str):
+            continue
+        returned += 1
+        if 1 <= number <= count and number not in aligned:
+            aligned[number] = text
+    return title, aligned, returned
+
+
+def _apply_cue_translation(hook, entries, title, aligned):
+    if title is not None:
+        hook = title
+    for index, entry in enumerate(entries, start=1):
+        text = aligned.get(index)
+        if isinstance(text, str):
+            entry['text'] = text
+    return hook
+
+
+def _translate_hook_and_cues(language, hook, entries, warnings):
+    """Translate by cue number. One retry, then source text fills any gap."""
+    payload = [{'n': index, 'text': entry.get('text', '')} for index, entry in enumerate(entries, start=1)]
+    source_count = len(entries)
+    best = None
+    for _ in range(2):
+        title, aligned, returned = _parse_translated_cues(text_json(
+            _SUBTITLE_TRANSLATION_PROMPT, {'language': language, 'title': hook, 'cues': payload},
+        ), source_count)
+        if len(aligned) == source_count and returned == source_count:
+            return _apply_cue_translation(hook, entries, title, aligned)
+        if best is None or len(aligned) >= len(best[1]):
+            best = (title, aligned, returned)
+    title, aligned, returned = best
+    missing = source_count - len(aligned)
+    logger.warning(
+        'subtitle translation mismatch source_count=%s returned_count=%s missing_count=%s',
+        source_count, returned, missing,
+    )
+    if missing > 0:
+        warnings.append('部分字幕未能翻译，已保留原文')
+    return _apply_cue_translation(hook, entries, title, aligned)
 
 
 def recover_empty_packaging(project_id, draft: Draft, warnings: list[str]) -> Draft:
@@ -143,17 +221,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     entries = [e.copy() for e in entries if any(to_seconds(e['start_time']) < s.end and to_seconds(e['end_time']) > s.start for s in draft.scenes)]
     hook = '' if packaged else draft.hook
     if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
-        translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
-        rows = translated.get('subtitles', [])
-        # null / a non-list is the model's shape, same as [] when rows were expected: invalid_response.
-        if (not isinstance(rows, list) or len(rows) != len(entries)
-                or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str)):
-            raise ModelResponseInvalid('字幕翻译格式不完整，请重试')
-        hook = translated['title']
-        if len(hook) > 500:
-            raise ModelResponseInvalid('翻译后的开头文字过长')
-        for e, t in zip(entries, rows):
-            e['text'] = t
+        hook = _translate_hook_and_cues(draft.language, hook, entries, warnings)
     font = resolve_cjk_font()
     if hook and draft.title_style not in title_art.STYLES and not font:
         raise UserFacingError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')

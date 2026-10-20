@@ -2773,7 +2773,6 @@ _INVALID_SITES = {
     'backend/services/studio/intelligence.py': ('文字模型返回的内容不是有效 JSON', '视觉模型返回的候选格式无效', '模型返回重复候选标识',
                                                '模型选段超出期望时长', '模型复核边界超出采样区间', '模型未返回成片方案'),
     'backend/services/studio/subtitle_promo.py': ('推广方案格式无效', '推广方案引用了无效片段', '推广文案为空'),
-    'backend/services/studio/render.py': ('字幕翻译格式不完整', '翻译后的开头文字过长'),
     'backend/utils/llm_client.py': ('无法从响应中解析出有效的JSON',),
 }
 
@@ -2781,7 +2780,7 @@ _INVALID_SITES = {
 @pytest.mark.usefixtures('isolated__r22_415')
 def test_model_response_invalid_raise_sites():
     """Every listed site raises the explicit type (intelligence 8 incl. refine + 2 duration sites, promo 3,
-    render 2, llm_client 2); none raises a bare ValueError any more."""
+    llm_client 2). Subtitle translation no longer raises: a short reply is retried, then source lines fill the gap."""
     count = 0
     for rel, needles in _INVALID_SITES.items():
         tree = ast.parse((ROOT / rel).read_text(encoding='utf-8'))
@@ -2793,7 +2792,7 @@ def test_model_response_invalid_raise_sites():
                 name = node.exc.func.id if isinstance(node.exc.func, ast.Name) else ast.unparse(node.exc.func)
                 assert name == 'ModelResponseInvalid', f'{rel}:{node.lineno}: {name}'
                 count += 1
-    assert count == 15, count
+    assert count == 13, count
 
 
 @pytest.mark.usefixtures('isolated__r22_415')
