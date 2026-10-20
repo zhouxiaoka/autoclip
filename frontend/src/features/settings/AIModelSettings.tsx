@@ -144,8 +144,12 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     cloudChoice.current = true
     setCloudChecking(false)
     if (result.kind === 'selected') {
-      m.update({ transcription: result.settings.transcription })
-      setCloudNote({ provider: result.providerLabel, model: result.model })
+      const transcription = result.settings.transcription
+      const note = { provider: result.providerLabel, model: result.model }
+      m.update({ transcription })
+      void m.save({ transcription }).then(saved => {
+        if (saved.ok && !saved.validationFailed) setCloudNote(note)
+      })
     } else {
       cloudPending.current = true
       setSelectedId('dashscope')
@@ -169,7 +173,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   const save = async () => {
     const patch = cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)
     const result = await m.save(patch)
-    if (result.ok && patch?.transcription?.provider === 'cloud' && patch.transcription.model) {
+    if (result.ok && !result.validationFailed && patch?.transcription?.provider === 'cloud' && patch.transcription.model) {
       cloudPending.current = false
       const chosen = applyRequestedCloudTranscription('cloud', { ...settings, ...patch }, m.lists)
       if (chosen.kind === 'selected') setCloudNote({ provider: chosen.providerLabel, model: chosen.model })
@@ -184,8 +188,6 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {settings.migration_warnings?.includes('purpose_reset_to_recommended') && <p role="alert" className="ac-note">{t('部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。')}</p>}
     {settings.migration_warnings?.includes('preset_catalog_updated') && <p role="alert" className="ac-note">{t('服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
-    {cloudChecking && <p className="ac-note" role="status">{t('正在检查可用的云端转写…')}</p>}
-    {cloudNote && <p className="ac-note" role="status">{t('已改用 {{provider}} 的 {{model}} 做云端转写。音频会上传到云端。', cloudNote)}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving || m.testing}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
         : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
@@ -193,7 +195,15 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
         </header>
         <div className="ac-model-section" data-section="default-models">
-          <DefaultModels settings={settings} lists={m.lists} onChange={next => m.update(next)} />
+          <DefaultModels
+            settings={settings}
+            lists={m.lists}
+            onChange={next => m.update(next)}
+            transcriptionNote={<>
+              {cloudChecking && <p className="ac-note" role="status">{t('正在检查可用的云端转写…')}</p>}
+              {cloudNote && <p className="ac-note" role="status">{t('已改用 {{provider}} 的 {{model}} 做云端转写。音频会上传到云端。', cloudNote)}</p>}
+            </>}
+          />
         </div>
         <ProviderCatalog
           settings={settings}

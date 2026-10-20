@@ -212,8 +212,9 @@ export function applyCoverOff(settings: ModelSettings): ModelSettings {
   return { ...settings, cover_enabled: false }
 }
 
-/** 「改用云端转写」tries configured accounts in this order. */
-const CLOUD_TRANSCRIPTION_ORDER = ['dashscope', 'api88', 'openai', 'infistar'] as const
+/** 「改用云端转写」tries configured accounts in this order.
+ * 88API and Infistar have no usable speech model, so they are not offered. */
+const CLOUD_TRANSCRIPTION_ORDER = ['dashscope', 'openai'] as const
 
 /** A list that never arrives should still open Bailian setup. */
 export const CLOUD_TRANSCRIPTION_WAIT_MS = 10_000
@@ -275,7 +276,7 @@ export function applyCloudTranscription(
     const preset = getProvider(providerId)
     const connection = preset ? findCatalogConnection(settings, preset) : undefined
     if (!preset || !connectionReadyForCloud(connection)) continue
-    const preferred = providerId === 'infistar' ? ['whisper-1'] : (preset.candidates.asr || [])
+    const preferred = preset.candidates.asr || []
     const list = lists[connection.id]
     const status = cloudListStatus(list)
     if (status === 'loading') {

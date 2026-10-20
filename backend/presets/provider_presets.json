@@ -44,8 +44,7 @@
       "base_url": "https://api.88api.ai/v1",
       "capabilities": [
         "language",
-        "image",
-        "asr"
+        "image"
       ],
       "docs_url": "https://88api.ai/sign-up?aff=2PIc",
       "locked": true,
@@ -86,9 +85,7 @@
           "gemini-3.8-flash",
           "gemini-3.5-flash"
         ],
-        "asr": [
-          "whisper-1"
-        ],
+        "asr": [],
         "image": []
       },
       "auth": "api_key"

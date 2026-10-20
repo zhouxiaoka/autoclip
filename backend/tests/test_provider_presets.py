@@ -88,7 +88,10 @@ def test_existing_product_defaults_are_preserved():
         assert all(model_catalog.supports_vision(model) for model in models)
     dashscope = provider_presets.get_provider("dashscope")
     assert dashscope.candidates["asr"] == ("qwen-audio-3.1-asr-flash", "qwen-audio-3.0-asr-flash")
-    assert provider_presets.get_provider("api88").candidates["asr"] == ("whisper-1",)
+    assert provider_presets.get_provider("api88").candidates["asr"] == ()
+    assert provider_presets.get_provider("infistar").candidates["asr"] == ()
+    assert "asr" not in provider_presets.get_provider("api88").capabilities
+    assert "asr" not in provider_presets.get_provider("infistar").capabilities
     assert provider_presets.get_provider("openai").candidates["asr"] == ("whisper-1",)
     assert dashscope.docs_url == "https://bailian.console.aliyun.com/"
     assert dashscope.referral == "https://www.aliyun.com/benefit?userCode=qmyj6jch"

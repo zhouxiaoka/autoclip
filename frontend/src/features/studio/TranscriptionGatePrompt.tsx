@@ -24,8 +24,7 @@ export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetr
   if (state.phase === 'idle' || (state.background && !ended)) return null
   if (state.phase === 'install_required') return <div className="studio-readiness" role="alertdialog" aria-label={t('需要先安装本地转写')}>
     <b>{t('需要先安装本地转写')}</b>
-    <span>{t('视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。')}</span>
-    <span>{t('没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。')}</span>
+    <span>{t('视频没有字幕，需要本地转写组件（约 220 MB，国内约 15 分钟），或改用云端转写。')}</span>
     <div className="studio-actions">
       <Btn size="sm" disabled={busy} onClick={() => void onInstall()}>{t('一键安装')}</Btn>
       <Btn size="sm" disabled={busy} onClick={() => navigate(CLOUD_TRANSCRIPTION_DESTINATION)}>{t('改用云端转写')}</Btn>

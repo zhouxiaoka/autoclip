@@ -2,7 +2,7 @@
 
 [English](88API_SETUP.en.md) · [返回 README](../README.md)
 
-88API Token聚合平台是 AutoClip 的赞助合作伙伴，可通过 OpenAI 兼容接口用于字幕分析、封面生图和字幕转写。
+88API Token聚合平台是 AutoClip 的赞助合作伙伴，可通过 OpenAI 兼容接口用于字幕分析和封面生图。
 
 ## 注册与获取 API Key
 
@@ -20,8 +20,7 @@
 不预设默认文本模型或账号可用名单，准确模型 ID 与访问权限以账号返回的列表为准。无 Key 时显示的图片、语音目录只是参考，不代表账号权限。
 
 - **封面**：可复用 AI 服务的 Key，选择支持 OpenAI Images 接口的型号，例如账号列表中的 `gpt-image-1`、`dall-e-3`。其他图片模型是否可用取决于实际接口及返回的能力信息。
-- **字幕转写**：选择 88API 和账号可用的 `whisper-1`，通过 OpenAI 音频接口获取带时间戳字幕。
-- 平台也提供视频生成和 TTS；这些平台能力不等于 AutoClip 已提供对应功能。
+- 平台也提供视频生成和 TTS；这些平台能力不等于 AutoClip 已提供对应功能。云端转写请用阿里云百炼或 OpenAI。
 
 ### 旧版本：通过 OpenAI 兼容接口接入
 
