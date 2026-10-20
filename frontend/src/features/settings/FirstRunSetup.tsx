@@ -114,7 +114,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   return <Dialog open={open} onClose={later} title={t('选择 AI 服务商')}
     description={connecting
       ? t('在浏览器完成注册后，把 API 密钥粘贴到下方。')
-      : t('AutoClip 通过 AI 服务商理解视频、提取精彩片段。字幕在本机免费生成。')}
+      : `${t('AutoClip 通过 AI 服务商理解视频、提取精彩片段。')} ${t('没有字幕的视频需要转写：可以在本机免费转写（第一次要下载约 220 MB），也可以用云端转写，更快。')}`}
     footer={<div className="ac-setup-foot">
       {connecting
         ? <Btn variant="text" size="sm" onClick={() => setStep('choose')}>{t('返回')}</Btn>
