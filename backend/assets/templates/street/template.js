@@ -1,5 +1,5 @@
 /* 街头快剪叠加层。安全区来自 fill.safe 或 fill.safe_area，不把某一平台写死在坐标里。
-   renderFrame(t) 只由 t 决定。线描贴纸最多两枚。字幕一次最多三个词。 */
+   renderFrame(t) 只由 t 决定。线描贴纸最多两枚。字幕一次只显示当前这一句。 */
 (function () {
   var data = null;
   var SAFE = {
@@ -39,7 +39,7 @@
         break;
       }
     }
-    var chunk = word < 0 ? -1 : Math.floor(word / 3);
+    var chunk = word;
     var step = -1;
     var number = data.number;
     if (number && index >= number.start_frame && index < number.end_frame) {
@@ -100,20 +100,13 @@
     sub.style.bottom = box.bottom + "px";
     sub.style.left = box.left + "px";
     sub.style.right = box.right + "px";
-    if (state.chunk < 0) {
+    if (state.word < 0) {
       sub.innerHTML = "";
       return;
     }
-    var words = data.words || [];
-    var start = state.chunk * 3;
-    var html = "";
-    for (var w = start; w < Math.min(words.length, start + 3); w++) {
-      var text = escapeText(words[w].text);
-      if (w === state.word && words[w].emphasis) html += "<em>" + text + "</em> ";
-      else if (w === state.word) html += text + " ";
-      else html += "<span class=\"w\">" + text + "</span> ";
-    }
-    sub.innerHTML = html;
+    var item = (data.words || [])[state.word];
+    var text = escapeText(item.text);
+    sub.innerHTML = item.emphasis ? "<em>" + text + "</em> " : text + " ";
   }
 
   window.setData = function (fill) {
