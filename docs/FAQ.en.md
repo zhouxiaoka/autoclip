@@ -71,7 +71,7 @@ Create a Bailian API key in two steps:
 1. Register or claim the offer with the author’s recommendation link: <https://www.aliyun.com/benefit?userCode=qmyj6jch>
 2. Then create the API key at <https://bailian.console.aliyun.com/> and paste it into Settings.
 
-You can still use local Whisper. A source without subtitles has to install the local transcription component the first time: the default base model is 141 MB, plus the runtime (about 81 MB on Windows, about 54 MB on Mac). On a network in China this takes about 14 minutes. CLI users can install `faster-whisper`. Convert other subtitle formats to accurately timed SRT rather than assuming every format is accepted.
+You can still use local Whisper. A video without subtitles has to download the local transcription component the first time (about 220 MB, about 15 minutes on a slow network). If you don't want to wait, switch to cloud transcription. CLI users can install `faster-whisper`. Convert other subtitle formats to accurately timed SRT rather than assuming every format is accepted.
 
 ### What if installing Whisper on Windows still says mlx-whisper only supports Apple Silicon?
 

@@ -35,9 +35,9 @@ Intel Mac 目前没有桌面安装包，请用 Docker（`DOCKER.md`）或 CLI。
 不下载 ZIP 时：`uvx autoclip-mcp` 安装并启动 MCP，`npx skills add zhouxiaoka/autoclip` 安装 skill。从源码安装仍可用（在仓库根目录 `python -m pip install --no-deps .`）。
 
 安装后若项目列表是空的，点首页「用示例项目看看效果」。示例在安装包内，不需要 API Key。
-没有字幕的素材第一次要先安装本地转写组件：默认 base 模型 141 MB，运行时 Windows 约 81 MB、Mac 约 54 MB。国内网络大约 14 分钟。装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写；音频会上传到云端。导入被拦住时，点「改用云端转写」。
+没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写；音频会上传到云端。导入被拦住时，点「改用云端转写」。
 
-Built-in portable Python + static ffmpeg, nothing to install. On macOS 15 and later, double-click once; if blocked, open System Settings → Privacy & Security → Open Anyway ([Apple](https://developer.apple.com/news/?id=saqachfa)). Older macOS: right-click the app → Open. Windows is unsigned (SmartScreen → More info → Run anyway). There is no Intel Mac desktop build; use Docker or the CLI. If a listed file is missing, that platform's build failed for this tag — see the Desktop Build workflow run.
+A video without subtitles downloads the local transcription component the first time (about 220 MB, about 15 minutes on a slow network). Built-in portable Python + static ffmpeg, nothing else to install. On macOS 15 and later, double-click once; if blocked, open System Settings → Privacy & Security → Open Anyway ([Apple](https://developer.apple.com/news/?id=saqachfa)). Older macOS: right-click the app → Open. Windows is unsigned (SmartScreen → More info → Run anyway). There is no Intel Mac desktop build; use Docker or the CLI. If a listed file is missing, that platform's build failed for this tag — see the Desktop Build workflow run.
 Without the ZIP: `uvx autoclip-mcp` installs and starts MCP, and `npx skills add zhouxiaoka/autoclip` installs the skill. Installing from a source checkout still works (`python -m pip install --no-deps .` from the repo root).
 """
 

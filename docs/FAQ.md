@@ -71,7 +71,7 @@ Docker 中的 `localhost` 是容器自己。宿主机模型服务的访问方式
 1. 先用作者推荐链接注册或领优惠：<https://www.aliyun.com/benefit?userCode=qmyj6jch>
 2. 再到 <https://bailian.console.aliyun.com/> 创建 API Key，回到设置里填写。
 
-也可以继续用本机 Whisper。没有字幕的素材第一次要先安装本地转写组件：默认 base 模型 141 MB，运行时 Windows 约 81 MB、Mac 约 54 MB。国内网络大约 14 分钟。CLI 环境可安装 `faster-whisper`。其他字幕格式建议先转换为带正确时间轴的 SRT，不假设上传入口支持所有格式。
+也可以继续用本机 Whisper。没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。CLI 环境可安装 `faster-whisper`。其他字幕格式建议先转换为带正确时间轴的 SRT，不假设上传入口支持所有格式。
 
 ### 在 Windows 上安装 Whisper 仍提示 mlx-whisper 仅支持 Apple Silicon？
 
