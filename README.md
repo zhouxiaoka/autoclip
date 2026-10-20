@@ -206,12 +206,12 @@
 
 ### 桌面版
 
-1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。
+1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。macOS 15 及以上首次打开：双击一次，若被拦截则到「系统设置 → 隐私与安全性 → 仍要打开」（[Apple 说明](https://developer.apple.com/news/?id=saqachfa)）。较旧的 macOS 可右键应用 →「打开」。Windows 若出现 SmartScreen，点「更多信息 → 仍要运行」。
 2. **配置模型**：在设置里选择服务商、填写 API Key，选择可用的分析模型，测试连接并保存；本地模型先在 Ollama / LM Studio 启动服务并加载模型。
-3. **贴链接，选平台**：先试一条有字幕的访谈或播客，可选择竖版版式；无字幕时在设置中准备 Whisper / SenseVoice，或配置云端转写。
+3. **先看示例，再贴自己的视频**：首页还没有项目时，点「用示例项目看看效果」，不需要 API Key，示例在安装包内。之后用自己的访谈或播客，可选择竖版版式。没有字幕、本地 Whisper 装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写（`qwen-audio-3.1-asr-flash`，大约 0.1 元/小时音频，具体以阿里云账单为准）。音频会上传到云端。导入被拦住时，点「改用云端转写」。若安装本地转写，第一次要下载组件：默认 base 模型 141 MB，运行时 Windows 约 81 MB、Mac 约 54 MB。国内网络大约 14 分钟。
 4. **检查并下载**：预览自动成片，检查字幕、取景与内容完整性，再下载发布包或连接账号投稿；需要更多片段时生成备选。
 
-Intel Mac / Linux 可使用 Docker 或 CLI。安装要求、系统首次启动提示和本次发布的验收范围见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
+Intel Mac 目前没有桌面安装包，与 Linux 一样使用 Docker 或 CLI。安装要求见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
 
 [完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
 
@@ -319,6 +319,15 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
     </td>
   </tr>
 </table>
+
+## 推荐链接
+
+这是作者推荐链接，不是上面的赞助。
+
+用它注册阿里云或领取优惠，再到百炼控制台创建 API Key，即可在「设置 → 默认模型 → 语音转字幕」使用百炼云端转写。音频会上传到云端。
+
+1. [作者推荐链接](https://www.aliyun.com/benefit?userCode=qmyj6jch)：注册或领优惠。
+2. [百炼控制台](https://bailian.console.aliyun.com/)：创建 API Key。
 
 ## 常见问题
 
