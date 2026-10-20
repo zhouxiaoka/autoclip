@@ -75,9 +75,11 @@
       "kind": "preset",
       "candidates": {
         "analysis": [
+          "gemini-3.8-flash",
           "gemini-3.5-flash"
         ],
         "vision": [
+          "gemini-3.8-flash",
           "gemini-3.5-flash"
         ],
         "asr": [],

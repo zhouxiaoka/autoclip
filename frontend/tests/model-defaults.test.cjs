@@ -46,7 +46,8 @@ test('88API and Infistar prefer a listed vision model, then fall back to one the
     { id: 'gemini-3.5-flash-lite', analysis: true, capability: 'multimodal' },
     { id: 'gemini-3.5-flash', analysis: true, capability: 'multimodal' },
   ]
-  assert.equal(defaultModel('api88', listed), 'gemini-3.5-flash')
+  assert.equal(defaultModel('api88', listed), 'gemini-3.8-flash')
+  assert.equal(defaultModel('api88', listed.filter(model => model.id !== 'gemini-3.8-flash')), 'gemini-3.5-flash')
   assert.equal(defaultModel('infistar', listed), 'gemini-3.5-flash-lite')
   const withoutRecommendations = [
     { id: 'text-only', analysis: true, capability: 'text' },

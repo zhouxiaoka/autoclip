@@ -72,7 +72,7 @@ def test_existing_product_defaults_are_preserved():
     # Gateway defaults stay empty. Recommendations are preference order only.
     assert cloud_presets.CLOUD_PRESETS["infistar"].default_model == ""
     for provider, models in {
-        "api88": ("gemini-3.5-flash",),
+        "api88": ("gemini-3.8-flash", "gemini-3.5-flash"),
         "infistar": ("gemini-3.5-flash-lite", "gemini-3.8-flash"),
     }.items():
         assert provider_presets.candidates_for(provider, "analysis") == models
