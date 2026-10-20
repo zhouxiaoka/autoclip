@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
@@ -15,6 +15,10 @@ import {
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
 import DefaultModels from './DefaultModels'
+import {
+  applyRequestedCloudTranscription, cloudTranscriptionDiscoverTargets, cloudTranscriptionSavePatch,
+  cloudTranscriptionWaitExpired, CLOUD_TRANSCRIPTION_WAIT_MS,
+} from './defaultModelSlots'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
@@ -110,6 +114,44 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     setSelectedId(catalogPreset(requestedProvider)?.id || null)
   }, [requestedProvider])
 
+  const cloudChoice = useRef(false)
+  const cloudPending = useRef(false)
+  const cloudDiscover = useRef(false)
+  const cloudWaitStarted = useRef<number | null>(null)
+  const [cloudTimedOut, setCloudTimedOut] = useState(false)
+  const [cloudChecking, setCloudChecking] = useState(false)
+  const [cloudNote, setCloudNote] = useState<{ provider: string; model: string } | null>(null)
+  const lists = m.lists
+  useEffect(() => {
+    if (requestedProvider !== 'cloud' || !settings || cloudDiscover.current) return
+    cloudDiscover.current = true
+    for (const connection of cloudTranscriptionDiscoverTargets(settings)) {
+      if (!lists[connection.id]) void m.discover(connection, false, 'manual')
+    }
+  }, [requestedProvider, settings, lists])
+  useEffect(() => {
+    if (!settings || cloudChoice.current) return
+    const result = applyRequestedCloudTranscription(requestedProvider, settings, lists, { timedOut: cloudTimedOut })
+    if (result.kind === 'idle') { setCloudChecking(false); return }
+    if (result.kind === 'wait') {
+      setCloudChecking(true)
+      if (cloudWaitStarted.current == null) cloudWaitStarted.current = Date.now()
+      const started = cloudWaitStarted.current
+      if (cloudTranscriptionWaitExpired(started, Date.now())) { setCloudTimedOut(true); return }
+      const timer = window.setTimeout(() => setCloudTimedOut(true), CLOUD_TRANSCRIPTION_WAIT_MS - (Date.now() - started))
+      return () => window.clearTimeout(timer)
+    }
+    cloudChoice.current = true
+    setCloudChecking(false)
+    if (result.kind === 'selected') {
+      m.update({ transcription: result.settings.transcription })
+      setCloudNote({ provider: result.providerLabel, model: result.model })
+    } else {
+      cloudPending.current = true
+      setSelectedId('dashscope')
+    }
+  }, [requestedProvider, settings, lists, cloudTimedOut])
+
   const [customOpen, setCustomOpen] = useState(false)
   useEffect(() => {
     const anchor = ANCHORS[requestedSection]
@@ -125,7 +167,13 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
 
   if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
-    const result = await m.save()
+    const patch = cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)
+    const result = await m.save(patch)
+    if (result.ok && patch?.transcription?.provider === 'cloud' && patch.transcription.model) {
+      cloudPending.current = false
+      const chosen = applyRequestedCloudTranscription('cloud', { ...settings, ...patch }, m.lists)
+      if (chosen.kind === 'selected') setCloudNote({ provider: chosen.providerLabel, model: chosen.model })
+    }
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
@@ -136,6 +184,8 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {settings.migration_warnings?.includes('purpose_reset_to_recommended') && <p role="alert" className="ac-note">{t('部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。')}</p>}
     {settings.migration_warnings?.includes('preset_catalog_updated') && <p role="alert" className="ac-note">{t('服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
+    {cloudChecking && <p className="ac-note" role="status">{t('正在检查可用的云端转写…')}</p>}
+    {cloudNote && <p className="ac-note" role="status">{t('已改用 {{provider}} 的 {{model}} 做云端转写。音频会上传到云端。', cloudNote)}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving || m.testing}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
         : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>

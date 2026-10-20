@@ -1,6 +1,6 @@
 import { endpointProviderReady } from './endpointProvider'
 import type { Connection, ModelEntry, ModelSettings } from './modelSettingsApi'
-import { analysisCandidates, imageCandidates } from './providerPresets'
+import { analysisCandidates, asrCandidates, imageCandidates } from './providerPresets'
 
 // Preference order only: select a recommendation from the provider's actual list.
 // Never substitute an existing explicit choice when a catalog refreshes.
@@ -58,7 +58,8 @@ export function applyModelDefaults(settings: ModelSettings, connection: Connecti
     if (model) { value.cover = { connection_id: connection.id, model, capability: 'auto', model_source: 'preset' }; value.cover_follows_analysis = true }
   }
   if (value.transcription?.provider === 'cloud' && value.transcription.connection_id === connection.id && !value.transcription.model) {
-    const model = models.find(m => m.asr && m.asr_supported)?.id
+    const fitting = models.filter(m => m.asr && m.asr_supported && !m.asr_preview)
+    const model = asrCandidates(connection.provider).find(id => fitting.some(m => m.id === id)) || fitting[0]?.id
     if (model) value.transcription = { ...value.transcription, model, model_source: value.transcription.model_source || 'preset' }
   }
   return value

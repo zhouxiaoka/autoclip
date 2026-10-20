@@ -280,7 +280,11 @@ def _validate_resolved(
     if purpose in ('cover', 'transcription'):
         # Check authenticated account access, not paid image/audio generation. Never
         # send non-chat models to chat/completions or infer access from a catalog.
-        if model.strip() not in models:
+        # Bailian's three adapted sync ASR models are omitted from /models but still
+        # transcribe, so a successful list fetch is enough for those ids.
+        from backend.core.asr_model_catalog import DASHSCOPE_SYNC
+        adapted = purpose == 'transcription' and resolved.provider == 'dashscope' and model.strip() in DASHSCOPE_SYNC
+        if model.strip() not in models and not adapted:
             return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
         return _ok(base, hint, models, **extras)
     probe_error = _probe(base, api_key, model.strip())

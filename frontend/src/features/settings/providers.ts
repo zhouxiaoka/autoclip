@@ -14,7 +14,7 @@ const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
   { key: 'local', label: () => t("本机运行") },
 ]
 
-type ProviderEntry = { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; group: ProviderGroup; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor }
+type ProviderEntry = { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; group: ProviderGroup; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor; referralUrl?: string }
 
 const UI_KEYS: ProviderKey[] = [
   'dashscope', 'openai', 'compatible', 'api88', 'infistar',
@@ -40,6 +40,7 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
     placeholder: row.placeholder,
     keyUrl: row.docs_url,
     group: groupFor(key),
+    referralUrl: row.referral || '',
   }
   if (row.openai_compat_remap) entry.cloud = { baseUrl: row.base_url, defaultModel: row.default_model }
   if (row.local_compat_remap) {

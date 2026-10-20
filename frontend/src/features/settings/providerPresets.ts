@@ -28,6 +28,7 @@ export type ProviderPreset = {
   context_hint: string
   local_app: string
   sponsor?: { register_url: string; guide_url: string; offer: string; description: string }
+  referral: string
 }
 
 export type ProviderCatalog = {
@@ -92,6 +93,7 @@ function parseProvider(id: string, rawProvider: unknown): ProviderPreset | undef
     context_hint: String(row.context_hint || ''),
     local_app: String(row.local_app || ''),
     sponsor,
+    referral: typeof row.referral === 'string' ? row.referral.trim() : '',
   }
 }
 
@@ -147,4 +149,8 @@ export function analysisCandidates(name?: string): string[] {
 
 export function imageCandidates(name?: string): string[] {
   return getProvider(name)?.candidates.image || []
+}
+
+export function asrCandidates(name?: string): string[] {
+  return getProvider(name)?.candidates.asr || []
 }

@@ -62,7 +62,8 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             ? undefined
             : preset?.keyUrl
               ? <>{t('在官网创建后粘贴到这里。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
-                {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}</>
+                {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}
+                {preset.referralUrl && <> · <a className="ac-link" data-author-referral="1" href={preset.referralUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.referralUrl!) }}>{t('作者推荐链接')} ↗</a></>}</>
               : t('自建服务可留空')
         }>
           <Input.Password aria-label={label(t('API 密钥'))} autoComplete="new-password" value={connection.api_key ?? ''}

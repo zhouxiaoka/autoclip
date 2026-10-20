@@ -36,16 +36,16 @@ export function recommendedModelIds(settings: ModelSettings, connection: Connect
   const ids = new Set(models.map(m => m.id))
   const language = models.filter(m => m.analysis).map(m => m.id)
   const image = models.filter(m => m.image).map(m => m.id)
-  const asr = models.filter(m => m.asr && m.asr_supported).map(m => m.id)
+  const selectableAsr = models.filter(m => m.asr && m.asr_supported && !m.asr_preview).map(m => m.id)
   const fromCatalog = (list?: string[]) => (list || []).filter(id => ids.has(id))
   const pickedLanguage = [...fromCatalog(candidates?.analysis), ...fromCatalog(candidates?.vision)]
   const pickedImage = fromCatalog(candidates?.image)
-  const pickedAsr = fromCatalog(candidates?.asr)
+  const pickedAsr = fromCatalog(candidates?.asr).filter(id => selectableAsr.includes(id))
   const result = [
     ...assignedModels(settings, connection.id).filter(id => ids.has(id)),
     ...(pickedLanguage.length ? pickedLanguage : pickFamilies(language, LANGUAGE_FAMILIES, LANGUAGE_LIMIT)),
     ...(pickedImage.length ? pickedImage : image.slice(0, IMAGE_LIMIT)),
-    ...(pickedAsr.length ? pickedAsr : asr.slice(0, 1)),
+    ...(pickedAsr.length ? pickedAsr : selectableAsr.slice(0, 1)),
   ]
   if (!result.length && language.length) result.push(language[0])
   return [...new Set(result)]

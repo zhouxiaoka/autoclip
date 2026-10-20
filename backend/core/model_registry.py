@@ -405,10 +405,13 @@ async def _discover_from_provider(connection, refresh=False):
         return {'models': _records(connection, fallback, _read()), 'source': 'catalog', 'updated_at': None,
                 'preview': True, 'warning': '账号模型列表获取失败，当前为参考目录；请检查密钥后刷新。'}
     if connection.provider == 'dashscope':
-        # The OpenAI-compatible /models endpoint does not enumerate all native ASR APIs.
-        # Keep native ASR references visibly unverified, rather than calling them account-entitled.
+        # The OpenAI-compatible /models endpoint omits native ASR. The three adapted
+        # sync models still transcribe, so they stay selectable. Unadapted ASR stays a preview.
         ids = {item if isinstance(item, str) else item.get('id') for item in raw}
-        raw = [*raw, *({'id': name, 'asr_preview': True} for name in asr_catalog.MODELS['dashscope'] if name not in ids)]
+        raw = [*raw, *(
+            {'id': name, 'asr_preview': name not in asr_catalog.DASHSCOPE_SYNC}
+            for name in asr_catalog.MODELS['dashscope'] if name not in ids
+        )]
     value = {'models': _records(connection, _with_public_metadata(connection, raw, public), _read()), 'source': 'live', 'updated_at': time.time()}
     _update(scope, value)
     return value

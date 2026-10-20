@@ -50,6 +50,7 @@ class ProviderPreset:
     context_hint: str
     local_app: str
     sponsor: Optional[Dict[str, str]]
+    referral: str
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,7 @@ def _parse_provider(key: str, raw: Any) -> Optional[ProviderPreset]:
         context_hint=str(raw.get("context_hint") or "").strip(),
         local_app=str(raw.get("local_app") or "").strip(),
         sponsor=_sponsor(raw.get("sponsor")),
+        referral=str(raw.get("referral") or "").strip() if isinstance(raw.get("referral"), str) else "",
     )
 
 
