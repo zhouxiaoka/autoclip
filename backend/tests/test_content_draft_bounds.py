@@ -64,6 +64,68 @@ def test_overlapping_clips_keep_only_the_higher_scored_draft(monkeypatch):
     assert [d['title'] for d in result] == ['high', 'other']
 
 
+def _span(start, end, score=0.5, title='片段'):
+    return {'id': f'{start:g}-{end:g}', 'title': title, 'language': 'source', 'aspect': 'landscape',
+            'scenes': [{'id': 's', 'label': title, 'start': start, 'end': end, 'evidence': '例子'}],
+            jobs.SCORE_KEY: score}
+
+
+def test_short_picks_on_a_long_source_gain_one_span_of_at_least_180s():
+    drafts = [_span(10, 50, 0.4, '甲'), _span(80, 120, 0.9, '乙'), _span(200, 240, 0.5, '丙')]
+    out = jobs._ensure_long_coverage(drafts, 531, 180)
+    assert [draft['title'] for draft in out[:3]] == ['甲', '乙', '丙']
+    added = out[-1]
+    start, end = added['scenes'][0]['start'], added['scenes'][0]['end']
+    assert added[jobs.LONG_ONLY_KEY] is True
+    assert end - start >= 180 and 0 <= start and end <= 531
+
+
+def test_adjacent_short_picks_are_merged_until_the_span_reaches_180s():
+    drafts = [_span(0, 40, 0.2), _span(50, 90, 0.3), _span(100, 140, 0.8, '合并')]
+    added = jobs._ensure_long_coverage(drafts, 200, 180)[-1]
+    start, end = added['scenes'][0]['start'], added['scenes'][0]['end']
+    assert added['title'] == '合并'
+    assert end - start >= 180 and end <= 200
+
+
+def test_a_clip_near_the_end_grows_backward_inside_the_source():
+    added = jobs._ensure_long_coverage([_span(500, 530)], 531, 180)[-1]
+    start, end = added['scenes'][0]['start'], added['scenes'][0]['end']
+    assert end - start >= 180 and start >= 0 and end <= 531
+
+
+def test_a_source_shorter_than_180s_is_not_stretched():
+    drafts = [_span(0, 40)]
+    assert jobs._ensure_long_coverage(drafts, 90, 180) is drafts
+
+
+def test_an_existing_long_draft_is_left_alone():
+    drafts = [_span(0, 200, 0.2), _span(210, 250, 0.9)]
+    assert jobs._ensure_long_coverage(drafts, 531, 180) is drafts
+
+
+def test_youtube_long_passes_its_minimum_into_content_selection(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: seen.append(args) or [
+        {'generated_title': '已够长', 'start_time_seconds': 0, 'end_time_seconds': 200},
+    ])
+    monkeypatch.setattr(jobs, '_complete_thought_bounds', lambda _, bounds: bounds)
+    monkeypatch.setattr(jobs.intelligence, '_probe', lambda _: {'duration': 600})
+    jobs._content_drafts('p', {'preferences': {'goal': 'content'}}, 'video.mp4', ['youtube_long', 'douyin'])
+    assert seen == [('p', 'video.mp4', 180, 'YouTube 横屏')]
+
+
+def test_short_platforms_do_not_pass_a_long_minimum(monkeypatch):
+    seen = []
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: seen.append(args) or [
+        {'generated_title': '短', 'start_time_seconds': 0, 'end_time_seconds': 30},
+    ])
+    monkeypatch.setattr(jobs, '_complete_thought_bounds', lambda _, bounds: bounds)
+    monkeypatch.setattr(jobs.intelligence, '_probe', lambda _: {'duration': 600})
+    jobs._content_drafts('p', {'preferences': {'goal': 'content'}}, 'video.mp4', ['douyin', 'bilibili'])
+    assert seen == [('p', 'video.mp4')]
+
+
 def test_small_overlap_between_neighbours_is_kept(monkeypatch):
     clips = [
         {'generated_title': 'a', 'start_time_seconds': 0, 'end_time_seconds': 30, 'final_score': 0.5},

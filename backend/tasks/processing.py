@@ -69,6 +69,8 @@ def process_video_pipeline(
     input_video_path: str,
     input_srt_path: Optional[str] = None,
     clips_only: bool = False,
+    platform_min_sec: Optional[float] = None,
+    platform_min_label: str = '',
 ) -> Dict[str, Any]:
     """
     处理视频流水线任务 - 使用Pipeline适配器
@@ -131,7 +133,9 @@ def process_video_pipeline(
         import asyncio
         from backend.core.project_cancellation import bind, checkpoint
         with bind(project_id):
-            result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path, clips_only=clips_only))
+            result = asyncio.run(pipeline_adapter.process_project_sync(
+                input_video_path, input_srt_path, clips_only=clips_only,
+                platform_min_sec=platform_min_sec, platform_min_label=platform_min_label))
             # 运行中项目被删除（RC156 #12）：无论适配器把它收成了什么结果，都在这里停下，不再写库/写文件
             checkpoint(project_id)
 

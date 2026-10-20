@@ -153,6 +153,70 @@ def test_auto_start_skips_ineligible_long_output_without_faking_duration(client,
     assert state['generation']['skipped'] == [{'strategy_id': 'youtube_long', 'reason': '素材没有足够完整的长内容'}]
 
 
+def _auto(monkeypatch, clips):
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
+
+    class ImmediateAuto:
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: clips)
+    exports = []
+
+    def fake_export(project_id, draft, *, _variant_identity, **kwargs):
+        assert kwargs == {'brand_outro': True}
+        exports.append((draft, _variant_identity))
+        return queue_export_record(project_id, draft, f'job-{draft.id}', _variant_identity)
+
+    monkeypatch.setattr(jobs, 'export', fake_export)
+    return exports
+
+
+def test_long_source_short_picks_produce_a_youtube_long_variant(client, source, monkeypatch):
+    monkeypatch.setattr(intelligence, '_probe', lambda video: {'duration': 531})
+    exports = _auto(monkeypatch, [
+        {'generated_title': '甲', 'start_time_seconds': 10, 'end_time_seconds': 50, 'final_score': 0.4},
+        {'generated_title': '乙', 'start_time_seconds': 80, 'end_time_seconds': 120, 'final_score': 0.9},
+        {'generated_title': '丙', 'start_time_seconds': 200, 'end_time_seconds': 240, 'final_score': 0.5},
+    ])
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': 'youtube_long'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['generation']['status'] == 'rendering', state['generation'].get('error')
+    assert state['generation'].get('skipped') in (None, [])
+    assert len(state['output_variants']) == len(exports) == 1
+    variant = state['output_variants'][0]
+    assert variant['strategy_id'] == 'youtube_long'
+    draft = next(item for item in state['drafts'] if item['id'] == variant['draft_id'])
+    scene = draft['scenes'][0]
+    assert scene['end'] - scene['start'] >= 180
+    assert scene['end'] <= 531
+
+
+def test_short_source_skips_youtube_long_and_still_renders_other_platforms(client, source, monkeypatch):
+    exports = _auto(monkeypatch, [
+        {'generated_title': '短观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
+    ])
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': ['tiktok', 'youtube_long']},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['generation']['status'] == 'rendering', state['generation'].get('error')
+    assert {item['strategy_id'] for item in state['output_variants']} == {'tiktok'}
+    assert len(exports) == 1
+    assert state['generation']['skipped'] == [{'strategy_id': 'youtube_long', 'reason': '素材没有足够完整的长内容'}]
+
+
 def test_auto_start_creates_platform_variants_without_confirmation(client, source, monkeypatch):
     from backend.services.studio import analysis_preferences as ap
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))

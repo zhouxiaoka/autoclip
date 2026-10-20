@@ -432,15 +432,23 @@ class ContentRunError(AttributedError, RuntimeError):
     """an uncoded content pipeline failure rebuilt across apply.get, with its snapshot."""
 
 
-def run_content(project_id, video):
-    """Run the existing content pipeline in this worker, without a second broker queue."""
+def run_content(project_id, video, platform_min_sec=None, platform_min_label=''):
+    """Run the existing content pipeline in this worker, without a second broker queue.
+
+    `platform_min_sec` is forwarded only when a long-form platform was requested, so callers
+    that mock the two-argument form keep working for every other platform.
+    """
     from backend.tasks.processing import process_video_pipeline
     srt = video.parent / 'input.srt'
-    result = process_video_pipeline.apply(kwargs={
+    kwargs = {
         'project_id': project_id, 'input_video_path': str(video),
         'input_srt_path': str(srt) if srt.exists() else None,
         'clips_only': True,  # studio renders from the source: no clustering, no per-clip re-encode
-    }, throw=True).get()
+    }
+    if platform_min_sec:
+        kwargs['platform_min_sec'] = platform_min_sec
+        kwargs['platform_min_label'] = platform_min_label
+    result = process_video_pipeline.apply(kwargs=kwargs, throw=True).get()
     if not result or not result.get('success'):
         message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
         failure = (result or {}).get('result') or {}
@@ -577,12 +585,16 @@ def _distinct_ranges(picked, bounds):
     return [(picked[i][0], *kept[i]) for i in sorted(kept)]
 
 
-def _content_drafts(project_id, plan, video):
+def _content_drafts(project_id, plan, video, platforms=()):
     """Create drafts once from the selected content route, before platform derivation."""
     route = plan.get('recommended_analysis', 'subtitle')
     prefs = Preferences.model_validate(plan['preferences'])
     if route == 'subtitle' or prefs.goal == 'content':
-        clips = run_content(project_id, video)
+        from backend.services.platform_strategy import long_form_minimum
+        min_sec, label = long_form_minimum(platforms)
+        # Pass the minimum only when a long platform asked for it. A two-argument mock
+        # still matches every short-platform import.
+        clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
         from backend.utils.text_processor import TextProcessor
         picked = []
         for clip in clips:
@@ -1116,14 +1128,23 @@ def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_i
 
 def _initial_derive(project_id, plan, video, generation, platforms, branding, skipped):
     """The first generation's derive step: content drafts -> platform variants (unchanged loop)."""
-    produced = _content_drafts(project_id, plan, video)
+    from backend.services.platform_strategy import long_form_minimum, platform_strategy
+    min_sec, _label = long_form_minimum(platforms)
+    duration = _known_source_duration(video) if min_sec else None
+    # A source that cannot hold the long-form minimum never reaches the model when that
+    # platform is the whole job. Mixed selections still analyze, then skip only the long version.
+    if min_sec and duration is not None and duration < min_sec and _platforms_are_long(platforms):
+        _record_long_skips(platforms, (), skipped)
+        raise UserFacingError('所选平台没有可生成的完整内容版本')
+    produced = _content_drafts(project_id, plan, video, platforms)
     if isinstance(produced, tuple):
         base_drafts, events, coverage = produced
     else:
         base_drafts, events, coverage = produced, [], None
+    if min_sec and duration is not None:
+        base_drafts = _ensure_long_coverage(base_drafts, duration, min_sec)
     variants = []
     derived_drafts = []
-    from backend.services.platform_strategy import platform_strategy
     burned = _source_has_burned_subtitles(project_id, video)
     framing_cache = {}
     packaging_cache = {}
@@ -1133,20 +1154,23 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
     scores = {draft['id']: draft[SCORE_KEY] for draft in base_drafts if SCORE_KEY in draft}
     automatic = {
         strategy_id: _automatic_drafts([base for base in base_drafts
-            if _eligible_for_platform(base, platform_strategy(strategy_id))], limit)
+            if _draft_usable(base, platform_strategy(strategy_id))], limit)
         for strategy_id in platforms
     }
+    _record_long_skips(platforms, base_drafts, skipped)
     from backend.services.studio.template_choice import html_candidate_ids, selected_template
     chosen = selected_template(generation)
     html_ids = html_candidate_ids(base_drafts) if chosen else set()
     planned = []
     for base in base_drafts:
         source_id = base['id']
-        base = {key: item for key, item in base.items() if key != SCORE_KEY}
+        long_only = bool(base.get(LONG_ONLY_KEY))
+        base = {key: item for key, item in base.items() if key not in (SCORE_KEY, LONG_ONLY_KEY)}
         for strategy_id in platforms:
             strategy = platform_strategy(strategy_id)
+            if long_only and strategy.duration_policy != 'long':
+                continue
             if not _eligible_for_platform(base, strategy):
-                skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                 continue
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
             now = source_id in automatic[strategy_id]
@@ -1262,8 +1286,155 @@ SCORE_KEY = '_auto_score'
 AUTO_RENDER_LIMIT = 10  # clips rendered automatically per import; the rest wait for a click
 
 
+LONG_ONLY_KEY = '_long_only'
+LONG_SKIP_REASON = '素材没有足够完整的长内容'
+
+
+def _known_source_duration(video):
+    """Probed seconds, or None when the container duration cannot be read."""
+    try:
+        raw = intelligence._probe(video).get('duration')
+        return float(raw) if raw else None
+    except Exception:
+        logger.warning('source duration probe failed', exc_info=True)
+        return None
+
+
+def _platforms_are_long(platforms):
+    from backend.services.platform_strategy import platform_strategy
+    return bool(platforms) and all(platform_strategy(item).duration_policy == 'long' for item in platforms)
+
+
+def _record_long_skips(platforms, drafts, skipped):
+    """One visible skip per long platform that still has no usable draft."""
+    from backend.services.platform_strategy import platform_strategy
+    for strategy_id in platforms:
+        strategy = platform_strategy(strategy_id)
+        if strategy.duration_policy != 'long':
+            continue
+        if any(_draft_usable(draft, strategy) for draft in drafts):
+            continue
+        if any(item.get('strategy_id') == strategy_id for item in skipped):
+            continue
+        skipped.append({'strategy_id': strategy_id, 'reason': LONG_SKIP_REASON})
+
+
+def _draft_usable(draft, strategy):
+    """A span grown only to satisfy a long platform is not offered to the short ones."""
+    if draft.get(LONG_ONLY_KEY) and strategy.duration_policy != 'long':
+        return False
+    return _eligible_for_platform(draft, strategy)
+
+
+def _grow_span(start, end, min_sec, floor, ceiling):
+    """Grow [start, end] to min_sec inside [floor, ceiling], extending the end first."""
+    floor, ceiling = float(floor), float(ceiling)
+    start = min(max(float(start), floor), ceiling)
+    end = min(max(float(end), start), ceiling)
+    if ceiling - floor < min_sec:
+        return None
+    if end - start >= min_sec:
+        return start, end
+    need = min_sec - (end - start)
+    after = ceiling - end
+    if after > 0:
+        take = min(need, after)
+        end += take
+        need -= take
+    if need > 1e-6:
+        before = start - floor
+        start -= min(need, max(0.0, before))
+    if end - start + 1e-3 < min_sec:
+        return None
+    if end - start < min_sec:
+        end = min(ceiling, start + min_sec)
+        if end - start < min_sec:
+            start = max(floor, end - min_sec)
+        if start < floor or end - start + 1e-3 < min_sec:
+            return None
+    return start, end
+
+
+def _pick_long_run(pieces, source_duration, min_sec):
+    """Narrowest run of time-adjacent pieces that can reach min_sec inside the source."""
+    count = len(pieces)
+    for width in range(1, count + 1):
+        best = None
+        for index in range(0, count - width + 1):
+            run = pieces[index:index + width]
+            start, end = run[0]['start'], run[-1]['end']
+            floor = pieces[index - 1]['end'] if index else 0.0
+            ceiling = pieces[index + width]['start'] if index + width < count else source_duration
+            fitted = _grow_span(start, end, min_sec, min(floor, start), max(ceiling, end))
+            if fitted is None:
+                continue
+            score = max(item['score'] for item in run)
+            if best is None or score > best[0]:
+                best = (score, fitted[0], fitted[1], max(run, key=lambda item: item['score']))
+        if best is not None:
+            return best[1], best[2], best[3]
+    return None
+
+
+def _ensure_long_coverage(drafts, source_duration, min_sec):
+    """Append one >= min_sec draft when the source can hold it and none of the picks already do.
+
+    Short drafts stay, so other platforms keep them. The added draft is marked long-only.
+    Growth stays inside [0, source_duration]: a short source is left unchanged.
+    """
+    if not drafts or source_duration is None or source_duration < min_sec:
+        return drafts
+    if any(not draft.get(LONG_ONLY_KEY) and _draft_duration(draft) >= min_sec for draft in drafts):
+        return drafts
+    pieces = []
+    for index, draft in enumerate(drafts):
+        if draft.get(LONG_ONLY_KEY):
+            continue
+        try:
+            score = float(draft.get(SCORE_KEY) or 0)
+        except (TypeError, ValueError):
+            score = 0.0
+        for scene in draft.get('scenes') or []:
+            start, end = float(scene.get('start') or 0), float(scene.get('end') or 0)
+            end = min(end, float(source_duration))
+            start = max(0.0, min(start, end))
+            if end - start <= 0:
+                continue
+            pieces.append({
+                'start': start, 'end': end, 'score': score, 'index': index,
+                'title': scene.get('label') or draft.get('title') or '内容片段',
+                'evidence': scene.get('evidence') or '',
+            })
+    pieces.sort(key=lambda item: (item['start'], item['end']))
+    chosen = _pick_long_run(pieces, float(source_duration), min_sec)
+    if chosen is None:
+        return drafts
+    start, end, piece = chosen
+    template = drafts[piece['index']]
+    scene = {
+        'id': uuid.uuid4().hex,
+        'label': str(piece['title'])[:120],
+        'start': start,
+        'end': end,
+        'evidence': str(piece['evidence'])[:1000],
+    }
+    logger.info('extended a long-form span to %.0fs within a %.0fs source', end - start, source_duration)
+    return [*drafts, {
+        **template,
+        'id': uuid.uuid4().hex,
+        'title': scene['label'],
+        'scenes': [scene],
+        SCORE_KEY: piece['score'],
+        LONG_ONLY_KEY: True,
+    }]
+
+
+def _draft_duration(draft):
+    return sum(scene['end'] - scene['start'] for scene in draft.get('scenes') or [])
+
+
 def _eligible_for_platform(draft, strategy):
-    duration = sum(scene['end'] - scene['start'] for scene in draft['scenes'])
+    duration = _draft_duration(draft)
     return strategy.duration_policy != 'long' or duration >= (strategy.min_recommended_duration_sec or 0)
 
 

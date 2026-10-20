@@ -21,7 +21,7 @@ function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(va
 test('quick import submits platform targets, branding and auto-starts to results',async()=>{
  const calls=[],navigations=[];let index=0
  const ready={analysis_mode:'auto',ready:true,checks:{analysis:{ok:true,code:'configured',repair:'none'},transcription:{ok:true,code:'whisper_installed',repair:'none'},visual:{ok:true,code:'optional',repair:'none'},ffmpeg:{ok:true,code:'available',repair:'none'}}}
- const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[false,()=>{}],[null,()=>{}],[false,()=>{}]]
+ const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[false,()=>{}],[null,()=>{}],[{open:false,durationSec:null},()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
   react:{useState:()=>states[index++],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
@@ -56,3 +56,202 @@ test('quick import source no longer tells users to confirm a plan',()=>{
  assert.match(source,/PlatformPicker/)
  assert.doesNotMatch(source,/navigate\(`\/import\/\$\{result\.project_id\}`\)/)
 })
+
+const NOTICE = 'YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过，其他平台仍会生成。'
+const TOO_SHORT = '这段素材不足 3 分钟，做不了 YouTube 横屏。'
+
+test('youtube landscape does not start until the rule is confirmed', async () => {
+  const React = require('react')
+  const { act } = React
+  const h = React.createElement
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  try {
+    const view = await mountImport(window, React, h, calls)
+    await flush(act)
+    const box = view.host.querySelector('textarea')
+    setValue(window, box, 'https://youtube.com/watch?v=abcdefghijk')
+    await act(async () => { box.dispatchEvent(new window.Event('input', { bubbles: true })) })
+    await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
+    await flush(act)
+    assert.equal(view.host.querySelector('[role="note"]').textContent, NOTICE)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.equal(dialog.querySelector('p').textContent, NOTICE)
+    await act(async () => { buttonText(document.body, '取消').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    assert.equal(document.querySelector('[role="dialog"]'), null)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    await act(async () => { buttonText(document.body, '确认并开始').click() })
+    await flush(act)
+    assert.equal(calls.length, 1)
+    assert.ok([...calls[0].entries()].some(([key, value]) => key === 'platforms' && value === 'youtube_long'))
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
+test('a known short file tells the user it cannot make youtube landscape, and still waits for confirm', async () => {
+  const React = require('react')
+  const { act } = React
+  const h = React.createElement
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  const orig = window.document.createElement.bind(window.document)
+  window.document.createElement = (tag, options) => {
+    const el = orig(tag, options)
+    if (tag === 'video') {
+      let src = ''
+      Object.defineProperty(el, 'src', {
+        configurable: true,
+        get: () => src,
+        set(value) {
+          src = String(value)
+          Object.defineProperty(el, 'duration', { value: 90 })
+          queueMicrotask(() => { if (typeof el.onloadedmetadata === 'function') el.onloadedmetadata() })
+        },
+      })
+    }
+    return el
+  }
+  window.URL.createObjectURL = () => 'blob:short'
+  window.URL.revokeObjectURL = () => {}
+  try {
+    const view = await mountImport(window, React, h, calls)
+    await flush(act)
+    await act(async () => { buttonText(view.host, '文件导入').click() })
+    await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
+    const input = view.host.querySelector('input[aria-label="视频文件"]')
+    assert.ok(input)
+    const file = new window.File(['x'], 'short.mp4', { type: 'video/mp4' })
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    await act(async () => { input.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    await flush(act)
+    assert.equal(view.host.querySelector('[role="note"]').textContent, TOO_SHORT)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    assert.equal(document.querySelector('[role="dialog"] p').textContent, TOO_SHORT)
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
+function installDom(window) {
+  const saved = ['window', 'document', 'navigator', 'HTMLElement', 'FormData', 'File', 'URL'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)])
+  Object.defineProperty(globalThis, 'window', { value: window, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'document', { value: window.document, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'navigator', { value: window.navigator, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'HTMLElement', { value: window.HTMLElement, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'FormData', { value: window.FormData, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'File', { value: window.File, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'URL', { value: window.URL, writable: true, configurable: true })
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  return () => {
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete globalThis[key]
+    }
+  }
+}
+
+function setValue(window, node, value) {
+  const proto = node instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(node, value)
+}
+
+function buttonText(root, label) {
+  return [...root.querySelectorAll('button')].find(node => node.textContent === label)
+}
+
+function buttonIncluding(root, label) {
+  return [...root.querySelectorAll('button')].find(node => node.textContent.includes(label))
+}
+
+async function flush(act) {
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+}
+
+async function mountImport(window, React, h, calls) {
+  const { createRoot } = require('react-dom/client')
+  const ts = require('typescript')
+  const studioDir = path.resolve(__dirname, '../src/features/studio')
+  const ready = { analysis_mode: 'auto', ready: true, checks: { analysis: { ok: true, code: 'ok', repair: 'none' }, transcription: { ok: true, code: 'ok', repair: 'none' }, visual: { ok: true, code: 'ok', repair: 'none' }, ffmpeg: { ok: true, code: 'ok', repair: 'none' } } }
+  const mocks = {
+    'react-i18next': { useTranslation() {} },
+    '../../i18n': { t: value => value, getLocale: () => 'zh-CN' },
+    antd: { Select: () => null },
+    'react-router-dom': { useNavigate: () => () => {} },
+    '../../ui': {
+      Btn: ({ children, onClick, variant }) => h('button', { type: 'button', onClick, 'data-variant': variant || '' }, children),
+      Segmented: ({ onChange, options }) => h('div', null, (options || []).map(option => h('button', { type: 'button', key: option.value, onClick: () => onChange(option.value) }, option.label))),
+      Dialog: ({ open, title, description, footer }) => open ? h('div', { role: 'dialog', 'aria-label': title }, h('h3', null, title), h('p', null, description), footer) : null,
+      StatusDot: () => null,
+    },
+    './api': {
+      studioApi: {
+        readiness: async () => ready,
+        readinessProbe: async () => ready,
+        platformStrategies: async () => ({ strategies: [] }),
+        import: async body => { calls.push(body); return { project_id: 'p' } },
+      },
+      errorText: value => String(value),
+      errorCode: () => undefined,
+    },
+    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
+    '../../analytics/workflow': { telemetryId: () => 't-long' },
+    '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
+    '../../analytics/experience': { trackExperience() {} },
+    './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
+    './StyleProbeLine': { default: () => null },
+    './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
+    './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
+    './ImportPreferences': { default: () => null },
+    '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}), getRuntimeStatus: async () => ({ status: 'installed' }), getModels: async () => [] } },
+    './TranscriptionGatePrompt': { default: () => null },
+    './transcriptionRecovery': { isRecoveryCode: () => false, probeConfig: () => ({}) },
+    './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
+    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    './studio.css': {}, './quick-output.css': {},
+  }
+  function load(file) {
+    const abs = path.join(studioDir, file)
+    const { outputText } = ts.transpileModule(fs.readFileSync(abs, 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
+      fileName: abs,
+    })
+    const exports = {}
+    const req = (id) => {
+      if (id in mocks) return mocks[id]
+      if (id === 'react' || id === 'react/jsx-runtime') return require(id)
+      if (id.startsWith('.')) {
+        const stem = id.replace(/^\.\//, '')
+        const ext = fs.existsSync(path.join(studioDir, stem + '.tsx')) ? '.tsx' : '.ts'
+        return load(stem + ext)
+      }
+      throw new Error('unexpected import ' + id + ' from ' + file)
+    }
+    runInSandbox(outputText, {
+      exports, require: req, console, window, document: window.document, navigator: window.navigator,
+      HTMLElement: window.HTMLElement, FormData: window.FormData, URL: window.URL, File: window.File,
+      Promise, setTimeout, clearTimeout, queueMicrotask, AbortController,
+    })
+    return exports
+  }
+  const CreativeImport = load('CreativeImport.tsx').default
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await React.act(async () => { root.render(h(CreativeImport, { onImported: async () => {} })) })
+  return { host, unmount: async () => { await React.act(async () => { root.unmount() }); host.remove() } }
+}

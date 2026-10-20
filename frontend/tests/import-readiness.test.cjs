@@ -99,7 +99,7 @@ function render(options = {}) {
     [false, () => {}],
     [false, () => {}],
     [null, () => {}],
-    [false, () => {}],
+    [{ open: false, durationSec: null }, () => {}],
   ]
   const { exports, code } = transpile(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'))
   const mocks = {
