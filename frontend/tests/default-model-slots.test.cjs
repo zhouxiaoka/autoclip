@@ -89,7 +89,7 @@ test('untouched visibility keeps recommended Bailian transcription models, inclu
 const whisper = { id: 'whisper-1', asr: true, asr_supported: true, asr_preview: false, analysis: false, image: false }
 const live = models => ({ source: 'live', models })
 
-test('cloud transcription follows Bailian, 88API, OpenAI, then a listed Infistar whisper-1', () => {
+test('cloud transcription follows Bailian then OpenAI, and skips 88API and Infistar', () => {
   const chosen = slots.applyCloudTranscription(settings())
   assert.equal(chosen.kind, 'selected')
   assert.equal(chosen.provider, 'dashscope')
@@ -107,21 +107,19 @@ test('cloud transcription follows Bailian, 88API, OpenAI, then a listed Infistar
   assert.equal(onlyOlder.model, 'qwen-audio-3.0-asr-flash')
 
   const only88 = settings({ connections: [conn('a88', 'api88')] })
-  assert.equal(slots.applyCloudTranscription(only88).kind, 'wait')
-  const api88 = slots.applyCloudTranscription(only88, { a88: live([whisper]) })
-  assert.equal(api88.kind, 'selected')
-  assert.equal(api88.provider, 'api88')
-  assert.equal(api88.model, 'whisper-1')
-  assert.equal(api88.settings.transcription.connection_id, 'a88')
-  const failed88 = { a88: { source: 'catalog', preview: true, models: [whisper] } }
-  assert.equal(slots.applyCloudTranscription(only88, failed88).kind, 'add')
-  assert.equal(slots.applyCloudTranscription(only88, { a88: { source: 'live', preview: true, models: [whisper] } }).kind, 'add')
+  assert.deepEqual(plain(slots.applyCloudTranscription(only88)), { kind: 'add', provider: 'dashscope' })
+  assert.deepEqual(plain(slots.applyCloudTranscription(only88, { a88: live([whisper]) })), { kind: 'add', provider: 'dashscope' })
+  const onlyOpenAI = settings({ connections: [conn('oa', 'openai')] })
+  assert.equal(slots.applyCloudTranscription(onlyOpenAI).kind, 'wait')
+  const failedOpenAI = { oa: { source: 'catalog', preview: true, models: [whisper] } }
+  assert.deepEqual(plain(slots.applyCloudTranscription(onlyOpenAI, failedOpenAI)), { kind: 'add', provider: 'dashscope' })
+  assert.deepEqual(plain(slots.applyCloudTranscription(onlyOpenAI, { oa: { source: 'live', preview: true, models: [whisper] } })), { kind: 'add', provider: 'dashscope' })
   const fellThrough = slots.applyCloudTranscription(settings({
     connections: [conn('a88', 'api88'), conn('oa', 'openai')],
-  }), { ...failed88, oa: live([whisper]) })
+  }), { a88: failedOpenAI.oa, oa: live([whisper]) })
   assert.equal(fellThrough.provider, 'openai')
   assert.equal(fellThrough.model, 'whisper-1')
-  assert.equal(slots.applyCloudTranscription(only88, {}, { timedOut: true }).kind, 'add')
+  assert.deepEqual(plain(slots.applyCloudTranscription(onlyOpenAI, {}, { timedOut: true })), { kind: 'add', provider: 'dashscope' })
   assert.equal(slots.cloudTranscriptionWaitExpired(1_000, 10_999), false)
   assert.equal(slots.cloudTranscriptionWaitExpired(1_000, 11_000), true)
   const targets = slots.cloudTranscriptionDiscoverTargets(settings({
@@ -130,8 +128,8 @@ test('cloud transcription follows Bailian, 88API, OpenAI, then a listed Infistar
       conn('infi', 'infistar', { api_key: '', has_key: false }),
     ],
   })).map(connection => connection.provider)
-  assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['api88', 'openai'])
-  const openai = slots.applyCloudTranscription(settings({ connections: [conn('oa', 'openai')] }), { oa: live([whisper]) })
+  assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['openai'])
+  const openai = slots.applyCloudTranscription(onlyOpenAI, { oa: live([whisper]) })
   assert.equal(openai.provider, 'openai')
   assert.equal(openai.model, 'whisper-1')
 
@@ -142,12 +140,9 @@ test('cloud transcription follows Bailian, 88API, OpenAI, then a listed Infistar
   assert.equal(both.model, 'qwen-audio-3.1-asr-flash')
 
   const skipped = slots.applyCloudTranscription(settings({ connections: [conn('infi', 'infistar')] }), {
-    infi: live([{ id: 'gpt-4o-mini', analysis: true, image: false }, { id: 'whisper-1', asr: true, asr_supported: false }]),
+    infi: live([{ id: 'gpt-4o-mini', analysis: true, image: false }, { id: 'whisper-1', asr: true, asr_supported: true }]),
   })
   assert.deepEqual(plain(skipped), { kind: 'add', provider: 'dashscope' })
-  const listed = slots.applyCloudTranscription(settings({ connections: [conn('infi', 'infistar')] }), { infi: live([whisper]) })
-  assert.equal(listed.provider, 'infistar')
-  assert.equal(listed.model, 'whisper-1')
 
   const deepseek = slots.applyCloudTranscription(settings({ connections: [conn('deep', 'deepseek')] }))
   assert.deepEqual(plain(deepseek), { kind: 'add', provider: 'dashscope' })

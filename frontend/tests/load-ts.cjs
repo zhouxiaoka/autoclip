@@ -13,6 +13,10 @@ function jsonModule(file) {
 }
 
 function loadTs(file, mocks = {}, fromDir = SETTINGS) {
+  // Tests that run effects pass `window` / `document` via mocks.__globals. It is not a module.
+  const globals = mocks.__globals || {}
+  const localMocks = mocks.__globals ? { ...mocks } : mocks
+  if (localMocks !== mocks) delete localMocks.__globals
   const abs = path.isAbsolute(file) ? file : path.join(fromDir, file)
   const source = fs.readFileSync(abs, 'utf8')
   const { outputText } = ts.transpileModule(source, {
@@ -21,7 +25,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   })
   const exports = {}
   const requireImpl = (id) => {
-    if (id in mocks) return mocks[id]
+    if (id in localMocks) return localMocks[id]
     if (id === '@provider-presets') return jsonModule(PRESETS)
     if (id === '@event-catalog') return jsonModule(EVENT_CATALOG)
     if (id === '@failure-messages') return jsonModule(FAILURE_MESSAGES)
@@ -43,7 +47,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   }
   // console is passed explicitly so a console.error inside the module reaches the strict setup (#299).
   // URLSearchParams, Event, timers and AbortController stay explicit: setup only fills URL / URLSearchParams (#272).
-  runInSandbox(outputText, { exports, URL, URLSearchParams, Event, console, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout, AbortController })
+  runInSandbox(outputText, { exports, URL, URLSearchParams, Event, console, ...globals, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout, AbortController })
   return exports
 }
 

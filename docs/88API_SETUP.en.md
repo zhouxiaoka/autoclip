@@ -2,7 +2,7 @@
 
 [简体中文](88API_SETUP.md) · [Back to README](../README-EN.md)
 
-88API Token Platform sponsors AutoClip and provides OpenAI-compatible APIs for analysis, cover images and transcription.
+88API Token Platform sponsors AutoClip and provides OpenAI-compatible APIs for analysis and cover images.
 
 ## Register and create an API key
 
@@ -20,8 +20,7 @@ Register through the [AutoClip referral link](https://88api.ai/sign-up?aff=2PIc)
 No default text model or account allowlist is assumed. Use exact model IDs available to your account. Image and audio previews shown without a key are reference catalogs, not proof of account access.
 
 - **Covers** can reuse the AI service key with supported OpenAI Images models such as account-listed `gpt-image-1` or `dall-e-3`. Other image models depend on their actual API and returned capability metadata.
-- **Transcription** supports account-listed `whisper-1` through the OpenAI audio API with timestamps.
-- The platform also offers video generation and TTS; these are not corresponding AutoClip features.
+- The platform also offers video generation and TTS; these are not corresponding AutoClip features. Cloud transcription uses Alibaba Cloud Bailian or OpenAI.
 
 ### Older versions: use the OpenAI-compatible provider
 

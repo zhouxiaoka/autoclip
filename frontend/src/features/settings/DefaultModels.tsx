@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import { Icon } from '../../ui'
@@ -137,10 +137,11 @@ function PurposePanel({ settings, lists, purpose, onChange }: {
   )
 }
 
-export default function DefaultModels({ settings, lists, onChange }: {
+export default function DefaultModels({ settings, lists, onChange, transcriptionNote = null }: {
   settings: ModelSettings
   lists: Record<string, ModelList>
   onChange: (next: ModelSettings) => void
+  transcriptionNote?: ReactNode
 }) {
   useTranslation()
   const [open, setOpen] = useState<PurposeId | null>(null)
@@ -177,6 +178,7 @@ export default function DefaultModels({ settings, lists, onChange }: {
                 <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
                 <span className="ac-purpose-line ac-mono">{lineText(line)}</span>
               </button>
+              {slot.id === 'transcription' && transcriptionNote}
               {warning && open !== slot.id && (
                 <p className="ac-note ac-note--error" role="alert">
                   {warning === 'follow'

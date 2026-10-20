@@ -82,7 +82,11 @@ function renderFirstRun() {
 test('first-run chooser defaults to 88API, opens the register URL, and never pastes the clipboard', () => {
   const { events, links, navigations, store, providers, render } = renderFirstRun()
   const nodes = flatten(render())
-  assert.equal(nodes.find(n => n?.props?.title)?.props.title, '选择 AI 服务商')
+  const dialog = nodes.find(n => n?.props?.title)
+  assert.equal(dialog?.props.title, '选择 AI 服务商')
+  assert.equal(dialog?.props.description, undefined)
+  assert.equal(JSON.stringify(nodes).includes('没有字幕的视频需要转写'), false)
+  assert.equal(JSON.stringify(nodes).includes('AutoClip 通过 AI 服务商理解视频'), false)
   const options = nodes.filter(n => n?.props?.['aria-checked'] !== undefined)
   assert.deepEqual(options.map(n => n.props['aria-checked']), [true, false, false])
   const cta = nodes.filter(n => n?.type === 'button').at(-1)
