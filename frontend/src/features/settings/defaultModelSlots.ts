@@ -231,6 +231,18 @@ export function applyBailianCloudTranscription(
   return { kind: 'selected', settings: applySmartSelection(settings, 'transcription', model, connection.id) }
 }
 
+/** Save patch for 「改用云端转写」 after Bailian setup.
+ * Empty until that connection has a key, so a save that is not this flow keeps local Whisper. */
+export function bailianCloudSavePatch(
+  pending: boolean,
+  settings: ModelSettings,
+  lists: Record<string, ModelList> = {},
+): Partial<ModelSettings> | undefined {
+  if (!pending) return undefined
+  const chosen = applyBailianCloudTranscription(settings, lists)
+  return chosen.kind === 'selected' ? { transcription: chosen.settings.transcription } : undefined
+}
+
 export function applyLocalTranscription(
   settings: ModelSettings, provider: 'whisper_local' | 'sensevoice_local', model: string,
 ): ModelSettings {

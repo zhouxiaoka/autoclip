@@ -281,10 +281,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     }
   }
 
-  /** Validate, persist, and report the first blocking problem so the caller can scroll to it. */
-  const save = async (): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
+  /** Validate, persist, and report the first blocking problem so the caller can scroll to it.
+   * `patch` is merged first so a click can persist a choice made in the same turn as this save. */
+  const save = async (patch?: Partial<ModelSettings>): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
     if (!settings) return { ok: false }
-    const effective = logic.coverFallback(settings, lists)
+    const current = patch ? { ...settings, ...patch } : settings
+    if (patch) setSettings(current)
+    const effective = logic.coverFallback(current, lists)
     const finish = beginExperience('provider_configuration_save', summary(effective))
     const issue = logic.saveIssue(effective)
     if (issue) { finish('blocked', { reason: issue.reason, role: issue.role, error_code: 'validation' }); const text = issueText(issue); setError(text); message.error(text); return { ok: false, issue } }

@@ -15,7 +15,7 @@ import {
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
 import DefaultModels from './DefaultModels'
-import { applyBailianCloudTranscription } from './defaultModelSlots'
+import { applyBailianCloudTranscription, bailianCloudSavePatch } from './defaultModelSlots'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
@@ -112,12 +112,16 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   }, [requestedProvider])
 
   const cloudChoice = useRef(false)
+  const cloudPending = useRef(false)
   useEffect(() => {
     if (requestedProvider !== 'cloud' || !settings || cloudChoice.current) return
     cloudChoice.current = true
     const result = applyBailianCloudTranscription(settings, m.lists)
     if (result.kind === 'selected') m.update({ transcription: result.settings.transcription })
-    else setSelectedId('dashscope')
+    else {
+      cloudPending.current = true
+      setSelectedId('dashscope')
+    }
   }, [requestedProvider, settings])
 
   const [customOpen, setCustomOpen] = useState(false)
@@ -135,7 +139,9 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
 
   if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
-    const result = await m.save()
+    const patch = bailianCloudSavePatch(cloudPending.current, settings, m.lists)
+    const result = await m.save(patch)
+    if (result.ok && patch) cloudPending.current = false
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }

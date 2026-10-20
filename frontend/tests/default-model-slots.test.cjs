@@ -108,6 +108,26 @@ test('switch to cloud transcription sets Bailian 3.1, or opens Bailian when ther
   assert.equal(noKey.kind, 'add')
 })
 
+test('pending cloud transcription is applied once Bailian has a key, and a normal save stays local', () => {
+  const pendingNoKey = settings({
+    connections: [conn('ds', 'dashscope', { api_key: '', has_key: false })],
+  })
+  assert.equal(slots.bailianCloudSavePatch(true, pendingNoKey), undefined)
+  assert.equal(slots.bailianCloudSavePatch(false, settings()), undefined)
+  const ready = slots.bailianCloudSavePatch(true, settings())
+  assert.equal(ready.transcription.provider, 'cloud')
+  assert.equal(ready.transcription.model, 'qwen-audio-3.1-asr-flash')
+  assert.equal(ready.transcription.connection_id, 'ds')
+  assert.equal(ready.transcription.model_source, 'preset')
+  const older = slots.bailianCloudSavePatch(true, settings(), {
+    ds: { source: 'live', models: [
+      { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true, asr_preview: true },
+      { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true, asr_preview: false },
+    ] },
+  })
+  assert.equal(older.transcription.model, 'qwen-audio-3.0-asr-flash')
+})
+
 test('cloud transcription only lists models with a supported, non-preview ASR route', () => {
   const asrLists = {
     ds: { source: 'live', models: [
