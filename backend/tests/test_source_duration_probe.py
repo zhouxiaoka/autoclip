@@ -33,6 +33,8 @@ def test_unreadable_is_its_own_code_with_sanitized_stderr(monkeypatch):
     error = preflight.classify_source(preflight.probe_material(video), srt_available=True, subtitle_route=False)
     assert error.code == 'source_unreadable'
     assert str(error) == media_precheck.UNREADABLE_MESSAGE
+    assert "找不到源文件" in str(error) and "可能已被移动或删除" in str(error)
+    assert "文件已损坏" in str(error)
     assert 'Invalid data found' in error.probe_detail
     assert 'alice' not in error.probe_detail and '我的 视频' not in error.probe_detail
     assert sentry_setup.studio_error_code(error) == 'source_unreadable'

@@ -58,7 +58,9 @@ test('quick import source no longer tells users to confirm a plan',()=>{
 })
 
 const NOTICE = 'YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过，其他平台仍会生成。'
+const NOTICE_ONLY = 'YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过。'
 const TOO_SHORT = '这段素材不足 3 分钟，做不了 YouTube 横屏。'
+const SKIP_OTHERS = 'YouTube 横屏会跳过，其他平台照常生成。'
 const PICK_ANOTHER = '请再选一个其他平台。'
 
 test('youtube landscape does not start until the rule is confirmed', async () => {
@@ -153,12 +155,14 @@ test('a known short file with another platform still confirms and starts', async
     await act(async () => { buttonText(view.host, '文件导入').click() })
     await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
     await chooseFile(window, act, view)
-    assert.equal(view.host.querySelector('[role="note"]').textContent, TOO_SHORT)
+    assert.equal(view.host.querySelector('[role="note"]').textContent, `${TOO_SHORT} ${SKIP_OTHERS}`)
     await act(async () => { buttonText(view.host, '生成成片').click() })
     await flush(act)
     assert.equal(calls.length, 0)
     const dialog = document.querySelector('[role="dialog"]')
     assert.ok(dialog.textContent.includes(TOO_SHORT))
+    assert.ok(dialog.textContent.includes(SKIP_OTHERS))
+    assert.equal(dialog.textContent.includes('其他平台仍会生成'), false)
     assert.equal(dialog.textContent.includes(PICK_ANOTHER), false)
     assert.ok(buttonText(dialog, '确认并开始'))
     await act(async () => { buttonText(dialog, '确认并开始').click() })
@@ -166,6 +170,64 @@ test('a known short file with another platform still confirms and starts', async
     assert.equal(calls.length, 1)
     const platforms = [...calls[0].entries()].filter(([key]) => key === 'platforms').map(([, value]) => value)
     assert.deepEqual(platforms.sort(), ['douyin', 'youtube_long'])
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
+test('a long enough file with only youtube landscape does not mention other platforms', async () => {
+  const React = require('react')
+  const { act } = React
+  const h = React.createElement
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  stubVideoDuration(window, 200)
+  try {
+    const view = await mountImport(window, React, h, calls)
+    await flush(act)
+    await act(async () => { buttonText(view.host, '文件导入').click() })
+    await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
+    await act(async () => { buttonIncluding(view.host, '抖音').click() })
+    await chooseFile(window, act, view)
+    assert.equal(view.host.querySelector('[role="note"]').textContent, NOTICE_ONLY)
+    assert.equal(view.host.textContent.includes('其他平台仍会生成'), false)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.equal(dialog.querySelector('p').textContent, NOTICE_ONLY)
+    assert.equal(dialog.textContent.includes('其他平台仍会生成'), false)
+    assert.ok(buttonText(dialog, '确认并开始'))
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
+test('a long enough file with another platform still says the others will generate', async () => {
+  const React = require('react')
+  const { act } = React
+  const h = React.createElement
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  stubVideoDuration(window, 200)
+  try {
+    const view = await mountImport(window, React, h, calls)
+    await flush(act)
+    await act(async () => { buttonText(view.host, '文件导入').click() })
+    await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
+    await chooseFile(window, act, view)
+    assert.equal(view.host.querySelector('[role="note"]').textContent, NOTICE)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog.textContent.includes('其他平台仍会生成'))
+    assert.equal(dialog.textContent.includes(SKIP_OTHERS), false)
     await view.unmount()
   } finally {
     try { window.happyDOM.abort?.(); window.close() } finally { restore() }
