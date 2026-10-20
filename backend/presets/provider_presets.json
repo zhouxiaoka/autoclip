@@ -76,7 +76,9 @@
       "candidates": {
         "analysis": [],
         "vision": [],
-        "asr": [],
+        "asr": [
+          "whisper-1"
+        ],
         "image": []
       },
       "auth": "api_key"
@@ -467,7 +469,9 @@
           "gpt-image-1",
           "dall-e-3"
         ],
-        "asr": []
+        "asr": [
+          "whisper-1"
+        ]
       },
       "auth": "api_key",
       "locked": true

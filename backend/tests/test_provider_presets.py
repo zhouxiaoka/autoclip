@@ -71,6 +71,8 @@ def test_existing_product_defaults_are_preserved():
     assert provider_presets.candidates_for("dashscope", "analysis")[0] == "qwen3.8-flash"
     dashscope = provider_presets.get_provider("dashscope")
     assert dashscope.candidates["asr"] == ("qwen-audio-3.1-asr-flash", "qwen-audio-3.0-asr-flash")
+    assert provider_presets.get_provider("api88").candidates["asr"] == ("whisper-1",)
+    assert provider_presets.get_provider("openai").candidates["asr"] == ("whisper-1",)
     assert dashscope.docs_url == "https://bailian.console.aliyun.com/"
     assert dashscope.referral == "https://www.aliyun.com/benefit?userCode=qmyj6jch"
     assert dashscope.sponsor is None

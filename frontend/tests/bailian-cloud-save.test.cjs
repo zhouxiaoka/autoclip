@@ -60,7 +60,7 @@ test('the save that follows a pending cloud choice persists Bailian transcriptio
   })
   await render().load()
   await Promise.resolve()
-  const pending = slots.bailianCloudSavePatch(true, render().settings)
+  const pending = slots.cloudTranscriptionSavePatch(true, render().settings)
   assert.equal(render().settings.transcription.provider, 'whisper_local')
   const result = await render().save(pending)
   assert.equal(result.ok, true)

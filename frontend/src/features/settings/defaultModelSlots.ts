@@ -212,34 +212,80 @@ export function applyCoverOff(settings: ModelSettings): ModelSettings {
   return { ...settings, cover_enabled: false }
 }
 
-/** 「改用云端转写」: a configured Bailian connection gets the recommended ASR model.
- * No connection (or no key) opens the Bailian setup instead of inventing one. */
-export function applyBailianCloudTranscription(
-  settings: ModelSettings,
-  lists: Record<string, ModelList> = {},
-): { kind: 'selected'; settings: ModelSettings } | { kind: 'add'; provider: 'dashscope' } {
-  const preset = getProvider('dashscope')
-  const connection = preset ? findCatalogConnection(settings, preset) : undefined
-  const ready = !!connection && endpointProviderReady(connection) && !!(connection.api_key?.trim() || connection.has_key)
-  if (!preset || !connection || !ready) return { kind: 'add', provider: 'dashscope' }
-  const fitting = (lists[connection.id]?.models || []).filter(entry => entry.asr && entry.asr_supported && !entry.asr_preview)
-  const preferred = preset.candidates.asr || []
-  const model = (fitting.length
-    ? preferred.find(id => fitting.some(entry => entry.id === id)) || fitting[0]?.id
-    : preferred[0]) || ''
-  if (!model) return { kind: 'add', provider: 'dashscope' }
-  return { kind: 'selected', settings: applySmartSelection(settings, 'transcription', model, connection.id) }
+/** 「改用云端转写」tries configured accounts in this order. */
+const CLOUD_TRANSCRIPTION_ORDER = ['dashscope', 'api88', 'openai', 'infistar'] as const
+
+export type CloudTranscriptionChoice =
+  | { kind: 'selected'; settings: ModelSettings; provider: string; providerLabel: string; model: string }
+  | { kind: 'add'; provider: 'dashscope' }
+  | { kind: 'wait' }
+  | { kind: 'idle' }
+
+function accountModelList(lists: Record<string, ModelList>, connectionId: string): ModelList | undefined {
+  const list = lists[connectionId]
+  if (!list || list.preview || (list.source !== 'live' && list.source !== 'cache')) return undefined
+  return list
 }
 
-/** Save patch for 「改用云端转写」 after Bailian setup.
- * Empty until that connection has a key, so a save that is not this flow keeps local Whisper. */
-export function bailianCloudSavePatch(
+function usableCloudAsr(list: ModelList, modelId: string): boolean {
+  const entry = list.models.find(model => model.id === modelId)
+  return !!entry?.asr && !!entry.asr_supported && !entry.asr_preview
+}
+
+/** Pick a cloud transcription the account can already run.
+ * Bailian may use its preset before the list arrives. Every other provider waits
+ * until the account list confirms the model, and never invents an id. */
+export function applyCloudTranscription(
+  settings: ModelSettings,
+  lists: Record<string, ModelList> = {},
+): Exclude<CloudTranscriptionChoice, { kind: 'idle' }> {
+  let unresolved = false
+  for (const providerId of CLOUD_TRANSCRIPTION_ORDER) {
+    const preset = getProvider(providerId)
+    const connection = preset ? findCatalogConnection(settings, preset) : undefined
+    const ready = !!connection && endpointProviderReady(connection) && !!(connection.api_key?.trim() || connection.has_key)
+    if (!preset || !connection || !ready) continue
+    const preferred = providerId === 'infistar' ? ['whisper-1'] : (preset.candidates.asr || [])
+    const list = accountModelList(lists, connection.id)
+    if (!list) {
+      if (providerId === 'dashscope' && preferred[0]) {
+        return {
+          kind: 'selected', provider: providerId, providerLabel: preset.short_name || preset.display_name, model: preferred[0],
+          settings: applySmartSelection(settings, 'transcription', preferred[0], connection.id),
+        }
+      }
+      unresolved = true
+      break
+    }
+    const model = preferred.find(id => usableCloudAsr(list, id)) || ''
+    if (!model) continue
+    return {
+      kind: 'selected', provider: providerId, providerLabel: preset.short_name || preset.display_name, model,
+      settings: applySmartSelection(settings, 'transcription', model, connection.id),
+    }
+  }
+  return unresolved ? { kind: 'wait' } : { kind: 'add', provider: 'dashscope' }
+}
+
+/** The settings page only switches when the user opened 「改用云端转写」. */
+export function applyRequestedCloudTranscription(
+  requestedProvider: string,
+  settings: ModelSettings,
+  lists: Record<string, ModelList> = {},
+): CloudTranscriptionChoice {
+  if (requestedProvider !== 'cloud') return { kind: 'idle' }
+  return applyCloudTranscription(settings, lists)
+}
+
+/** Save patch after 「改用云端转写」 opened Bailian setup.
+ * Empty until a configured account can transcribe, so a save outside this flow keeps local Whisper. */
+export function cloudTranscriptionSavePatch(
   pending: boolean,
   settings: ModelSettings,
   lists: Record<string, ModelList> = {},
 ): Partial<ModelSettings> | undefined {
   if (!pending) return undefined
-  const chosen = applyBailianCloudTranscription(settings, lists)
+  const chosen = applyCloudTranscription(settings, lists)
   return chosen.kind === 'selected' ? { transcription: chosen.settings.transcription } : undefined
 }
 

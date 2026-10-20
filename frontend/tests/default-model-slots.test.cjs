@@ -86,44 +86,81 @@ test('untouched visibility keeps recommended Bailian transcription models, inclu
   assert.equal(groups.includes('qwen-audio-preview'), false)
 })
 
-test('switch to cloud transcription sets Bailian 3.1, or opens Bailian when there is no key', () => {
-  const chosen = slots.applyBailianCloudTranscription(settings())
+const whisper = { id: 'whisper-1', asr: true, asr_supported: true, asr_preview: false, analysis: false, image: false }
+const live = models => ({ source: 'live', models })
+
+test('cloud transcription follows Bailian, 88API, OpenAI, then a listed Infistar whisper-1', () => {
+  const chosen = slots.applyCloudTranscription(settings())
   assert.equal(chosen.kind, 'selected')
+  assert.equal(chosen.provider, 'dashscope')
+  assert.equal(chosen.providerLabel, '阿里云百炼')
+  assert.equal(chosen.model, 'qwen-audio-3.1-asr-flash')
   assert.equal(chosen.settings.transcription.provider, 'cloud')
-  assert.equal(chosen.settings.transcription.model, 'qwen-audio-3.1-asr-flash')
   assert.equal(chosen.settings.transcription.connection_id, 'ds')
   assert.equal(chosen.settings.transcription.model_source, 'preset')
-  const onlyOlder = slots.applyBailianCloudTranscription(settings(), {
-    ds: { source: 'live', models: [
+  const onlyOlder = slots.applyCloudTranscription(settings(), {
+    ds: live([
       { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true, asr_preview: true },
       { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true, asr_preview: false },
-    ] },
+    ]),
   })
-  assert.equal(onlyOlder.settings.transcription.model, 'qwen-audio-3.0-asr-flash')
-  const missing = slots.applyBailianCloudTranscription(settings({ connections: [conn('infi', 'infistar')] }))
-  assert.deepEqual(plain(missing), { kind: 'add', provider: 'dashscope' })
-  const noKey = slots.applyBailianCloudTranscription(settings({
+  assert.equal(onlyOlder.model, 'qwen-audio-3.0-asr-flash')
+
+  const only88 = settings({ connections: [conn('a88', 'api88')] })
+  assert.equal(slots.applyCloudTranscription(only88).kind, 'wait')
+  const api88 = slots.applyCloudTranscription(only88, { a88: live([whisper]) })
+  assert.equal(api88.kind, 'selected')
+  assert.equal(api88.provider, 'api88')
+  assert.equal(api88.model, 'whisper-1')
+  assert.equal(api88.settings.transcription.connection_id, 'a88')
+  assert.equal(slots.applyCloudTranscription(only88, { a88: { source: 'catalog', preview: true, models: [whisper] } }).kind, 'wait')
+  const openai = slots.applyCloudTranscription(settings({ connections: [conn('oa', 'openai')] }), { oa: live([whisper]) })
+  assert.equal(openai.provider, 'openai')
+  assert.equal(openai.model, 'whisper-1')
+
+  const both = slots.applyCloudTranscription(settings({
+    connections: [conn('a88', 'api88'), conn('ds', 'dashscope')],
+  }), { a88: live([whisper]), ds: live([{ id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true }]) })
+  assert.equal(both.provider, 'dashscope')
+  assert.equal(both.model, 'qwen-audio-3.1-asr-flash')
+
+  const skipped = slots.applyCloudTranscription(settings({ connections: [conn('infi', 'infistar')] }), {
+    infi: live([{ id: 'gpt-4o-mini', analysis: true, image: false }, { id: 'whisper-1', asr: true, asr_supported: false }]),
+  })
+  assert.deepEqual(plain(skipped), { kind: 'add', provider: 'dashscope' })
+  const listed = slots.applyCloudTranscription(settings({ connections: [conn('infi', 'infistar')] }), { infi: live([whisper]) })
+  assert.equal(listed.provider, 'infistar')
+  assert.equal(listed.model, 'whisper-1')
+
+  const deepseek = slots.applyCloudTranscription(settings({ connections: [conn('deep', 'deepseek')] }))
+  assert.deepEqual(plain(deepseek), { kind: 'add', provider: 'dashscope' })
+  const noKey = slots.applyCloudTranscription(settings({
     connections: [conn('ds', 'dashscope', { api_key: '', has_key: false })],
   }))
   assert.equal(noKey.kind, 'add')
 })
 
-test('pending cloud transcription is applied once Bailian has a key, and a normal save stays local', () => {
+test('local Whisper stays until the user asks to switch, then a later Bailian save can apply it', () => {
+  const state = settings()
+  const before = plain(state.transcription)
+  const idle = slots.applyRequestedCloudTranscription('', state)
+  assert.equal(idle.kind, 'idle')
+  assert.deepEqual(plain(state.transcription), before)
   const pendingNoKey = settings({
     connections: [conn('ds', 'dashscope', { api_key: '', has_key: false })],
   })
-  assert.equal(slots.bailianCloudSavePatch(true, pendingNoKey), undefined)
-  assert.equal(slots.bailianCloudSavePatch(false, settings()), undefined)
-  const ready = slots.bailianCloudSavePatch(true, settings())
+  assert.equal(slots.cloudTranscriptionSavePatch(true, pendingNoKey), undefined)
+  assert.equal(slots.cloudTranscriptionSavePatch(false, settings()), undefined)
+  const ready = slots.cloudTranscriptionSavePatch(true, settings())
   assert.equal(ready.transcription.provider, 'cloud')
   assert.equal(ready.transcription.model, 'qwen-audio-3.1-asr-flash')
   assert.equal(ready.transcription.connection_id, 'ds')
   assert.equal(ready.transcription.model_source, 'preset')
-  const older = slots.bailianCloudSavePatch(true, settings(), {
-    ds: { source: 'live', models: [
+  const older = slots.cloudTranscriptionSavePatch(true, settings(), {
+    ds: live([
       { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true, asr_preview: true },
       { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true, asr_preview: false },
-    ] },
+    ]),
   })
   assert.equal(older.transcription.model, 'qwen-audio-3.0-asr-flash')
 })
