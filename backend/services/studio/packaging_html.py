@@ -393,7 +393,7 @@ async def _bounded_capture(template: str, fill: dict, frames: int, fps: int, cap
     return await _playwright_frames(template, fill, frames, fps)
 
 
-def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None) -> OverlayJob:
+def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None) -> OverlayJob:
     """Capture the overlay, or return a classic result. This does not raise.
 
     ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
@@ -417,7 +417,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
     frames = max(1, int(round(max(0.1, float(duration)) * fps)))
-    fill = build_fill(packaging, duration, fps=fps, safe_area=safe_area)
+    fill = build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes)
     dest = overlay_cache_path(project_id, template, fill)
     _enforce_overlay_cap(dest.parent)
     if _cache_usable(dest):

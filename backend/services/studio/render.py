@@ -239,7 +239,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             overlay_job = packaging_html.prepare_overlay(
                 project_id, html_template, draft.packaging,
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
-                features=features, safe_area=safe_area,
+                features=features, safe_area=safe_area, scenes=draft.scenes,
             )
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise

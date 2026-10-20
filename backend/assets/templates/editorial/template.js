@@ -82,16 +82,11 @@
       sub.innerHTML = "";
       return;
     }
-    var group = Math.floor(state.word / 8) * 8;
-    var words = data.words || [];
-    var html = "";
-    for (var w = group; w < Math.min(words.length, group + 8); w++) {
-      var text = escapeText(words[w].text);
-      if (w === state.word && words[w].emphasis) html += "<em>" + text + "</em> ";
-      else if (w === state.word) html += "<strong>" + text + "</strong> ";
-      else html += "<span class=\"w\">" + text + "</span> ";
-    }
-    sub.innerHTML = html;
+    // One sentence at a time. The caption box is two lines tall, so a group of
+    // sentences stays stuck on the first one.
+    var item = (data.words || [])[state.word];
+    var text = escapeText(item.text);
+    sub.innerHTML = item.emphasis ? "<em>" + text + "</em> " : "<strong>" + text + "</strong> ";
   }
 
   window.setData = function (fill) {
