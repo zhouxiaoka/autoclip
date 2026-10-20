@@ -1918,6 +1918,7 @@
   "一键安装": "Installer maintenant",
   "改用云端转写": "Utiliser la transcription cloud",
   "已改用 {{provider}} 的 {{model}} 做云端转写。音频会上传到云端。": "Transcription cloud : {{provider}}, {{model}}. L'audio est envoyé dans le cloud.",
+  "正在检查可用的云端转写…": "Vérification de la transcription cloud disponible…",
   "需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。": "Installez d’abord la transcription locale : la vidéo n’a pas de sous-titres et le Whisper local choisi n’est pas installé. Installez-le dans Réglages → Transcription ou passez au cloud, puis réimportez.",
   "等待安装完成": "En attente de la fin de l'installation",
   "本地 Whisper 正在安装，装好后再开始。": "Whisper local est en cours d'installation. Lancez une fois terminé.",

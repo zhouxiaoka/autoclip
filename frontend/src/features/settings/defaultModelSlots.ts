@@ -215,16 +215,25 @@ export function applyCoverOff(settings: ModelSettings): ModelSettings {
 /** 「改用云端转写」tries configured accounts in this order. */
 const CLOUD_TRANSCRIPTION_ORDER = ['dashscope', 'api88', 'openai', 'infistar'] as const
 
+/** A list that never arrives should still open Bailian setup. */
+export const CLOUD_TRANSCRIPTION_WAIT_MS = 10_000
+
 export type CloudTranscriptionChoice =
   | { kind: 'selected'; settings: ModelSettings; provider: string; providerLabel: string; model: string }
   | { kind: 'add'; provider: 'dashscope' }
   | { kind: 'wait' }
   | { kind: 'idle' }
 
-function accountModelList(lists: Record<string, ModelList>, connectionId: string): ModelList | undefined {
-  const list = lists[connectionId]
-  if (!list || list.preview || (list.source !== 'live' && list.source !== 'cache')) return undefined
-  return list
+function connectionReadyForCloud(connection: Connection | undefined): connection is Connection {
+  return !!connection && endpointProviderReady(connection) && !!(connection.api_key?.trim() || connection.has_key)
+}
+
+/** Account list is still in flight only when this connection has no entry yet.
+ * A preview or catalog payload is a finished, unusable answer (failed discover). */
+function cloudListStatus(list: ModelList | undefined): 'loading' | 'unusable' | 'ready' {
+  if (!list) return 'loading'
+  if (list.preview || list.source === 'catalog' || (list.source !== 'live' && list.source !== 'cache')) return 'unusable'
+  return 'ready'
 }
 
 function usableCloudAsr(list: ModelList, modelId: string): boolean {
@@ -232,39 +241,63 @@ function usableCloudAsr(list: ModelList, modelId: string): boolean {
   return !!entry?.asr && !!entry.asr_supported && !entry.asr_preview
 }
 
+function selectedCloud(
+  settings: ModelSettings, providerId: string, label: string, model: string, connectionId: string,
+): Extract<CloudTranscriptionChoice, { kind: 'selected' }> {
+  return {
+    kind: 'selected', provider: providerId, providerLabel: label, model,
+    settings: applySmartSelection(settings, 'transcription', model, connectionId),
+  }
+}
+
+/** Ready accounts in provider order. The cloud flow discovers each of these, not only the open row. */
+export function cloudTranscriptionDiscoverTargets(settings: ModelSettings): Connection[] {
+  const targets: Connection[] = []
+  for (const providerId of CLOUD_TRANSCRIPTION_ORDER) {
+    const preset = getProvider(providerId)
+    const connection = preset ? findCatalogConnection(settings, preset) : undefined
+    if (connectionReadyForCloud(connection)) targets.push(connection)
+  }
+  return targets
+}
+
 /** Pick a cloud transcription the account can already run.
- * Bailian may use its preset before the list arrives. Every other provider waits
- * until the account list confirms the model, and never invents an id. */
+ * Bailian may use its preset before any list arrives. Every other provider waits
+ * only while its list is absent. A preview or catalog result is unusable and the
+ * next account is tried. `timedOut` stops waiting and opens Bailian when none fit. */
 export function applyCloudTranscription(
   settings: ModelSettings,
   lists: Record<string, ModelList> = {},
+  options: { timedOut?: boolean } = {},
 ): Exclude<CloudTranscriptionChoice, { kind: 'idle' }> {
   let unresolved = false
   for (const providerId of CLOUD_TRANSCRIPTION_ORDER) {
     const preset = getProvider(providerId)
     const connection = preset ? findCatalogConnection(settings, preset) : undefined
-    const ready = !!connection && endpointProviderReady(connection) && !!(connection.api_key?.trim() || connection.has_key)
-    if (!preset || !connection || !ready) continue
+    if (!preset || !connectionReadyForCloud(connection)) continue
     const preferred = providerId === 'infistar' ? ['whisper-1'] : (preset.candidates.asr || [])
-    const list = accountModelList(lists, connection.id)
-    if (!list) {
+    const list = lists[connection.id]
+    const status = cloudListStatus(list)
+    if (status === 'loading') {
       if (providerId === 'dashscope' && preferred[0]) {
-        return {
-          kind: 'selected', provider: providerId, providerLabel: preset.short_name || preset.display_name, model: preferred[0],
-          settings: applySmartSelection(settings, 'transcription', preferred[0], connection.id),
-        }
+        return selectedCloud(settings, providerId, preset.short_name || preset.display_name, preferred[0], connection.id)
       }
-      unresolved = true
-      break
+      if (!options.timedOut) {
+        unresolved = true
+        break
+      }
+      continue
     }
+    if (status !== 'ready' || !list) continue
     const model = preferred.find(id => usableCloudAsr(list, id)) || ''
     if (!model) continue
-    return {
-      kind: 'selected', provider: providerId, providerLabel: preset.short_name || preset.display_name, model,
-      settings: applySmartSelection(settings, 'transcription', model, connection.id),
-    }
+    return selectedCloud(settings, providerId, preset.short_name || preset.display_name, model, connection.id)
   }
   return unresolved ? { kind: 'wait' } : { kind: 'add', provider: 'dashscope' }
+}
+
+export function cloudTranscriptionWaitExpired(startedAt: number, now: number): boolean {
+  return now - startedAt >= CLOUD_TRANSCRIPTION_WAIT_MS
 }
 
 /** The settings page only switches when the user opened 「改用云端转写」. */
@@ -272,9 +305,10 @@ export function applyRequestedCloudTranscription(
   requestedProvider: string,
   settings: ModelSettings,
   lists: Record<string, ModelList> = {},
+  options: { timedOut?: boolean } = {},
 ): CloudTranscriptionChoice {
   if (requestedProvider !== 'cloud') return { kind: 'idle' }
-  return applyCloudTranscription(settings, lists)
+  return applyCloudTranscription(settings, lists, options)
 }
 
 /** Save patch after 「改用云端转写」 opened Bailian setup.

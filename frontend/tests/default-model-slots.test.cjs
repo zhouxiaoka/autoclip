@@ -113,7 +113,24 @@ test('cloud transcription follows Bailian, 88API, OpenAI, then a listed Infistar
   assert.equal(api88.provider, 'api88')
   assert.equal(api88.model, 'whisper-1')
   assert.equal(api88.settings.transcription.connection_id, 'a88')
-  assert.equal(slots.applyCloudTranscription(only88, { a88: { source: 'catalog', preview: true, models: [whisper] } }).kind, 'wait')
+  const failed88 = { a88: { source: 'catalog', preview: true, models: [whisper] } }
+  assert.equal(slots.applyCloudTranscription(only88, failed88).kind, 'add')
+  assert.equal(slots.applyCloudTranscription(only88, { a88: { source: 'live', preview: true, models: [whisper] } }).kind, 'add')
+  const fellThrough = slots.applyCloudTranscription(settings({
+    connections: [conn('a88', 'api88'), conn('oa', 'openai')],
+  }), { ...failed88, oa: live([whisper]) })
+  assert.equal(fellThrough.provider, 'openai')
+  assert.equal(fellThrough.model, 'whisper-1')
+  assert.equal(slots.applyCloudTranscription(only88, {}, { timedOut: true }).kind, 'add')
+  assert.equal(slots.cloudTranscriptionWaitExpired(1_000, 10_999), false)
+  assert.equal(slots.cloudTranscriptionWaitExpired(1_000, 11_000), true)
+  const targets = slots.cloudTranscriptionDiscoverTargets(settings({
+    connections: [
+      conn('oa', 'openai'), conn('a88', 'api88'), conn('deep', 'deepseek'),
+      conn('infi', 'infistar', { api_key: '', has_key: false }),
+    ],
+  })).map(connection => connection.provider)
+  assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['api88', 'openai'])
   const openai = slots.applyCloudTranscription(settings({ connections: [conn('oa', 'openai')] }), { oa: live([whisper]) })
   assert.equal(openai.provider, 'openai')
   assert.equal(openai.model, 'whisper-1')
