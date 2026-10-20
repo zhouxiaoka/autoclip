@@ -74,8 +74,12 @@
       },
       "kind": "preset",
       "candidates": {
-        "analysis": [],
-        "vision": [],
+        "analysis": [
+          "gemini-3.5-flash"
+        ],
+        "vision": [
+          "gemini-3.5-flash"
+        ],
         "asr": [],
         "image": []
       },
@@ -125,8 +129,14 @@
       },
       "kind": "preset",
       "candidates": {
-        "analysis": [],
-        "vision": [],
+        "analysis": [
+          "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
+        "vision": [
+          "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
         "asr": [],
         "image": []
       },

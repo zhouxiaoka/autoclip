@@ -39,6 +39,31 @@ test('recommendations only select models returned by the service', () => {
   assert.equal(defaultModel('dashscope', [{ id: 'new-image-protocol', image: true }], true), '')
   assert.equal(defaultModel('infistar', [], false), '')
 })
+test('88API and Infistar prefer a listed vision model, then fall back to one the account actually has', () => {
+  const listed = [
+    { id: 'text-only', analysis: true, capability: 'text' },
+    { id: 'gemini-3.8-flash', analysis: true, capability: 'multimodal' },
+    { id: 'gemini-3.5-flash-lite', analysis: true, capability: 'multimodal' },
+    { id: 'gemini-3.5-flash', analysis: true, capability: 'multimodal' },
+  ]
+  assert.equal(defaultModel('api88', listed), 'gemini-3.5-flash')
+  assert.equal(defaultModel('infistar', listed), 'gemini-3.5-flash-lite')
+  const withoutRecommendations = [
+    { id: 'text-only', analysis: true, capability: 'text' },
+    { id: 'account-vision', analysis: true, capability: 'multimodal' },
+    { id: 'later-vision', analysis: true, capability: 'multimodal' },
+  ]
+  assert.equal(defaultModel('api88', withoutRecommendations), 'account-vision')
+  assert.equal(defaultModel('infistar', withoutRecommendations), 'account-vision')
+  assert.equal(defaultModel('api88', [{ id: 'text-only', analysis: true, capability: 'text' }]), 'text-only')
+  const visual = applyModelDefaults({
+    ...blank(),
+    analysis_mode: 'visual',
+    vision: { connection_id: 'main', model: '', capability: 'auto' },
+  }, { id: 'main', provider: 'api88' }, withoutRecommendations, false)
+  assert.equal(visual.analysis.model, 'account-vision')
+  assert.equal(visual.vision.model, 'account-vision')
+})
 test('Infistar recommends newly discovered generation models without a static allowlist', () => {
   assert.equal(defaultModel('infistar', [{ id: 'new-image', image: true }], true), 'new-image')
 })
