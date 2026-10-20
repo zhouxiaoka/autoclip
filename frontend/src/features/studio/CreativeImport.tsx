@@ -59,9 +59,16 @@ function uiLocale() {
 
 const YOUTUBE_LONG_MIN_SEC = 180
 
-function longFormNotice(durationSec: number | null) {
-  if (durationSec != null && durationSec < YOUTUBE_LONG_MIN_SEC) return t('这段素材不足 3 分钟，做不了 YouTube 横屏。')
-  return t('YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过，其他平台仍会生成。')
+function longFormNotice(durationSec: number | null, platforms: string[]) {
+  const others = platforms.some(platform => platform !== 'youtube_long')
+  if (durationSec != null && durationSec < YOUTUBE_LONG_MIN_SEC) {
+    return others
+      ? `${t('这段素材不足 3 分钟，做不了 YouTube 横屏。')} ${t('YouTube 横屏会跳过，其他平台照常生成。')}`
+      : t('这段素材不足 3 分钟，做不了 YouTube 横屏。')
+  }
+  return others
+    ? t('YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过，其他平台仍会生成。')
+    : t('YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过。')
 }
 
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
@@ -344,7 +351,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}
-      {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec)}</p>}
+      {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec, platforms)}</p>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
       <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
@@ -355,6 +362,6 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       <label className="studio-field">{t("已有字幕（选填）")}<input type="file" accept=".srt" aria-label={t("已有字幕")} onChange={e=>setSubtitle(e.target.files?.[0] || null)}/>{subtitle&&<small>{subtitle.name}<button className="studio-link" onClick={()=>setSubtitle(null)}>{t("移除")}</button></small>}</label>
       {source==='link'&&<details className="studio-details"><summary>{t("下载遇到登录限制时")}</summary><label className="studio-field">{t("使用浏览器登录状态")}<select value={browser} onChange={e=>setBrowser(e.target.value)}><option value="">{t("不使用")}</option>{['chrome','edge','safari','firefox'].map(b=><option key={b}>{b}</option>)}</select></label><p className="studio-muted">{t("仅在下载需要登录时选择，不会自动读取浏览器 Cookie。")}</p></details>}
     </Dialog>
-    <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec)} {t('请再选一个其他平台。')}</> : longFormNotice(longGate.durationSec)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />
+    <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec, platforms)} {t('请再选一个其他平台。')}</> : longFormNotice(longGate.durationSec, platforms)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />
   </section>
 }

@@ -108,7 +108,7 @@ test('R22 #212: a whisper_not_installed failure offers the transcription setting
 })
 
 test('R24 #231: an unreadable source is shown at once as a source problem: no spinner, no retry, no settings, pick another file', () => {
-  const UNREADABLE = '无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。'
+  const UNREADABLE = '无法读取这个视频的时长。找不到源文件（可能已被移动或删除），也可能是文件已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。'
   for (const automatic of [true, false]) {
     const buttons = []
     navigations.length = 0

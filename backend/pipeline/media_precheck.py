@@ -117,11 +117,16 @@ def is_no_audio_text(text: str) -> bool:
 
 # ---------------------------------------------------------------- duration (#345) ---
 SOURCE_UNREADABLE = "source_unreadable"
+
+
+def unreadable_message() -> str:
+    """Catalog sentence: a missing file and a damaged file share this code."""
+    from backend.core.failure_codes import sentence
+    return sentence(SOURCE_UNREADABLE)
+
+
 # i18n key in all eight frontend locales: keep it fixed (no interpolation).
-UNREADABLE_MESSAGE = (
-    "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。"
-    "请换一个文件，或先用其他软件转成 MP4 后重新导入。"
-)
+UNREADABLE_MESSAGE = unreadable_message()
 TOO_SHORT_1S_MESSAGE = "视频太短：不到 1 秒，无法制作。请换一段更长的视频。"
 
 
