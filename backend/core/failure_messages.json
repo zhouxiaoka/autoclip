@@ -29,6 +29,7 @@
   "timeline_empty": "没有找到可以成片的片段。",
   "source_blocked": "这个来源暂时无法读取，请换一个视频或稍后重试。",
   "source_too_short": "视频太短，无法制作成片。",
+  "no_complete_version": "所选平台没有可生成的完整内容版本",
   "source_no_audio": "视频没有音轨，无法按语音制作。",
   "source_unreadable": "视频无法读取，请确认文件完整且能播放。",
   "service_restarted": "应用刚重启，这次制作已中断，请重试。",

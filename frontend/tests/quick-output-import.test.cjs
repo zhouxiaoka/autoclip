@@ -59,6 +59,7 @@ test('quick import source no longer tells users to confirm a plan',()=>{
 
 const NOTICE = 'YouTube 横屏至少需要一条 3 分钟或更长的片段。如果素材做不出这样一条，这个版本会被跳过，其他平台仍会生成。'
 const TOO_SHORT = '这段素材不足 3 分钟，做不了 YouTube 横屏。'
+const PICK_ANOTHER = '请再选一个其他平台。'
 
 test('youtube landscape does not start until the rule is confirmed', async () => {
   const React = require('react')
@@ -98,7 +99,7 @@ test('youtube landscape does not start until the rule is confirmed', async () =>
   }
 })
 
-test('a known short file tells the user it cannot make youtube landscape, and still waits for confirm', async () => {
+test('a known short file with only youtube landscape cannot start', async () => {
   const React = require('react')
   const { act } = React
   const h = React.createElement
@@ -106,41 +107,97 @@ test('a known short file tells the user it cannot make youtube landscape, and st
   const window = new Window({ url: 'http://localhost/' })
   const restore = installDom(window)
   const calls = []
-  const orig = window.document.createElement.bind(window.document)
-  window.document.createElement = (tag, options) => {
-    const el = orig(tag, options)
-    if (tag === 'video') {
-      let src = ''
-      Object.defineProperty(el, 'src', {
-        configurable: true,
-        get: () => src,
-        set(value) {
-          src = String(value)
-          Object.defineProperty(el, 'duration', { value: 90 })
-          queueMicrotask(() => { if (typeof el.onloadedmetadata === 'function') el.onloadedmetadata() })
-        },
-      })
-    }
-    return el
-  }
-  window.URL.createObjectURL = () => 'blob:short'
-  window.URL.revokeObjectURL = () => {}
+  stubVideoDuration(window, 90)
   try {
     const view = await mountImport(window, React, h, calls)
     await flush(act)
     await act(async () => { buttonText(view.host, '文件导入').click() })
     await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
-    const input = view.host.querySelector('input[aria-label="视频文件"]')
-    assert.ok(input)
-    const file = new window.File(['x'], 'short.mp4', { type: 'video/mp4' })
-    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
-    await act(async () => { input.dispatchEvent(new window.Event('change', { bubbles: true })) })
-    await flush(act)
+    await act(async () => { buttonIncluding(view.host, '抖音').click() })
+    await chooseFile(window, act, view)
     assert.equal(view.host.querySelector('[role="note"]').textContent, TOO_SHORT)
     await act(async () => { buttonText(view.host, '生成成片').click() })
     await flush(act)
     assert.equal(calls.length, 0)
-    assert.equal(document.querySelector('[role="dialog"] p').textContent, TOO_SHORT)
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog.textContent.includes(TOO_SHORT))
+    assert.ok(dialog.textContent.includes(PICK_ANOTHER))
+    assert.equal(buttonText(dialog, '确认并开始'), undefined)
+    assert.ok(buttonText(dialog, '知道了'))
+    await act(async () => { buttonText(dialog, '知道了').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    assert.equal(document.querySelector('[role="dialog"]'), null)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    assert.equal(buttonText(document.body, '确认并开始'), undefined)
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
+test('a known short file with another platform still confirms and starts', async () => {
+  const React = require('react')
+  const { act } = React
+  const h = React.createElement
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  stubVideoDuration(window, 90)
+  try {
+    const view = await mountImport(window, React, h, calls)
+    await flush(act)
+    await act(async () => { buttonText(view.host, '文件导入').click() })
+    await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
+    await chooseFile(window, act, view)
+    assert.equal(view.host.querySelector('[role="note"]').textContent, TOO_SHORT)
+    await act(async () => { buttonText(view.host, '生成成片').click() })
+    await flush(act)
+    assert.equal(calls.length, 0)
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog.textContent.includes(TOO_SHORT))
+    assert.equal(dialog.textContent.includes(PICK_ANOTHER), false)
+    assert.ok(buttonText(dialog, '确认并开始'))
+    await act(async () => { buttonText(dialog, '确认并开始').click() })
+    await flush(act)
+    assert.equal(calls.length, 1)
+    const platforms = [...calls[0].entries()].filter(([key]) => key === 'platforms').map(([, value]) => value)
+    assert.deepEqual(platforms.sort(), ['douyin', 'youtube_long'])
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
+test('confirm keeps the paste trigger that opened the gate', async () => {
+  const React = require('react')
+  const { act } = React
+  const h = React.createElement
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  try {
+    const view = await mountImport(window, React, h, calls, { flagValue: key => key === 'one_click_paste_start' ? 'autostart' : 'button' })
+    const realTimeout = window.setTimeout.bind(window)
+    window.setTimeout = (fn, ms, ...args) => realTimeout(fn, ms === 3000 ? 0 : ms, ...args)
+    await flush(act)
+    await act(async () => { buttonIncluding(view.host, 'YouTube 视频').click() })
+    const box = view.host.querySelector('textarea')
+    const event = new window.Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: { getData: () => 'https://youtube.com/watch?v=abcdefghijk' } })
+    await act(async () => { box.dispatchEvent(event) })
+    await flush(act)
+    await flush(act)
+    assert.equal(calls.length, 0)
+    assert.ok(document.querySelector('[role="dialog"]'))
+    await act(async () => { buttonText(document.body, '确认并开始').click() })
+    await flush(act)
+    assert.equal(calls.length, 1)
+    assert.equal(view.started[0].trigger, 'paste')
     await view.unmount()
   } finally {
     try { window.happyDOM.abort?.(); window.close() } finally { restore() }
@@ -178,15 +235,47 @@ function buttonIncluding(root, label) {
   return [...root.querySelectorAll('button')].find(node => node.textContent.includes(label))
 }
 
+function stubVideoDuration(window, seconds) {
+  const orig = window.document.createElement.bind(window.document)
+  window.document.createElement = (tag, options) => {
+    const el = orig(tag, options)
+    if (tag === 'video') {
+      let src = ''
+      Object.defineProperty(el, 'src', {
+        configurable: true,
+        get: () => src,
+        set(value) {
+          src = String(value)
+          Object.defineProperty(el, 'duration', { value: seconds })
+          queueMicrotask(() => { if (typeof el.onloadedmetadata === 'function') el.onloadedmetadata() })
+        },
+      })
+    }
+    return el
+  }
+  window.URL.createObjectURL = () => 'blob:short'
+  window.URL.revokeObjectURL = () => {}
+}
+
+async function chooseFile(window, act, view) {
+  const input = view.host.querySelector('input[aria-label="视频文件"]')
+  assert.ok(input)
+  const file = new window.File(['x'], 'short.mp4', { type: 'video/mp4' })
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+  await act(async () => { input.dispatchEvent(new window.Event('change', { bubbles: true })) })
+  await flush(act)
+}
+
 async function flush(act) {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
 
-async function mountImport(window, React, h, calls) {
+async function mountImport(window, React, h, calls, options = {}) {
   const { createRoot } = require('react-dom/client')
   const ts = require('typescript')
   const studioDir = path.resolve(__dirname, '../src/features/studio')
   const ready = { analysis_mode: 'auto', ready: true, checks: { analysis: { ok: true, code: 'ok', repair: 'none' }, transcription: { ok: true, code: 'ok', repair: 'none' }, visual: { ok: true, code: 'ok', repair: 'none' }, ffmpeg: { ok: true, code: 'ok', repair: 'none' } } }
+  const started = []
   const mocks = {
     'react-i18next': { useTranslation() {} },
     '../../i18n': { t: value => value, getLocale: () => 'zh-CN' },
@@ -208,9 +297,9 @@ async function mountImport(window, React, h, calls) {
       errorText: value => String(value),
       errorCode: () => undefined,
     },
-    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
+    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted(payload) { started.push(payload) }, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-long' },
-    '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
+    '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: key => options.flagValue?.(key) ?? 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
     '../../analytics/experience': { trackExperience() {} },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
@@ -253,5 +342,5 @@ async function mountImport(window, React, h, calls) {
   document.body.appendChild(host)
   const root = createRoot(host)
   await React.act(async () => { root.render(h(CreativeImport, { onImported: async () => {} })) })
-  return { host, unmount: async () => { await React.act(async () => { root.unmount() }); host.remove() } }
+  return { host, started, unmount: async () => { await React.act(async () => { root.unmount() }); host.remove() } }
 }

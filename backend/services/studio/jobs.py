@@ -2,7 +2,7 @@ import json
 import logging
 import shutil
 from time import monotonic, sleep
-from backend.core.failure_codes import UserFacingError, user_visible_error
+from backend.core.failure_codes import UserFacingError, sentence, user_visible_error
 from backend.core.sentry_setup import capture_studio_exception, studio_error_code, studio_failure_context
 from copy import deepcopy
 import uuid
@@ -1135,7 +1135,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
     # platform is the whole job. Mixed selections still analyze, then skip only the long version.
     if min_sec and duration is not None and duration < min_sec and _platforms_are_long(platforms):
         _record_long_skips(platforms, (), skipped)
-        raise UserFacingError('所选平台没有可生成的完整内容版本')
+        raise UserFacingError(sentence('no_complete_version'))
     produced = _content_drafts(project_id, plan, video, platforms)
     if isinstance(produced, tuple):
         base_drafts, events, coverage = produced
@@ -1205,7 +1205,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
         })
     _queue_best_first(variants)
     if not variants:
-        raise UserFacingError('所选平台没有可生成的完整内容版本')
+        raise UserFacingError(sentence('no_complete_version'))
     return derived_drafts, variants, events
 
 

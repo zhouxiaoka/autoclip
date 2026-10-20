@@ -153,6 +153,32 @@ def test_auto_start_skips_ineligible_long_output_without_faking_duration(client,
     assert state['generation']['skipped'] == [{'strategy_id': 'youtube_long', 'reason': '素材没有足够完整的长内容'}]
 
 
+def test_youtube_long_only_short_probe_skips_without_calling_the_model(client, source, monkeypatch):
+    from backend.core.failure_codes import sentence
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
+    class ImmediateAuto:
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(intelligence, '_probe', lambda video: {'duration': 90})
+    monkeypatch.setattr(jobs, 'run_content', lambda *args, **kwargs: pytest.fail('model must not run'))
+    monkeypatch.setattr(jobs, 'export', lambda *_, **kwargs: (_ for _ in ()).throw(AssertionError('long form must not render')))
+
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': 'youtube_long'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['generation']['status'] == 'failed'
+    assert state['output_variants'] == []
+    assert state['generation']['error'] == sentence('no_complete_version') == '所选平台没有可生成的完整内容版本'
+    assert state['generation']['skipped'] == [{'strategy_id': 'youtube_long', 'reason': '素材没有足够完整的长内容'}]
+
+
 def _auto(monkeypatch, clips):
     from backend.services.studio import analysis_preferences as ap
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
