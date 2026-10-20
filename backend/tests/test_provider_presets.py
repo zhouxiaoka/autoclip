@@ -69,6 +69,23 @@ def test_existing_product_defaults_are_preserved():
     assert "siliconflow" not in model_catalog.CURATED_MODELS
     assert model_catalog.SILICONFLOW_BASE_URL == "https://api.siliconflow.cn/v1"
     assert provider_presets.candidates_for("dashscope", "analysis")[0] == "qwen3.8-flash"
+    # Gateway defaults stay empty. Recommendations are preference order only.
+    assert cloud_presets.CLOUD_PRESETS["infistar"].default_model == ""
+    for provider, models in {
+        "api88": ("qwen3.8-flash", "qwen3.8-max", "gemini-3.8-flash", "gemini-3.5-flash"),
+        "infistar": (
+            "doubao-seed-2-1-turbo-260628",
+            "doubao-seed-2-1-pro-260628",
+            "qwen3.8-flash",
+            "qwen3.8-max",
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
+        ),
+    }.items():
+        assert provider_presets.candidates_for(provider, "analysis") == models
+        assert provider_presets.candidates_for(provider, "vision") == models
+        assert provider_presets.candidates_for(provider, "image") == ()
+        assert all(model_catalog.supports_vision(model) for model in models)
 
 
 def test_unknown_schema_is_rejected_and_bad_rows_are_skipped(tmp_path):
