@@ -10,7 +10,7 @@ import pytest
 from backend.services.studio import packaging_html as html
 from backend.services.studio import store
 from backend.services.studio.models import Draft, Packaging, Scene
-from backend.services.studio.overlay_fill import build_fill
+from backend.services.studio.overlay_fill import build_fill, paint_fill
 from backend.services.studio.template_choice import blocking_reason, html_candidate_ids, intel_mac_unverified, selected_template
 
 
@@ -75,6 +75,49 @@ def test_issue_367_html_build_fill_honors_captions_switch():
     # dict packaging (cache / older callers) must honor the flag too
     assert build_fill({'cues': [{'start': 0, 'end': 1, 'text': 'x'}], 'captions_enabled': False,
                        'title_lines': ['t']}, 1.0)['words'] == []
+    assert paint_fill(filled_on, on) is filled_on
+    painted = paint_fill(filled_off, off)
+    assert painted['title_lines'] == [] and painted['hook']['text'] == ''
+    assert filled_off['title_lines'] == ['好的投资人']  # stripping the paint does not drop the title
+
+
+def test_editorial_and_street_captions_off_keep_the_classic_title_style():
+    """HTML templates paint no hook/titlebar when captions are off, and burn the classic title instead.
+
+    Editorial and street each run on both portrait packagings: interview (centred, 112px, whole clip)
+    and podcast (centred hook). The title dialogues match captions-on. Caption text does not.
+    """
+    from backend.services.studio import packaging_render as pr
+    scenes = [Scene(id='s', label='s', start=0, end=8)]
+    specs = [
+        ('editorial', dict(template='interview_zh', audience_language='zh', title_lines=['好的投资人', '应该像飞行教练'], title_accent_line=1)),
+        ('street', dict(template='interview_zh', audience_language='zh', title_lines=['街头一问', '七十秒'], title_accent_line=0)),
+        ('editorial', dict(template='podcast_en', audience_language='en', title_lines=['A centred hook'])),
+        ('street', dict(template='podcast_en', audience_language='en', title_lines=['Street question', 'Seventy seconds'])),
+    ]
+    for html_template, body in specs:
+        on = Packaging(version=1, cues=[{'start': 0.4, 'end': 2.0, 'text': '字幕正文'}], **body)
+        off = on.model_copy(update={'captions_enabled': False})
+        filled_on = build_fill(on, 8, template=html_template)
+        filled_off = build_fill(off, 8, template=html_template)
+        assert filled_on['words'] and filled_off['words'] == []
+        assert filled_off['title_lines'] == body['title_lines']
+        assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
+        assert paint_fill(filled_on, on) is filled_on
+        painted = paint_fill(filled_off, off)
+        assert painted['title_lines'] == [] and painted['hook']['text'] == ''
+        assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
+        on_titles = [line for line in pr.scene_ass(on, scenes, 0).splitlines() if line.startswith('Dialogue:') and any(token in line for token in (',Title,', ',TitleAccent,', ',Hook,'))]
+        off_titles = pr.scene_ass(off, scenes, 0, titles_only=True).splitlines()
+        off_titles = [line for line in off_titles if line.startswith('Dialogue:')]
+        assert off_titles == on_titles and off_titles
+        blob = '\n'.join(off_titles)
+        assert '\\an8' in blob and '\\pos(540' in blob and '字幕正文' not in blob
+        assert all(line in body['title_lines'] or any(part in line for part in body['title_lines']) for line in off_titles)
+        if body['template'] == 'interview_zh':
+            assert ',Hook,' not in blob and '\\fs112' in blob and ',0:00:08.00,' in blob
+        else:
+            assert ',Hook,' in blob and '\\fs66' in blob and '\\pos(540,250)' in blob and ',0:00:02.80,' in blob
 
 
 def test_missing_runtime_and_over_budget_downgrade_without_raising(tmp_path, monkeypatch):
@@ -169,6 +212,72 @@ def test_overlay_is_the_second_ffmpeg_input(tmp_path, monkeypatch):
     assert classic['template_render']['template'] == 'classic'
     assert classic['template_render']['requested_template'] == 'editorial'
     assert 'secret' not in str(classic['template_render'])
+
+
+def test_html_captions_off_burns_the_classic_title_and_captions_on_does_not(tmp_path, monkeypatch):
+    if subprocess.run(['ffmpeg', '-version'], capture_output=True).returncode != 0:
+        pytest.skip('ffmpeg unavailable')
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    root = store.directory('p-title')
+    root.mkdir(parents=True)
+    source = _source(root)
+    overlay = tmp_path / 'overlay.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=white@0.3:s=64x64:d=2,format=rgba', '-y', str(overlay)], check=True, capture_output=True)
+
+    def fake_overlay(*args, **_kwargs):
+        name = args[1]
+        return html.OverlayJob(overlay, name, False, 'none', 'none', 'completed', requested_template=name, duration_ms=1)
+
+    monkeypatch.setattr(html, 'prepare_overlay', fake_overlay)
+    from backend.services import video_encoder
+    from backend.services.studio.render import render_draft
+    commands = []
+    captured = {}
+    real = video_encoder.run_with_fallback
+
+    def spy(build, run):
+        command = build('libx264')
+        commands.append(command)
+        graph = command[command.index('-filter_complex') + 1]
+        if "ass='" in graph:
+            start = graph.index("ass='") + len("ass='")
+            path = graph[start:graph.index("'", start)].replace('\\:', ':').replace("\\'", "'")
+            captured['ass'] = Path(path).read_text(encoding='utf-8')
+        return real(build, run)
+
+    monkeypatch.setattr(video_encoder, 'run_with_fallback', spy)
+
+    def graph_of(draft, job_id, template):
+        commands.clear()
+        captured.clear()
+        result = render_draft('p-title', source, draft, job_id, lambda _p: None, html_template=template, features={'pkg_templates_v1': True})
+        assert result['template_render']['downgraded'] is False
+        assert result['template'] == template
+        assert len(commands) == 1
+        return commands[0][commands[0].index('-filter_complex') + 1]
+
+    scenes = [Scene(id='s1', start=0.0, end=0.4)]
+    off = Draft(
+        id='d-off', title='Short', scenes=scenes, subtitles=False, original_audio=False, aspect='original', layout='fit',
+        packaging=Packaging(
+            version=1, template='interview_zh', audience_language='zh', title_lines=['好的投资人'],
+            captions_enabled=False, cues=[{'start': 0.0, 'end': 0.3, 'text': '字幕正文'}],
+        ),
+    )
+    for template in ('editorial', 'street'):
+        drafted = off.model_copy(update={'id': f'd-{template}'})
+        graph = graph_of(drafted, f'job-{template}', template)
+        assert 'ass=' in graph and '[withtitle]' in graph
+        burned = captured['ass']
+        assert '好的投资人' in burned and '字幕正文' not in burned
+        assert '\\an8' in burned and '\\fs112' in burned and '\\pos(540,' in burned
+        assert ',Hook,' not in burned
+
+    on = off.model_copy(update={
+        'id': 'd-on',
+        'packaging': off.packaging.model_copy(update={'captions_enabled': True}),
+    })
+    assert 'ass=' not in graph_of(on, 'job-on', 'editorial')
 
 
 def _source(root: Path) -> Path:

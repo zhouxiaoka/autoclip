@@ -283,6 +283,17 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
                             picture, label = packaging_render.picture_only(draft, scene, w, h)
+                            pack = draft.packaging
+                            # HTML overlay stands in for ASS, and its hook/titlebar is not the classic
+                            # title. Captions-on classic output still uses that title; burn the same
+                            # dialogues under a captions-off overlay (the overlay itself paints no title).
+                            if pack is not None and pack.captions_enabled is False and pack.title_lines:
+                                from backend.services.publish_export import _escape_filter_path
+                                ass_path = folder / f'{i}.title.ass'
+                                ass_path.write_text(packaging_render.scene_ass(pack, draft.scenes, i, titles_only=True), encoding='utf-8')
+                                ass = f"ass='{_escape_filter_path(ass_path)}':fontsdir='{_escape_filter_path(packaging_render.FONT_DIR)}'"
+                                picture += f';[{label}]{ass}[withtitle]'
+                                label = 'withtitle'
                             tail, label = packaging_html.composite_tail(label, 1, w, h, overlay_grade)
                             built = (picture + ';' + tail, label)
                         elif packaged:

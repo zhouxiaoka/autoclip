@@ -281,6 +281,10 @@ def test_re_render_of_an_old_empty_fallback_recovers_source_without_mutating_dra
     assert render.recover_empty_packaging('project', burned, []) is burned
 
 
+def _title_dialogues(text):
+    return [line for line in _dialogues(text) if any(token in line for token in (',Title,', ',TitleAccent,', ',Hook,'))]
+
+
 def test_issue_367_template_captions_can_be_switched_off():
     on = pr.scene_ass(_packaging(), SCENES, 0)
     off = pr.scene_ass(_packaging(captions_enabled=False), SCENES, 0)
@@ -288,6 +292,33 @@ def test_issue_367_template_captions_can_be_switched_off():
     assert '第一句' not in off and 'first line' not in off
     assert '好的投资人' in off  # title stays
     assert _packaging().captions_enabled is True  # saved drafts keep captions
+    assert _title_dialogues(on) == _title_dialogues(off)
+
+
+def test_captions_off_title_style_matches_captions_on_for_classic_templates():
+    """Interview stays a centred full-clip title; podcast stays the centred hook. Captions do not restyle either."""
+    scenes = [Scene(id='s', label='s', start=0, end=8)]
+    interview = _packaging(cues=[{'start': 1.0, 'end': 3.0, 'text': '字幕正文', 'original': 'caption line'}])
+    podcast = _packaging(
+        template='podcast_en', audience_language='en', title_lines=['Great investors', 'teach you to fly'],
+        cues=[{'start': 1.0, 'end': 3.0, 'text': 'Spoken line'}], speakers=[], tags=[],
+    )
+    for on_pack in (interview, podcast):
+        off_pack = on_pack.model_copy(update={'captions_enabled': False})
+        on = pr.scene_ass(on_pack, scenes, 0)
+        off = pr.scene_ass(off_pack, scenes, 0)
+        burned = pr.scene_ass(off_pack, scenes, 0, titles_only=True)
+        assert _title_dialogues(on) == _title_dialogues(off) == _dialogues(burned)
+        assert _title_dialogues(on)
+        assert not any(',Plate' in line or ',Tag,' in line or ',TagPill,' in line for line in _dialogues(burned))
+    interview_title = '\n'.join(_title_dialogues(pr.scene_ass(interview, scenes, 0)))
+    assert '\\an8' in interview_title and '\\pos(540,' in interview_title and '\\fs112' in interview_title
+    assert ',Title,' in interview_title and ',TitleAccent,' in interview_title
+    assert ',0:00:08.00,' in interview_title and ',Hook,' not in interview_title
+    assert '字幕正文' not in pr.scene_ass(interview.model_copy(update={'captions_enabled': False}), scenes, 0)
+    podcast_title = '\n'.join(_title_dialogues(pr.scene_ass(podcast, scenes, 0)))
+    assert ',Hook,' in podcast_title and '\\an8\\fs66' in podcast_title and '\\pos(540,250)' in podcast_title
+    assert ',0:00:02.80,' in podcast_title and 'Spoken line' not in pr.scene_ass(podcast.model_copy(update={'captions_enabled': False}), scenes, 0)
 
 
 def test_issue_367_switched_off_captions_are_not_recovered_from_source(monkeypatch):
