@@ -118,10 +118,10 @@ class ApiKeys(BaseModel):
     """API密钥设置"""
     dashscope: str = Field(default="", description="通义千问API密钥")
     openai: str = Field(default="", description="OpenAI API密钥")
-    minimax: str = Field(default="", description="MiniMax API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
     siliconflow: str = Field(default="", description="SiliconFlow API密钥（已不再作为独立提供商，仅兼容旧配置）")
     deepseek: str = Field(default="", description="DeepSeek 官方 API密钥")
+    minimax: str = Field(default="", description="MiniMax API key")
     kimi: str = Field(default="", description="Kimi / 月之暗面 API密钥")
     glm: str = Field(default="", description="智谱 GLM API密钥")
     grok: str = Field(default="", description="xAI Grok API密钥")
@@ -334,10 +334,10 @@ async def get_settings():
                 api_keys=ApiKeys(
                     dashscope=config.dashscope_api_key,
                     openai=config.openai_api_key,
-                    minimax="",
                     gemini=config.gemini_api_key,
                     siliconflow=config.siliconflow_api_key,
                     deepseek="",
+                    minimax="",
                     kimi="",
                     glm="",
                     grok="",
@@ -770,11 +770,11 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
     keys = settings.api.api_keys
     return {
         "dashscope": keys.dashscope,
-        "minimax": keys.minimax,
         "openai": keys.openai,
         "gemini": keys.gemini,
         "siliconflow": keys.siliconflow,
         "deepseek": keys.deepseek,
+        "minimax": keys.minimax,
         "kimi": keys.kimi,
         "glm": keys.glm,
         "grok": keys.grok,

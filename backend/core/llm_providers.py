@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 class ProviderType(Enum):
     """模型提供商类型"""
     DASHSCOPE = "dashscope"  # 阿里通义千问
-    MINIMAX = "minimax"  # MiniMax OpenAI-compatible API
     OPENAI = "openai"        # OpenAI
     GEMINI = "gemini"        # Google Gemini
     SILICONFLOW = "siliconflow"  # 硅基流动
@@ -528,17 +527,6 @@ class OpenAIProvider(LLMProvider):
         """获取OpenAI可用模型（内置常用名单；兼容接口的型号以服务端 `/models` 为准）"""
         return _catalog_model_infos(ProviderType.OPENAI)
 
-class MiniMaxProvider(OpenAIProvider):
-    """MiniMax OpenAI-compatible provider (global endpoint by default)."""
-
-    def __init__(self, api_key: str, model_name: str = "MiniMax-M3", **kwargs):
-        kwargs.setdefault("base_url", "https://api.minimax.io/v1")
-        super().__init__(api_key, model_name, **kwargs)
-
-    def get_available_models(self) -> List[ModelInfo]:
-        return _catalog_model_infos(ProviderType.MINIMAX)
-
-
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
     
@@ -670,7 +658,6 @@ class LLMProviderFactory:
     _providers = {
         ProviderType.DASHSCOPE: DashScopeProvider,
         ProviderType.OPENAI: OpenAIProvider,
-        ProviderType.MINIMAX: MiniMaxProvider,
         ProviderType.GEMINI: GeminiProvider,
         ProviderType.SILICONFLOW: SiliconFlowProvider,
     }

@@ -31,6 +31,15 @@ CLOUD_PRESETS: Dict[str, CloudPreset] = {
         docs_url="https://platform.deepseek.com/api_keys",
         hint="DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。",
     ),
+    "minimax": CloudPreset(
+        key="minimax",
+        display_name="MiniMax",
+        base_url="https://api.minimax.io/v1",
+        default_model="MiniMax-M3.1-Flash",
+        api_key_setting="minimax_api_key",
+        docs_url="https://platform.minimax.io/user-center/basic-information/interface-key",
+        hint="MiniMax OpenAI-compatible API. Text defaults to M3.1-Flash, with M3 as the second choice.",
+    ),
     "seed": CloudPreset(
         key="seed",
         display_name="Seed（火山方舟）",

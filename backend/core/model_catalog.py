@@ -31,10 +31,6 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "qwen-vl-max",
         "qwen-vl-plus",
     ],
-    "minimax": [
-        "MiniMax-M3",
-        "MiniMax-M2.7",
-    ],
     "openai": [
         "gpt-5.6-sol",
         "gpt-5.6-terra",
@@ -58,6 +54,10 @@ CURATED_MODELS: Dict[str, List[str]] = {
     "deepseek": [
         "deepseek-flash",
         "deepseek-v4-pro",
+    ],
+    "minimax": [
+        "MiniMax-M3.1-Flash",
+        "MiniMax-M3",
     ],
     "seed": [
         "doubao-seed-2-1-lite-260915",
@@ -87,11 +87,11 @@ CURATED_MODELS: Dict[str, List[str]] = {
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
-    "minimax": "MiniMax-M3",
     "dashscope": "qwen-plus",
     "openai": "gpt-5-mini",
     "gemini": "gemini-3.8-flash",
     "deepseek": "deepseek-flash",
+    "minimax": "MiniMax-M3.1-Flash",
     "seed": "doubao-seed-2-1-lite-260915",
     "kimi": "kimi-k2.6",
     "glm": "glm-5.3",
@@ -101,11 +101,11 @@ DEFAULT_MODELS: Dict[str, str] = {
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
-    "minimax": "MiniMax",
     "dashscope": "通义千问",
     "openai": "OpenAI",
     "gemini": "Gemini",
     "deepseek": "DeepSeek",
+    "minimax": "MiniMax",
     "seed": "Seed",
     "kimi": "Kimi",
     "glm": "GLM",

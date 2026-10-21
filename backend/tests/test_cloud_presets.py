@@ -31,7 +31,7 @@ def fake_openai(monkeypatch):
     monkeypatch.setitem(sys.modules, "openai", module)
     _FakeOpenAIClient.created.clear()
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    for name in ("LLM_PROVIDER", "API_MODEL_NAME", "LLM_MODEL", "API_OPENAI_API_KEY", "OPENAI_API_KEY", "API_DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY", "API_INFISTAR_API_KEY", "INFISTAR_API_KEY", "API_API88_API_KEY", "API88_API_KEY"):
+    for name in ("LLM_PROVIDER", "API_MODEL_NAME", "LLM_MODEL", "API_OPENAI_API_KEY", "OPENAI_API_KEY", "API_DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY", "API_MINIMAX_API_KEY", "MINIMAX_API_KEY", "API_INFISTAR_API_KEY", "INFISTAR_API_KEY", "API_API88_API_KEY", "API88_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     from backend.core import llm_manager as manager_module
     monkeypatch.setattr(manager_module.config_sync_service, "is_sync_needed", lambda: False)
@@ -46,6 +46,9 @@ def test_resolve_cloud_presets_use_official_endpoints():
 
     assert resolve_cloud_preset("kimi")[1] == "https://api.moonshot.cn/v1"
     assert resolve_cloud_preset("glm")[2].default_model == "glm-5.3"
+    minimax = resolve_cloud_preset("minimax")
+    assert minimax[:2] == ("openai", "https://api.minimax.io/v1")
+    assert minimax[2].default_model == "MiniMax-M3.1-Flash"
     assert resolve_cloud_preset("xai")[2].key == "grok"
     assert resolve_cloud_preset("doubao")[1] == "https://ark.cn-beijing.volces.com/api/v3"
     assert resolve_cloud_preset("ark")[2].default_model == "doubao-seed-2-1-lite-260915"
@@ -87,9 +90,22 @@ def test_manager_uses_seed_ark_key_not_openai(fake_openai, tmp_path):
     assert fake_openai.created[-1]["base_url"] == "https://ark.cn-beijing.volces.com/api/v3"
 
 
+@pytest.mark.parametrize("model, expected", [("", "MiniMax-M3.1-Flash"), ("MiniMax-M3", "MiniMax-M3"), ("MiniMax-M2.7", "MiniMax-M2.7"), ("custom-model", "custom-model")])
+def test_minimax_settings_keep_explicit_models_and_own_key(fake_openai, tmp_path, model, expected):
+    import json
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"api": {"api_keys": {"minimax": "fixture-minimax", "openai": "fixture-other"},
+                                           "api_provider": "minimax", "api_model": model}}))
+    info = LLMManager(settings_file=settings).get_current_provider_info()
+    assert info["provider"] == "minimax"
+    assert info["model"] == expected
+    assert info["base_url"] == "https://api.minimax.io/v1"
+    assert fake_openai.created[-1]["api_key"] == "fixture-minimax"
+
+
 def test_curated_lists_drop_retired_aliases():
     assert "gpt-4o" not in CLOUD_PRESETS
-    assert set(CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88"}
+    assert set(CLOUD_PRESETS) == {"deepseek", "minimax", "seed", "kimi", "glm", "grok", "infistar", "api88"}
 
 
 def test_infistar_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):
