@@ -12,9 +12,9 @@ Register through the [AutoClip referral link](https://88api.ai/sign-up?aff=2PIc)
 
 ### New versions: select 88API directly
 
-1. Open **Settings → AI Models → AI service** and select **88API** in the recommended group. You can also configure it during first-run setup.
+1. Open **Settings → Providers & models** and select **88API** under **Recommended**. You can also configure it during first-run setup.
 2. Enter your 88API key. The preset base URL is `https://api.88api.ai/v1`. A saved `https://88api.ai/v1` still works and is not rewritten.
-3. Wait for your account's model list and choose an analysis model. For visual analysis, select a multimodal model that accepts images.
+3. Wait for your account's model list and choose an analysis model. To read pictures, pick a vision-capable model under visual understanding.
 4. Test the connection and save. Verify the result with a short video before larger jobs.
 
 No default text model or account allowlist is assumed. Use exact model IDs available to your account. Image and audio previews shown without a key are reference catalogs, not proof of account access.

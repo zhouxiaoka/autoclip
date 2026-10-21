@@ -105,7 +105,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
     # the frozen identity, else the config actually being sent (never re-read settings).
     identity = config.get('identity') or sent_vision_identity(config)
     if not base or not model:
-        raise UserFacingError('当前模型只能处理文字，不能看画面；请在「设置 → AI 分析」换成多模态模型，或改用字幕分析')
+        raise UserFacingError('当前模型只能处理文字，不能看画面。请到「设置 → 模型」换一个能看图的模型，或改用字幕分析。')
     body = {'model': model, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
     # Structured visual observation must finish within the bounded request budget.
     # Other compatible providers must not receive Seed-specific parameters.
@@ -152,7 +152,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 with urllib.request.urlopen(request(body), timeout=config.get('timeout', 180)) as response:
                     result = json.load(response)
         except TimeoutError:
-            raise failure('timeout', '视觉模型响应超时，请在「设置 → 视觉理解」中提高请求超时后重试；原素材已保留') from None
+            raise failure('timeout', '视觉模型响应超时，请稍后重试；原素材已保留。') from None
         except urllib.error.HTTPError as error:
             status = error.code
             detail = ''
