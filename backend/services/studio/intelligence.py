@@ -114,6 +114,20 @@ def vision_call(content, config=None, *, allow_event_list=False):
     cached = remembered_model(provider, base, key, saved_model)
     if cached:
         model = cached
+    from backend.core.model_catalog import known_text_only
+    if known_text_only(model):
+        # The saved id cannot see images. One account-list lookup may substitute a
+        # vision model; otherwise stop before the call so a thinking trace is not
+        # reported as a truncated visual answer.
+        alt = resolve_available_model(
+            base_url=base, api_key=key, provider=provider,
+            failed_model=model, exclude=(saved_model, model),
+        )
+        if alt and not known_text_only(alt):
+            model = alt
+        else:
+            from backend.services.provider_validation import VISION_BLOCK_MESSAGE
+            raise UserFacingError(VISION_BLOCK_MESSAGE)
 
     def build_body(name):
         payload = {'model': name, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
@@ -220,6 +234,9 @@ def vision_call(content, config=None, *, allow_event_list=False):
             try:
                 choice = result['choices'][0]
                 if choice.get('finish_reason') == 'length':
+                    if known_text_only(model):
+                        from backend.services.provider_validation import VISION_BLOCK_MESSAGE
+                        raise UserFacingError(VISION_BLOCK_MESSAGE)
                     raise failure('output_truncated', '视觉模型输出被截断，本次未生成完整结果；请尝试较短素材或其他视觉模型')
                 if choice.get('finish_reason') == 'content_filter' or choice.get('message', {}).get('refusal'):
                     raise failure('refused', '视觉模型未处理这段素材，请检查素材或更换模型')

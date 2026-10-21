@@ -444,11 +444,15 @@ def image_endpoint(connection: Connection) -> dict:
 
 def capability(settings: ModelSettings, assignment: Assignment) -> str | None:
     """The one capability answer for a binding: readiness, the pipeline, save checks and
-    the settings list all use this. Explicit multimodal/text wins; auto asks the provider
-    and catalog metadata first, then (for named providers, not a generic compatible
-    gateway) the model-name rules in supports_vision (gpt-5.x,
-    gpt-6.x, o1/o3/o4-mini ...). auto never turns an unknown name into "text": it stays None,
-    which simply means "not confirmed to see images"."""
+    the settings list all use this. A name classified as text-only stays text even when
+    a live list or an explicit multimodal flag says otherwise. Other explicit
+    multimodal/text choices win; auto asks the provider and catalog metadata first,
+    then (for named providers, not a generic compatible gateway) the model-name rules
+    in supports_vision (gpt-5.x, gpt-6.x, o1/o3/o4-mini ...). auto never turns an
+    unknown name into "text": it stays None, which simply means "not confirmed to see images"."""
+    from backend.core.model_catalog import known_text_only
+    if known_text_only(assignment.model):
+        return 'text'
     if assignment.capability != 'auto':
         return assignment.capability
     from backend.core.model_registry import lookup_capability

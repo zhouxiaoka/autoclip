@@ -70,12 +70,25 @@ def _openai_vision(name: str) -> bool | None:
     return True
 
 
+def known_text_only(model: str) -> bool:
+    """A name this catalog has classified as text-only.
+
+    Provider and models.dev lists sometimes mark the same id as accepting images.
+    That metadata must not override this classification: a visual run would look
+    configured and then fail as a truncated answer.
+    """
+    name = (model or "").strip().lower()
+    if not name or name in {'qwen3.8-max', 'qwen3.8-flash'}:
+        return False
+    return any(marker in name for marker in _TEXT_ONLY_MARKERS)
+
+
 def supports_vision(model: str) -> bool:
     name = (model or "").strip().lower()
     # Explicitly verified official model IDs; these no longer carry a -vl suffix.
     if name in {'qwen3.8-max', 'qwen3.8-flash'}:
         return True
-    if not name or any(m in name for m in _TEXT_ONLY_MARKERS):
+    if not name or known_text_only(name):
         return False
     openai = _openai_vision(name)
     if openai is not None:

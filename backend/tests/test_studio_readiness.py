@@ -235,6 +235,35 @@ def test_auto_capability_resolution(monkeypatch):
     assert pick('gpt-6.1-sol', 'text') == 'text'
 
 
+def test_catalog_image_flag_cannot_make_a_text_only_model_ready_for_visual(monkeypatch):
+    """models.dev lists deepseek-flash as image input. Visual mode must still say it cannot see images."""
+    from backend.core import model_registry as registry
+    from backend.services import ai_model_settings as ai
+    connection = Connection(id='ai', name='DeepSeek', provider='deepseek', api_key='sk-test-key', base_url='https://api.deepseek.com')
+    registry._update('metadata', {'updated_at': 10**10, 'providers': {
+        'deepseek': {'deepseek-flash': {'capability': 'multimodal', 'source': 'https://models.dev/api.json'}},
+    }})
+    registry._update(registry._scope(connection), {
+        'models': [{'id': 'deepseek-flash', 'capability': 'multimodal', 'capability_source': 'provider'}],
+        'source': 'live',
+    })
+    settings = document(
+        connections=[connection], analysis_mode='visual',
+        analysis=Assignment(connection_id='ai', model='deepseek-flash', capability='auto'),
+    )
+    assert registry.lookup_capability(connection, 'deepseek-flash') == 'multimodal'
+    assert ai.capability(settings, settings.analysis) == 'text'
+    assert ai.vision_endpoint(settings) is None
+    visual = report_for(monkeypatch, settings)['checks']['visual']
+    assert visual == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
+    # An explicit multimodal flag on this name does not override the text-only classification.
+    forced = document(
+        connections=[connection], analysis_mode='visual',
+        analysis=Assignment(connection_id='ai', model='deepseek-flash', capability='multimodal'),
+    )
+    assert report_for(monkeypatch, forced)['checks']['visual']['code'] == 'vision_unsupported'
+
+
 def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
     gateway = Connection(id='ai', name='Gateway', provider='compatible', api_key='k', base_url='https://gateway.example/v1')
     settings = document(connections=[gateway], analysis_mode='visual',
