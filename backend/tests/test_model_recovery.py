@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import urllib.error
+from types import SimpleNamespace
 
 import pytest
 
@@ -187,6 +188,303 @@ def test_other_http_errors_do_not_fetch_a_substitute(monkeypatch):
     config = {"base_url": BASE, "model": "qwen-vl-plus", "api_key": SECRET, "timeout": 10}
     with pytest.raises(intelligence.VisionRequestError):
         intelligence.vision_call([], config=config)
+
+
+class _OcrSession:
+    def __init__(self, reply):
+        self.sent = []
+        self.reply = reply
+
+    def post(self, url, headers=None, json=None, timeout=None):
+        self.sent.append((url, json))
+        status, payload = self.reply(json or {})
+        return SimpleNamespace(status_code=status, json=lambda payload=payload: payload, text="")
+
+
+def _models_http(ids, seen):
+    def http(url, *, headers, timeout, trust_env):
+        seen["urls"].append(url)
+        seen["auth"] = headers.get("Authorization")
+        return _ModelsResponse({"data": [{"id": name} for name in ids]})
+    return http
+
+
+NATIVE = "https://dashscope.aliyuncs.com/api/v1"
+COMPAT = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+INTL_API = "https://dashscope-intl.aliyuncs.com/api/v1"
+INTL_COMPAT = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+GONE = {"code": "InvalidParameter", "message": "Model not exist."}
+OCR_OK = {"output": {"choices": [{"message": {"content": [{"text": "标题"}]}}]}}
+CHAT_OK = {"choices": [{"message": {"content": "标题"}}]}
+CHAT_GONE = {"error": {"message": "Model not exist.", "type": "invalid_request_error", "code": "model_not_found"}}
+
+
+def test_bailian_ocr_default_comes_from_the_live_list_not_a_retired_id(caplog):
+    from backend.core.image_providers import default_ocr_model
+
+    seen = {"urls": []}
+    with caplog.at_level(logging.INFO):
+        chosen = default_ocr_model(
+            "dashscope", model="wanx2.1-t2i-turbo", base_url=NATIVE, api_key=SECRET,
+            http=_models_http(["qwen-plus", "qwen3-vl-plus"], seen),
+        )
+    assert chosen == "qwen3-vl-plus"
+    assert seen["urls"] == [COMPAT + "/models"]
+    assert SECRET not in caplog.text
+    assert NATIVE not in caplog.text and COMPAT not in caplog.text
+    assert SECRET in seen["auth"]
+
+
+def test_bailian_catalog_rewrites_official_hosts_and_leaves_a_proxy_alone():
+    from backend.core.image_providers import default_ocr_model
+
+    intl = {"urls": []}
+    assert default_ocr_model(
+        "dashscope", base_url=INTL_API, api_key=SECRET,
+        http=_models_http(["qwen3-vl-plus"], intl),
+    ) == "qwen3-vl-plus"
+    assert intl["urls"] == [INTL_COMPAT + "/models"]
+
+    proxy = {"urls": []}
+    assert default_ocr_model(
+        "dashscope", base_url="https://proxy.example.com/v1", api_key=SECRET,
+        http=_models_http(["custom-vl"], proxy),
+    ) == "custom-vl"
+    assert proxy["urls"] == ["https://proxy.example.com/v1/models"]
+
+
+def test_bailian_ocr_default_is_empty_when_the_list_has_no_vision_model():
+    from backend.core.image_providers import default_ocr_model
+
+    seen = {"urls": []}
+    assert default_ocr_model(
+        "dashscope", api_key=SECRET, http=_models_http(["qwen-plus", "wanx2.1-t2i-turbo"], seen),
+    ) == ""
+    assert seen["urls"] == [COMPAT + "/models"]
+    assert default_ocr_model("openai") == "gpt-4o-mini"
+    from backend.core.image_providers import SEEDREAM_DEFAULT_OCR
+    assert default_ocr_model("seedream") == SEEDREAM_DEFAULT_OCR
+
+
+def test_saved_bailian_ocr_model_retries_once_from_the_account_list(caplog):
+    from backend.core.image_providers import read_image_text
+    from backend.core.model_recovery import remembered_model
+
+    seen = {"urls": []}
+
+    def reply(body):
+        if body.get("model") == "qwen-vl-plus":
+            return 400, GONE
+        return 200, OCR_OK
+
+    session = _OcrSession(reply)
+    with caplog.at_level(logging.INFO):
+        text = read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="qwen-vl-plus",
+            image=b"\xff\xd8\xff", session=session,
+            http=_models_http(["qwen-plus", "qwen-vl-plus", "qwen3-vl-plus", "qwen3.8-flash"], seen),
+        )
+    assert text == "标题"
+    assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus", "qwen3.8-flash"]
+    assert session.sent[0][1].get("parameters") is None
+    assert session.sent[1][1].get("parameters") == {"enable_thinking": False}
+    assert all("/api/v1/services/aigc/multimodal-generation/generation" in url for url, _body in session.sent)
+    assert all("/compatible-mode/" not in url for url, _body in session.sent)
+    assert seen["urls"] == [COMPAT + "/models"]
+    assert SECRET not in caplog.text and COMPAT not in caplog.text
+    assert remembered_model("dashscope", COMPAT, SECRET, "qwen-vl-plus") == "qwen3.8-flash"
+
+    def boom(url, *, headers, timeout, trust_env):
+        raise AssertionError("cached substitute must not list again")
+
+    again = _OcrSession(reply)
+    assert read_image_text(
+        provider="dashscope", api_key=SECRET, base_url=NATIVE, model="qwen-vl-plus",
+        image=b"\xff\xd8\xff", session=again, http=boom,
+    ) == "标题"
+    assert [body["model"] for _url, body in again.sent] == ["qwen3.8-flash"]
+    assert seen["urls"] == [COMPAT + "/models"]
+
+
+def test_compatible_bailian_ocr_recovers_and_the_native_path_reuses_it():
+    from backend.core.image_providers import read_image_text
+
+    seen = {"urls": []}
+
+    def chat(body):
+        if body.get("model") == "qwen-vl-plus":
+            return 404, CHAT_GONE
+        return 200, CHAT_OK
+
+    session = _OcrSession(chat)
+    assert read_image_text(
+        provider="openai", api_key=SECRET, base_url=COMPAT, model="qwen-vl-plus",
+        image=b"\xff\xd8\xff", session=session,
+        http=_models_http(["qwen-vl-plus", "qwen3.8-flash"], seen),
+    ) == "标题"
+    assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus", "qwen3.8-flash"]
+    assert all(url == COMPAT + "/chat/completions" for url, _body in session.sent)
+    assert session.sent[1][1].get("enable_thinking") is False
+
+    def native(body):
+        if body.get("model") == "qwen-vl-plus":
+            return 400, GONE
+        return 200, OCR_OK
+
+    def boom(url, *, headers, timeout, trust_env):
+        raise AssertionError("native cover must reuse the compatible-path substitute")
+
+    follow = _OcrSession(native)
+    assert read_image_text(
+        provider="dashscope", api_key=SECRET, base_url="", model="qwen-vl-plus",
+        image=b"\xff\xd8\xff", session=follow, http=boom,
+    ) == "标题"
+    assert [body["model"] for _url, body in follow.sent] == ["qwen3.8-flash"]
+
+
+def test_empty_bailian_ocr_model_posts_the_listed_vision_model():
+    from backend.core.image_providers import read_image_text
+
+    seen = {"urls": []}
+    session = _OcrSession(lambda body: (200, OCR_OK))
+    assert read_image_text(
+        provider="dashscope", api_key=SECRET, base_url=NATIVE, model="",
+        image=b"\xff\xd8\xff", session=session,
+        http=_models_http(["qwen-plus", "qwen3-vl-plus"], seen),
+    ) == "标题"
+    assert [body["model"] for _url, body in session.sent] == ["qwen3-vl-plus"]
+    assert seen["urls"] == [COMPAT + "/models"]
+    assert "/api/v1/" not in seen["urls"][0]
+
+
+def test_ocr_does_not_retry_when_the_list_has_no_other_vision_model():
+    from backend.core.image_providers import ImageError, read_image_text
+
+    seen = {"urls": []}
+    session = _OcrSession(lambda body: (400, GONE))
+    with pytest.raises(ImageError) as caught:
+        read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="qwen-vl-plus",
+            image=b"\xff\xd8\xff", session=session,
+            http=_models_http(["qwen-plus", "qwen-vl-plus"], seen),
+        )
+    assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus"]
+    assert seen["urls"] == [COMPAT + "/models"]
+    assert SECRET not in str(caught.value) and "aliyuncs.com" not in str(caught.value)
+
+
+def test_ocr_without_a_vision_model_skips_before_calling_bailian():
+    from backend.core.image_providers import ImageError, read_image_text
+
+    def refuse(body):
+        raise AssertionError("posted")
+
+    session = _OcrSession(refuse)
+    with pytest.raises(ImageError, match="跳过校对"):
+        read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="",
+            image=b"\xff\xd8\xff", session=session,
+            http=_models_http(["qwen-plus"], {"urls": []}),
+        )
+
+
+def test_a_second_missing_ocr_model_does_not_retry_again():
+    from backend.core.image_providers import ImageError, read_image_text
+
+    seen = {"urls": []}
+    session = _OcrSession(lambda body: (400, GONE))
+    with pytest.raises(ImageError):
+        read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="qwen-vl-plus",
+            image=b"\xff\xd8\xff", session=session,
+            http=_models_http(["qwen-vl-plus", "qwen3.8-flash"], seen),
+        )
+    assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus", "qwen3.8-flash"]
+    assert seen["urls"] == [COMPAT + "/models"]
+
+
+def test_advertised_retired_id_is_only_an_ordering_hint_and_recovers_once():
+    from backend.core.image_providers import read_image_text
+
+    seen = {"urls": []}
+
+    def reply(body):
+        if body.get("model") == "qwen-vl-plus":
+            return 400, GONE
+        return 200, OCR_OK
+
+    session = _OcrSession(reply)
+    assert read_image_text(
+        provider="dashscope", api_key=SECRET, base_url="", model="",
+        image=b"\xff\xd8\xff", session=session,
+        http=_models_http(["qwen-vl-plus", "qwen3.8-flash", "qwen3-vl-plus"], seen),
+    ) == "标题"
+    assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus", "qwen3.8-flash"]
+    assert seen["urls"] == [COMPAT + "/models", COMPAT + "/models"]
+
+
+def test_other_ocr_errors_do_not_fetch_a_substitute():
+    from backend.core.image_providers import ImageError, read_image_text
+
+    def http(url, *, headers, timeout, trust_env):
+        raise AssertionError("must not list models")
+
+    session = _OcrSession(lambda body: (401, {"error": {"message": "Invalid API-key", "code": "invalid_api_key"}}))
+    with pytest.raises(ImageError):
+        read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="qwen-vl-plus",
+            image=b"\xff\xd8\xff", session=session, http=http,
+        )
+    assert len(session.sent) == 1
+
+
+def test_a_working_ocr_model_is_not_replaced(caplog):
+    from backend.core.image_providers import read_image_text
+
+    def http(url, *, headers, timeout, trust_env):
+        raise AssertionError("must not list models")
+
+    session = _OcrSession(lambda body: (200, OCR_OK))
+    with caplog.at_level(logging.INFO):
+        assert read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="qwen-vl-plus",
+            image=b"\xff\xd8\xff", session=session, http=http,
+        ) == "标题"
+    assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus"]
+    assert SECRET not in caplog.text
+
+
+def test_verify_endpoint_keeps_a_saved_ocr_model_and_resolves_only_the_fallback(monkeypatch):
+    from backend.services import cover
+    from backend.services.cover import CoverConfig
+
+    def boom(url, *, headers, timeout, trust_env):
+        raise AssertionError("saved id must not fetch the list")
+
+    monkeypatch.setattr("backend.core.provider_model_fetch._default_http_get", boom)
+    saved = CoverConfig(provider="dashscope", model="wanx2.1-t2i-turbo", api_key=SECRET, ocr_model="qwen-vl-plus")
+    assert cover.verify_endpoint(saved)["model"] == "qwen-vl-plus"
+    assert saved.ocr_model == "qwen-vl-plus"
+
+    monkeypatch.setattr("backend.services.studio.vision_settings.effective", dict)
+    seen = {"urls": []}
+    monkeypatch.setattr(
+        "backend.core.provider_model_fetch._default_http_get",
+        _models_http(["qwen-plus", "qwen3-vl-plus"], seen),
+    )
+    cfg = CoverConfig(provider="dashscope", model="wanx2.1-t2i-turbo", api_key=SECRET, base_url=NATIVE)
+    endpoint = cover.verify_endpoint(cfg)
+    assert endpoint["model"] == "qwen3-vl-plus"
+    assert endpoint["provider"] == "dashscope"
+    assert cfg.model == "wanx2.1-t2i-turbo" and cfg.ocr_model == ""
+    assert seen["urls"] == [COMPAT + "/models"]
+
+    monkeypatch.setattr(
+        "backend.core.provider_model_fetch._default_http_get",
+        _models_http(["qwen-plus"], {"urls": []}),
+    )
+    with pytest.raises(cover.ImageError, match="跳过校对"):
+        cover.verify_endpoint(cfg)
 
 
 def test_text_only_model_length_is_not_reported_as_truncation(monkeypatch):
