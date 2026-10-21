@@ -24,6 +24,7 @@ import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoSt
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
 import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
+import { SETTINGS_SAVED_EVENT } from './settingsReturn'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import './studio.css'
 import './quick-output.css'
@@ -138,16 +139,23 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const pasteFlag = String(flagValue('one_click_paste_start'))
   const blockOptions = { source, allowLinkWithoutWhisper: allowLink }
   useEffect(() => {
-    let cancel = false
-    studioApi.readiness()
-      .then(value => {
-        if (cancel) return
-        setReadiness(value)
-        trackAsrReadiness(asrReadinessProperties(value, false))
-      })
-      .catch(() => { if (!cancel) setReadiness(null) })
-      .finally(() => { if (!cancel) setSettled(true) })
-    return () => { cancel = true }
+    // The first-run dialog and the settings page save through the same notification.
+    // This page stays mounted across that save, so the mount probe would stay stale until reload.
+    let ticket = 0
+    const load = () => {
+      const current = ++ticket
+      studioApi.readiness()
+        .then(value => {
+          if (current !== ticket) return
+          setReadiness(value)
+          trackAsrReadiness(asrReadinessProperties(value, false))
+        })
+        .catch(() => { if (current === ticket) setReadiness(null) })
+        .finally(() => { if (current === ticket) setSettled(true) })
+    }
+    load()
+    window.addEventListener(SETTINGS_SAVED_EVENT, load)
+    return () => { ticket += 1; window.removeEventListener(SETTINGS_SAVED_EVENT, load) }
   }, [])
   useEffect(() => {
     if (!hidePreferences) return
