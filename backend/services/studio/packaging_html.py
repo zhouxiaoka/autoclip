@@ -401,7 +401,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     browser startup, and the ffv1 encode share ``budget_seconds()``. ``duration_ms``
     is that overlay work, not the rest of the render.
     """
-    from backend.services.studio.overlay_fill import build_fill
+    from backend.services.studio.overlay_fill import build_fill, paint_fill
     from backend.services.studio.template_choice import blocking_reason
 
     started_wall = time.monotonic()
@@ -417,7 +417,10 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
     frames = max(1, int(round(max(0.1, float(duration)) * fps)))
-    fill = build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template)
+    fill = paint_fill(
+        build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template),
+        packaging,
+    )
     dest = overlay_cache_path(project_id, template, fill)
     _enforce_overlay_cap(dest.parent)
     if _cache_usable(dest):

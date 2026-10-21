@@ -176,11 +176,13 @@ def _nameplate(scene: _Scene, at: float, name: str, role: str, y: int) -> None:
         scene.add(5, at, end, 'PlateRole', slide(y + 66, 80) + _esc(role), carry=False)
 
 
-def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None) -> str:
+def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None, *, titles_only: bool = False) -> str:
     """ASS document for scene `index`; times are relative to that scene's start.
 
     Every caption screen is at most two lines (see caption_layout). Styles only change looks and
     motion, never the layout contract: title on top, captions at the window edge, plate lower-left.
+    `titles_only` is the title layer an HTML overlay burns when captions are off, so that overlay's
+    own hook does not replace this title.
     """
     from backend.services.studio.caption_layout import timed_screens, width
     rows = timeline(scenes)
@@ -215,6 +217,9 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         size = min(66, int(920 / max(max(width(line) for line in lines), 1)))
         hook = '\\N'.join(_esc(line) for line in lines)
         out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\fs{size}\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{hook}')
+
+    if titles_only:
+        return _header(look) + '\n'.join(out.lines) + '\n'
 
     for cue in (packaging.cues if packaging.captions_enabled else []):
         start, end = cue.start, cue.end

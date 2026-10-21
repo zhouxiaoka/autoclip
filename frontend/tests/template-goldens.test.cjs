@@ -84,6 +84,35 @@ test('editorial and street match the golden frames at fixed timestamps', () => {
   assert.equal(JSON.stringify(streetAt).includes('不该出现'), false)
 })
 
+test('editorial and street still paint a title when caption words are empty', () => {
+  // The template itself does not tie the title to the caption track. Captions-off
+  // rendering strips these fields before paint and burns the classic title instead.
+
+  for (const template of ['editorial', 'street']) {
+    const page = load(template)
+    const fill = {...fills[template], words: []}
+    page.setData(fill)
+    page.renderFrame(0)
+    assert.equal(page.document.getElementById('sub').innerHTML, '')
+    const hook = page.occupiedRects(0).find(rect => rect.slot === 'hook')
+    assert.ok(hook, template)
+    if (template === 'editorial') {
+      assert.equal(page.document.getElementById('hook').textContent, fills.editorial.hook.text)
+      assert.equal(hook.x, 48)
+      assert.equal(hook.y, 108)
+      assert.equal(hook.w, 624)
+      assert.equal(hook.h, 150)
+    } else {
+      assert.equal(page.document.getElementById('line-a').textContent, '街头一问')
+      assert.equal(page.document.getElementById('line-b').textContent, '七十秒')
+      assert.equal(hook.x, 48)
+      assert.equal(hook.y, 96)
+      assert.equal(hook.w, 624)
+      assert.equal(hook.h, 108)
+    }
+  }
+})
+
 test('editorial and street stay readable over any footage', () => {
   for (const template of ['editorial', 'street']) {
     const css = fs.readFileSync(path.join(root, template, 'style.css'), 'utf8')

@@ -48,6 +48,18 @@ def _clip(template):
     }
 
 
+def test_landscape_title_is_unchanged_when_captions_are_off():
+    scenes = [{'id': 's', 'label': 's', 'start': 0.0, 'end': 4.0}]
+    base = {'id': 'd', 'title': 't', 'hook': '横版标题', 'scenes': scenes}
+    off = jobs._apply_strategy(base, 'youtube_long', output_captions=False)
+    on = jobs._apply_strategy(base, 'youtube_long', output_captions=True)
+    assert off.hook == on.hook == '横版标题'
+    assert off.title_style == on.title_style == 'editorial'
+    assert off.title_template_version == on.title_template_version
+    assert off.subtitles is False and on.subtitles is True
+    assert off.packaging is None and on.packaging is None
+
+
 def test_apply_strategy_off_clears_both_caption_flags_and_leaves_titles():
     scenes = [{'id': 's', 'label': 's', 'start': 0.0, 'end': 4.0}]
     base = {'id': 'd', 'title': 't', 'scenes': scenes}

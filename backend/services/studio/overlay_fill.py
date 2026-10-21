@@ -206,3 +206,18 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         'stickers': [],
         'safe_area': area,
     }
+
+
+def paint_fill(fill: dict, packaging) -> dict:
+    """The fill the HTML template actually paints.
+
+    `build_fill` always keeps `title_lines` and the hook text. With captions off, painting
+    them draws the editorial left hook (about 2.4s) or the street 34px boxes instead of the
+    classic title. Drop only those painted fields; the classic title is burned beside the overlay.
+    Captions-on returns the same dict, so that overlay payload does not change.
+    """
+    if _get(packaging, 'captions_enabled', True) is not False:
+        return fill
+    hook = dict(fill.get('hook') or {})
+    hook['text'] = ''
+    return {**fill, 'hook': hook, 'title_lines': []}
