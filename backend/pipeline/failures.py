@@ -224,7 +224,7 @@ def cloud_transcription_failure(message, error: BaseException | None = None, htt
     code = frozen_error_code(error) or "provider_error"
     failure = AttributedPipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
-        "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
+        "到「设置 → 默认模型 → 语音转字幕」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
         code=code, http_status=http_status if isinstance(http_status, int) else None,
         upstream_error_type=upstream_error_type,
     )
@@ -253,7 +253,7 @@ def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> Pip
         return PipelineFailure(
             stage,
             "云端转写失败：本次未获得可用转写结果。",
-            "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
             code="provider_error",
         )
     return PipelineFailure(

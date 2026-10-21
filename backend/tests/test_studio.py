@@ -336,7 +336,7 @@ def test_export_requires_the_revision_shown_in_editor(client,monkeypatch):
 
 def test_vision_timeout_is_actionable_and_hides_credentials(monkeypatch):
     monkeypatch.setattr(intelligence.urllib.request,'urlopen',lambda *a,**k: (_ for _ in ()).throw(TimeoutError('read timed out private-key')))
-    with pytest.raises(RuntimeError,match='提高请求超时') as error:
+    with pytest.raises(RuntimeError,match='请稍后重试') as error:
         intelligence.vision_call([],config={'base_url':'https://example.test/v1','model':'vision','api_key':'private-key','timeout':10})
     assert 'private-key' not in str(error.value)
 
