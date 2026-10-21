@@ -650,7 +650,7 @@ def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = Non
     call(validate_draft, project_id, draft)
     variant = next((v for v in state.get('output_variants', []) if v['draft_id'] == draft_id), None)
     if variant:
-        return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)))
+        return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)), **jobs.template_export_kwargs(variant))
     return call(jobs.export, project_id, draft)
 
 @router.get('/{project_id}/exports/{job_id}/video')
