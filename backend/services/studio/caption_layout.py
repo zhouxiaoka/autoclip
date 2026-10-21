@@ -9,6 +9,7 @@ Widths count a CJK character as 1 and Latin as 0.55.
 from __future__ import annotations
 
 import re
+from itertools import pairwise
 
 CJK = re.compile(r'[　-〿㐀-鿿＀-￯]')
 CLAUSE = re.compile(r'[^，。！？!?；;、,：:]+[，。！？!?；;、,：:]*')
@@ -73,6 +74,106 @@ def split_screens(text: str, line_limit: float) -> list[str]:
     """Consecutive screens, each at most two lines joined by an ASS hard break."""
     lines = lines_for(text, line_limit)
     return ['\\N'.join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
+
+
+def _clause_spans(text: str) -> list[tuple[int, int]]:
+    """Clause ranges that cover `text` exactly, punctuation kept with the clause before it."""
+    spans = []
+    cursor = 0
+    for match in CLAUSE.finditer(text):
+        if match.start() > cursor:
+            spans.append((cursor, match.start()))
+        if match.end() > match.start():
+            spans.append((match.start(), match.end()))
+        cursor = match.end()
+    if cursor < len(text):
+        spans.append((cursor, len(text)))
+    return spans
+
+
+def _cut_span(text: str, start: int, end: int, limit: float) -> int:
+    """Exclusive end of the next piece inside text[start:end]. The cut keeps every character."""
+    piece = text[start:end]
+    cut = _cut(piece, limit)
+    if cut <= 0:
+        cut = 1
+    if cut < len(piece):
+        return start + cut
+    acc = 0.0
+    for index, ch in enumerate(piece):
+        acc += width(ch)
+        if acc > limit:
+            return start + max(1, index)
+    return end
+
+
+def page_lines(text: str, line_limit: float) -> list[str]:
+    """Lines that join back to `text`. Breaks prefer punctuation, then the same joints as `_cut`."""
+    if not text:
+        return []
+    pieces: list[tuple[int, int]] = []
+    for start, end in _clause_spans(text):
+        while start < end and width(text[start:end]) > line_limit:
+            cut = _cut_span(text, start, end, line_limit)
+            if cut <= start:
+                cut = min(end, start + 1)
+            pieces.append((start, cut))
+            start = cut
+        if start < end:
+            pieces.append((start, end))
+    if not pieces:
+        return [text]
+    lines: list[tuple[int, int]] = []
+    for start, end in pieces:
+        if lines and lines[-1][1] == start and width(text[lines[-1][0]:end]) <= line_limit:
+            lines[-1] = (lines[-1][0], end)
+        else:
+            lines.append((start, end))
+    covered = lines[0][0] == 0 and lines[-1][1] == len(text)
+    covered = covered and all(left[1] == right[0] for left, right in pairwise(lines))
+    if not covered:
+        return _hard_lines(text, line_limit)
+    rendered = [text[start:end] for start, end in lines]
+    return _attach_break_spaces(rendered, line_limit)
+
+
+def _hard_lines(text: str, line_limit: float) -> list[str]:
+    lines = []
+    start = 0
+    while start < len(text):
+        acc = 0.0
+        index = start
+        while index < len(text):
+            step = width(text[index])
+            if index > start and acc + step > line_limit:
+                break
+            acc += step
+            index += 1
+        if index == start:
+            index = start + 1
+        lines.append(text[start:index])
+        start = index
+    return lines
+
+
+def _attach_break_spaces(lines: list[str], line_limit: float) -> list[str]:
+    """Keep a break-point space on the previous line when that line still fits."""
+    out = list(lines)
+    for index in range(1, len(out)):
+        spaces = len(out[index]) - len(out[index].lstrip(' '))
+        if spaces <= 0:
+            continue
+        moved = out[index][:spaces]
+        if width(out[index - 1] + moved) <= line_limit:
+            out[index - 1] += moved
+            out[index] = out[index][spaces:]
+    return [line for line in out if line]
+
+
+def page_screens(text: str, line_limit: float) -> list[str]:
+    """Two-line screens joined by a newline. Dropping the newlines restores `text`."""
+    lines = page_lines(text, line_limit)
+    return ['\n'.join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
 
 
 def wrap_two(text: str, line_limit: float) -> str:

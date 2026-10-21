@@ -1,5 +1,5 @@
 /* 街头快剪叠加层。安全区来自 fill.safe 或 fill.safe_area，不把某一平台写死在坐标里。
-   renderFrame(t) 只由 t 决定。线描贴纸最多两枚。字幕一次只显示当前这一句。 */
+   renderFrame(t) 只由 t 决定。线描贴纸最多两枚。字幕一次只显示当前这一屏。 */
 (function () {
   var data = null;
   var SAFE = {
@@ -105,7 +105,7 @@
       return;
     }
     var item = (data.words || [])[state.word];
-    var text = escapeText(item.text);
+    var text = String(item.text || "").split("\n").map(escapeText).join("<br>");
     sub.innerHTML = item.emphasis ? "<em>" + text + "</em> " : text + " ";
   }
 
