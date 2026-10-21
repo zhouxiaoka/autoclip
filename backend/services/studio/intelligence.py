@@ -115,19 +115,6 @@ def vision_call(content, config=None, *, allow_event_list=False):
     if cached:
         model = cached
     from backend.core.model_catalog import known_text_only
-    if known_text_only(model):
-        # The saved id cannot see images. One account-list lookup may substitute a
-        # vision model; otherwise stop before the call so a thinking trace is not
-        # reported as a truncated visual answer.
-        alt = resolve_available_model(
-            base_url=base, api_key=key, provider=provider,
-            failed_model=model, exclude=(saved_model, model),
-        )
-        if alt and not known_text_only(alt):
-            model = alt
-        else:
-            from backend.services.provider_validation import VISION_BLOCK_MESSAGE
-            raise UserFacingError(VISION_BLOCK_MESSAGE)
 
     def build_body(name):
         payload = {'model': name, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
@@ -248,7 +235,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 if not isinstance(value, dict):
                     raise ValueError('Expected a JSON object')
                 return value
-            except VisionRequestError:
+            except (VisionRequestError, UserFacingError):
                 raise
             except (ValueError, KeyError, IndexError, TypeError, AttributeError):
                 raise failure('invalid_response', '视觉模型未返回完整的结构化结果，请检查模型兼容性后重试') from None

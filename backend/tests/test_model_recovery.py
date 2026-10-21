@@ -189,18 +189,16 @@ def test_other_http_errors_do_not_fetch_a_substitute(monkeypatch):
         intelligence.vision_call([], config=config)
 
 
-def test_text_only_model_does_not_call_the_provider_or_report_truncation(monkeypatch):
+def test_text_only_model_length_is_not_reported_as_truncation(monkeypatch):
     from backend.core.failure_codes import UserFacingError
     from backend.services.provider_validation import VISION_BLOCK_MESSAGE
 
     def urlopen(req, timeout=None):
-        raise AssertionError("text-only visual call must not reach the provider")
+        return io.BytesIO(json.dumps(
+            {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+        ).encode())
 
     monkeypatch.setattr(intelligence.urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(
-        "backend.core.model_recovery.resolve_available_model",
-        lambda **kwargs: None,
-    )
     config = {"base_url": "https://api.deepseek.com", "model": "deepseek-flash", "api_key": SECRET, "timeout": 10,
               "identity": {"provider": "deepseek", "config_source": "preset"}}
     with pytest.raises(UserFacingError) as caught:
@@ -208,24 +206,3 @@ def test_text_only_model_does_not_call_the_provider_or_report_truncation(monkeyp
     assert str(caught.value) == VISION_BLOCK_MESSAGE
     assert "output_truncated" not in str(caught.value)
     assert "截断" not in str(caught.value)
-
-
-def test_text_only_model_uses_a_listed_vision_model_instead_of_failing_truncated(monkeypatch):
-    sent = []
-
-    def urlopen(req, timeout=None):
-        body = json.loads(req.data.decode())
-        sent.append(body["model"])
-        if body["model"] == "deepseek-flash":
-            return io.BytesIO(json.dumps({"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}).encode())
-        return io.BytesIO(json.dumps(OK).encode())
-
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(
-        "backend.core.model_recovery.resolve_available_model",
-        lambda **kwargs: "qwen3-vl-plus" if kwargs["failed_model"] == "deepseek-flash" else None,
-    )
-    config = {"base_url": BASE, "model": "deepseek-flash", "api_key": SECRET, "timeout": 10,
-              "identity": {"provider": "dashscope", "config_source": "preset"}}
-    assert intelligence.vision_call([{"type": "text", "text": "look"}], config=config) == {"events": []}
-    assert sent == ["qwen3-vl-plus"]
