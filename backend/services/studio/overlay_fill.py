@@ -1,12 +1,38 @@
 """Turn packaging fields into the setData payload an HTML template reads.
 
-Sentence cues become one word each. Optional kicker, emphasis, numbers and
-gloss are included when packaging already has them. Stickers are not generated
+Sentence cues become one word each. A long editorial or street cue is paged into
+two-line screens that share its clip interval. Optional kicker, emphasis, numbers
+and gloss are included when packaging already has them. Stickers are not generated
 in this version.
 """
 from __future__ import annotations
 
+from backend.services.studio.caption_layout import page_screens, width
+
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
+# Caption box on the 720px canvas. Editorial insets are the fixed #sub rule in
+# style.css. Street insets are the SAFE map paint() applies over that template.
+_CANVAS = 720
+_EDITORIAL_FONT = 32
+_EDITORIAL_INSET = 48
+_STREET_FONT = 40
+_STREET_INSET = {
+    'xiaohongshu': 48,
+    'douyin': 36,
+    'tiktok': 36,
+    'instagram_reels': 40,
+    'youtube_shorts': 36,
+}
+
+
+def caption_line_limit(template: str, safe_area: str = 'xiaohongshu') -> int | None:
+    """CJK-width capacity of one caption line, or None when the cue is not paged."""
+    if template == 'editorial':
+        return (_CANVAS - 2 * _EDITORIAL_INSET) // _EDITORIAL_FONT
+    if template == 'street':
+        inset = _STREET_INSET.get(safe_area, _STREET_INSET['xiaohongshu'])
+        return (_CANVAS - 2 * inset) // _STREET_FONT
+    return None
 
 
 def _get(packaging, name, default):
@@ -58,7 +84,65 @@ def _clip_frames(out_start: float, out_end: float, total: int, fps: int) -> tupl
     return start, end
 
 
-def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None) -> dict:
+def _frame_counts(span: int, weights: list[float]) -> list[int]:
+    """Integer lengths that sum to `span`. Each screen gets at least one frame."""
+    count = len(weights)
+    extra_budget = span - count
+    total = sum(weights) or float(count)
+    raw = [extra_budget * weight / total for weight in weights]
+    extra = [int(part) for part in raw]
+    left = extra_budget - sum(extra)
+    order = sorted(range(count), key=lambda i: (raw[i] - extra[i], weights[i], -i), reverse=True)
+    for index in order[:left]:
+        extra[index] += 1
+    return [1 + part for part in extra]
+
+
+def _emphasis_on_screen(text: str, phrase: str, start: int, end: int) -> str:
+    """The part of the first matching phrase that lands on text[start:end]."""
+    if not phrase:
+        return ''
+    at = text.find(phrase)
+    if at < 0:
+        return ''
+    phrase_end = at + len(phrase)
+    if end <= at or start >= phrase_end:
+        return ''
+    return text[max(start, at):min(end, phrase_end)]
+
+
+def _append_cue(words: list, text: str, frames: tuple[int, int], phrase: str, limit: int | None) -> None:
+    start, end = frames
+    if not limit:
+        words.append({'text': text, 'start_frame': start, 'end_frame': end, 'emphasis': phrase})
+        return
+    screens = page_screens(text, limit)
+    if ''.join(screen.replace('\n', '') for screen in screens) != text:
+        screens = []
+    if len(screens) <= 1 or end - start < len(screens):
+        # One screen still fits the box, so the template keeps today's CSS wrap.
+        # A cue shorter than one frame per page cannot be split without overlap.
+        words.append({'text': text, 'start_frame': start, 'end_frame': end, 'emphasis': phrase})
+        return
+    cursor = 0
+    pieces = []
+    for screen in screens:
+        length = len(screen.replace('\n', ''))
+        pieces.append((cursor, cursor + length, screen))
+        cursor += length
+    counts = _frame_counts(end - start, [max(width(screen.replace('\n', '')), 1) for screen in screens])
+    frame = start
+    for (lo, hi, screen), count in zip(pieces, counts):
+        words.append({
+            'text': screen,
+            'start_frame': frame,
+            'end_frame': frame + count,
+            'emphasis': _emphasis_on_screen(text, phrase, lo, hi),
+        })
+        frame += count
+
+
+def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
     total = max(1, _frames(duration, fps))
@@ -68,6 +152,8 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     cues = list(_get(packaging, 'cues', []) or []) if captions_on is not False else []
     emphasis = [str(_get(mark, 'text', '')).strip() for mark in (_get(packaging, 'emphasis', []) or [])]
     emphasis = [phrase for phrase in emphasis if phrase]
+    area = safe_area if safe_area in SAFE_AREAS else 'xiaohongshu'
+    limit = caption_line_limit(template or '', area)
     words = []
     for cue in cues:
         text = str(_get(cue, 'text', '')).strip()
@@ -78,7 +164,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
             frames = _clip_frames(out_start, out_end, total, fps)
             if frames is None:
                 continue
-            words.append({'text': text, 'start_frame': frames[0], 'end_frame': frames[1], 'emphasis': phrase})
+            _append_cue(words, text, frames, phrase, limit)
     cards = []
     glosses = list(_get(packaging, 'gloss', []) or [])
     for index, card in enumerate(glosses):
@@ -108,7 +194,6 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
             'steps': 8,
         }
         break
-    area = safe_area if safe_area in SAFE_AREAS else 'xiaohongshu'
     hook = '\n'.join(lines) if lines else str(_get(packaging, 'kicker', '') or '')
     return {
         'fps': fps,

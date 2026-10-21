@@ -82,10 +82,10 @@
       sub.innerHTML = "";
       return;
     }
-    // One sentence at a time. The caption box is two lines tall, so a group of
-    // sentences stays stuck on the first one.
+    // One screen at a time. A long sentence is already paged in the fill; a
+    // newline is the two-line break and must not be collapsed by innerHTML.
     var item = (data.words || [])[state.word];
-    var text = escapeText(item.text);
+    var text = String(item.text || "").split("\n").map(escapeText).join("<br>");
     sub.innerHTML = item.emphasis ? "<em>" + text + "</em> " : "<strong>" + text + "</strong> ";
   }
 

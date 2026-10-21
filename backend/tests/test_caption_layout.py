@@ -32,6 +32,17 @@ def test_a_long_original_under_a_short_caption_never_exceeds_two_lines():
         assert all(cl.width(line) <= 25.5 + 1e-6 for line in orig.split('\\N'))
 
 
+def test_html_pages_keep_every_character_inside_two_lines():
+    """Editorial/street pages reuse the same joints, and the screens join back to the cue."""
+    en = 'and brought exactly the same energy to a great many founders over the years'
+    for text, limit in ((LONG_ZH, 15), (en, 16), ('Paul 以前常说，这会周期性发生。', 15)):
+        screens = cl.page_screens(text, limit)
+        assert ''.join(screen.replace('\n', '') for screen in screens) == text
+        assert all(cl.line_count(screen.replace('\n', '\\N')) <= 2 for screen in screens)
+        for screen in screens:
+            assert all(cl.width(line) <= limit + 1e-6 for line in screen.split('\n'))
+
+
 def test_screens_share_time_by_width_and_keep_the_original_in_step():
     screens = cl.timed_screens(LONG_ZH, 10.0, 16.0, 15, LONG_EN, 25)
     assert len(screens) >= 2
