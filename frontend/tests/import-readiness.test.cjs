@@ -137,6 +137,7 @@ function render(options = {}) {
       downloadModel: async model => { installs.push('model:' + model); return { status: 'downloading', model, message: '' } },
     } },
     './importReadiness': readiness,
+    './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
     './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c,m)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c);installs.push('open:'+c+(m?':'+m:''))},close(){},install:async()=>{installs.push('controller.install')},retry:async()=>{}}]},
     './studio.css': {},
     './quick-output.css': {},
