@@ -93,7 +93,7 @@ _PERMISSION_HINTS = (
     "ip whitelist", "ip 白名单",
 )
 _MODEL_HINTS = (
-    "model_not_found", "does not exist", "no available channel",
+    "model_not_found", "does not exist", "model not exist", "no available channel",
     "没有可用渠道", "模型不存在", "is not found",
 )
 _RATE_HINTS = ("rate limit", "too many requests", "retry later", "throttl", "频率")
