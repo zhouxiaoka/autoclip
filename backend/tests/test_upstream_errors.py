@@ -110,8 +110,10 @@ def test_deepseek_envelopes(status, body, expected):
         (401, {"code": "InvalidApiKey", "message": "Invalid API-key provided.", "request_id": "private-id"}, UpstreamErrorType.INVALID_KEY),
         (429, {"code": "Throttling.RateQuota", "message": "Request rate exceeded"}, UpstreamErrorType.RATE_LIMITED),
         (403, {"code": "AllocationQuota.FreeTierOnly", "message": "Free tier allocation quota exceeded"}, UpstreamErrorType.INSUFFICIENT_QUOTA),
+        (404, {"error": {"message": "Model not exist.", "type": "invalid_request_error", "code": "model_not_found"}}, UpstreamErrorType.MODEL_NOT_FOUND),
+        (400, {"code": "InvalidParameter", "message": "Model not exist."}, UpstreamErrorType.MODEL_NOT_FOUND),
     ],
-    ids=["dashscope-key", "dashscope-rate", "dashscope-quota"],
+    ids=["dashscope-key", "dashscope-rate", "dashscope-quota", "dashscope-404-model", "dashscope-400-model-not-exist"],
 )
 def test_dashscope_native_envelopes(status, body, expected):
     result = classify_upstream_error(status, body)
