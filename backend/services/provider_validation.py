@@ -16,7 +16,7 @@ miss (``vision_unsupported``), not an upstream class: save stays allowed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import is_local_url, uses_max_completion_tokens

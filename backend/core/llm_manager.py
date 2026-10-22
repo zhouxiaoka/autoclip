@@ -477,44 +477,128 @@ class LLMManager:
             logger.error("设置提供商失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None
     
+    def _analysis_endpoint(self, route: _CallRoute) -> tuple[str, str, str]:
+        """Catalog slug, base URL, and key for one text-model substitution. The key is not logged."""
+        from backend.core.model_recovery import analysis_catalog
+        provider = route.provider
+        info = route.info if isinstance(route.info, dict) else {}
+        settings = route.settings if isinstance(route.settings, dict) else {}
+        base = str(
+            info.get("base_url")
+            or settings.get("openai_base_url")
+            or settings.get("dashscope_base_url")
+            or getattr(provider, "base_url", "")
+            or ""
+        )
+        key = str(getattr(provider, "api_key", "") or "")
+        catalog = analysis_catalog(
+            identity=route.identity if isinstance(route.identity, dict) else {},
+            base_url=base,
+            named=(
+                settings.get("connection_provider"),
+                settings.get("cloud_preset"),
+                settings.get("llm_provider_preset"),
+                info.get("provider"),
+            ),
+        )
+        return catalog, base, key
+
+    def _invoke_text(self, route: _CallRoute, prompt: str, input_data: Any, model_override, kwargs) -> tuple[LLMResponse, str]:
+        from backend.core import llm_telemetry
+        from backend.core.llm_degrade import bind_request_model, bound_request_model
+        provider, settings, info = route.provider, route.settings, route.info
+        with bind_request_model(model_override):
+            chosen = bound_request_model(
+                str(info.get("model") or getattr(provider, "model_name", "") or "")
+            )
+            with llm_telemetry.bind_context(
+                provider=str(info.get("provider") or ""),
+                model=chosen,
+                base_url=str(info.get("base_url") or settings.get("openai_base_url") or settings.get("dashscope_base_url") or ""),
+                kind="text",
+                identity=route.identity,
+            ):
+                response = provider.call(prompt, input_data, **kwargs)
+        return response, chosen
+
+    def _retry_missing_text_model(
+        self, error: Exception, route: _CallRoute, prompt: str, input_data: Any, kwargs,
+        *, asked: str, sent: str,
+    ) -> tuple[LLMResponse, str]:
+        """One substitute when the text model is gone. Does not write settings.
+
+        The slot key is the id this call was asked to send (saved settings or
+        ``API_MODEL_NAME``), matching vision recovery. A failed substitute is
+        not remembered. Telemetry stays on the provider call: error codes and
+        the model id that was actually sent.
+        """
+        from backend.core import llm_telemetry
+        from backend.core.llm_degrade import consume_chunk_call
+        from backend.core.model_recovery import remember_model, resolve_available_analysis_model
+        from backend.core.upstream_errors import UpstreamErrorType, classify_exception
+        if classify_exception(error).error_type is not UpstreamErrorType.MODEL_NOT_FOUND:
+            raise error
+        # The outer call already reserved its SDK retries. This resend does too.
+        if not consume_chunk_call():
+            raise error
+        catalog, base, key = self._analysis_endpoint(route)
+        failed = sent or asked
+        alt = resolve_available_analysis_model(
+            base_url=base, api_key=key, provider=catalog,
+            failed_model=failed, exclude=(asked, sent),
+        )
+        if not alt or alt == failed:
+            raise error
+        token = llm_telemetry.set_retry_count(llm_telemetry.current_retry_count() + 1)
+        try:
+            response, chosen = self._invoke_text(route, prompt, input_data, alt, kwargs)
+        except Exception:
+            raise
+        else:
+            remember_model(catalog, base, key, asked, alt)
+            return response, chosen
+        finally:
+            llm_telemetry.reset_retry_count(token)
+
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
         """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。
 
         ``model`` is per-call candidate state. It is not written to
-        ``settings`` or ``current_provider.model_name``.
+        ``settings`` or ``current_provider.model_name``. A retired text model
+        is substituted once from the live list and remembered for this process.
         """
-        from backend.core.llm_degrade import bind_request_model, bound_request_model
+        from backend.core.model_recovery import remembered_model
         from backend.core.project_cancellation import checkpoint
         override = kwargs.pop("model", None)
         route = kwargs.pop("_route", None)
         checkpoint()  # 项目已删除：不再为它花钱（RC156 #12）
         route = route or self._snapshot_call_route()
-        provider, settings, info = route.provider, route.settings, route.info
+        provider, info = route.provider, route.info
         cache_path = _llm_cache_path(prompt, input_data)
         if cache_path is not None and cache_path.exists():
             logger.info("LLM 缓存命中")
             return cache_path.read_text(encoding="utf-8")
         if not provider:
             raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
-        
+
+        saved = str(info.get("model") or getattr(provider, "model_name", "") or "").strip()
+        asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved
+        catalog, base, key = self._analysis_endpoint(route)
+        cached = remembered_model(catalog, base, key, asked) if asked else None
+        if cached:
+            override = cached
+        sent = cached or asked
         try:
-            from backend.core import llm_telemetry
-            with bind_request_model(override):
-                chosen = bound_request_model(
-                    str(info.get('model') or getattr(provider, 'model_name', '') or '')
+            try:
+                response, chosen = self._invoke_text(route, prompt, input_data, override, kwargs)
+            except Exception as error:
+                response, chosen = self._retry_missing_text_model(
+                    error, route, prompt, input_data, kwargs, asked=asked, sent=sent,
                 )
-                with llm_telemetry.bind_context(
-                    provider=str(info.get('provider') or ''),
-                    model=chosen,
-                    base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
-                    kind='text',
-                    identity=route.identity,
-                ):
-                    response = provider.call(prompt, input_data, **kwargs)
             content = response.content
             from backend.core import llm_usage
             llm_usage.record(response.model or chosen, response.usage,
-                             prompt_chars=len(provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
+                             prompt_chars=len(provider._build_full_input(prompt, input_data)), completion_chars=len(content or ""))
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(content, encoding="utf-8")
