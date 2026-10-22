@@ -31,8 +31,8 @@ def cut_filters(silence_input, duration):
 
 
 # The social target the loudness QA checks: -14 LUFS integrated, true peak at or below -1 dBTP.
-# The second pass aims 0.5 dB under the ceiling so the AAC encode's overshoot stays below it.
-LOUDNORM_TARGET = {'I': -14.0, 'TP': -1.5, 'LRA': 11.0}
+# The second pass aims 1 dB under the ceiling so the AAC encode's overshoot stays at or below -1 dBTP.
+LOUDNORM_TARGET = {'I': -14.0, 'TP': -2.0, 'LRA': 11.0}
 _RESAMPLE = 'aresample=48000:async=1:first_pts=0'
 
 
