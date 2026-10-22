@@ -1235,6 +1235,29 @@ def _submit_production(project_id, run_id, plan, *, attempt_id=None):
             mark_project(project_id, 'failed')
 
 
+def template_export_kwargs(variant) -> dict:
+    """Template arguments recorded on an automatic variant.
+
+    Production and editor re-export both pass this dict into `export`. Without it, a
+    magazine or street clip is rendered with the classic interview title.
+    """
+    if not isinstance(variant, dict):
+        return {}
+    from backend.services.studio.overlay_fill import SAFE_AREAS
+    if variant.get('html_template'):
+        strategy = variant.get('strategy_id')
+        return {
+            'html_template': variant['html_template'],
+            'safe_area': strategy if strategy in SAFE_AREAS else 'xiaohongshu',
+        }
+    if variant.get('html_fallback'):
+        kwargs = {'html_fallback': variant['html_fallback']}
+        if variant.get('requested_template') in ('editorial', 'street'):
+            kwargs['requested_template'] = variant['requested_template']
+        return kwargs
+    return {}
+
+
 def _dispatch_pending_variants(project_id):
     """Queue a render for every automatic variant that does not have one yet.
 
@@ -1254,19 +1277,10 @@ def _dispatch_pending_variants(project_id):
             store.change(project_id, lambda data: store.settle_attempt(data, kind='reject', variant_id=expected[0], expected=expected, error='来源草稿不存在', error_code='missing_resource'))
             continue
         try:
-            from backend.services.studio.overlay_fill import SAFE_AREAS
-            export_kwargs = {}
-            if variant.get('html_template'):
-                export_kwargs['html_template'] = variant['html_template']
-                export_kwargs['safe_area'] = variant.get('strategy_id') if variant.get('strategy_id') in SAFE_AREAS else 'xiaohongshu'
-            elif variant.get('html_fallback'):
-                export_kwargs['html_fallback'] = variant['html_fallback']
-                if variant.get('requested_template') in ('editorial', 'street'):
-                    export_kwargs['requested_template'] = variant['requested_template']
             job = export(
                 project_id, Draft.model_validate(raw),
                 brand_outro=bool(variant['branding'].get('outro_enabled', True)),
-                _variant_identity=expected, **export_kwargs,
+                _variant_identity=expected, **template_export_kwargs(variant),
             )
         except Exception as error:
             store.raise_owned_read_error(error)
