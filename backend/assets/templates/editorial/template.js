@@ -144,7 +144,18 @@
       var state = stateName(t, phrase);
       // A moving underline would make every frame unique. Snap it so the hold shows the full bar.
       var sweep = state === " now" ? 100 : 0;
-      html += '<span class="p' + (phrase.acc ? " acc" : "") + state + '" style="--u:' + sweep + '%">' + esc(phrase.s) + "</span>";
+      var text = String(phrase.s || "");
+      var mark = phrase.acc ? String(phrase.hl || "") : "";
+      var at = mark ? text.indexOf(mark) : -1;
+      if (at >= 0) {
+        // Gold serif on the emphasis only: 「AI其实是一块」 stays sans, 「五层蛋糕」 turns gold.
+        var open = '<span class="p' + state + '" style="--u:' + sweep + '%">';
+        if (at > 0) html += open + esc(text.slice(0, at)) + "</span>";
+        html += '<span class="p acc' + state + '" style="--u:' + sweep + '%">' + esc(mark) + "</span>";
+        if (at + mark.length < text.length) html += open + esc(text.slice(at + mark.length)) + "</span>";
+        continue;
+      }
+      html += '<span class="p' + (phrase.acc ? " acc" : "") + state + '" style="--u:' + sweep + '%">' + esc(text) + "</span>";
     }
     return html;
   }

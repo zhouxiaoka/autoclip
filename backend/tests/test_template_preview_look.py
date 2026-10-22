@@ -225,7 +225,10 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     assert 'AI是五层蛋糕，' in frames['0.5']['hook']['html']
     assert '最底层是能源' in frames['0.5']['hook']['html'] and 'ln acc' in frames['0.5']['hook']['html']
     assert frames['3.0']['hook']['html'] == frames['0.5']['hook']['html']
-    assert '五层蛋糕' in frames['0.5']['zh']['html'] and 'acc' in frames['0.5']['zh']['html']
+    # Preview: 「AI其实」 stays sans and only the key words take the gold serif.
+    accented = re.findall(r'class="p acc[^"]*"[^>]*>([^<]*)<', frames['0.5']['zh']['html'])
+    assert accented == ['五层蛋糕'], frames['0.5']['zh']['html']
+    assert re.sub(r'<[^>]+>', '', frames['0.5']['zh']['html']) == 'AI其实是一块五层蛋糕'
     assert 'five' in frames['0.5']['en']['html']
     assert frames['0.5']['kick']['text'] == 'Jensen Huang on the five-layer cake'
     assert frames['0.5']['trk']['text'] == 'FIVE-LAYER CAKE · JENSEN HUANG'
@@ -254,8 +257,9 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     blank = _render('street', paint_fill(build_fill(off_street, 8, template='street'), off_street, 'street'))
     assert blank['0.5']['zh']['html'] == ''
     assert '白领工作会最先没' in blank['0.5']['title']['text']
-    assert blank['0.5']['topic']['text'] == '马斯克：白领工作会最先没'
-    assert '马斯克：马斯克' not in blank['0.5']['topic']['text']
+    # Captions off: no cue says who is talking, so the guest's name is not put on the footage.
+    assert blank['0.5']['topic']['text'] == '白领工作会最先没'
+    assert '马斯克' not in blank['3.0']['topic']['text']
     assert '白领工作会最先没' in blank['3.0']['title']['text']
 
 

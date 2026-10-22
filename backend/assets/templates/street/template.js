@@ -136,10 +136,9 @@
   }
 
   function speakerName(moment) {
-    // A cue that did not name its speaker stays unnamed. The only guest is not stamped on the host.
-    if (moment) return displayName(moment.speaker || "");
-    var guests = (data.speakers || []).filter(function (person) { return person.name && !hostName(person.name); });
-    return guests.length === 1 ? displayName(guests[0].name) : "";
+    // A name needs a cue that names its speaker. With no caption on screen (captions off, or
+    // between cues) nothing says who is talking, and the guest is not stamped on the host.
+    return moment ? displayName(moment.speaker || "") : "";
   }
 
   function labelFor(moment) {

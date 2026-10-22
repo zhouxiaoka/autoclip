@@ -331,7 +331,11 @@ def _agree_speaker(model_name: str, cue_start: float, cue_end: float, transcript
     diarized = _diarized_name(cue_start, cue_end, word_timing, speakers)
     if diarized:
         return _names_agree(model_name, diarized, speakers)
-    turns = _turns(_transcript_rows(transcript))
+    rows = _transcript_rows(transcript)
+    if not any(explicit or text.lstrip().startswith('>>') for _start, _end, text, explicit in rows):
+        # No turn markers: nothing tells the host's lines from the guest's. Show no name.
+        return ''
+    turns = _turns(rows)
     if not turns:
         return ''
     best = None
@@ -1133,7 +1137,9 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                 key = bool(phrase and (phrase in piece or piece in phrase)) or any(
                     word['key'] and word['t1'] > t0 and word['t0'] < t1 for word in group_en
                 )
-                zh.append({'s': piece, 't0': t0, 't1': t1, 'key': key, 'acc': False})
+                # The preview's gold serif sits on the key words, not on the whole line.
+                mark = phrase if phrase and phrase in piece and phrase != piece else ''
+                zh.append({'s': piece, 't0': t0, 't1': t1, 'key': key, 'acc': False, 'hl': mark})
                 words.append({
                     'text': piece,
                     'start_frame': start_frame,

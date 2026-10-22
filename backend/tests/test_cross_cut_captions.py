@@ -139,3 +139,12 @@ def test_cue_that_runs_backwards_across_the_cold_open_still_captions_it():
         assert joined == '人们说我们会有更多时间我完全不同意人生学得越多我越发现还有更多事要做因为每次你学到东西就会打开一扇新门', (template, joined)
         disagree = next(item for item in shown if '不同意' in item[0])
         assert disagree[2] <= 1249.57 - 1245.63 + 0.2, shown
+
+
+def test_no_name_without_turn_markers():
+    # more_time's subtitles have no ">>". The model named the guest on every cue, host lines included.
+    from backend.services.studio.overlay_fill import _agree_speaker
+    speakers = [{'at': 0.0, 'name': '黄仁勋', 'role': '英伟达 CEO'}]
+    rows = [(1242.883, 1244.923, "And so that's the future."), (1245.783, 1247.403, "People say we're going to have more time.")]
+    assert _agree_speaker('黄仁勋', 1242.883, 1247.403, rows, speakers, None) == ''
+    assert _agree_speaker('', 1242.883, 1247.403, rows, speakers, None) == ''
