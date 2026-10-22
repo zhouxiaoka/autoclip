@@ -2,7 +2,7 @@
   "editorial": [
     {
       "t": 0,
-      "hash": "好的投资人像飞行教练||||-1",
+      "hash": "好的投资人像飞行教练||||-1|1.000",
       "rects": [
         {
           "slot": "hook",
@@ -17,7 +17,7 @@
     },
     {
       "t": 0.5,
-      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:100%\">好的</span>|||-1",
+      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:100%\">好的</span>|||-1|1.000",
       "rects": [
         {
           "slot": "hook",
@@ -39,7 +39,7 @@
     },
     {
       "t": 1,
-      "hash": "好的投资人像飞行教练|<span class=\"p acc now\" style=\"--u:100%\">投资人</span>|||0",
+      "hash": "好的投资人像飞行教练|<span class=\"p acc now\" style=\"--u:100%\">投资人</span>|||0|1.000",
       "rects": [
         {
           "slot": "hook",
@@ -61,7 +61,7 @@
     },
     {
       "t": 1.6,
-      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:100%\">像</span>||飞行教练|3",
+      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:25%\">像</span>||飞行教练|3|1.040",
       "rects": [
         {
           "slot": "hook",
@@ -85,12 +85,12 @@
           "h": 72
         }
       ],
-      "sub": "<span class=\"p now\" style=\"--u:100%\">像</span>",
+      "sub": "<span class=\"p now\" style=\"--u:25%\">像</span>",
       "topic": ""
     },
     {
       "t": 2.4,
-      "hash": "好的投资人像飞行教练|||飞行教练|-1",
+      "hash": "好的投资人像飞行教练|||飞行教练|-1|1.000",
       "rects": [
         {
           "slot": "hook",

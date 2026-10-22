@@ -136,14 +136,31 @@
     return "";
   }
 
+  function framesSince(t, t0) {
+    return Math.floor((t - t0) * (data.fps || 30) + 1e-4);
+  }
+
+  function sweepAt(t, phrase) {
+    return Math.min(100, 25 * (framesSince(t, phrase.t0) + 1));
+  }
+
+  // A slight pop as a new screen lands, settled by the fourth frame.
+  var POP = [1.04, 1.025, 1.01];
+
+  function popAt(moment, t) {
+    var k = framesSince(t, moment.t0);
+    return k >= 0 && k < POP.length ? POP[k] : 1;
+  }
+
   function zhHtml(moment, t) {
     var html = "";
     var list = moment.zh || [];
     for (var i = 0; i < list.length; i++) {
       var phrase = list[i];
       var state = stateName(t, phrase);
-      // A moving underline would make every frame unique. Snap it so the hold shows the full bar.
-      var sweep = state === " now" ? 100 : 0;
+      // The preview sweeps the underline in over about 4 frames. Quarter steps keep the
+      // capture to 3 extra frames per phrase; the hold shows the full bar.
+      var sweep = state === " now" ? sweepAt(t, phrase) : 0;
       var text = String(phrase.s || "");
       var mark = phrase.acc ? String(phrase.hl || "") : "";
       var at = mark ? text.indexOf(mark) : -1;
@@ -206,6 +223,7 @@
     var moment = momentAt(t);
     var zh = document.getElementById("zh");
     var en = document.getElementById("en");
+    var pop = 1;
     if (moment) {
       var mark = moment.t0 + ":" + (moment.zh || []).map(function (phrase) { return phrase.s; }).join("/");
       if (seenMoment !== mark) {
@@ -216,11 +234,13 @@
       zh.innerHTML = zhHtml(moment, t);
       en.innerHTML = enHtml(moment, t);
       fit(zh, 52, 40, 2, 960, '500 52px "Noto Sans CJK SC"');
+      pop = popAt(moment, t);
       fit(en, 36, 24, 2, 960, 'italic 36px "Instrument Serif"');
     } else {
       zh.innerHTML = "";
       en.innerHTML = "";
       seenMoment = null;
+      pop = 1;
     }
     var gloss = document.getElementById("gloss");
     var index = Math.max(0, Math.floor(t * data.fps + 1e-4));
@@ -245,8 +265,10 @@
       step = (number.steps || 8) - 1;
     }
     document.getElementById("num").textContent = step < 0 || !number ? "" : String(Math.round(number.value * (step + 1) / (number.steps || 8))) + (number.unit || "");
+    zh.style.transformOrigin = "0 60%";
+    zh.style.transform = pop === 1 ? "" : "scale(" + pop + ")";
     var headline = lines().map(function (line) { return line[0]; }).join("\n");
-    return [headline, zh.innerHTML, en.innerHTML, card, String(step)].join("|");
+    return [headline, zh.innerHTML, en.innerHTML, card, String(step), pop.toFixed(3)].join("|");
   };
 
   window.occupiedRects = function (t) {
