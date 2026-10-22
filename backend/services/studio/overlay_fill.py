@@ -383,18 +383,23 @@ def _guest_names(speakers: list[dict]) -> list[str]:
     return names
 
 
-def _title_caps(speakers: list[dict], title_lines: list[str] | None) -> str:
-    """Caps from the packaging title and the guest, never from a clipped spoken sentence."""
-    title = ' '.join(str(line).strip() for line in (title_lines or []) if str(line).strip())
-    title = ' '.join(title.split())
-    if not title:
+def _guest_credit(speakers: list[dict]) -> str:
+    """GUEST · ROLE, or the guest alone; nothing when the guest is not known."""
+    guests = [person for person in speakers if person.get('name') in _guest_names(speakers)]
+    if len(guests) != 1:
         return ''
+    name = str(guests[0].get('name') or '').strip()
+    role = str(guests[0].get('role') or '').strip()
+    return f'{name} · {role}' if role and role not in name else name
+
+
+def _issue_line(packaging, speakers: list[dict]) -> str:
+    """The model's show and date; without one, the guest's interview, so the footer is a line."""
+    issue = str(_get(packaging, 'issue', '') or '').strip()
+    if issue:
+        return issue
     guests = _guest_names(speakers)
-    named = next((name for name in guests if name in title), '')
-    name = named or (guests[0] if len(guests) == 1 else '')
-    if name and name not in title:
-        return f'{title} · {name}'
-    return title
+    return f'{guests[0]} 访谈' if len(guests) == 1 else ''
 
 
 def _caps_credit(deck: str, speakers: list[dict], title_lines: list[str] | None = None) -> str:
@@ -405,7 +410,8 @@ def _caps_credit(deck: str, speakers: list[dict], title_lines: list[str] | None 
     title and the guest, not that spoken sentence.
     """
     if not deck:
-        return _title_caps(speakers, title_lines)
+        # dad_suit e: the headline printed again as its own byline. The guest is the byline.
+        return _guest_credit(speakers)
     text = ' '.join(deck.split())
     named = re.match(r'^(.+?)\s+on\s+(.+)$', text, flags=re.IGNORECASE)
     if named and re.search(r'[A-Za-z]', named.group(1)):
@@ -1407,7 +1413,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     except (TypeError, ValueError):
         accent = len(lines) - 1 if lines else 0
     hook_lines = [[line, index == accent] for index, line in enumerate(lines[:2])]
-    issue = str(_get(packaging, 'issue', '') or '').strip()
+    issue = _issue_line(packaging, people)
     src_start = 0.0
     if scenes:
         src_start = float(_get(scenes[0], 'start', 0) or 0)

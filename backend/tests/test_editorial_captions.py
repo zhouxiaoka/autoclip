@@ -331,7 +331,8 @@ def test_fallback_emphasis_uses_whole_words_and_an_empty_deck_stays_empty():
     )
     fill = build_fill(spoken, 4, template='editorial')
     assert fill['deck'] == ''
-    assert fill['credit'] == '标题' and fill['hook_trk'] == '标题'
+    # No deck and no known guest: no byline, rather than the headline printed twice.
+    assert fill['credit'] == '' and fill['hook_trk'] == ''
     assert 'literally' not in fill['credit'].lower() and 'hours' not in fill['credit'].lower()
     named = Packaging(
         version=2, template='editorial', audience_language='zh', title_lines=['更闲的工作'],
@@ -339,7 +340,7 @@ def test_fallback_emphasis_uses_whole_words_and_an_empty_deck_stays_empty():
         cues=[{'start': 0, 'end': 4, 'text': '原话', 'original': 'This is literally 24 hours of labor and more'}],
     )
     named_fill = build_fill(named, 4, template='editorial')
-    assert named_fill['deck'] == '' and named_fill['credit'] == '更闲的工作 · 黄仁勋'
+    assert named_fill['deck'] == '' and named_fill['credit'] == '黄仁勋 · 英伟达'
     assert 'literally' not in named_fill['credit'].lower()
 
 
