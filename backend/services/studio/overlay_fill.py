@@ -470,33 +470,50 @@ def _protected_token(token: str, emphasis: str) -> bool:
 
 
 def _wrap_units(text: str, limit: float, emphasis: str = '') -> list[str]:
-    """One line per chunk. Breaks stay off 15小时, DNA里 and the highlight."""
+    """One line per chunk, broken between words: never 增长八|倍, 生|产力 or 每周工|作80小时.
+
+    Fewest lines first; then no line under three characters (一项|预测 left 预测 alone for
+    0.5s), no line opening with 的/了, and lines of similar length.
+    """
     if width(text) <= limit + 1e-6:
         return [text]
-    from backend.services.studio.cjk_segment import tokenize
+    from backend.services.studio.cjk_segment import break_units, crosses_word
     # A highlight wider than the line cannot be one atom; a short one such as 机会 can.
     guard = emphasis if emphasis and width(emphasis) <= limit + 1e-6 else ''
+    units: list[str] = []
+    for unit in break_units(text, guard):
+        if width(unit.strip()) > limit + 1e-6 and not _protected_token(unit, emphasis):
+            units.extend(_hard_slices(unit.strip(), limit))
+        elif unit.strip():
+            units.append(unit)
+    n = len(units)
+    best: list[tuple | None] = [(0, 0.0)] + [None] * n
+    back = [0] * (n + 1)
+    for end in range(1, n + 1):
+        for begin in range(end - 1, -1, -1):
+            chunk = ''.join(units[begin:end]).strip()
+            size = width(chunk)
+            if size > limit + 1e-6 and end - begin > 1:
+                break
+            if best[begin] is None:
+                continue
+            penalty = (limit - size) ** 2 * 0.2
+            if size < 3:
+                penalty += 40
+            if chunk[:1] in _LEAD:
+                penalty += 30
+            if begin and crosses_word(''.join(units[:begin]), ''.join(units[begin:])):
+                penalty += 25
+            lines, cost = best[begin]
+            candidate = (lines + 1, cost + penalty)
+            if best[end] is None or candidate < best[end]:
+                best[end], back[end] = candidate, begin
     chunks: list[str] = []
-    buf = ''
-    for token in tokenize(text, guard):
-        if not token.strip():
-            if buf and width(buf + token) <= limit + 1e-6:
-                buf += token
-            continue
-        if width(token) > limit + 1e-6 and not _protected_token(token, emphasis):
-            if buf.strip():
-                chunks.append(buf.strip())
-                buf = ''
-            chunks.extend(_hard_slices(token, limit))
-            continue
-        if buf and width(buf + token) > limit + 1e-6:
-            chunks.append(buf.strip())
-            buf = token
-        else:
-            buf += token
-    if buf.strip():
-        chunks.append(buf.strip())
-    return [chunk for chunk in chunks if chunk]
+    end = n
+    while end > 0:
+        chunks.append(''.join(units[back[end]:end]).strip())
+        end = back[end]
+    return [chunk for chunk in chunks[::-1] if chunk]
 
 
 def _attach_emphasis(previous: str, piece: str, limit: float) -> list[str]:
@@ -814,7 +831,8 @@ def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[
     """A phrase under about 0.6s joins a neighbour on the same side of a cut.
 
     80小时 and 15小时 were on screen for 0.37s. Join only when the combined line still
-    fits. Merging across a removed gap would replay the line on the next shot.
+    fits; otherwise the phrase borrows time from a touching neighbour. Merging across a
+    removed gap would replay the line on the next shot.
     """
     def fits(left: str, right: str) -> bool:
         if not line_limit:
@@ -822,10 +840,12 @@ def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[
         return width(left + right) <= float(line_limit) + 1e-6
 
     items = list(placed)
+    skipped: set[int] = set()
     guard = 0
-    while guard < 16:
+    while guard < 32:
         guard += 1
-        short = next((index for index, item in enumerate(items) if item[2] - item[1] < _MIN_PHRASE_SEC - 1e-3), None)
+        short = next((index for index, item in enumerate(items)
+                      if index not in skipped and item[2] - item[1] < _MIN_PHRASE_SEC - 1e-3), None)
         if short is None:
             break
         item = items[short]
@@ -834,13 +854,49 @@ def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[
         if prev is not None and prev[2] >= item[1] - 0.05 and fits(prev[0], item[0]):
             items[short - 1] = (prev[0] + item[0], prev[1], max(prev[2], item[2]), prev[3], max(prev[4], item[4]))
             del items[short]
+            skipped.clear()
             continue
         if nxt is not None and item[2] >= nxt[1] - 0.05 and fits(item[0], nxt[0]):
             items[short + 1] = (item[0] + nxt[0], item[1], max(item[2], nxt[2]), item[3], max(item[4], nxt[4]))
             del items[short]
+            skipped.clear()
             continue
-        break
+        if not _borrow_time(items, short):
+            skipped.add(short)
     return items
+
+
+def _borrow_time(items: list[tuple], short: int) -> bool:
+    """A short phrase that cannot share a line takes time from a touching neighbour.
+
+    Both keep at least 0.6s; time never crosses a cut, because only touching phrases trade.
+    """
+    item = items[short]
+    fps = next((it[3] / it[1] for it in items if it[1] > 0 and it[3] > 0), 30.0)
+    need = max(1, round(_MIN_PHRASE_SEC * fps)) - (item[4] - item[3])
+    keep = round(_MIN_PHRASE_SEC * fps)
+    for side in (1, -1):
+        index = short + side
+        if not 0 <= index < len(items):
+            continue
+        other = items[index]
+        touching = other[3] == item[4] if side == 1 else other[4] == item[3]
+        spare = (other[4] - other[3]) - keep
+        if not touching or spare <= 0:
+            continue
+        take = min(need, spare)
+        if side == 1:
+            cut = item[4] + take
+            items[short] = (item[0], item[1], cut / fps, item[3], cut)
+            items[index] = (other[0], cut / fps, other[2], cut, other[4])
+        else:
+            cut = item[3] - take
+            items[short] = (item[0], cut / fps, item[2], cut, item[4])
+            items[index] = (other[0], other[1], cut / fps, other[3], cut)
+        need -= take
+        if need <= 0:
+            return True
+    return False
 
 
 def cue_lines(cue_start: float, cue_end: float, rows: list[tuple], scenes) -> list[tuple] | None:
