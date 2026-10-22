@@ -316,7 +316,8 @@
       seenPhrase = phrase;
       zh.innerHTML = esc(text);
       zh.className = phrase.key ? "k" : "";
-      fit(zh, 84, 64, 4, 1000, '700 84px "Noto Sans CJK SC"');
+      // The preview's 100px; shrink only when the phrase would not fit the 1000px line.
+      fit(zh, 100, 72, 4, 1000, '700 100px "Noto Sans CJK SC"');
       popping = (t - (phrase.t0 || 0)) < 0.12 ? "1" : "0";
       var popped = ease((t - (phrase.t0 || 0)) / 0.12);
       zh.style.transform = "scale(" + (1.18 + (1 - 1.18) * popped).toFixed(3) + ")";

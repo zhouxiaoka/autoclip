@@ -55,8 +55,9 @@ def test_sentence_after_a_cold_open_keeps_its_middle():
     ]
     shown = _on_screen(_fill('street', scenes, cues, rows))
     texts = [text for text, _a, _b in shown]
+    joined = ''.join(texts)
     for phrase in ('人们说我们会有更多时间', '我完全不同意', '这就是未来', '我认为对大多数人来说', '这种智能会解锁更多机会'):
-        assert sum(phrase in text for text in texts) == 1, (phrase, texts)
+        assert joined.count(phrase) == 1, (phrase, texts)
     third_shot = (1249.57 - 1245.63) + (1245.1 - 1227.17)
     most = next(item for item in shown if '大多数人' in item[0])
     assert third_shot - 1e-6 <= most[1] <= third_shot + 1.0, shown

@@ -502,7 +502,7 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                   if (!document.fonts) return;
                   const specs = [
                     ['36px Anton', 'AG'],
-                    ['700 84px "Noto Sans CJK SC"', '中'],
+                    ['700 100px "Noto Sans CJK SC"', '中'],
                     ['500 52px "Noto Sans CJK SC"', '中'],
                     ['900 96px "Noto Serif SC"', '中'],
                     ['italic 44px "Instrument Serif"', 'Ag'],

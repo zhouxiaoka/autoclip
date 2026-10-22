@@ -35,8 +35,9 @@ html, body {
   font-family: "Noto Sans CJK SC", sans-serif;
   font-weight: 700;
   font-variation-settings: "wght" 700;
-  font-size: 84px;
-  line-height: 1.1;
+  font-size: 100px;
+  /* A fixed 110px line box: a shrunk phrase keeps the English line at y 1449. */
+  line-height: 110px;
   color: #fff;
   -webkit-text-stroke: 14px #000;
   paint-order: stroke fill;

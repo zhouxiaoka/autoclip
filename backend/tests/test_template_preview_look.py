@@ -409,7 +409,7 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
     hook_off = next(rect for rect in still['0.5']['rects'] if rect['slot'] == 'hook')
     assert hook_on['y'] == hook_off['y'] == 1192
     street_css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
-    assert 'text-align: center' in street_css and 'font-size: 84px' in street_css and '#D7FF3A' in street_css
+    assert 'text-align: center' in street_css and 'font-size: 100px' in street_css and '#D7FF3A' in street_css
     editorial_css = (TEMPLATES / 'editorial' / 'style.css').read_text(encoding='utf-8')
     assert '#F4EFE6' in editorial_css and '#F2D98C' in editorial_css and '#C7243A' in editorial_css
 
@@ -577,3 +577,49 @@ def test_captions_off_hook_stays_out_of_the_face():
         hook = next(rect for rect in frames[stamp]['rects'] if rect['slot'] == 'hook')
         assert hook['y'] >= ezone[1]
         assert all(not _hits_zone(rect, ezone) for rect in frames[stamp]['rects'])
+
+
+def _bright_runs(rows, top, bottom, left=30, right=1050):
+    """Row runs in [top, bottom) holding caption fill (white or lime), with their x extent."""
+    runs, current = [], None
+    for y in range(top, bottom):
+        row = rows[y]
+        xs = [x // 3 for x in range(left * 3, right * 3, 3) if row[x + 1] > 200 and row[x] + row[x + 1] + row[x + 2] > 520]
+        if len(xs) >= 3:
+            if current and current[1] == y - 1:
+                current[1] = y
+                current[2], current[3] = min(current[2], xs[0]), max(current[3], xs[-1])
+            else:
+                current = [y, y, xs[0], xs[-1]]
+                runs.append(current)
+    return [run for run in runs if run[1] - run[0] >= 12]
+
+
+def test_street_caption_is_the_preview_size_and_shrinks_only_on_overflow(tmp_path):
+    if subprocess.run(['timeout', '5', CHROME, '--version'], capture_output=True).returncode != 0:
+        pytest.skip('chrome unavailable')
+    faces = subprocess.run(['fc-list'], capture_output=True, text=True).stdout
+    if 'Noto Sans CJK' not in faces or 'Anton' not in faces:
+        pytest.skip('preview fonts unavailable')
+    measured = {}
+    for name, text in (('short', 'AI现在就能干一半'), ('full', '这种智能会解锁更多机')):
+        packaging = Packaging(
+            version=2, template='street', audience_language='zh', title_lines=['白领工作会最先没'],
+            cues=[{'start': 0.2, 'end': 4.0, 'text': text, 'original': 'AI CAN DO HALF OR MORE'}],
+        )
+        fill = paint_fill(build_fill(packaging, 4.0, template='street'), packaging)
+        assert [phrase['s'] for phrase in fill['moments'][0]['zh']] == [text]
+        dest = tmp_path / f'{name}.png'
+        _shoot('street', fill, 1.0, dest)
+        _width, _height, rows = _png_size_and_rows(dest)
+        runs = _bright_runs(rows, 1300, 1520)
+        assert len(runs) == 2, (name, runs)
+        measured[name] = runs
+    zh, en = measured['short']
+    assert abs(zh[0] - 1331) <= 8 and 90 <= zh[1] - zh[0] + 1 <= 96, zh  # preview: ink 1331-1424 at 100px
+    assert abs((zh[2] + zh[3]) / 2 - 540) <= 6, zh
+    assert abs(en[0] - 1449) <= 6 and abs(en[1] - 1481) <= 6, en
+    # Ten glyphs at 100px fill the 1000px line without shrinking; the English line does not move.
+    full_zh, full_en = measured['full']
+    assert 90 <= full_zh[1] - full_zh[0] + 1 <= 96 and full_zh[3] - full_zh[2] <= 1000, full_zh
+    assert abs(full_en[0] - 1449) <= 6, full_en

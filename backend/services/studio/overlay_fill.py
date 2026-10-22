@@ -14,13 +14,13 @@ import re
 from backend.services.studio.caption_layout import lines_for, page_screens, width
 
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
-# Phrase budget on the 1080px canvas. One line, no wrap: street 84px inside 30px
-# insets (ink about 92px, inside the 90–96 cap), editorial 52px inside 60px insets.
+# Phrase budget on the 1080px canvas. One line, no wrap: street 100px inside 30px
+# insets (cap height about 93px, inside the 90–96 band of the preview), editorial 52px inside 60px insets.
 # A longer sentence is split into phrases.
 _CANVAS = 1080
 _EDITORIAL_FONT = 52
 _EDITORIAL_INSET = 60
-_STREET_FONT = 84
+_STREET_FONT = 100
 _MIN_PHRASE_SEC = 0.6
 _LEAD = set('的了着过地得吗呢吧啊呀')
 _SOURCE_LIMIT = 34
