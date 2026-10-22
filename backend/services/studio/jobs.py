@@ -795,12 +795,15 @@ def _project_strategy(project_id, strategy_id):
     return replace(strategy, template=template) if template and strategy.aspect == 'portrait' else strategy
 
 
-def _apply_framing(project_id, value, strategy_id, video, burned, cache):
+def _apply_framing(project_id, value, strategy_id, video, burned, cache, *, portrait_crop=False):
     """Pick true vertical speaker framing when it is safe; otherwise keep the full frame on a backdrop.
 
     Burned-in captions would be cut by a 9:16 window, so those sources always keep the full frame.
     Tracks depend only on the scenes, so one detection pass is shared by every vertical platform.
     The interview template frames a 4:3 window instead; without a track it shows the whole frame.
+    HTML portrait templates cover the full 9:16 frame, so `portrait_crop` frames that window even
+    when the platform's classic template is the 4:3 interview. Burned-caption and no-face fallbacks
+    stay on the classic layout.
     """
     strategy = _project_strategy(project_id, strategy_id)
     if strategy.aspect != 'portrait':
@@ -812,7 +815,7 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     if burned:
         plain = [{**scene, 'crop_x': None, 'crop_track': None, 'framing_source': None, 'framing_adjusted': False} for scene in value['scenes']]
         return {**value, 'scenes': plain, 'layout': fallback_layout}, 'full_frame_captions'
-    window = INTERVIEW_WINDOW if interview else None
+    window = None if portrait_crop else (INTERVIEW_WINDOW if interview else None)
     key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), window)
     if key not in cache:
         try:
@@ -826,7 +829,8 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
         # Drop tracks inherited from another platform's framing: they were computed for a different window.
         plain = [{**scene, 'crop_x': None, 'crop_track': None, 'framing_source': None, 'framing_adjusted': False} for scene in value['scenes']]
         return {**value, 'scenes': plain, 'layout': fallback_layout}, framing
-    return {**value, 'scenes': scenes, 'layout': 'window' if interview else 'crop'}, framing
+    layout = 'crop' if portrait_crop or not interview else 'window'
+    return {**value, 'scenes': scenes, 'layout': layout}, framing
 
 
 def _audience_title(value, strategy_id, post):
@@ -1179,7 +1183,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
             if now:
                 with llm_usage.timed('framing'):
-                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache, portrait_crop=use_html)
             planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id))
     with llm_usage.timed('packaging'):
         _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], burned, packaging_cache)
