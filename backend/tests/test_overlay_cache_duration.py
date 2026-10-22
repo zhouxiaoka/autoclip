@@ -48,8 +48,12 @@ def test_captions_off_overlay_cache_keeps_each_clips_duration(tmp_path, monkeypa
     blob = _png(tmp_path)
     short_pack = _off('短片标题', '第一条字幕')
     long_pack = _off('更长成片的标题', '另一条字幕')
-    # Both lengths are past the 2.4s hook, so the painted fill no longer carries either title or length.
-    assert _painted(short_pack, 3, template) == _painted(long_pack, 5, template)
+    # #475: captions-off used to paint the same pixels past the hook, so only the frame count
+    # kept a short overlay from being reused on a longer clip (`shortest=1` then cuts it).
+    # The fill now records the clip duration (`T`). That still must not collapse the two movies.
+    short_fill, long_fill = _painted(short_pack, 3, template), _painted(long_pack, 5, template)
+    assert short_fill['T'] == 3 and long_fill['T'] == 5
+    assert short_fill != long_fill
     seen = []
 
     def capture(count, _fps):
@@ -82,8 +86,9 @@ def test_captions_off_overlay_cache_keeps_each_clips_duration(tmp_path, monkeypa
         'p1', template, long_pack, 5, features={'pkg_templates_v1': True}, capture=capture,
     )
     assert reused.path == long.path and seen == [short_frames, long_frames, long_frames]
-    # Same length, different painted content (the kicker survives captions-off) stays a different movie.
-    other = long_pack.model_copy(update={'version': 2, 'kicker': '别的'})
+    # Same length, different painted content stays a different movie.
+    # Editorial captions-off clears the kicker; the folio issue is still painted.
+    other = long_pack.model_copy(update={'issue': '另一期'})
     assert _painted(other, 5, template) != _painted(long_pack, 5, template)
     different = html.prepare_overlay(
         'p1', template, other, 5, features={'pkg_templates_v1': True}, capture=capture,

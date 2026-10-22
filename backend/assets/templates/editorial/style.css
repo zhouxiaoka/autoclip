@@ -18,12 +18,14 @@ html, body {
   font-family: "Noto Serif SC", serif;
 }
 #scrim {
+  /* Drawn by ffmpeg (geq) at composite time. A gradient in the captured overlay is a full-frame alpha ramp, and ffv1 stores every pixel, so a 100s clip blows past the cache cap. */
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   height: 1000px;
   background: linear-gradient(to bottom, rgba(12,10,8,0) 0%, rgba(12,10,8,.38) 38%, rgba(12,10,8,.78) 100%);
+  display: none;
 }
 #hook {
   position: absolute;
@@ -32,14 +34,24 @@ html, body {
   top: 1110px;
 }
 #hook .kick {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  margin: 0;
   font-family: "Instrument Serif", serif;
   font-style: italic;
   font-weight: 400;
   font-size: 44px;
   line-height: 1;
   color: #F2D98C;
-  margin-bottom: 22px;
   letter-spacing: .3px;
+}
+#h-l {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 1110 + 66 = 1176, the line-box top that puts the ink on y 1192 even with an empty kicker. */
+  top: 66px;
 }
 #hook .ln {
   display: block;
@@ -58,8 +70,11 @@ html, body {
   padding-bottom: 6px;
 }
 #hook .trk {
-  /* Source CSS is 20px. Inter Tight sits higher in the line box, so 36px lands the ink on y 1444–1459. */
-  margin-top: 36px;
+  /* Fixed under the two-line headline. An empty kicker must not move this or the lines above. */
+  position: absolute;
+  left: 0;
+  top: 331px;
+  margin: 0;
   font-family: "Inter Tight", sans-serif;
   font-weight: 500;
   font-size: 22px;
@@ -113,12 +128,14 @@ html, body {
 #en .w.past { color: rgba(244,239,230,.9); }
 #en .w.now { color: #F2D98C; }
 #prog {
+  /* ffmpeg drawbox paints this hairline. Leaving it in the overlay recaptures every frame. */
   position: absolute;
   left: 60px;
   top: 1826px;
   height: 1px;
   width: 0;
   background: rgba(244,239,230,.8);
+  display: none;
 }
 #folio {
   position: absolute;

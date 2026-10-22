@@ -78,12 +78,33 @@ html, body {
   white-space: nowrap;
 }
 #prog {
+  /* ffmpeg drawbox paints this. A bar in the overlay changes every frame and blows the capture budget. */
   position: absolute;
   left: 0;
   bottom: 0;
   height: 12px;
   background: #D7FF3A;
   width: 0;
+  display: none;
+}
+#title-hook {
+  position: absolute;
+  top: 250px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #000;
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 700;
+  font-variation-settings: "wght" 700;
+  font-size: 62px;
+  line-height: 1.15;
+  padding: 20px 36px;
+  border-radius: 20px;
+  white-space: pre;
+  text-align: center;
+  box-shadow: 0 9px 0 #000;
+  display: none;
 }
 #brand {
   position: absolute;

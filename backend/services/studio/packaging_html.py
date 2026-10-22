@@ -151,14 +151,65 @@ def overlay_cache_limit() -> int:
     return value
 
 
-def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str) -> tuple[str, str]:
-    """Grade the base, then place the transparent overlay on top. Label is ``html``."""
+def _progress_drawbox(template: str, offset: float, total: float, width: int, height: int) -> str:
+    """A bar whose width follows the clip clock. It is not part of the captured overlay.
+
+    ``renderFrame`` used to bake the bar into every PNG, so a 90s street clip captured
+    all 2700 frames and blew the 90s budget. ``t`` here is scene-local; ``offset`` is
+    where this scene sits in the finished clip.
+    """
+    if template not in {'street', 'editorial'} or total <= 0 or width <= 0 or height <= 0:
+        return ''
+    off = f'{max(0.0, float(offset)):.3f}'
+    dur = f'{max(float(total), 0.001):.3f}'
+    if template == 'street':
+        bar_h = 12
+        return (
+            f"drawbox=x=0:y={max(0, height - bar_h)}:w='iw*(t+{off})/{dur}'"
+            f":h={bar_h}:color=0xD7FF3A:t=fill"
+        )
+    bar_w = min(960, max(1, width - 120))
+    return (
+        f"drawbox=x=60:y={max(0, height - 94)}:w='{bar_w}*(t+{off})/{dur}'"
+        f":h=1:color=0xF4EFE6@0.8:t=fill"
+    )
+
+
+def _editorial_scrim(width: int, height: int) -> str:
+    """Lower 1000px wash, matching the template gradient, outside the captured overlay.
+
+    Stops: transparent at the top, 38% at 38% of the height, 78% at the bottom. Color ``#0C0A08``.
+    """
+    scrim_h = min(1000, height)
+    if scrim_h < 2 or width < 2:
+        return ''
+    top = max(0, height - scrim_h)
+    # Commas inside geq belong to the expression, so they are escaped for the filtergraph.
+    alpha = (
+        "if(lt(Y\\,H*38/100)\\,255*Y/H\\,"
+        "255*(38/100+40/100*(Y-H*38/100)/(H*62/100)))"
+    )
+    return (
+        f"color=c=0x0C0A08:s={width}x{scrim_h}:r=30,format=yuva444p,"
+        f"geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'[scrim];"
+        f"[graded][scrim]overlay=0:{top}:format=auto:eof_action=repeat[based];"
+    )
+
+
+def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str, *, template: str = '', offset: float = 0.0, total: float = 0.0) -> tuple[str, str]:
+    """Grade the base, wash the editorial scrim, place the overlay, then the progress bar."""
+    scrim = _editorial_scrim(width, height) if template == 'editorial' else ''
+    base = '[based]' if scrim else '[graded]'
     graph = (
         f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
+        f"{scrim}"
         f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva444p[ov];"
-        f"[graded][ov]overlay=0:0:format=auto:shortest=1[html]"
+        f"{base}[ov]overlay=0:0:format=auto:shortest=1[html]"
     )
-    return graph, 'html'
+    bar = _progress_drawbox(template, offset, total, width, height)
+    if not bar:
+        return graph, 'html'
+    return graph + f';[html]{bar}[paced]', 'paced'
 
 
 def overlay_frame_count(duration: float, fps: int = 30) -> int:
@@ -416,10 +467,24 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                 page = await browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=1)
                 await page.goto(page_url)
                 await page.evaluate('(fill) => window.setData(fill)', fill)
-                # The first paint is what asks for Anton / Instrument Serif. Measure again
-                # after those faces are in, so fit-to-width does not freeze a fallback size.
-                await page.evaluate('(t) => window.renderFrame(t)', 0)
-                await page.evaluate('async () => { if (document.fonts) await document.fonts.ready }')
+                # Ask for the sliced families with the glyphs on the line. check(font)
+                # stays false while an unused unicode-range file is pending, and fit()
+                # then refuses to shrink, so the English line stays past the box.
+                await page.evaluate('''(t) => window.renderFrame(t)''', 0)
+                await page.evaluate('''async () => {
+                  if (!document.fonts) return;
+                  const specs = [
+                    ['36px Anton', 'AG'],
+                    ['700 100px "Noto Sans CJK SC"', '中'],
+                    ['500 52px "Noto Sans CJK SC"', '中'],
+                    ['900 96px "Noto Serif SC"', '中'],
+                    ['italic 44px "Instrument Serif"', 'Ag'],
+                    ['italic 36px "Instrument Serif"', 'Ag'],
+                    ['500 22px "Inter Tight"', 'AG'],
+                  ];
+                  await Promise.all(specs.map(([spec, text]) => document.fonts.load(spec, text)));
+                  await document.fonts.ready;
+                }''')
                 pages.append(page)
 
             async def render(ordinal, seconds):

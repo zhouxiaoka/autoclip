@@ -262,6 +262,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         with tempfile.TemporaryDirectory(prefix='ac-studio-render-') as temp:
             folder = Path(temp)
             offsets = _output_offsets(draft)
+            clip_total = (offsets[-1] + audio.scene_duration(draft.scenes[-1])) if draft.scenes else 0.0
             overlay_retried = False
             from backend.services.studio.packaging_html import HtmlRetry
             while True:
@@ -290,7 +291,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                                 picture, label = packaging_render.picture_only(draft, scene, w, h)
                             pack = draft.packaging
                             # Editorial captions-off still burns the classic title beside the overlay.
-                            # Street keeps that title in its lower band, so a top title would sit on the face.
+                            # Street paints that title as the short hook sticker, so a top title would sit on the face.
                             if pack is not None and html_template != 'street' and pack.captions_enabled is False and pack.title_lines:
                                 from backend.services.publish_export import _escape_filter_path
                                 ass_path = folder / f'{i}.title.ass'
@@ -298,7 +299,10 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                                 ass = f"ass='{_escape_filter_path(ass_path)}':fontsdir='{_escape_filter_path(packaging_render.FONT_DIR)}'"
                                 picture += f';[{label}]{ass}[withtitle]'
                                 label = 'withtitle'
-                            tail, label = packaging_html.composite_tail(label, 1, w, h, overlay_grade)
+                            tail, label = packaging_html.composite_tail(
+                                label, 1, w, h, overlay_grade,
+                                template=html_template or '', offset=offsets[i], total=clip_total,
+                            )
                             built = (picture + ';' + tail, label)
                         elif packaged:
                             from backend.services.studio import packaging_render

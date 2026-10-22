@@ -54,30 +54,6 @@ def _frames(seconds: float, fps: int) -> int:
     return max(0, int(round(float(seconds) * fps)))
 
 
-def _cue_output_spans(start: float, end: float, scenes) -> list[tuple[float, float]]:
-    """Map a source-time cue onto the concatenated clip, the same way classic ASS does.
-
-    Without scenes the cue is already on the output clock. With scenes, subtract each
-    scene start and place the overlap at that scene's output offset.
-    """
-    start, end = float(start or 0), float(end or 0)
-    if not scenes:
-        return [(start, end)] if end > start else []
-    from backend.services.studio.audio import scene_duration
-    from backend.services.studio.packaging_render import timeline
-    spans = []
-    for scene, (src_start, src_end, offset) in zip(scenes, timeline(scenes)):
-        lo, hi = max(start, float(src_start)), min(end, float(src_end))
-        if hi <= lo:
-            continue
-        length = scene_duration(scene)
-        out_start = max(offset, offset + lo - float(src_start))
-        out_end = min(offset + length, offset + hi - float(src_start))
-        if out_end > out_start:
-            spans.append((out_start, out_end))
-    return spans
-
-
 def _clip_frames(out_start: float, out_end: float, total: int, fps: int) -> tuple[int, int] | None:
     start = _frames(out_start, fps)
     end = _frames(out_end, fps)
@@ -201,26 +177,34 @@ def _cue_phrase(cue, text: str, listed: list[str]) -> str:
     return key_phrase(text, str(_get(cue, 'original', '') or ''))
 
 
-def _cue_speaker_name(cue, speakers: list[dict]) -> str:
-    from backend.services.studio.packaging import _speaker_name
-    return _speaker_name(
+def _cue_speaker_name(cue, speakers: list[dict], packaging=None) -> str:
+    """The cue's own speaker, in the audience's writing. An unnamed line stays unnamed.
+
+    A Latin name on a Chinese video becomes the one CJK guest on the roster, or nothing.
+    It is not replaced with whoever happens to be the only person in the roster when the
+    cue never named them.
+    """
+    from backend.services.studio.packaging import CJK, LATIN, _localize_zh_name, _speaker_name
+    claimed = _speaker_name(
         str(_get(cue, 'text', '') or ''),
         _get(cue, 'start', 0) or 0,
         str(_get(cue, 'speaker', '') or ''),
         [{'name': item['name'], 'at': _get(item, 'at', 0) or 0, 'role': item.get('role', '')} for item in speakers],
     )
+    if not claimed:
+        return ''
+    audience = str(_get(packaging, 'audience_language', '') or '')
+    roster = ' '.join(item.get('name', '') for item in speakers if item.get('name'))
+    localized = _localize_zh_name(claimed, audience, roster)
+    if audience == 'zh' and not localized and LATIN.search(claimed) and not CJK.search(claimed):
+        return ''
+    return localized or claimed
 
 
 def _deck_line(packaging) -> str:
+    """The model's deck only. A clipped first sentence is not a deck."""
     deck = str(_get(packaging, 'deck', '') or '').strip()
-    if deck:
-        return deck[:80]
-    for cue in _get(packaging, 'cues', []) or []:
-        original = ' '.join(str(_get(cue, 'original', '') or '').split())
-        if original and any('A' <= ch <= 'z' for ch in original):
-            clause = original.split('.')[0].strip()
-            return clause[:80]
-    return ''
+    return deck[:80] if deck else ''
 
 
 _CREDIT_STOP = {'on', 'the', 'a', 'an', 'of', 'about', 'and'}
@@ -278,27 +262,44 @@ def _clip_units(text: str, limit: float) -> str:
     return out.strip().strip(_PUNCT).strip()
 
 
+def _hard_slices(token: str, limit: float) -> list[str]:
+    """A single token wider than the line. Cut by character only then."""
+    slices: list[str] = []
+    buf = ''
+    for ch in token:
+        if buf and width(buf + ch) > limit + 1e-6:
+            slices.append(buf)
+            buf = ch
+        else:
+            buf += ch
+    if buf:
+        slices.append(buf)
+    return slices
+
+
 def _wrap_units(text: str, limit: float) -> list[str]:
+    """One line per chunk. Breaks land on word boundaries, not inside 15小时 / 生产力 / DNA里."""
     if width(text) <= limit + 1e-6:
         return [text]
+    from backend.services.studio.cjk_segment import tokenize
     chunks: list[str] = []
     buf = ''
-    index = 0
-    while index < len(text):
-        ch = text[index]
-        if ch.isascii() and (ch.isalnum() or ch in "'-"):
-            end = index + 1
-            while end < len(text) and text[end].isascii() and (text[end].isalnum() or text[end] in "'-"):
-                end += 1
-            token = text[index:end]
-        else:
-            token, end = ch, index + 1
+    for token in tokenize(text):
+        if not token.strip():
+            if buf and width(buf + token) <= limit + 1e-6:
+                buf += token
+            continue
+        if width(token) > limit + 1e-6:
+            if buf.strip():
+                chunks.append(buf.strip())
+                buf = ''
+            chunks.extend(_hard_slices(token, limit))
+            continue
         if buf and width(buf + token) > limit + 1e-6:
             chunks.append(buf.strip())
-            buf = token.lstrip()
+            buf = token
         else:
             buf += token
-        index = end
     if buf.strip():
         chunks.append(buf.strip())
     return [chunk for chunk in chunks if chunk]
@@ -412,13 +413,18 @@ def _timed_in_cue(cue, word_timing, scenes) -> list | None:
 
 
 def _groups(spoken: list, group_limit: float) -> list[list]:
-    """Keep one moment's phrases inside the line budget. Street's budget is one cue."""
+    """Phrases that share a line and a contiguous stretch of the output clock.
+
+    A cut that removes the middle of a sentence leaves a gap. Those two sides are
+    different moments, so the first phrase does not stay up through the other shot.
+    """
     groups: list[list] = []
     current: list = []
     used = 0.0
     for item in spoken:
         piece_width = width(item[0])
-        if current and used + piece_width > group_limit + 1e-6:
+        gap = current and item[3] > current[-1][4]
+        if current and (gap or used + piece_width > group_limit + 1e-6):
             groups.append(current)
             current = []
             used = 0.0
@@ -468,6 +474,155 @@ def _timecode(seconds: float) -> str:
     return f'{minutes}:{secs:02d}'
 
 
+def _kept_spans(start: float, end: float, scenes) -> list[tuple[float, float, float, float]]:
+    """Each kept overlap as (source start, source end, output start, output end)."""
+    start, end = float(start or 0), float(end or 0)
+    if end <= start:
+        return []
+    if not scenes:
+        return [(start, end, start, end)]
+    from backend.services.studio.audio import scene_duration
+    from backend.services.studio.packaging_render import timeline
+    spans = []
+    for scene, (src_start, src_end, offset) in zip(scenes, timeline(scenes)):
+        lo, hi = max(start, float(src_start)), min(end, float(src_end))
+        if hi <= lo:
+            continue
+        length = scene_duration(scene)
+        out_start = max(offset, offset + lo - float(src_start))
+        out_end = min(offset + length, offset + hi - float(src_start))
+        if out_end > out_start:
+            spans.append((lo, hi, out_start, out_end))
+    return spans
+
+
+def _source_words(cue, word_timing) -> list | None:
+    """ASR words overlapping this cue, still on the source clock."""
+    if not word_timing:
+        return None
+    start = float(_get(cue, 'start', 0) or 0)
+    end = float(_get(cue, 'end', 0) or 0)
+    rows = []
+    for segment in word_timing:
+        if not isinstance(segment, dict):
+            continue
+        words = segment.get('words')
+        if not isinstance(words, list):
+            words = [segment] if 'start' in segment and 'text' in segment else []
+        for word in words:
+            if not isinstance(word, dict):
+                continue
+            token = str(word.get('text') or '').strip()
+            try:
+                word_start, word_end = float(word['start']), float(word['end'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not token or word_end <= start or word_start >= end:
+                continue
+            rows.append({'text': token, 'start': max(word_start, start), 'end': min(word_end, end)})
+    rows.sort(key=lambda item: (item['start'], item['end']))
+    return rows or None
+
+
+def _align_phrase_times(pieces: list[str], words: list, start: float, end: float) -> list[tuple[str, float, float]] | None:
+    """Give each phrase the source interval of the words it covers. None when the text does not line up."""
+    def norm(value: str) -> str:
+        return re.sub(r'[\s，。、！？：；,.!?]+', '', value)
+
+    cursor = 0
+    rows = []
+    for piece in pieces:
+        target = norm(piece)
+        if not target:
+            continue
+        if cursor >= len(words):
+            return None
+        acc = ''
+        t0 = t1 = None
+        while cursor < len(words) and target not in acc:
+            acc += norm(words[cursor]['text'])
+            if t0 is None:
+                t0 = float(words[cursor]['start'])
+            t1 = float(words[cursor]['end'])
+            cursor += 1
+            if len(acc) > len(target) + 12 and target not in acc:
+                return None
+        if t0 is None or t1 is None or t1 <= t0:
+            return None
+        rows.append((piece, max(start, t0), min(end, t1)))
+    return rows or None
+
+
+def _length_bounds(pieces: list[str], start: float, end: float) -> list[tuple[str, float, float]]:
+    weights = [max(width(piece), 1) for piece in pieces]
+    total_weight = sum(weights) or 1
+    span = max(end - start, 0.05)
+    cursor = start
+    rows = []
+    for piece, weight in zip(pieces, weights):
+        dur = span * weight / total_weight
+        rows.append((piece, cursor, cursor + dur))
+        cursor += dur
+    if rows:
+        piece, t0, _t1 = rows[-1]
+        rows[-1] = (piece, t0, end)
+    return rows
+
+
+def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words) -> list[tuple]:
+    """Place each phrase on the output clock once, at the moment it is spoken.
+
+    A cue that crosses a cut used to restart its whole phrase list inside every shot.
+    Phrases are timed across the cue, then mapped through the shots. A phrase the cut
+    removes is dropped. A phrase the cut splits is kept on the first overlap only.
+    One shot that contains the whole cue keeps the old frame tiling, so a single scene
+    still meets the caption page exactly.
+    """
+    spans = _kept_spans(cue_start, cue_end, scenes)
+    if not spans:
+        return []
+    src_lo, src_hi, out_lo, out_hi = spans[0]
+    whole = len(spans) == 1 and abs(src_lo - cue_start) <= 1e-3 and abs(src_hi - cue_end) <= 1e-3
+    aligned = _align_phrase_times(pieces, source_words, cue_start, cue_end) if source_words else None
+    if whole and not aligned:
+        frames = _clip_frames(out_lo, out_hi, total, fps)
+        if frames is None:
+            return []
+        shown = _fit_pieces(pieces, frames[1] - frames[0])
+        counts = _frame_counts(frames[1] - frames[0], [max(width(piece), 1) for piece in shown])
+        cursor = frames[0]
+        placed = []
+        for piece, count in zip(shown, counts):
+            placed.append((piece, cursor / fps, (cursor + count) / fps, cursor, cursor + count))
+            cursor += count
+        return placed
+    bounds = aligned or _length_bounds(pieces, cue_start, cue_end)
+    rough = []
+    for piece, t0, t1 in bounds:
+        for span_lo, span_hi, span_out, span_end in spans:
+            ov0, ov1 = max(t0, span_lo), min(t1, span_hi)
+            if ov1 <= ov0 + 1e-4:
+                continue
+            scale = (span_end - span_out) / max(span_hi - span_lo, 1e-6)
+            rough.append((piece, span_out + (ov0 - span_lo) * scale, span_out + (ov1 - span_lo) * scale))
+            break
+    placed = []
+    for piece, ot0, ot1 in rough:
+        start = _frames(ot0, fps)
+        end = _frames(ot1, fps)
+        if end <= start:
+            end = start + 1
+        if placed and start < placed[-1][4]:
+            start = placed[-1][4]
+        if start >= total:
+            continue
+        end = min(end, total)
+        if end <= start:
+            continue
+        placed.append((piece, start / fps, end / fps, start, end))
+    return placed
+
+
 def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
@@ -485,65 +640,54 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     words = []
     moments = []
     phrase_limit = float(limit or 10)
-    # Editorial draws every phrase of a moment on one line, so a moment stays inside two line-budgets.
-    group_limit = phrase_limit * (2 if (template or '') == 'editorial' else 10**6)
+    # One caption line. Two full phrases used to share a moment and overflow the box.
+    group_limit = phrase_limit if (template or '') == 'editorial' else phrase_limit * 10**6
+    roster = [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])]
     for cue in cues:
         text = str(_get(cue, 'text', '')).strip()
         if not text:
             continue
         phrase = _cue_phrase(cue, text, emphasis)
         raw_original = str(_get(cue, 'original', '') or '')
-        # The preview keeps the whole English sentence on one line and shrinks it. Do not ellipsize it.
+        # The preview keeps the whole English sentence on one line and shrinks it. The template trims what still overflows.
         original = ' '.join(raw_original.split()) if (template or '') in {'editorial', 'street'} else _source_line(raw_original, source_limit)
-        speaker = _cue_speaker_name(cue, [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])])
+        speaker = _cue_speaker_name(cue, roster, packaging)
         pieces = _phrases(text, phrase_limit)
         if not pieces:
             continue
         timed = _timed_in_cue(cue, word_timing, scenes)
-        for out_start, out_end in _cue_output_spans(_get(cue, 'start', 0), _get(cue, 'end', 0), scenes):
-            frames = _clip_frames(out_start, out_end, total, fps)
-            if frames is None:
-                continue
-            shown = _fit_pieces(pieces, frames[1] - frames[0])
-            counts = _frame_counts(frames[1] - frames[0], [max(width(piece), 1) for piece in shown])
-            spoken = []
-            cursor = frames[0]
-            for piece, count in zip(shown, counts):
-                spoken.append((piece, cursor / fps, (cursor + count) / fps, cursor, cursor + count))
-                cursor += count
-            english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
-            groups = _groups(spoken, group_limit)
-            for group in groups:
-                zh = []
-                group_en = [
-                    word for word in english
-                    if word['t1'] > group[0][1] - 1e-6 and word['t0'] < group[-1][2] + 1e-6
-                ] or english
-                for piece, t0, t1, start_frame, end_frame in group:
-                    key = bool(phrase and (phrase in piece or piece in phrase)) or any(
-                        word['key'] and word['t1'] > t0 and word['t0'] < t1 for word in group_en
-                    )
-                    zh.append({'s': piece, 't0': t0, 't1': t1, 'key': key, 'acc': False})
-                    words.append({
-                        'text': piece,
-                        'start_frame': start_frame,
-                        'end_frame': end_frame,
-                        'emphasis': phrase if key and phrase and (phrase in piece or piece in phrase) else '',
-                        'original': original,
-                        'speaker': speaker,
-                    })
-                moments.append({
-                    't0': group[0][1], 't1': group[-1][2], 'speaker': speaker,
-                    'zh': zh, 'en': group_en,
+        spoken = _once_per_clip(
+            pieces, float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
+            scenes, total, fps, _source_words(cue, word_timing),
+        )
+        if not spoken:
+            continue
+        english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
+        groups = _groups(spoken, group_limit)
+        for group in groups:
+            zh = []
+            group_en = [
+                word for word in english
+                if word['t1'] > group[0][1] - 1e-6 and word['t0'] < group[-1][2] + 1e-6
+            ] or english
+            for piece, t0, t1, start_frame, end_frame in group:
+                key = bool(phrase and (phrase in piece or piece in phrase)) or any(
+                    word['key'] and word['t1'] > t0 and word['t0'] < t1 for word in group_en
+                )
+                zh.append({'s': piece, 't0': t0, 't1': t1, 'key': key, 'acc': False})
+                words.append({
+                    'text': piece,
+                    'start_frame': start_frame,
+                    'end_frame': end_frame,
+                    'emphasis': phrase if key and phrase and (phrase in piece or piece in phrase) else '',
+                    'original': original,
+                    'speaker': speaker,
                 })
+            moments.append({
+                't0': group[0][1], 't1': group[-1][2], 'speaker': speaker,
+                'zh': zh, 'en': group_en,
+            })
     _mark_accents(moments)
-    if not moments and (template or '') == 'street' and lines and captions_on is False:
-        topic_line = _short_topic(lines, people) or lines[0]
-        moments = [{
-            't0': 0, 't1': duration, 'speaker': '',
-            'zh': [{'s': topic_line, 't0': 0, 't1': duration, 'key': False, 'acc': False}],
-            'en': [],
-        }]
     cards = []
     glosses = list(_get(packaging, 'gloss', []) or [])
     for index, card in enumerate(glosses):
@@ -606,6 +750,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         'src_start_tc': _timecode(src_start),
         'stickers': [],
         'safe_area': area,
+        'audience_language': str(_get(packaging, 'audience_language', '') or ''),
     }
 
 

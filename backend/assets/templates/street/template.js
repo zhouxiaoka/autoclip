@@ -117,14 +117,29 @@
     return best || list[0] || null;
   }
 
+  function hostName(name) {
+    var text = String(name || "");
+    return {"主持人": 1, "嘉宾": 1, "采访者": 1, "记者": 1, "host": 1, "interviewer": 1, "guest": 1}[text] ||
+      {"主持人": 1, "嘉宾": 1, "采访者": 1, "记者": 1, "host": 1, "interviewer": 1, "guest": 1}[text.toLowerCase()];
+  }
+
+  function displayName(name) {
+    name = String(name || "");
+    if (!name) return "";
+    var zh = (data.audience_language || "") === "zh";
+    var latin = /[A-Za-z]/.test(name) && !/[\u4e00-\u9fff]/.test(name);
+    if (!zh || !latin) return name;
+    var guests = (data.speakers || []).map(function (person) { return person.name; }).filter(function (item) {
+      return item && /[\u4e00-\u9fff]/.test(item) && !hostName(item);
+    });
+    return guests.length === 1 ? guests[0] : "";
+  }
+
   function speakerName(moment) {
-    if (moment && moment.speaker) return moment.speaker;
-    var lines = (data.title_lines || []).join("");
-    var list = data.speakers || [];
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].name && lines.indexOf(list[i].name) >= 0) return list[i].name;
-    }
-    return (list[0] && list[0].name) || "";
+    // A cue that did not name its speaker stays unnamed. The only guest is not stamped on the host.
+    if (moment) return displayName(moment.speaker || "");
+    var guests = (data.speakers || []).filter(function (person) { return person.name && !hostName(person.name); });
+    return guests.length === 1 ? displayName(guests[0].name) : "";
   }
 
   function labelFor(moment) {
@@ -140,13 +155,60 @@
     node.style.display = "inline-block";
     var width = node.scrollWidth;
     node.style.display = display;
-    return width;
+    var stroke = 0;
+    if (window.getComputedStyle) {
+      stroke = parseFloat(getComputedStyle(node).webkitTextStrokeWidth) || 0;
+    }
+    // The stroke is centered on the outline, so the full width hangs outside the glyphs.
+    return width + stroke;
+  }
+
+  function faceReady(node, face) {
+    if (!face || !document.fonts || !document.fonts.check) return true;
+    // check(font) is false while any unicode-range file in the family is still pending.
+    // Anton and Instrument Serif ship in slices, so pass the glyphs actually on the line.
+    var sample = String(node && node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 32) || "Ag";
+    try {
+      if (document.fonts.check(face, sample)) return true;
+    } catch (error) { /* older check() takes one argument */ }
+    return !!document.fonts.check(face);
+  }
+
+  function ellipsisText(node, limit, gauge) {
+    var box = gauge || node;
+    var text = String(node.textContent || "").replace(/…$/, "");
+    var parts = text.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      while (parts.length > 1 && lineWidth(box) > limit) {
+        parts.pop();
+        node.textContent = parts.join(" ") + "…";
+      }
+    }
+    text = String(node.textContent || "");
+    var guard = 0;
+    while (lineWidth(box) > limit && text.replace(/…$/, "").length > 1 && guard < 80) {
+      text = text.replace(/…$/, "").slice(0, -1);
+      node.textContent = text + "…";
+      guard += 1;
+    }
+  }
+
+  function trimTo(node, limit) {
+    if (!node || typeof node.scrollWidth !== "number") return;
+    if (lineWidth(node) <= limit) return;
+    var kids = node.children;
+    if (kids && kids.length && node.removeChild) {
+      while (kids.length > 1 && lineWidth(node) > limit) node.removeChild(kids[kids.length - 1]);
+      if (lineWidth(node) > limit && kids.length) ellipsisText(kids[kids.length - 1], limit, node);
+      return;
+    }
+    ellipsisText(node, limit);
   }
 
   function fit(node, start, floor, step, limit, face) {
     if (!node || typeof node.scrollWidth !== "number") return;
     // A fallback face is wider than Anton. Shrinking against it freezes the line too small.
-    if (face && document.fonts && document.fonts.check && !document.fonts.check(face)) {
+    if (!faceReady(node, face)) {
       node.style.fontSize = start + "px";
       return;
     }
@@ -156,6 +218,7 @@
       size -= step;
       node.style.fontSize = size + "px";
     }
+    trimTo(node, limit);
   }
 
   function enState(t, word) {
@@ -212,26 +275,35 @@
     seenPhrase = null;
   };
 
+  function captionsAreOff() {
+    return !(data.moments && data.moments.length) && !(data.words && data.words.length);
+  }
+
+  function titleSticker(t) {
+    // Captions off: the title is the preview hook for the opening, not the caption.
+    if (!captionsAreOff()) return "";
+    var lines = (data.title_lines || []).filter(Boolean);
+    if (!lines.length || t >= 3.4) return "";
+    return lines.join("\n");
+  }
+
   window.renderFrame = function (t) {
-    var total = Number(data.T) > 0 ? Number(data.T) : 1;
     var moment = momentAt(t);
     var phrase = moment ? phraseAt(moment, t) : null;
     var zh = document.getElementById("zh");
     var en = document.getElementById("en");
     var cap = document.getElementById("cap");
-    if (!phrase && !(data.words || []).length) {
-      var fallback = (data.title_lines || []).join("");
-      phrase = fallback ? {s: topicText() || fallback, t0: 0, key: false} : null;
-    }
+    var text = "";
+    var popping = "0";
     if (phrase) {
       cap.style.display = "";
-      var text = String(phrase.s || "").replace(/[，。、！？：；,.!?]+$/g, "");
-      if (!seenPhrase || seenPhrase.s !== phrase.s || seenPhrase.t0 !== phrase.t0) {
-        seenPhrase = phrase;
-        zh.innerHTML = esc(text);
-        zh.className = phrase.key ? "k" : "";
-      }
+      text = String(phrase.s || "").replace(/[，。、！？：；,.!?]+$/g, "");
+      // Rebuild from the phrase so a trim on a fallback face cannot stick.
+      seenPhrase = phrase;
+      zh.innerHTML = esc(text);
+      zh.className = phrase.key ? "k" : "";
       fit(zh, 100, 70, 4, 1000, '700 100px "Noto Sans CJK SC"');
+      popping = (t - (phrase.t0 || 0)) < 0.12 ? "1" : "0";
       var popped = ease((t - (phrase.t0 || 0)) / 0.12);
       zh.style.transform = "scale(" + (1.18 + (1 - 1.18) * popped).toFixed(3) + ")";
       en.innerHTML = moment ? enHtml(moment, t) : "";
@@ -244,22 +316,27 @@
       seenPhrase = null;
     }
     var label = labelFor(moment);
+    var sticker = titleSticker(t);
     var topic = document.getElementById("topic");
     topic.textContent = label;
     topic.style.display = label ? "" : "none";
+    var title = document.getElementById("title-hook");
+    if (title) {
+      title.textContent = sticker;
+      // Stylesheet display:none wins if the inline value is cleared.
+      title.style.display = sticker ? "block" : "none";
+    }
     document.getElementById("num").innerHTML = numberHtml(t);
     paintStickers(t);
-    var width = (100 * clamp(t / total, 0, 1)).toFixed(2);
-    document.getElementById("prog").style.width = width + "%";
-    return [text || "", zh.className, en.innerHTML, label, width].join("|");
+    return [text || "", zh.className, en.innerHTML, label, popping, numberHtml(t), sticker].join("|");
   };
 
   window.occupiedRects = function (t) {
     var rects = [];
     var moment = momentAt(t);
     var phrase = moment ? phraseAt(moment, t) : null;
-    if (!phrase && !(data.words || []).length && (data.title_lines || []).length) phrase = {s: topicText()};
     if (phrase) rects.push({slot: "subtitle", x: 30, y: 1331, w: 1020, h: 93});
+    if (titleSticker(t)) rects.push({slot: "title", x: 40, y: 250, w: 1000, h: 110});
     if (moment && moment.en && moment.en.length) rects.push({slot: "source", x: 30, y: 1449, w: 1020, h: 32});
     if (labelFor(moment)) rects.push({slot: "hook", x: 40, y: 1812, w: 1000, h: 65});
     if (numberHtml(t)) rects.push({slot: "number", x: 40, y: 80, w: 360, h: 84});

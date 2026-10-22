@@ -71,6 +71,7 @@ PROMPT = (
     'protected_terms 是已在原字幕和中文标题中出现的专名或术语；标题和译文提到它们时保留原文拼写，不能改成地名或猜测音译。'
     'translate 为 false 时字幕直接用原文，segments 返回空数组 []，不要复述原文。'
     'speakers 只填写在 lines 或 known_names 中明确出现过的人名，role 写其公开身份（不确定就留空），line 是此人第一次说话的行；'
+    'name 用 audience_language 写给观众看的名字：中文受众写黄仁勋，不要写 Jensen Huang。'
     '不确定就返回空数组，绝不猜测身份。'
     'tags 仅当 template 为 interview_zh 时给出 2–4 个编辑点评（中文每个不超过 10 个字，英文不超过 30 个字符），必须具体点出这一句最有冲击力的内容，'
     '文字使用 audience_language（英文平台不得写中文）；例如“七分钟干完三个月”“以退为进”；禁止“逻辑清晰”“直击核心”“干货满满”这类泛泛评价；line 指向被点评的行。'
@@ -78,8 +79,10 @@ PROMPT = (
     '另外返回 "marks"：每一句一条 {"line":行id,"text":"关键词","speaker":"说话人"}。'
     'line 是该句覆盖的某一行 id；text 是该句译文（或原文）里最该标出的一个短词或短语（中文 2–8 个字，英文一个词），'
     '必须是该句 text 的连续子串，不能是整句，不能编造。'
-    'speaker 是这一句实际在说话的人，必须等于 speakers 里的 name；主持人和嘉宾分开标，不确定就省略 speaker。'
-    '可以额外返回 "deck"：一行英文斜体导语，不超过 60 个字符，概括主题，例如 "Jensen Huang on the five-layer cake"；没有把握就省略。'
+    'speaker 是这一句实际在说话的人，必须等于 speakers 里的 name，并且用 audience_language 的写法；'
+    '主持人和嘉宾分开标，不要把唯一的嘉宾标到每一句；主持人的句子省略 speaker，不确定也省略 speaker。'
+    '可以额外返回 "deck"：一行完整的英文斜体导语，不超过 60 个字符，概括主题，例如 "Jensen Huang on the five-layer cake"；'
+    '写不出完整的一句就省略，不要返回被截断的半句。'
     '可以额外返回 "issue"：杂志页脚的节目和日期，不超过 60 个字符，例如 "DWARKESH PODCAST · 2026.04.15"；不确定就省略。'
     '另外返回 "mood"：按这段内容本身的情绪选一个——calm（冷静理性的分析）、serious（严肃、风险、警示）、'
     'bold（强观点、冲突、爆点）、warm（真诚、感动、个人经历）、playful（轻松、幽默、有趣）。'
@@ -198,12 +201,15 @@ def _accept_phrase(phrase: str, text: str) -> str:
     return text[at:at + len(phrase)]
 
 
+_HOST_NAMES = {'主持人', '嘉宾', '采访者', '记者', 'host', 'interviewer', 'guest'}
+
+
 def key_phrase(text: str, original: str = '') -> str:
     """One highlight already inside `text`. The same inputs always return the same phrase.
 
-    A figure the speaker said wins. Otherwise the last few characters of the last clause,
-    or the last content word of an English line. `original` is unused on purpose: a Chinese
-    phrase is not mapped onto an English translation.
+    A figure the speaker said wins. Otherwise the last whole word of the last clause
+    (jieba, not a 4-character slice), or the last content word of an English line.
+    `original` is unused on purpose: a Chinese phrase is not mapped onto an English translation.
     """
     del original
     cleaned = ' '.join(str(text or '').split())
@@ -219,14 +225,12 @@ def key_phrase(text: str, original: str = '') -> str:
             return token[:30]
     parts = [part.strip() for part in re.split(r'[，。！？、；,.!?;:]+', cleaned) if part.strip()]
     chunk = parts[-1] if parts else cleaned
-    cjk = re.findall(r'[\u4e00-\u9fff]', chunk)
-    if len(cjk) >= 2:
-        phrase = ''.join(cjk[-4:]) if len(cjk) > 4 else ''.join(cjk)
-        if phrase != cleaned and phrase in cleaned:
-            return phrase
-        tail = ''.join(cjk[-2:])
-        if tail != cleaned and tail in cleaned:
-            return tail
+    if CJK.search(chunk):
+        from backend.services.studio.cjk_segment import whole_phrase
+        phrase = whole_phrase(chunk) or whole_phrase(cleaned)
+        if phrase and phrase != cleaned and phrase in cleaned and not phrase.startswith(tuple('的了着过')):
+            return phrase[:8]
+        return ''
     words = re.findall(r"[A-Za-z][A-Za-z']*", cleaned)
     content = [word for word in words if word.lower() not in _EN_STOP and len(word) > 3]
     chosen = content[-1] if content else (words[-1] if words else '')
@@ -235,21 +239,80 @@ def key_phrase(text: str, original: str = '') -> str:
     return ''
 
 
+def _cjk_guest_names(*blobs: str) -> list[str]:
+    found: list[str] = []
+    for blob in blobs:
+        for token in re.split(r'[\s,，、/|]+', blob or ''):
+            token = token.strip()
+            if len(token) < 2 or token.lower() in _HOST_NAMES or not CJK.search(token) or LATIN.search(token):
+                continue
+            if token not in found:
+                found.append(token)
+    return found
+
+
+def _localize_zh_name(name: str, audience: str, *blobs: str) -> str:
+    """The name a Chinese audience should read. A Latin-only name becomes the one CJK guest, or ''.
+
+    黄仁勋 stays. Jensen Huang becomes 黄仁勋 when that Chinese name is the only guest in the
+    known names or the roster. An unmapped Latin name is dropped so the label shows the topic.
+    """
+    name = (name or '').strip()
+    if not name:
+        return ''
+    if audience != 'zh' or CJK.search(name) or not LATIN.search(name):
+        return name
+    guests = _cjk_guest_names(*blobs)
+    if len(guests) != 1:
+        return ''
+    folded = ' '.join(blobs).lower()
+    tokens = [part.lower() for part in re.split(r'\s+', name) if len(part) > 1]
+    if any(token in folded for token in tokens):
+        return guests[0]
+    nonempty = [blob.strip() for blob in blobs if str(blob or '').strip()]
+    if len(nonempty) == 1 and nonempty[0] == guests[0]:
+        return guests[0]
+    return ''
+
+
+def _apply_audience_names(speakers: list[dict], cues: list[dict], audience: str, known_names: str) -> tuple[list[dict], list[dict]]:
+    """Rewrite a Latin guest to the one Chinese name we actually know. Leave every other name as written.
+
+    Sam Altman stays Sam Altman when the package has no 黄仁勋 to put in his place. The street
+    and editorial label hides that Latin name for a Chinese audience at render time.
+    """
+    if audience != 'zh':
+        return speakers, cues
+    renamed = []
+    for item in speakers:
+        original = str(item.get('name') or '')
+        name = _localize_zh_name(original, audience, known_names)
+        renamed.append({**item, 'name': name or original})
+    roster = ' '.join(item['name'] for item in renamed)
+    for cue in cues:
+        if not isinstance(cue, dict):
+            continue
+        original = str(cue.get('speaker') or '')
+        localized = _localize_zh_name(original, audience, known_names, roster)
+        cue['speaker'] = localized or original
+    return renamed, cues
+
+
 def _speaker_name(text: str, start: float, claimed: str, speakers: list[dict]) -> str:
-    """Who is talking in this cue. A name the model claimed has to be one of the speakers."""
+    """Who is talking in this cue. Only a name the cue claimed, or the one name the line itself says.
+
+    The person who is on screen at `start` is not assumed to be the speaker. One guest in the
+    roster used to label the host's lines as well.
+    """
+    del start
     known = [item for item in speakers if str(item.get('name') or '').strip()]
     names = {item['name'] for item in known}
     if claimed and claimed in names:
         return claimed
-    mentioned = [item['name'] for item in known if item['name'] in (text or '')]
+    mentioned = [item['name'] for item in known if item['name'] and item['name'] in (text or '')]
     if len(mentioned) == 1:
         return mentioned[0]
-    active, active_at = '', -1.0
-    for item in known:
-        at = float(item.get('at') or 0)
-        if at <= float(start or 0) + 0.05 and at >= active_at:
-            active, active_at = item['name'], at
-    return active
+    return ''
 
 
 def _stamp_cues(payload: dict) -> dict:
@@ -474,5 +537,6 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
     deck = _clean(str(result.get('deck') or '')) if isinstance(result.get('deck'), str) else ''
     issue = _clean(str(result.get('issue') or ''))[:80] if isinstance(result.get('issue'), str) else ''
     look = choose_look(base['template'], result.get('mood'), _seed(lines), avoid_palettes)
+    kept, cues = _apply_audience_names(kept, cues, audience, known_names)
     return {**base, **look, 'title_lines': titles, 'title_accent_line': min(accent, max(0, len(titles) - 1)),
             'cues': cues, 'speakers': kept, 'tags': tags, 'highlights': highlights[:40], 'deck': deck, 'issue': issue}

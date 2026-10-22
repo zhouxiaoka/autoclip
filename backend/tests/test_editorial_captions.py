@@ -248,6 +248,92 @@ def test_english_pages_keep_the_spaces():
         _visible_sentence('street', fill, index)
 
 
+def test_chinese_breaks_keep_words_numbers_and_latin_together():
+    from backend.services.studio.overlay_fill import _phrases
+    pieces = _phrases('甲乙丙丁生产力需要15小时写进DNA里', 5)
+    assert ''.join(pieces).replace(' ', '') == '甲乙丙丁生产力需要15小时写进DNA里'
+    for earlier, later in pairwise(pieces):
+        assert not (earlier.endswith('生') and later.startswith('产'))
+        assert not (earlier.endswith('15小') and later.startswith('时'))
+        assert not (earlier.endswith('DNA') and later.startswith('里'))
+        assert '15小' not in earlier or '时' in earlier
+    assert any('15小时' in piece for piece in pieces)
+    assert any('生产力' in piece for piece in pieces)
+    assert any('DNA里' in piece for piece in pieces)
+
+
+def test_a_sentence_across_cuts_plays_each_phrase_once():
+    text = '我完全不同意，他把在机场买的东西都扔了'
+    packaging = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['话题'],
+        cues=[{'start': 85, 'end': 97, 'text': text}],
+    )
+    scenes = [Scene(id='a', start=85, end=91), Scene(id='b', start=91, end=97)]
+    fill = build_fill(packaging, 12, scenes=scenes, template='street')
+    shown = [word['text'] for word in fill['words']]
+    assert _squash(''.join(shown)) == _squash(text)
+    assert len(shown) == len(set(shown))
+    first = [word['text'] for word in fill['words'] if word['start_frame'] < 6 * 30]
+    second = [word['text'] for word in fill['words'] if word['start_frame'] >= 6 * 30]
+    assert first and second
+    assert not set(first) & set(second)
+    assert first[0].startswith('我完全不同意')
+
+    tail = build_fill(packaging, 4, scenes=[Scene(id='tail', start=93, end=97)], template='street')
+    tail_text = ''.join(word['text'] for word in tail['words'])
+    assert tail['words']
+    assert '我完全不同意' not in tail_text
+    assert '机场' in tail_text or '扔' in tail_text
+
+
+def test_word_times_place_a_phrase_once_on_the_output_clock():
+    text = '我完全不同意，他把东西扔了'
+    packaging = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['话题'],
+        cues=[{'start': 0, 'end': 8, 'text': text}],
+    )
+    words = [
+        {'text': '我完全不同意', 'start': 0.2, 'end': 2.0},
+        {'text': '他把东西扔了', 'start': 5.0, 'end': 7.5},
+    ]
+    scenes = [Scene(id='a', start=0, end=4), Scene(id='b', start=4, end=8)]
+    fill = build_fill(packaging, 8, scenes=scenes, template='street', word_timing=[{'words': words}])
+    shown = [(word['text'], word['start_frame'], word['end_frame']) for word in fill['words']]
+    assert [item[0] for item in shown] == ['我完全不同意', '他把东西扔了']
+    assert shown[0][1] == round(0.2 * 30)
+    assert shown[1][1] == round(5.0 * 30)
+    assert shown[0][0] not in ''.join(word['text'] for word in fill['words'] if word['start_frame'] >= 4 * 30)
+
+
+def test_fallback_emphasis_uses_whole_words_and_an_empty_deck_stays_empty():
+    from backend.services.studio.packaging import key_phrase
+    assert key_phrase('他买了一件衬衫来') == '衬衫'
+    assert key_phrase('这就是的美国梦') == '美国梦'
+    assert key_phrase('真是奇怪的东西') == '东西'
+    assert key_phrase('他在公司上班') == '上班'
+    for bad in ('件衬衫来', '的美国梦', '怪的东西', '公司上班'):
+        assert key_phrase('他买了一件衬衫来') != bad or bad == '衬衫'
+    assert '件衬衫来' not in {key_phrase('他买了一件衬衫来')}
+    spoken = Packaging(
+        version=2, template='editorial', audience_language='zh', title_lines=['标题'],
+        cues=[{'start': 0, 'end': 4, 'text': '原话', 'original': 'This is literally 24 hours of labor and more'}],
+    )
+    fill = build_fill(spoken, 4, template='editorial')
+    assert fill['deck'] == '' and fill['credit'] == '' and fill['hook_trk'] == ''
+
+
+def test_progress_bar_is_a_filter_not_an_overlay_frame():
+    from backend.services.studio.packaging_html import composite_tail
+    graph, label = composite_tail('base', 1, 1080, 1920, '', template='street', offset=12.5, total=100)
+    assert label == 'paced'
+    assert "drawbox=x=0:y=1908:w='iw*(t+12.500)/100.000':h=12:color=0xD7FF3A:t=fill" in graph
+    editorial, _ = composite_tail('base', 1, 1080, 1920, '', template='editorial', offset=0, total=80)
+    assert "y=1826" in editorial and '(t+0.000)/80.000' in editorial
+    assert "color=c=0x0C0A08:s=1080x1000" in editorial and "overlay=0:920" in editorial
+    plain, plain_label = composite_tail('base', 1, 1080, 1920, '')
+    assert plain_label == 'html' and 'drawbox' not in plain
+
+
 def test_caption_line_limit_matches_the_template_box():
     editorial = (ROOT / 'backend/assets/templates/editorial/style.css').read_text(encoding='utf-8')
     street_css = (ROOT / 'backend/assets/templates/street/style.css').read_text(encoding='utf-8')

@@ -69,6 +69,7 @@ for (const t of payload.times) {
     zh: read('zh'),
     en: read('en'),
     topic: read('topic'),
+    title: read('title-hook'),
     folio: read('f-l'),
     rects: sandbox.occupiedRects(Number(t)),
   }
@@ -207,7 +208,8 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     assert zh['html'] == 'AI现在就能干一半' and zh['className'] == 'k'
     assert re.search(r'class="w k[^"]*">AI<', source)
     assert not re.search(r'class="w k[^"]*">half<', source, re.I)
-    assert painted['0.5']['topic']['text'] == '马斯克：白领工作会最先没'
+    # The cue never named a speaker, so the only guest is not written onto this line.
+    assert painted['0.5']['topic']['text'] == '白领工作会最先没'
     assert '特斯拉' not in painted['0.5']['topic']['text']
     assert any(rect['slot'] == 'hook' and rect['y'] == 1812 for rect in painted['0.5']['rects'])
 
@@ -248,9 +250,11 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
         captions_enabled=False,
     )
     blank = _render('street', paint_fill(build_fill(off_street, 8, template='street'), off_street, 'street'))
-    assert '白领工作会最先没' in blank['0.5']['zh']['html']
+    assert blank['0.5']['zh']['html'] == ''
+    assert '白领工作会最先没' in blank['0.5']['title']['text']
     assert blank['0.5']['topic']['text'] == '马斯克：白领工作会最先没'
     assert '马斯克：马斯克' not in blank['0.5']['topic']['text']
+    assert '白领工作会最先没' in blank['3.0']['title']['text']
 
 
 def test_prepare_overlay_paints_the_preview_marks(tmp_path, monkeypatch):
@@ -398,6 +402,44 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
     assert 'text-align: center' in street_css and 'font-size: 100px' in street_css and '#D7FF3A' in street_css
     editorial_css = (TEMPLATES / 'editorial' / 'style.css').read_text(encoding='utf-8')
     assert '#F4EFE6' in editorial_css and '#F2D98C' in editorial_css and '#C7243A' in editorial_css
+
+
+def test_chinese_audience_sees_the_guest_name_only_on_the_guest_line():
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio import packaging as packaging_mod
+
+    lines = [
+        {'start': 0.2, 'end': 2.0, 'text': 'I completely disagree with that'},
+        {'start': 2.0, 'end': 6.0, 'text': 'Jensen says the dream is still alive'},
+    ]
+
+    def call(_prompt, _data):
+        return {
+            'title_lines': ['黄仁勋谈梦想'],
+            'accent_line': 0,
+            'segments': [
+                {'from': 0, 'to': 0, 'text': '我完全不同意'},
+                {'from': 1, 'to': 1, 'text': '黄仁勋说美国梦还在'},
+            ],
+            'speakers': [{'line': 1, 'name': 'Jensen Huang', 'role': 'Nvidia'}],
+            'tags': [],
+            'highlights': [],
+            'marks': [
+                {'line': 1, 'text': '美国梦', 'speaker': 'Jensen Huang'},
+            ],
+        }
+
+    result = packaging_mod.build_packaging(
+        {'title': '黄仁勋', 'hook': ''}, lines, platform_strategy('douyin'),
+        known_names='黄仁勋 主持人 Jensen', call=call,
+    )
+    assert result['speakers'][0]['name'] == '黄仁勋'
+    assert [cue['speaker'] for cue in result['cues']] == ['', '黄仁勋']
+    fill = build_fill(Packaging.model_validate(result), 8, template='street')
+    painted = _render('street', fill)
+    assert painted['0.5']['topic']['text'] == '黄仁勋谈梦想'
+    assert 'Jensen' not in painted['0.5']['topic']['text']
+    assert painted['3.0']['topic']['text'] == '黄仁勋：黄仁勋谈梦想'
 
 
 def test_street_picture_pads_a_1290_window_without_moving_the_draft():

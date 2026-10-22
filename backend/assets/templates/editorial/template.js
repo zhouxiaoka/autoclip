@@ -12,15 +12,6 @@
     });
   }
 
-  function clamp(value, lo, hi) {
-    return Math.max(lo, Math.min(hi, value));
-  }
-
-  function ease(p) {
-    p = clamp(p, 0, 1);
-    return 1 - Math.pow(1 - p, 3);
-  }
-
   function lines() {
     if (data.hook_lines && data.hook_lines.length) return data.hook_lines;
     var text = (data.hook && data.hook.text) || "";
@@ -77,12 +68,56 @@
     node.style.display = "inline-block";
     var width = node.scrollWidth;
     node.style.display = display;
-    return width;
+    var stroke = 0;
+    if (window.getComputedStyle) {
+      stroke = parseFloat(getComputedStyle(node).webkitTextStrokeWidth) || 0;
+    }
+    return width + stroke;
+  }
+
+  function faceReady(node, face) {
+    if (!face || !document.fonts || !document.fonts.check) return true;
+    var sample = String(node && node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 32) || "Ag";
+    try {
+      if (document.fonts.check(face, sample)) return true;
+    } catch (error) { /* older check() takes one argument */ }
+    return !!document.fonts.check(face);
+  }
+
+  function ellipsisText(node, limit, gauge) {
+    var box = gauge || node;
+    var text = String(node.textContent || "").replace(/…$/, "");
+    var parts = text.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      while (parts.length > 1 && lineWidth(box) > limit) {
+        parts.pop();
+        node.textContent = parts.join(" ") + "…";
+      }
+    }
+    text = String(node.textContent || "");
+    var guard = 0;
+    while (lineWidth(box) > limit && text.replace(/…$/, "").length > 1 && guard < 120) {
+      text = text.replace(/…$/, "").slice(0, -1);
+      node.textContent = text + "…";
+      guard += 1;
+    }
+  }
+
+  function trimTo(node, limit) {
+    if (!node || typeof node.scrollWidth !== "number") return;
+    if (lineWidth(node) <= limit) return;
+    var kids = node.children;
+    if (kids && kids.length && node.removeChild) {
+      while (kids.length > 1 && lineWidth(node) > limit) node.removeChild(kids[kids.length - 1]);
+      if (lineWidth(node) > limit && kids.length) ellipsisText(kids[kids.length - 1], limit, node);
+      return;
+    }
+    ellipsisText(node, limit);
   }
 
   function fit(node, start, floor, step, limit, face) {
     if (!node || typeof node.scrollWidth !== "number") return;
-    if (face && document.fonts && document.fonts.check && !document.fonts.check(face)) {
+    if (!faceReady(node, face)) {
       node.style.fontSize = start + "px";
       return;
     }
@@ -92,6 +127,7 @@
       size -= step;
       node.style.fontSize = size + "px";
     }
+    trimTo(node, limit);
   }
 
   function stateName(t, row) {
@@ -106,7 +142,8 @@
     for (var i = 0; i < list.length; i++) {
       var phrase = list[i];
       var state = stateName(t, phrase);
-      var sweep = state === " now" ? Math.round(100 * ease((t - phrase.t0) / 0.35)) : 0;
+      // A moving underline would make every frame unique. Snap it so the hold shows the full bar.
+      var sweep = state === " now" ? 100 : 0;
       html += '<span class="p' + (phrase.acc ? " acc" : "") + state + '" style="--u:' + sweep + '%">' + esc(phrase.s) + "</span>";
     }
     return html;
@@ -137,7 +174,7 @@
     var block = document.getElementById("h-l");
     block.innerHTML = html;
     fitHook();
-    document.getElementById("kick").textContent = data.deck || data.kicker || "";
+    document.getElementById("kick").textContent = data.deck || "";
     document.getElementById("trk").textContent = data.hook_trk || data.credit || "";
     document.getElementById("f-l").textContent = folioText();
   }
@@ -155,7 +192,6 @@
 
   window.renderFrame = function (t) {
     fitHook();
-    var total = Number(data.T) > 0 ? Number(data.T) : 1;
     var moment = momentAt(t);
     var zh = document.getElementById("zh");
     var en = document.getElementById("en");
@@ -198,7 +234,6 @@
       step = (number.steps || 8) - 1;
     }
     document.getElementById("num").textContent = step < 0 || !number ? "" : String(Math.round(number.value * (step + 1) / (number.steps || 8))) + (number.unit || "");
-    document.getElementById("prog").style.width = (960 * clamp(t / total, 0, 1)).toFixed(1) + "px";
     var headline = lines().map(function (line) { return line[0]; }).join("\n");
     return [headline, zh.innerHTML, en.innerHTML, card, String(step)].join("|");
   };
@@ -207,7 +242,7 @@
     var rects = [];
     var hookLines = lines();
     if (hookLines.length) rects.push({slot: "hook", x: 60, y: 1192, w: 960, h: 209});
-    if (data.deck || data.kicker) rects.push({slot: "kicker", x: 60, y: 1115, w: 960, h: 44});
+    if (data.deck) rects.push({slot: "kicker", x: 60, y: 1115, w: 960, h: 44});
     if (data.hook_trk || data.credit) rects.push({slot: "credit", x: 60, y: 1443, w: 960, h: 22});
     var moment = momentAt(t);
     if (moment) {

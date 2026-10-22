@@ -10,13 +10,6 @@
           "y": 1192,
           "w": 960,
           "h": 209
-        },
-        {
-          "slot": "kicker",
-          "x": 60,
-          "y": 1115,
-          "w": 960,
-          "h": 44
         }
       ],
       "sub": "",
@@ -24,7 +17,7 @@
     },
     {
       "t": 0.5,
-      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:64%\">好的</span>|||-1",
+      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:100%\">好的</span>|||-1",
       "rects": [
         {
           "slot": "hook",
@@ -34,13 +27,6 @@
           "h": 209
         },
         {
-          "slot": "kicker",
-          "x": 60,
-          "y": 1115,
-          "w": 960,
-          "h": 44
-        },
-        {
           "slot": "subtitle",
           "x": 60,
           "y": 1565,
@@ -48,12 +34,12 @@
           "h": 61
         }
       ],
-      "sub": "<span class=\"p now\" style=\"--u:64%\">好的</span>",
+      "sub": "<span class=\"p now\" style=\"--u:100%\">好的</span>",
       "topic": ""
     },
     {
       "t": 1,
-      "hash": "好的投资人像飞行教练|<span class=\"p acc now\" style=\"--u:92%\">投资人</span>|||0",
+      "hash": "好的投资人像飞行教练|<span class=\"p acc now\" style=\"--u:100%\">投资人</span>|||0",
       "rects": [
         {
           "slot": "hook",
@@ -61,13 +47,6 @@
           "y": 1192,
           "w": 960,
           "h": 209
-        },
-        {
-          "slot": "kicker",
-          "x": 60,
-          "y": 1115,
-          "w": 960,
-          "h": 44
         },
         {
           "slot": "subtitle",
@@ -77,12 +56,12 @@
           "h": 61
         }
       ],
-      "sub": "<span class=\"p acc now\" style=\"--u:92%\">投资人</span>",
+      "sub": "<span class=\"p acc now\" style=\"--u:100%\">投资人</span>",
       "topic": ""
     },
     {
       "t": 1.6,
-      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:0%\">像</span>||飞行教练|3",
+      "hash": "好的投资人像飞行教练|<span class=\"p now\" style=\"--u:100%\">像</span>||飞行教练|3",
       "rects": [
         {
           "slot": "hook",
@@ -90,13 +69,6 @@
           "y": 1192,
           "w": 960,
           "h": 209
-        },
-        {
-          "slot": "kicker",
-          "x": 60,
-          "y": 1115,
-          "w": 960,
-          "h": 44
         },
         {
           "slot": "subtitle",
@@ -113,7 +85,7 @@
           "h": 72
         }
       ],
-      "sub": "<span class=\"p now\" style=\"--u:0%\">像</span>",
+      "sub": "<span class=\"p now\" style=\"--u:100%\">像</span>",
       "topic": ""
     },
     {
@@ -126,13 +98,6 @@
           "y": 1192,
           "w": 960,
           "h": 209
-        },
-        {
-          "slot": "kicker",
-          "x": 60,
-          "y": 1115,
-          "w": 960,
-          "h": 44
         },
         {
           "slot": "gloss",
@@ -149,7 +114,7 @@
   "street": [
     {
       "t": 0,
-      "hash": "你|||街头一问|0.00",
+      "hash": "你|||街头一问|1||",
       "rects": [
         {
           "slot": "subtitle",
@@ -171,7 +136,7 @@
     },
     {
       "t": 0.5,
-      "hash": "怎么|||街头一问|50.00",
+      "hash": "怎么|||街头一问|0|14秒|",
       "rects": [
         {
           "slot": "subtitle",
@@ -200,7 +165,7 @@
     },
     {
       "t": 1,
-      "hash": "看|k||街头一问|100.00",
+      "hash": "看|k||街头一问|0|42秒|",
       "rects": [
         {
           "slot": "subtitle",
@@ -243,7 +208,7 @@
     },
     {
       "t": 1.6,
-      "hash": "这个|||街头一问|100.00",
+      "hash": "这个|||街头一问|0|70秒|",
       "rects": [
         {
           "slot": "subtitle",
@@ -286,7 +251,7 @@
     },
     {
       "t": 2.4,
-      "hash": "|||街头一问|100.00",
+      "hash": "|||街头一问|0||",
       "rects": [
         {
           "slot": "hook",

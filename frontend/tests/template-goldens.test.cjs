@@ -88,7 +88,7 @@ test('editorial and street match the golden frames at fixed timestamps', () => {
 test('editorial headline stays under the face and street keeps the lower label', () => {
   // Editorial captions-off clears the hook before paint and burns the classic title.
   // The template itself still holds the headline for the whole clip, below the face.
-  // Street captions-off keeps the title in the lower caption band, never as a top title.
+  // Street captions-off shows the title as the opening hook sticker, and the label keeps the topic.
 
   for (const template of ['editorial', 'street']) {
     const page = load(template)
@@ -106,11 +106,55 @@ test('editorial headline stays under the face and street keeps the lower label',
       assert.equal(page.occupiedRects(3).find(rect => rect.slot === 'hook').y, hook.y)
     } else {
       const sub = page.document.getElementById('zh').innerHTML
-      assert.match(sub, /街头一问/)
+      assert.equal(sub, '')
+      assert.match(page.document.getElementById('title-hook').textContent, /街头一问/)
       assert.equal(page.document.getElementById('topic').textContent, '街头一问')
       assert.equal(hook.y, 1812)
+      page.renderFrame(4)
+      assert.equal(page.document.getElementById('title-hook').textContent, '')
+      assert.equal(page.document.getElementById('zh').innerHTML, '')
     }
   }
+})
+
+test('a moving progress bar is not a new overlay frame', () => {
+  const street = load('street')
+  street.setData({
+    fps: 30,
+    T: 90,
+    title_lines: ['话题'],
+    topic: '话题',
+    speakers: [{name: '黄仁勋'}],
+    moments: [{
+      t0: 0,
+      t1: 90,
+      speaker: '黄仁勋',
+      zh: [
+        {s: '第一句完整的话', t0: 0, t1: 30, key: true, acc: false},
+        {s: '第二句完整的话', t0: 30, t1: 60, key: false, acc: false},
+        {s: '第三句完整的话', t0: 60, t1: 90, key: false, acc: false},
+      ],
+      en: [
+        {w: 'FIRST', t0: 0, t1: 30, key: true},
+        {w: 'SECOND', t0: 30, t1: 60, key: false},
+        {w: 'THIRD', t0: 60, t1: 90, key: false},
+      ],
+    }],
+  })
+  let runs = 0
+  let prev = null
+  for (let i = 0; i < 90 * 30; i++) {
+    const hash = street.renderFrame(i / 30)
+    if (hash !== prev) {
+      runs += 1
+      prev = hash
+    }
+  }
+  assert.ok(runs < 40, `street captured ${runs} states in 90s`)
+
+  const editorial = load('editorial')
+  editorial.setData(fills.editorial)
+  assert.equal(editorial.renderFrame(0.5), editorial.renderFrame(0.53))
 })
 
 test('street and editorial css match the measured preview', () => {

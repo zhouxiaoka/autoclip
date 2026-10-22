@@ -41,6 +41,7 @@ dependencies = [
   "dashscope==1.27.4",
   "mcp==2.1.1",
   "sentry-sdk==2.69.2",
+  "jieba==0.42.1",
 ]
 
 [project.scripts]
