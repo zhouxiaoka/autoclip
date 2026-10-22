@@ -314,11 +314,68 @@ def _recast_crop(crop_x: float, source_w: int, source_h: int) -> float:
     return crop_x_for_center(center, new)
 
 
-def street_picture(draft: Draft, scene: Scene, source_w: int, source_h: int) -> tuple[str, str]:
+def street_punches(draft: Draft, index: int, zoom=None) -> tuple[float, list[tuple[float, float]]]:
+    """(scale, scene-local spans) where the street window is punched in.
+
+    The preview's jump-cut feel: every new sentence flips between the two ``base.zoom.step``
+    framings (1.00 and 1.22), so about half of the sentence starts punch in, hard, on the
+    frame the sentence starts. ``base.zoom.intro`` holds the punched framing over the
+    first second. Spans are seconds from the start of scene ``index``.
+    """
+    from backend.services.studio.audio import scene_duration
+    if zoom is None:
+        try:
+            from backend.services.studio.templates.registry import get
+            zoom = get('street').base.zoom
+        except Exception:
+            return 1.0, []
+    steps = [float(item) for item in (getattr(zoom, 'step', None) or [])]
+    if getattr(zoom, 'mode', '') != 'step' or len(steps) < 2 or max(steps) <= min(steps):
+        return 1.0, []
+    scale = max(steps) / min(steps)
+    if not draft.scenes or not 0 <= index < len(draft.scenes):
+        return scale, []
+    rows = timeline(draft.scenes)
+    starts = []
+    cues = (draft.packaging.cues if draft.packaging else []) or []
+    for cue in cues:
+        at = to_output(float(cue.start), rows)
+        if at is not None:
+            starts.append(round(at, 3))
+    starts = sorted(set(starts))
+    intro = getattr(zoom, 'intro', None)
+    intro_end = float(intro.dur) if intro is not None else 0.0
+    offset, length = rows[index][2], scene_duration(draft.scenes[index])
+    points = sorted({0.0, length, *[s - offset for s in starts if 0 < s - offset < length],
+                     *([intro_end - offset] if 0 < intro_end - offset < length else [])})
+    spans = []
+    for lo, hi in zip(points, points[1:]):
+        mid = offset + (lo + hi) / 2
+        punched = mid < intro_end or sum(1 for s in starts if s <= mid) % 2 == 1
+        if not punched or hi - lo < 1e-3:
+            continue
+        if spans and abs(spans[-1][1] - lo) < 1e-6:
+            spans[-1] = (spans[-1][0], hi)
+        else:
+            spans.append((lo, hi))
+    return scale, [(round(lo, 3), round(hi, 3)) for lo, hi in spans]
+
+
+def _punch_chain(scale: float, spans: list[tuple[float, float]], face_y: float, width: int, height: int) -> str:
+    """``[win]`` -> ``[punched]``: the same window cropped ``scale`` times tighter, around the face line."""
+    enable = '+'.join(f'between(t,{lo:.3f},{max(lo, hi - 0.001):.3f})' for lo, hi in spans)
+    return (f"[win]split=2[wa][wb];"
+            f"[wb]crop=w='2*trunc(iw/{scale:.4f}/2)':h='2*trunc(ih/{scale:.4f}/2)':x='(iw-ow)/2':y='(ih-oh)*{face_y:.3f}',"
+            f"scale={width}:{height}:flags=bicubic,setsar=1[wz];"
+            f"[wa][wz]overlay=0:0:enable='{enable}'[punched]")
+
+
+def street_picture(draft: Draft, scene: Scene, source_w: int, source_h: int, index: int | None = None) -> tuple[str, str]:
     """Cover-crop the tracked speaker into the top 1080×1290 window and leave black below.
 
     The draft keeps the 9:16 crop_x so a classic fallback still frames the same face.
     Only this picture retargets that centre onto the shorter window the preview uses.
+    With the scene ``index``, the window takes the template's step punch-ins (``street_punches``).
     """
     fallback = scene.crop_x if scene.crop_x is not None else draft.crop_x
     points = []
@@ -330,6 +387,19 @@ def street_picture(draft: Draft, scene: Scene, source_w: int, source_h: int) -> 
     })
     graph, label = picture_only(draft, recast, *STREET_WINDOW)
     if graph.endswith('[base]'):
+        window = 'win'
+        if index is not None:
+            scale, spans = street_punches(draft, index)
+            if spans:
+                face_y = 0.40
+                try:
+                    from backend.services.studio.templates.registry import get
+                    face_y = float(get('street').base.face_y)
+                except Exception:
+                    pass
+                graph = graph[:-6] + '[win];' + _punch_chain(scale, spans, face_y, *STREET_WINDOW)
+                window = 'punched'
+                return graph + f';[{window}]pad=1080:1920:0:0:black,setsar=1[base]', 'base'
         graph = graph[:-6] + '[win];[win]pad=1080:1920:0:0:black,setsar=1[base]'
         return graph, 'base'
     return graph, label

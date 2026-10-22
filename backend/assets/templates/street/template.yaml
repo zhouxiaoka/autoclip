@@ -13,6 +13,7 @@ base:
     mode: step
     step: [1.00, 1.22]
     key_punch: 0.04
+    intro: {from: 1.22, dur: 1.0}
   transitions: {broll: cut, max: 2}
   grade: "eq=contrast=1.06:saturation=1.08"
 overlay:

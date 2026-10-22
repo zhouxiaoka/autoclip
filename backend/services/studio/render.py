@@ -285,7 +285,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                             from backend.services.studio import packaging_html, packaging_render
                             if html_template == 'street' and draft.layout == 'crop':
                                 picture, label = packaging_render.street_picture(
-                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0),
+                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
                                 )
                             else:
                                 picture, label = packaging_render.picture_only(draft, scene, w, h)
