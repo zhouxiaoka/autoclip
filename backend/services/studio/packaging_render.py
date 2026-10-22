@@ -299,6 +299,42 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     return _header(look) + '\n'.join(out.lines) + '\n'
 
 
+STREET_WINDOW = (1080, 1290)
+PORTRAIT_FRAME = (1080, 1920)
+
+
+def _recast_crop(crop_x: float, source_w: int, source_h: int) -> float:
+    """Same speaker centre, expressed for the 1080×1290 street window instead of 9:16."""
+    from backend.services.studio.framing import crop_x_for_center, window_fraction
+    if source_w < 2 or source_h < 2:
+        return crop_x
+    old = window_fraction(source_w, source_h, *PORTRAIT_FRAME)
+    new = window_fraction(source_w, source_h, *STREET_WINDOW)
+    center = 0.5 if old >= 1 else old / 2 + crop_x * (1 - old)
+    return crop_x_for_center(center, new)
+
+
+def street_picture(draft: Draft, scene: Scene, source_w: int, source_h: int) -> tuple[str, str]:
+    """Cover-crop the tracked speaker into the top 1080×1290 window and leave black below.
+
+    The draft keeps the 9:16 crop_x so a classic fallback still frames the same face.
+    Only this picture retargets that centre onto the shorter window the preview uses.
+    """
+    fallback = scene.crop_x if scene.crop_x is not None else draft.crop_x
+    points = []
+    for point in scene.crop_track or []:
+        points.append(point.model_copy(update={'crop_x': _recast_crop(point.crop_x, source_w, source_h)}))
+    recast = scene.model_copy(update={
+        'crop_x': _recast_crop(fallback if fallback is not None else 0.5, source_w, source_h),
+        'crop_track': points or None,
+    })
+    graph, label = picture_only(draft, recast, *STREET_WINDOW)
+    if graph.endswith('[base]'):
+        graph = graph[:-6] + '[win];[win]pad=1080:1920:0:0:black,setsar=1[base]'
+        return graph, 'base'
+    return graph, label
+
+
 def picture_only(draft: Draft, scene: Scene, w: int, h: int) -> tuple[str, str]:
     """The base picture without ASS. The HTML overlay is a later input."""
     from backend.services.publish_export import _layout_filters

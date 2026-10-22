@@ -15,7 +15,8 @@ def test_shipping_templates_are_editorial_and_street_only():
     assert set(loaded) == {'editorial', 'street'}
     editorial, street = loaded['editorial'], loaded['street']
     assert editorial.name.zh == '杂志风' and street.name.zh == '街头快剪'
-    assert editorial.canvas.overlay_px == (720, 1280) and editorial.canvas.fps == 30
+    assert editorial.canvas.overlay_px == (1080, 1920) and editorial.canvas.fps == 30
+    assert street.canvas.overlay_px == (1080, 1920)
     assert editorial.overlay.slots['subtitle'].max_rows == 2
     assert street.overlay.limits['sticker_max'] == 2
     assert street.audio.bgm == 'none' and street.audio.optional_bed is True

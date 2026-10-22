@@ -1,6 +1,7 @@
 """Editorial and street overlays match the editing-style preview, not the old bars."""
 import json
 import os
+import re
 import struct
 import subprocess
 import tempfile
@@ -18,9 +19,9 @@ TEMPLATES = ROOT / 'backend' / 'assets' / 'templates'
 SANDBOX = ROOT / 'frontend' / 'tests' / 'vm-sandbox.cjs'
 CHROME = os.environ.get('CHROME_BIN', 'google-chrome')
 
-# Yellow-green key word (street) and the gold rule / quote (editorial).
-STREET_MARK = (0xD6, 0xEF, 0x4A)
-EDITORIAL_GOLD = (0xE6, 0xC5, 0x6A)
+# Preview lime and the magazine butter. Sampled from the 1080 CSS, not the old restyle.
+STREET_MARK = (0xD7, 0xFF, 0x3A)
+EDITORIAL_GOLD = (0xF2, 0xD9, 0x8C)
 
 
 def _paint(template, **kwargs):
@@ -59,24 +60,24 @@ for (const t of payload.times) {
   sandbox.renderFrame(Number(t))
   const read = id => {
     const node = document.getElementById(id)
-    return { html: node.innerHTML, text: node.textContent, display: node.style.display || '' }
+    return { html: node.innerHTML, text: node.textContent, display: node.style.display || '', className: node.className || '' }
   }
   frames[String(t)] = {
-    hook: read('hook'),
-    sub: read('sub'),
-    source: read('source'),
-    lineA: read('line-a'),
-    lineB: read('line-b'),
-    tick: read('tick'),
-    kicker: read('kicker'),
-    rects: sandbox.occupiedRects(t),
+    hook: read('h-l'),
+    kick: read('kick'),
+    trk: read('trk'),
+    zh: read('zh'),
+    en: read('en'),
+    topic: read('topic'),
+    folio: read('f-l'),
+    rects: sandbox.occupiedRects(Number(t)),
   }
 }
 process.stdout.write(JSON.stringify(frames))
 '''
     done = subprocess.run(
         ['node', '-e', script, str(SANDBOX), template, str(TEMPLATES)],
-        input=json.dumps({'fill': fill, 'times': ['0.5', '3.0']}),
+        input=json.dumps({'fill': fill, 'times': ['0.5', '1.6', '3.0']}),
         capture_output=True, text=True, check=True,
     )
     return json.loads(done.stdout)
@@ -166,7 +167,7 @@ def _shoot(template, fill, t, dest: Path):
     )
     subprocess.run(
         ['timeout', '20', CHROME, '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-         '--force-device-scale-factor=1', '--window-size=720,1280', f'--screenshot={dest}', driver.as_uri()],
+         '--force-device-scale-factor=1', '--window-size=1080,1920', f'--screenshot={dest}', driver.as_uri()],
         capture_output=True, check=False,
     )
     driver.unlink(missing_ok=True)
@@ -185,9 +186,10 @@ def test_fill_keeps_the_source_line_and_the_speaker():
     assert fill['speakers'] == [{'name': '马斯克', 'role': '特斯拉'}]
     assert fill['words']
     original = fill['words'][0]['original']
-    assert original.count('\n') == 1
-    assert original.endswith('…')
+    assert original == long_original
+    assert '\n' not in original
     assert all(word['original'] == original for word in fill['words'])
+    assert ' '.join(word['w'] for word in fill['moments'][0]['en']) == long_original
     assert ''.join(word['text'].replace('\n', '') for word in fill['words']) == 'AI现在就能干一半'
 
 
@@ -200,53 +202,55 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
         cues=[{'start': 0.2, 'end': 4.0, 'text': 'AI现在就能干一半', 'original': 'AI can do half or more'}],
     )
     painted = _render('street', street)
-    sub = painted['0.5']['sub']['html']
-    source = painted['0.5']['source']['html']
-    assert '<em>AI</em>' in sub and '<em>AI现在就能干一半</em>' not in sub
-    assert '<em>AI</em>' in source
-    assert painted['0.5']['lineA']['text'] == '马斯克：白领工作会最先没'
-    assert painted['0.5']['lineB']['text'] == '特斯拉'
-    assert painted['0.5']['tick']['display'] == 'block'
-    assert any(rect['slot'] == 'hook' and rect['y'] > 900 for rect in painted['0.5']['rects'])
+    zh = painted['0.5']['zh']
+    source = painted['0.5']['en']['html']
+    assert zh['html'] == 'AI现在就能干一半' and zh['className'] == 'k'
+    assert re.search(r'class="w k[^"]*">AI<', source)
+    assert not re.search(r'class="w k[^"]*">half<', source, re.I)
+    assert painted['0.5']['topic']['text'] == '马斯克：白领工作会最先没'
+    assert '特斯拉' not in painted['0.5']['topic']['text']
+    assert any(rect['slot'] == 'hook' and rect['y'] == 1812 for rect in painted['0.5']['rects'])
 
     editorial, _ = _paint(
         'editorial',
         title_lines=['AI是五层蛋糕，', '最底层是能源'],
-        kicker='访谈',
+        deck='Jensen Huang on the five-layer cake',
         speakers=[{'at': 0, 'name': '黄仁勋', 'role': '英伟达'}],
         emphasis=[{'at': 0.2, 'text': '五层蛋糕'}],
         cues=[{'start': 0.2, 'end': 4.0, 'text': 'AI其实是一块五层蛋糕', 'original': 'AI is a five layer cake'}],
     )
     frames = _render('editorial', editorial)
-    assert frames['0.5']['hook']['text'] == 'AI是五层蛋糕，\n最底层是能源'
-    assert frames['3.0']['hook']['text'] == frames['0.5']['hook']['text']
-    assert '<em>五层蛋糕</em>' in frames['0.5']['sub']['html']
-    assert 'five layer cake' in frames['0.5']['source']['html']
-    assert frames['0.5']['kicker']['text'] == '黄仁勋  英伟达'
+    assert 'AI是五层蛋糕，' in frames['0.5']['hook']['html']
+    assert '最底层是能源' in frames['0.5']['hook']['html'] and 'ln acc' in frames['0.5']['hook']['html']
+    assert frames['3.0']['hook']['html'] == frames['0.5']['hook']['html']
+    assert '五层蛋糕' in frames['0.5']['zh']['html'] and 'acc' in frames['0.5']['zh']['html']
+    assert 'five' in frames['0.5']['en']['html']
+    assert frames['0.5']['kick']['text'] == 'Jensen Huang on the five-layer cake'
+    assert frames['0.5']['trk']['text'] == 'FIVE-LAYER CAKE · JENSEN HUANG'
     hook = next(rect for rect in frames['3.0']['rects'] if rect['slot'] == 'hook')
-    assert hook['y'] >= 700
+    assert hook['y'] == 1192
 
-    # Captions-off drops cues inside build_fill and clears the painted hook / title lines.
-    # The classic title is burned beside the overlay; the template must not keep either.
+    # Captions-off drops cues inside build_fill. Editorial clears the painted hook so the classic
+    # title can be burned beside it. Street keeps the title in the lower band.
     off_editorial = Packaging(
         version=2, template='editorial', audience_language='zh', title_lines=['AI是五层蛋糕，', '最底层是能源'],
         kicker='访谈', speakers=[{'at': 0, 'name': '黄仁勋', 'role': '英伟达'}],
         cues=[{'start': 0.2, 'end': 4.0, 'text': 'AI其实是一块五层蛋糕', 'original': 'AI is a five layer cake'}],
         captions_enabled=False,
     )
-    hidden = _render('editorial', paint_fill(build_fill(off_editorial, 8, template='editorial'), off_editorial))
-    assert hidden['3.0']['hook']['text'] == ''
-    assert hidden['3.0']['sub']['html'] == ''
+    hidden = _render('editorial', paint_fill(build_fill(off_editorial, 8, template='editorial'), off_editorial, 'editorial'))
+    assert hidden['3.0']['hook']['html'] == ''
+    assert hidden['3.0']['zh']['html'] == ''
     off_street = Packaging(
         version=2, template='street', audience_language='zh', title_lines=['白领工作会最先没'],
         speakers=[{'at': 0, 'name': '马斯克', 'role': '特斯拉'}],
         cues=[{'start': 0.2, 'end': 4.0, 'text': 'AI现在就能干一半', 'original': 'AI can do half or more'}],
         captions_enabled=False,
     )
-    blank = _render('street', paint_fill(build_fill(off_street, 8, template='street'), off_street))
-    assert blank['0.5']['lineA']['text'] == '' and blank['0.5']['lineB']['text'] == ''
-    assert blank['0.5']['sub']['html'] == ''
-    assert blank['0.5']['tick']['display'] == 'none'
+    blank = _render('street', paint_fill(build_fill(off_street, 8, template='street'), off_street, 'street'))
+    assert '白领工作会最先没' in blank['0.5']['zh']['html']
+    assert blank['0.5']['topic']['text'] == '马斯克：白领工作会最先没'
+    assert '马斯克：马斯克' not in blank['0.5']['topic']['text']
 
 
 def test_prepare_overlay_paints_the_preview_marks(tmp_path, monkeypatch):
@@ -299,3 +303,146 @@ def test_prepare_overlay_paints_the_preview_marks(tmp_path, monkeypatch):
         assert _near(rows, STREET_MARK) > 40, name
         _width, _height, rows = _png_size_and_rows(editorial_shots[name])
         assert _near(rows, EDITORIAL_GOLD) > 40, name
+
+
+def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
+    """Emphasis and the speaker come from the real packaging parse, not a hand-filled overlay."""
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio import packaging as packaging_mod
+
+    lines = [
+        {'start': 0.2, 'end': 2.0, 'text': 'I think for most people this opens more opportunities'},
+        {'start': 2.0, 'end': 6.0, 'text': 'Jensen says the economy grows 8 times'},
+    ]
+    draft = {'title': '黄仁勋', 'hook': ''}
+
+    def reply(**extra):
+        body = {
+            'title_lines': ['黄仁勋：更闲的工作', '还是更有意义'],
+            'accent_line': 0,
+            'segments': [
+                {'from': 0, 'to': 0, 'text': '我认为对大多数人来说，AI会打开更多机会'},
+                {'from': 1, 'to': 1, 'text': '黄仁勋说，经济会增长到 8 倍'},
+            ],
+            'speakers': [
+                {'line': 0, 'name': '主持人', 'role': '访谈'},
+                {'line': 1, 'name': '黄仁勋', 'role': '英伟达 CEO'},
+            ],
+            'tags': [],
+            'highlights': [],
+            'deck': 'Jensen Huang on the five-layer cake',
+            'marks': [
+                {'line': 0, 'text': '更多机会', 'speaker': '主持人'},
+                {'line': 1, 'text': '8 倍', 'speaker': '黄仁勋'},
+            ],
+        }
+        body.update(extra)
+        return body
+
+    prompts = []
+
+    def call(prompt, _data):
+        prompts.append(prompt)
+        return reply()
+
+    result = packaging_mod.build_packaging(
+        draft, lines, platform_strategy('douyin'), known_names='黄仁勋 主持人 Jensen', call=call,
+    )
+    assert 'marks' in prompts[0]
+    assert result['version'] == 1 and result['template'] == 'interview_zh'
+    assert result['deck'] == 'Jensen Huang on the five-layer cake'
+    assert [cue['emphasis'] for cue in result['cues']] == ['更多机会', '8 倍']
+    assert [cue['speaker'] for cue in result['cues']] == ['主持人', '黄仁勋']
+    for cue in result['cues']:
+        assert cue['emphasis'] in cue['text'] and cue['emphasis'] != cue['text']
+
+    bare = packaging_mod.build_packaging(
+        draft, lines, platform_strategy('douyin'), known_names='黄仁勋 主持人 Jensen',
+        call=lambda _prompt, _data: reply(marks=[], deck=''),
+    )
+    again = packaging_mod.build_packaging(
+        draft, lines, platform_strategy('douyin'), known_names='黄仁勋 主持人 Jensen',
+        call=lambda _prompt, _data: reply(marks=[], deck=''),
+    )
+    assert [cue['emphasis'] for cue in bare['cues']] == [cue['emphasis'] for cue in again['cues']]
+    for cue in bare['cues']:
+        assert cue['emphasis'] and cue['emphasis'] in cue['text'] and cue['emphasis'] != cue['text']
+
+    model = Packaging.model_validate(result)
+    fill = paint_fill(build_fill(model, 8, template='street'), model, 'street')
+    # A long host sentence pages into more than one screen; every page keeps that cue's speaker.
+    speakers = [word['speaker'] for word in fill['words']]
+    assert speakers[0] == '主持人' and speakers[-1] == '黄仁勋'
+    assert set(speakers) == {'主持人', '黄仁勋'}
+    host = [word for word in fill['words'] if word['speaker'] == '主持人']
+    guest = [word for word in fill['words'] if word['speaker'] == '黄仁勋']
+    assert any(word['emphasis'] == '更多机会' for word in host)
+    assert any(word['emphasis'] == '8 倍' for word in guest)
+    painted = _render('street', fill)
+    assert painted['0.5']['topic']['text'] == '主持人：更闲的工作'
+    assert '黄仁勋：黄仁勋' not in painted['0.5']['topic']['text']
+    assert painted['3.0']['topic']['text'] == '黄仁勋：更闲的工作'
+    assert re.search(r'class="w k[^"]*">8<', painted['3.0']['en']['html'])
+    assert 'class="w k' not in painted['0.5']['en']['html']
+    editorial_fill = paint_fill(build_fill(model, 8, template='editorial'), model, 'editorial')
+    frames = _render('editorial', editorial_fill)
+    assert frames['0.5']['kick']['text'] == 'Jensen Huang on the five-layer cake'
+    assert frames['0.5']['trk']['text'] == 'FIVE-LAYER CAKE · JENSEN HUANG'
+    assert frames['3.0']['trk']['text'] == frames['0.5']['trk']['text']
+    quiet = {**editorial_fill, 'words': [], 'moments': []}
+    still = _render('editorial', quiet)
+    hook_on = next(rect for rect in frames['0.5']['rects'] if rect['slot'] == 'hook')
+    hook_off = next(rect for rect in still['0.5']['rects'] if rect['slot'] == 'hook')
+    assert hook_on['y'] == hook_off['y'] == 1192
+    street_css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
+    assert 'text-align: center' in street_css and 'font-size: 100px' in street_css and '#D7FF3A' in street_css
+    editorial_css = (TEMPLATES / 'editorial' / 'style.css').read_text(encoding='utf-8')
+    assert '#F4EFE6' in editorial_css and '#F2D98C' in editorial_css and '#C7243A' in editorial_css
+
+
+def test_street_picture_pads_a_1290_window_without_moving_the_draft():
+    from backend.services.studio.models import Draft, Scene
+    from backend.services.studio.packaging_render import street_picture
+
+    scene = Scene(id='s', start=0, end=4, crop_x=0.2)
+    draft = Draft(id='d', title='t', scenes=[scene], layout='crop', crop_x=0.2)
+    graph, label = street_picture(draft, scene, 1920, 1080)
+    assert 'crop=1080:1290' in graph
+    assert 'pad=1080:1920:0:0:black' in graph
+    assert 'crop=1080:1920' not in graph
+    assert label == 'base'
+    assert scene.crop_x == 0.2 and draft.crop_x == 0.2
+
+
+def test_word_times_light_only_a_textual_or_digit_keyword():
+    shared = dict(version=2, template='street', audience_language='zh', title_lines=['一半'])
+    chinese = Packaging(
+        **shared,
+        cues=[{'start': 0.2, 'end': 3.0, 'text': 'AI现在就能干一半', 'original': 'AI can do half or more', 'emphasis': '一半'}],
+    )
+    timing = [{'start': 0.2, 'end': 3.0, 'text': 'AI can do half or more', 'words': [
+        {'text': 'AI', 'start': 0.2, 'end': 0.5},
+        {'text': 'can', 'start': 0.5, 'end': 0.8},
+        {'text': 'do', 'start': 0.8, 'end': 1.1},
+        {'text': 'half', 'start': 1.1, 'end': 1.6},
+        {'text': 'or', 'start': 1.6, 'end': 1.9},
+        {'text': 'more', 'start': 1.9, 'end': 2.4},
+    ]}]
+    fill = build_fill(chinese, 4, template='street', word_timing=timing)
+    words = fill['moments'][0]['en']
+    assert [word['w'] for word in words] == ['AI', 'can', 'do', 'half', 'or', 'more']
+    assert [word['key'] for word in words] == [False, False, False, False, False, False]
+    assert words[3]['t0'] == pytest.approx(1.1)
+    assert fill['moments'][0]['zh'][0]['key'] is True
+
+    numbered = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['八倍'],
+        cues=[{'start': 0.0, 'end': 2.0, 'text': '经济会增长到 8 倍', 'original': 'grows 8 times', 'emphasis': '8 倍'}],
+    )
+    numbered_fill = build_fill(numbered, 2, template='street')
+    marked = {word['w']: word['key'] for word in numbered_fill['moments'][0]['en']}
+    assert marked['8'] is True and marked['times'] is False and marked['grows'] is False
+
+    plain = build_fill(chinese, 4, template='street')
+    starts = [word['t0'] for word in plain['moments'][0]['en']]
+    assert starts == sorted(starts) and starts[0] < starts[-1]

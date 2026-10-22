@@ -54,8 +54,8 @@ class CanvasSpec(BaseModel):
         width, height = (int(value[0]), int(value[1]))
         if width < 2 or height < 2 or width % 2 or height % 2:
             raise UserFacingError('overlay_px 必须是偶数像素')
-        if (width, height) != (720, 1280):
-            raise UserFacingError('v1 叠加层固定为 720×1280')
+        if (width, height) != (1080, 1920):
+            raise UserFacingError('杂志风和街头快剪的叠加层是 1080×1920')
         return width, height
 
 

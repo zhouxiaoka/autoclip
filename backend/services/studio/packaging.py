@@ -75,6 +75,12 @@ PROMPT = (
     'tags 仅当 template 为 interview_zh 时给出 2–4 个编辑点评（中文每个不超过 10 个字，英文不超过 30 个字符），必须具体点出这一句最有冲击力的内容，'
     '文字使用 audience_language（英文平台不得写中文）；例如“七分钟干完三个月”“以退为进”；禁止“逻辑清晰”“直击核心”“干货满满”这类泛泛评价；line 指向被点评的行。'
     'highlights 仅当 template 为 podcast_en 时给出，每 3–4 行最多一个，word 必须是该行（翻译后）里出现的单个关键词。'
+    '另外返回 "marks"：每一句一条 {"line":行id,"text":"关键词","speaker":"说话人"}。'
+    'line 是该句覆盖的某一行 id；text 是该句译文（或原文）里最该标出的一个短词或短语（中文 2–8 个字，英文一个词），'
+    '必须是该句 text 的连续子串，不能是整句，不能编造。'
+    'speaker 是这一句实际在说话的人，必须等于 speakers 里的 name；主持人和嘉宾分开标，不确定就省略 speaker。'
+    '可以额外返回 "deck"：一行英文斜体导语，不超过 60 个字符，概括主题，例如 "Jensen Huang on the five-layer cake"；没有把握就省略。'
+    '可以额外返回 "issue"：杂志页脚的节目和日期，不超过 60 个字符，例如 "DWARKESH PODCAST · 2026.04.15"；不确定就省略。'
     '另外返回 "mood"：按这段内容本身的情绪选一个——calm（冷静理性的分析）、serious（严肃、风险、警示）、'
     'bold（强观点、冲突、爆点）、warm（真诚、感动、个人经历）、playful（轻松、幽默、有趣）。'
 )
@@ -173,6 +179,96 @@ def _names_allowed(name: str, haystack: str) -> bool:
     return bool(parts) and all(p.lower() in haystack for p in parts[:1])
 
 
+_EN_STOP = {
+    'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'that', 'this', 'with', 'is', 'are',
+    'was', 'were', 'be', 'it', 'as', 'at', 'by', 'from', 'i', 'you', 'he', 'she', 'we', 'they',
+}
+
+
+def _accept_phrase(phrase: str, text: str) -> str:
+    """The phrase only counts when it is a short piece of the cue, not the whole sentence."""
+    phrase = _clean(phrase)
+    if not phrase or not text or phrase == text or len(phrase) > 30:
+        return ''
+    if phrase in text:
+        return phrase
+    at = text.lower().find(phrase.lower())
+    if at < 0:
+        return ''
+    return text[at:at + len(phrase)]
+
+
+def key_phrase(text: str, original: str = '') -> str:
+    """One highlight already inside `text`. The same inputs always return the same phrase.
+
+    A figure the speaker said wins. Otherwise the last few characters of the last clause,
+    or the last content word of an English line. `original` is unused on purpose: a Chinese
+    phrase is not mapped onto an English translation.
+    """
+    del original
+    cleaned = ' '.join(str(text or '').split())
+    if not cleaned:
+        return ''
+    number = re.search(
+        r'\d+(?:\.\d+)?(?:\s*[十百千万亿])?(?:\s*(?:倍|个|%|％|年|天|小时|分钟|秒|元|块))?',
+        cleaned,
+    )
+    if number:
+        token = number.group().strip()
+        if token and token != cleaned and token in cleaned:
+            return token[:30]
+    parts = [part.strip() for part in re.split(r'[，。！？、；,.!?;:]+', cleaned) if part.strip()]
+    chunk = parts[-1] if parts else cleaned
+    cjk = re.findall(r'[\u4e00-\u9fff]', chunk)
+    if len(cjk) >= 2:
+        phrase = ''.join(cjk[-4:]) if len(cjk) > 4 else ''.join(cjk)
+        if phrase != cleaned and phrase in cleaned:
+            return phrase
+        tail = ''.join(cjk[-2:])
+        if tail != cleaned and tail in cleaned:
+            return tail
+    words = re.findall(r"[A-Za-z][A-Za-z']*", cleaned)
+    content = [word for word in words if word.lower() not in _EN_STOP and len(word) > 3]
+    chosen = content[-1] if content else (words[-1] if words else '')
+    if chosen and chosen != cleaned:
+        return chosen[:30]
+    return ''
+
+
+def _speaker_name(text: str, start: float, claimed: str, speakers: list[dict]) -> str:
+    """Who is talking in this cue. A name the model claimed has to be one of the speakers."""
+    known = [item for item in speakers if str(item.get('name') or '').strip()]
+    names = {item['name'] for item in known}
+    if claimed and claimed in names:
+        return claimed
+    mentioned = [item['name'] for item in known if item['name'] in (text or '')]
+    if len(mentioned) == 1:
+        return mentioned[0]
+    active, active_at = '', -1.0
+    for item in known:
+        at = float(item.get('at') or 0)
+        if at <= float(start or 0) + 0.05 and at >= active_at:
+            active, active_at = item['name'], at
+    return active
+
+
+def _stamp_cues(payload: dict) -> dict:
+    """Fill a missing emphasis and speaker, then validate. Classic ASS never reads these fields."""
+    speakers = list(payload.get('speakers') or [])
+    deck = _clean(str(payload.get('deck') or '')) if payload.get('deck') else ''
+    payload = {**payload, 'deck': deck if deck and LATIN.search(deck) and len(deck) <= 80 else ''}
+    cues = []
+    for cue in payload.get('cues') or []:
+        if not isinstance(cue, dict):
+            continue
+        text = str(cue.get('text') or '')
+        phrase = _accept_phrase(str(cue.get('emphasis') or ''), text) or key_phrase(text, str(cue.get('original') or ''))
+        speaker = _speaker_name(text, cue.get('start') or 0, str(cue.get('speaker') or '').strip(), speakers)
+        cues.append({**cue, 'emphasis': phrase, 'speaker': speaker})
+    payload = {**payload, 'cues': cues}
+    return Packaging.model_validate(payload).model_dump()
+
+
 def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy, *, burned: bool = False,
                     burned_language: str | None = None, known_names: str = '', call: Callable[[str, dict], dict] | None = None,
                     avoid_palettes: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -192,7 +288,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
     if not lines:
-        return Packaging.model_validate(fallback).model_dump()
+        return _stamp_cues(fallback)
     if call is None:
         from backend.services.studio.intelligence import text_json as call
     payload = {'template': template, 'audience_language': audience, 'translate': translate,
@@ -205,7 +301,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     for attempt in range(2):
         try:
             result = call(PROMPT, payload)
-            return Packaging.model_validate(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes, captions)).model_dump()
+            return _stamp_cues(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes, captions))
         except (ValueError, TypeError) as error:
             logger.warning('Packaging response rejected (attempt %d): %s', attempt + 1, error)
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
@@ -221,7 +317,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
             # A rejected model response must not turn an English interview into a captionless
             # video. Keep readable source rows and disclose the loss of translation in the UI.
             fallback['cues'] = source_cues(lines, audience)
-    return Packaging.model_validate(fallback).model_dump()
+    return _stamp_cues(fallback)
 
 
 def source_cues(lines: list[dict[str, Any]], audience: str) -> list[dict[str, Any]]:
@@ -367,8 +463,16 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
             cue = next((c for c in cues if index is not None and c['lines'][0] <= index <= c['lines'][1]), None)
             if cue and word and len(word) <= 30 and word.lower() in cue['text'].lower():
                 highlights.append({'at': cue['start'], 'text': word})
+    marks = _items(result.get('marks'))
+    kept = speakers[:8]
     for cue in cues:
+        lo, hi = cue.get('lines', (0, 0))
+        mark = next((item for item in marks if isinstance(item.get('line'), int) and lo <= item['line'] <= hi), {})
+        cue['emphasis'] = _accept_phrase(str(mark.get('text') or ''), cue['text'])
+        cue['speaker'] = str(mark.get('speaker') or '').strip()
         cue.pop('lines', None)
+    deck = _clean(str(result.get('deck') or '')) if isinstance(result.get('deck'), str) else ''
+    issue = _clean(str(result.get('issue') or ''))[:80] if isinstance(result.get('issue'), str) else ''
     look = choose_look(base['template'], result.get('mood'), _seed(lines), avoid_palettes)
     return {**base, **look, 'title_lines': titles, 'title_accent_line': min(accent, max(0, len(titles) - 1)),
-            'cues': cues, 'speakers': speakers[:8], 'tags': tags, 'highlights': highlights[:40]}
+            'cues': cues, 'speakers': kept, 'tags': tags, 'highlights': highlights[:40], 'deck': deck, 'issue': issue}

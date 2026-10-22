@@ -416,6 +416,10 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                 page = await browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=1)
                 await page.goto(page_url)
                 await page.evaluate('(fill) => window.setData(fill)', fill)
+                # The first paint is what asks for Anton / Instrument Serif. Measure again
+                # after those faces are in, so fit-to-width does not freeze a fallback size.
+                await page.evaluate('(t) => window.renderFrame(t)', 0)
+                await page.evaluate('async () => { if (document.fonts) await document.fonts.ready }')
                 pages.append(page)
 
             async def render(ordinal, seconds):
@@ -439,7 +443,20 @@ async def _bounded_capture(template: str, fill: dict, frames: int, fps: int, cap
     return await _playwright_frames(template, fill, frames, fps)
 
 
-def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None) -> OverlayJob:
+def load_project_word_timing(project_id: str):
+    """ASR words for this project's source SRT, or None when the sidecar is missing or stale."""
+    try:
+        from backend.services.publish_export import find_source_srt
+        from backend.utils.word_timing import load_word_timing
+        srt = find_source_srt(project_id)
+        if srt is None:
+            return None
+        return load_word_timing(srt)
+    except Exception:
+        return None
+
+
+def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None) -> OverlayJob:
     """Capture the overlay, or return a classic result. This does not raise.
 
     ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
@@ -463,9 +480,11 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
     frames = overlay_frame_count(duration, fps)
+    timing = load_project_word_timing(project_id) if word_timing is None else word_timing
     fill = paint_fill(
-        build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template),
+        build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template, word_timing=timing),
         packaging,
+        template,
     )
     dest = overlay_cache_path(project_id, template, fill, frames=frames)
     _enforce_overlay_cap(dest.parent)

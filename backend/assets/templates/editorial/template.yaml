@@ -4,7 +4,7 @@ name: {zh: 杂志风, en: Editorial}
 fit:
   formats: {sit_down_interview: 1.0, keynote_stage: 0.7, podcast_studio: 0.6, street_interview: 0.2}
   needs_face: true
-canvas: {aspects: [portrait], overlay_px: [720, 1280], fps: 30}
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
   framing: full_face
   face_y: 0.38
@@ -16,12 +16,12 @@ base:
     intro: {from: 1.18, dur: 0.9}
     end_push: 0.035
   transitions: {broll: zoomblur, max: 2}
-  grade: "curves=all='0/0.02 0.5/0.52 1/0.97',eq=saturation=1.0:contrast=1.04,noise=alls=4:allf=u"
+  grade: "curves=all='0/0.02 0.5/0.52 1/0.97',colorbalance=rs=0.035:gs=0.01:bs=-0.03:rh=0.025:bh=-0.02,eq=saturation=1.0:contrast=1.04,noise=alls=4:allf=u"
 overlay:
   entry: index.html
   slots:
-    hook: {top: 860, alt_top: 980}
-    subtitle: {top: 980, max_rows: 2}
+    hook: {top: 1110, alt_top: 1110}
+    subtitle: {top: 1560, max_rows: 2}
     gloss: [{top: 800, left: 48, width: 420}]
   safe_area: xiaohongshu
   limits: {effect_text_max: 6, emphasis_gap_s: 3.0}

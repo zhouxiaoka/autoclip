@@ -69,7 +69,8 @@ function sample(template) {
     t: time,
     hash: page.renderFrame(time),
     rects: page.occupiedRects(time),
-    sub: page.document.getElementById('sub').innerHTML,
+    sub: page.document.getElementById('zh').innerHTML,
+    topic: page.document.getElementById('topic') ? page.document.getElementById('topic').textContent : '',
   }))
 }
 
@@ -85,48 +86,60 @@ test('editorial and street match the golden frames at fixed timestamps', () => {
 })
 
 test('editorial headline stays under the face and street keeps the lower label', () => {
-  // The template itself does not tie the title to the caption track. Captions-off
-  // rendering strips these fields before paint and burns the classic title instead.
-  // The editorial headline stays for the whole clip, below the face (y >= 700).
+  // Editorial captions-off clears the hook before paint and burns the classic title.
+  // The template itself still holds the headline for the whole clip, below the face.
+  // Street captions-off keeps the title in the lower caption band, never as a top title.
 
   for (const template of ['editorial', 'street']) {
     const page = load(template)
     const fill = {...fills[template], words: []}
     page.setData(fill)
     page.renderFrame(0)
-    assert.equal(page.document.getElementById('sub').innerHTML, '')
     const hook = page.occupiedRects(0).find(rect => rect.slot === 'hook')
     assert.ok(hook, template)
     if (template === 'editorial') {
-      assert.equal(page.document.getElementById('hook').textContent, fills.editorial.hook.text)
-      assert.ok(hook.y >= 700, `headline y ${hook.y} covers the speaker head`)
+      assert.equal(page.document.getElementById('zh').innerHTML, '')
+      assert.match(page.document.getElementById('h-l').innerHTML, /好的投资人像飞行教练/)
+      assert.equal(hook.y, 1192)
       page.renderFrame(3)
-      assert.equal(page.document.getElementById('hook').textContent, fills.editorial.hook.text)
+      assert.match(page.document.getElementById('h-l').innerHTML, /好的投资人像飞行教练/)
+      assert.equal(page.occupiedRects(3).find(rect => rect.slot === 'hook').y, hook.y)
     } else {
-      assert.equal(page.document.getElementById('line-a').textContent, '街头一问')
-      assert.equal(page.document.getElementById('line-b').textContent, '七十秒')
-      assert.equal(page.document.getElementById('tick').style.display, 'block')
-      assert.ok(hook.y > 900, `label y ${hook.y} is not the lower bar`)
+      const sub = page.document.getElementById('zh').innerHTML
+      assert.match(sub, /街头一问/)
+      assert.equal(page.document.getElementById('topic').textContent, '街头一问')
+      assert.equal(hook.y, 1812)
     }
   }
 })
 
-test('editorial and street stay readable over any footage', () => {
-  for (const template of ['editorial', 'street']) {
-    const css = fs.readFileSync(path.join(root, template, 'style.css'), 'utf8')
-    // A dark gradient scrim behind the caption band, shown only while a caption is on screen.
-    assert.match(css, /:has\(#sub:not\(:empty\)\)::after\s*\{\s*opacity: 1;/)
-    assert.match(css, /linear-gradient\(to top, rgba\(10,10,9,\.[0-9]+\)/)
-    // Light text with a thin dark stroke and a short offset drop shadow; no glow.
-    assert.match(css, /-webkit-text-stroke: [0-9.]+px rgba\(10,10,9,/)
-    for (const [, shadow] of css.matchAll(/text-shadow:\s*([^;]+);/g)) {
-      const [, y, blur] = shadow.trim().split(/\s+/).map(parseFloat)
-      assert.ok(y > 0 && blur <= 6, `${template}: text-shadow must be a short drop shadow, got ${shadow}`)
-    }
-    assert.doesNotMatch(css, /#sub[^{]*\{[^}]*color:\s*#1a1a19/)
-    // Unspoken words keep most of their opacity.
-    const base = Number(css.match(/#sub \.w \{ opacity: ([0-9.]+); \}/)[1])
-    assert.ok(base >= 0.75, `${template}: unspoken caption words at ${base}`)
-  }
-  assert.match(fs.readFileSync(path.join(root, 'editorial', 'style.css'), 'utf8'), /:has\(#hook:not\(:empty\)\)::before/)
+test('street and editorial css match the measured preview', () => {
+  const street = fs.readFileSync(path.join(root, 'street', 'style.css'), 'utf8')
+  const editorial = fs.readFileSync(path.join(root, 'editorial', 'style.css'), 'utf8')
+  assert.match(street, /#field[\s\S]*top:\s*1290px/)
+  assert.match(street, /#zh[\s\S]*font-size:\s*100px/)
+  assert.match(street, /#zh\.k\s*\{\s*color:\s*#D7FF3A/)
+  assert.match(street, /-webkit-text-stroke:\s*14px #000/)
+  assert.match(street, /text-shadow:\s*0 10px 0 #000/)
+  assert.match(street, /#en[\s\S]*Anton/)
+  assert.match(street, /#en[\s\S]*font-size:\s*36px/)
+  assert.match(street, /#topic[\s\S]*top:\s*1812px/)
+  assert.match(street, /border-left:\s*10px solid #D7FF3A/)
+  assert.match(street, /#prog[\s\S]*height:\s*12px/)
+  assert.match(street, /NotoSansSC\.ttf/)
+  assert.doesNotMatch(street, /NotoSansSC-Medium/)
+  assert.match(editorial, /#scrim[\s\S]*height:\s*1000px/)
+  assert.match(editorial, /#hook[\s\S]*top:\s*1110px/)
+  assert.match(editorial, /Instrument Serif/)
+  assert.match(editorial, /#F2D98C/)
+  assert.match(editorial, /#F4EFE6/)
+  assert.match(editorial, /#C7243A/)
+  assert.match(editorial, /Noto Serif SC/)
+  assert.match(editorial, /letter-spacing:\s*\.34em/)
+  assert.match(editorial, /#cap[\s\S]*top:\s*1560px/)
+  assert.match(editorial, /#folio[\s\S]*top:\s*1842px/)
+  assert.match(editorial, /skewX\(-9deg\)/)
+  assert.doesNotMatch(editorial, /text-shadow/)
+  assert.doesNotMatch(editorial, /-webkit-text-stroke/)
+  assert.match(editorial, /NotoSansSC\.ttf/)
 })

@@ -1,131 +1,166 @@
+@import url("../../fonts/preview/faces.css");
+
 @font-face {
-  font-family: "Noto Sans SC";
-  src: url("../../fonts/NotoSansSC-Medium.ttf") format("truetype");
-  font-weight: 100 900;
+  font-family: "Noto Sans CJK SC";
   font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../fonts/NotoSansSC.ttf") format("truetype");
 }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-  margin: 0;
-  width: 720px;
-  height: 1280px;
+  width: 1080px;
+  height: 1920px;
   background: transparent;
   overflow: hidden;
-  color: #f6f5f3;
-  font-family: "Noto Sans SC", "PingFang SC", "Geist", sans-serif;
+  color: #F4EFE6;
+  font-family: "Noto Serif SC", serif;
 }
-/* Readable over any footage: a dark gradient behind the lower text block plus a thin stroke and a
-   short offset shadow on the letters. No glow. The scrims only appear while their band has text.
-   The headline sits in that lower block, so the scrim does not darken the speaker's face. */
-body::before, body::after {
-  content: "";
+#scrim {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  pointer-events: none;
-  opacity: 0;
-}
-body::before { height: 620px; background: linear-gradient(to top, rgba(10,10,9,.62) 0%, rgba(10,10,9,.38) 50%, rgba(10,10,9,0) 100%); }
-body::after { height: 420px; background: linear-gradient(to top, rgba(10,10,9,.78) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%); }
-body:has(#hook:not(:empty))::before { opacity: 1; }
-body:has(#sub:not(:empty))::after { opacity: 1; }
-#stack {
-  position: absolute;
-  left: 48px;
-  right: 48px;
-  bottom: 168px;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-#kicker, #hook, #gloss, #num, #sub, #source {
-  paint-order: stroke fill;
-  -webkit-text-stroke: 1.5px rgba(10,10,9,.55);
-  text-shadow: 0 2px 4px rgba(0,0,0,.6);
+  height: 1000px;
+  background: linear-gradient(to bottom, rgba(12,10,8,0) 0%, rgba(12,10,8,.38) 38%, rgba(12,10,8,.78) 100%);
 }
 #hook {
-  margin: 0;
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Serif SC", "Songti SC", serif;
-  font-weight: 400;
-  font-size: 56px;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
-  white-space: pre-line;
-  max-height: 2.4em;
-  overflow: hidden;
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: 1110px;
 }
-#rule {
-  width: 72px;
-  height: 2px;
-  background: #E6C56A;
-  flex: none;
+#hook .kick {
+  font-family: "Instrument Serif", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 44px;
+  line-height: 1;
+  color: #F2D98C;
+  margin-bottom: 22px;
+  letter-spacing: .3px;
+}
+#hook .ln {
+  display: block;
+  font-family: "Noto Serif SC", serif;
+  font-weight: 900;
+  font-size: 96px;
+  line-height: 1.16;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  color: #F4EFE6;
+}
+#hook .ln.acc {
+  color: #F2D98C;
+  background: linear-gradient(#C7243A, #C7243A) no-repeat 0 100% / 100% 5px;
+  width: max-content;
+  padding-bottom: 6px;
+}
+#hook .trk {
+  /* Source CSS is 20px. Inter Tight sits higher in the line box, so 36px lands the ink on y 1444–1459. */
+  margin-top: 36px;
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: .34em;
+  text-transform: uppercase;
+  color: rgba(244,239,230,.78);
+}
+#cap {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: 1560px;
+}
+#zh {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  font-size: 52px;
+  line-height: 1.32;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+#zh .p { color: rgba(244,239,230,.38); }
+#zh .p.past { color: #F4EFE6; }
+#zh .p.now {
+  color: #F4EFE6;
+  background: linear-gradient(#F2D98C, #F2D98C) no-repeat 0 92% / var(--u, 0%) 6px;
+}
+#zh .p.acc {
+  font-family: "Noto Serif SC", serif;
+  font-weight: 900;
+  font-size: 1.2em;
+  line-height: 1;
+  display: inline-block;
+  transform: skewX(-9deg);
+  color: #F2D98C !important;
+  margin: 0 .08em;
+}
+#en {
+  margin-top: 14px;
+  font-family: "Instrument Serif", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 36px;
+  line-height: 1.25;
+  white-space: nowrap;
+  letter-spacing: .2px;
+}
+#en .w { color: rgba(244,239,230,.42); }
+#en .w.past { color: rgba(244,239,230,.9); }
+#en .w.now { color: #F2D98C; }
+#prog {
+  position: absolute;
+  left: 60px;
+  top: 1826px;
+  height: 1px;
+  width: 0;
+  background: rgba(244,239,230,.8);
+}
+#folio {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: 1842px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(244,239,230,.62);
+}
+#brand {
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: none;
+  color: rgba(244,239,230,.38);
 }
 #gloss {
+  position: absolute;
+  left: 60px;
+  top: 980px;
   width: 420px;
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.45;
-  color: #f6f5f3;
-}
-#gloss:empty { display: none; }
-#gloss b {
-  display: block;
-  margin-bottom: 4px;
-  font-family: Georgia, "Noto Serif SC", serif;
-  font-weight: 400;
-  font-size: 22px;
+  color: #F4EFE6;
+  font-family: "Noto Serif SC", serif;
+  font-size: 28px;
 }
 #num {
   position: absolute;
-  right: 48px;
-  bottom: 300px;
-  z-index: 1;
-  margin: 0;
-  font-family: Georgia, "Noto Serif SC", serif;
-  font-size: 64px;
+  right: 60px;
+  top: 980px;
+  color: #F2D98C;
+  font-family: "Instrument Serif", serif;
+  font-style: italic;
+  font-size: 72px;
   line-height: 1;
 }
-#num small {
-  display: block;
-  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
-  font-size: 16px;
-  letter-spacing: 0.08em;
-}
-#sub {
-  margin: 0;
-  font-size: 32px;
-  line-height: 1.35;
-  max-height: 2.7em;
-  overflow: hidden;
-  color: #E6C56A;
-  left: 48px;
-  right: 48px;
-}
-#sub:empty { display: none; }
-#sub em {
-  font-style: normal;
-  font-weight: 600;
-  color: #F4E2A0;
-}
-#source {
-  margin: 0;
-  font-family: Georgia, "Iowan Old Style", serif;
-  font-style: italic;
-  font-size: 18px;
-  line-height: 1.35;
-  color: rgba(246,245,243,.88);
-  max-height: 2.7em;
-  overflow: hidden;
-}
-#source:empty { display: none; }
-#source em { font-style: italic; color: #E6C56A; }
-#kicker {
-  margin: 0;
-  font-size: 14px;
-  letter-spacing: 0.14em;
-  color: rgba(246,245,243,.78);
-}
-#kicker:empty { display: none; }
-#sub .w { opacity: .82; }

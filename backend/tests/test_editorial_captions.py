@@ -6,7 +6,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from backend.services.studio.audio import scene_duration
-from backend.services.studio.caption_layout import page_lines, page_screens, width
+from backend.services.studio.caption_layout import width
 from backend.services.studio.models import Packaging, Scene
 from backend.services.studio.overlay_fill import build_fill, caption_line_limit
 
@@ -44,34 +44,44 @@ def _plain_caption(html: str) -> str:
     return text.removesuffix(' ')
 
 
+def _norm(text: str) -> str:
+    return re.sub(r'[，。、！？：；,.!?]+', '', text)
+
+
+def _squash(text: str) -> str:
+    return ''.join(_norm(text).split())
+
+
 def _visible_sentence(template: str, fill: dict, index: int) -> str:
     row = _captions(template, fill)[index]
     html = row['html']
-    assert 'class="w"' not in html
     text = fill['words'][index]['text']
-    assert _plain_caption(html) == text
-    assert html.lower().count('<br>') == text.count('\n')
-    assert html.lower().count('<br>') <= 1
+    assert 'class="w"' not in html
+    assert '<br' not in html.lower()
+    assert '\n' not in text
+    plain = _plain_caption(html)
+    if template == 'street':
+        assert plain == text
+    else:
+        assert text in plain
     return html
 
 
 def _assert_pages_cover(paged: list[dict], baseline: list[dict], limit: int) -> None:
-    """Each original cue is split into two-line screens that share its frame span."""
+    """Each cue becomes one-line phrases that tile its frame span."""
     cursor = 0
     for cue in baseline:
         parts = []
         first = last = None
+        target = _squash(cue['text'])
         while cursor < len(paged):
             word = paged[cursor]
-            piece = word['text'].replace('\n', '')
-            if not cue['text'][len(''.join(parts)):].startswith(piece):
+            piece = word['text']
+            assert '\n' not in piece
+            assert width(piece) <= limit + 1.1
+            joined = _squash(''.join(parts) + piece)
+            if parts and not target.startswith(joined):
                 break
-            # A cue that already fits stays one string, so CSS wraps it as before.
-            # A paged screen carries an explicit newline and each line fits the box.
-            lines = word['text'].split('\n') if '\n' in word['text'] else page_lines(word['text'], limit)
-            assert 1 <= len(lines) <= 2
-            assert ''.join(lines) == piece
-            assert all(width(line) <= limit + 1e-6 for line in lines)
             if first is None:
                 first = word['start_frame']
             else:
@@ -80,9 +90,9 @@ def _assert_pages_cover(paged: list[dict], baseline: list[dict], limit: int) -> 
             assert word['end_frame'] > word['start_frame']
             parts.append(piece)
             cursor += 1
-            if ''.join(parts) == cue['text']:
+            if _squash(''.join(parts)) == target:
                 break
-        assert ''.join(parts) == cue['text']
+        assert _squash(''.join(parts)) == target
         assert first == cue['start_frame'] and last == cue['end_frame']
     assert cursor == len(paged)
     for earlier, later in pairwise(paged):
@@ -106,16 +116,19 @@ def test_repro_fill_switches_one_sentence_on_the_clip_clock():
         {'start': word['start_frame'] / recorded['fps'], 'end': word['end_frame'] / recorded['fps'], 'text': word['text']}
         for word in recorded['words']
     ]
-    fill = build_fill(_packaging(recorded, cues), scene_duration(scene), fps=recorded['fps'], scenes=[scene])
-    assert [(word['start_frame'], word['end_frame'], word['text']) for word in fill['words']] == [
-        (word['start_frame'], word['end_frame'], word['text']) for word in recorded['words']
-    ]
     for template in ('editorial', 'street'):
+        fill = build_fill(_packaging(recorded, cues), scene_duration(scene), fps=recorded['fps'], scenes=[scene], template=template)
+        assert _squash(''.join(word['text'] for word in fill['words'])) == _squash(''.join(word['text'] for word in recorded['words']))
+        assert fill['words'][0]['start_frame'] == recorded['words'][0]['start_frame']
+        assert fill['words'][-1]['end_frame'] == recorded['words'][-1]['end_frame']
         for index, word in enumerate(fill['words']):
             _visible_sentence(template, fill, index)
             if index:
                 assert word['start_frame'] >= fill['words'][index - 1]['end_frame']
-        _paged(_packaging(recorded, cues), scene_duration(scene), fill['words'], template, fps=recorded['fps'], scenes=[scene])
+        _paged(_packaging(recorded, cues), scene_duration(scene), [
+            {'text': word['text'], 'start_frame': word['start_frame'], 'end_frame': word['end_frame']}
+            for word in recorded['words']
+        ], template, fps=recorded['fps'], scenes=[scene])
 
 
 def test_scene_that_starts_after_its_own_length_still_shows_each_sentence():
@@ -130,23 +143,18 @@ def test_scene_that_starts_after_its_own_length_still_shows_each_sentence():
     for word in recorded['words']:
         cues.append({'start': cursor, 'end': cursor + 5, 'text': word['text']})
         cursor += 5
-    fill = build_fill(_packaging(recorded, cues), scene_duration(scene), scenes=[scene])
-    assert len(fill['words']) == len(recorded['words'])
-    total = round(scene_duration(scene) * fill['fps'])
-    assert scene_start > length
-    for index, word in enumerate(fill['words']):
-        assert 0 <= word['start_frame'] < word['end_frame'] <= total
-        assert word['start_frame'] < 30 * 25
-        assert word['text'] == recorded['words'][index]['text']
-        if index:
-            assert word['start_frame'] >= fill['words'][index - 1]['end_frame']
-    assert fill['words'][0]['start_frame'] == round(0.4 * 30)
     for template in ('editorial', 'street'):
-        for index in range(len(fill['words'])):
+        fill = build_fill(_packaging(recorded, cues), scene_duration(scene), scenes=[scene], template=template)
+        total = round(scene_duration(scene) * fill['fps'])
+        assert scene_start > length
+        assert _squash(''.join(word['text'] for word in fill['words'])) == _squash(''.join(cue['text'] for cue in cues))
+        for index, word in enumerate(fill['words']):
+            assert 0 <= word['start_frame'] < word['end_frame'] <= total
+            assert word['start_frame'] < 30 * 25
+            if index:
+                assert word['start_frame'] >= fill['words'][index - 1]['end_frame']
             _visible_sentence(template, fill, index)
-        paged = _paged(_packaging(recorded, cues), scene_duration(scene), fill['words'], template, scenes=[scene])
-        assert paged['words'][0]['start_frame'] == round(0.4 * 30)
-        assert all(word['start_frame'] < 30 * 25 for word in paged['words'])
+        assert fill['words'][0]['start_frame'] == round(0.4 * 30)
 
 
 TRUNCATION = Path(__file__).resolve().parent / 'fixtures' / 'caption_truncation'
@@ -191,35 +199,36 @@ def test_repro_long_sentences_page_inside_two_lines():
                 ],
             ),
             recorded['words'][-1]['end_frame'] / recorded['fps'],
-            baseline['words'], template, fps=recorded['fps'], safe_area=recorded['safe_area'],
+            recorded['words'], template, fps=recorded['fps'], safe_area=recorded['safe_area'],
         )
-        cue = baseline['words'][index]
+        cue = recorded['words'][index]
         screens = [
             word for word in paged['words']
             if cue['start_frame'] <= word['start_frame'] and word['end_frame'] <= cue['end_frame']
         ]
-        if length > limit * 2:
+        assert screens
+        assert _squash(''.join(word['text'] for word in screens)) == _squash(cue['text'])
+        if width(cue['text']) > limit:
             assert len(screens) >= 2
         else:
-            assert screens == [cue]
+            assert len(screens) == 1
 
 
-def test_emphasis_follows_the_phrase_onto_each_screen_it_touches():
+def test_emphasis_follows_the_phrase_onto_the_piece_that_contains_it():
     recorded = json.loads((TRUNCATION / 'fill-ed-i150-1-efb323df.json').read_text(encoding='utf-8'))
     text = recorded['words'][1]['text']
-    limit = caption_line_limit('editorial', 'xiaohongshu')
-    boundary = len(page_screens(text, limit)[0].replace('\n', ''))
-    phrase = text[boundary - 4:boundary + 4]
+    clause = max((part.strip() for part in re.split(r'[，。、！？：；,.!?]+', text) if part.strip()), key=len)
+    phrase = clause[2:8]
     packaging = Packaging(
         version=2, template='editorial', audience_language='zh', title_lines=['标题'],
         cues=[{'start': 0, 'end': 10, 'text': text}],
         emphasis=[{'at': 0, 'text': phrase}],
     )
     fill = build_fill(packaging, 10, template='editorial')
-    shown = ''.join(word['text'].replace('\n', '') for word in fill['words'])
-    assert shown == text
+    shown = ''.join(word['text'] for word in fill['words'])
+    assert _squash(shown) == _squash(text)
     marked = [word for word in fill['words'] if word['emphasis']]
-    assert marked and ''.join(word['emphasis'] for word in marked) == phrase
+    assert marked and all(word['emphasis'] == phrase and phrase in word['text'] for word in marked)
     assert any(not word['emphasis'] for word in fill['words'])
     for index in range(len(fill['words'])):
         _visible_sentence('editorial', fill, index)
@@ -231,7 +240,7 @@ def test_english_pages_keep_the_spaces():
         cues=[{'start': 0.2, 'end': 4.2, 'text': LONG_EN}],
     )
     fill = build_fill(packaging, 5, safe_area='xiaohongshu', template='street')
-    assert ''.join(word['text'].replace('\n', '') for word in fill['words']) == LONG_EN
+    assert ''.join(''.join(item['text'].split()) for item in fill['words']) == ''.join(LONG_EN.split())
     assert len(fill['words']) >= 2
     assert fill['words'][0]['start_frame'] == round(0.2 * 30)
     assert fill['words'][-1]['end_frame'] == round(4.2 * 30)
@@ -242,18 +251,8 @@ def test_english_pages_keep_the_spaces():
 def test_caption_line_limit_matches_the_template_box():
     editorial = (ROOT / 'backend/assets/templates/editorial/style.css').read_text(encoding='utf-8')
     street_css = (ROOT / 'backend/assets/templates/street/style.css').read_text(encoding='utf-8')
-    street_js = (ROOT / 'backend/assets/templates/street/template.js').read_text(encoding='utf-8')
-
-    def box(css: str) -> tuple[int, int, int]:
-        body = re.search(r'(?:^|\n)#sub\s*\{([^}]*)\}', css).group(1)
-        def px(prop: str) -> int:
-            return int(re.search(rf'{prop}\s*:\s*(\d+)px', body).group(1))
-        return px('left'), px('right'), px('font-size')
-
-    left, right, font = box(editorial)
-    assert caption_line_limit('editorial', 'douyin') == (720 - left - right) // font
-    _, _, street_font = box(street_css)
-    insets = re.findall(r'(\w+):\s*\{[^}]*left:\s*(\d+),\s*right:\s*(\d+)', street_js)
-    assert insets
-    for area, inset_left, inset_right in insets:
-        assert caption_line_limit('street', area) == (720 - int(inset_left) - int(inset_right)) // street_font
+    assert 'font-size: 52px' in editorial and 'left: 60px' in editorial and 'right: 60px' in editorial
+    assert 'font-size: 100px' in street_css and 'left: 30px' in street_css and 'right: 30px' in street_css
+    assert caption_line_limit('editorial', 'douyin') == (1080 - 120) // 52
+    for area in ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts'):
+        assert caption_line_limit('street', area) == (1080 - 60) // 100

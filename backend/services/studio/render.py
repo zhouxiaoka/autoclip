@@ -282,12 +282,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                         scene_overlay = overlay_path
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
-                            picture, label = packaging_render.picture_only(draft, scene, w, h)
+                            if html_template == 'street' and draft.layout == 'crop':
+                                picture, label = packaging_render.street_picture(
+                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0),
+                                )
+                            else:
+                                picture, label = packaging_render.picture_only(draft, scene, w, h)
                             pack = draft.packaging
-                            # HTML overlay stands in for ASS, and its hook/titlebar is not the classic
-                            # title. Captions-on classic output still uses that title; burn the same
-                            # dialogues under a captions-off overlay (the overlay itself paints no title).
-                            if pack is not None and pack.captions_enabled is False and pack.title_lines:
+                            # Editorial captions-off still burns the classic title beside the overlay.
+                            # Street keeps that title in its lower band, so a top title would sit on the face.
+                            if pack is not None and html_template != 'street' and pack.captions_enabled is False and pack.title_lines:
                                 from backend.services.publish_export import _escape_filter_path
                                 ass_path = folder / f'{i}.title.ass'
                                 ass_path.write_text(packaging_render.scene_ass(pack, draft.scenes, i, titles_only=True), encoding='utf-8')

@@ -43,12 +43,18 @@ class Scene(BaseModel):
         return self
 
 class PackagingCue(BaseModel):
-    """One caption line in source seconds: text in the audience language, plus the original."""
+    """One caption line in source seconds: text in the audience language, plus the original.
+
+    `emphasis` is one short phrase already inside `text`. `speaker` is who is talking.
+    Both default to empty so a version 1 payload saved before these fields still loads.
+    """
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     text: str = Field(min_length=1, max_length=600)
     original: str = Field(default='', max_length=900)
+    emphasis: str = Field(default='', max_length=30)
+    speaker: str = Field(default='', max_length=40)
 
 
 class PackagingSpeaker(BaseModel):
@@ -95,8 +101,10 @@ class Packaging(BaseModel):
     """Automatic template packaging, generated once per content and audience language.
 
     Version 1 is the classic ASS family (`interview_zh`, `podcast_en`) and stays readable.
-    Version 2 adds the HTML templates and the optional editorial/street fields. A version 1
-    payload that carries those fields is rejected, so old projects do not silently change shape.
+    Version 2 adds the HTML templates and the optional editorial/street lists (kicker, the
+    emphasis list, numbers, gloss). A version 1 payload that carries those lists is rejected.
+    Per-cue emphasis, the cue's speaker and `deck` are optional on version 1: old projects omit
+    them and still load, and classic ASS does not paint them.
     """
     model_config = ConfigDict(extra='forbid')
     version: Literal[1, 2] = 1
@@ -120,6 +128,10 @@ class Packaging(BaseModel):
     mood: Literal['calm', 'serious', 'bold', 'warm', 'playful'] | None = None
     palette: Literal['azure', 'amber', 'coral', 'mint', 'lemon', 'rose', 'lilac'] | None = None
     kicker: str = Field(default='', max_length=16)
+    # English italic line above a magazine headline. Classic ASS ignores it.
+    deck: str = Field(default='', max_length=80)
+    # Magazine folio, for example "DWARKESH PODCAST · 2026.04.15". Empty keeps 原片 only.
+    issue: str = Field(default='', max_length=80)
     emphasis: list[PackagingMark] = Field(default_factory=list, max_length=12)
     numbers: list[PackagingNumber] = Field(default_factory=list, max_length=6)
     gloss: list[PackagingGloss] = Field(default_factory=list, max_length=6)

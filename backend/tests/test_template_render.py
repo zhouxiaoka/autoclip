@@ -103,9 +103,14 @@ def test_editorial_and_street_captions_off_keep_the_classic_title_style():
         assert filled_on['words'] and filled_off['words'] == []
         assert filled_off['title_lines'] == body['title_lines']
         assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
-        assert paint_fill(filled_on, on) is filled_on
-        painted = paint_fill(filled_off, off)
-        assert painted['title_lines'] == [] and painted['hook']['text'] == ''
+        assert paint_fill(filled_on, on, html_template) is filled_on
+        painted = paint_fill(filled_off, off, html_template)
+        if html_template == 'street':
+            # The street lower band keeps the title. The classic top title is not burned on top of the face.
+            assert painted['title_lines'] == body['title_lines']
+            assert painted['hook']['text'] == '\n'.join(body['title_lines'])
+        else:
+            assert painted['title_lines'] == [] and painted['hook']['text'] == ''
         assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
         on_titles = [line for line in pr.scene_ass(on, scenes, 0).splitlines() if line.startswith('Dialogue:') and any(token in line for token in (',Title,', ',TitleAccent,', ',Hook,'))]
         off_titles = pr.scene_ass(off, scenes, 0, titles_only=True).splitlines()
@@ -267,6 +272,9 @@ def test_html_captions_off_burns_the_classic_title_and_captions_on_does_not(tmp_
     for template in ('editorial', 'street'):
         drafted = off.model_copy(update={'id': f'd-{template}'})
         graph = graph_of(drafted, f'job-{template}', template)
+        if template == 'street':
+            assert 'ass=' not in graph and '[withtitle]' not in graph
+            continue
         assert 'ass=' in graph and '[withtitle]' in graph
         burned = captured['ass']
         assert '好的投资人' in burned and '字幕正文' not in burned
