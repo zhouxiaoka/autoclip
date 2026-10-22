@@ -722,16 +722,42 @@ def test_face_qa_under_the_production_budget(tmp_path, monkeypatch):
         scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
     ), 2.0)
     assert quiet == ('skip', 'timeout'), quiet
+    # The caption check passes, but the crop check never read a frame: a skip, not a pass.
+    monkeypatch.setattr(face, 'detect_faces', lambda *_args: [])
+    unread = face.check(Context(
+        output=source, source=source, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
+    ), 2.0)
+    assert unread == ('skip', 'timeout'), unread
 
 
 def test_production_budget_samples_three_frames_across_the_longest_spans():
     # The old cap was int(0.9 / 0.7) == 1, so a 0.9 s crop budget saw a single frame.
     spans = [(0.0, 4.0, 0.2, 'crop'), (10.0, 1.2, 0.8, 'crop')]
     plan = face._grab_plan(spans, 0.9)
-    assert len(plan) >= 3
+    assert len(plan) == 3
+    assert face._grab_count(0.9) == 3 and face._grab_count(2.0) > 3
     assert int(0.9 / 0.7) == 1
     long_times = sorted(when for index, when in plan if index == 0)
     assert long_times[0] < 0.6 and long_times[-1] > 3.2, plan
+
+
+def test_three_looks_go_to_different_framings_not_three_takes_of_one_crop():
+    """Three long spans on the same host crop and a shorter span on another crop.
+
+    Longest-first spent all three looks on the host. The fourth span is where a turned head
+    was framed in a real render, so it has to get one of the three looks.
+    """
+    spans = [
+        (0.0, 16.1, 0.238, 'crop'), (16.1, 23.0, 0.247, 'crop'), (39.1, 17.7, 0.67, 'crop'),
+        (56.8, 3.3, 0.506, 'crop'), (60.1, 11.9, 0.159, 'crop'), (72.0, 0.4, 0.58, 'crop'),
+    ]
+    plan = face._grab_plan(spans, 0.9)
+    assert [index for index, _when in plan] == [1, 2, 4], plan
+    assert all(spans[index][0] < when < spans[index][0] + spans[index][1] * 0.2 for index, when in plan)
+    # A fit span is a different framing from any crop.
+    mixed = [(0.0, 20.0, 0.3, 'crop'), (20.0, 19.0, 0.31, 'crop'), (39.0, 5.0, 0.5, 'fit')]
+    assert [index for index, _when in face._grab_plan(mixed, 0.9)] == [0, 2, 1]
 
 
 def test_a_frame_from_the_wrong_timestamp_is_discarded(tmp_path, monkeypatch):
@@ -745,6 +771,25 @@ def test_a_frame_from_the_wrong_timestamp_is_discarded(tmp_path, monkeypatch):
 
     monkeypatch.setattr(face, 'run', shifted)
     assert face._grab_frames(video, [2.5], 2.0) == [None]
+
+
+def test_grab_pts_are_matched_by_output_name_not_log_order(tmp_path, monkeypatch):
+    """The parallel filtergraphs log in any order. Each pts belongs to the output that named it."""
+    video = _write_clip(tmp_path, 'order', [np.full((SOURCE[1], SOURCE[0], 3), 20, np.uint8)] * (FPS * 3))
+    original = face.run
+
+    def reordered(cmd, timeout, **kwargs):
+        proc = original(cmd, timeout, **kwargs)
+        proc.stderr = (
+            b'[showinfo@g2 @ 0x3] n:   0 pts: 1 pts_time:2.6\n'
+            b'[showinfo@g0 @ 0x1] n:   0 pts: 1 pts_time:0.4\n'
+            b'[showinfo@g1 @ 0x2] n:   0 pts: 1 pts_time:9.0\n'
+        )
+        return proc
+
+    monkeypatch.setattr(face, 'run', reordered)
+    grabbed = face._grab_frames(video, [0.4, 1.5, 2.6], 8.0)
+    assert [bool(frame) for frame in grabbed] == [True, False, True]
 
 
 def test_production_budget_rejects_a_bad_crop_the_middle_frame_would_pass(tmp_path, monkeypatch):

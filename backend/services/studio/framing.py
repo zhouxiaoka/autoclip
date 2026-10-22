@@ -63,7 +63,6 @@ TRACK_SCORE = 0.6          # single-face tracking. A box below this is not a cro
 WIDE_SCORE = 0.45          # only for counting people when a look would otherwise be one face
 PERSON_MIN = 0.02          # face width below this fraction is noise, not a person
 SAMPLE_INTERVAL = 1.0      # seconds between looks inside one sequential decode of the shot
-MAX_EXTRACTS_PER_MINUTE = 40  # one sequential decode per shot; samples inside it are not seeks
 TAIL_SHOT = 0.15           # a final fragment at least this long still gets its own crop
 DISSOLVE_STEP = 0.25       # seconds between frames when looking for a crossfade
 DISSOLVE_WINDOW = 1.0      # a dissolve drifts across about this much time
@@ -548,9 +547,21 @@ def _grab_shot(video: Path, abs_start: float, abs_end: float, times: list[float]
     length = max(PAIR_GAP, abs_end - abs_start)
     pattern = folder / f"{key}-%04d.jpg"
     rate = f"{1 / PAIR_GAP:.4g}"
+    # The fps filter walks the shot on a PAIR_GAP grid. Only the two grid frames of each
+    # sample (and the last few) are scaled and written; select drops the rest.
+    wanted_set: set[int] = set()
+    for at in times:
+        first = max(0, round(max(0.0, at - abs_start) / PAIR_GAP))
+        wanted_set.update((first, first + 1))
+    # The last grid frames are kept too: a sample past the end of a short shot pairs with
+    # whatever frame the shot really ends on, as it did when every grid frame was written.
+    tail = max(0, round(length / PAIR_GAP) - 2)
+    wanted = sorted(index for index in wanted_set if index < tail)
+    pick = "+".join([f"eq(n\\,{index})" for index in wanted] + [f"gte(n\\,{tail})"])
     cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(),
            "-ss", f"{max(0.0, abs_start):.3f}", "-t", f"{length:.3f}", "-i", str(video),
-           "-an", "-vf", f"fps={rate},scale={FRAME_WIDTH}:-2", "-q:v", "4", "-y", str(pattern)]
+           "-an", "-vf", f"fps={rate},select={pick},scale={FRAME_WIDTH}:-2",
+           "-fps_mode", "passthrough", "-q:v", "4", "-y", str(pattern)]
     cmd, priority = render_limits.low_priority(cmd)
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=max(30, length * 2), **priority)
@@ -559,9 +570,13 @@ def _grab_shot(video: Path, abs_start: float, abs_end: float, times: list[float]
     frames: dict[int, Path] = {}
     for path in folder.glob(f"{key}-*.jpg"):
         try:
-            frames[int(path.stem.rsplit("-", 1)[-1]) - 1] = path
+            written = int(path.stem.rsplit("-", 1)[-1]) - 1
         except ValueError:
             continue
+        # Files are numbered in output order: the wanted grid frames, then the tail from `tail` on.
+        if written < 0:
+            continue
+        frames[wanted[written] if written < len(wanted) else tail + written - len(wanted)] = path
     if not frames:
         return [(at, None) for at in times]
     paired = []

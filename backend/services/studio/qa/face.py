@@ -8,11 +8,12 @@ estimate, not a magazine or street-cut layout.
 
 The crop check looks at the source, not the rendered window. A turned-away head,
 a window with nobody in it, or one person sliced out of a group photo fails once
-that run lasts more than a second. The production crop budget still reads at least
-three frames, in one accurate seek, spread across the longest spans and their edges.
-A seek that does not finish is a skip, never a pass, and a skip does not cancel the
-caption-overlap check. Fit is a miss when it covers more than 10% of the clip and a
-single person was there to crop. A wide group, including small low-score faces, is not.
+that run lasts more than a second. The production crop budget (0.9 s) reads three
+frames in one accurate grab: the longest span, then the longest spans framed
+differently, each looked at just after its shot boundary. A grab that does not
+finish or reads nothing is a skip, never a pass. The caption check still runs after
+it, and the result stays a skip unless that check fails. Fit is a miss when it
+covers more than 10% of the clip and a single person was there to crop. A wide group, including small low-score faces, is not.
 """
 from __future__ import annotations
 
@@ -205,7 +206,6 @@ def _presence_kind(frontals, turned, left: float, right: float, wide=None) -> st
     return 'empty'
 
 
-_MIN_LOOKS = 3
 _PTS_SLOP = 0.5
 
 
@@ -222,7 +222,10 @@ def _grab_frames(path, times: list[float], timeout: float, width: int = 480) -> 
     """Accurate JPEGs for several timestamps, one ffmpeg process.
 
     Input seek before `-i` with accurate seek and `-copyts`, so each frame's pts can be
-    checked against the request. A frame that landed on a different shot is dropped.
+    checked against the request. Every output has its own named showinfo instance
+    (`showinfo@g<index>`), and a pts is matched to its output by that name. The filtergraphs
+    run in parallel, so the order of their log lines says nothing about which output they
+    belong to. A frame more than _PTS_SLOP from its requested time is dropped.
     """
     if not times:
         return []
@@ -238,22 +241,25 @@ def _grab_frames(path, times: list[float], timeout: float, width: int = 480) -> 
     for index in range(len(times)):
         cmd += [
             '-map', f'{index}:v:0', '-an', '-frames:v', '1',
-            '-vf', f"scale={width}:-2,select=eq(n\\,0),showinfo", '-q:v', '5', str(folder / f'{index}.jpg'),
+            '-vf', f"scale={width}:-2,select=eq(n\\,0),showinfo@g{index}", '-q:v', '5', str(folder / f'{index}.jpg'),
         ]
     try:
         proc = run(cmd, timeout)
         stderr = proc.stderr or b''
         if isinstance(stderr, str):
             stderr = stderr.encode('utf-8', 'replace')
-        # One seek can print later frames before the muxer stops. The first frame of each
-        # output is the one written, and its pts has to be the timestamp that was requested.
-        pts = [float(match) for match in re.findall(
-            rb'n:\s*0\s+pts:\s*-?\d+\s+pts_time:\s*([0-9eE.+-]+)', stderr,
-        )]
+        pts: dict[int, float] = {}
+        for label, value in re.findall(
+            rb'\[showinfo@g(\d+) @[^\]]*\]\s*n:\s*0\s+pts:\s*-?\d+\s+pts_time:\s*([0-9eE.+-]+)', stderr,
+        ):
+            try:
+                pts.setdefault(int(label), float(value))
+            except ValueError:
+                continue
         frames: list[bytes | None] = []
         for index, when in enumerate(times):
             jpg = folder / f'{index}.jpg'
-            actual = pts[index] if index < len(pts) else None
+            actual = pts.get(index)
             if not jpg.is_file() or jpg.stat().st_size == 0 or actual is None or abs(actual - when) > _PTS_SLOP:
                 frames.append(None)
                 continue
@@ -301,40 +307,70 @@ def _read_faces(path, at: float, timeout: float):
     return _faces_in_jpeg(blob)
 
 
+# Measured on the 1080p VP9 Bg2 source under load: one frame about 0.36 s, three about
+# 0.5 s, eight about 1.0 s, so about 0.27 s to start plus 0.09 s per frame. Only part of the budget is planned, so a loaded
+# machine still finishes inside it. A 0.9 s crop budget reads three frames.
+_GRAB_BASE = 0.27
+_GRAB_EACH = 0.09
+_GRAB_HEADROOM = 0.6
+
+
+def _grab_count(timeout: float | None) -> int:
+    """How many frames one accurate grab can read inside `timeout`."""
+    if timeout is None:
+        return _MAX_GRABS
+    usable = float(timeout) * _GRAB_HEADROOM - _GRAB_BASE
+    return max(1, min(_MAX_GRABS, int(usable / _GRAB_EACH + 1e-6)))
+
+
+def _framing_gap(span, others) -> float:
+    """How different this span's framing is from the closest span already looked at."""
+    _at, _duration, crop_x, mode = span
+    gaps = []
+    for _o_at, _o_duration, o_crop_x, o_mode in others:
+        if mode == 'fit' and o_mode == 'fit':
+            gaps.append(0.0)
+        elif mode == 'fit' or o_mode == 'fit':
+            gaps.append(0.5)
+        else:
+            gaps.append(abs(crop_x - o_crop_x))
+    return min(gaps) if gaps else 1.0
+
+
 def _grab_plan(spans, timeout: float | None = None):
-    """(span index, absolute time). At least three looks, including on the 0.9 s crop budget.
+    """(span index, absolute time), sized to the budget by _grab_count.
 
-    Longest spans are first. The first look on a span sits near its start, the next near its
-    end, so a crop inherited across a cut is not judged from the calm middle of the long span.
-    `timeout` is accepted so callers can pass the budget; one ffmpeg process reads the plan,
-    so the budget does not collapse the plan to a single frame.
+    The first look is on the longest span. Each next first look goes to the span with the
+    largest length times framing gap: a long span framed like one already seen (same
+    speaker, same crop) adds little, a long span with a different crop or mode is a new
+    framing decision. A span's first look sits just after its start, next to the shot
+    boundary where an inherited crop shows. Once every span has one look, second looks
+    (just before the end) and third looks (middle) follow, longest span first.
     """
-    del timeout
-    candidates = []
-    for index, (at, duration, _crop_x, _mode) in enumerate(spans):
-        fracs = (0.12, 0.88, 0.5) if duration >= 0.8 else (0.5,)
-        for place, frac in enumerate(fracs):
-            candidates.append((index, at + duration * frac, duration, place))
-    candidates.sort(key=lambda item: (-item[2], item[3], item[0]))
+    limit = _grab_count(timeout)
+
+    def fracs(duration: float) -> tuple[float, ...]:
+        return (0.12, 0.88, 0.5) if duration >= 0.8 else (0.5,)
+
     chosen: list[tuple[int, float]] = []
-    seen: set[tuple[int, float]] = set()
-    counts: dict[int, int] = {}
-
-    def take(item, limit: int) -> None:
-        index, when, _duration, _place = item
-        key = (index, round(when, 3))
-        if key in seen or counts.get(index, 0) >= limit or len(chosen) >= _MAX_GRABS:
-            return
-        seen.add(key)
-        counts[index] = counts.get(index, 0) + 1
-        chosen.append((index, when))
-
-    for item in candidates:
-        take(item, 1)
-    for item in candidates:
-        if len(chosen) >= _MIN_LOOKS:
-            break
-        take(item, _MIN_LOOKS)
+    seen: list[int] = []
+    remaining = list(range(len(spans)))
+    while remaining and len(chosen) < limit:
+        picked = [spans[index] for index in seen]
+        best = max(remaining, key=lambda index: (
+            spans[index][1] * _framing_gap(spans[index], picked), spans[index][1], -index,
+        ))
+        remaining.remove(best)
+        seen.append(best)
+        at, duration = spans[best][0], spans[best][1]
+        chosen.append((best, at + duration * fracs(duration)[0]))
+    for place in (1, 2):
+        for index in sorted(range(len(spans)), key=lambda index: (-spans[index][1], index)):
+            if len(chosen) >= limit:
+                return chosen
+            options = fracs(spans[index][1])
+            if place < len(options):
+                chosen.append((index, spans[index][0] + spans[index][1] * options[place]))
     return chosen
 
 
@@ -444,12 +480,21 @@ def check(ctx, timeout: float) -> tuple[str, str]:
         if presence[0] == 'skip':
             return presence
         return 'pass', 'none'
+    cover = _cover_check(ctx, rects, timeout - (time.monotonic() - started))
+    # A crop check that timed out or read nothing is a skip, not a pass, unless the
+    # caption check found a face under the caption.
+    if cover[0] == 'fail' or presence[0] != 'skip':
+        return cover
+    return presence
+
+
+def _cover_check(ctx, rects, remaining: float) -> tuple[str, str]:
+    """Caption or title covering a face in the rendered output."""
     if ctx.output is None or not getattr(ctx.output, 'is_file', lambda: False)():
         return 'skip', 'unreadable'
     from backend.services.studio import framing
     if not framing.is_installed():
         return 'skip', 'no_detector'
-    remaining = timeout - (time.monotonic() - started)
     if remaining < 0.05:
         return 'skip', 'timeout'
     times = _sample_times(_duration(ctx) or 1.0)

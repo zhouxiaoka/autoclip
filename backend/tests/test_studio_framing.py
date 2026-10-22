@@ -74,10 +74,7 @@ def test_sample_offsets_stay_clear_of_cuts():
 
 
 def test_framing_decodes_each_shot_once(monkeypatch, tmp_path):
-    """One sequential extract per shot, not a seek per sample.
-
-    40 extracts a minute is the bound. A per-sample seek on this 8 s clip is 60 a minute.
-    """
+    """One sequential extract per shot, not a seek per sample. Only the sampled frames are written."""
     calls = []
 
     def fake_run(cmd, *args, **kwargs):
@@ -97,9 +94,9 @@ def test_framing_decodes_each_shot_once(monkeypatch, tmp_path):
     samples = framing.sample_offsets(0, 4) + framing.sample_offsets(4, length)
     assert len(extracts) == 2, extracts
     assert len(extracts) < len(samples)
-    assert len(extracts) / (length / 60) <= framing.MAX_EXTRACTS_PER_MINUTE
     assert all(cmd.count("-ss") == 1 for cmd in extracts)
     assert all("-noaccurate_seek" not in cmd for cmd in extracts)
+    assert all(any("select=" in part for part in cmd) and "passthrough" in cmd for cmd in extracts)
 
 
 def test_dissolve_times_mark_a_gradual_drift_and_ignore_one_jump():
