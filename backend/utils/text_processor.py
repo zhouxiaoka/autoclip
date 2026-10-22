@@ -1,7 +1,6 @@
 """
 文本处理工具
 """
-import html
 import json
 import logging
 import re
@@ -233,7 +232,7 @@ class TextProcessor:
                 subtitles.append({
                     'start_time': str(sub.start),
                     'end_time': str(sub.end),
-                    'text': html.unescape(sub.text.strip()),
+                    'text': sub.text.strip(),
                     'index': sub.index
                 })
 

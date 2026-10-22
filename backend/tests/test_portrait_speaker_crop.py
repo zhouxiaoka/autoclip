@@ -253,7 +253,19 @@ def test_cues_read_explicit_labels_and_gtgt_turns():
         {'start': 1, 'end': 2, 'text': 'still me'},
         {'start': 2, 'end': 3, 'text': 'Guest: now me'},
     ])
-    assert [cue['speaker'] for cue in explicit] == ['host', 'host', 'Guest']
+    # One `Guest:` does not switch the speaker. The same name has to label two cues.
+    assert [cue['speaker'] for cue in explicit] == ['host', 'host', 'host']
+    repeated = framing.cues_from_entries([
+        {'start': 0, 'end': 1, 'text': 'Jensen: hello'},
+        {'start': 1, 'end': 2, 'text': 'still talking'},
+        {'start': 2, 'end': 3, 'text': 'Jensen: again'},
+    ])
+    assert [cue['speaker'] for cue in repeated] == ['Jensen', 'Jensen', 'Jensen']
+    once = framing.cues_from_entries([
+        {'start': 0, 'end': 1, 'text': 'Guest: hello once'},
+        {'start': 1, 'end': 2, 'text': 'and the line continues'},
+    ])
+    assert all('speaker' not in cue for cue in once)
     turns = framing.cues_from_entries([
         {'start_time': '00:00:00,000', 'end_time': '00:00:01,000', 'text': 'intro'},
         {'start_time': '00:00:01,000', 'end_time': '00:00:02,000', 'text': '>> answer'},
@@ -444,15 +456,23 @@ def test_every_gtgt_is_a_turn_and_a_rolling_line_is_not():
     assert '&gt;' not in rolling[1]['text']
 
 
-def test_import_unescapes_speaker_marks(tmp_path):
+def test_parse_srt_keeps_markup_and_framing_unescapes_speaker_marks(tmp_path):
     from backend.utils.text_processor import TextProcessor
     srt = tmp_path / 'input.srt'
-    srt.write_text('1\n00:00:01,000 --> 00:00:02,000\n&gt;&gt; I think we were trying\n', encoding='utf-8')
+    srt.write_text(
+        '1\n00:00:00,000 --> 00:00:01,000\nTom & Jerry <guest> paid\n\n'
+        '2\n00:00:01,000 --> 00:00:02,000\n&gt;&gt; I think we were trying\n',
+        encoding='utf-8',
+    )
     parsed = TextProcessor.parse_srt(srt)
-    assert parsed[0]['text'].startswith('>>')
-    assert '&gt;' not in parsed[0]['text']
+    assert parsed[0]['text'] == 'Tom & Jerry <guest> paid'
+    assert '&' in parsed[0]['text'] and '<' in parsed[0]['text']
+    assert parsed[1]['text'].startswith('&gt;&gt;')
     cues = framing.cues_from_entries(parsed)
-    assert cues[0]['speaker'] == 'speaker_a'
+    assert 'Tom & Jerry <guest> paid' in cues[0]['text']
+    assert cues[1]['text'].startswith('>>')
+    assert cues[1]['speaker'] == 'speaker_b'
+    assert '&gt;' not in cues[1]['text']
 
 
 def test_a_short_fit_blip_is_absorbed_and_a_fast_flip_still_flashes():
@@ -479,3 +499,213 @@ def test_presence_fails_only_after_a_second_of_the_same_miss():
     assert face.judge_presence([(0.6, 'turned'), (0.6, 'turned')]) == ('fail', 'back_of_head')
     assert face.judge_presence([(0.6, 'missing'), (0.4, 'frontal'), (0.6, 'missing')])[0] == 'pass'
     assert face.judge_presence([(1.2, 'missing')]) == ('fail', 'speaker_out')
+    assert face.judge_presence([(1.2, 'empty')]) == ('fail', 'no_face')
+    assert face.judge_presence([(1.2, 'group')]) == ('fail', 'group_crop')
+    assert face.judge_presence([(0.8, 'group')])[0] == 'pass'
+
+
+def test_low_score_faces_keep_a_wide_shot_from_a_single_face_crop():
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    wide = {
+        'offset': 0.5, 't': 1.0,
+        'frontal': [{'x': 0.22, 'w': 0.08, 'motion': 6, 'area': 1, 'score': 0.91}],
+        'turned': [
+            {'x': 0.55, 'w': 0.04, 'motion': 0, 'area': 0.2, 'score': 0.55},
+            {'x': 0.82, 'w': 0.035, 'motion': 0, 'area': 0.2, 'score': 0.50},
+        ],
+    }
+    assert framing._center_for(wide, {}, [], fraction) is None
+    pair = {
+        'offset': 0.4, 't': 0.4,
+        'frontal': [{'x': 0.20, 'w': 0.10, 'motion': 4, 'area': 1, 'score': 0.91}],
+        'turned': [{'x': 0.75, 'w': 0.04, 'motion': 0, 'area': 0.2, 'score': 0.52}],
+    }
+    assert framing._center_for(pair, {}, [], fraction) is None
+    # One frontal face and one high-score turned head is still the interview punch-in.
+    interview = {
+        'offset': 0.5, 't': 1.0,
+        'frontal': [{'x': 0.18, 'w': 0.06, 'motion': 6, 'area': 1, 'score': 0.90}],
+        'turned': [{'x': 0.80, 'w': 0.09, 'motion': 1, 'area': 2, 'score': 0.87}],
+    }
+    assert framing._center_for(interview, {}, [], fraction) == pytest.approx(0.18)
+
+
+def test_fit_votes_inside_a_shot_stay_when_they_last():
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    samples = []
+    for offset in (0.3, 0.8, 1.3, 1.8, 2.3, 2.8, 3.3, 4.3, 4.8, 5.3, 5.8):
+        if offset < 3.5:
+            frontal = [
+                {'x': 0.2, 'w': 0.08, 'motion': 0, 'area': 1, 'score': 0.93},
+                {'x': 0.5, 'w': 0.08, 'motion': 0, 'area': 1, 'score': 0.94},
+                {'x': 0.8, 'w': 0.08, 'motion': 0, 'area': 1, 'score': 0.95},
+            ]
+        else:
+            frontal = [{'x': 0.72, 'w': 0.12, 'motion': 5, 'area': 1, 'score': 0.9}]
+        samples.append({'offset': offset, 't': offset, 'frontal': frontal, 'turned': []})
+    track = framing.frame_observed(samples, 0.0, 6.5, fraction, [], {})
+    assert _active_point(track, 1.0)['mode'] == 'fit', track
+    close = _active_point(track, 5.5)
+    assert close['mode'] == 'crop', track
+    left, right = _window(close['crop_x'], fraction)
+    assert left <= 0.72 <= right
+
+
+def test_a_shot_shorter_than_the_hold_keeps_its_own_crop():
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    samples = [{'offset': 0.18, 't': 77.58, 'frontal': [
+        {'x': 0.70, 'w': 0.12, 'motion': 2, 'area': 1, 'score': 0.9},
+    ], 'turned': []}]
+    track = framing.frame_observed(samples, 77.4, 0.37, fraction, [], {})
+    assert len(track) == 1 and track[0]['mode'] == 'crop'
+    assert track[0]['start'] == pytest.approx(77.4, abs=0.02)
+    left, right = _window(track[0]['crop_x'], fraction)
+    assert left <= 0.70 <= right
+
+
+def _write_clip(tmp_path, name, frames):
+    folder = tmp_path / name
+    folder.mkdir()
+    for index, frame in enumerate(frames):
+        cv2.imwrite(str(folder / f'{index:04d}.jpg'), frame)
+    path = tmp_path / f'{name}.mp4'
+    _encode(folder, len(frames), path)
+    return path
+
+
+def test_crossfade_from_a_group_still_to_a_close_up_splits_the_framing(tmp_path):
+    frontal, _turned = _faces()
+    group_face = cv2.resize(frontal, (120, 150))
+    group = np.full((SOURCE[1], SOURCE[0], 3), (210, 186, 150), np.uint8)
+    for cx in (180, 480, 780):
+        _blit(group, group_face, cx, 270)
+    close = np.full((SOURCE[1], SOURCE[0], 3), (16, 22, 30), np.uint8)
+    speaker = cv2.resize(frontal, (200, 250))
+    _blit(close, speaker, 700, 270)
+    frames = []
+    for index in range(int(7 * FPS)):
+        second = index / FPS
+        if second < 3.0:
+            frames.append(group)
+        elif second < 4.0:
+            alpha = second - 3.0
+            frames.append(cv2.addWeighted(group, 1 - alpha, close, alpha, 0))
+        else:
+            frames.append(close)
+    video = _write_clip(tmp_path, 'crossfade', frames)
+    cuts = framing.detect_cuts(video, 0, 7)
+    assert any(2.4 <= cut <= 4.6 for cut in cuts), cuts
+    draft = Draft(id='d', title='t', aspect='portrait', layout='crop',
+                  scenes=[Scene(id='fade', label='a', start=0, end=7)])
+    result = _auto_frame(video, draft, [])
+    track = result['scenes'][0]['crop_track']
+    fraction = result['window_fraction']
+    assert _active_point(track, 1.0)['mode'] == 'fit', track
+    close_point = _active_point(track, 5.8)
+    assert close_point['mode'] == 'crop', track
+    image = _frame_at(video, 5.8)
+    found = _detected(image)
+    face_x = max(found, key=lambda row: row['w'])['x']
+    left, right = _window(close_point['crop_x'], fraction)
+    assert left <= face_x <= right, (face_x, close_point, track)
+
+
+def test_wide_shot_with_small_faces_is_not_cropped_to_one_person(tmp_path):
+    frontal, _turned = _faces()
+    host = cv2.resize(frontal, (96, 120))
+    small = cv2.resize(frontal, (58, 74))
+    image = np.full((SOURCE[1], SOURCE[0], 3), (36, 44, 38), np.uint8)
+    _blit(image, host, 180, 250)
+    for cx in (430, 640, 840):
+        _blit(image, small, cx, 300)
+    video = _write_clip(tmp_path, 'wide', [image] * (FPS * 3))
+    seen = _frame_at(video, 1.0)
+    found = _detected(seen)
+    assert len(found) >= 3, found
+    draft = Draft(id='d', title='t', aspect='portrait', layout='crop',
+                  scenes=[Scene(id='wide', label='a', start=0, end=3)])
+    result = _auto_frame(video, draft, [])
+    track = result['scenes'][0]['crop_track']
+    assert track and all(point['mode'] == 'fit' for point in track), track
+
+
+def test_a_very_short_final_shot_gets_its_own_crop(tmp_path):
+    frontal, _turned = _faces()
+    left = np.full((SOURCE[1], SOURCE[0], 3), (18, 18, 22), np.uint8)
+    right = np.full((SOURCE[1], SOURCE[0], 3), (230, 214, 186), np.uint8)
+    _blit(left, cv2.resize(frontal, (150, 190)), 170, 270)
+    _blit(right, cv2.resize(frontal, (170, 210)), 780, 270)
+    length = 4.0
+    cut_at = length - 0.37
+    frames = []
+    for index in range(int(length * FPS)):
+        frames.append(left if index / FPS < cut_at else right)
+    video = _write_clip(tmp_path, 'tail', frames)
+    cuts = framing.detect_cuts(video, 0, length)
+    assert any(abs(cut - cut_at) <= 0.25 for cut in cuts), cuts
+    draft = Draft(id='d', title='t', aspect='portrait', layout='crop',
+                  scenes=[Scene(id='tail', label='a', start=0, end=length)])
+    result = _auto_frame(video, draft, [])
+    track = result['scenes'][0]['crop_track']
+    fraction = result['window_fraction']
+    early = _detected(_frame_at(video, 0.6))
+    late = _detected(_frame_at(video, 3.85))
+    early_x = early[0]['x']
+    late_x = late[0]['x']
+    assert early_x < 0.4 and late_x > 0.6, (early, late)
+
+    def holds(at, face_x, other_x):
+        point = _active_point(track, at)
+        assert point['mode'] == 'crop', (at, track)
+        window_left, window_right = _window(point['crop_x'], fraction)
+        assert window_left <= face_x <= window_right, (at, face_x, point, track)
+        assert not (window_left <= other_x <= window_right), (at, other_x, point, track)
+
+    holds(0.6, early_x, late_x)
+    holds(3.85, late_x, early_x)
+
+
+def test_face_qa_under_the_production_budget(tmp_path, monkeypatch):
+    from backend.services.studio.qa.media import ProbeError
+    video = _talk_video(tmp_path)
+    image = _frame_at(video, 1.0)
+    _speaker, turned = _frontal_and_turned(image)
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    bad = framing.crop_x_for_center(turned['x'], fraction)
+    # Captions are on, so the crop check gets 0.9 s of the 2.0 s face budget.
+    turned_head = face.check(Context(
+        output=video, source=video, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, bad)])],
+    ), 2.0)
+    assert turned_head == ('fail', 'back_of_head'), turned_head
+
+    group = _group_video(tmp_path)
+    group_image = _frame_at(group, 0.4)
+    faces = _detected(group_image)
+    assert len(faces) >= 3
+    one = framing.crop_x_for_center(sorted(faces, key=lambda row: row['x'])[0]['x'], fraction)
+    cropped_group = face.check(Context(
+        output=group, source=group, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, one)])],
+    ), 2.0)
+    assert cropped_group == ('fail', 'group_crop'), cropped_group
+
+    blank = _write_clip(tmp_path, 'blank', [np.full((SOURCE[1], SOURCE[0], 3), 12, np.uint8)] * (FPS * 2))
+    empty = face.check(Context(
+        output=blank, source=blank, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.5)])],
+    ), 2.0)
+    assert empty == ('fail', 'no_face'), empty
+
+    source = tmp_path / 'huge.mp4'
+    source.write_bytes(b'\x00' * 64)
+
+    def timed_out(*_args, **_kwargs):
+        raise ProbeError('timeout')
+
+    monkeypatch.setattr(face, '_grab_jpeg', timed_out)
+    skipped = face.check(Context(
+        output=source, source=source, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
+    ), 2.0)
+    assert skipped == ('skip', 'timeout'), skipped

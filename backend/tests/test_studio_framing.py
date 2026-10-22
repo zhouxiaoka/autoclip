@@ -56,16 +56,37 @@ def test_split_shots_collapses_flicker_and_caps_count():
     assert framing.split_shots(3, []) == [(0.0, 3)]
     montage = framing.split_shots(300, [i * 0.5 for i in range(1, 600)], max_shots=10)
     assert len(montage) == 10 and montage[0][0] == 0.0 and montage[-1][1] == 300
+    # A third of a second at the end is still its own shot. A tenth of a second is not.
+    assert framing.split_shots(77.77, [77.4]) == [(0.0, 77.4), (77.4, 77.77)]
 
 
 def test_sample_offsets_stay_clear_of_cuts():
     # Short shot: one look in the middle, never on the cut frames themselves.
     assert framing.sample_offsets(10, 11) == [pytest.approx(10.375)]
-    three = framing.sample_offsets(10, 14)
-    assert len(three) == 3 and three[0] >= 10.3 and three[-1] + framing.PAIR_GAP <= 13.7
+    dense = framing.sample_offsets(10, 14)
+    assert len(dense) == 7 and dense[0] >= 10.3 and dense[-1] + framing.PAIR_GAP <= 13.7
+    assert dense[1] - dense[0] == pytest.approx(framing.SAMPLE_INTERVAL)
     long = framing.sample_offsets(0, 20)
     assert len(long) >= 7 and long[0] == pytest.approx(.3) and all(b - a == pytest.approx(framing.SAMPLE_INTERVAL) for a, b in itertools.pairwise(long))
-    assert framing.sample_offsets(0, .2) == [0]
+    assert framing.sample_offsets(0, .2) == [pytest.approx(0.1)]
+    assert framing.sample_offsets(77.4, 77.77) == [pytest.approx(77.585)]
+
+
+def test_dissolve_times_mark_a_gradual_drift_and_ignore_one_jump():
+    import numpy as np
+
+    def field(value: int):
+        return np.full(64, int(value), np.uint8)
+
+    times = [index * 0.25 for index in range(12)]
+    gradual = [field(200)] * 3 + [field(value) for value in (160, 110, 60, 20)] + [field(20)] * 5
+    marks = framing.dissolve_times(gradual, times)
+    assert marks and 1.2 <= marks[0] <= 2.4
+    jump = [field(200)] * 4 + [field(20)] * 8
+    assert framing.dissolve_times(jump, times) == []
+    # Mouth motion on a talking head is one small step, not a shot boundary.
+    twitch = [field(40)] * 5 + [field(48)] + [field(40)] * 6
+    assert framing.dissolve_times(twitch, times) == []
 
 
 def test_frame_shot_classifies_cards_and_speakers():

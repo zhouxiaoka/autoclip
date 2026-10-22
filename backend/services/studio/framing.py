@@ -1,9 +1,11 @@
 """Shot-aware framing for the portrait crop layout.
 
-Work in shots, not on a clock. Each scene is first split at hard cuts (ffmpeg scene-change scores),
-then every shot is classified from a few frame pairs: OpenCV's YuNet model (bundled ONNX, MIT licence)
-finds faces. A turned-away head or the back of a head is never the crop centre. The window follows
-a visible frontal face, and when the transcript names who is speaking it follows that person's face.
+Work in shots, not on a clock. Each scene is first split at hard cuts (ffmpeg scene-change scores)
+and at dissolves, then every shot is classified from frame pairs taken about twice a second:
+OpenCV's YuNet model (bundled ONNX, MIT licence) finds faces. A turned-away head or the back of a
+head is never the crop centre. The window follows a visible frontal face, and when the transcript
+names who is speaking it follows that person's face. A run of looks that vote to show the whole
+frame stays a fit segment when it lasts at least a second.
 
 - a shot with one frontal face that fits the window → `crop`, centred on that face (the active
   speaker when a cue says who);
@@ -44,7 +46,6 @@ CUT_THRESHOLD = 0.3        # ffmpeg scene-change score that counts as a hard cut
 MIN_SHOT = 0.4             # seconds; cuts closer than this are flicker/transitions, not shots
 MAX_SHOTS = 120            # per scene; beyond this the footage is a montage and we sample coarsely
 CUT_MARGIN = 0.3           # seconds kept clear of a cut when sampling (transition frames lie)
-SAMPLE_INTERVAL = 2.5      # seconds between samples inside a long shot
 LONG_SHOT = 6.0            # shots longer than this may switch speaker inside
 PAIR_GAP = 0.25            # seconds between the two frames of one sample (mouth motion)
 FRAME_WIDTH = 480
@@ -56,7 +57,14 @@ NOSE_OUTSIDE = 0.09        # a three-quarter face (nose ~0.08 outside the eyes) 
 NOSE_OPEN = 0.13           # extra room only when both eyes are clearly open
 OPEN_EYE = 0.30            # eye-span / face-width that earns the extra nose room
 FRONTAL_EYE_MIN = 0.15     # eye-span / face-width below this is a collapsed, non-frontal landmark set
-MIN_SCORE = 0.72           # YuNet score below this is a false box (backs of heads land near 0.64)
+MIN_SCORE = 0.72           # close-up score below this is a false box (backs of heads land near 0.64)
+WIDE_SCORE = 0.45          # a small face in a wide shot still counts as a person below MIN_SCORE
+PERSON_MIN = 0.02          # face width below this fraction is noise, not a person
+SAMPLE_INTERVAL = 0.5      # seconds between looks; long shots are not stuck at a fixed handful
+TAIL_SHOT = 0.15           # a final fragment at least this long still gets its own crop
+DISSOLVE_STEP = 0.25       # seconds between frames when looking for a crossfade
+DISSOLVE_WINDOW = 1.0      # a dissolve drifts across about this much time
+DISSOLVE_DRIFT = 0.22      # mean pixel change (0–1) that means the picture became a different shot
 MAX_FACE = 0.55            # a box wider than this fraction of the frame is not a face
 EDGE_FACE = 0.22           # a box this wide that touches the frame edge is a stuck false detection
 PAN_EASE = 0.45            # seconds; an interior speaker change eases instead of cutting
@@ -389,7 +397,7 @@ def layout_filter(scene: Scene, fallback: float, w: int, h: int) -> str:
 
 
 # ------------------------------------------------------------------- shots ---
-def detect_cuts(video: Path, start: float, length: float) -> list[float]:
+def _hard_cuts(video: Path, start: float, length: float) -> list[float]:
     """Hard cuts inside [start, start+length) as seconds relative to `start`."""
     from backend.services import render_limits
     cmd = [get_ffmpeg_path(), "-v", "info", "-nostats", *render_limits.input_args(), "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
@@ -410,12 +418,94 @@ def detect_cuts(video: Path, start: float, length: float) -> list[float]:
     return cuts
 
 
+def _pixel_distance(left, right) -> float:
+    """Mean absolute difference of two gray frames, 0 for a match and 1 for a full invert."""
+    import numpy as np
+    before = np.asarray(left)
+    after = np.asarray(right)
+    if before.shape != after.shape or before.size == 0:
+        return 0.0
+    return float(np.abs(before.astype(np.int16) - after.astype(np.int16)).mean()) / 255.0
+
+
+def dissolve_times(frames: list, times: list[float]) -> list[float]:
+    """Ends of gradual transitions. A single hard jump is left to the scene detector.
+
+    `times` are seconds on the same clock as `frames`. A window whose picture drifts into a
+    different frame, without one step doing all of the change, is a crossfade. Histogram
+    distance is not used: a flat wall sits on a bin edge and a small fade looks like a cut.
+    """
+    marks = []
+    for index, end in enumerate(times):
+        start_index = index
+        while start_index > 0 and end - times[start_index - 1] <= DISSOLVE_WINDOW + 1e-6:
+            start_index -= 1
+        if end - times[start_index] < 0.6:
+            continue
+        if _pixel_distance(frames[start_index], frames[index]) < DISSOLVE_DRIFT:
+            continue
+        steps = [_pixel_distance(frames[i], frames[i + 1]) for i in range(start_index, index)]
+        if not steps or max(steps) >= DISSOLVE_DRIFT:
+            continue
+        if sum(1 for step in steps if step >= 0.05) < 2:
+            continue
+        marks.append(end)
+    kept: list[float] = []
+    for mark in marks:
+        if kept and mark - kept[-1] < MIN_SHOT:
+            kept[-1] = mark
+            continue
+        kept.append(mark)
+    return kept
+
+
+def _dissolve_cuts(video: Path, start: float, length: float) -> list[float]:
+    """Crossfades the hard-cut detector misses, as seconds relative to `start`."""
+    if length < 0.8:
+        return []
+    width, height = 96, 54
+    rate = f"{1 / DISSOLVE_STEP:.4g}"
+    cmd = [get_ffmpeg_path(), "-v", "error", "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
+           "-an", "-vf", f"fps={rate},scale={width}:{height}", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=max(30, length * 2), check=False)
+    except subprocess.TimeoutExpired:
+        return []
+    raw = proc.stdout or b""
+    size = width * height
+    count = len(raw) // size
+    if proc.returncode != 0 or count < 4:
+        return []
+    import numpy as np
+    frames = []
+    times = []
+    for index in range(count):
+        frames.append(np.frombuffer(raw, dtype=np.uint8, count=size, offset=index * size).copy())
+        times.append(index * DISSOLVE_STEP)
+    return dissolve_times(frames, times)
+
+
+def detect_cuts(video: Path, start: float, length: float) -> list[float]:
+    """Hard cuts and crossfades inside [start, start+length), seconds relative to `start`."""
+    cuts = _hard_cuts(video, start, length)
+    try:
+        cuts.extend(_dissolve_cuts(video, start, length))
+    except (OSError, ValueError):
+        pass
+    return sorted(set(round(cut, 2) for cut in cuts))
+
+
 def split_shots(length: float, cuts: list[float], min_shot: float = MIN_SHOT, max_shots: int = MAX_SHOTS) -> list[tuple[float, float]]:
-    """Turn cut times into (start, end) shots; cuts too close together collapse into one shot."""
+    """Turn cut times into (start, end) shots; cuts too close together collapse into one shot.
+
+    A final fragment shorter than MIN_SHOT still stands alone when it is at least TAIL_SHOT,
+    so a close-up in the last third of a second is not left on the previous crop.
+    """
     bounds = [0.0]
     for cut in sorted(cuts):
-        if cut - bounds[-1] >= min_shot and length - cut >= min_shot:
-            bounds.append(cut)
+        if cut - bounds[-1] < min_shot or length - cut < TAIL_SHOT:
+            continue
+        bounds.append(cut)
     if len(bounds) > max_shots:
         step = len(bounds) / max_shots
         bounds = [bounds[int(i * step)] for i in range(max_shots)]
@@ -423,18 +513,22 @@ def split_shots(length: float, cuts: list[float], min_shot: float = MIN_SHOT, ma
 
 
 def sample_offsets(start: float, end: float) -> list[float]:
-    """Where to look inside one shot: away from the cuts, more often in long shots."""
+    """Where to look inside one shot: every SAMPLE_INTERVAL, clear of the cut frames.
+
+    A shot shorter than 0.8 s is one look at its middle, including a final fragment under a second.
+    """
     length = end - start
-    if length <= PAIR_GAP + .1:
+    if length <= 0:
         return [start]
+    if length < 0.8:
+        return [start + length / 2]
     margin = min(CUT_MARGIN, (length - PAIR_GAP) / 2)
     first, last = start + margin, end - margin - PAIR_GAP
     if last <= first:
-        return [first]
-    if length <= LONG_SHOT:
-        count = 1 if length < 1.5 else 3
-        return [first + (last - first) * i / max(1, count - 1) for i in range(count)] if count > 1 else [(first + last) / 2]
+        return [(start + end) / 2]
     count = int((last - first) // SAMPLE_INTERVAL) + 1
+    if count <= 1:
+        return [(first + last) / 2]
     return [first + SAMPLE_INTERVAL * i for i in range(count)]
 
 
@@ -463,7 +557,7 @@ def _detector(cv2: Any, width: int, height: int) -> Any:
     """One YuNet instance per frame size. Caller holds _detector_lock during inference."""
     key = (width, height)
     if key not in _detectors:
-        _detectors[key] = cv2.FaceDetectorYN.create(str(MODEL), "", key, score_threshold=0.6, nms_threshold=0.3, top_k=50)
+        _detectors[key] = cv2.FaceDetectorYN.create(str(MODEL), "", key, score_threshold=WIDE_SCORE, nms_threshold=0.3, top_k=50)
     return _detectors[key]
 
 
@@ -510,14 +604,44 @@ def is_frontal(face) -> bool:
     return eye_y < nose_y < mouth_y + 0.1 * height
 
 
-def _reliable_box(face, frame_w: int) -> bool:
-    """False for a low score, a huge box, or a wide box stuck to the frame edge."""
+def _box_parts(face, frame_w: int) -> tuple[float, float, float] | None:
     try:
         x, box_w = float(face[0]), float(face[2])
         score = float(face[14]) if len(face) > 14 else 1.0
     except (TypeError, ValueError, IndexError):
+        return None
+    if frame_w <= 0 or box_w <= 0:
+        return None
+    return score, x, box_w
+
+
+def _person_box(face, frame_w: int) -> bool:
+    """True for anyone in the shot, including a small face a wide view would otherwise drop.
+
+    A large box still needs MIN_SCORE, so a 0.64 back-of-head or an edge-stuck false face does
+    not become a person. A small box may sit between WIDE_SCORE and MIN_SCORE.
+    """
+    parts = _box_parts(face, frame_w)
+    if parts is None:
         return False
-    if score < MIN_SCORE or frame_w <= 0:
+    score, x, box_w = parts
+    norm = box_w / frame_w
+    if norm < PERSON_MIN or norm > MAX_FACE:
+        return False
+    if norm >= 0.08 and score < MIN_SCORE:
+        return False
+    if score < WIDE_SCORE:
+        return False
+    return not (box_w >= EDGE_FACE * frame_w and (x <= 1 or x + box_w >= frame_w - 1))
+
+
+def _reliable_box(face, frame_w: int) -> bool:
+    """A box good enough to centre a crop on: close-up score, not huge, not stuck to the edge."""
+    parts = _box_parts(face, frame_w)
+    if parts is None:
+        return False
+    score, x, box_w = parts
+    if score < MIN_SCORE:
         return False
     if box_w < MIN_FACE * frame_w or box_w > MAX_FACE * frame_w:
         return False
@@ -568,14 +692,19 @@ def _observe_pair(pair: tuple[Path, Path]) -> dict[str, list[dict[str, float]]] 
     grey_a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
     grey_b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY) if second is not None and second.shape == first.shape else None
     for face in faces:
-        if not _reliable_box(face, width):
+        if not _person_box(face, width):
             continue
         box_w = float(face[2])
+        try:
+            score = float(face[14]) if len(face) > 14 else 1.0
+        except (TypeError, ValueError):
+            score = 1.0
         item = {
             "x": float((float(face[0]) + box_w / 2) / width),
             "w": box_w / width,
             "motion": _mouth_motion(cv2, face, grey_a, grey_b, width, height),
             "area": box_w * float(face[3]),
+            "score": score,
         }
         # A head that is frontal in only one frame of the pair is mid-turn. Do not crop to it.
         (frontal if _frontal_in_pair(face, other, width) else turned).append(item)
@@ -708,18 +837,18 @@ def _rolls(previous: str, new: str) -> bool:
     return shorter >= 4 and shared >= max(4, int(shorter * 0.6))
 
 
-def _explicit_name(text: str) -> str | None:
-    """A bracket label, or a capitalised name. `Look:` is a sentence, not a speaker."""
+def _explicit_name(text: str) -> tuple[str, str] | None:
+    """`(kind, name)` for a bracket label or a capitalised `Name:`. `Look:` is not a name."""
     match = _EXPLICIT_SPEAKER.match(text)
     if not match:
         return None
     bracket = (match.group("bracket") or "").strip()
     if bracket:
-        return bracket
+        return ("bracket", bracket)
     label = (match.group("label") or "").strip()
     if not _NAME.match(label) or label.lower() in _STOP_NAMES:
         return None
-    return label
+    return ("name", label)
 
 
 def _fold_rolls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -738,7 +867,8 @@ def _fold_rolls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def cues_from_entries(entries) -> list[dict[str, Any]]:
     """Speaker cues, or plain cues when the transcript never names a speaker.
 
-    Bracket labels and a repeated capitalised `Name:` win. A one-off `Look:` does not.
+    Bracket labels always win. A capitalised `Name:` wins only when that same name labels
+    at least two cues, so one `Guest:` or `Look:` does not rename the transcript.
     Every remaining `>>` is a new turn. A transcript with neither labels nor `>>` is left
     unlabelled, so framing follows the frontal talking face instead of binding one person.
     """
@@ -754,7 +884,19 @@ def cues_from_entries(entries) -> list[dict[str, Any]]:
             continue
         parsed.append({"start": start, "end": end, "text": _caption_text(entry.get("text") or "")})
     parsed = _fold_rolls(parsed)
-    names = [_explicit_name(row["text"]) for row in parsed]
+    found = [_explicit_name(row["text"]) for row in parsed]
+    name_counts: dict[str, int] = {}
+    for item in found:
+        if item and item[0] == "name":
+            name_counts[item[1]] = name_counts.get(item[1], 0) + 1
+    names = []
+    for item in found:
+        if item is None:
+            names.append(None)
+        elif item[0] == "bracket" or name_counts.get(item[1], 0) >= 2:
+            names.append(item[1])
+        else:
+            names.append(None)
     if any(names):
         current = None
         cues = []
@@ -844,13 +986,24 @@ def _fits(faces: list[dict[str, float]], fraction: float) -> bool:
 def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fraction: float) -> float | None:
     """Normalised centre for one sample, or None when the shot should fit the whole frame.
 
-    Three or more frontal faces that do not fit the window stay together (a group photo), even
-    when a cue overlaps. A bound speaker who has turned away is not replaced by someone else or
-    by the back of their head. Two frontal faces with no unique speaker are kept when they do not
-    fit, and centred as a pair when they do.
+    Three or more people who do not fit the window stay together (a group photo or a wide shot),
+    even when a cue overlaps and even when only one of them cleared the close-up score. A small
+    low-score face still counts as another person, so a wide shot is not a single-face punch-in.
+    A bound speaker who has turned away is not replaced by someone else or by the back of their
+    head. Two frontal faces with no unique speaker are kept when they do not fit, and centred as
+    a pair when they do. None means show the whole frame: there is no face to put in the window.
     """
     frontals = list(sample.get("frontal") or [])
+    people = frontals + list(sample.get("turned") or [])
+    # Three or more people who cannot share the window are a group, even when only one
+    # of them cleared the close-up score. A wide shot is not a single-face punch-in.
+    if len(people) >= 3 and not _fits(people, fraction):
+        return None
     if len(frontals) >= 3 and not _fits(frontals, fraction):
+        return None
+    # Two people where the other face only cleared the wide-shot score: still not one person.
+    low_score = [face for face in people if float(face.get("score", 1.0)) < MIN_SCORE]
+    if len(people) >= 2 and low_score and not _fits(people, fraction):
         return None
     speaker = speaker_at(cues, float(sample.get("t", 0))) if cues else None
     bound = binding.get(speaker) if speaker else None
@@ -931,9 +1084,15 @@ def _stabilize(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         frontal_n = sum(1 for _index, kind, _face in cluster["members"] if kind == "frontal")
         total = len(cluster["members"])
-        # A tie keeps each look's own label. Promoting on a tie turns the back of a head into a
-        # second frontal once that person faces the camera in another part of the shot.
-        forced = "frontal" if frontal_n * 2 > total else "turned" if frontal_n * 2 < total else None
+        # Only a clear two-thirds majority renames the whole shot. A tie, or a speaker who
+        # faces the camera for half a long shot, keeps each look's own label. Promoting a
+        # slight majority turns a real frontal run into the back of a head.
+        if frontal_n * 3 >= total * 2:
+            forced = "frontal"
+        elif frontal_n * 3 <= total:
+            forced = "turned"
+        else:
+            forced = None
         for index, kind, face in cluster["members"]:
             label = forced or kind
             if any(abs(other["x"] - face["x"]) <= 0.05 for other in rebuilt[index][label]):
@@ -1017,41 +1176,46 @@ def _crop_point(start: float, center: float | None, fraction: float) -> dict[str
     return {"start": round(start, 2), "crop_x": round(crop_x_for_center(center, fraction), 3), "mode": "crop"}
 
 
+def _same_vote(previous: float | None, center: float | None, fraction: float) -> bool:
+    if previous is None or center is None:
+        return previous is None and center is None
+    return abs(crop_x_for_center(previous, fraction) - crop_x_for_center(center, fraction)) < MIN_JUMP
+
+
+def _points_from_votes(votes: list[tuple[float, float | None]], shot_start: float, shot_length: float,
+                       fraction: float) -> list[dict[str, Any]]:
+    """One point per run of agreeing looks. A fit run is kept, not dropped for lack of crop votes."""
+    if not votes:
+        return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
+    runs: list[list[Any]] = []
+    for offset, center in votes:
+        if runs and _same_vote(runs[-1][1], center, fraction):
+            if center is not None:
+                runs[-1][2].append(center)
+            continue
+        runs.append([offset, center, [center] if center is not None else []])
+    points = []
+    for index, (offset, _center, centres) in enumerate(runs):
+        start = shot_start if index == 0 else shot_start + offset
+        median = statistics.median(centres) if centres else None
+        points.append(_crop_point(start, median, fraction))
+    return points
+
+
 def frame_observed(samples: list[dict[str, Any]], shot_start: float, shot_length: float, fraction: float,
                    cues, binding: dict[str, float]) -> list[dict[str, Any]]:
     """Track points for one shot from observed faces.
 
-    Fewer than half the looks show a frontal face, or fewer than half have a centre that fits,
-    and the shot is shown whole. Cue changes inside the shot each get their own point. Without a
-    cue change, a short shot holds one centre and a long shot uses the existing hold rules.
+    Looks that vote fit become a fit segment when that run lasts at least MIN_SEGMENT.
+    They are not discarded just because fewer than three looks voted for a crop. A shot
+    with no frontal face at all is shown whole. A crop never continues across looks that
+    found no face to centre on.
     """
     samples = _stabilize(samples)
-    if not samples or sum(1 for sample in samples if sample.get("frontal")) * 2 < len(samples):
+    if not samples or not any(sample.get("frontal") for sample in samples):
         return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
-    chosen = []
-    for sample in samples:
-        center = _center_for(sample, binding, cues, fraction)
-        if center is not None:
-            chosen.append((float(sample["offset"]), center))
-    if len(chosen) * 2 < len(samples):
-        return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
-    segments = _cue_segments(samples, cues, shot_length)
-    points: list[dict[str, Any]] = []
-    if segments:
-        for start, end in segments:
-            # The last slice keeps a sample that lands on the shot's end.
-            if end >= shot_length - 1e-6:
-                centres = [center for offset, center in chosen if offset >= start - 1e-6]
-            else:
-                centres = [center for offset, center in chosen if start - 1e-6 <= offset < end - 1e-6]
-            median = statistics.median(centres) if centres else None
-            points.append(_crop_point(shot_start + start, median, fraction))
-    elif shot_length <= LONG_SHOT or len(chosen) < 3:
-        points.append(_crop_point(shot_start, statistics.median(center for _, center in chosen), fraction))
-    else:
-        seen = [(offset, crop_x_for_center(center, fraction)) for offset, center in chosen]
-        for point in segment_track(seen):
-            points.append({"start": round(shot_start + point["start"], 2), "crop_x": point["crop_x"], "mode": "crop"})
+    votes = [(float(sample["offset"]), _center_for(sample, binding, cues, fraction)) for sample in samples]
+    points = _points_from_votes(votes, shot_start, shot_length, fraction)
     return _with_ease(_steady(_absorb_short(points, shot_start, shot_length)))
 
 
