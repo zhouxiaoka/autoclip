@@ -318,6 +318,15 @@ autoclip outputs PROJECT_ID --export-kits
       🎁 <strong>Предложение для AutoClip</strong>: Новые пользователи могут получить <strong>$5 пробного кредита</strong> при регистрации по <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">реферальной ссылке</a> на условиях акции. <a href="docs/INFISTAR_SETUP.en.md">Инструкция по настройке (англ.)</a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      Благодарим APIMart за поддержку этого проекта! APIMart — недорогая API-платформа для генерации изображений и видео с помощью ИИ: GPT-Image-2 от <code>$0.006/image</code>, более 160 изображений за один доллар. Один асинхронный API охватывает и изображения, и видео: отправьте задачу, получите ID и заберите результат опросом или через callback. Пакетная обработка десятков тысяч изображений без таймаутов, смена модели без изменения кода. Оплата по факту использования, без ежемесячной платы — <a href="https://go.apimart.ai/tw-autoclip">зарегистрируйтесь здесь</a>, чтобы начать.
+    </td>
+  </tr>
 </table>
 
 ## Частые вопросы

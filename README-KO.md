@@ -318,6 +318,15 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
       🎁 <strong>AutoClip 전용 혜택</strong>: 신규 사용자는 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">전용 추천 링크</a>로 가입하면 <strong>$5 체험 크레딧</strong>을 받을 수 있습니다. 적용 조건은 이벤트 안내를 확인하세요. <a href="docs/INFISTAR_SETUP.en.md">설정 가이드 (영어)</a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      이 프로젝트를 후원해 주신 APIMart에 감사드립니다! APIMart는 AI 이미지와 동영상 생성을 위한 저비용 API 플랫폼입니다. GPT-Image-2는 <code>$0.006/image</code>부터 이용할 수 있으며, 1달러로 160장 이상을 만들 수 있습니다. 하나의 비동기 API로 이미지와 동영상을 모두 처리합니다. 작업을 제출해 ID를 받고, 폴링 또는 콜백으로 결과를 가져옵니다. 타임아웃 없이 수만 장을 배치로 처리하고, 코드를 바꾸지 않고 모델을 전환할 수 있습니다. 월 이용료 없는 종량제이며, <a href="https://go.apimart.ai/tw-autoclip">여기에서 가입</a>하면 바로 시작할 수 있습니다.
+    </td>
+  </tr>
 </table>
 
 ## 자주 묻는 질문
