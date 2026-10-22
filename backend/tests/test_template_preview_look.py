@@ -226,9 +226,12 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     assert '最底层是能源' in frames['0.5']['hook']['html'] and 'ln acc' in frames['0.5']['hook']['html']
     assert frames['3.0']['hook']['html'] == frames['0.5']['hook']['html']
     # Preview: 「AI其实」 stays sans and only the key words take the gold serif.
-    accented = re.findall(r'class="p acc[^"]*"[^>]*>([^<]*)<', frames['0.5']['zh']['html'])
-    assert accented == ['五层蛋糕'], frames['0.5']['zh']['html']
-    assert re.sub(r'<[^>]+>', '', frames['0.5']['zh']['html']) == 'AI其实是一块五层蛋糕'
+    # A screen holds about 6-8 characters, so the sentence turns once: AI其实是 / 一块五层蛋糕.
+    first = re.sub(r'<[^>]+>', '', frames['0.5']['zh']['html'])
+    second = re.sub(r'<[^>]+>', '', frames['3.0']['zh']['html'])
+    assert first + second == 'AI其实是一块五层蛋糕', (first, second)
+    accented = re.findall(r'class="p acc[^"]*"[^>]*>([^<]*)<', frames['0.5']['zh']['html'] + frames['3.0']['zh']['html'])
+    assert accented == ['五层蛋糕'], frames['3.0']['zh']['html']
     assert 'five' in frames['0.5']['en']['html']
     assert frames['0.5']['kick']['text'] == 'Jensen Huang on the five-layer cake'
     assert frames['0.5']['trk']['text'] == 'FIVE-LAYER CAKE · JENSEN HUANG'

@@ -9,6 +9,7 @@ Stickers are not generated in this version.
 """
 from __future__ import annotations
 
+import math
 import re
 
 from backend.services.studio.caption_layout import lines_for, page_screens, width
@@ -767,7 +768,7 @@ def _timed_in_cue(cue, word_timing, scenes) -> list | None:
     return rows or None
 
 
-def _groups(spoken: list, group_limit: float) -> list[list]:
+def _groups(spoken: list, group_limit: float, max_sec: float | None = None) -> list[list]:
     """Phrases that share a line and a contiguous stretch of the output clock.
 
     A cut that removes the middle of a sentence leaves a gap. Those two sides are
@@ -779,7 +780,8 @@ def _groups(spoken: list, group_limit: float) -> list[list]:
     for item in spoken:
         piece_width = width(item[0])
         gap = current and item[3] > current[-1][4]
-        if current and (gap or used + piece_width > group_limit + 1e-6):
+        too_long = bool(max_sec) and item[2] - current[0][1] > max_sec + 1e-6 if current else False
+        if current and (gap or too_long or used + piece_width > group_limit + 1e-6):
             groups.append(current)
             current = []
             used = 0.0
@@ -1195,6 +1197,30 @@ def _place_rough(rough: list[tuple], total: int, fps: int, line_limit: float | N
     return _hold_phrases(placed, line_limit)
 
 
+_EDITORIAL_SCREEN = 8
+_SCREEN_SEC = 2.6
+
+
+def _split_long_screens(spoken: list, fps: int) -> list:
+    """A screen that stays up over 2.6s splits at a natural break into two.
+
+    The preview turns a screen about every 1.5s. A slow 8-character phrase held for 3s
+    reads as a stuck caption. Each half gets time by its share of the characters.
+    """
+    out = []
+    for piece, t0, t1, f0, f1 in spoken:
+        halves = _wrap_units(piece, math.ceil(width(piece) / 2) + 1) if t1 - t0 > _SCREEN_SEC and width(piece) >= 6 else [piece]
+        if len(halves) != 2 or min(width(half) for half in halves) < 2:
+            out.append((piece, t0, t1, f0, f1))
+            continue
+        share = width(halves[0]) / max(1e-6, width(piece))
+        mid_t = t0 + (t1 - t0) * share
+        mid_f = max(f0 + 1, min(f1 - 1, f0 + int(round((f1 - f0) * share))))
+        out.append((halves[0], t0, mid_t, f0, mid_f))
+        out.append((halves[1], mid_t, t1, mid_f, f1))
+    return out
+
+
 def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
@@ -1214,6 +1240,12 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     phrase_limit = float(limit or 10)
     # One caption line. Two full phrases used to share a moment and overflow the box.
     group_limit = phrase_limit if (template or '') == 'editorial' else phrase_limit * 10**6
+    if (template or '') == 'editorial':
+        # The preview shows about 6-8 characters for about 1.5s, not a full 18-character line.
+        phrase_limit = min(phrase_limit, _EDITORIAL_SCREEN)
+        group_limit = phrase_limit
+    # A flash under 0.6s may join its neighbour a little past the screen size.
+    hold_limit = phrase_limit + 2 if (template or '') == 'editorial' else phrase_limit
     roster = [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])]
     rows = _transcript_rows(transcript)
     for cue in cues:
@@ -1237,16 +1269,18 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         lines_here = cue_lines(cue_start, cue_end, rows, scenes) if rows else None
         spoken = _once_per_clip(
             pieces, cue_start, cue_end,
-            scenes, total, fps, _source_words(cue, word_timing), phrase_limit,
+            scenes, total, fps, _source_words(cue, word_timing), hold_limit,
             lines=lines_here,
         )
         if not spoken:
             continue
+        if (template or '') == 'editorial':
+            spoken = _split_long_screens(spoken, fps)
         if not timed and lines_here and (template or '') == 'street':
             english = _en_on_lines(original, lines_here, phrase)
         else:
             english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
-        groups = _groups(spoken, group_limit)
+        groups = _groups(spoken, group_limit, _SCREEN_SEC if (template or '') == 'editorial' else None)
         for group in groups:
             zh = []
             group_en = [
