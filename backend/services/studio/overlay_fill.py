@@ -821,19 +821,39 @@ def _close_blinks(moments: list[dict], words: list[dict], fps: int) -> None:
             here['end_frame'] = nxt['start_frame']
 
 
+def _whole_word_mark(piece: str, mark: str) -> str:
+    """The highlight grown to whole words: 差回 inside 出差回来 lights 出差回来."""
+    from backend.services.studio.cjk_segment import crosses_word
+    at = piece.find(mark)
+    if at < 0:
+        return mark
+    end = at + len(mark)
+    while at > 0 and crosses_word(piece[:at], piece[at:end]):
+        at -= 1
+    while end < len(piece) and crosses_word(piece[at:end], piece[end:]):
+        end += 1
+    return piece[at:end]
+
+
 def _mark_accents(moments: list[dict]) -> None:
-    """One gold serif phrase per moment, and not again for 3 seconds."""
+    """One gold serif phrase per moment, not again for 3 seconds, and each text once a clip.
+
+    dad_suit lit 24小时 at 4.9s and again at 25.7s, and 纽约 twice.
+    """
     last = -9.0
+    used: set[str] = set()
     for moment in moments:
         chosen = None
         for phrase in moment['zh']:
-            if phrase['key'] and len(phrase['s']) >= 2 and phrase['t0'] - last >= 3.0:
+            text = phrase.get('hl') or phrase['s']
+            if phrase['key'] and len(phrase['s']) >= 2 and phrase['t0'] - last >= 3.0 and text not in used:
                 chosen = phrase
                 break
         for phrase in moment['zh']:
             phrase['acc'] = phrase is chosen
         if chosen is not None:
             last = chosen['t0']
+            used.add(chosen.get('hl') or chosen['s'])
 
 
 def _short_topic(lines: list[str], speakers: list[dict]) -> str:
@@ -1350,11 +1370,11 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                 if word['t1'] > group[0][1] - 1e-6 and word['t0'] < group[-1][2] + 1e-6
             ]
             for piece, t0, t1, start_frame, end_frame in group:
-                key = bool(phrase and (phrase in piece or piece in phrase)) or any(
+                key = bool(phrase and (phrase in piece or piece in phrase)) or ((template or '') != 'editorial' and any(
                     word['key'] and word['t1'] > t0 and word['t0'] < t1 for word in group_en
-                )
+                ))
                 # The preview's gold serif sits on the key words, not on the whole line.
-                mark = phrase if phrase and phrase in piece and phrase != piece else ''
+                mark = _whole_word_mark(piece, phrase) if phrase and phrase in piece and phrase != piece else ''
                 zh.append({'s': piece, 't0': t0, 't1': t1, 'key': key, 'acc': False, 'hl': mark})
                 words.append({
                     'text': piece,
