@@ -62,3 +62,79 @@ def test_sentence_after_a_cold_open_keeps_its_middle():
     assert third_shot - 1e-6 <= most[1] <= third_shot + 1.0, shown
     starts = [start for _text, start, _end in shown]
     assert starts == sorted(starts)
+
+
+def _srt(seconds):
+    minutes, rest = divmod(seconds, 60)
+    hours, minutes = divmod(int(minutes), 60)
+    return f'{hours:02d}:{minutes:02d}:{rest:06.3f}'.replace('.', ',')
+
+
+MORE_TIME_ROWS = [
+    (1227.303, 1232.883, "The more I've learned in life, the more I realize there's more to do."),
+    (1232.883, 1236.223, "And that's because every time you learn something, it opens a new door."),
+    (1242.883, 1244.923, "And so that's the future."),
+    (1245.783, 1247.403, "People say we're going to have more time."),
+    (1247.743, 1249.363, 'I completely disagree.'),
+    (1250.283, 1254.923, 'I think for most people, this intelligence is going to unlock more opportunities.'),
+]
+MORE_TIME_SCENES = [{'start': 1245.63, 'end': 1249.57}, {'start': 1227.17, 'end': 1236.4}, {'start': 1242.8, 'end': 1245.1},
+                    {'start': 1250.17, 'end': 1255.0}]
+
+
+def _more_time_packaging(segments):
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio import packaging
+    entries = [{'start_time': _srt(a), 'end_time': _srt(b), 'text': text} for a, b, text in MORE_TIME_ROWS]
+    lines = packaging.draft_lines(entries, MORE_TIME_SCENES)
+    response = {'title_lines': ['黄仁勋：AI不会', '让你更清闲'], 'accent_line': 1, 'segments': segments, 'speakers': [], 'tags': []}
+    return lines, packaging.build_packaging({'title': 'More time', 'hook': ''}, lines, platform_strategy('xiaohongshu'),
+                                            call=lambda prompt, data: response)
+
+
+def test_packaged_sentence_that_runs_backwards_is_split_on_its_subtitle_timing():
+    # Live DeepSeek output for more_time: lines 0-3 (cold open, then the second shot) as one sentence.
+    lines, result = _more_time_packaging([
+        {'from': 0, 'to': 3, 'text': '人们说我们会有更多时间。我完全不同意。人生学得越多，我越发现还有更多事要做。因为每次你学到东西，就会打开一扇新门。'},
+        {'from': 4, 'to': 5, 'text': '这就是未来。我认为对大多数人来说，这种智能会解锁更多机会。'},
+    ])
+    assert not result['fallback']
+    cues = [(cue['start'], cue['end'], cue['text']) for cue in result['cues']]
+    assert all(start < end for start, end, _text in cues), cues
+    assert cues[0] == (lines[0]['start'], lines[1]['end'], '人们说我们会有更多时间。我完全不同意。')
+    assert cues[1][:2] == (lines[2]['start'], lines[3]['end']) and cues[1][2].startswith('人生学得越多')
+    assert ''.join(text for _a, _b, text in cues) == '人们说我们会有更多时间。我完全不同意。人生学得越多，我越发现还有更多事要做。因为每次你学到东西，就会打开一扇新门。这就是未来。我认为对大多数人来说，这种智能会解锁更多机会。'
+    # "And so that's the future." skips the cold-open lines before "I think..." in the source: split there too.
+    assert [text for _a, _b, text in cues[2:]] == ['这就是未来。', '我认为对大多数人来说，这种智能会解锁更多机会。']
+
+
+def test_forward_sentence_across_a_plain_cut_stays_one_cue():
+    lines, result = _more_time_packaging([
+        {'from': 0, 'to': 1, 'text': '人们说我们会有更多时间。我完全不同意。'},
+        {'from': 2, 'to': 3, 'text': '人生学得越多，我越发现还有更多事要做。因为每次你学到东西，就会打开一扇新门。'},
+        {'from': 4, 'to': 4, 'text': '这就是未来。'},
+        {'from': 5, 'to': 5, 'text': '我认为对大多数人来说，这种智能会解锁更多机会。'},
+    ])
+    assert len(result['cues']) == 4 and result['cues'][1]['start'] == lines[2]['start'] and result['cues'][1]['end'] == lines[3]['end']
+
+
+def test_cue_that_runs_backwards_across_the_cold_open_still_captions_it():
+    # The model grouped the cold-open line with the next lines in timeline order:
+    # start 1245.78 (cold open) > end 1236.22 (second shot). It used to be dropped: 13s with no captions.
+    scenes = [Scene(id='c', start=1245.63, end=1249.57), Scene(id='a', start=1227.17, end=1245.1)]
+    rows = [
+        (1245.783, 1247.403, "People say we're going to have more time."),
+        (1247.743, 1249.363, 'I completely disagree.'),
+        (1227.303, 1232.883, "The more I've learned in life, the more I realize there's more to do."),
+        (1232.883, 1236.223, "And that's because every time you learn something, it opens a new door."),
+    ]
+    cue = {'start': 1245.783, 'end': 1236.223,
+           'text': '人们说我们会有更多时间。我完全不同意。人生学得越多，我越发现还有更多事要做。因为每次你学到东西，就会打开一扇新门。',
+           'original': ' '.join(row[2] for row in rows)}
+    for template in ('street', 'editorial'):
+        shown = _on_screen(_fill(template, scenes, [cue], rows))
+        assert shown and shown[0][1] < 0.5, (template, shown)
+        joined = ''.join(text for text, _a, _b in shown)
+        assert joined == '人们说我们会有更多时间我完全不同意人生学得越多我越发现还有更多事要做因为每次你学到东西就会打开一扇新门', (template, joined)
+        disagree = next(item for item in shown if '不同意' in item[0])
+        assert disagree[2] <= 1249.57 - 1245.63 + 0.2, shown

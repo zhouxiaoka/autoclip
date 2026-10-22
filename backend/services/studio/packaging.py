@@ -424,6 +424,65 @@ def _line(result_item: dict, lines: list) -> int | None:
     return index if isinstance(index, int) and 0 <= index < len(lines) else None
 
 
+_CLAUSE_END = re.compile(r'(?<=[。！？；，、…!?;,])')
+
+
+def _jumps(lines, start, end):
+    """Line ids inside a segment where the next line is not the one spoken next.
+
+    Draft lines follow the edit, so a cold open puts later speech first. A segment that groups
+    the cold open with the shot after it runs backwards (1245.78 -> 1236.22) or skips the cold
+    open's lines in the source. A plain cut between consecutive lines is not a jump.
+    """
+    jumps = []
+    for i in range(start, end):
+        here, there = lines[i], lines[i + 1]
+        backwards = there['start'] < here['end'] - .05
+        skipped = any(here['end'] - .05 <= line['start'] < there['start'] - .05
+                      for k, line in enumerate(lines) if not start <= k <= end)
+        if backwards or skipped:
+            jumps.append(i)
+    return jumps
+
+
+def _split_at_jumps(lines, start, end, text):
+    """Split a segment's text where its lines jump, at the clause nearest each run's share of the text.
+
+    Each run keeps its own subtitle timing. A jump with no clause break near it stays joined to
+    the run before; a run that still goes backwards is timed on its first run's lines only.
+    """
+    jumps = _jumps(lines, start, end)
+    if not jumps:
+        return [((start, end), text)]
+    clauses = [c for c in _CLAUSE_END.split(text) if c]
+    sizes = [max(1, len(line['text'])) for line in lines[start:end + 1]]
+    total, chars = sum(sizes), len(text)
+    cuts, used = [], 0
+    edges = [sum(len(c) for c in clauses[:k]) for k in range(1, len(clauses))]
+    for jump in jumps:
+        target = sum(sizes[:jump - start + 1]) / total * chars
+        choices = [k for k, edge in enumerate(edges) if k >= used]
+        if not choices:
+            continue
+        best = min(choices, key=lambda k: abs(edges[k] - target))
+        if abs(edges[best] - target) > max(4, chars * .25):
+            continue
+        cuts.append((jump, best + 1))
+        used = best + 1
+    runs, lo, at = [], start, 0
+    for jump, clause in cuts:
+        runs.append(((lo, jump), ''.join(clauses[at:clause])))
+        lo, at = jump + 1, clause
+    runs.append(((lo, end), ''.join(clauses[at:])))
+    out = []
+    for (a, b), piece in runs:
+        inner = [j for j in jumps if a <= j < b and lines[j + 1]['start'] < lines[j]['end'] - .05]
+        if inner:
+            b = inner[0]  # still backwards: keep the text on the lines it starts with
+        out.append(((a, b), piece))
+    return out
+
+
 def _segments(raw, lines, translate):
     """Sentence cues from model segments: contiguous, ordered, covering every line exactly once.
 
@@ -443,9 +502,10 @@ def _segments(raw, lines, translate):
             raise ValueError('segment spans too many lines')
         if not text or len(text) > 600:
             raise ValueError('segment text invalid')
-        original = ' '.join(line['text'] for line in lines[start:end + 1])
-        cues.append({'start': lines[start]['start'], 'end': lines[end]['end'], 'text': text,
-                     'original': original[:900] if translate else '', 'lines': (start, end)})
+        for (lo, hi), piece in _split_at_jumps(lines, start, end, text):
+            original = ' '.join(line['text'] for line in lines[lo:hi + 1])
+            cues.append({'start': lines[lo]['start'], 'end': lines[hi]['end'], 'text': piece,
+                         'original': original[:900] if translate else '', 'lines': (lo, hi), 'group': (start, end)})
         expected = end + 1
     if expected != len(lines):
         raise ValueError(f'segments do not cover every line: expected ids 0..{len(lines) - 1}, stopped at {expected - 1}')
@@ -486,10 +546,12 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
             cues = _segments(result.get('segments'), lines, translate)  # invalid translation: whole package falls back
             if audience == 'zh' and not any(CJK.search(cue['text']) for cue in cues):
                 raise ValueError('Chinese translation contains no Chinese captions')
+            groups = {}
             for cue in cues:
-                start, end = cue['lines']
+                groups.setdefault(cue.pop('group'), []).append(cue['text'])
+            for (start, end), texts in groups.items():
                 original = ' '.join(line['text'] for line in lines[start:end + 1])
-                _check_preserved_terms(original, cue['text'], protected)
+                _check_preserved_terms(original, ''.join(texts), protected)
             if any(foreign_for(audience, cue['text']) for cue in cues):
                 raise ValueError('English captions contain Chinese or Japanese text')
         else:
