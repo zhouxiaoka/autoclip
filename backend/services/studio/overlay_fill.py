@@ -867,7 +867,9 @@ def _mark_accents(moments: list[dict], words: list[dict] | None = None) -> None:
             used.add(chosen.get('hl') or chosen['s'])
     if not words:
         return
-    # words[].emphasis feeds the paint path; keep it in lockstep with the accent marks.
+    # Strip words[].emphasis only when uniqueness suppressed the same highlight (一套 after
+    # 买了一套, a second 纽约). The 3s cooldown must not erase packaging emphasis — street
+    # lime and multi-speaker cues still need the mark on the word that carries it.
     lit = {(round(phrase['t0'], 3), phrase.get('hl') or phrase['s'])
            for moment in moments for phrase in moment['zh'] if phrase.get('acc')}
     for word in words:
@@ -875,8 +877,10 @@ def _mark_accents(moments: list[dict], words: list[dict] | None = None) -> None:
         if not mark:
             continue
         t0 = word['start_frame'] / 30
-        if not any(abs(t0 - at) < 0.05 and (mark == text or mark in text or text in mark)
-                   for at, text in lit):
+        if any(abs(t0 - at) < 0.05 and (mark == text or mark in text or text in mark)
+               for at, text in lit):
+            continue
+        if _already_lit(mark, used):
             word['emphasis'] = ''
 
 

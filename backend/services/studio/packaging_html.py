@@ -172,7 +172,8 @@ def _progress_bar(template: str, offset: float, total: float, width: int, height
         color = '0xD7FF3A'
     else:
         span = min(960, max(2, int(width) - 120))
-        bar_h = 1
+        # Even height: yuva420p rejects 2x1 on ffmpeg 6.1 (CI) with "Picture size 2x0".
+        bar_h = 2
         x = 60 if width >= 120 else 0
         y = max(0, height - 94)
         color = '0xF4EFE6@0.8'
