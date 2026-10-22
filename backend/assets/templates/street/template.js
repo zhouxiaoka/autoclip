@@ -307,7 +307,7 @@
     var en = document.getElementById("en");
     var cap = document.getElementById("cap");
     var text = "";
-    var popping = "0";
+    var scale = "";
     if (phrase) {
       cap.style.display = "";
       text = String(phrase.s || "").replace(/[，。、！？：；,.!?]+$/g, "");
@@ -317,9 +317,10 @@
       zh.className = phrase.key ? "k" : "";
       // The preview's 100px; shrink only when the phrase would not fit the 1000px line.
       fit(zh, 100, 72, 4, 1000, '700 100px "Noto Sans CJK SC"');
-      popping = (t - (phrase.t0 || 0)) < 0.12 ? "1" : "0";
+      // The hash carries the scale itself: a popping flag made capture keep the 1.18 frame for the whole ease.
       var popped = ease((t - (phrase.t0 || 0)) / 0.12);
-      zh.style.transform = "scale(" + (1.18 + (1 - 1.18) * popped).toFixed(3) + ")";
+      scale = (1.18 + (1 - 1.18) * popped).toFixed(3);
+      zh.style.transform = "scale(" + scale + ")";
       en.innerHTML = moment ? enHtml(moment, t) : "";
       if (en.innerHTML) fit(en, 36, 24, 2, 1000, "36px Anton");
     } else {
@@ -342,7 +343,7 @@
     }
     document.getElementById("num").innerHTML = numberHtml(t);
     paintStickers(t);
-    return [text || "", zh.className, en.innerHTML, label, popping, numberHtml(t), sticker].join("|");
+    return [text || "", zh.className, en.innerHTML, label, scale, numberHtml(t), sticker].join("|");
   };
 
   window.occupiedRects = function (t) {
