@@ -177,8 +177,10 @@ def verify_endpoint(cfg: "CoverConfig") -> dict[str, str]:
         return {"provider": "openai", "api_key": vision.get("api_key", ""), "base_url": vision["base_url"], "model": vision["model"]}
     if cfg.source == 'connections':
         raise ImageError('未选择可用于封面校对的多模态模型，跳过校对')
-    return {"provider": cfg.provider, "api_key": cfg.api_key, "base_url": cfg.base_url,
-            "model": default_ocr_model(cfg.provider, cfg.model, cfg.base_url)}
+    chosen = default_ocr_model(cfg.provider, cfg.model, cfg.base_url, api_key=cfg.api_key)
+    if not chosen:
+        raise ImageError('未选择可用于封面校对的多模态模型，跳过校对')
+    return {"provider": cfg.provider, "api_key": cfg.api_key, "base_url": cfg.base_url, "model": chosen}
 
 
 def load_config() -> CoverConfig:
