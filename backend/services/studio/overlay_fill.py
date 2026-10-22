@@ -835,10 +835,20 @@ def _whole_word_mark(piece: str, mark: str) -> str:
     return piece[at:end]
 
 
-def _mark_accents(moments: list[dict]) -> None:
+def _already_lit(text: str, used: set[str]) -> bool:
+    """True when this highlight, or a longer/shorter form of it, already lit once this clip."""
+    text = str(text or '').strip()
+    if not text:
+        return True
+    if text in used:
+        return True
+    return any(text in prior or prior in text for prior in used if prior)
+
+
+def _mark_accents(moments: list[dict], words: list[dict] | None = None) -> None:
     """One gold serif phrase per moment, not again for 3 seconds, and each text once a clip.
 
-    dad_suit lit 24小时 at 4.9s and again at 25.7s, and 纽约 twice.
+    dad_suit lit 24小时 at 4.9s and again at 25.7s, 纽约 twice, and 一套 after 买了一套.
     """
     last = -9.0
     used: set[str] = set()
@@ -846,7 +856,8 @@ def _mark_accents(moments: list[dict]) -> None:
         chosen = None
         for phrase in moment['zh']:
             text = phrase.get('hl') or phrase['s']
-            if phrase['key'] and len(phrase['s']) >= 2 and phrase['t0'] - last >= 3.0 and text not in used:
+            if (phrase['key'] and len(phrase['s']) >= 2 and phrase['t0'] - last >= 3.0
+                    and not _already_lit(text, used)):
                 chosen = phrase
                 break
         for phrase in moment['zh']:
@@ -854,6 +865,19 @@ def _mark_accents(moments: list[dict]) -> None:
         if chosen is not None:
             last = chosen['t0']
             used.add(chosen.get('hl') or chosen['s'])
+    if not words:
+        return
+    # words[].emphasis feeds the paint path; keep it in lockstep with the accent marks.
+    lit = {(round(phrase['t0'], 3), phrase.get('hl') or phrase['s'])
+           for moment in moments for phrase in moment['zh'] if phrase.get('acc')}
+    for word in words:
+        mark = str(word.get('emphasis') or '').strip()
+        if not mark:
+            continue
+        t0 = word['start_frame'] / 30
+        if not any(abs(t0 - at) < 0.05 and (mark == text or mark in text or text in mark)
+                   for at, text in lit):
+            word['emphasis'] = ''
 
 
 def _short_topic(lines: list[str], speakers: list[dict]) -> str:
@@ -1454,7 +1478,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                 moment['en_screens'] = _en_screens(english)
             moments.append(moment)
     _close_blinks(moments, words, fps)
-    _mark_accents(moments)
+    _mark_accents(moments, words)
     cards = []
     glosses = list(_get(packaging, 'gloss', []) or [])
     for index, card in enumerate(glosses):
