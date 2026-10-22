@@ -1084,13 +1084,18 @@ def cue_lines(cue_start: float, cue_end: float, rows: list[tuple], scenes) -> li
     return None
 
 
-def _clock_rough(pieces: list[str], lines: list[tuple]) -> list[tuple]:
-    """Split the pieces over the lines by text length, then map each into its line's kept time.
+def _clock_rough(pieces: list[str], lines: list[tuple], text: str = '') -> list[tuple]:
+    """Split the pieces over the lines by text length, then lay each line's pieces over its kept time.
 
     The translation follows the source line by line, so a piece's share of the Chinese text
     lands on the same share of the source text: 我完全不同意 stays on "I completely disagree."
     Lines get their own length of the clock, so silence and cuts between lines take no text.
-    A piece that straddles two lines goes to the line holding most of it.
+
+    Pieces go to lines in order, each to the line holding most of it, except that a line is
+    not left empty while there are pieces to spare: dad_suit e put 带了巧克力 on the line after
+    "He brought chocolate." and the screen was blank for 3.2s while he said it. A line that
+    still gets nothing is covered by the piece before it. When the cue has exactly one
+    clause per line (他把在机场买的东西全带回来了，带了巧克力，...), clause k is line k.
     """
     weights = [max(1, len(' '.join(str(line[4] or '').split()))) for line in lines]
     clock = []
@@ -1098,24 +1103,79 @@ def _clock_rough(pieces: list[str], lines: list[tuple]) -> list[tuple]:
     for line, weight in zip(lines, weights):
         clock.append((cursor, cursor + weight, line[2], line[3]))
         cursor += weight
+    bounds = _length_bounds(pieces, 0.0, cursor)
+    if not bounds:
+        return []
+    count, n_lines = len(bounds), len(clock)
+
+    def miss(i: int, k: int) -> float:
+        _piece, c0, c1 = bounds[i]
+        k0, k1 = clock[k][0], clock[k][1]
+        return 1.0 - max(0.0, min(c1, k1) - max(c0, k0)) / max(c1 - c0, 1e-6)
+
+    skip = 1.0 if count >= n_lines else 0.0
+    clause_of = _clause_index(pieces, text) if text else None
+    if clause_of is not None and max(clause_of) + 1 == n_lines and sorted(clause_of) == clause_of:
+        return _lay_lines(bounds, clause_of, clock)
+    inf = float('inf')
+    cost = [[inf] * n_lines for _ in range(count)]
+    back = [[-1] * n_lines for _ in range(count)]
+    for k in range(n_lines):
+        cost[0][k] = miss(0, k) + skip * k
+    for i in range(1, count):
+        for k in range(n_lines):
+            best, arg = inf, -1
+            for j in range(k + 1):
+                value = cost[i - 1][j] + skip * max(0, k - j - 1)
+                if value < best - 1e-9:
+                    best, arg = value, j
+            cost[i][k] = best + miss(i, k)
+            back[i][k] = arg
+    last = min(range(n_lines), key=lambda k: cost[count - 1][k] + skip * (n_lines - 1 - k))
+    assign = [0] * count
+    assign[-1] = last
+    for i in range(count - 1, 0, -1):
+        assign[i - 1] = back[i][assign[i]]
+    return _lay_lines(bounds, assign, clock)
+
+
+def _clause_index(pieces: list[str], text: str) -> list[int] | None:
+    """Which comma-separated clause of the cue each piece falls in, or None if they do not tile it."""
+    clauses = [''.join(part.split()) for part in re.split(r'[，。！？；、,.!?;]+', text)]
+    clauses = [part for part in clauses if part]
+    if ''.join(''.join(piece.split()) for piece in pieces) != ''.join(clauses):
+        return None
+    ends, acc = [], 0
+    for part in clauses:
+        acc += len(part)
+        ends.append(acc)
+    out, at = [], 0
+    for piece in pieces:
+        size = len(''.join(piece.split()))
+        mid = at + size / 2
+        out.append(next(index for index, end in enumerate(ends) if mid < end or index == len(ends) - 1))
+        at += size
+    return out
+
+
+def _lay_lines(bounds: list[tuple], assign: list[int], clock: list[tuple]) -> list[tuple]:
+    count = len(bounds)
     rough = []
-    for piece, c0, c1 in _length_bounds(pieces, 0.0, cursor):
-        best = None
-        best_len = 0.0
-        for k0, k1, out_lo, out_hi in clock:
-            ov0, ov1 = max(c0, k0), min(c1, k1)
-            if ov1 - ov0 > best_len + 1e-6:
-                best_len = ov1 - ov0
-                scale = (out_hi - out_lo) / (k1 - k0)
-                best = (piece, out_lo + (ov0 - k0) * scale, out_lo + (ov1 - k0) * scale)
-        if best is None:
-            _k0, _k1, out_lo, out_hi = clock[-1]
-            best = (piece, max(out_lo, out_hi - .05), out_hi)
-        rough.append(best)
+    for k, (_k0, _k1, out_lo, out_hi) in enumerate(clock):
+        mine = [bounds[i][0] for i in range(count) if assign[i] == k]
+        if mine:
+            rough.extend(_length_bounds(mine, out_lo, out_hi))
+        elif rough:
+            piece, t0, _t1 = rough[-1]
+            rough[-1] = (piece, t0, out_hi)
+    first = assign[0]
+    if first > 0 and rough:
+        piece, _t0, t1 = rough[0]
+        rough[0] = (piece, clock[0][2], t1)
     return rough
 
 
-def _place_on_lines(pieces: list[str], lines: list[tuple], total: int, fps: int, source_words, line_limit: float | None) -> list[tuple]:
+def _place_on_lines(pieces: list[str], lines: list[tuple], total: int, fps: int, source_words, line_limit: float | None, text: str = '') -> list[tuple]:
     """Every piece once, on the kept footage where its line is spoken."""
     rough = None
     aligned = _align_phrase_times(pieces, source_words, min(l[0] for l in lines), max(l[1] for l in lines)) if source_words else None
@@ -1137,7 +1197,7 @@ def _place_on_lines(pieces: list[str], lines: list[tuple], total: int, fps: int,
         if mapped and all(b[1] >= a[1] for a, b in zip(mapped, mapped[1:])):
             rough = mapped
     if rough is None:
-        rough = _clock_rough(pieces, lines)
+        rough = _clock_rough(pieces, lines, text)
     placed = _place_rough(rough, total, fps, None)
     if len(placed) < len(rough):
         # Frame rounding pushed a piece past its end. Retile the run so none is lost.
@@ -1152,7 +1212,7 @@ def _place_on_lines(pieces: list[str], lines: list[tuple], total: int, fps: int,
     return _hold_phrases(placed, line_limit)
 
 
-def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words, line_limit: float | None = None, lines: list[tuple] | None = None) -> list[tuple]:
+def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words, line_limit: float | None = None, lines: list[tuple] | None = None, text: str = '') -> list[tuple]:
     """Place each phrase on the output clock once, at the moment it is spoken.
 
     A cue that crosses a cut used to restart its whole phrase list inside every shot.
@@ -1168,7 +1228,7 @@ def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, 
         # The cue's own subtitle lines, in timeline order and on kept footage only. The span
         # [cue_start, cue_end] also covers removed source time and other shots (a cold open),
         # and a length split over it dropped phrases that were spoken in a kept shot.
-        return _place_on_lines(pieces, lines, total, fps, source_words, line_limit)
+        return _place_on_lines(pieces, lines, total, fps, source_words, line_limit, text)
     if not spans:
         return []
     src_lo, src_hi, out_lo, out_hi = spans[0]
@@ -1351,7 +1411,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         spoken = _once_per_clip(
             pieces, cue_start, cue_end,
             scenes, total, fps, _source_words(cue, word_timing), hold_limit,
-            lines=lines_here,
+            lines=lines_here, text=text,
         )
         if not spoken:
             continue
