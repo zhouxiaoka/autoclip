@@ -2,21 +2,25 @@
 
 Work in shots, not on a clock. Each scene is first split at hard cuts (ffmpeg scene-change scores),
 then every shot is classified from a few frame pairs: OpenCV's YuNet model (bundled ONNX, MIT licence)
-finds faces and the face whose mouth region moved most is the person talking.
+finds faces. A turned-away head or the back of a head is never the crop centre. The window follows
+a visible frontal face, and when the transcript names who is speaking it follows that person's face.
 
-- a shot with a usable face → `crop`, window centred on the speaker (long shots may switch inside);
-- a shot without one (quote cards, slides, screen recordings, empty wide shots) → `fit`: the whole
-  frame on a blurred backdrop, so nothing gets sliced off.
+- a shot with one frontal face that fits the window → `crop`, centred on that face (the active
+  speaker when a cue says who);
+- a shot where several people must all stay in frame, or where the only face is turned away →
+  `fit`: the whole frame on a blurred backdrop, so nobody is sliced off;
+- a shot without a usable face (quote cards, slides, screen recordings) → `fit` as well.
 
-Track points sit exactly on the cuts, so the window jumps with the edit instead of lagging behind
-it. OpenCV is not part of the base install (≈45 MB); it is installed on demand into the data
-directory, the same way the Whisper runtime is.
+The window jumps on a cut and eases when the speaker changes inside a shot. OpenCV is not part of
+the base install (≈45 MB); it is installed on demand into the data directory, the same way the
+Whisper runtime is.
 """
 from __future__ import annotations
 
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import statistics
 import subprocess
@@ -47,6 +51,11 @@ MOTION_THRESHOLD = 4.0     # mean abs grey difference in the mouth box that coun
 MIN_FACE = 0.035           # face width below this fraction of the frame is too small to frame on
 MIN_HOLD = 2               # samples a new speaker must persist before the window moves (inside a shot)
 MIN_JUMP = 0.12            # normalised distance below which two positions are the same framing
+NOSE_OUTSIDE = 0.07        # nose this far outside the eye span (as a fraction of face width) is turned away
+FRONTAL_EYE_MIN = 0.15     # eye-span / face-width below this is a collapsed, non-frontal landmark set
+PAN_EASE = 0.45            # seconds; an interior speaker change eases instead of cutting
+REVERSAL_GAP = 0.8         # seconds; a direction change closer than this is jitter and is dropped
+CLUSTER_RADIUS = 0.18      # a later vote farther than this from a speaker's place does not move them
 
 
 # ---------------------------------------------------------------- runtime ---
@@ -318,15 +327,27 @@ def segment_track(samples: list[tuple[float, float]], min_hold: int = MIN_HOLD, 
 
 
 def crop_expression(scene: Scene, fallback: float) -> str:
-    """ffmpeg expression for the crop window position within one scene (t is scene-relative)."""
+    """ffmpeg expression for the crop window position within one scene (t is scene-relative).
+
+    A point with ease > 0 lerps from the previous crop_x. Ease 0 keeps the step function, including
+    the exact nesting `if(lt(t,17.5),if(lt(t,10.0),0.3,0.8),0.3)`.
+    """
     points = scene.crop_track or []
     static = scene.crop_x if scene.crop_x is not None else fallback
     if len(points) <= 1:
         return f"{points[0].crop_x if points else static}"
     # Nest from the first point outwards: each boundary tests the *next* point's start.
     expression = f"{points[0].crop_x}"
+    prev_x = points[0].crop_x
     for point in points[1:]:
-        expression = f"if(lt(t,{point.start}),{expression},{point.crop_x})"
+        ease = float(getattr(point, "ease", 0) or 0)
+        if ease > 0 and point.crop_x != prev_x:
+            delta = round(point.crop_x - prev_x, 3)
+            expression = (f"if(lt(t,{point.start}),{expression},"
+                          f"if(lt(t,{point.start + ease}),({prev_x}+({delta})*(t-{point.start})/{ease}),{point.crop_x}))")
+        else:
+            expression = f"if(lt(t,{point.start}),{expression},{point.crop_x})"
+        prev_x = point.crop_x
     return expression
 
 
@@ -439,14 +460,65 @@ def _detector(cv2: Any, width: int, height: int) -> Any:
     return _detectors[key]
 
 
-def _speaker_center(pair: tuple[Path, Path]) -> float | None:
-    """Normalised x-centre of the talking face; the largest face when nobody's mouth moves."""
+def is_frontal(face) -> bool:
+    """True when YuNet's landmarks read as a face looking at the camera.
+
+    Eye-span alone moves with scale, so a real frontal face can sit anywhere from about 0.22 to
+    0.43 of the box. The stable reject is a nose outside the eye span, plus a collapsed eye span
+    and a landmark order that is not eyes-then-nose-then-mouth. A turned head or the back of a
+    head fails this and must not become a crop centre.
+    """
+    try:
+        width = float(face[2])
+        height = float(face[3])
+        if width <= 1 or height <= 1:
+            return False
+        right_x, right_y = float(face[4]), float(face[5])
+        left_x, left_y = float(face[6]), float(face[7])
+        nose_x, nose_y = float(face[8]), float(face[9])
+        mouth_y = (float(face[11]) + float(face[13])) / 2
+    except (TypeError, ValueError, IndexError):
+        return False
+    if abs(left_x - right_x) / width < FRONTAL_EYE_MIN:
+        return False
+    eye_left, eye_right = (right_x, left_x) if right_x < left_x else (left_x, right_x)
+    if nose_x < eye_left:
+        outside = eye_left - nose_x
+    elif nose_x > eye_right:
+        outside = nose_x - eye_right
+    else:
+        outside = 0.0
+    if outside > NOSE_OUTSIDE * width:
+        return False
+    eye_y = (right_y + left_y) / 2
+    return eye_y < nose_y < mouth_y + 0.1 * height
+
+
+def _mouth_motion(cv2, face, grey_a, grey_b, width: int, height: int) -> float:
+    if grey_b is None:
+        return 0.0
+    box_w, box_h = float(face[2]), float(face[3])
+    mx1, my1, mx2, my2 = face[10], face[11], face[12], face[13]
+    left = int(max(0, min(mx1, mx2) - box_w * .1))
+    right = int(min(width, max(mx1, mx2) + box_w * .1))
+    top = int(max(0, min(my1, my2) - box_h * .12))
+    bottom = int(min(height, max(my1, my2) + box_h * .2))
+    if right <= left or bottom <= top:
+        return 0.0
+    return float(abs(grey_a[top:bottom, left:right].astype("int16") - grey_b[top:bottom, left:right].astype("int16")).mean())
+
+
+def _observe_pair(pair: tuple[Path, Path]) -> dict[str, list[dict[str, float]]] | None:
+    """Frontal and turned faces in one sample, each `{x, w, motion, area}` in frame fractions.
+
+    None when the detector or the frame is missing. An empty detection is a real look with nobody
+    in it, which is different from a failed read.
+    """
     cv2 = load_cv2()
     if cv2 is None:
         return None  # broken/missing component: keep the default framing, no Sentry noise
-
     first = cv2.imread(str(pair[0]))
-    second = cv2.imread(str(pair[1]))
+    second = cv2.imread(str(pair[1])) if len(pair) > 1 else None
     if first is None:
         return None
     height, width = first.shape[:2]
@@ -455,34 +527,60 @@ def _speaker_center(pair: tuple[Path, Path]) -> float | None:
     with _detector_lock:
         _, faces = _detector(cv2, width, height).detect(first)
         faces = faces.copy() if faces is not None else None
+        other = None
+        if second is not None and second.shape == first.shape:
+            _, other = _detector(cv2, width, height).detect(second)
+            other = other.copy() if other is not None else None
+    frontal: list[dict[str, float]] = []
+    turned: list[dict[str, float]] = []
     if faces is None or len(faces) == 0:
-        return None
-    # Audience shots and far wide shots have faces too small to frame on; treat them as none.
-    faces = [face for face in faces if face[2] >= MIN_FACE * width]
-    if not faces:
-        return None
+        return {"frontal": frontal, "turned": turned}
     grey_a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
     grey_b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY) if second is not None and second.shape == first.shape else None
-    best, best_motion = None, -1.0
     for face in faces:
-        w, h = face[2], face[3]
-        # YuNet landmarks: right eye, left eye, nose, right mouth corner, left mouth corner.
-        mx1, my1, mx2, my2 = face[10], face[11], face[12], face[13]
-        if grey_b is not None:
-            left, right = int(max(0, min(mx1, mx2) - w * .1)), int(min(width, max(mx1, mx2) + w * .1))
-            top, bottom = int(max(0, min(my1, my2) - h * .12)), int(min(height, max(my1, my2) + h * .2))
-            if right > left and bottom > top:
-                motion = float(abs(grey_a[top:bottom, left:right].astype("int16") - grey_b[top:bottom, left:right].astype("int16")).mean())
-            else:
-                motion = 0.0
-        else:
-            motion = 0.0
-        if motion > best_motion:
-            best, best_motion = face, motion
-    if best_motion < MOTION_THRESHOLD:
-        best = max(faces, key=lambda f: f[2] * f[3])
-    x, w = best[0], best[2]
-    return float((x + w / 2) / width)
+        box_w = float(face[2])
+        if box_w < MIN_FACE * width:
+            continue
+        item = {
+            "x": float((float(face[0]) + box_w / 2) / width),
+            "w": box_w / width,
+            "motion": _mouth_motion(cv2, face, grey_a, grey_b, width, height),
+            "area": box_w * float(face[3]),
+        }
+        # A head that is frontal in only one frame of the pair is mid-turn. Do not crop to it.
+        (frontal if _frontal_in_pair(face, other, width) else turned).append(item)
+    return {"frontal": frontal, "turned": turned}
+
+
+def _frontal_in_pair(face, others, width: int) -> bool:
+    if not is_frontal(face):
+        return False
+    if others is None:
+        return True
+    x = (float(face[0]) + float(face[2]) / 2) / width
+    nearest, best = None, 0.12
+    for other in others:
+        other_x = (float(other[0]) + float(other[2]) / 2) / width
+        dist = abs(other_x - x)
+        if dist < best:
+            nearest, best = other, dist
+    return nearest is None or is_frontal(nearest)
+
+
+def _speaker_center(pair: tuple[Path, Path]) -> float | None:
+    """Normalised x-centre of the frontal face that is talking; the largest frontal face otherwise.
+
+    A turned-away head is not a candidate, even when it is larger or its mouth region moves more.
+    """
+    observed = _observe_pair(pair)
+    if not observed or not observed["frontal"]:
+        return None
+    talking = [face for face in observed["frontal"] if face["motion"] >= MOTION_THRESHOLD]
+    if talking:
+        best = max(talking, key=lambda face: face["motion"])
+    else:
+        best = max(observed["frontal"], key=lambda face: face["area"])
+    return float(best["x"])
 
 
 def frame_shot(samples: list[tuple[float, float | None]], shot_start: float, shot_length: float, fraction: float) -> list[dict[str, Any]]:
@@ -510,8 +608,276 @@ def merge_points(points: list[dict[str, Any]], min_jump: float = MIN_JUMP) -> li
     return merged
 
 
+_EXPLICIT_SPEAKER = re.compile(
+    r"^\s*(?:>>\s*)?(?:\[(?P<bracket>[^\[\]\n]{1,40})\]|(?P<label>[A-Za-z][A-Za-z0-9_-]{0,31})\s*[:：])"
+)
+
+
+def _as_seconds(value) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    from backend.pipeline.quality import to_seconds
+    return to_seconds(str(value))
+
+
+def _entry_bounds(entry: dict) -> tuple[float, float]:
+    if "start" in entry and "end" in entry and not isinstance(entry.get("start"), str):
+        return float(entry["start"]), float(entry["end"])
+    start = entry["start"] if "start" in entry else entry["start_time"]
+    end = entry["end"] if "end" in entry else entry["end_time"]
+    return _as_seconds(start), _as_seconds(end)
+
+
+def cues_from_entries(entries) -> list[dict[str, Any]]:
+    """Speaker-labelled cues. Explicit `[name]` / `Name:` labels win; otherwise `>>` turns alternate.
+
+    A `>>` line continues the previous turn when the previous line was also `>>` and the gap is
+    under 0.8 s (YouTube-style continuations). The block before the first `>>` is speaker_a.
+    Unlabelled lines after an explicit label keep that speaker.
+    """
+    parsed = []
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            start, end = _entry_bounds(entry)
+        except (TypeError, ValueError, KeyError):
+            continue
+        if end <= start:
+            continue
+        parsed.append({"start": start, "end": end, "text": str(entry.get("text") or "")})
+    speakers = []
+    any_explicit = False
+    for row in parsed:
+        match = _EXPLICIT_SPEAKER.match(row["text"])
+        if match:
+            any_explicit = True
+            speakers.append((match.group("bracket") or match.group("label") or "").strip())
+        else:
+            speakers.append(None)
+    if any_explicit:
+        current = None
+        cues = []
+        for row, speaker in zip(parsed, speakers):
+            if speaker:
+                current = speaker
+            if current:
+                cues.append({**row, "speaker": current})
+        return cues
+    cues = []
+    turn = 0
+    started = False
+    prev_marker = False
+    prev_end = None
+    names = ("speaker_a", "speaker_b")
+    for row in parsed:
+        marker = row["text"].lstrip().startswith(">>")
+        gap = prev_end is not None and row["start"] - prev_end > REVERSAL_GAP
+        if marker and started and (not prev_marker or gap):
+            turn = 1 - turn
+        cues.append({**row, "speaker": names[turn]})
+        started = True
+        prev_marker = marker
+        prev_end = row["end"]
+    return cues
+
+
+def speaker_at(cues, t: float) -> str | None:
+    """Speaker of the cue that contains `t`. A gap between cues has no speaker."""
+    found = None
+    for cue in cues or []:
+        try:
+            if float(cue["start"]) <= t < float(cue["end"]):
+                found = cue.get("speaker")
+        except (KeyError, TypeError, ValueError):
+            continue
+    return found or None
+
+
+def _vote_x(frontals: list[dict[str, float]]) -> float | None:
+    """One frontal face, or the single mouth that is moving, or the clearly louder of two talkers."""
+    if len(frontals) == 1:
+        return frontals[0]["x"]
+    talking = [face for face in frontals if face["motion"] >= MOTION_THRESHOLD]
+    if len(talking) == 1:
+        return talking[0]["x"]
+    if len(talking) >= 2:
+        ordered = sorted(talking, key=lambda face: face["motion"], reverse=True)
+        if ordered[0]["motion"] >= ordered[1]["motion"] * 1.5:
+            return ordered[0]["x"]
+    return None
+
+
+def bind_speakers(samples: list[dict[str, Any]], cues) -> dict[str, float]:
+    """Map each cue speaker to a stable horizontal place.
+
+    Votes come only from frontal faces. Once a speaker has a place, a later vote farther than
+    CLUSTER_RADIUS is ignored, so a louder listener cannot steal the binding.
+    """
+    votes: dict[str, list[float]] = {}
+    ordered = sorted(samples, key=lambda sample: float(sample.get("t", 0)))
+    for sample in ordered:
+        speaker = speaker_at(cues, float(sample.get("t", 0)))
+        if not speaker:
+            continue
+        chosen = _vote_x(sample.get("frontal") or [])
+        if chosen is None:
+            continue
+        existing = votes.get(speaker)
+        if existing and abs(chosen - statistics.median(existing)) > CLUSTER_RADIUS:
+            continue
+        votes.setdefault(speaker, []).append(chosen)
+    return {speaker: float(statistics.median(xs)) for speaker, xs in votes.items()}
+
+
+def _span(faces: list[dict[str, float]]) -> tuple[float, float]:
+    left = min(face["x"] - face["w"] / 2 for face in faces)
+    right = max(face["x"] + face["w"] / 2 for face in faces)
+    return left, right
+
+
+def _fits(faces: list[dict[str, float]], fraction: float) -> bool:
+    if len(faces) < 2:
+        return True
+    left, right = _span(faces)
+    return right - left <= fraction + 1e-6
+
+
+def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fraction: float) -> float | None:
+    """Normalised centre for one sample, or None when the shot should fit the whole frame.
+
+    Three or more frontal faces that do not fit the window stay together (a group photo), even
+    when a cue overlaps. A bound speaker who has turned away is not replaced by someone else or
+    by the back of their head. Two frontal faces with no unique speaker are kept when they do not
+    fit, and centred as a pair when they do.
+    """
+    frontals = list(sample.get("frontal") or [])
+    if len(frontals) >= 3 and not _fits(frontals, fraction):
+        return None
+    speaker = speaker_at(cues, float(sample.get("t", 0))) if cues else None
+    bound = binding.get(speaker) if speaker else None
+    if bound is not None:
+        near = [face for face in frontals if abs(face["x"] - bound) <= CLUSTER_RADIUS and face["w"] <= fraction]
+        if near:
+            return min(near, key=lambda face: abs(face["x"] - bound))["x"]
+        return None
+    wide = [face for face in frontals if face["w"] > fraction]
+    if len(frontals) == 1 and wide:
+        return None
+    if len(frontals) == 1:
+        return frontals[0]["x"]
+    talking = [face for face in frontals if face["motion"] >= MOTION_THRESHOLD]
+    if len(frontals) == 2 and len(talking) == 1 and talking[0]["w"] <= fraction:
+        return talking[0]["x"]
+    if len(frontals) >= 2 and not _fits(frontals, fraction):
+        return None
+    if len(frontals) >= 2 and _fits(frontals, fraction):
+        left, right = _span(frontals)
+        return (left + right) / 2
+    return None
+
+
+def _cue_segments(samples: list[dict[str, Any]], cues, shot_length: float) -> list[tuple[float, float]] | None:
+    """Shot-relative cue slices. None when the cue does not change inside the shot."""
+    if not cues or not samples or shot_length <= 0:
+        return None
+    origin = float(samples[0]["t"]) - float(samples[0]["offset"])
+    bounds = {0.0, shot_length}
+    for cue in cues:
+        try:
+            edges = (float(cue["start"]), float(cue["end"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        for edge in edges:
+            rel = edge - origin
+            if 0.2 <= rel <= shot_length - 0.2:
+                bounds.add(rel)
+    ordered = sorted(bounds)
+    segments = [(a, b) for a, b in zip(ordered, ordered[1:]) if b - a >= 0.2]
+    return segments if len(segments) > 1 else None
+
+
+def _steady(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop duplicate framing and a reversal that lands inside the jitter window."""
+    kept: list[dict[str, Any]] = []
+    for point in points:
+        if not kept:
+            kept.append(point)
+            continue
+        if point["mode"] == "fit" and kept[-1]["mode"] == "fit":
+            continue
+        if point["mode"] == "crop" and kept[-1]["mode"] == "crop" and abs(point["crop_x"] - kept[-1]["crop_x"]) < MIN_JUMP:
+            continue
+        if len(kept) >= 2 and point["mode"] == "crop" and kept[-1]["mode"] == "crop" and kept[-2]["mode"] == "crop":
+            before = kept[-1]["crop_x"] - kept[-2]["crop_x"]
+            after = point["crop_x"] - kept[-1]["crop_x"]
+            if before * after < 0 and point["start"] - kept[-1]["start"] < REVERSAL_GAP:
+                continue
+        kept.append(point)
+    return kept
+
+
+def _with_ease(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The first point of a shot is a cut. A later crop-to-crop move eases."""
+    eased = []
+    for point in points:
+        item = {key: value for key, value in point.items() if key != "ease"}
+        if eased and item["mode"] == "crop" and eased[-1]["mode"] == "crop" and abs(item["crop_x"] - eased[-1]["crop_x"]) >= MIN_JUMP:
+            item["ease"] = PAN_EASE
+        eased.append(item)
+    return eased
+
+
+def _crop_point(start: float, center: float | None, fraction: float) -> dict[str, Any]:
+    if center is None:
+        return {"start": round(start, 2), "crop_x": .5, "mode": "fit"}
+    return {"start": round(start, 2), "crop_x": round(crop_x_for_center(center, fraction), 3), "mode": "crop"}
+
+
+def frame_observed(samples: list[dict[str, Any]], shot_start: float, shot_length: float, fraction: float,
+                   cues, binding: dict[str, float]) -> list[dict[str, Any]]:
+    """Track points for one shot from observed faces.
+
+    Fewer than half the looks show a frontal face, or fewer than half have a centre that fits,
+    and the shot is shown whole. Cue changes inside the shot each get their own point. Without a
+    cue change, a short shot holds one centre and a long shot uses the existing hold rules.
+    """
+    if not samples or sum(1 for sample in samples if sample.get("frontal")) * 2 < len(samples):
+        return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
+    chosen = []
+    for sample in samples:
+        center = _center_for(sample, binding, cues, fraction)
+        if center is not None:
+            chosen.append((float(sample["offset"]), center))
+    if len(chosen) * 2 < len(samples):
+        return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
+    segments = _cue_segments(samples, cues, shot_length)
+    points: list[dict[str, Any]] = []
+    if segments:
+        for start, end in segments:
+            # The last slice keeps a sample that lands on the shot's end.
+            if end >= shot_length - 1e-6:
+                centres = [center for offset, center in chosen if offset >= start - 1e-6]
+            else:
+                centres = [center for offset, center in chosen if start - 1e-6 <= offset < end - 1e-6]
+            median = statistics.median(centres) if centres else None
+            points.append(_crop_point(shot_start + start, median, fraction))
+    elif shot_length <= LONG_SHOT or len(chosen) < 3:
+        points.append(_crop_point(shot_start, statistics.median(center for _, center in chosen), fraction))
+    else:
+        seen = [(offset, crop_x_for_center(center, fraction)) for offset, center in chosen]
+        for point in segment_track(seen):
+            points.append({"start": round(shot_start + point["start"], 2), "crop_x": point["crop_x"], "mode": "crop"})
+    return _with_ease(_steady(points))
+
+
 def scan_speakers(video: Path, scenes) -> list[dict[str, Any]]:
-    """Shots and sampled speaker centres per scene: the expensive part, independent of the output window."""
+    """Shots and sampled faces per scene: the expensive part, independent of the output window.
+
+    Each sample is `{offset, t, frontal, turned}`. A turned head still counts as a person, so a
+    shot of only the back of a head is framed (as fit) instead of being treated as footage with
+    nobody in it.
+    """
     if not is_installed():
         raise RuntimeError("人物识别组件未安装")
     scans = []
@@ -522,38 +888,54 @@ def scan_speakers(video: Path, scenes) -> list[dict[str, Any]]:
             shots = []
             faces = grabbed = 0
             for index, (shot_start, shot_end) in enumerate(split_shots(length, detect_cuts(video, scene.start, length))):
-                samples: list[tuple[float, float | None]] = []
+                samples: list[dict[str, Any]] = []
                 for j, at in enumerate(sample_offsets(shot_start, shot_end)):
                     pair = _grab_pair(video, scene.start + at, folder, f"{scene.id}-{index}-{j}")
                     if not pair:
                         continue
                     grabbed += 1
-                    center = _speaker_center(pair)
-                    faces += center is not None
-                    samples.append((at - shot_start, center))
+                    observed = _observe_pair(pair)
+                    if observed is None:
+                        continue
+                    if observed["frontal"] or observed["turned"]:
+                        faces += 1
+                    samples.append({
+                        "offset": at - shot_start,
+                        "t": scene.start + at,
+                        "frontal": observed["frontal"],
+                        "turned": observed["turned"],
+                    })
                 shots.append((shot_start, shot_end, samples))
             scans.append({"shots": shots, "faces": faces, "samples": grabbed})
     return scans
 
 
 def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, window: tuple[int, int] | None = None,
-               scans: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+               scans: list[dict[str, Any]] | None = None, cues=None) -> dict[str, Any]:
     """Shot-aligned crop tracks per scene.
 
     Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
     people at all (gameplay, screen recording) keeps the layout the user chose untouched.
     `window` overrides the output size, e.g. the 4:3 window of the interview template.
     `scans` reuses a `scan_speakers` pass, so several windows cost one detection.
+    `cues` are speaker-labelled transcript rows (`start`, `end`, `speaker`); without them the
+    window still prefers the frontal face and fits a group.
+    Tuple samples from an older scan keep the previous centre-only path.
     """
     if scans is None:
         scans = scan_speakers(video, draft.scenes)
     out_w, out_h = window or {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
     fraction = window_fraction(source_w, source_h, out_w, out_h)
+    observed = [sample for scan in scans for _start, _end, samples in scan["shots"] for sample in samples if isinstance(sample, dict)]
+    binding = bind_speakers(observed, cues or [])
     scenes = []
     for scene, scan in zip(draft.scenes, scans):
         points: list[dict[str, Any]] = []
         for shot_start, shot_end, samples in scan["shots"]:
-            points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
+            if samples and isinstance(samples[0], dict):
+                points += frame_observed(samples, shot_start, shot_end - shot_start, fraction, cues or [], binding)
+            else:
+                points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
         track = merge_points(points)
         scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track, "faces": scan["faces"], "samples": scan["samples"],
                        "shots": len(scan["shots"]), "fit_shots": sum(p["mode"] == "fit" for p in track), "switches": len(track) - 1})

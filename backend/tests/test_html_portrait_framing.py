@@ -107,7 +107,10 @@ def _arm(monkeypatch, video):
     monkeypatch.setattr(framing, 'is_installed', lambda: True)
     monkeypatch.setattr(framing, 'detect_cuts', lambda *_a, **_k: [])
     monkeypatch.setattr(framing, '_grab_pair', lambda *_a, **_k: (video, video))
-    monkeypatch.setattr(framing, '_speaker_center', lambda _pair: CENTER)
+    monkeypatch.setattr(framing, '_observe_pair', lambda _pair: {
+        'frontal': [{'x': CENTER, 'w': 0.12, 'motion': 0.0, 'area': 1.0}],
+        'turned': [],
+    })
 
 
 def _derive(video, template):

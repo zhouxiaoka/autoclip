@@ -1,10 +1,14 @@
-"""Caption or title covering a detected face. Any overlap above 0 px fails.
+"""Caption or title covering a detected face, and a portrait crop that misses the speaker.
 
 YuNet from the framing runtime is reused when it is already installed. A few
 frames are sampled. The detector is a private net: it does not take
 framing._detector_lock, so a check cannot stall framing. Missing the optional
 detector is a skip, not a failure. Three frames and the caption box are an
 estimate, not a magazine or street-cut layout.
+
+The crop check looks at the source, not the rendered window. A turned-away head
+or a speaker left outside the 9:16 window fails once that run lasts more than
+a second. A fit shot (the whole frame on a blurred fill) is not a miss.
 """
 from __future__ import annotations
 
@@ -18,6 +22,10 @@ _net_lock = threading.Lock()
 # Packaging caption is about two 62 px lines on a 1920 px frame.
 _CAPTION_PX = 170
 _TITLE_PX = 200
+# A bad crop has to stay bad for longer than this before the check fails. Exactly 1 s still passes.
+_PRESENCE_LIMIT = 1.0
+_FACE_OVERLAP = 0.35
+_MAX_GRABS = 8
 
 
 def overlay_rects(width: int, height: int, *, captions: bool, title: bool, packaged: bool,
@@ -55,6 +63,29 @@ def covered_fraction(face: tuple[float, float, float, float],
         iy = max(0.0, min(fy + fh, oy + oh) - max(fy, oy))
         best = max(best, ix * iy)
     return best / area
+
+
+def judge_presence(spans: list[tuple[float, str]]) -> tuple[str, str]:
+    """Fail when one bad run is longer than a second.
+
+    `turned` is a back-of-head or turned-away face filling the window. `missing` is a frontal
+    face that the window does not contain. `frontal`, `fit` and `quiet` break the run.
+    """
+    def longest(kind: str) -> float:
+        best = current = 0.0
+        for duration, label in spans:
+            if label == kind:
+                current += max(0.0, duration)
+                best = max(best, current)
+            else:
+                current = 0.0
+        return best
+
+    if longest('turned') > _PRESENCE_LIMIT:
+        return 'fail', 'back_of_head'
+    if longest('missing') > _PRESENCE_LIMIT:
+        return 'fail', 'speaker_out'
+    return 'pass', 'frontal'
 
 
 def judge_cover(fraction: float) -> tuple[str, str]:
@@ -120,10 +151,127 @@ def detect_faces(path, at: float, out_w: int, out_h: int, timeout: float) -> lis
     return [(float(face[0]) * sx, float(face[1]) * sy, float(face[2]) * sx, float(face[3]) * sy) for face in faces]
 
 
+def _crop_spans(ctx) -> list[tuple[float, float, float, str]]:
+    """(absolute time, duration, crop_x, mode) for every crop-track point."""
+    spans = []
+    for scene in ctx.scenes:
+        points = list(scene.points or [])
+        modes = list(scene.modes or [])
+        length = max(0.0, scene.end - scene.start)
+        for index, (start, crop_x) in enumerate(points):
+            end = points[index + 1][0] if index + 1 < len(points) else length
+            duration = end - start
+            if duration <= 0:
+                continue
+            mode = modes[index] if index < len(modes) else 'crop'
+            if mode not in ('crop', 'fit'):
+                mode = 'crop'
+            spans.append((scene.start + start, duration, crop_x, mode))
+    return spans
+
+
+def _width_overlap(face: dict, left: float, right: float) -> float:
+    face_left = face['x'] - face['w'] / 2
+    face_right = face['x'] + face['w'] / 2
+    overlap = max(0.0, min(face_right, right) - max(face_left, left))
+    return overlap / face['w'] if face['w'] else 0.0
+
+
+def _presence_kind(frontals, turned, left: float, right: float) -> str:
+    if any(_width_overlap(face, left, right) >= _FACE_OVERLAP for face in frontals):
+        return 'frontal'
+    if any(_width_overlap(face, left, right) >= _FACE_OVERLAP for face in turned):
+        return 'turned'
+    if frontals:
+        return 'missing'
+    return 'quiet'
+
+
+def _read_faces(path, at: float, timeout: float):
+    """(width, height, frontal faces, turned faces) in normalised source coordinates."""
+    from backend.services.studio import framing
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    proc = run([
+        get_ffmpeg_path(), '-v', 'error', '-ss', f'{at:.3f}', '-i', str(path), '-frames:v', '1',
+        '-vf', 'scale=480:-2', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1',
+    ], timeout)
+    if proc.returncode != 0 or not proc.stdout:
+        raise ProbeError('unreadable')
+    cv2 = framing.load_cv2()
+    if cv2 is None:
+        return None
+    import numpy as np
+    image = cv2.imdecode(np.frombuffer(proc.stdout, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise ProbeError('unreadable')
+    height, width = image.shape[:2]
+    _scores, found = _detect(cv2, image)
+    frontal, turned = [], []
+    if found is not None:
+        for row in found:
+            box_w = float(row[2])
+            if box_w <= 1:
+                continue
+            item = {'x': (float(row[0]) + box_w / 2) / width, 'w': box_w / width}
+            (frontal if framing.is_frontal(row) else turned).append(item)
+    return width, height, frontal, turned
+
+
+def _presence_check(ctx, timeout: float) -> tuple[str, str]:
+    """Portrait crops only. Landscape, a missing source, and an unreadable frame stay a pass."""
+    if ctx.height <= ctx.width:
+        return 'pass', 'none'
+    spans = _crop_spans(ctx)
+    if not spans:
+        return 'pass', 'none'
+    from backend.services.studio import framing
+    if not framing.is_installed():
+        return 'skip', 'no_detector'
+    source = getattr(ctx, 'source', None)
+    if source is None or not getattr(source, 'is_file', lambda: False)():
+        return 'pass', 'none'
+    ranked = sorted(range(len(spans)), key=lambda index: spans[index][1], reverse=True)[:_MAX_GRABS]
+    chosen = set(ranked)
+    share = timeout / max(1, len(chosen))
+    layout = getattr(ctx, 'layout', '') or ''
+    judged: list[tuple[float, str] | None] = [None] * len(spans)
+    try:
+        for index in ranked:
+            at, duration, crop_x, mode = spans[index]
+            if mode == 'fit':
+                judged[index] = (duration, 'fit')
+                continue
+            read = _read_faces(source, at + duration / 2, share)
+            if read is None:
+                return 'skip', 'no_detector'
+            width, height, frontal, turned = read
+            if layout == 'window':
+                from backend.services.studio.jobs import INTERVIEW_WINDOW
+                out_w, out_h = INTERVIEW_WINDOW
+            else:
+                out_w, out_h = ctx.width, ctx.height
+            fraction = framing.window_fraction(width, height, out_w, out_h)
+            left = crop_x * (1 - fraction)
+            judged[index] = (duration, _presence_kind(frontal, turned, left, left + fraction))
+    except ProbeError:
+        return 'pass', 'none'
+    kinds = []
+    for index, span in enumerate(spans):
+        item = judged[index]
+        kinds.append(item if item is not None else (span[1], 'quiet'))
+    return judge_presence(kinds)
+
+
 def check(ctx, timeout: float) -> tuple[str, str]:
     rects = overlay_rects(ctx.width, ctx.height, captions=ctx.captions, title=ctx.title,
                           packaged=ctx.packaged, title_y=ctx.title_y)
+    presence_limit = timeout if not rects else max(0.05, timeout * 0.45)
+    presence = _presence_check(ctx, presence_limit)
+    if presence[0] == 'fail':
+        return presence
     if not rects:
+        if presence[0] == 'skip':
+            return presence
         return 'pass', 'none'
     if ctx.output is None or not getattr(ctx.output, 'is_file', lambda: False)():
         return 'skip', 'unreadable'

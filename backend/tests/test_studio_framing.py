@@ -93,12 +93,13 @@ def test_auto_frame_aligns_the_track_to_cuts(monkeypatch, tmp_path):
     monkeypatch.setattr(framing, "_grab_pair", lambda video, at, folder, key: (folder / f"{key}-{at:.3f}-1.jpg", folder / f"{key}-2.jpg"))
     # Scene "talk" (15 s): a quote card for 3 s, then the left speaker until a cut at 9 s, then the right speaker.
     monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [3.0, 9.0] if start == 0 else [])
-    def speaker(pair):
+    def observe(pair):
         at = float(pair[0].name.split("-")[-2])
         if pair[0].name.startswith("empty") or at < 3:
-            return None
-        return .3 if at < 9 else .7
-    monkeypatch.setattr(framing, "_speaker_center", speaker)
+            return {"frontal": [], "turned": []}
+        x = .3 if at < 9 else .7
+        return {"frontal": [{"x": x, "w": 0.1, "motion": 0.0, "area": 1.0}], "turned": []}
+    monkeypatch.setattr(framing, "_observe_pair", observe)
     draft = Draft(id="d", title="t", aspect="portrait", layout="crop",
                   scenes=[Scene(id="talk", label="a", start=0, end=15), Scene(id="empty", label="b", start=15, end=16)])
     result = framing.auto_frame(tmp_path / "input.mp4", draft, 1280, 720)
@@ -118,7 +119,7 @@ def test_auto_frame_leaves_people_free_footage_alone(monkeypatch, tmp_path):
     monkeypatch.setattr(framing, "is_installed", lambda: True)
     monkeypatch.setattr(framing, "_grab_pair", lambda video, at, folder, key: (folder / f"{key}-1.jpg", folder / f"{key}-2.jpg"))
     monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [2.0])
-    monkeypatch.setattr(framing, "_speaker_center", lambda pair: None)
+    monkeypatch.setattr(framing, "_observe_pair", lambda pair: {"frontal": [], "turned": []})
     draft = Draft(id="d", title="t", aspect="portrait", layout="crop", scenes=[Scene(id="game", label="a", start=0, end=6)])
     [scene] = framing.auto_frame(tmp_path / "input.mp4", draft, 1280, 720)["scenes"]
     assert scene["crop_x"] is None and scene["crop_track"] is None and scene["faces"] == 0 and scene["samples"] > 0

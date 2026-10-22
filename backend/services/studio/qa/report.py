@@ -23,6 +23,7 @@ BUCKETS = frozenset({
     'in_target', 'quiet_1_3', 'quiet_gt3', 'loud_1_3', 'loud_gt3', 'peak', 'peak_and_level',
     'calm', 'flash', 'rms', 'flash_and_rms',
     'complete', 'mid_word', 'mid_sentence',
+    'back_of_head', 'speaker_out',
     'timeout', 'budget', 'no_audio', 'no_detector', 'no_words', 'unreadable', 'error',
 })
 
@@ -39,6 +40,8 @@ class SceneSpan:
     start: float
     end: float
     points: list[tuple[float, float]] = field(default_factory=list)
+    # Parallel to points: 'crop' or 'fit'. Empty means every point is a crop (older payloads).
+    modes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -54,6 +57,8 @@ class Context:
     title: bool = False
     packaged: bool = False
     title_y: float = 0.12
+    # 'window' is the 4:3 interview window; anything else on a portrait frame is the full 9:16 crop.
+    layout: str = ''
 
 
 def _capture(checker: str, error: Exception) -> None:
