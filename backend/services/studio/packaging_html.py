@@ -176,12 +176,22 @@ def _progress_bar(template: str, offset: float, total: float, width: int, height
         x = 60 if width >= 120 else 0
         y = max(0, height - 94)
         color = '0xF4EFE6@0.8'
-    grown = f'max(2\\,min({span}\\,trunc({span}*(t+{off})/{dur})))'
+    # Even widths: the composite blends in yuv420, where chroma is shared by pixel pairs.
+    grown = f'max(2\\,min({span}\\,2*trunc({span}*(t+{off})/{dur}/2)))'
     return (
-        f"color=c={color}:s=2x{bar_h}:r=30,format=yuva444p,"
+        f"{_still(f'color=c={color}:s=2x{bar_h}:r=30:d=1')},"
         f"scale=w='{grown}':h={bar_h}:eval=frame:flags=neighbor[bar];"
-        f"[html][bar]overlay=x={x}:y={y}:format=auto:eval=frame:shortest=1:eof_action=repeat[paced]"
+        f"[html][bar]overlay=x={x}:y={y}:format=yuv420:eval=frame:shortest=1:eof_action=repeat[paced]"
     )
+
+
+def _still(source: str) -> str:
+    """One generated frame, converted once to the blend format, then repeated.
+
+    The composite runs per output frame. A generator, ``geq`` or a pixel-format conversion
+    upstream of ``loop`` runs once; downstream it would run on every frame of every scene.
+    """
+    return f"{source},trim=end_frame=1,format=yuva420p,loop=loop=-1:size=1:start=0"
 
 
 def _editorial_scrim(width: int, height: int) -> str:
@@ -189,7 +199,7 @@ def _editorial_scrim(width: int, height: int) -> str:
 
     Stops: transparent at the top, 38% at 38% of the height, 78% at the bottom. Color ``#0C0A08``.
     ``geq`` per pixel per frame costs about a second of video per second of clip. The wash does
-    not move, so it is one frame, looped.
+    not move, so it is one frame, converted to yuva420p once and looped.
     """
     scrim_h = min(1000, height)
     if scrim_h < 2 or width < 2:
@@ -200,23 +210,28 @@ def _editorial_scrim(width: int, height: int) -> str:
         "if(lt(Y\\,H*38/100)\\,255*Y/H\\,"
         "255*(38/100+40/100*(Y-H*38/100)/(H*62/100)))"
     )
+    wash = f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'"
     return (
-        f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,"
-        f"geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}',"
-        f"trim=end_frame=1,loop=loop=-1:size=1:start=0[scrim];"
-        f"[graded][scrim]overlay=0:{top}:format=auto:eof_action=repeat[based];"
+        f"{_still(wash)}[scrim];"
+        f"[graded][scrim]overlay=0:{top}:format=yuv420:eof_action=repeat[based];"
     )
 
 
 def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str, *, template: str = '', offset: float = 0.0, total: float = 0.0) -> tuple[str, str]:
-    """Grade the base, wash the editorial scrim, place the overlay, then the progress bar."""
+    """Grade the base, wash the editorial scrim, place the overlay, then the progress bar.
+
+    Every blend is yuv420, the format of the graded picture and of the encode. ``format=auto``
+    with a yuva444p layer made ffmpeg convert the looped scrim and the bar on every output frame;
+    that and a per-pixel ``colorbalance`` doubled the editorial composite against classic.
+    The captured overlay is converted once per captured frame (only caption changes), not per output frame.
+    """
     scrim = _editorial_scrim(width, height) if template == 'editorial' else ''
     base = '[based]' if scrim else '[graded]'
     graph = (
         f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
         f"{scrim}"
-        f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva444p[ov];"
-        f"{base}[ov]overlay=0:0:format=auto:shortest=1[html]"
+        f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
+        f"{base}[ov]overlay=0:0:format=yuv420:shortest=1[html]"
     )
     bar = _progress_bar(template, offset, total, width, height)
     if not bar:

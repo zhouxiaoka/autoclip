@@ -347,7 +347,7 @@ def test_progress_bar_is_a_filter_not_an_overlay_frame():
     from backend.services.studio.packaging_html import composite_tail
     graph, label = composite_tail('base', 1, 1080, 1920, '', template='street', offset=12.5, total=100)
     assert label == 'paced'
-    assert "scale=w='max(2\\,min(1080\\,trunc(1080*(t+12.500)/100.000)))':h=12:eval=frame" in graph
+    assert "scale=w='max(2\\,min(1080\\,2*trunc(1080*(t+12.500)/100.000/2)))':h=12:eval=frame" in graph
     assert 'overlay=x=0:y=1908' in graph and '0xD7FF3A' in graph
     editorial, _ = composite_tail('base', 1, 1080, 1920, '', template='editorial', offset=0, total=80)
     assert "y=1826" in editorial and '(t+0.000)/80.000' in editorial and 'eval=frame' in editorial
@@ -521,25 +521,69 @@ def test_progress_bar_width_tracks_three_timestamps(tmp_path):
         assert right <= 1020
 
 
-def test_editorial_scrim_is_looped_and_cheaper_than_a_per_frame_gradient(tmp_path):
+def _graph_chains(graph: str) -> list[str]:
+    return [chain for chain in graph.split(';') if chain]
+
+
+def test_editorial_composite_has_no_per_frame_generator_or_conversion():
+    """Structure, not wall time: CI runners are 2x slower than a desktop, so a seconds budget is noise.
+
+    The 1.5.7 editorial graph cost about 2x classic per second of video. The causes were a
+    looped yuva444p scrim and bar blended with ``format=auto`` (converted on every output
+    frame) and a per-pixel ``colorbalance`` in the grade. Every generator and ``geq`` must
+    run on one frame, be converted to the blend format before ``loop``, and every blend is yuv420.
+    """
+    from backend.services.studio.packaging_html import composite_tail
+    from backend.services.studio.templates.registry import get
+    for template in ('editorial', 'street'):
+        grade = get(template).base.grade
+        graph, label = composite_tail('base', 1, 1080, 1920, grade, template=template, offset=4, total=80)
+        assert label == 'paced'
+        assert 'colorbalance' not in graph
+        sources = [chain for chain in _graph_chains(graph) if not chain.startswith('[')]
+        assert sources, graph
+        for chain in sources:
+            assert 'trim=end_frame=1' in chain and 'loop=loop=-1:size=1' in chain, chain
+            head, _, tail = chain.partition('loop=loop=-1')
+            assert head.rstrip(',').endswith('format=yuva420p'), chain
+            assert 'geq' not in tail and 'format=' not in tail, chain
+        for chain in _graph_chains(graph):
+            for blend in re.findall(r'overlay=[^;\[]*', chain):
+                assert 'format=yuv420' in blend and 'format=auto' not in blend, blend
+        assert 'format=yuva444p[ov]' not in graph and 'format=yuva420p[ov]' in graph
+    scrims = [chain for chain in _graph_chains(composite_tail('base', 1, 1080, 1920, '', template='editorial', offset=0, total=3)[0]) if 'geq' in chain]
+    assert len(scrims) == 1
+
+
+def test_editorial_grade_keeps_the_warm_look_without_colorbalance(tmp_path):
+    """The curves LUT replaced curves+colorbalance. A gray ramp must land within 2 levels of the old grade."""
     if not _ffmpeg_ok():
         return
-    import time
+    from backend.services.studio.templates.registry import get
+    old = "curves=all='0/0.02 0.5/0.52 1/0.97',colorbalance=rs=0.035:gs=0.01:bs=-0.03:rh=0.025:bh=-0.02"
+    grade = get('editorial').base.grade
+    new = grade.split(',eq=')[0]
+    assert new.startswith('curves=r=') and 'colorbalance' not in grade
+    ramp = bytes(v for _row in range(2) for level in range(256) for v in (level, level, level))
+    def run(vf: str) -> bytes:
+        return subprocess.run(
+            ['ffmpeg', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', '256x2', '-i', '-',
+             '-vf', vf, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'],
+            input=ramp, capture_output=True, check=True,
+        ).stdout
+    before, after = run(old), run(new)
+    assert len(before) == len(after) == len(ramp)
+    assert max(abs(a - b) for a, b in zip(before, after)) <= 2
+    # Still warm: red lifted over blue in the shadows, as the preview grade does.
+    assert after[3 * 32] > after[3 * 32 + 2] + 6
+
+
+def test_editorial_scrim_darkens_the_lower_frame(tmp_path):
+    if not _ffmpeg_ok():
+        return
     from PIL import Image
     from backend.services.studio.packaging_html import composite_tail
     graph, label = composite_tail('0:v', 1, 1080, 1920, '', template='editorial', offset=0, total=3)
-    assert 'trim=end_frame=1' in graph and 'loop=loop=-1:size=1' in graph
-    command = [
-        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-        '-f', 'lavfi', '-i', 'color=c=0x4a3428:s=1080x1920:r=30:d=3',
-        '-f', 'lavfi', '-i', 'color=c=black@0:s=1080x1920:r=30:d=3,format=rgba',
-        '-filter_complex', graph, '-map', f'[{label}]', '-f', 'null', '-',
-    ]
-    started = time.perf_counter()
-    subprocess.run(command, check=True, capture_output=True)
-    elapsed = time.perf_counter() - started
-    # A per-frame geq of this wash is about 1.8s per second of video here. The loop stays under 0.7.
-    assert elapsed / 3 < 0.7, elapsed
     shot = tmp_path / 'scrim.png'
     subprocess.run(
         [
