@@ -609,8 +609,10 @@ def _bright_runs(rows, top, bottom, left=30, right=1050):
 def test_street_caption_is_the_preview_size_and_shrinks_only_on_overflow(tmp_path):
     if subprocess.run(['timeout', '5', CHROME, '--version'], capture_output=True).returncode != 0:
         pytest.skip('chrome unavailable')
-    faces = subprocess.run(['fc-list'], capture_output=True, text=True).stdout
-    if 'Noto Sans CJK' not in faces or 'Anton' not in faces:
+    # _shoot loads Anton from faces.css and Noto from the bundled TTF. CI has fonts-noto-cjk
+    # but not a system Anton face, so gating on fc-list skipped this regression there.
+    fonts = ROOT / 'backend' / 'assets' / 'fonts'
+    if not (fonts / 'preview' / 'faces.css').is_file() or not (fonts / 'NotoSansSC.ttf').is_file():
         pytest.skip('preview fonts unavailable')
     measured = {}
     for name, text in (('short', 'AI现在就能干一半'), ('full', '这种智能会解锁更多机')):
