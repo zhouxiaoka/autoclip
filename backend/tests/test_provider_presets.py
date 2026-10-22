@@ -86,6 +86,17 @@ def test_existing_product_defaults_are_preserved():
         assert provider_presets.candidates_for(provider, "vision") == models
         assert provider_presets.candidates_for(provider, "image") == ()
         assert all(model_catalog.supports_vision(model) for model in models)
+    assert provider_presets.candidates_for("apimart", "analysis") == (
+        "qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash",
+    )
+    assert provider_presets.candidates_for("apimart", "vision") == (
+        "gemini-3.8-flash", "qwen3.8-flash",
+    )
+    assert provider_presets.get_provider("apimart").default_model == ""
+    assert provider_presets.get_provider("apimart").catalog == ()
+    assert model_catalog.supports_vision("qwen3.8-flash")
+    assert model_catalog.supports_vision("gemini-3.8-flash")
+    assert not model_catalog.supports_vision("deepseek-v4-flash")
     dashscope = provider_presets.get_provider("dashscope")
     assert dashscope.candidates["asr"] == ("qwen-audio-3.1-asr-flash", "qwen-audio-3.0-asr-flash")
     assert provider_presets.get_provider("api88").candidates["asr"] == ()

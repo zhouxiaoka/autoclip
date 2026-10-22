@@ -75,14 +75,12 @@ def remember_model(provider: str, base_url: str, api_key: str, saved_model: str,
 
 
 def _listed_vision_ready(name: str, capabilities: Optional[Mapping[str, str]]) -> bool:
-    """Live tags win. Explicit ``text`` is never vision-ready, even if the id looks multimodal."""
-    from backend.core.model_catalog import is_image_model, supports_vision
+    """Vision/Omni tags add vision. A Text tag never vetoes the name heuristic."""
+    from backend.core.model_catalog import is_image_model, is_non_chat_family, supports_vision
 
-    if is_image_model(name):
+    if is_image_model(name) or is_non_chat_family(name):
         return False
     listed = (capabilities or {}).get(name)
-    if listed == "text":
-        return False
     if listed == "multimodal":
         return True
     return supports_vision(name)
@@ -98,7 +96,7 @@ def pick_available_vision_model(
     """First live vision model. Preset vision order, then the account list order.
 
     Preset ids are only an ordering hint among ids the account still lists.
-    When the list carries capability tags, a text-only row is not vision-ready.
+    A Vision/Omni tag marks that id ready. A Text tag does not remove it.
     """
     from backend.core.provider_model_fetch import recommended_by_purpose
 

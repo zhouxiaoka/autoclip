@@ -204,6 +204,11 @@ def _classify(
     blob = " ".join(part for part in (code, kind, message, text.lower()) if part)
     named = _normalize_token(error_name or "")
 
+    # Azure-style DeploymentNotFound is a retired model id, not a wrong /v1 URL.
+    # The message often lacks the word "model", so a bare 404 would be bad_endpoint.
+    if _retired_deployment(code, kind, blob):
+        return UpstreamErrorType.MODEL_NOT_FOUND
+
     structured = _from_structured_code(code, kind, blob, status)
     if structured is not None:
         return structured
@@ -232,6 +237,11 @@ def _classify(
     if named in _CONNECTION_NAMES or _contains(blob, _CONNECTION_HINTS):
         return UpstreamErrorType.CONNECTION
     return UpstreamErrorType.UNKNOWN
+
+
+def _retired_deployment(code: str, kind: str, blob: str) -> bool:
+    compact = re.sub(r"[\s_]+", "", f"{code} {kind} {blob}")
+    return "deploymentnotfound" in compact
 
 
 def _from_structured_code(

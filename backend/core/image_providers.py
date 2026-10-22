@@ -756,6 +756,8 @@ def _compatible_ocr_body(model: str, root: str, data_uri: str, instruction: str)
             {"type": "text", "text": instruction},
             {"type": "image_url", "image_url": {"url": data_uri}},
         ]}],
+        # Same rule as chat: omit stream and APIMart returns text/event-stream.
+        "stream": False,
     }
     if _qwen_thinking_off(model, root):
         body["enable_thinking"] = False

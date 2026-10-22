@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Body
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,8 @@ def put_ai_models(body: ai_models.ModelSettings):
     try:
         return ai_models.save(body)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from backend.core.log_redaction import redact_text
+        raise HTTPException(status_code=422, detail=redact_text(str(exc))) from exc
 
 
 class ConnectionModelsRequest(BaseModel):
@@ -71,7 +72,8 @@ async def discover_connection_models(body: ConnectionModelsRequest):
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
         return await discover(connection, body.refresh)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from backend.core.log_redaction import redact_text
+        raise HTTPException(status_code=422, detail=redact_text(str(exc))) from exc
 
 
 class ConnectionTestRequest(BaseModel):
@@ -185,6 +187,7 @@ class ServiceSettings(BaseModel):
 
 class ApiKeys(BaseModel):
     """API密钥设置"""
+    model_config = ConfigDict(hide_input_in_errors=True)
     dashscope: str = Field(default="", description="通义千问API密钥")
     openai: str = Field(default="", description="OpenAI API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
@@ -195,6 +198,7 @@ class ApiKeys(BaseModel):
     grok: str = Field(default="", description="xAI Grok API密钥")
     infistar: str = Field(default="", description="Infistar 无限星河 API密钥")
     api88: str = Field(default="", description="88API API密钥")
+    apimart: str = Field(default="", description="APIMart API密钥")
     seed: str = Field(default="", description="火山方舟 Seed / 豆包 API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
@@ -203,7 +207,7 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
-    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio）")
+    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / apimart，或本地预设 ollama / lmstudio）")
     api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；provider=openai 时空为官方地址，本地预设为空时用预设默认地址")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
@@ -440,6 +444,7 @@ async def get_settings():
                     grok="",
                     infistar="",
                     api88="",
+                    apimart="",
                     seed="",
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
@@ -876,6 +881,7 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "grok": keys.grok,
         "infistar": keys.infistar,
         "api88": keys.api88,
+        "apimart": keys.apimart,
         "seed": keys.seed,
     }.get((provider or "").strip().lower(), "") or ""
 

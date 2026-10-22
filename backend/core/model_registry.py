@@ -301,11 +301,11 @@ def _records(connection, raw, data):
             # an unfamiliar ID is never labelled text-only.
             capability, source = 'multimodal', 'name'
         if getattr(connection, 'provider', None) == 'apimart':
-            # Live capability_tags override the name heuristic. Text without Vision
-            # stays text even when the id looks multimodal (for example gpt-4o).
+            # Vision/Omni tags add multimodal. A Text tag leaves the name heuristic
+            # in place. Non-chat families are dropped even when tagged Vision.
             from backend.core.provider_model_fetch import capability_from_tags
             category = str(item.get('category') or '').strip().lower()
-            if category in {'image', 'video', 'audio'}:
+            if category in {'image', 'video', 'audio'} or model_catalog.is_non_chat_family(name):
                 continue
             tags = item.get('capability_tags')
             if isinstance(tags, list) and tags:

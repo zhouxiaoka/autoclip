@@ -1,14 +1,15 @@
 import { endpointProviderReady } from './endpointProvider'
 import type { Connection, ModelEntry, ModelSettings } from './modelSettingsApi'
-import { analysisCandidates, asrCandidates, imageCandidates } from './providerPresets'
+import { analysisCandidates, asrCandidates, imageCandidates, visionCandidates } from './providerPresets'
 
 // Preference order only: select a recommendation from the provider's actual list.
 // Never substitute an existing explicit choice when a catalog refreshes.
 // Order comes from backend/presets/provider_presets.json candidates.
-export function defaultModel(provider: string, models: ModelEntry[], image = false): string {
+export function defaultModel(provider: string, models: ModelEntry[], image = false, purpose: 'analysis' | 'vision' = 'analysis'): string {
   const eligible = models.filter(m => image ? m.image : m.analysis)
   if (image && provider === 'infistar') return eligible.find(m => m.id === 'qwen-image-plus')?.id || eligible[0]?.id || ''
-  const preferred = image ? imageCandidates(provider) : analysisCandidates(provider)
+  const vision = purpose === 'vision' ? visionCandidates(provider) : []
+  const preferred = image ? imageCandidates(provider) : (vision.length ? vision : analysisCandidates(provider))
   if (image) return preferred.length
     ? preferred.find(id => eligible.some(m => m.id === id)) || ''
     : eligible[0]?.id || ''
@@ -48,7 +49,7 @@ export function applyModelDefaults(settings: ModelSettings, connection: Connecti
     const binding = value[role]
     if (binding?.connection_id !== connection.id || binding.model) continue
     const eligible = role === 'cover' ? models : analysisModels(models, role === 'vision' ? 'visual' : settings.analysis_mode)
-    const model = defaultModel(connection.provider, eligible, role === 'cover')
+    const model = defaultModel(connection.provider, eligible, role === 'cover', role === 'vision' ? 'vision' : 'analysis')
     if (model) value[role] = { ...binding, model, model_source: binding.model_source || 'preset' }
   }
   // AI covers switched on by the user before a model list arrived: fill the recommended image model.

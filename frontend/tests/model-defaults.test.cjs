@@ -74,6 +74,24 @@ test('88API and Infistar prefer domestic vision models, then fall back to one th
   assert.equal(visual.analysis.model, 'account-vision')
   assert.equal(visual.vision.model, 'account-vision')
 })
+test('APIMart orders live models and does not default to the first multimodal id', () => {
+  const listed = [
+    { id: 'chatgpt-4o-latest', analysis: true, capability: 'multimodal' },
+    { id: 'gpt-4-vision-preview', analysis: true, capability: 'multimodal' },
+    { id: 'deepseek-v4-flash', analysis: true, capability: 'text' },
+    { id: 'gemini-3.8-flash', analysis: true, capability: 'multimodal' },
+    { id: 'qwen3.8-flash', analysis: true, capability: 'multimodal' },
+  ]
+  assert.equal(defaultModel('apimart', listed), 'qwen3.8-flash')
+  assert.equal(defaultModel('apimart', listed, false, 'vision'), 'gemini-3.8-flash')
+  const applied = applyModelDefaults({
+    ...blank(),
+    vision: { connection_id: 'main', model: '', capability: 'auto' },
+  }, { id: 'main', provider: 'apimart' }, listed, false)
+  assert.equal(applied.analysis.model, 'qwen3.8-flash')
+  assert.equal(applied.vision.model, 'gemini-3.8-flash')
+  assert.equal(applied.analysis.model_source, 'preset')
+})
 test('Infistar recommends newly discovered generation models without a static allowlist', () => {
   assert.equal(defaultModel('infistar', [{ id: 'new-image', image: true }], true), 'new-image')
 })

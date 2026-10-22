@@ -37,6 +37,7 @@ import groq from '../../assets/providers/groq.svg'
 import xiaomimimo from '../../assets/providers/xiaomimimo.svg'
 import api88 from '../../assets/providers/api88.jpg'
 import infistar from '../../assets/providers/infistar.svg'
+import apimart from '../../assets/providers/apimart.svg'
 
 export type ProviderIconTone = 'color' | 'monochrome'
 
@@ -49,6 +50,7 @@ const mono = (src: string): ProviderIcon => ({ src, tone: 'monochrome' })
 export const PROVIDER_ICONS: Readonly<Partial<Record<string, ProviderIcon>>> = {
   api88: color(api88),
   infistar: color(infistar),
+  apimart: mono(apimart),
   openai: mono(openai),
   deepseek: color(deepseek),
   gemini: color(gemini),

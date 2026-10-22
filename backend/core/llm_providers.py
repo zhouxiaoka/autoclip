@@ -204,9 +204,10 @@ class DashScopeProvider(LLMProvider):
                 payload = {
                     "model": model,
                     "messages": [{"role": "user", "content": full_input}],
-                    "stream": False,
                 }
                 payload.update({k: v for k, v in kwargs.items() if v is not None})
+                # Gateways such as APIMart answer with SSE unless stream is explicitly false.
+                payload["stream"] = False
                 if disables_qwen_thinking(model, self.base_url):
                     payload.setdefault("enable_thinking", False)  # 原始 HTTP 请求：顶层参数
                 url = f"{self.base_url}/chat/completions"
@@ -484,6 +485,9 @@ class OpenAIProvider(LLMProvider):
                 "messages": [{"role": "user", "content": full_input}],
                 **kwargs,
             }))
+            # The SDK omits stream when the caller does not pass it, and several
+            # OpenAI-compatible hosts (APIMart) then return text/event-stream.
+            payload["stream"] = False
             try:
                 response = self.client.chat.completions.create(**payload)
             except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
@@ -630,9 +634,9 @@ class SiliconFlowProvider(LLMProvider):
             data = {
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
-                "stream": False,
-                **kwargs
+                **kwargs,
             }
+            data["stream"] = False
             
             response = requests.post(
                 f"{self.base_url}/chat/completions",

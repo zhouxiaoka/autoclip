@@ -190,8 +190,15 @@
       },
       "kind": "preset",
       "candidates": {
-        "analysis": [],
-        "vision": [],
+        "analysis": [
+          "qwen3.8-flash",
+          "gemini-3.8-flash",
+          "deepseek-v4-flash"
+        ],
+        "vision": [
+          "gemini-3.8-flash",
+          "qwen3.8-flash"
+        ],
         "asr": [],
         "image": []
       },

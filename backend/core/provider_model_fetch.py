@@ -61,8 +61,8 @@ class AccountModelList:
     # Connection-test telemetry only: integer upstream status and a coarse network kind.
     http_status: int = 0
     network_kind: str = ""
-    # Live capability from the account list. ``text`` must not be treated as vision-ready.
-    # Absent ids fall back to the name heuristic. Not part of the public API payload.
+    # Live capability from the account list. Only ``multimodal`` is stored: a Text
+    # tag never vetoes the name heuristic. Not part of the public API payload.
     capabilities: dict[str, str] = field(default_factory=dict)
 
     def as_api(self) -> dict:
@@ -135,21 +135,18 @@ _CHAT_TAGS = frozenset({"text", "vision", "omni"})
 
 
 def capability_from_tags(tags: Any) -> str | None:
-    """APIMart ``capability_tags`` → ``multimodal`` / ``text``.
+    """APIMart ``capability_tags`` may only add vision.
 
-    ``Text`` without ``Vision`` or ``Omni`` is text-only. Unknown or empty tags
-    return None so the existing name heuristic can run as a fallback.
+    ``Vision`` or ``Omni`` means multimodal. A ``Text`` tag does not veto the
+    name heuristic (Gemini 3.5–3.8, Qwen3.x and Claude are tagged Text and still
+    accept images). Unknown or empty tags return None.
     Docs: https://docs.apimart.ai/en/api-reference/texts/models/list
     """
     if not isinstance(tags, Sequence) or isinstance(tags, (str, bytes)):
         return None
     lowered = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
-    if not lowered:
-        return None
     if lowered & _VISION_TAGS:
         return "multimodal"
-    if "text" in lowered:
-        return "text"
     return None
 
 
@@ -163,8 +160,9 @@ def apimart_listing_entry(item: Any) -> tuple[str, str | None] | None:
     name = normalize_model_id(item.get("id") or item.get("name"))
     if not name:
         return None
+    from backend.core.model_catalog import is_non_chat_family
     category = str(item.get("category") or "").strip().lower()
-    if category in _NON_CHAT_CATEGORIES:
+    if category in _NON_CHAT_CATEGORIES or is_non_chat_family(name):
         return None
     tags = item.get("capability_tags")
     capability = capability_from_tags(tags)
