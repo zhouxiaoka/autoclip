@@ -23,7 +23,7 @@ BUCKETS = frozenset({
     'in_target', 'quiet_1_3', 'quiet_gt3', 'loud_1_3', 'loud_gt3', 'peak', 'peak_and_level',
     'calm', 'flash', 'rms', 'flash_and_rms',
     'complete', 'mid_word', 'mid_sentence',
-    'back_of_head', 'speaker_out',
+    'back_of_head', 'speaker_out', 'fit_heavy',
     'timeout', 'budget', 'no_audio', 'no_detector', 'no_words', 'unreadable', 'error',
 })
 

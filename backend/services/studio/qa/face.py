@@ -8,7 +8,8 @@ estimate, not a magazine or street-cut layout.
 
 The crop check looks at the source, not the rendered window. A turned-away head
 or a speaker left outside the 9:16 window fails once that run lasts more than
-a second. A fit shot (the whole frame on a blurred fill) is not a miss.
+a second. Several frames are read per long crop. Fit is a miss when it covers
+more than 10% of the clip and a single frontal face was there to crop.
 """
 from __future__ import annotations
 
@@ -25,7 +26,8 @@ _TITLE_PX = 200
 # A bad crop has to stay bad for longer than this before the check fails. Exactly 1 s still passes.
 _PRESENCE_LIMIT = 1.0
 _FACE_OVERLAP = 0.35
-_MAX_GRABS = 8
+_MAX_GRABS = 12
+_FIT_LIMIT = 0.10
 
 
 def overlay_rects(width: int, height: int, *, captions: bool, title: bool, packaged: bool,
@@ -86,6 +88,13 @@ def judge_presence(spans: list[tuple[float, str]]) -> tuple[str, str]:
     if longest('missing') > _PRESENCE_LIMIT:
         return 'fail', 'speaker_out'
     return 'pass', 'frontal'
+
+
+def judge_fit_ratio(unjustified: float, duration: float) -> tuple[str, str]:
+    """Fail when fit covers more than 10% and those shots still had a single frontal face."""
+    if duration <= 0 or unjustified / duration <= _FIT_LIMIT:
+        return 'pass', 'frontal'
+    return 'fail', 'fit_heavy'
 
 
 def judge_cover(fraction: float) -> tuple[str, str]:
@@ -209,12 +218,28 @@ def _read_faces(path, at: float, timeout: float):
     frontal, turned = [], []
     if found is not None:
         for row in found:
-            box_w = float(row[2])
-            if box_w <= 1:
+            if not framing._reliable_box(row, width):
                 continue
+            box_w = float(row[2])
             item = {'x': (float(row[0]) + box_w / 2) / width, 'w': box_w / width}
             (frontal if framing.is_frontal(row) else turned).append(item)
     return width, height, frontal, turned
+
+
+def _grab_plan(spans):
+    """(span index, absolute time). Several looks on a long crop; one look on a fit or a short crop."""
+    required = []
+    extra = []
+    for index, (at, duration, _crop_x, mode) in enumerate(spans):
+        fracs = (0.5,) if mode == 'fit' or duration < 1.5 else (0.2, 0.5, 0.8)
+        required.append((index, at + duration * fracs[0]))
+        extra.extend((duration, index, at + duration * frac) for frac in fracs[1:])
+    if len(required) > _MAX_GRABS:
+        keep = set(sorted(range(len(spans)), key=lambda i: spans[i][1], reverse=True)[:_MAX_GRABS])
+        return [item for item in required if item[0] in keep]
+    room = _MAX_GRABS - len(required)
+    extra.sort(reverse=True)
+    return required + [(index, when) for _duration, index, when in extra[:room]]
 
 
 def _presence_check(ctx, timeout: float) -> tuple[str, str]:
@@ -230,21 +255,22 @@ def _presence_check(ctx, timeout: float) -> tuple[str, str]:
     source = getattr(ctx, 'source', None)
     if source is None or not getattr(source, 'is_file', lambda: False)():
         return 'pass', 'none'
-    ranked = sorted(range(len(spans)), key=lambda index: spans[index][1], reverse=True)[:_MAX_GRABS]
-    chosen = set(ranked)
-    share = timeout / max(1, len(chosen))
+    plan = _grab_plan(spans)
+    share = timeout / max(1, len(plan))
     layout = getattr(ctx, 'layout', '') or ''
-    judged: list[tuple[float, str] | None] = [None] * len(spans)
+    kinds_by_span: list[list[str]] = [[] for _ in spans]
+    frontals_by_span: list[list[int]] = [[] for _ in spans]
     try:
-        for index in ranked:
-            at, duration, crop_x, mode = spans[index]
-            if mode == 'fit':
-                judged[index] = (duration, 'fit')
-                continue
-            read = _read_faces(source, at + duration / 2, share)
+        for index, when in plan:
+            _at, _duration, crop_x, mode = spans[index]
+            read = _read_faces(source, when, share)
             if read is None:
                 return 'skip', 'no_detector'
             width, height, frontal, turned = read
+            frontals_by_span[index].append(len(frontal))
+            if mode == 'fit':
+                kinds_by_span[index].append('fit')
+                continue
             if layout == 'window':
                 from backend.services.studio.jobs import INTERVIEW_WINDOW
                 out_w, out_h = INTERVIEW_WINDOW
@@ -252,14 +278,39 @@ def _presence_check(ctx, timeout: float) -> tuple[str, str]:
                 out_w, out_h = ctx.width, ctx.height
             fraction = framing.window_fraction(width, height, out_w, out_h)
             left = crop_x * (1 - fraction)
-            judged[index] = (duration, _presence_kind(frontal, turned, left, left + fraction))
+            kinds_by_span[index].append(_presence_kind(frontal, turned, left, left + fraction))
     except ProbeError:
         return 'pass', 'none'
     kinds = []
+    unjustified = 0.0
     for index, span in enumerate(spans):
-        item = judged[index]
-        kinds.append(item if item is not None else (span[1], 'quiet'))
-    return judge_presence(kinds)
+        labels = kinds_by_span[index]
+        if span[3] == 'fit':
+            counts = frontals_by_span[index]
+            if counts and max(counts) < 2 and any(count == 1 for count in counts):
+                unjustified += span[1]
+            kinds.append((span[1], 'fit'))
+            continue
+        if not labels:
+            kinds.append((span[1], 'quiet'))
+            continue
+        # The worst look that is at least half the samples wins, so one lucky frame cannot pass.
+        turned = labels.count('turned')
+        missing = labels.count('missing')
+        if turned * 2 >= len(labels):
+            label = 'turned'
+        elif missing * 2 >= len(labels):
+            label = 'missing'
+        elif 'frontal' in labels:
+            label = 'frontal'
+        else:
+            label = labels[0]
+        kinds.append((span[1], label))
+    presence = judge_presence(kinds)
+    if presence[0] == 'fail':
+        return presence
+    duration = sum(max(0.0, scene.end - scene.start) for scene in ctx.scenes) or sum(span[1] for span in spans)
+    return judge_fit_ratio(unjustified, duration)
 
 
 def check(ctx, timeout: float) -> tuple[str, str]:

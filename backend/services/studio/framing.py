@@ -17,6 +17,7 @@ Whisper runtime is.
 """
 from __future__ import annotations
 
+import html
 import importlib.util
 import logging
 import os
@@ -51,11 +52,17 @@ MOTION_THRESHOLD = 4.0     # mean abs grey difference in the mouth box that coun
 MIN_FACE = 0.035           # face width below this fraction of the frame is too small to frame on
 MIN_HOLD = 2               # samples a new speaker must persist before the window moves (inside a shot)
 MIN_JUMP = 0.12            # normalised distance below which two positions are the same framing
-NOSE_OUTSIDE = 0.07        # nose this far outside the eye span (as a fraction of face width) is turned away
+NOSE_OUTSIDE = 0.09        # a three-quarter face (nose ~0.08 outside the eyes) is still frontal
+NOSE_OPEN = 0.13           # extra room only when both eyes are clearly open
+OPEN_EYE = 0.30            # eye-span / face-width that earns the extra nose room
 FRONTAL_EYE_MIN = 0.15     # eye-span / face-width below this is a collapsed, non-frontal landmark set
+MIN_SCORE = 0.72           # YuNet score below this is a false box (backs of heads land near 0.64)
+MAX_FACE = 0.55            # a box wider than this fraction of the frame is not a face
+EDGE_FACE = 0.22           # a box this wide that touches the frame edge is a stuck false detection
 PAN_EASE = 0.45            # seconds; an interior speaker change eases instead of cutting
 REVERSAL_GAP = 0.8         # seconds; a direction change closer than this is jitter and is dropped
 CLUSTER_RADIUS = 0.18      # a later vote farther than this from a speaker's place does not move them
+MIN_SEGMENT = 1.2          # seconds; crop/fit changes shorter than this are flicker unless the shot is a cut
 
 
 # ---------------------------------------------------------------- runtime ---
@@ -479,7 +486,14 @@ def is_frontal(face) -> bool:
         mouth_y = (float(face[11]) + float(face[13])) / 2
     except (TypeError, ValueError, IndexError):
         return False
-    if abs(left_x - right_x) / width < FRONTAL_EYE_MIN:
+    if len(face) > 14:
+        try:
+            if float(face[14]) < MIN_SCORE:
+                return False
+        except (TypeError, ValueError):
+            return False
+    eye_ratio = abs(left_x - right_x) / width
+    if eye_ratio < FRONTAL_EYE_MIN:
         return False
     eye_left, eye_right = (right_x, left_x) if right_x < left_x else (left_x, right_x)
     if nose_x < eye_left:
@@ -488,10 +502,26 @@ def is_frontal(face) -> bool:
         outside = nose_x - eye_right
     else:
         outside = 0.0
-    if outside > NOSE_OUTSIDE * width:
+    outside_ratio = outside / width
+    # 0.082 is a three-quarter face. A turned head with collapsed eyes stays rejected above 0.09.
+    if outside_ratio > NOSE_OPEN or (outside_ratio > NOSE_OUTSIDE and eye_ratio < OPEN_EYE):
         return False
     eye_y = (right_y + left_y) / 2
     return eye_y < nose_y < mouth_y + 0.1 * height
+
+
+def _reliable_box(face, frame_w: int) -> bool:
+    """False for a low score, a huge box, or a wide box stuck to the frame edge."""
+    try:
+        x, box_w = float(face[0]), float(face[2])
+        score = float(face[14]) if len(face) > 14 else 1.0
+    except (TypeError, ValueError, IndexError):
+        return False
+    if score < MIN_SCORE or frame_w <= 0:
+        return False
+    if box_w < MIN_FACE * frame_w or box_w > MAX_FACE * frame_w:
+        return False
+    return not (box_w >= EDGE_FACE * frame_w and (x <= 1 or x + box_w >= frame_w - 1))
 
 
 def _mouth_motion(cv2, face, grey_a, grey_b, width: int, height: int) -> float:
@@ -538,9 +568,9 @@ def _observe_pair(pair: tuple[Path, Path]) -> dict[str, list[dict[str, float]]] 
     grey_a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
     grey_b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY) if second is not None and second.shape == first.shape else None
     for face in faces:
-        box_w = float(face[2])
-        if box_w < MIN_FACE * width:
+        if not _reliable_box(face, width):
             continue
+        box_w = float(face[2])
         item = {
             "x": float((float(face[0]) + box_w / 2) / width),
             "w": box_w / width,
@@ -611,6 +641,16 @@ def merge_points(points: list[dict[str, Any]], min_jump: float = MIN_JUMP) -> li
 _EXPLICIT_SPEAKER = re.compile(
     r"^\s*(?:>>\s*)?(?:\[(?P<bracket>[^\[\]\n]{1,40})\]|(?P<label>[A-Za-z][A-Za-z0-9_-]{0,31})\s*[:：])"
 )
+# Words that start an English sentence and are followed by a colon. They are not speaker names.
+_STOP_NAMES = frozenset("""
+look wait note okay ok yes no oh well so and but here there now then please hey hi wow
+right left one two first next this that what why how when where who if or because also
+just maybe really actually basically listen watch see remember imagine consider anyway
+meanwhile however therefore plus update warning important example question answer title
+summary today yesterday tomorrow folks everyone somebody something nothing thanks thank
+welcome hello goodbye sorry yeah yep nope fine great good bad new old big small
+""".split())
+_NAME = re.compile(r"^[A-Z][A-Za-z][A-Za-z0-9_-]{0,30}$")
 
 
 def _as_seconds(value) -> float:
@@ -628,12 +668,79 @@ def _entry_bounds(entry: dict) -> tuple[float, float]:
     return _as_seconds(start), _as_seconds(end)
 
 
-def cues_from_entries(entries) -> list[dict[str, Any]]:
-    """Speaker-labelled cues. Explicit `[name]` / `Name:` labels win; otherwise `>>` turns alternate.
+def _caption_text(text: str) -> str:
+    """Unescape `&gt;&gt;` and collapse a rolling line that repeats its own `>>` mark."""
+    cleaned = html.unescape(str(text or "")).replace("\n", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if ">>" not in cleaned:
+        return cleaned
+    parts = [part.strip() for part in re.split(r"\s*>>\s*", cleaned) if part.strip()]
+    if not parts:
+        return cleaned
+    kept = parts[0]
+    for part in parts[1:]:
+        if _rolls(kept, part):
+            kept = part if len(part) >= len(kept) else kept
+        else:
+            kept = part
+    return ">> " + kept
 
-    A `>>` line continues the previous turn when the previous line was also `>>` and the gap is
-    under 0.8 s (YouTube-style continuations). The block before the first `>>` is speaker_a.
-    Unlabelled lines after an explicit label keep that speaker.
+
+def _body(text: str) -> str:
+    return re.sub(r"^(?:>>\s*)+", "", text or "").strip()
+
+
+def _rolls(previous: str, new: str) -> bool:
+    """True when `new` is the same YouTube caption window grown by a few words."""
+    old_words = _body(previous).lower().split()
+    new_words = _body(new).lower().split()
+    if not old_words or not new_words:
+        return False
+    old_text, new_text = " ".join(old_words), " ".join(new_words)
+    if new_text.startswith(old_text) or old_text.startswith(new_text):
+        return True
+    shared = 0
+    for left, right in zip(old_words, new_words):
+        if left != right:
+            break
+        shared += 1
+    shorter = min(len(old_words), len(new_words))
+    return shorter >= 4 and shared >= max(4, int(shorter * 0.6))
+
+
+def _explicit_name(text: str) -> str | None:
+    """A bracket label, or a capitalised name. `Look:` is a sentence, not a speaker."""
+    match = _EXPLICIT_SPEAKER.match(text)
+    if not match:
+        return None
+    bracket = (match.group("bracket") or "").strip()
+    if bracket:
+        return bracket
+    label = (match.group("label") or "").strip()
+    if not _NAME.match(label) or label.lower() in _STOP_NAMES:
+        return None
+    return label
+
+
+def _fold_rolls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Consecutive rolling captions are one cue. A new sentence that also starts with `>>` is kept."""
+    folded: list[dict[str, Any]] = []
+    for row in rows:
+        if folded and row["text"].lstrip().startswith(">>") and _rolls(folded[-1]["text"], row["text"]):
+            if len(_body(row["text"])) >= len(_body(folded[-1]["text"])):
+                folded[-1]["text"] = row["text"]
+            folded[-1]["end"] = max(folded[-1]["end"], row["end"])
+            continue
+        folded.append(dict(row))
+    return folded
+
+
+def cues_from_entries(entries) -> list[dict[str, Any]]:
+    """Speaker cues, or plain cues when the transcript never names a speaker.
+
+    Bracket labels and a repeated capitalised `Name:` win. A one-off `Look:` does not.
+    Every remaining `>>` is a new turn. A transcript with neither labels nor `>>` is left
+    unlabelled, so framing follows the frontal talking face instead of binding one person.
     """
     parsed = []
     for entry in entries or []:
@@ -645,40 +752,31 @@ def cues_from_entries(entries) -> list[dict[str, Any]]:
             continue
         if end <= start:
             continue
-        parsed.append({"start": start, "end": end, "text": str(entry.get("text") or "")})
-    speakers = []
-    any_explicit = False
-    for row in parsed:
-        match = _EXPLICIT_SPEAKER.match(row["text"])
-        if match:
-            any_explicit = True
-            speakers.append((match.group("bracket") or match.group("label") or "").strip())
-        else:
-            speakers.append(None)
-    if any_explicit:
+        parsed.append({"start": start, "end": end, "text": _caption_text(entry.get("text") or "")})
+    parsed = _fold_rolls(parsed)
+    names = [_explicit_name(row["text"]) for row in parsed]
+    if any(names):
         current = None
         cues = []
-        for row, speaker in zip(parsed, speakers):
+        for row, speaker in zip(parsed, names):
             if speaker:
                 current = speaker
             if current:
                 cues.append({**row, "speaker": current})
+            else:
+                cues.append(dict(row))
         return cues
+    if not any(row["text"].lstrip().startswith(">>") for row in parsed):
+        return parsed
     cues = []
     turn = 0
     started = False
-    prev_marker = False
-    prev_end = None
-    names = ("speaker_a", "speaker_b")
+    labels = ("speaker_a", "speaker_b")
     for row in parsed:
-        marker = row["text"].lstrip().startswith(">>")
-        gap = prev_end is not None and row["start"] - prev_end > REVERSAL_GAP
-        if marker and started and (not prev_marker or gap):
+        if row["text"].lstrip().startswith(">>") and started:
             turn = 1 - turn
-        cues.append({**row, "speaker": names[turn]})
+        cues.append({**row, "speaker": labels[turn]})
         started = True
-        prev_marker = marker
-        prev_end = row["end"]
     return cues
 
 
@@ -760,6 +858,9 @@ def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fractio
         near = [face for face in frontals if abs(face["x"] - bound) <= CLUSTER_RADIUS and face["w"] <= fraction]
         if near:
             return min(near, key=lambda face: abs(face["x"] - bound))["x"]
+        # The bound person is off screen. One remaining frontal face is who is actually there.
+        if len(frontals) == 1 and frontals[0]["w"] <= fraction:
+            return frontals[0]["x"]
         return None
     wide = [face for face in frontals if face["w"] > fraction]
     if len(frontals) == 1 and wide:
@@ -778,23 +879,105 @@ def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fractio
 
 
 def _cue_segments(samples: list[dict[str, Any]], cues, shot_length: float) -> list[tuple[float, float]] | None:
-    """Shot-relative cue slices. None when the cue does not change inside the shot."""
+    """Shot-relative slices where the named speaker changes. Unlabelled cues do not slice the shot."""
     if not cues or not samples or shot_length <= 0:
+        return None
+    labelled = []
+    for cue in cues:
+        speaker = cue.get("speaker") if isinstance(cue, dict) else None
+        if not speaker:
+            continue
+        try:
+            labelled.append((float(cue["start"]), speaker))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if len(labelled) < 2:
         return None
     origin = float(samples[0]["t"]) - float(samples[0]["offset"])
     bounds = {0.0, shot_length}
-    for cue in cues:
-        try:
-            edges = (float(cue["start"]), float(cue["end"]))
-        except (KeyError, TypeError, ValueError):
-            continue
-        for edge in edges:
-            rel = edge - origin
+    previous = None
+    for start, speaker in sorted(labelled):
+        if previous is not None and speaker != previous:
+            rel = start - origin
             if 0.2 <= rel <= shot_length - 0.2:
                 bounds.add(rel)
+        previous = speaker
     ordered = sorted(bounds)
     segments = [(a, b) for a, b in zip(ordered, ordered[1:]) if b - a >= 0.2]
     return segments if len(segments) > 1 else None
+
+
+def _stabilize(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One-off boxes drop. A place that is frontal in most looks stays frontal for the whole shot."""
+    if len(samples) < 4:
+        return samples
+    clusters: list[dict[str, Any]] = []
+    for index, sample in enumerate(samples):
+        for kind in ("frontal", "turned"):
+            for face in sample.get(kind) or []:
+                placed = False
+                for cluster in clusters:
+                    if abs(face["x"] - statistics.median(cluster["xs"])) <= CLUSTER_RADIUS:
+                        cluster["xs"].append(face["x"])
+                        cluster["members"].append((index, kind, face))
+                        placed = True
+                        break
+                if not placed:
+                    clusters.append({"xs": [face["x"]], "members": [(index, kind, face)]})
+    rebuilt = [{"offset": sample["offset"], "t": sample["t"], "frontal": [], "turned": []} for sample in samples]
+    for cluster in clusters:
+        hits = {index for index, _kind, _face in cluster["members"]}
+        if len(hits) < 2:
+            continue
+        frontal_n = sum(1 for _index, kind, _face in cluster["members"] if kind == "frontal")
+        total = len(cluster["members"])
+        # A tie keeps each look's own label. Promoting on a tie turns the back of a head into a
+        # second frontal once that person faces the camera in another part of the shot.
+        forced = "frontal" if frontal_n * 2 > total else "turned" if frontal_n * 2 < total else None
+        for index, kind, face in cluster["members"]:
+            label = forced or kind
+            if any(abs(other["x"] - face["x"]) <= 0.05 for other in rebuilt[index][label]):
+                continue
+            rebuilt[index][label].append(face)
+    return rebuilt
+
+
+def _absorb_short(points: list[dict[str, Any]], shot_start: float, shot_length: float) -> list[dict[str, Any]]:
+    """Drop a crop/fit change that lasts under MIN_SEGMENT. A shot that is itself that short stays."""
+    if shot_length < MIN_SEGMENT or len(points) <= 1:
+        return points
+    shot_end = shot_start + shot_length
+    points = [dict(point) for point in points]
+    for _ in range(12):
+        if len(points) <= 1:
+            break
+        short = None
+        for index, point in enumerate(points):
+            end = points[index + 1]["start"] if index + 1 < len(points) else shot_end
+            if end - point["start"] < MIN_SEGMENT - 1e-6:
+                short = index
+                break
+        if short is None:
+            break
+        if short == 0:
+            adopted = dict(points[1])
+            adopted["start"] = points[0]["start"]
+            points = [adopted, *points[2:]]
+        else:
+            points = [*points[:short], *points[short + 1:]]
+    return points
+
+
+def fit_ratio(track: list[dict[str, Any]] | None, length: float) -> float:
+    """Share of `length` rendered as fit. 0 when the track is empty or the scene has no duration."""
+    if not track or length <= 0:
+        return 0.0
+    fit = 0.0
+    for index, point in enumerate(track):
+        end = track[index + 1]["start"] if index + 1 < len(track) else length
+        if point.get("mode") == "fit":
+            fit += max(0.0, end - point["start"])
+    return fit / length
 
 
 def _steady(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -842,6 +1025,7 @@ def frame_observed(samples: list[dict[str, Any]], shot_start: float, shot_length
     and the shot is shown whole. Cue changes inside the shot each get their own point. Without a
     cue change, a short shot holds one centre and a long shot uses the existing hold rules.
     """
+    samples = _stabilize(samples)
     if not samples or sum(1 for sample in samples if sample.get("frontal")) * 2 < len(samples):
         return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
     chosen = []
@@ -868,7 +1052,7 @@ def frame_observed(samples: list[dict[str, Any]], shot_start: float, shot_length
         seen = [(offset, crop_x_for_center(center, fraction)) for offset, center in chosen]
         for point in segment_track(seen):
             points.append({"start": round(shot_start + point["start"], 2), "crop_x": point["crop_x"], "mode": "crop"})
-    return _with_ease(_steady(points))
+    return _with_ease(_steady(_absorb_short(points, shot_start, shot_length)))
 
 
 def scan_speakers(video: Path, scenes) -> list[dict[str, Any]]:

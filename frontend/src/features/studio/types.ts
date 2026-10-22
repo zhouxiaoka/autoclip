@@ -7,8 +7,8 @@ export interface SubtitleCue { start: number; end: number; text: string }
 export interface FramingStatus { status: 'installed' | 'not_installed' | 'installing' | 'error'; progress: number; message: string; size_mb: number; cooldown_seconds?: number }
 export interface AutoFrameResult { window_fraction: number; scenes: { id: string; crop_x: number | null; crop_track: CropPoint[] | null; faces: number; samples: number; shots: number; fit_shots: number; switches: number }[] }
 export type FrameMode = 'crop' | 'fit'
-/** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. */
-export interface CropPoint { start: number; crop_x: number; mode?: FrameMode }
+/** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. `ease` is how long the pan into this crop takes; 0 is a cut. */
+export interface CropPoint { start: number; crop_x: number; mode?: FrameMode; ease?: number }
 export interface Scene { framing_source?: 'auto' | 'manual' | null; framing_adjusted?: boolean; id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
 /** Index of the track point covering `time` (absolute seconds), or -1 without a track. */
 export function shotIndexAt(scene: Scene | undefined, time: number): number {
@@ -19,12 +19,20 @@ export function shotIndexAt(scene: Scene | undefined, time: number): number {
   track.forEach((p, i) => { if (p.start <= rel) index = i })
   return index
 }
-/** Crop window position for a scene at `time` (absolute seconds): speaker track first, then static values. */
+/** Crop window position for a scene at `time` (absolute seconds): speaker track first, then static values. An eased point lerps in from the previous crop. */
 export function cropAt(scene: Scene | undefined, time: number, fallback = .5): number {
   if (!scene) return fallback
   const index = shotIndexAt(scene, time)
-  if (index >= 0) return scene.crop_track![index].crop_x
-  return scene.crop_x ?? fallback
+  if (index < 0) return scene.crop_x ?? fallback
+  const point = scene.crop_track![index]
+  const ease = point.ease || 0
+  const rel = time - scene.start
+  if (ease > 0 && index > 0 && point.mode !== 'fit') {
+    const prev = scene.crop_track![index - 1]
+    const t = Math.min(1, Math.max(0, (rel - point.start) / ease))
+    return prev.crop_x + (point.crop_x - prev.crop_x) * t
+  }
+  return point.crop_x
 }
 /** How the current shot is shown in a cropped layout. */
 export function frameModeAt(scene: Scene | undefined, time: number): FrameMode {
@@ -35,7 +43,12 @@ export function frameModeAt(scene: Scene | undefined, time: number): FrameMode {
 export function patchShot(scene: Scene, time: number, changes: Partial<CropPoint>, fallback = .5): Scene {
   const track = scene.crop_track?.length ? scene.crop_track : [{ start: 0, crop_x: scene.crop_x ?? fallback, mode: 'crop' as FrameMode }]
   const index = Math.max(0, shotIndexAt({ ...scene, crop_track: track }, time))
-  return { ...scene, crop_track: track.map((p, i) => i === index ? { ...p, ...changes } : p) }
+  return { ...scene, crop_track: track.map((p, i) => {
+    if (i !== index) return p
+    const next = { ...p, ...changes }
+    if ('crop_x' in changes && changes.crop_x !== p.crop_x) next.ease = 0
+    return next
+  }) }
 }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }

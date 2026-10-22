@@ -212,6 +212,12 @@ def test_group_still_fits_everyone_instead_of_cropping_to_one_face(tmp_path):
     assert track and all(point['mode'] == 'fit' for point in track), track
     graph = framing.layout_filter(Scene(id='group', label='a', start=0, end=2, crop_track=track), 0.5, 1080, 1920)
     assert 'gblur' in graph and 'overlay' in graph
+    # A group that cannot share the window is a justified fit, even at 100%.
+    group_qa = face.check(Context(
+        output=video, source=video, width=1080, height=1920,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.5)], ['fit'])],
+    ), 8)
+    assert group_qa[0] != 'fail', group_qa
 
 
 def test_face_qa_fails_when_the_turned_head_is_framed_for_more_than_a_second(tmp_path):
@@ -234,6 +240,11 @@ def test_face_qa_fails_when_the_turned_head_is_framed_for_more_than_a_second(tmp
     assert outcome(0.8, bad)[0] != 'fail'
     held = outcome(2.0, good)
     assert held[0] != 'fail', held
+    fitted = face.check(Context(
+        output=video, source=video, width=1080, height=1920,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.5)], ['fit'])],
+    ), 8)
+    assert fitted == ('fail', 'fit_heavy'), fitted
 
 
 def test_cues_read_explicit_labels_and_gtgt_turns():
@@ -249,7 +260,7 @@ def test_cues_read_explicit_labels_and_gtgt_turns():
         {'start_time': '00:00:02,050', 'end_time': '00:00:03,000', 'text': '>> more'},
         {'start_time': '00:00:05,000', 'end_time': '00:00:06,000', 'text': '>> later'},
     ])
-    assert [cue['speaker'] for cue in turns] == ['speaker_a', 'speaker_b', 'speaker_b', 'speaker_a']
+    assert [cue['speaker'] for cue in turns] == ['speaker_a', 'speaker_b', 'speaker_a', 'speaker_b']
 
 
 def test_binding_stays_on_the_speaker_when_someone_else_is_louder():
@@ -297,6 +308,168 @@ def test_crop_expression_eases_an_interior_pan_and_keeps_a_hard_cut():
         {'start': 0, 'crop_x': .3}, {'start': 10, 'crop_x': .8}, {'start': 17.5, 'crop_x': .3},
     ])
     assert framing.crop_expression(hard, .5) == "if(lt(t,17.5),if(lt(t,10.0),0.3,0.8),0.3)"
+
+
+def _face_row(score, eye_ratio, outside_ratio, *, x=40, box_w=80):
+    """A YuNet row. `outside_ratio` pushes the nose past the right eye."""
+    height = 100
+    eye_span = eye_ratio * box_w
+    center = x + box_w / 2
+    eye_y, nose_y, mouth_y = 70, 88, 110
+    right_eye = center - eye_span / 2
+    left_eye = center + eye_span / 2
+    return [
+        x, 40, box_w, height,
+        right_eye, eye_y, left_eye, eye_y,
+        left_eye + outside_ratio * box_w, nose_y,
+        center - 8, mouth_y, center + 8, mouth_y,
+        score,
+    ]
+
+
+def _fit_percent(track, length):
+    return framing.fit_ratio(track, length) * 100
+
+
+def _flash_rate(track, length, width=1080):
+    from backend.services.studio.qa import jitter
+    count = jitter.flashes([(point['start'], point['crop_x']) for point in track], width, [point['mode'] for point in track])
+    return count / max(length, 1e-3) * 60
+
+
+def _scans(samples, length, faces):
+    return [{'shots': [(0.0, float(length), samples)], 'faces': faces, 'samples': len(samples)}]
+
+
+def test_unlabeled_transcript_follows_each_talking_face_and_ignores_look(tmp_path):
+    cues = framing.cues_from_entries([
+        {'start': 0, 'end': 8, 'text': 'we did not have our best year'},
+        {'start': 8, 'end': 16, 'text': 'Look: the other person is asking now'},
+        {'start': 16, 'end': 20, 'text': 'and the answer keeps going'},
+    ])
+    assert cues and all('speaker' not in cue for cue in cues)
+    samples = []
+    for at in (0.4, 2.9, 5.4, 7.9, 10.4, 12.9, 15.4, 17.9):
+        on_left = at < 8
+        samples.append({'offset': at, 't': at, 'turned': [], 'frontal': [
+            {'x': 0.25, 'w': 0.10, 'motion': 8 if on_left else 0, 'area': 1},
+            {'x': 0.72, 'w': 0.10, 'motion': 0 if on_left else 8, 'area': 1},
+        ]})
+    draft = Draft(id='d', title='t', aspect='portrait', layout='crop',
+                  scenes=[Scene(id='talk', label='a', start=0, end=20)])
+    result = framing.auto_frame(tmp_path / 'clip.mp4', draft, *SOURCE, scans=_scans(samples, 20, 8), cues=cues)
+    track = result['scenes'][0]['crop_track']
+    fraction = result['window_fraction']
+    assert _fit_percent(track, 20) == 0, track
+    assert _flash_rate(track, 20) <= 1, (_flash_rate(track, 20), track)
+
+    def contains(at, face_x, other_x):
+        point = _active_point(track, at)
+        left, right = _window(point['crop_x'], fraction)
+        assert point['mode'] == 'crop'
+        assert left <= face_x <= right
+        assert not (left <= other_x <= right)
+
+    contains(1.0, 0.25, 0.72)
+    contains(16.0, 0.72, 0.25)
+
+
+def test_single_speaker_stays_cropped_for_tiktok_and_classic(tmp_path):
+    from backend.services.studio.jobs import INTERVIEW_WINDOW
+    cues = framing.cues_from_entries([
+        {'start': start, 'end': start + 3, 'text': 'one person keeps talking about the work'}
+        for start in range(0, 12, 3)
+    ])
+    assert all('speaker' not in cue for cue in cues)
+    samples = [
+        {'offset': at, 't': at, 'turned': [], 'frontal': [{'x': 0.42, 'w': 0.12, 'motion': 1, 'area': 1}]}
+        for at in (0.4, 2.9, 5.4, 7.9, 10.4)
+    ]
+    draft = Draft(id='d', title='t', aspect='portrait', layout='crop',
+                  scenes=[Scene(id='solo', label='a', start=0, end=12)])
+    for window in (None, INTERVIEW_WINDOW):
+        result = framing.auto_frame(tmp_path / 'solo.mp4', draft, *SOURCE, window=window,
+                                    scans=_scans(samples, 12, len(samples)), cues=cues)
+        track = result['scenes'][0]['crop_track']
+        assert _fit_percent(track, 12) == 0, (window, track)
+        assert _flash_rate(track, 12) == 0, (window, track)
+        assert all(point['mode'] == 'crop' for point in track)
+
+
+def test_a_missing_bound_speaker_crops_the_one_face_that_is_there():
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    sample = {'offset': 1.0, 't': 1.0, 'turned': [], 'frontal': [{'x': 0.22, 'w': 0.10, 'motion': 0, 'area': 1}]}
+    cues = [{'start': 0, 'end': 5, 'speaker': 'host', 'text': '[host] hello'}]
+    assert framing._center_for(sample, {'host': 0.80}, cues, fraction) == pytest.approx(0.22)
+
+
+def test_three_quarter_face_is_frontal_and_false_boxes_are_not():
+    three_quarter = _face_row(0.91, 0.28, 0.082)
+    assert framing.is_frontal(three_quarter)
+    back_of_head = _face_row(0.64, 0.28, 0.0)
+    assert not framing.is_frontal(back_of_head)
+    false_box = _face_row(0.61, 0.40, 0.0, x=0, box_w=int(0.33 * 480))
+    assert not framing._reliable_box(false_box, 480)
+    stuck = _face_row(0.90, 0.40, 0.0, x=0, box_w=int(0.33 * 480))
+    assert not framing._reliable_box(stuck, 480)
+
+
+def test_a_one_off_false_face_does_not_pull_the_crop():
+    real = {'x': 0.42, 'w': 0.10, 'motion': 2, 'area': 1}
+    fake = {'x': 0.107, 'w': 0.33, 'motion': 0, 'area': 8}
+    samples = []
+    for at in (0.4, 2.9, 5.4, 7.9, 10.4):
+        frontal = [dict(real)]
+        if abs(at - 5.4) < 0.01:
+            frontal.append(dict(fake))
+        samples.append({'offset': at, 't': at, 'frontal': frontal, 'turned': []})
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    track = framing.frame_observed(samples, 0.0, 12.0, fraction, [], {})
+    assert _fit_percent(track, 12) == 0, track
+    point = _active_point(track, 6)
+    left, right = _window(point['crop_x'], fraction)
+    assert left <= 0.42 <= right
+    assert not (left <= 0.107 <= right)
+
+
+def test_every_gtgt_is_a_turn_and_a_rolling_line_is_not():
+    rolling = framing.cues_from_entries([
+        {'start': 0.0, 'end': 1.0, 'text': 'intro line'},
+        {'start': 1.0, 'end': 2.0, 'text': '&gt;&gt; I think we were trying'},
+        {'start': 1.4, 'end': 2.6, 'text': '&gt;&gt; I think we were trying to do too much'},
+        {'start': 2.6, 'end': 3.4, 'text': '>> and now the other person'},
+    ])
+    assert [cue['speaker'] for cue in rolling] == ['speaker_a', 'speaker_b', 'speaker_a']
+    assert 'too much' in rolling[1]['text']
+    assert '&gt;' not in rolling[1]['text']
+
+
+def test_import_unescapes_speaker_marks(tmp_path):
+    from backend.utils.text_processor import TextProcessor
+    srt = tmp_path / 'input.srt'
+    srt.write_text('1\n00:00:01,000 --> 00:00:02,000\n&gt;&gt; I think we were trying\n', encoding='utf-8')
+    parsed = TextProcessor.parse_srt(srt)
+    assert parsed[0]['text'].startswith('>>')
+    assert '&gt;' not in parsed[0]['text']
+    cues = framing.cues_from_entries(parsed)
+    assert cues[0]['speaker'] == 'speaker_a'
+
+
+def test_a_short_fit_blip_is_absorbed_and_a_fast_flip_still_flashes():
+    from backend.services.studio.qa import jitter
+    blip = [
+        {'start': 0.0, 'crop_x': 0.2, 'mode': 'crop'},
+        {'start': 3.0, 'crop_x': 0.5, 'mode': 'fit'},
+        {'start': 3.4, 'crop_x': 0.2, 'mode': 'crop'},
+    ]
+    absorbed = framing._absorb_short(blip, 0.0, 10.0)
+    assert _fit_percent(absorbed, 10) == 0, absorbed
+    fast = [(0.0, 0.2), (0.2, 0.5), (0.5, 0.2)]
+    assert jitter.flashes(fast, 1000, ['crop', 'fit', 'crop']) == 1
+    held = [(0.0, 0.2), (5.0, 0.5), (10.0, 0.8)]
+    assert jitter.flashes(held, 1000, ['crop', 'fit', 'crop']) == 0
+    # Without modes the same 0.5 is a crop position, so the way back is a reversal.
+    assert jitter.flashes(fast, 1000) == 1
 
 
 def test_presence_fails_only_after_a_second_of_the_same_miss():
