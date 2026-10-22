@@ -46,8 +46,16 @@ test('shot lookups follow the track from the scene start and fall back to static
 test('patchShot edits only the shot under the playhead and seeds a track for untracked scenes',()=>{
  const scene={id:'s',label:'a',start:10,end:25,evidence:'',crop_track:[{start:0,crop_x:.5,mode:'fit'},{start:3,crop_x:.2,mode:'crop'}]}
  const next=patchShot(scene,11,{mode:'crop',crop_x:.6})
- assert.deepEqual(next.crop_track,[{start:0,crop_x:.6,mode:'crop'},{start:3,crop_x:.2,mode:'crop'}]);assert.equal(scene.crop_track[0].mode,'fit','original untouched')
+ assert.deepEqual(next.crop_track,[{start:0,crop_x:.6,mode:'crop',ease:0},{start:3,crop_x:.2,mode:'crop'}]);assert.equal(scene.crop_track[0].mode,'fit','original untouched')
  const seeded=patchShot({id:'u',label:'b',start:0,end:5,evidence:'',crop_x:.3},2,{mode:'fit'},.5)
  assert.deepEqual(seeded.crop_track,[{start:0,crop_x:.3,mode:'fit'}])
- assert.deepEqual(patchShot({id:'v',label:'c',start:0,end:5,evidence:''},2,{crop_x:.9},.5).crop_track,[{start:0,crop_x:.9,mode:'crop'}])
+ assert.deepEqual(patchShot({id:'v',label:'c',start:0,end:5,evidence:''},2,{crop_x:.9},.5).crop_track,[{start:0,crop_x:.9,mode:'crop',ease:0}])
+ const eased={id:'s',label:'a',start:10,end:25,evidence:'',crop_track:[{start:0,crop_x:.2,mode:'crop'},{start:4,crop_x:.8,mode:'crop',ease:.45}]}
+ assert.ok(Math.abs(cropAt(eased,14.225)-.5)<1e-6,'ease lerps from the previous crop')
+ assert.equal(cropAt(eased,16),.8)
+ const kept=patchShot(eased,11,{mode:'fit'})
+ assert.equal(kept.crop_track[0].ease,undefined)
+ const cleared=patchShot(eased,15,{crop_x:.7})
+ assert.equal(cleared.crop_track[1].ease,0);assert.equal(cleared.crop_track[1].crop_x,.7)
+ assert.equal(eased.crop_track[1].ease,.45,'original ease stays put')
 })

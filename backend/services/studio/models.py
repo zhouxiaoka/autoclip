@@ -20,6 +20,8 @@ class CropPoint(BaseModel):
     crop_x: float = Field(ge=0, le=1)
     # 'crop' follows crop_x; 'fit' shows the whole frame on a blurred backdrop (text cards, slides, no faces).
     mode: Literal['crop', 'fit'] = 'crop'
+    # Seconds spent easing from the previous crop_x. 0 is a hard cut (a shot change, or the first point).
+    ease: float = Field(default=0, ge=0, le=2)
 
 
 class Scene(BaseModel):

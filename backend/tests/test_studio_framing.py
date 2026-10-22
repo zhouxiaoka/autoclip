@@ -1,5 +1,6 @@
 """Speaker-centred framing math and whole-clip subtitle styles for Studio drafts."""
 import itertools
+import subprocess
 import sys
 from pathlib import Path
 
@@ -56,16 +57,63 @@ def test_split_shots_collapses_flicker_and_caps_count():
     assert framing.split_shots(3, []) == [(0.0, 3)]
     montage = framing.split_shots(300, [i * 0.5 for i in range(1, 600)], max_shots=10)
     assert len(montage) == 10 and montage[0][0] == 0.0 and montage[-1][1] == 300
+    # A third of a second at the end is still its own shot. A tenth of a second is not.
+    assert framing.split_shots(77.77, [77.4]) == [(0.0, 77.4), (77.4, 77.77)]
 
 
 def test_sample_offsets_stay_clear_of_cuts():
     # Short shot: one look in the middle, never on the cut frames themselves.
     assert framing.sample_offsets(10, 11) == [pytest.approx(10.375)]
-    three = framing.sample_offsets(10, 14)
-    assert len(three) == 3 and three[0] >= 10.3 and three[-1] + framing.PAIR_GAP <= 13.7
+    dense = framing.sample_offsets(10, 14)
+    assert len(dense) == 4 and dense[0] >= 10.3 and dense[-1] + framing.PAIR_GAP <= 13.7
+    assert dense[1] - dense[0] == pytest.approx(framing.SAMPLE_INTERVAL)
     long = framing.sample_offsets(0, 20)
     assert len(long) >= 7 and long[0] == pytest.approx(.3) and all(b - a == pytest.approx(framing.SAMPLE_INTERVAL) for a, b in itertools.pairwise(long))
-    assert framing.sample_offsets(0, .2) == [0]
+    assert framing.sample_offsets(0, .2) == [pytest.approx(0.1)]
+    assert framing.sample_offsets(77.4, 77.77) == [pytest.approx(77.585)]
+
+
+def test_framing_decodes_each_shot_once(monkeypatch, tmp_path):
+    """One sequential extract per shot, not a seek per sample. Only the sampled frames are written."""
+    calls = []
+
+    def fake_run(cmd, *args, **kwargs):
+        calls.append([str(part) for part in cmd])
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(framing.subprocess, "run", fake_run)
+    monkeypatch.setattr(framing, "is_installed", lambda: True)
+    monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [4.0])
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"0")
+    length = 8.0
+    draft = Draft(id="d", title="t", aspect="portrait", layout="crop",
+                  scenes=[Scene(id="clip", label="a", start=0, end=length)])
+    framing.auto_frame(video, draft, 1280, 720)
+    extracts = [cmd for cmd in calls if any(f"scale={framing.FRAME_WIDTH}" in part and "fps=" in part for part in cmd)]
+    samples = framing.sample_offsets(0, 4) + framing.sample_offsets(4, length)
+    assert len(extracts) == 2, extracts
+    assert len(extracts) < len(samples)
+    assert all(cmd.count("-ss") == 1 for cmd in extracts)
+    assert all("-noaccurate_seek" not in cmd for cmd in extracts)
+    assert all(any("select=" in part for part in cmd) and "passthrough" in cmd for cmd in extracts)
+
+
+def test_dissolve_times_mark_a_gradual_drift_and_ignore_one_jump():
+    import numpy as np
+
+    def field(value: int):
+        return np.full(64, int(value), np.uint8)
+
+    times = [index * 0.25 for index in range(12)]
+    gradual = [field(200)] * 3 + [field(value) for value in (160, 110, 60, 20)] + [field(20)] * 5
+    marks = framing.dissolve_times(gradual, times)
+    assert marks and 1.2 <= marks[0] <= 2.4
+    jump = [field(200)] * 4 + [field(20)] * 8
+    assert framing.dissolve_times(jump, times) == []
+    # Mouth motion on a talking head is one small step, not a shot boundary.
+    twitch = [field(40)] * 5 + [field(48)] + [field(40)] * 6
+    assert framing.dissolve_times(twitch, times) == []
 
 
 def test_frame_shot_classifies_cards_and_speakers():
@@ -90,15 +138,17 @@ def test_merge_points_drops_invisible_changes():
 
 def test_auto_frame_aligns_the_track_to_cuts(monkeypatch, tmp_path):
     monkeypatch.setattr(framing, "is_installed", lambda: True)
-    monkeypatch.setattr(framing, "_grab_pair", lambda video, at, folder, key: (folder / f"{key}-{at:.3f}-1.jpg", folder / f"{key}-2.jpg"))
+    monkeypatch.setattr(framing, "_grab_shot", lambda video, start, end, times, folder, key: [
+        (at, (folder / f"{key}-{at:.3f}-1.jpg", folder / f"{key}-2.jpg")) for at in times])
     # Scene "talk" (15 s): a quote card for 3 s, then the left speaker until a cut at 9 s, then the right speaker.
     monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [3.0, 9.0] if start == 0 else [])
-    def speaker(pair):
+    def observe(pair):
         at = float(pair[0].name.split("-")[-2])
         if pair[0].name.startswith("empty") or at < 3:
-            return None
-        return .3 if at < 9 else .7
-    monkeypatch.setattr(framing, "_speaker_center", speaker)
+            return {"frontal": [], "turned": []}
+        x = .3 if at < 9 else .7
+        return {"frontal": [{"x": x, "w": 0.1, "motion": 0.0, "area": 1.0}], "turned": []}
+    monkeypatch.setattr(framing, "_observe_pair", observe)
     draft = Draft(id="d", title="t", aspect="portrait", layout="crop",
                   scenes=[Scene(id="talk", label="a", start=0, end=15), Scene(id="empty", label="b", start=15, end=16)])
     result = framing.auto_frame(tmp_path / "input.mp4", draft, 1280, 720)
@@ -116,9 +166,10 @@ def test_auto_frame_aligns_the_track_to_cuts(monkeypatch, tmp_path):
 
 def test_auto_frame_leaves_people_free_footage_alone(monkeypatch, tmp_path):
     monkeypatch.setattr(framing, "is_installed", lambda: True)
-    monkeypatch.setattr(framing, "_grab_pair", lambda video, at, folder, key: (folder / f"{key}-1.jpg", folder / f"{key}-2.jpg"))
+    monkeypatch.setattr(framing, "_grab_shot", lambda video, start, end, times, folder, key: [
+        (at, (folder / f"{key}-1.jpg", folder / f"{key}-2.jpg")) for at in times])
     monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [2.0])
-    monkeypatch.setattr(framing, "_speaker_center", lambda pair: None)
+    monkeypatch.setattr(framing, "_observe_pair", lambda pair: {"frontal": [], "turned": []})
     draft = Draft(id="d", title="t", aspect="portrait", layout="crop", scenes=[Scene(id="game", label="a", start=0, end=6)])
     [scene] = framing.auto_frame(tmp_path / "input.mp4", draft, 1280, 720)["scenes"]
     assert scene["crop_x"] is None and scene["crop_track"] is None and scene["faces"] == 0 and scene["samples"] > 0

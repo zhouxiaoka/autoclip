@@ -749,7 +749,7 @@ def _prepare_speaker_framing(platforms):
         logger.warning('Framing install could not start: %s', type(error).__name__)
 
 
-def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None):
+def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None, cues=None):
     """Speaker-following crop tracks for a vertical draft (or the given output window).
 
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
@@ -773,7 +773,7 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None):
         if scans is None:
             scans = {}
         scans[key] = detected
-    result = framing.auto_frame(video, draft, int(info['width']), int(info['height']), window=window, scans=scans[key])
+    result = framing.auto_frame(video, draft, int(info['width']), int(info['height']), window=window, scans=scans[key], cues=cues)
     tracks = {scene['id']: scene for scene in result['scenes']}
     if not any(scene.get('faces') for scene in result['scenes']):
         return None, 'full_frame'
@@ -793,6 +793,21 @@ def _project_strategy(project_id, strategy_id):
     style = (store.read(project_id).get('generation') or {}).get('portrait_style', 'auto')
     template = {'interview': 'interview_zh', 'podcast': 'podcast_en'}.get(style)
     return replace(strategy, template=template) if template and strategy.aspect == 'portrait' else strategy
+
+
+def _framing_cues(project_id):
+    """Speaker cues for the crop. A missing project is no transcript, and it must not create one."""
+    try:
+        from backend.core.path_utils import get_projects_directory
+        project_dir = get_projects_directory() / str(project_id)
+        if not project_dir.is_dir():
+            return []
+        from backend.services.publish_export import _load_srt_entries
+        from backend.services.studio import framing
+        return framing.cues_from_entries(_load_srt_entries(project_id))
+    except Exception as error:  # noqa: BLE001 - framing still follows the frontal face without a transcript
+        logger.warning('Framing cues unavailable: %s', type(error).__name__)
+        return []
 
 
 def _apply_framing(project_id, value, strategy_id, video, burned, cache, portrait_crop=False):
@@ -817,9 +832,11 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache, portrai
         return {**value, 'scenes': plain, 'layout': fallback_layout}, 'full_frame_captions'
     window = None if portrait_crop else (INTERVIEW_WINDOW if interview else None)
     key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), window)
+    if 'cues' not in cache:
+        cache['cues'] = _framing_cues(project_id)
     if key not in cache:
         try:
-            cache[key] = _speaker_framing(value, video, window=window, scans=cache.setdefault('scans', {}))
+            cache[key] = _speaker_framing(value, video, window=window, scans=cache.setdefault('scans', {}), cues=cache['cues'])
         except Exception as error:  # noqa: BLE001 - fall back to the full frame rather than fail output
             logger.warning('Speaker framing failed: %s', type(error).__name__)
             capture_studio_exception(error, 'auto_frame')
