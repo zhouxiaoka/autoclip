@@ -24,7 +24,7 @@ def test_landscape_outputs_are_not_reframed(monkeypatch):
 
 def test_faces_give_speaker_crop_and_one_detection_per_window_shape(monkeypatch):
     calls = []
-    def detect(value, video, *, window=None, scans=None):
+    def detect(value, video, *, window=None, scans=None, cues=None):
         calls.append(window)
         return [{**scene, 'crop_x': .3, 'crop_track': [{'start': 0, 'crop_x': .3, 'mode': 'crop'}]} for scene in value['scenes']], 'speaker'
     monkeypatch.setattr(jobs, '_speaker_framing', detect)

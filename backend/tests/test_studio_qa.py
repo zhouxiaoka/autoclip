@@ -201,6 +201,19 @@ def test_face_overlap_buckets_and_detected_boxes(monkeypatch, tmp_path):
     assert face.check(covered, 1) == ('skip', 'no_detector')
 
 
+def test_caption_check_still_runs_when_presence_skips(monkeypatch, tmp_path):
+    output = tmp_path / 'frame.mp4'
+    output.write_bytes(b'not-decoded-here')
+    ctx = _ctx(
+        captions=True, output=output, source=output,
+        scenes=[report.SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
+    )
+    monkeypatch.setattr(face, '_presence_check', lambda *_args, **_kwargs: ('skip', 'timeout'))
+    monkeypatch.setattr('backend.services.studio.framing.is_installed', lambda: True)
+    monkeypatch.setattr(face, 'detect_faces', lambda *_args: [(100.0, 1800.0, 80.0, 80.0)])
+    assert face.check(ctx, 2.0) == ('fail', 'gt40')
+
+
 def test_budget_skips_a_slow_checker_and_keeps_going():
     ticks = [0.0]
 

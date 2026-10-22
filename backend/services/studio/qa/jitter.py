@@ -22,16 +22,32 @@ SAMPLE_FLASH_PX = 3.0
 _SAMPLE_W, _SAMPLE_H = 96, 54
 
 
-def flashes(points: list[tuple[float, float]], width: int) -> int:
-    """Direction reversals whose jumps are each at least MIN_JUMP of the frame."""
-    jumps = []
-    for (t1, x1), (t2, x2) in zip(points, points[1:]):
-        delta = (x2 - x1) * width
-        if abs(delta) >= MIN_JUMP * width:
-            jumps.append((t2, delta))
+def flashes(points: list[tuple[float, float]], width: int, modes: list[str] | None = None) -> int:
+    """Direction reversals, and a fit blip that is undone within REVERSAL_S.
+
+    A fit point is a layout, not a crop at 0.5. Crop-to-crop jumps still use MIN_JUMP.
+    Two layout changes inside the reversal window are one visible flash.
+    """
+    modes = list(modes or [])
+    states = []
+    for index, (time, crop_x) in enumerate(points):
+        mode = modes[index] if index < len(modes) and modes[index] in ('crop', 'fit') else 'crop'
+        states.append((time, mode, crop_x))
+    moves = []
+    layouts = []
+    for previous, current in zip(states, states[1:]):
+        if previous[1] != current[1]:
+            layouts.append(current[0])
+        elif previous[1] == 'crop':
+            delta = (current[2] - previous[2]) * width
+            if abs(delta) >= MIN_JUMP * width:
+                moves.append((current[0], 1 if delta > 0 else -1))
     count = 0
-    for (t1, d1), (t2, d2) in zip(jumps, jumps[1:]):
+    for (t1, d1), (t2, d2) in zip(moves, moves[1:]):
         if d1 * d2 < 0 and (t2 - t1) <= REVERSAL_S:
+            count += 1
+    for t1, t2 in zip(layouts, layouts[1:]):
+        if t2 - t1 <= REVERSAL_S:
             count += 1
     return count
 
@@ -116,7 +132,7 @@ def _sample_shifts(path, at: float, timeout: float) -> list[tuple[float, float]]
 def check(ctx, timeout: float) -> tuple[str, str]:
     width = ctx.width or 1080
     duration = sum(max(0.0, scene.end - scene.start) for scene in ctx.scenes) or 1.0
-    track_flashes = sum(flashes(scene.points, width) for scene in ctx.scenes)
+    track_flashes = sum(flashes(scene.points, width, scene.modes) for scene in ctx.scenes)
     has_track = any(scene.points for scene in ctx.scenes)
     raw: list[tuple[float, float]] = []
     if ctx.output is not None and getattr(ctx.output, 'is_file', lambda: False)():
