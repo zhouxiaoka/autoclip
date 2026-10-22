@@ -208,7 +208,7 @@ def key_phrase(text: str, original: str = '') -> str:
     """One highlight already inside `text`. The same inputs always return the same phrase.
 
     A figure the speaker said wins. Otherwise the last whole word of the last clause
-    (jieba, not a 4-character slice), or the last content word of an English line.
+    (a 的/了/着 split, not a 4-character slice), or the last content word of an English line.
     `original` is unused on purpose: a Chinese phrase is not mapped onto an English translation.
     """
     del original

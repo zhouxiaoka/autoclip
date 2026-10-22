@@ -14,12 +14,15 @@ import re
 from backend.services.studio.caption_layout import lines_for, page_screens, width
 
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
-# Phrase budget on the 1080px canvas. One line, no wrap: street 100px inside 30px
-# insets, editorial 52px inside 60px insets. A longer sentence is split into phrases.
+# Phrase budget on the 1080px canvas. One line, no wrap: street 84px inside 30px
+# insets (ink about 92px, inside the 90–96 cap), editorial 52px inside 60px insets.
+# A longer sentence is split into phrases.
 _CANVAS = 1080
 _EDITORIAL_FONT = 52
 _EDITORIAL_INSET = 60
-_STREET_FONT = 100
+_STREET_FONT = 84
+_MIN_PHRASE_SEC = 0.6
+_LEAD = set('的了着过地得吗呢吧啊呀')
 _SOURCE_LIMIT = 34
 _STREET_SOURCE_LIMIT = 42
 _STREET_INSET = {
@@ -201,6 +204,161 @@ def _cue_speaker_name(cue, speakers: list[dict], packaging=None) -> str:
     return localized or claimed
 
 
+def _transcript_rows(transcript) -> list[tuple]:
+    rows = []
+    for item in transcript or []:
+        speaker = ''
+        if isinstance(item, dict):
+            try:
+                start = float(item.get('start', item.get('start_time', 0)) or 0)
+                end = float(item.get('end', item.get('end_time', 0)) or 0)
+            except (TypeError, ValueError):
+                continue
+            text = str(item.get('text') or '')
+            speaker = str(item.get('speaker') or '').strip()
+        else:
+            try:
+                start, end, text = float(item[0]), float(item[1]), str(item[2])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if len(item) > 3 and item[3]:
+                speaker = str(item[3]).strip()
+        if end > start and text.strip():
+            rows.append((start, end, text, speaker))
+    rows.sort(key=lambda row: (row[0], row[1]))
+    return rows
+
+
+def _turns(rows: list[tuple]) -> list[tuple]:
+    """``(start, end, parity, text, explicit name)``. Each ``>>`` starts the next speaker.
+
+    A file that opens without ``>>`` is parity 0. The first ``>>`` is the next speaker.
+    """
+    parity = -1
+    turns = []
+    for start, end, text, explicit in rows:
+        if explicit:
+            turns.append((start, end, None, text, explicit))
+            continue
+        if text.lstrip().startswith('>>') or parity < 0:
+            parity += 1
+        turns.append((start, end, parity, text, ''))
+    return turns
+
+
+def _host_parity(turns: list[tuple]) -> int:
+    """The side with more questions. With none, the shorter side: the guest talks more."""
+    questions = {0: 0, 1: 0}
+    durations = {0: 0.0, 1: 0.0}
+    for start, end, parity, text, _explicit in turns:
+        if parity is None:
+            continue
+        side = int(parity) % 2
+        questions[side] += text.count('?') + text.count('？')
+        durations[side] += max(0.0, end - start)
+    if questions[0] != questions[1]:
+        return 0 if questions[0] > questions[1] else 1
+    if durations[0] != durations[1]:
+        return 0 if durations[0] < durations[1] else 1
+    return 0
+
+
+def _diarized_name(cue_start: float, cue_end: float, word_timing, speakers: list[dict]) -> str:
+    """A word or segment ``speaker`` that is already a roster name. Empty when there is none."""
+    if not word_timing:
+        return ''
+    from backend.services.studio.packaging import _HOST_NAMES
+    roster = {str(person.get('name') or '').strip() for person in speakers}
+    roster.discard('')
+    totals: dict[str, float] = {}
+    for segment in word_timing:
+        if not isinstance(segment, dict):
+            continue
+        words = segment.get('words')
+        if not isinstance(words, list):
+            words = [segment] if 'start' in segment else []
+        segment_name = str(segment.get('speaker') or '').strip()
+        for word in words:
+            if not isinstance(word, dict):
+                continue
+            name = str(word.get('speaker') or segment_name).strip()
+            if name not in roster and name not in _HOST_NAMES and name.lower() not in {item.lower() for item in _HOST_NAMES}:
+                continue
+            try:
+                start, end = float(word['start']), float(word['end'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            overlap = min(cue_end, end) - max(cue_start, start)
+            if overlap > 0:
+                totals[name] = totals.get(name, 0.0) + overlap
+    if not totals:
+        return ''
+    return max(totals, key=totals.get)
+
+
+def _names_agree(model_name: str, evidence: str, speakers: list[dict]) -> str:
+    """Show a name only when the model and the transcript name the same person.
+
+    A blank model does not contradict a guest turn, so the single guest is shown.
+    A guest name on a host turn is dropped: a wrong label is worse than none.
+    """
+    from backend.services.studio.packaging import _HOST_NAMES
+    evidence = str(evidence or '').strip()
+    model_name = str(model_name or '').strip()
+    if not evidence:
+        return ''
+
+    def hostish(name: str) -> bool:
+        return bool(name) and (name in _HOST_NAMES or name.lower() in {item.lower() for item in _HOST_NAMES})
+
+    if hostish(evidence):
+        return model_name if hostish(model_name) else ''
+    guests = _guest_names(speakers)
+    if evidence not in guests and evidence not in {person.get('name') for person in speakers}:
+        return ''
+    if not model_name or model_name == evidence:
+        return evidence
+    return ''
+
+
+def _agree_speaker(model_name: str, cue_start: float, cue_end: float, transcript, speakers: list[dict], word_timing) -> str:
+    """The label is the name the model and the transcript both support. Otherwise none.
+
+    Transcript turns come from ``>>`` or from a diarized ``speaker`` on the words.
+    Without either, the model's name is not shown.
+    """
+    from backend.services.studio.packaging import _HOST_NAMES
+    diarized = _diarized_name(cue_start, cue_end, word_timing, speakers)
+    if diarized:
+        return _names_agree(model_name, diarized, speakers)
+    turns = _turns(_transcript_rows(transcript))
+    if not turns:
+        return ''
+    best = None
+    best_len = 0.0
+    for turn in turns:
+        overlap = min(cue_end, turn[1]) - max(cue_start, turn[0])
+        if overlap > best_len:
+            best_len = overlap
+            best = turn
+    if best is None or best_len <= 0:
+        return ''
+    if best[4]:
+        return _names_agree(model_name, best[4], speakers)
+    host_side = _host_parity(turns)
+    role_host = best[2] is not None and int(best[2]) % 2 == host_side
+    if role_host:
+        if model_name in _HOST_NAMES or (model_name and model_name.lower() in {item.lower() for item in _HOST_NAMES}):
+            return model_name
+        return ''
+    guests = _guest_names(speakers)
+    if len(guests) == 1 and (not model_name or model_name == guests[0]):
+        return guests[0]
+    if model_name in guests:
+        return model_name
+    return ''
+
+
 def _deck_line(packaging) -> str:
     """The model's deck only. A clipped first sentence is not a deck."""
     deck = str(_get(packaging, 'deck', '') or '').strip()
@@ -210,14 +368,39 @@ def _deck_line(packaging) -> str:
 _CREDIT_STOP = {'on', 'the', 'a', 'an', 'of', 'about', 'and'}
 
 
+def _guest_names(speakers: list[dict]) -> list[str]:
+    from backend.services.studio.packaging import _HOST_NAMES
+    names = []
+    for person in speakers:
+        name = str(person.get('name') or '').strip()
+        if name and name not in _HOST_NAMES and name.lower() not in {item.lower() for item in _HOST_NAMES}:
+            names.append(name)
+    return names
+
+
+def _title_caps(speakers: list[dict], title_lines: list[str] | None) -> str:
+    """Caps from the packaging title and the guest, never from a clipped spoken sentence."""
+    title = ' '.join(str(line).strip() for line in (title_lines or []) if str(line).strip())
+    title = ' '.join(title.split())
+    if not title:
+        return ''
+    guests = _guest_names(speakers)
+    named = next((name for name in guests if name in title), '')
+    name = named or (guests[0] if len(guests) == 1 else '')
+    if name and name not in title:
+        return f'{title} · {name}'
+    return title
+
+
 def _caps_credit(deck: str, speakers: list[dict], title_lines: list[str] | None = None) -> str:
     """TOPIC · SPEAKER under the magazine headline.
 
     "Jensen Huang on the five-layer cake" becomes FIVE-LAYER CAKE · JENSEN HUANG.
-    A long spoken sentence is shortened to its last few words.
+    A long spoken sentence is shortened to its last few words. With no deck, the line is the
+    title and the guest, not that spoken sentence.
     """
     if not deck:
-        return ''
+        return _title_caps(speakers, title_lines)
     text = ' '.join(deck.split())
     named = re.match(r'^(.+?)\s+on\s+(.+)$', text, flags=re.IGNORECASE)
     if named and re.search(r'[A-Za-z]', named.group(1)):
@@ -277,19 +460,30 @@ def _hard_slices(token: str, limit: float) -> list[str]:
     return slices
 
 
-def _wrap_units(text: str, limit: float) -> list[str]:
-    """One line per chunk. Breaks land on word boundaries, not inside 15小时 / 生产力 / DNA里."""
+def _protected_token(token: str, emphasis: str) -> bool:
+    """A highlight, a number or a Latin token stays whole even when it is wider than the line."""
+    if emphasis and token.strip() == emphasis:
+        return True
+    if any(ch.isdigit() for ch in token):
+        return True
+    return any(ch.isascii() and ch.isalnum() for ch in token)
+
+
+def _wrap_units(text: str, limit: float, emphasis: str = '') -> list[str]:
+    """One line per chunk. Breaks stay off 15小时, DNA里 and the highlight."""
     if width(text) <= limit + 1e-6:
         return [text]
     from backend.services.studio.cjk_segment import tokenize
+    # A highlight wider than the line cannot be one atom; a short one such as 机会 can.
+    guard = emphasis if emphasis and width(emphasis) <= limit + 1e-6 else ''
     chunks: list[str] = []
     buf = ''
-    for token in tokenize(text):
+    for token in tokenize(text, guard):
         if not token.strip():
             if buf and width(buf + token) <= limit + 1e-6:
                 buf += token
             continue
-        if width(token) > limit + 1e-6:
+        if width(token) > limit + 1e-6 and not _protected_token(token, emphasis):
             if buf.strip():
                 chunks.append(buf.strip())
                 buf = ''
@@ -305,7 +499,53 @@ def _wrap_units(text: str, limit: float) -> list[str]:
     return [chunk for chunk in chunks if chunk]
 
 
-def _phrases(text: str, limit: float) -> list[str]:
+def _attach_emphasis(previous: str, piece: str, limit: float) -> list[str]:
+    """Keep a highlight off its own line without blowing the line budget.
+
+    If the previous line has room, the highlight joins it. Otherwise a few characters
+    move down with it, so 「机会」 is not a phrase by itself and neither line overflows.
+    """
+    if width(previous + piece) <= limit + 1e-6:
+        return [previous + piece]
+    for take in range(1, len(previous)):
+        left, right = previous[:-take], previous[-take:] + piece
+        if left and width(left) <= limit + 1e-6 and width(right) <= limit + 1e-6:
+            return [left, right]
+    return [previous + piece]
+
+
+def _merge_isolated_emphasis(pieces: list[str], emphasis: str, limit: float) -> list[str]:
+    """A highlight is not its own phrase. 「机会」 stays with the words around it."""
+    emphasis = str(emphasis or '').strip().strip(_PUNCT)
+    if not emphasis:
+        return pieces
+    merged: list[str] = []
+    for piece in pieces:
+        if merged and piece.strip().strip(_PUNCT) == emphasis:
+            merged[-1:] = _attach_emphasis(merged[-1], piece, limit)
+        else:
+            merged.append(piece)
+    return merged
+
+
+def _no_leading_particle(pieces: list[str]) -> list[str]:
+    """Don't start a line with 的/了/吗. The particle stays on the previous line."""
+    fixed: list[str] = []
+    for piece in pieces:
+        if fixed and piece and piece[0] in _LEAD:
+            take = 0
+            while take < len(piece) and piece[take] in _LEAD:
+                take += 1
+            fixed[-1] += piece[:take]
+            rest = piece[take:]
+            if rest:
+                fixed.append(rest)
+            continue
+        fixed.append(piece)
+    return [piece for piece in fixed if piece]
+
+
+def _phrases(text: str, limit: float, emphasis: str = '') -> list[str]:
     """Short single-line pieces. Trailing punctuation is dropped, the same way the preview does."""
     cleaned = str(text or '').strip().strip(_PUNCT).strip()
     if not cleaned:
@@ -313,7 +553,8 @@ def _phrases(text: str, limit: float) -> list[str]:
     parts = [part.strip() for part in re.split(r'[，。、！？：；,.!?]+', cleaned) if part.strip()]
     pieces: list[str] = []
     for part in parts:
-        pieces.extend(_wrap_units(part, limit))
+        pieces.extend(_wrap_units(part, limit, emphasis))
+    pieces = _no_leading_particle(_merge_isolated_emphasis(pieces, emphasis, limit))
     return pieces or [cleaned]
 
 
@@ -569,12 +810,46 @@ def _length_bounds(pieces: list[str], start: float, end: float) -> list[tuple[st
     return rows
 
 
-def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words) -> list[tuple]:
+def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[tuple]:
+    """A phrase under about 0.6s joins a neighbour on the same side of a cut.
+
+    80小时 and 15小时 were on screen for 0.37s. Join only when the combined line still
+    fits. Merging across a removed gap would replay the line on the next shot.
+    """
+    def fits(left: str, right: str) -> bool:
+        if not line_limit:
+            return True
+        return width(left + right) <= float(line_limit) + 1e-6
+
+    items = list(placed)
+    guard = 0
+    while guard < 16:
+        guard += 1
+        short = next((index for index, item in enumerate(items) if item[2] - item[1] < _MIN_PHRASE_SEC - 1e-3), None)
+        if short is None:
+            break
+        item = items[short]
+        prev = items[short - 1] if short else None
+        nxt = items[short + 1] if short + 1 < len(items) else None
+        if prev is not None and prev[2] >= item[1] - 0.05 and fits(prev[0], item[0]):
+            items[short - 1] = (prev[0] + item[0], prev[1], max(prev[2], item[2]), prev[3], max(prev[4], item[4]))
+            del items[short]
+            continue
+        if nxt is not None and item[2] >= nxt[1] - 0.05 and fits(item[0], nxt[0]):
+            items[short + 1] = (item[0] + nxt[0], item[1], max(item[2], nxt[2]), item[3], max(item[4], nxt[4]))
+            del items[short]
+            continue
+        break
+    return items
+
+
+def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words, line_limit: float | None = None) -> list[tuple]:
     """Place each phrase on the output clock once, at the moment it is spoken.
 
     A cue that crosses a cut used to restart its whole phrase list inside every shot.
     Phrases are timed across the cue, then mapped through the shots. A phrase the cut
-    removes is dropped. A phrase the cut splits is kept on the first overlap only.
+    removes entirely is dropped. A phrase the cut splits is kept on the shot that holds
+    most of it, so a sliver at the end of the first shot does not eat the line.
     One shot that contains the whole cue keeps the old frame tiling, so a single scene
     still meets the caption page exactly.
     """
@@ -595,17 +870,24 @@ def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, 
         for piece, count in zip(shown, counts):
             placed.append((piece, cursor / fps, (cursor + count) / fps, cursor, cursor + count))
             cursor += count
-        return placed
+        return _hold_phrases(placed, line_limit)
     bounds = aligned or _length_bounds(pieces, cue_start, cue_end)
     rough = []
     for piece, t0, t1 in bounds:
+        best = None
+        best_len = 0.0
         for span_lo, span_hi, span_out, span_end in spans:
             ov0, ov1 = max(t0, span_lo), min(t1, span_hi)
             if ov1 <= ov0 + 1e-4:
                 continue
+            length = ov1 - ov0
+            if length <= best_len:
+                continue
+            best_len = length
             scale = (span_end - span_out) / max(span_hi - span_lo, 1e-6)
-            rough.append((piece, span_out + (ov0 - span_lo) * scale, span_out + (ov1 - span_lo) * scale))
-            break
+            best = (piece, span_out + (ov0 - span_lo) * scale, span_out + (ov1 - span_lo) * scale)
+        if best:
+            rough.append(best)
     placed = []
     for piece, ot0, ot1 in rough:
         start = _frames(ot0, fps)
@@ -620,10 +902,10 @@ def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, 
         if end <= start:
             continue
         placed.append((piece, start / fps, end / fps, start, end))
-    return placed
+    return _hold_phrases(placed, line_limit)
 
 
-def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None) -> dict:
+def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
     total = max(1, _frames(duration, fps))
@@ -651,14 +933,18 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         raw_original = str(_get(cue, 'original', '') or '')
         # The preview keeps the whole English sentence on one line and shrinks it. The template trims what still overflows.
         original = ' '.join(raw_original.split()) if (template or '') in {'editorial', 'street'} else _source_line(raw_original, source_limit)
-        speaker = _cue_speaker_name(cue, roster, packaging)
-        pieces = _phrases(text, phrase_limit)
+        speaker = _agree_speaker(
+            _cue_speaker_name(cue, roster, packaging),
+            float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
+            transcript, roster, word_timing,
+        )
+        pieces = _phrases(text, phrase_limit, phrase)
         if not pieces:
             continue
         timed = _timed_in_cue(cue, word_timing, scenes)
         spoken = _once_per_clip(
             pieces, float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
-            scenes, total, fps, _source_words(cue, word_timing),
+            scenes, total, fps, _source_words(cue, word_timing), phrase_limit,
         )
         if not spoken:
             continue
@@ -669,7 +955,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
             group_en = [
                 word for word in english
                 if word['t1'] > group[0][1] - 1e-6 and word['t0'] < group[-1][2] + 1e-6
-            ] or english
+            ]
             for piece, t0, t1, start_frame, end_frame in group:
                 key = bool(phrase and (phrase in piece or piece in phrase)) or any(
                     word['key'] and word['t1'] > t0 and word['t0'] < t1 for word in group_en
@@ -757,14 +1043,14 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
 def paint_fill(fill: dict, packaging, template: str | None = None) -> dict:
     """The fill the HTML template actually paints.
 
-    `build_fill` always keeps `title_lines` and the hook text. With captions off, editorial
-    drops those painted fields so the classic title can be burned beside the overlay.
-    Street keeps them: the lower band paints the title, and the classic top title is not burned.
-    Captions-on returns the same dict, so that overlay payload does not change.
+    `build_fill` always keeps `title_lines` and the hook text. Street and editorial paint that
+    title in their own safe zone (the black lower band, or the magazine headline under the face).
+    The classic top title is not burned on top of either. Captions-on returns the same dict.
+    A caller that does not name an HTML template still clears the painted hook.
     """
     if _get(packaging, 'captions_enabled', True) is not False:
         return fill
-    if (template or _get(packaging, 'template', '')) == 'street':
+    if template in {'street', 'editorial'}:
         return fill
     hook = dict(fill.get('hook') or {})
     hook['text'] = ''

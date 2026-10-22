@@ -227,9 +227,23 @@
     return "";
   }
 
+  function enForPhrase(moment, phrase) {
+    // The English line is the words being spoken with this Chinese phrase, not the start of the sentence.
+    var list = (moment && moment.en) || [];
+    if (!phrase) return [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var word = list[i];
+      if (word.t1 > phrase.t0 + 1e-3 && word.t0 < phrase.t1 - 1e-3) out.push(word);
+    }
+    return out;
+  }
+
   function enHtml(moment, t) {
+    var phrase = phraseAt(moment, t);
+    var list = enForPhrase(moment, phrase);
+    if (!list.length) return "";
     var html = "";
-    var list = moment.en || [];
     for (var i = 0; i < list.length; i++) {
       var word = list[i];
       html += (i ? " " : "") + '<span class="w' + (word.key ? " k" : "") + enState(t, word) + '">' + esc(word.w) + "</span>";
@@ -302,12 +316,12 @@
       seenPhrase = phrase;
       zh.innerHTML = esc(text);
       zh.className = phrase.key ? "k" : "";
-      fit(zh, 100, 70, 4, 1000, '700 100px "Noto Sans CJK SC"');
+      fit(zh, 84, 64, 4, 1000, '700 84px "Noto Sans CJK SC"');
       popping = (t - (phrase.t0 || 0)) < 0.12 ? "1" : "0";
       var popped = ease((t - (phrase.t0 || 0)) / 0.12);
       zh.style.transform = "scale(" + (1.18 + (1 - 1.18) * popped).toFixed(3) + ")";
       en.innerHTML = moment ? enHtml(moment, t) : "";
-      fit(en, 36, 24, 2, 1000, "36px Anton");
+      if (en.innerHTML) fit(en, 36, 24, 2, 1000, "36px Anton");
     } else {
       cap.style.display = "none";
       zh.innerHTML = "";
@@ -335,9 +349,10 @@
     var rects = [];
     var moment = momentAt(t);
     var phrase = moment ? phraseAt(moment, t) : null;
-    if (phrase) rects.push({slot: "subtitle", x: 30, y: 1331, w: 1020, h: 93});
-    if (titleSticker(t)) rects.push({slot: "title", x: 40, y: 250, w: 1000, h: 110});
-    if (moment && moment.en && moment.en.length) rects.push({slot: "source", x: 30, y: 1449, w: 1020, h: 32});
+    if (phrase) rects.push({slot: "subtitle", x: 30, y: 1331, w: 1020, h: 92});
+    // Captions-off hook sits in the black band under the picture, not on the face (head zone ends at 1290).
+    if (titleSticker(t)) rects.push({slot: "title", x: 40, y: 1360, w: 1000, h: 192});
+    if (moment && phrase && enForPhrase(moment, phrase).length) rects.push({slot: "source", x: 30, y: 1449, w: 1020, h: 32});
     if (labelFor(moment)) rects.push({slot: "hook", x: 40, y: 1812, w: 1000, h: 65});
     if (numberHtml(t)) rects.push({slot: "number", x: 40, y: 80, w: 360, h: 84});
     var index = Math.max(0, Math.floor(t * (data.fps || 30) + 1e-4));

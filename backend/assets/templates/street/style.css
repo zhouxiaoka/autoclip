@@ -35,7 +35,7 @@ html, body {
   font-family: "Noto Sans CJK SC", sans-serif;
   font-weight: 700;
   font-variation-settings: "wght" 700;
-  font-size: 100px;
+  font-size: 84px;
   line-height: 1.1;
   color: #fff;
   -webkit-text-stroke: 14px #000;
@@ -78,7 +78,7 @@ html, body {
   white-space: nowrap;
 }
 #prog {
-  /* ffmpeg drawbox paints this. A bar in the overlay changes every frame and blows the capture budget. */
+  /* ffmpeg paints this. A bar in the overlay changes every frame and blows the capture budget. */
   position: absolute;
   left: 0;
   bottom: 0;
@@ -89,7 +89,7 @@ html, body {
 }
 #title-hook {
   position: absolute;
-  top: 250px;
+  top: 1360px;
   left: 50%;
   transform: translateX(-50%);
   background: #fff;

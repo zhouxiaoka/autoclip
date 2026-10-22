@@ -250,16 +250,27 @@ def test_english_pages_keep_the_spaces():
 
 def test_chinese_breaks_keep_words_numbers_and_latin_together():
     from backend.services.studio.overlay_fill import _phrases
-    pieces = _phrases('甲乙丙丁生产力需要15小时写进DNA里', 5)
-    assert ''.join(pieces).replace(' ', '') == '甲乙丙丁生产力需要15小时写进DNA里'
-    for earlier, later in pairwise(pieces):
+    marked = _phrases('甲乙丙丁生产力需要15小时写进DNA里', 5, '生产力')
+    assert ''.join(marked).replace(' ', '') == '甲乙丙丁生产力需要15小时写进DNA里'
+    for earlier, later in pairwise(marked):
         assert not (earlier.endswith('生') and later.startswith('产'))
         assert not (earlier.endswith('15小') and later.startswith('时'))
         assert not (earlier.endswith('DNA') and later.startswith('里'))
+    assert any('生产力' in piece for piece in marked)
+    plain = _phrases('甲乙丙丁生产力需要15小时写进DNA里', 5)
+    assert ''.join(plain).replace(' ', '') == '甲乙丙丁生产力需要15小时写进DNA里'
+    for earlier, later in pairwise(plain):
+        assert not (earlier.endswith('15小') and later.startswith('时'))
+        assert not (earlier.endswith('DNA') and later.startswith('里'))
         assert '15小' not in earlier or '时' in earlier
-    assert any('15小时' in piece for piece in pieces)
-    assert any('生产力' in piece for piece in pieces)
-    assert any('DNA里' in piece for piece in pieces)
+    assert any('15小时' in piece for piece in plain)
+    assert any('DNA里' in piece for piece in plain)
+    lead = _phrases('甲乙丙的DNA里', 3)
+    assert lead and all(not piece.startswith('的') for piece in lead)
+    assert any('DNA里' in piece for piece in lead)
+    highlight = _phrases('智能会解锁更多机会', 8, '机会')
+    assert all(piece.strip('，。') != '机会' for piece in highlight)
+    assert '机会' in ''.join(highlight)
 
 
 def test_a_sentence_across_cuts_plays_each_phrase_once():
@@ -319,26 +330,227 @@ def test_fallback_emphasis_uses_whole_words_and_an_empty_deck_stays_empty():
         cues=[{'start': 0, 'end': 4, 'text': '原话', 'original': 'This is literally 24 hours of labor and more'}],
     )
     fill = build_fill(spoken, 4, template='editorial')
-    assert fill['deck'] == '' and fill['credit'] == '' and fill['hook_trk'] == ''
+    assert fill['deck'] == ''
+    assert fill['credit'] == '标题' and fill['hook_trk'] == '标题'
+    assert 'literally' not in fill['credit'].lower() and 'hours' not in fill['credit'].lower()
+    named = Packaging(
+        version=2, template='editorial', audience_language='zh', title_lines=['更闲的工作'],
+        speakers=[{'at': 0, 'name': '黄仁勋', 'role': '英伟达'}],
+        cues=[{'start': 0, 'end': 4, 'text': '原话', 'original': 'This is literally 24 hours of labor and more'}],
+    )
+    named_fill = build_fill(named, 4, template='editorial')
+    assert named_fill['deck'] == '' and named_fill['credit'] == '更闲的工作 · 黄仁勋'
+    assert 'literally' not in named_fill['credit'].lower()
 
 
 def test_progress_bar_is_a_filter_not_an_overlay_frame():
     from backend.services.studio.packaging_html import composite_tail
     graph, label = composite_tail('base', 1, 1080, 1920, '', template='street', offset=12.5, total=100)
     assert label == 'paced'
-    assert "drawbox=x=0:y=1908:w='iw*(t+12.500)/100.000':h=12:color=0xD7FF3A:t=fill" in graph
+    assert "scale=w='max(2\\,min(1080\\,trunc(1080*(t+12.500)/100.000)))':h=12:eval=frame" in graph
+    assert 'overlay=x=0:y=1908' in graph and '0xD7FF3A' in graph
     editorial, _ = composite_tail('base', 1, 1080, 1920, '', template='editorial', offset=0, total=80)
-    assert "y=1826" in editorial and '(t+0.000)/80.000' in editorial
+    assert "y=1826" in editorial and '(t+0.000)/80.000' in editorial and 'eval=frame' in editorial
+    assert 'min(960' in editorial and 'overlay=x=60:y=1826' in editorial
     assert "color=c=0x0C0A08:s=1080x1000" in editorial and "overlay=0:920" in editorial
+    assert 'trim=end_frame=1' in editorial and 'loop=loop=-1:size=1' in editorial
     plain, plain_label = composite_tail('base', 1, 1080, 1920, '')
-    assert plain_label == 'html' and 'drawbox' not in plain
+    assert plain_label == 'html' and 'drawbox' not in plain and 'eval=frame' not in plain
 
 
 def test_caption_line_limit_matches_the_template_box():
     editorial = (ROOT / 'backend/assets/templates/editorial/style.css').read_text(encoding='utf-8')
     street_css = (ROOT / 'backend/assets/templates/street/style.css').read_text(encoding='utf-8')
     assert 'font-size: 52px' in editorial and 'left: 60px' in editorial and 'right: 60px' in editorial
-    assert 'font-size: 100px' in street_css and 'left: 30px' in street_css and 'right: 30px' in street_css
+    assert 'font-size: 84px' in street_css and 'line-height: 1.1' in street_css
+    assert 'left: 30px' in street_css and 'right: 30px' in street_css
+    assert 90 <= 84 * 1.1 <= 96
     assert caption_line_limit('editorial', 'douyin') == (1080 - 120) // 52
     for area in ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts'):
-        assert caption_line_limit('street', area) == (1080 - 60) // 100
+        assert caption_line_limit('street', area) == (1080 - 60) // 84
+
+
+def test_caption_breaks_do_not_depend_on_jieba():
+    requirements = (ROOT / 'requirements.txt').read_text(encoding='utf-8')
+    project = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    assert 'jieba' not in requirements and 'jieba' not in project
+
+
+def test_a_phrase_in_the_second_shot_is_not_dropped_at_the_cut():
+    text = '对大多数人来说，智能会解锁更多机会'
+    packaging = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['话题'],
+        cues=[{'start': 0, 'end': 16, 'text': text}],
+    )
+    scenes = [Scene(id='a', start=0, end=7.05), Scene(id='b', start=10, end=16)]
+    fill = build_fill(packaging, 16, scenes=scenes, template='street')
+    shown = [word['text'] for word in fill['words']]
+    assert len(shown) == len(set(shown))
+    assert _squash(''.join(shown)) == _squash(text)
+    hit = [word for word in fill['words'] if '机会' in word['text']]
+    assert len(hit) == 1
+    assert hit[0]['start_frame'] >= round(7.05 * 30) - 2
+    assert (hit[0]['end_frame'] - hit[0]['start_frame']) / 30 > 1
+    assert any(word['start_frame'] < 7 * 30 and '大多数' in word['text'] for word in fill['words'])
+
+
+def test_short_phrases_hold_for_at_least_half_a_second():
+    text = '介绍，80小时，收尾，15小时'
+    packaging = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['话题'],
+        cues=[{'start': 0, 'end': 4, 'text': text}],
+    )
+    timing = [{'words': [
+        {'text': '介绍', 'start': 0.0, 'end': 1.2},
+        {'text': '80小时', 'start': 1.2, 'end': 1.57},
+        {'text': '收尾', 'start': 1.57, 'end': 3.2},
+        {'text': '15小时', 'start': 3.2, 'end': 3.57},
+    ]}]
+    fill = build_fill(packaging, 4, template='street', word_timing=timing)
+    blob = ''.join(word['text'] for word in fill['words'])
+    assert '80小时' in blob and '15小时' in blob
+    assert not any(word['text'] in {'80小时', '15小时'} for word in fill['words'])
+    for word in fill['words']:
+        assert (word['end_frame'] - word['start_frame']) / 30 >= 0.55
+
+
+def test_speaker_name_follows_the_transcript_not_the_model_alone():
+    packaging = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['更闲的工作'],
+        speakers=[{'at': 0, 'name': '黄仁勋', 'role': '英伟达'}, {'at': 0, 'name': '主持人', 'role': '访谈'}],
+        cues=[
+            {'start': 14.7, 'end': 21.7, 'text': '智能会解锁更多机会', 'speaker': ''},
+            {'start': 30.7, 'end': 44.9, 'text': '经济会增长', 'speaker': ''},
+            {'start': 45.1, 'end': 56.4, 'text': '凯恩斯说工作会更闲吗', 'speaker': '黄仁勋'},
+            {'start': 66.1, 'end': 77.6, 'text': '那十五小时又怎么说', 'speaker': '黄仁勋'},
+        ],
+    )
+    # Host and guest alternate. The two Keynes questions are the host; a guest line sits between them.
+    transcript = [
+        (14.7, 21.7, 'intelligence unlocks more opportunity'),
+        (30.7, 44.9, 'the economy can grow'),
+        (45.1, 56.4, '>> would Keynes say we get more leisure?'),
+        (56.4, 66.1, '>> not for the work itself'),
+        (66.1, 77.6, '>> and what about fifteen hours a week?'),
+    ]
+    fill = build_fill(packaging, 80, template='street', transcript=transcript)
+
+    def labels(start, end):
+        return {word['speaker'] for word in fill['words'] if start - 0.05 <= word['start_frame'] / 30 < end}
+
+    assert labels(14.7, 21.7) == {'黄仁勋'}
+    assert labels(30.7, 44.9) == {'黄仁勋'}
+    assert labels(45.1, 56.4) == {''}
+    assert labels(66.1, 77.6) == {''}
+    bare = build_fill(packaging, 80, template='street')
+    assert bare['words'] and all(word['speaker'] == '' for word in bare['words'])
+
+    contradicted = Packaging(
+        version=2, template='street', audience_language='zh', title_lines=['话题'],
+        speakers=[{'at': 0, 'name': '黄仁勋', 'role': '英伟达'}, {'at': 0, 'name': '主持人', 'role': '访谈'}],
+        cues=[{'start': 45.1, 'end': 56.4, 'text': '凯恩斯说工作会更闲吗', 'speaker': '黄仁勋'}],
+    )
+    voiced = build_fill(
+        contradicted, 60, template='street',
+        word_timing=[{'words': [{'text': '凯恩斯说工作会更闲吗', 'start': 45.1, 'end': 56.4, 'speaker': '主持人'}]}],
+    )
+    assert voiced['words'] and all(word['speaker'] == '' for word in voiced['words'])
+    agreed = build_fill(
+        contradicted.model_copy(update={'cues': [{'start': 14.7, 'end': 21.7, 'text': '智能会解锁更多机会', 'speaker': ''}]}),
+        30, template='street',
+        word_timing=[{'words': [{'text': '智能会解锁更多机会', 'start': 14.7, 'end': 21.7, 'speaker': '黄仁勋'}]}],
+    )
+    assert {word['speaker'] for word in agreed['words']} == {'黄仁勋'}
+
+
+def _ffmpeg_ok() -> bool:
+    return subprocess.run(['ffmpeg', '-version'], capture_output=True).returncode == 0
+
+
+def _bar_edges(template: str, total: float, times: list[float], folder: Path) -> list[tuple[int, int]]:
+    from PIL import Image
+    from backend.services.studio.packaging_html import composite_tail
+    graph, label = composite_tail('0:v', 1, 1080, 1920, '', template=template, offset=0, total=total)
+    frames = [int(round(t * 30)) for t in times]
+    picked = '+'.join(f'eq(n,{frame})' for frame in frames)
+    dest = folder / template
+    dest.mkdir()
+    subprocess.run(
+        [
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', f'color=c=black:s=1080x1920:r=30:d={total}',
+            '-f', 'lavfi', '-i', f'color=c=black@0:s=1080x1920:r=30:d={total},format=rgba',
+            '-filter_complex', graph + f';[{label}]select=\'{picked}\'[picked]',
+            '-map', '[picked]', '-vsync', 'vfr', str(dest / 'f%02d.png'),
+        ],
+        check=True, capture_output=True,
+    )
+    row_y = 1914 if template == 'street' else 1826
+    edges = []
+    for index, _time in enumerate(times, start=1):
+        image = Image.open(dest / f'f{index:02d}.png').convert('RGB')
+        row = [image.getpixel((x, row_y)) for x in range(1080)]
+        if template == 'street':
+            lit = [x for x, pixel in enumerate(row) if pixel[1] > 180 and pixel[0] > 140 and pixel[2] < 120]
+        else:
+            lit = [x for x, pixel in enumerate(row) if pixel[0] > 80 and pixel[1] > 80 and pixel[2] > 70]
+        assert lit, (template, _time)
+        edges.append((lit[0], lit[-1]))
+    return edges
+
+
+def test_progress_bar_width_tracks_three_timestamps(tmp_path):
+    if not _ffmpeg_ok():
+        return
+    total = 4.0
+    times = [0.5, 2.0, 3.5]
+    street = _bar_edges('street', total, times, tmp_path)
+    rights = []
+    for t, (left, right) in zip(times, street):
+        expected = 1080 * t / total
+        assert left <= 2
+        assert abs((right + 1) - expected) <= 1080 / total / 30 + 8
+        rights.append(right)
+    assert rights[0] < rights[1] < rights[2]
+    assert rights[0] < 1080 * 0.4
+    editorial = _bar_edges('editorial', total, times, tmp_path)
+    for t, (left, right) in zip(times, editorial):
+        expected_right = 60 + 960 * t / total
+        assert left >= 58
+        assert abs((right + 1) - expected_right) <= 960 / total / 30 + 8
+        assert right <= 1020
+
+
+def test_editorial_scrim_is_looped_and_cheaper_than_a_per_frame_gradient(tmp_path):
+    if not _ffmpeg_ok():
+        return
+    import time
+    from PIL import Image
+    from backend.services.studio.packaging_html import composite_tail
+    graph, label = composite_tail('0:v', 1, 1080, 1920, '', template='editorial', offset=0, total=3)
+    assert 'trim=end_frame=1' in graph and 'loop=loop=-1:size=1' in graph
+    command = [
+        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', 'color=c=0x4a3428:s=1080x1920:r=30:d=3',
+        '-f', 'lavfi', '-i', 'color=c=black@0:s=1080x1920:r=30:d=3,format=rgba',
+        '-filter_complex', graph, '-map', f'[{label}]', '-f', 'null', '-',
+    ]
+    started = time.perf_counter()
+    subprocess.run(command, check=True, capture_output=True)
+    elapsed = time.perf_counter() - started
+    # A per-frame geq of this wash is about 1.8s per second of video here. The loop stays under 0.7.
+    assert elapsed / 3 < 0.7, elapsed
+    shot = tmp_path / 'scrim.png'
+    subprocess.run(
+        [
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'color=c=0x4a3428:s=1080x1920:r=30:d=1',
+            '-f', 'lavfi', '-i', 'color=c=black@0:s=1080x1920:r=30:d=1,format=rgba',
+            '-filter_complex', graph, '-map', f'[{label}]', '-frames:v', '1', str(shot),
+        ],
+        check=True, capture_output=True,
+    )
+    image = Image.open(shot).convert('RGB')
+    top = image.getpixel((540, 100))
+    bottom = image.getpixel((540, 1919))
+    assert top[0] > bottom[0] and top[1] > bottom[1]

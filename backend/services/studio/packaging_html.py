@@ -151,27 +151,36 @@ def overlay_cache_limit() -> int:
     return value
 
 
-def _progress_drawbox(template: str, offset: float, total: float, width: int, height: int) -> str:
+def _progress_bar(template: str, offset: float, total: float, width: int, height: int) -> str:
     """A bar whose width follows the clip clock. It is not part of the captured overlay.
 
-    ``renderFrame`` used to bake the bar into every PNG, so a 90s street clip captured
-    all 2700 frames and blew the 90s budget. ``t`` here is scene-local; ``offset`` is
-    where this scene sits in the finished clip.
+    ``renderFrame`` used to bake the bar into every PNG. ``drawbox`` on ffmpeg 6.1 has no
+    ``eval`` option, so ``w='iw*t/D'`` is resolved once at init (``t`` is NAN) and the bar
+    is full width from frame 0. ``scale`` does re-evaluate, so a 2px swatch grows each frame.
+    ``t`` on that swatch starts at 0 for the scene; ``offset`` is where the scene sits in the clip.
+    Street runs from x=0 across the frame. Editorial starts at x=60 and stops at x=1020.
     """
     if template not in {'street', 'editorial'} or total <= 0 or width <= 0 or height <= 0:
         return ''
     off = f'{max(0.0, float(offset)):.3f}'
     dur = f'{max(float(total), 0.001):.3f}'
     if template == 'street':
+        span = max(2, int(width))
         bar_h = 12
-        return (
-            f"drawbox=x=0:y={max(0, height - bar_h)}:w='iw*(t+{off})/{dur}'"
-            f":h={bar_h}:color=0xD7FF3A:t=fill"
-        )
-    bar_w = min(960, max(1, width - 120))
+        x = 0
+        y = max(0, height - bar_h)
+        color = '0xD7FF3A'
+    else:
+        span = min(960, max(2, int(width) - 120))
+        bar_h = 1
+        x = 60 if width >= 120 else 0
+        y = max(0, height - 94)
+        color = '0xF4EFE6@0.8'
+    grown = f'max(2\\,min({span}\\,trunc({span}*(t+{off})/{dur})))'
     return (
-        f"drawbox=x=60:y={max(0, height - 94)}:w='{bar_w}*(t+{off})/{dur}'"
-        f":h=1:color=0xF4EFE6@0.8:t=fill"
+        f"color=c={color}:s=2x{bar_h}:r=30,format=yuva444p,"
+        f"scale=w='{grown}':h={bar_h}:eval=frame:flags=neighbor[bar];"
+        f"[html][bar]overlay=x={x}:y={y}:format=auto:eval=frame:shortest=1:eof_action=repeat[paced]"
     )
 
 
@@ -179,6 +188,8 @@ def _editorial_scrim(width: int, height: int) -> str:
     """Lower 1000px wash, matching the template gradient, outside the captured overlay.
 
     Stops: transparent at the top, 38% at 38% of the height, 78% at the bottom. Color ``#0C0A08``.
+    ``geq`` per pixel per frame costs about a second of video per second of clip. The wash does
+    not move, so it is one frame, looped.
     """
     scrim_h = min(1000, height)
     if scrim_h < 2 or width < 2:
@@ -190,8 +201,9 @@ def _editorial_scrim(width: int, height: int) -> str:
         "255*(38/100+40/100*(Y-H*38/100)/(H*62/100)))"
     )
     return (
-        f"color=c=0x0C0A08:s={width}x{scrim_h}:r=30,format=yuva444p,"
-        f"geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'[scrim];"
+        f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,"
+        f"geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}',"
+        f"trim=end_frame=1,loop=loop=-1:size=1:start=0[scrim];"
         f"[graded][scrim]overlay=0:{top}:format=auto:eof_action=repeat[based];"
     )
 
@@ -206,10 +218,10 @@ def composite_tail(base_label: str, overlay_index: int, width: int, height: int,
         f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva444p[ov];"
         f"{base}[ov]overlay=0:0:format=auto:shortest=1[html]"
     )
-    bar = _progress_drawbox(template, offset, total, width, height)
+    bar = _progress_bar(template, offset, total, width, height)
     if not bar:
         return graph, 'html'
-    return graph + f';[html]{bar}[paced]', 'paced'
+    return graph + ';' + bar, 'paced'
 
 
 def overlay_frame_count(duration: float, fps: int = 30) -> int:
@@ -220,9 +232,9 @@ def overlay_frame_count(duration: float, fps: int = 30) -> int:
 def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int) -> Path:
     """One file per template, painted fill and length. The name is a hash, not the caption.
 
-    Length is part of the key. With captions off, the painted fill drops the title, and any
-    clip longer than the hook (about 2.4s) then has the same fill as a shorter clip of the
-    same style. The composite uses ``shortest=1``, so that shorter movie cuts the output.
+    Length is part of the key. Street and editorial keep the title when captions are off, so two
+    clips of one style can share a painted fill. The composite uses ``shortest=1``, and a shorter
+    cached movie would cut the longer output.
     """
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
@@ -475,7 +487,7 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                   if (!document.fonts) return;
                   const specs = [
                     ['36px Anton', 'AG'],
-                    ['700 100px "Noto Sans CJK SC"', '中'],
+                    ['700 84px "Noto Sans CJK SC"', '中'],
                     ['500 52px "Noto Sans CJK SC"', '中'],
                     ['900 96px "Noto Serif SC"', '中'],
                     ['italic 44px "Instrument Serif"', 'Ag'],
@@ -521,6 +533,16 @@ def load_project_word_timing(project_id: str):
         return None
 
 
+def load_project_transcript(project_id: str):
+    """Source subtitle rows ``(start, end, text)``, including ``>>`` speaker turns. None when absent."""
+    try:
+        from backend.services.publish_export import _load_srt_entries
+        from backend.services.studio.boundaries import rows_from_entries
+        return rows_from_entries(_load_srt_entries(project_id)) or None
+    except Exception:
+        return None
+
+
 def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None) -> OverlayJob:
     """Capture the overlay, or return a classic result. This does not raise.
 
@@ -547,7 +569,10 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     frames = overlay_frame_count(duration, fps)
     timing = load_project_word_timing(project_id) if word_timing is None else word_timing
     fill = paint_fill(
-        build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template, word_timing=timing),
+        build_fill(
+            packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template,
+            word_timing=timing, transcript=load_project_transcript(project_id),
+        ),
         packaging,
         template,
     )

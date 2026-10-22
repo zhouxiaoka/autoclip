@@ -86,8 +86,7 @@ test('editorial and street match the golden frames at fixed timestamps', () => {
 })
 
 test('editorial headline stays under the face and street keeps the lower label', () => {
-  // Editorial captions-off clears the hook before paint and burns the classic title.
-  // The template itself still holds the headline for the whole clip, below the face.
+  // Editorial holds the headline for the whole clip, below the face.
   // Street captions-off shows the title as the opening hook sticker, and the label keeps the topic.
 
   for (const template of ['editorial', 'street']) {
@@ -161,7 +160,7 @@ test('street and editorial css match the measured preview', () => {
   const street = fs.readFileSync(path.join(root, 'street', 'style.css'), 'utf8')
   const editorial = fs.readFileSync(path.join(root, 'editorial', 'style.css'), 'utf8')
   assert.match(street, /#field[\s\S]*top:\s*1290px/)
-  assert.match(street, /#zh[\s\S]*font-size:\s*100px/)
+  assert.match(street, /#zh[\s\S]*font-size:\s*84px/)
   assert.match(street, /#zh\.k\s*\{\s*color:\s*#D7FF3A/)
   assert.match(street, /-webkit-text-stroke:\s*14px #000/)
   assert.match(street, /text-shadow:\s*0 10px 0 #000/)

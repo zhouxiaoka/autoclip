@@ -289,16 +289,8 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                                 )
                             else:
                                 picture, label = packaging_render.picture_only(draft, scene, w, h)
-                            pack = draft.packaging
-                            # Editorial captions-off still burns the classic title beside the overlay.
-                            # Street paints that title as the short hook sticker, so a top title would sit on the face.
-                            if pack is not None and html_template != 'street' and pack.captions_enabled is False and pack.title_lines:
-                                from backend.services.publish_export import _escape_filter_path
-                                ass_path = folder / f'{i}.title.ass'
-                                ass_path.write_text(packaging_render.scene_ass(pack, draft.scenes, i, titles_only=True), encoding='utf-8')
-                                ass = f"ass='{_escape_filter_path(ass_path)}':fontsdir='{_escape_filter_path(packaging_render.FONT_DIR)}'"
-                                picture += f';[{label}]{ass}[withtitle]'
-                                label = 'withtitle'
+                            # Street and editorial paint their own title inside the template safe zone.
+                            # The classic top ASS (hook at y=250, interview title at y=150) covers the face.
                             tail, label = packaging_html.composite_tail(
                                 label, 1, w, h, overlay_grade,
                                 template=html_template or '', offset=offsets[i], total=clip_total,

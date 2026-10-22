@@ -181,8 +181,8 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
 
     Every caption screen is at most two lines (see caption_layout). Styles only change looks and
     motion, never the layout contract: title on top, captions at the window edge, plate lower-left.
-    `titles_only` is the title layer an HTML overlay burns when captions are off, so that overlay's
-    own hook does not replace this title.
+    `titles_only` is the classic title layer with the caption rows left out. Street and editorial
+    paint their own title in the template and do not burn this document.
     """
     from backend.services.studio.caption_layout import timed_screens, width
     rows = timeline(scenes)
