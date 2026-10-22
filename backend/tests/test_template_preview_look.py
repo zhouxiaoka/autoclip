@@ -232,7 +232,8 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     assert first + second == 'AI其实是一块五层蛋糕', (first, second)
     accented = re.findall(r'class="p acc[^"]*"[^>]*>([^<]*)<', frames['0.5']['zh']['html'] + frames['3.0']['zh']['html'])
     assert accented == ['五层蛋糕'], frames['3.0']['zh']['html']
-    assert 'five' in frames['0.5']['en']['html']
+    # Each screen carries its own part of the English: AI is a / five layer cake.
+    assert 'five' in frames['3.0']['en']['html'] and 'five' not in frames['0.5']['en']['html']
     assert frames['0.5']['kick']['text'] == 'Jensen Huang on the five-layer cake'
     assert frames['0.5']['trk']['text'] == 'FIVE-LAYER CAKE · JENSEN HUANG'
     hook = next(rect for rect in frames['3.0']['rects'] if rect['slot'] == 'hook')

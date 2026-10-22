@@ -1221,6 +1221,61 @@ def _split_long_screens(spoken: list, fps: int) -> list:
     return out
 
 
+def _en_for_groups(english: list[dict], groups: list[list], timed: bool) -> list[list[dict]]:
+    """Each English word on exactly one editorial screen: the one saying the same part.
+
+    Overlap on a proportional clock put a word on both sides of a turn (O99 "and I gave
+    them...", O219 "travel that much. They don't travel that much."). Without ASR times a
+    screen takes the share of the sentence its Chinese is of the cue, the cut moved to a
+    nearby comma or full stop, and its words are re-spread over that screen. With ASR times a
+    word belongs to the screen holding its midpoint.
+    """
+    if not english or not groups:
+        return [[] for _ in groups]
+    if timed:
+        out = [[] for _ in groups]
+        for word in english:
+            mid = (word['t0'] + word['t1']) / 2
+            index = next((i for i, group in enumerate(groups) if mid < group[-1][2] - 1e-6), len(groups) - 1)
+            out[index].append(word)
+        return out
+    zh = [sum(width(item[0]) for item in group) for group in groups]
+    total_zh = sum(zh) or 1.0
+    sizes = [len(word['w']) + 1 for word in english]
+    total_en = float(sum(sizes)) or 1.0
+    ends = []
+    acc = 0.0
+    for size in sizes:
+        acc += size
+        ends.append(acc / total_en)
+    ideal, share = [], 0.0
+    for count in zh[:-1]:
+        share += count / total_zh
+        ideal.append(min(range(len(english)), key=lambda i: abs(ends[i] - share)) + 1)
+    cuts = []
+    for index, cut in enumerate(ideal):
+        low = (cuts[-1] if cuts else 0) + 1
+        high = (ideal[index + 1] if index + 1 < len(ideal) else len(english)) - 1
+        # Prefer a clause end within two words, without emptying a neighbour.
+        near = [c for c in range(max(low, cut - 2), min(high, cut + 2) + 1) if english[c - 1]['w'][-1:] in ',.;:?!']
+        if near:
+            cut = min(near, key=lambda c: abs(c - cut))
+        cuts.append(max(cuts[-1] if cuts else 0, min(cut, len(english))))
+    bounds = [0] + cuts + [len(english)]
+    out = []
+    for group, lo, hi in zip(groups, bounds, bounds[1:]):
+        slice_ = english[lo:hi]
+        t0, t1 = group[0][1], group[-1][2]
+        weight = sum(len(word['w']) for word in slice_) or 1
+        cursor, words = t0, []
+        for word in slice_:
+            dur = (t1 - t0) * len(word['w']) / weight
+            words.append(dict(word, t0=cursor, t1=cursor + dur))
+            cursor += dur
+        out.append(words)
+    return out
+
+
 def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
@@ -1281,9 +1336,10 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         else:
             english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
         groups = _groups(spoken, group_limit, _SCREEN_SEC if (template or '') == 'editorial' else None)
-        for group in groups:
+        per_group = _en_for_groups(english, groups, bool(timed)) if (template or '') == 'editorial' else None
+        for group_index, group in enumerate(groups):
             zh = []
-            group_en = [
+            group_en = per_group[group_index] if per_group is not None else [
                 word for word in english
                 if word['t1'] > group[0][1] - 1e-6 and word['t0'] < group[-1][2] + 1e-6
             ]
