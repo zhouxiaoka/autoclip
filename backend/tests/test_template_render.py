@@ -357,7 +357,9 @@ def test_a_corrupt_cache_is_recaptured_and_old_files_respect_the_cap(tmp_path, m
         seen['n'] += 1
         return [{'index': 0, 'count': count, 'png': blob}]
 
-    dest = html.overlay_cache_path('p1', 'editorial', build_fill(None, 0.2, fps=30))
+    dest = html.overlay_cache_path(
+        'p1', 'editorial', build_fill(None, 0.2, fps=30), frames=html.overlay_frame_count(0.2),
+    )
     dest.write_bytes(b'not-a-movie')
     old = dest.parent / 'old.mkv'
     old.write_bytes(b'x' * 5000)

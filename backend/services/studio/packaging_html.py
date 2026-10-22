@@ -161,11 +161,21 @@ def composite_tail(base_label: str, overlay_index: int, width: int, height: int,
     return graph, 'html'
 
 
-def overlay_cache_path(project_id: str, template: str, fill: dict) -> Path:
-    """One file per template and fill. The name is a hash, not the caption."""
+def overlay_frame_count(duration: float, fps: int = 30) -> int:
+    """Frames an overlay movie has to cover. Matches the capture length below."""
+    return max(1, int(round(max(0.1, float(duration)) * fps)))
+
+
+def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int) -> Path:
+    """One file per template, painted fill and length. The name is a hash, not the caption.
+
+    Length is part of the key. With captions off, the painted fill drops the title, and any
+    clip longer than the hook (about 2.4s) then has the same fill as a shorter clip of the
+    same style. The composite uses ``shortest=1``, so that shorter movie cuts the output.
+    """
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-    digest = hashlib.sha256(f'{template}|{blob}'.encode()).hexdigest()[:20]
+    digest = hashlib.sha256(f'{template}|{int(frames)}|{blob}'.encode()).hexdigest()[:20]
     folder = directory(project_id) / 'output' / 'studio' / 'overlays'
     folder.mkdir(parents=True, exist_ok=True)
     return folder / f'{digest}.mkv'
@@ -249,6 +259,42 @@ def _cache_usable(path: Path) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return probe.returncode == 0 and probe.stdout.strip() == 'ffv1,yuva444p'
+
+
+def _overlay_duration(path: Path) -> float | None:
+    """Container seconds, or None when the movie cannot be timed."""
+    try:
+        from backend.utils.ffmpeg_utils import get_ffprobe_path
+        probe = subprocess.run(
+            [get_ffprobe_path(), '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'csv=p=0', str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if probe.returncode != 0:
+        return None
+    try:
+        value = float(probe.stdout.strip())
+    except ValueError:
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
+def _cached_overlay_fits(path: Path, frames: int, fps: int) -> bool:
+    """Reuse a movie only when it is a finished overlay of this clip's length.
+
+    A file that is merely valid ffv1 can still be another clip's overlay. The
+    composite stops at the shorter input, so the wrong length is not usable.
+    """
+    if fps <= 0 or frames <= 0 or not _cache_usable(path):
+        return False
+    probed = _overlay_duration(path)
+    if probed is None:
+        return False
+    return abs(probed - (frames / fps)) <= (2 / fps)
 
 
 def report_overlay_failure(error: BaseException) -> None:
@@ -416,15 +462,16 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     if template not in {'editorial', 'street'}:
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
-    frames = max(1, int(round(max(0.1, float(duration)) * fps)))
+    frames = overlay_frame_count(duration, fps)
     fill = paint_fill(
         build_fill(packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template),
         packaging,
     )
-    dest = overlay_cache_path(project_id, template, fill)
+    dest = overlay_cache_path(project_id, template, fill, frames=frames)
     _enforce_overlay_cap(dest.parent)
-    if _cache_usable(dest):
+    if _cached_overlay_fits(dest, frames, fps):
         return finish(OverlayJob(dest, template, False, 'none', 'none', 'completed', requested_template=template))
+    # A valid movie of the wrong length used to stay cached and fail every retry.
     dest.unlink(missing_ok=True)
     now = clock or time.monotonic
     budget_started = now()

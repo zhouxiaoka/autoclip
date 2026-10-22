@@ -99,7 +99,7 @@ def test_real_render_produces_the_editorial_overlay_not_classic(monkeypatch, tmp
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setattr(runtime, '_data_dir', lambda: tmp_path)
     (tmp_path / 'overlays').mkdir()
-    monkeypatch.setattr(html, 'overlay_cache_path', lambda pid, tpl, fill: tmp_path / 'overlays' / f'{tpl}.mkv')
+    monkeypatch.setattr(html, 'overlay_cache_path', lambda pid, tpl, fill, *, frames: tmp_path / 'overlays' / f'{tpl}.mkv')
     assert runtime.is_installed()
     job = html.prepare_overlay('p1', 'editorial', None, 0.5, features={'pkg_templates_v1': True})
     assert job.downgraded is False, job
