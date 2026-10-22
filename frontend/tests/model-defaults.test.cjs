@@ -83,13 +83,13 @@ test('APIMart orders live models and does not default to the first multimodal id
     { id: 'qwen3.8-flash', analysis: true, capability: 'multimodal' },
   ]
   assert.equal(defaultModel('apimart', listed), 'qwen3.8-flash')
-  assert.equal(defaultModel('apimart', listed, false, 'vision'), 'gemini-3.8-flash')
+  assert.equal(defaultModel('apimart', listed, false, 'vision'), 'qwen3.8-flash')
   const applied = applyModelDefaults({
     ...blank(),
     vision: { connection_id: 'main', model: '', capability: 'auto' },
   }, { id: 'main', provider: 'apimart' }, listed, false)
   assert.equal(applied.analysis.model, 'qwen3.8-flash')
-  assert.equal(applied.vision.model, 'gemini-3.8-flash')
+  assert.equal(applied.vision.model, 'qwen3.8-flash')
   assert.equal(applied.analysis.model_source, 'preset')
 })
 test('Infistar recommends newly discovered generation models without a static allowlist', () => {

@@ -90,7 +90,7 @@ def test_existing_product_defaults_are_preserved():
         "qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash",
     )
     assert provider_presets.candidates_for("apimart", "vision") == (
-        "gemini-3.8-flash", "qwen3.8-flash",
+        "qwen3.8-flash", "gemini-3.8-flash",
     )
     assert provider_presets.get_provider("apimart").default_model == ""
     assert provider_presets.get_provider("apimart").catalog == ()

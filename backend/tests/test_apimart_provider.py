@@ -133,7 +133,7 @@ def test_apimart_preset_is_an_openai_compatible_sponsor():
     assert preset.catalog == ()
     assert preset.catalog_image == ()
     assert preset.candidates["analysis"] == ("qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash")
-    assert preset.candidates["vision"] == ("gemini-3.8-flash", "qwen3.8-flash")
+    assert preset.candidates["vision"] == ("qwen3.8-flash", "gemini-3.8-flash")
     assert "生成画面" not in preset.hint
     transport, base_url, cloud = resolve_cloud_preset("apimart")
     assert transport == "openai"
@@ -153,7 +153,7 @@ def test_live_list_uses_capability_tags_and_drops_non_chat_models():
         "gpt-4-vision-preview": "multimodal",
     }
     assert result.recommended["analysis"] == ["qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash"]
-    assert result.recommended["vision"] == ["gemini-3.8-flash", "qwen3.8-flash"]
+    assert result.recommended["vision"] == ["qwen3.8-flash", "gemini-3.8-flash"]
     assert http.seen[0]["url"] == BASE + "/models?expand=category"
     assert http.seen[0]["headers"]["Authorization"] == "Bearer " + SECRET
     dumped = json.dumps(result.as_api())
@@ -189,7 +189,7 @@ def test_text_tag_does_not_veto_vision_and_non_chat_families_are_dropped():
         "apimart",
         CHAT_IDS,
         capabilities={"gpt-4o": "text", "chatgpt-4o-latest": "multimodal"},
-    ) == "gemini-3.8-flash"
+    ) == "qwen3.8-flash"
     assert pick_available_vision_model(
         "apimart",
         ["gpt-4o"],
@@ -213,7 +213,7 @@ def test_retired_model_falls_back_to_a_live_candidate_not_chatgpt_4o_latest(capl
         failed_model="chatgpt-4o-latest",
         http=http,
     )
-    assert alt == "gemini-3.8-flash"
+    assert alt == "qwen3.8-flash"
     assert SECRET not in caplog.text
     assert pick_available_vision_model("apimart", ["text-only-model", "custom-vl"]) == "custom-vl"
 
