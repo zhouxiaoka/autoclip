@@ -8,6 +8,7 @@ const PREFERRED: Record<string, string[]> = {
   gemini: ['gemini-3.8-flash', 'gemini-2.5-flash'],
   seed: ['doubao-seed-2-1-lite-260915'],
   deepseek: ['deepseek-flash'],
+  minimax: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
   kimi: ['kimi-k2.6', 'kimi-k3'],
   glm: ['glm-5.3'], grok: ['grok-4.6'],
 }

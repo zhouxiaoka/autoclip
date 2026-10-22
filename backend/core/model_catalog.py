@@ -55,6 +55,10 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "deepseek-flash",
         "deepseek-v4-pro",
     ],
+    "minimax": [
+        "MiniMax-M3.1-Flash",
+        "MiniMax-M3",
+    ],
     "seed": [
         "doubao-seed-2-1-lite-260915",
         "doubao-seed-2-1-pro-260915",
@@ -87,6 +91,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "openai": "gpt-5-mini",
     "gemini": "gemini-3.8-flash",
     "deepseek": "deepseek-flash",
+    "minimax": "MiniMax-M3.1-Flash",
     "seed": "doubao-seed-2-1-lite-260915",
     "kimi": "kimi-k2.6",
     "glm": "glm-5.3",
@@ -100,6 +105,7 @@ PROVIDER_LABELS: Dict[str, str] = {
     "openai": "OpenAI",
     "gemini": "Gemini",
     "deepseek": "DeepSeek",
+    "minimax": "MiniMax",
     "seed": "Seed",
     "kimi": "Kimi",
     "glm": "GLM",
