@@ -238,9 +238,22 @@
     return out;
   }
 
+  function enShown(moment, t) {
+    // The whole English sentence stays up across its Chinese phrases, one line of it at a time,
+    // chosen by when its words are spoken. Old fills without screens follow the phrase.
+    var list = (moment && moment.en) || [];
+    var screens = moment && moment.en_screens;
+    if (!screens || !screens.length) return enForPhrase(moment, phraseAt(moment, t));
+    var pick = screens[0];
+    for (var i = 0; i < screens.length; i++) {
+      var first = list[screens[i][0]];
+      if (first && first.t0 <= t + 0.03) pick = screens[i];
+    }
+    return list.slice(pick[0], pick[1]);
+  }
+
   function enHtml(moment, t) {
-    var phrase = phraseAt(moment, t);
-    var list = enForPhrase(moment, phrase);
+    var list = enShown(moment, t);
     if (!list.length) return "";
     var html = "";
     for (var i = 0; i < list.length; i++) {
@@ -353,7 +366,7 @@
     if (phrase) rects.push({slot: "subtitle", x: 30, y: 1331, w: 1020, h: 92});
     // Captions-off hook sits in the black band under the picture, not on the face (head zone ends at 1290).
     if (titleSticker(t)) rects.push({slot: "title", x: 40, y: 1360, w: 1000, h: 192});
-    if (moment && phrase && enForPhrase(moment, phrase).length) rects.push({slot: "source", x: 30, y: 1449, w: 1020, h: 32});
+    if (moment && phrase && enShown(moment, t).length) rects.push({slot: "source", x: 30, y: 1449, w: 1020, h: 32});
     if (labelFor(moment)) rects.push({slot: "hook", x: 40, y: 1812, w: 1000, h: 65});
     if (numberHtml(t)) rects.push({slot: "number", x: 40, y: 80, w: 360, h: 84});
     var index = Math.max(0, Math.floor(t * (data.fps || 30) + 1e-4));

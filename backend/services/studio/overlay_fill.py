@@ -634,6 +634,90 @@ def _en_words(original: str, t0: float, t1: float, emphasis: str, timed: list | 
     return words
 
 
+def _en_on_lines(original: str, lines: list[tuple], emphasis: str) -> list[dict]:
+    """English words on the subtitle lines they were spoken on, on the output clock.
+
+    The same text-length clock as ``_clock_rough``: a word's share of the source text lands on
+    the line holding that share, and within that line on its share of the kept time. Spreading
+    the whole sentence over its first-to-last time put each word one clause late after a pause.
+    """
+    tokens = ' '.join(str(original or '').split()).split(' ')
+    tokens = [token for token in tokens if token]
+    if not tokens or not lines:
+        return []
+    weights = [max(1, len(' '.join(str(line[4] or '').split()))) for line in lines]
+    clock, cursor = [], 0.0
+    for line, weight in zip(lines, weights):
+        clock.append((cursor, cursor + weight, line[2], line[3]))
+        cursor += weight
+    sizes = [len(token) + 1 for token in tokens]
+    total = float(sum(sizes)) or 1.0
+
+    def at(position: float) -> float:
+        position = min(max(position, 0.0), cursor)
+        for k0, k1, out_lo, out_hi in clock:
+            if position <= k1 + 1e-9:
+                return out_lo + (position - k0) * (out_hi - out_lo) / max(k1 - k0, 1e-9)
+        return clock[-1][3]
+
+    words, used = [], 0.0
+    for token, size in zip(tokens, sizes):
+        lo = used / total * cursor
+        hi = (used + size) / total * cursor
+        used += size
+        mid = (lo + hi) / 2
+        line = next((row for row in clock if mid <= row[1] + 1e-9), clock[-1])
+        # A word stays inside one line's kept time; the gap between lines is silence.
+        start = at(max(lo, line[0]))
+        end = at(min(hi, line[1]))
+        if end <= start:
+            end = start + 0.04
+        words.append({'w': token, 't0': start, 't1': end, 'key': _en_key(token, emphasis)})
+    return words
+
+
+_EN_SCREEN = 60
+
+
+def _en_screens(english: list[dict], limit: int = _EN_SCREEN) -> list[list[int]]:
+    """Index ranges of the English sentence, one source line wide each.
+
+    Street keeps the whole English sentence up across its Chinese phrases. A sentence wider
+    than one line is shown a line at a time, balanced, broken at a pause first and after
+    punctuation when that still leaves a well-filled line, so "TO HAVE MORE TIME. I" does
+    not end a line.
+    """
+    def chars(lo: int, hi: int) -> int:
+        return max(0, sum(len(word['w']) + 1 for word in english[lo:hi]) - 1)
+
+    if not english:
+        return []
+    runs, start = [], 0
+    for index in range(1, len(english)):
+        if english[index]['t0'] - english[index - 1]['t1'] >= 0.6:
+            runs.append((start, index))
+            start = index
+    runs.append((start, len(english)))
+    screens = []
+    for lo, hi in runs:
+        count = -(-chars(lo, hi) // limit)
+        # Balanced lines: two 40-character halves, not 60 characters and an orphan word.
+        width = min(limit, -(-chars(lo, hi) // count) + 6)
+        start = lo
+        while start < hi:
+            end = start + 1
+            while end < hi and chars(start, end + 1) <= width:
+                end += 1
+            if end < hi:
+                for back in range(end - 1, start + 1, -1):
+                    if re.search(r'[,.;:!?]$', english[back]['w']) and chars(start, back + 1) >= width * .55:
+                        end = back + 1
+                        break
+            screens.append([start, end])
+            start = end
+    return screens
+
+
 def _fit_pieces(pieces: list[str], span: int) -> list[str]:
     """Never ask for more phrases than frames. Extra pieces join the previous one."""
     merged = list(pieces)
@@ -1118,14 +1202,18 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
             continue
         timed = _timed_in_cue(cue, word_timing, scenes)
         cue_start, cue_end = float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0)
+        lines_here = cue_lines(cue_start, cue_end, rows, scenes) if rows else None
         spoken = _once_per_clip(
             pieces, cue_start, cue_end,
             scenes, total, fps, _source_words(cue, word_timing), phrase_limit,
-            lines=cue_lines(cue_start, cue_end, rows, scenes) if rows else None,
+            lines=lines_here,
         )
         if not spoken:
             continue
-        english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
+        if not timed and lines_here and (template or '') == 'street':
+            english = _en_on_lines(original, lines_here, phrase)
+        else:
+            english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
         groups = _groups(spoken, group_limit)
         for group in groups:
             zh = []
@@ -1148,10 +1236,15 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                     'original': original,
                     'speaker': speaker,
                 })
-            moments.append({
+            moment = {
                 't0': group[0][1], 't1': group[-1][2], 'speaker': speaker,
                 'zh': zh, 'en': group_en,
-            })
+            }
+            if (template or '') == 'street':
+                # The whole sentence stays up across its phrases, a line at a time.
+                moment['en'] = english
+                moment['en_screens'] = _en_screens(english)
+            moments.append(moment)
     _mark_accents(moments)
     cards = []
     glosses = list(_get(packaging, 'gloss', []) or [])

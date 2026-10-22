@@ -519,7 +519,9 @@ def _hits_zone(rect: dict, zone: tuple[int, int]) -> bool:
     return rect['y'] < zone[1] and rect['y'] + rect['h'] > zone[0]
 
 
-def test_street_english_follows_the_phrase_being_spoken():
+def test_street_english_keeps_the_sentence_up_across_its_phrases():
+    # The preview keeps the whole English sentence up while its Chinese phrases change
+    # (29 Chinese phrases, 14 English lines). It used to change with every phrase.
     packaging = Packaging(
         version=2, template='street', audience_language='zh', title_lines=['话题'],
         cues=[{
@@ -534,11 +536,12 @@ def test_street_english_follows_the_phrase_being_spoken():
     early = f"{phrases[0]['t0'] + 0.05:.3f}"
     late = f"{phrases[-1]['t0'] + 0.05:.3f}"
     painted = _render('street', fill, times=[early, late])
-    assert 'FOR' in painted[early]['en']['html']
-    assert 'OPPORTUNITY' not in painted[early]['en']['html']
-    assert 'FOR' not in painted[late]['en']['html']
-    assert 'MOST' not in painted[late]['en']['html']
-    assert 'OPPORTUNITY' in painted[late]['en']['html']
+    for at in (early, late):
+        text = re.sub(r'<[^>]+>', '', painted[at]['en']['html'])
+        assert text == 'FOR MOST PEOPLE INTELLIGENCE UNLOCKS MORE OPPORTUNITY'
+    # Words still light up as they are spoken.
+    assert 'class="w now">FOR' in painted[early]['en']['html']
+    assert 'class="w past">FOR' in painted[late]['en']['html']
     quiet = {**fill, 'moments': [{**fill['moments'][0], 'en': []}]}
     blank = _render('street', quiet, times=[late])
     assert blank[late]['en']['html'] == ''
