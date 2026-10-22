@@ -1,22 +1,47 @@
-/* 杂志风叠加层。renderFrame(t) 只由 t 决定，哈希在钩子、词、强调、术语卡、数字档位变化时改变。 */
+/* 杂志风叠加层。大标题停在下半，整段都在，不在 2.4 秒后收起，也不盖住脸。
+   标题下是金线、当前这句中文（强调词更亮）和斜体英文原句，最底是署名。
+   renderFrame(t) 只由 t 决定。until_frame 不再用来藏标题；关字幕时 fill 会把标题清掉。 */
 (function () {
   var data = null;
+  var SAFE = {
+    xiaohongshu: {top: 96, bottom: 168, left: 48, right: 48},
+    douyin: {top: 72, bottom: 220, left: 36, right: 36},
+    tiktok: {top: 80, bottom: 210, left: 36, right: 36},
+    instagram_reels: {top: 88, bottom: 200, left: 40, right: 40},
+    youtube_shorts: {top: 72, bottom: 180, left: 36, right: 36}
+  };
+  // face_y 0.38 puts the face near y=486. The headline starts under that, on the chest.
+  var HEAD_CLEAR = 700;
 
   function frameIndex(t) {
     return Math.max(0, Math.floor(t * data.fps + 1e-4));
   }
 
+  function insets() {
+    return data.safe || SAFE[data.safe_area] || SAFE.xiaohongshu;
+  }
+
+  function creditText() {
+    var people = data.speakers || [];
+    if (people.length && people[0].name) {
+      return people[0].role ? people[0].name + "  " + people[0].role : String(people[0].name);
+    }
+    return data.kicker || "";
+  }
+
   function stateAt(t) {
     var index = frameIndex(t);
-    var hook = data.hook && index < data.hook.until_frame ? (data.hook.text || "") : "";
+    var hook = (data.hook && data.hook.text) || "";
     var word = -1;
     var emphasis = "";
+    var source = "";
     var words = data.words || [];
     for (var i = 0; i < words.length; i++) {
       var item = words[i];
       if (index >= item.start_frame && index < item.end_frame) {
         word = i;
         emphasis = item.emphasis || "";
+        source = item.original || "";
         break;
       }
     }
@@ -40,13 +65,16 @@
     } else if (number && index >= number.end_frame && index < (number.hold_frame || number.end_frame)) {
       step = (number.steps || 8) - 1;
     }
+    var credit = creditText();
     return {
-      hash: [hook, String(word), emphasis, gloss, String(step), data.kicker || ""].join("|"),
+      hash: [hook, String(word), emphasis, source, gloss, String(step), credit].join("|"),
       hook: hook,
       word: word,
       emphasis: emphasis,
+      source: source,
       gloss: gloss,
-      step: step
+      step: step,
+      credit: credit
     };
   }
 
@@ -56,9 +84,84 @@
     });
   }
 
+  function highlight(text, phrase) {
+    var raw = String(text || "");
+    var flat = raw.replace(/\n/g, "");
+    var at = -1;
+    var len = phrase ? String(phrase).length : 0;
+    if (phrase && len) {
+      var needle = String(phrase);
+      at = flat.indexOf(needle);
+      if (at < 0) {
+        var found = flat.toLowerCase().indexOf(needle.toLowerCase());
+        if (found >= 0) at = found;
+      }
+    }
+    var html = "";
+    var count = 0;
+    var open = false;
+    for (var i = 0; i < raw.length; i++) {
+      var ch = raw.charAt(i);
+      if (ch === "\n") {
+        html += "<br>";
+        continue;
+      }
+      if (at >= 0 && count === at) {
+        html += "<em>";
+        open = true;
+      }
+      html += escapeText(ch);
+      count += 1;
+      if (open && count === at + len) {
+        html += "</em>";
+        open = false;
+      }
+    }
+    if (open) html += "</em>";
+    return html;
+  }
+
+  function metrics(state) {
+    var gap = 10;
+    var glossH = state.gloss ? 72 : 0;
+    var hookLines = state.hook ? Math.min(2, String(state.hook).split("\n").length) : 0;
+    var hookH = hookLines ? hookLines * 64 : 0;
+    var ruleH = state.hook ? 2 : 0;
+    var subH = 0;
+    var sourceH = 0;
+    if (state.word >= 0) {
+      var item = (data.words || [])[state.word] || {};
+      subH = Math.min(2, String(item.text || "").split("\n").length || 1) * 44;
+      if (item.original) sourceH = Math.min(2, String(item.original).split("\n").length) * 24;
+    }
+    var creditH = state.credit ? 22 : 0;
+    var parts = [glossH, hookH, ruleH, subH, sourceH, creditH].filter(function (h) { return h > 0; });
+    var total = 0;
+    for (var i = 0; i < parts.length; i++) total += parts[i];
+    if (parts.length > 1) total += (parts.length - 1) * gap;
+    var box = insets();
+    var top = 1280 - box.bottom - total;
+    if (top < HEAD_CLEAR) top = HEAD_CLEAR;
+    return {box: box, top: top, gap: gap, glossH: glossH, hookH: hookH, ruleH: ruleH, subH: subH, sourceH: sourceH, creditH: creditH};
+  }
+
+  function numberOrigin(state) {
+    var laid = metrics(state);
+    var h = 80;
+    var y = laid.top - laid.gap - h;
+    if (y < HEAD_CLEAR) y = HEAD_CLEAR;
+    return {x: 720 - laid.box.right - 220, y: y, w: 220, h: h};
+  }
+
   function paint(state) {
-    document.getElementById("kicker").innerHTML = "<i></i>" + escapeText(data.kicker || "");
+    var box = insets();
+    var stack = document.getElementById("stack");
+    stack.style.left = box.left + "px";
+    stack.style.right = box.right + "px";
+    stack.style.bottom = box.bottom + "px";
     document.getElementById("hook").textContent = state.hook || "";
+    document.getElementById("rule").style.display = state.hook ? "block" : "none";
+    document.getElementById("kicker").textContent = state.credit || "";
     var gloss = document.getElementById("gloss");
     gloss.innerHTML = "";
     if (state.gloss) {
@@ -71,6 +174,10 @@
       }
     }
     var num = document.getElementById("num");
+    var origin = numberOrigin(state);
+    num.style.right = box.right + "px";
+    num.style.top = origin.y + "px";
+    num.style.bottom = "auto";
     if (state.step < 0 || !data.number) {
       num.innerHTML = "";
     } else {
@@ -78,15 +185,15 @@
       num.innerHTML = escapeText(String(shown)) + "<small>" + escapeText(data.number.unit || "") + "</small>";
     }
     var sub = document.getElementById("sub");
+    var source = document.getElementById("source");
     if (state.word < 0) {
       sub.innerHTML = "";
+      source.innerHTML = "";
       return;
     }
-    // One screen at a time. A long sentence is already paged in the fill; a
-    // newline is the two-line break and must not be collapsed by innerHTML.
     var item = (data.words || [])[state.word];
-    var text = String(item.text || "").split("\n").map(escapeText).join("<br>");
-    sub.innerHTML = item.emphasis ? "<em>" + text + "</em> " : "<strong>" + text + "</strong> ";
+    sub.innerHTML = highlight(item.text, item.emphasis) + " ";
+    source.innerHTML = item.original ? highlight(item.original, item.emphasis) : "";
   }
 
   window.setData = function (fill) {
@@ -101,12 +208,26 @@
 
   window.occupiedRects = function (t) {
     var state = stateAt(t);
+    var laid = metrics(state);
+    var box = laid.box;
     var rects = [];
-    if (data.kicker) rects.push({slot: "kicker", x: 48, y: 72, w: 280, h: 28});
-    if (state.hook) rects.push({slot: "hook", x: 48, y: 108, w: 624, h: 150});
-    if (state.gloss) rects.push({slot: "gloss", x: 48, y: 860, w: 420, h: 96});
-    if (state.step >= 0) rects.push({slot: "number", x: 400, y: 420, w: 272, h: 120});
-    if (state.word >= 0) rects.push({slot: "subtitle", x: 48, y: 1040, w: 624, h: 88});
+    var y = laid.top;
+    var width = 720 - box.left - box.right;
+    function take(slot, h, w) {
+      if (!h) return;
+      rects.push({slot: slot, x: box.left, y: y, w: w || width, h: h});
+      y += h + laid.gap;
+    }
+    take("gloss", laid.glossH, 420);
+    take("hook", laid.hookH);
+    if (laid.ruleH) y += laid.ruleH + laid.gap;
+    take("subtitle", laid.subH);
+    take("source", laid.sourceH);
+    take("kicker", laid.creditH, 420);
+    if (state.step >= 0) {
+      var origin = numberOrigin(state);
+      rects.push({slot: "number", x: origin.x, y: origin.y, w: origin.w, h: origin.h});
+    }
     return rects;
   };
 })();

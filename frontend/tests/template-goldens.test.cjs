@@ -84,9 +84,10 @@ test('editorial and street match the golden frames at fixed timestamps', () => {
   assert.equal(JSON.stringify(streetAt).includes('不该出现'), false)
 })
 
-test('editorial and street still paint a title when caption words are empty', () => {
+test('editorial headline stays under the face and street keeps the lower label', () => {
   // The template itself does not tie the title to the caption track. Captions-off
   // rendering strips these fields before paint and burns the classic title instead.
+  // The editorial headline stays for the whole clip, below the face (y >= 700).
 
   for (const template of ['editorial', 'street']) {
     const page = load(template)
@@ -98,17 +99,14 @@ test('editorial and street still paint a title when caption words are empty', ()
     assert.ok(hook, template)
     if (template === 'editorial') {
       assert.equal(page.document.getElementById('hook').textContent, fills.editorial.hook.text)
-      assert.equal(hook.x, 48)
-      assert.equal(hook.y, 108)
-      assert.equal(hook.w, 624)
-      assert.equal(hook.h, 150)
+      assert.ok(hook.y >= 700, `headline y ${hook.y} covers the speaker head`)
+      page.renderFrame(3)
+      assert.equal(page.document.getElementById('hook').textContent, fills.editorial.hook.text)
     } else {
       assert.equal(page.document.getElementById('line-a').textContent, '街头一问')
       assert.equal(page.document.getElementById('line-b').textContent, '七十秒')
-      assert.equal(hook.x, 48)
-      assert.equal(hook.y, 96)
-      assert.equal(hook.w, 624)
-      assert.equal(hook.h, 108)
+      assert.equal(page.document.getElementById('tick').style.display, 'block')
+      assert.ok(hook.y > 900, `label y ${hook.y} is not the lower bar`)
     }
   }
 })

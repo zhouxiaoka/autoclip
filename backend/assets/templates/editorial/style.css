@@ -1,3 +1,9 @@
+@font-face {
+  font-family: "Noto Sans SC";
+  src: url("../../fonts/NotoSansSC-Medium.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+}
 html, body {
   margin: 0;
   width: 720px;
@@ -5,106 +11,121 @@ html, body {
   background: transparent;
   overflow: hidden;
   color: #f6f5f3;
-  font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-family: "Noto Sans SC", "PingFang SC", "Geist", sans-serif;
 }
-/* Readable over any footage: a dark gradient behind the text bands plus a thin stroke and a
-   short offset shadow on the letters. No glow. The scrims only appear while their band has text. */
+/* Readable over any footage: a dark gradient behind the lower text block plus a thin stroke and a
+   short offset shadow on the letters. No glow. The scrims only appear while their band has text.
+   The headline sits in that lower block, so the scrim does not darken the speaker's face. */
 body::before, body::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
+  bottom: 0;
   pointer-events: none;
   opacity: 0;
 }
-body::before { top: 0; height: 420px; background: linear-gradient(to bottom, rgba(10,10,9,.72) 0%, rgba(10,10,9,.45) 55%, rgba(10,10,9,0) 100%); }
-body::after { bottom: 0; height: 400px; background: linear-gradient(to top, rgba(10,10,9,.78) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%); }
-body:has(#hook:not(:empty))::before, body:has(#kicker:not(:empty))::before { opacity: 1; }
+body::before { height: 620px; background: linear-gradient(to top, rgba(10,10,9,.62) 0%, rgba(10,10,9,.38) 50%, rgba(10,10,9,0) 100%); }
+body::after { height: 420px; background: linear-gradient(to top, rgba(10,10,9,.78) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%); }
+body:has(#hook:not(:empty))::before { opacity: 1; }
 body:has(#sub:not(:empty))::after { opacity: 1; }
-#kicker, #hook, #gloss, #num, #sub {
+#stack {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  bottom: 168px;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+#kicker, #hook, #gloss, #num, #sub, #source {
   paint-order: stroke fill;
   -webkit-text-stroke: 1.5px rgba(10,10,9,.55);
   text-shadow: 0 2px 4px rgba(0,0,0,.6);
 }
-#kicker {
-  position: absolute;
-  top: 72px;
-  left: 48px;
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.18em;
-  color: rgba(246,245,243,.88);
-}
-#kicker i {
-  display: inline-block;
-  width: 18px;
-  height: 1px;
-  margin-right: 10px;
-  background: #f6f5f3;
-  vertical-align: middle;
-}
 #hook {
-  position: absolute;
-  top: 108px;
-  left: 48px;
-  right: 48px;
   margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Serif SC", "Songti SC", serif;
   font-weight: 400;
-  font-size: 64px;
-  line-height: 1.05;
+  font-size: 56px;
+  line-height: 1.12;
   letter-spacing: -0.02em;
   white-space: pre-line;
+  max-height: 2.4em;
+  overflow: hidden;
+}
+#rule {
+  width: 72px;
+  height: 2px;
+  background: #E6C56A;
+  flex: none;
 }
 #gloss {
-  position: absolute;
-  top: 860px;
-  left: 48px;
   width: 420px;
   margin: 0;
   font-size: 18px;
   line-height: 1.45;
   color: #f6f5f3;
 }
+#gloss:empty { display: none; }
 #gloss b {
   display: block;
   margin-bottom: 4px;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: Georgia, "Noto Serif SC", serif;
   font-weight: 400;
   font-size: 22px;
 }
 #num {
   position: absolute;
-  top: 420px;
   right: 48px;
+  bottom: 300px;
+  z-index: 1;
   margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
-  font-size: 84px;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 64px;
   line-height: 1;
 }
 #num small {
   display: block;
-  font-family: "Geist", "PingFang SC", sans-serif;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
   font-size: 16px;
   letter-spacing: 0.08em;
 }
 #sub {
-  position: absolute;
-  top: 1040px;
-  left: 48px;
-  right: 48px;
   margin: 0;
   font-size: 32px;
   line-height: 1.35;
   max-height: 2.7em;
   overflow: hidden;
+  color: #E6C56A;
+  left: 48px;
+  right: 48px;
 }
+#sub:empty { display: none; }
 #sub em {
-  font-family: "Instrument Serif", Georgia, serif;
-  font-style: italic;
-  font-weight: 400;
+  font-style: normal;
+  font-weight: 600;
+  color: #F4E2A0;
 }
-#sub strong { font-weight: 600; }
-/* Words not being spoken stay clearly legible; the current word is full white and bold. */
+#source {
+  margin: 0;
+  font-family: Georgia, "Iowan Old Style", serif;
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.35;
+  color: rgba(246,245,243,.88);
+  max-height: 2.7em;
+  overflow: hidden;
+}
+#source:empty { display: none; }
+#source em { font-style: italic; color: #E6C56A; }
+#kicker {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  color: rgba(246,245,243,.78);
+}
+#kicker:empty { display: none; }
 #sub .w { opacity: .82; }

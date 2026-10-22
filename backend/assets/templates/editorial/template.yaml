@@ -20,9 +20,9 @@ base:
 overlay:
   entry: index.html
   slots:
-    hook: {top: 96, alt_top: 980}
-    subtitle: {top: 1040, max_rows: 2}
-    gloss: [{top: 860, left: 48, width: 420}]
+    hook: {top: 860, alt_top: 980}
+    subtitle: {top: 980, max_rows: 2}
+    gloss: [{top: 800, left: 48, width: 420}]
   safe_area: xiaohongshu
   limits: {effect_text_max: 6, emphasis_gap_s: 3.0}
 fields:

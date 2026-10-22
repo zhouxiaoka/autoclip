@@ -1,4 +1,6 @@
-/* 街头快剪叠加层。安全区来自 fill.safe 或 fill.safe_area，不把某一平台写死在坐标里。
+/* 街头快剪叠加层。人物留在上半，字幕落在下半的暗处。
+   大字中文里，packaging.emphasis 命中的词用黄绿标出；英文原句在其下，同一词同样标出。
+   左下是色条 + 说话人：话题，角色做小字署名。安全区来自 fill.safe 或 fill.safe_area。
    renderFrame(t) 只由 t 决定。线描贴纸最多两枚。字幕一次只显示当前这一屏。 */
 (function () {
   var data = null;
@@ -29,6 +31,16 @@
     return shown;
   }
 
+  function labelAt() {
+    var lines = data.title_lines || [];
+    var people = data.speakers || [];
+    var name = people.length ? String(people[0].name || "") : "";
+    var role = people.length ? String(people[0].role || "") : "";
+    var topic = [lines[0] || "", lines[1] || ""].filter(Boolean);
+    if (name && topic.length) return {a: name + "：" + topic.join(""), b: role};
+    return {a: lines[0] || "", b: lines[1] || ""};
+  }
+
   function stateAt(t) {
     var index = frameIndex(t);
     var words = data.words || [];
@@ -52,9 +64,10 @@
       step = (number.steps || 6) - 1;
     }
     var stickers = visibleStickers(index).map(function (item) { return item.id; }).join(",");
-    var lines = data.title_lines || [];
+    var label = labelAt();
+    var origin = word >= 0 ? String(words[word].original || "") : "";
     return {
-      hash: [lines[0] || "", lines[1] || "", String(chunk), String(step), stickers].join("|"),
+      hash: [label.a, label.b, String(chunk), origin, String(step), stickers].join("|"),
       chunk: chunk,
       word: word,
       step: step,
@@ -68,15 +81,54 @@
     });
   }
 
+  function highlight(text, phrase) {
+    var raw = String(text || "");
+    var flat = raw.replace(/\n/g, "");
+    var at = -1;
+    var len = phrase ? String(phrase).length : 0;
+    if (phrase && len) {
+      var needle = String(phrase);
+      at = flat.indexOf(needle);
+      if (at < 0) {
+        var found = flat.toLowerCase().indexOf(needle.toLowerCase());
+        if (found >= 0) at = found;
+      }
+    }
+    var html = "";
+    var count = 0;
+    var open = false;
+    for (var i = 0; i < raw.length; i++) {
+      var ch = raw.charAt(i);
+      if (ch === "\n") {
+        html += "<br>";
+        continue;
+      }
+      if (at >= 0 && count === at) {
+        html += "<em>";
+        open = true;
+      }
+      html += escapeText(ch);
+      count += 1;
+      if (open && count === at + len) {
+        html += "</em>";
+        open = false;
+      }
+    }
+    if (open) html += "</em>";
+    return html;
+  }
+
   function paint(state) {
     var box = insets();
+    var label = labelAt();
     var bar = document.getElementById("titlebar");
-    bar.style.top = box.top + "px";
+    bar.style.top = "auto";
     bar.style.left = box.left + "px";
     bar.style.right = box.right + "px";
-    var lines = data.title_lines || [];
-    document.getElementById("line-a").textContent = lines[0] || "";
-    document.getElementById("line-b").textContent = lines[1] || "";
+    bar.style.bottom = box.bottom + "px";
+    document.getElementById("line-a").textContent = label.a;
+    document.getElementById("line-b").textContent = label.b;
+    document.getElementById("tick").style.display = (label.a || label.b) ? "block" : "none";
     var num = document.getElementById("num");
     num.style.top = (480 + box.top - 96) + "px";
     num.style.left = box.left + "px";
@@ -96,17 +148,27 @@
       node.textContent = state.stickers[s].text || "";
       host.appendChild(node);
     }
+    var item = state.word >= 0 ? (data.words || [])[state.word] : null;
+    var origin = item && item.original ? String(item.original) : "";
+    var sourceLines = origin ? Math.min(2, origin.split("\n").length) : 0;
+    var labelH = label.a && label.b ? 52 : ((label.a || label.b) ? 28 : 0);
+    var sourceH = sourceLines ? sourceLines * 20 + 8 : 0;
+    var sourceBottom = box.bottom + labelH + 96;
     var sub = document.getElementById("sub");
-    sub.style.bottom = box.bottom + "px";
+    var source = document.getElementById("source");
     sub.style.left = box.left + "px";
     sub.style.right = box.right + "px";
-    if (state.word < 0) {
+    sub.style.bottom = (sourceBottom + sourceH) + "px";
+    source.style.left = box.left + "px";
+    source.style.right = box.right + "px";
+    source.style.bottom = sourceBottom + "px";
+    if (!item) {
       sub.innerHTML = "";
+      source.innerHTML = "";
       return;
     }
-    var item = (data.words || [])[state.word];
-    var text = String(item.text || "").split("\n").map(escapeText).join("<br>");
-    sub.innerHTML = item.emphasis ? "<em>" + text + "</em> " : text + " ";
+    sub.innerHTML = highlight(item.text, item.emphasis) + " ";
+    source.innerHTML = origin ? highlight(origin, item.emphasis) : "";
   }
 
   window.setData = function (fill) {
@@ -123,13 +185,23 @@
     var state = stateAt(t);
     var box = insets();
     var rects = [];
-    var lines = data.title_lines || [];
-    if (lines[0] || lines[1]) rects.push({slot: "hook", x: box.left, y: box.top, w: 720 - box.left - box.right, h: lines[1] ? 108 : 52});
+    var label = labelAt();
+    var labelH = label.a && label.b ? 52 : ((label.a || label.b) ? 28 : 0);
+    if (labelH) rects.push({slot: "hook", x: box.left, y: 1280 - box.bottom - labelH, w: 720 - box.left - box.right, h: labelH});
     if (state.step >= 0) rects.push({slot: "number", x: box.left, y: 480 + box.top - 96, w: 360, h: 84});
     for (var s = 0; s < state.stickers.length && s < 2; s++) {
       rects.push({slot: "sticker", x: state.stickers[s].x || 480, y: state.stickers[s].y || 360, w: 120, h: 72});
     }
-    if (state.chunk >= 0) rects.push({slot: "subtitle", x: box.left, y: 1280 - box.bottom - 96, w: 720 - box.left - box.right, h: 96});
+    if (state.chunk >= 0) {
+      var item = (data.words || [])[state.chunk];
+      var lines = String(item.text || "").split("\n").length;
+      var subH = Math.min(2, lines) * 60;
+      var origin = String(item.original || "");
+      var sourceH = origin ? Math.min(2, origin.split("\n").length) * 20 + 8 : 0;
+      var sourceBottom = box.bottom + labelH + 96;
+      rects.push({slot: "subtitle", x: box.left, y: 1280 - (sourceBottom + sourceH) - subH, w: 720 - box.left - box.right, h: subH});
+      if (sourceH) rects.push({slot: "source", x: box.left, y: 1280 - sourceBottom - sourceH, w: 720 - box.left - box.right, h: sourceH});
+    }
     return rects;
   };
 })();

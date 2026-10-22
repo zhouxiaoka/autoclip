@@ -18,14 +18,14 @@ base:
 overlay:
   entry: index.html
   slots:
-    hook: {top: 64, alt_top: 220}
-    subtitle: {top: 1060, max_rows: 2}
+    hook: {top: 1088, alt_top: 1088}
+    subtitle: {top: 860, max_rows: 2}
     number: {top: 480, left: 48, width: 360}
   safe_area: xiaohongshu
   limits: {sticker_max: 2, subtitle_words: 3, emphasis_gap_s: 3.0}
 fields:
   required: [title_lines, cues]
-  optional: [kicker, emphasis, numbers, stickers]
+  optional: [kicker, emphasis, numbers, speakers, stickers]
 audio: {bgm: none, optional_bed: true}
 cover: {layout: street_3x4, from_overlay: true}
 qa: {}

@@ -1,48 +1,71 @@
+@font-face {
+  font-family: "Noto Sans SC";
+  src: url("../../fonts/NotoSansSC-Medium.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+}
 html, body {
   margin: 0;
   width: 720px;
   height: 1280px;
   background: transparent;
   overflow: hidden;
-  color: #1a1a19;
-  font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+  color: #f6f5f3;
+  font-family: "Noto Sans SC", "PingFang SC", "Geist", sans-serif;
 }
 #frame { position: absolute; inset: 0; }
-/* Captions sit on a dark gradient with a thin stroke and a short offset shadow, so they read
-   over bright or busy footage. No glow. The scrim only appears while a caption is on screen. */
+/* Dark lower field is an overlay band on the full 9:16 crop. It is not a second crop and does
+   not move the speaker: the face stays near y=538 and the band fades out by y=760, above the
+   head. Solid for the bottom 58% of this 520px band, then a short fade. Captions sit on it
+   with a thin stroke and a short offset shadow. No glow. The band only appears while a
+   caption is on screen, so captions-off leaves the picture clear. */
 #frame::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 460px;
-  background: linear-gradient(to top, rgba(10,10,9,.8) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%);
+  height: 520px;
+  background: linear-gradient(to top, rgba(10,10,9,.96) 0%, rgba(10,10,9,.96) 58%, rgba(10,10,9,0) 100%);
   pointer-events: none;
   opacity: 0;
 }
 #frame:has(#sub:not(:empty))::after { opacity: 1; }
-#titlebar, #num, #stickers, #sub { z-index: 1; }
-#titlebar b { box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+#titlebar, #num, #stickers, #sub, #source { z-index: 1; }
 #titlebar {
   position: absolute;
-  left: 36px;
-  right: 36px;
+  left: 48px;
+  right: 48px;
+  bottom: 168px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: stretch;
+  gap: 10px;
+  max-width: 640px;
 }
+#tick {
+  width: 4px;
+  background: #D6EF4A;
+  flex: none;
+}
+#titlebar span { display: flex; flex-direction: column; gap: 2px; }
 #titlebar b {
   display: block;
-  padding: 8px 14px;
-  background: #1a1a19;
-  color: #f6f5f3;
+  padding: 0;
+  background: transparent;
+  color: #D6EF4A;
   font-weight: 600;
-  font-size: 34px;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  font-size: 18px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
 }
-#line-b { align-self: flex-start; background: #f6f5f3; color: #1a1a19; border: 1px solid #1a1a19; }
+#line-b {
+  align-self: flex-start;
+  background: transparent;
+  color: rgba(246,245,243,.78);
+  border: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
 #num {
   position: absolute;
   left: 48px;
@@ -74,18 +97,37 @@ html, body {
 }
 #sub {
   position: absolute;
-  left: 36px;
-  right: 36px;
+  left: 48px;
+  right: 48px;
+  bottom: 360px;
   margin: 0;
-  font-size: 40px;
+  font-size: 52px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
   color: #f6f5f3;
   paint-order: stroke fill;
   -webkit-text-stroke: 2px rgba(10,10,9,.6);
   text-shadow: 0 2px 4px rgba(0,0,0,.6);
-  max-height: 2.4em;
+  max-height: 2.3em;
   overflow: hidden;
 }
-#sub em { font-style: normal; box-shadow: inset 0 -0.35em 0 #5a8bff; }
+#sub em { font-style: normal; color: #D6EF4A; }
+#source {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  color: rgba(246,245,243,.82);
+  paint-order: stroke fill;
+  -webkit-text-stroke: 1.5px rgba(10,10,9,.55);
+  text-shadow: 0 2px 4px rgba(0,0,0,.6);
+  max-height: 2.7em;
+  overflow: hidden;
+}
+#source em { font-style: normal; color: #D6EF4A; }
 #sub .w { opacity: .82; }
