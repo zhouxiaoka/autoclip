@@ -528,17 +528,26 @@ def _attach_emphasis(previous: str, piece: str, limit: float) -> list[str]:
     """
     if width(previous + piece) <= limit + 1e-6:
         return [previous + piece]
+    from backend.services.studio.cjk_segment import crosses_word
+    fits = []
     for take in range(1, len(previous)):
         left, right = previous[:-take], previous[-take:] + piece
         if left and width(left) <= limit + 1e-6 and width(right) <= limit + 1e-6:
+            fits.append((left, right))
+    # Move whole words down: 就越发|现还有更多事要做 split 发现.
+    for left, right in fits:
+        if not crosses_word(left, right):
             return [left, right]
+    if fits:
+        return list(fits[0])
     return [previous + piece]
 
 
 def _merge_isolated_emphasis(pieces: list[str], emphasis: str, limit: float) -> list[str]:
     """A highlight is not its own phrase. 「机会」 stays with the words around it."""
     emphasis = str(emphasis or '').strip().strip(_PUNCT)
-    if not emphasis:
+    # 还有更多事要做 reads as a phrase on its own; pulling words down to it split 发现.
+    if not emphasis or width(emphasis) > 3:
         return pieces
     merged: list[str] = []
     for piece in pieces:
@@ -779,6 +788,29 @@ def _groups(spoken: list, group_limit: float) -> list[list]:
     if current:
         groups.append(current)
     return groups
+
+
+_BLINK = 0.3
+
+
+def _close_blinks(moments: list[dict], words: list[dict], fps: int) -> None:
+    """Hold a caption over a gap shorter than ``_BLINK`` instead of flashing an empty frame.
+
+    Two cues 2 frames apart blanked the caption for 2 frames (O392-393); the preview never
+    blinks between sentences. A real pause longer than that still clears the line.
+    """
+    ordered = sorted(moments, key=lambda moment: moment['t0'])
+    for here, nxt in zip(ordered, ordered[1:]):
+        gap = nxt['t0'] - here['t1']
+        if 0 < gap <= _BLINK + 1e-6:
+            here['t1'] = nxt['t0']
+            if here['zh']:
+                here['zh'][-1]['t1'] = nxt['t0']
+    frames = sorted(words, key=lambda word: word['start_frame'])
+    for here, nxt in zip(frames, frames[1:]):
+        gap = nxt['start_frame'] - here['end_frame']
+        if 0 < gap <= round(_BLINK * fps):
+            here['end_frame'] = nxt['start_frame']
 
 
 def _mark_accents(moments: list[dict]) -> None:
@@ -1245,6 +1277,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                 moment['en'] = english
                 moment['en_screens'] = _en_screens(english)
             moments.append(moment)
+    _close_blinks(moments, words, fps)
     _mark_accents(moments)
     cards = []
     glosses = list(_get(packaging, 'gloss', []) or [])

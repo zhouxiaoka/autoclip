@@ -69,3 +69,19 @@ def test_word_list_is_small_and_packaged():
     assert lexicon.stat().st_size < 5 * 1024 * 1024
     assert (ROOT / 'backend/assets/lexicon/zh_words-LICENSE.txt').is_file()
     assert 'assets/lexicon/*.txt.gz' in (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+
+
+def test_a_long_highlight_keeps_its_own_line_and_does_not_split_a_word():
+    # more_time: emphasis 还有更多事要做 pulled 现 down with it and showed 就越发 / 现还有更多事要做.
+    from backend.services.studio.overlay_fill import _phrases
+    pieces = _phrases('我这一生学得越多，就越发现还有更多事要做。', 10, '还有更多事要做')
+    assert pieces == ['我这一生学得越多', '就越发现', '还有更多事要做']
+    joined = '|'.join(pieces)
+    assert '越发|现' not in joined and '发|现' not in joined
+
+
+def test_a_short_highlight_moves_down_whole_words():
+    from backend.services.studio.overlay_fill import _attach_emphasis
+    # 机会 is not its own line; the characters that move down with it are a whole word.
+    left, right = _attach_emphasis('这种智能会解锁更多', '机会', 8)
+    assert right.endswith('机会') and not left.endswith('解') and not right.startswith('锁')
