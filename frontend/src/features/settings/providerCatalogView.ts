@@ -17,7 +17,7 @@ export const CAPABILITY_FILTERS: CapabilityFilter[] = ['all', 'language', 'asr',
 export const CATALOG_GROUPS: ProviderGroupId[] = ['recommended', 'popular', 'local', 'more']
 
 const LEGACY_IDS = new Set<string>([
-  'dashscope', 'openai', 'infistar', 'api88', 'gemini', 'deepseek',
+  'dashscope', 'openai', 'infistar', 'api88', 'apimart', 'gemini', 'deepseek',
   'seed', 'kimi', 'glm', 'grok', 'ollama', 'lmstudio',
 ])
 const OPENAI_LIKE = new Set(['openai-completions', 'openai-responses'])

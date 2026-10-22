@@ -19,7 +19,7 @@ PRESET_IDS = list(json.loads((ROOT / 'backend/presets/provider_presets.json').re
 
 
 def test_catalog_has_all_presets_and_generated_copies_are_fresh():
-    assert len(PRESET_IDS) == 39
+    assert len(PRESET_IDS) == 40
     assert list(telemetry_provider_slugs()) == PRESET_IDS + ['compatible', 'other']
     done = subprocess.run([sys.executable, str(ROOT / 'scripts/gen_provider_slugs.py'), '--check'], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr

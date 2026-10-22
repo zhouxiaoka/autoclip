@@ -105,6 +105,7 @@ export function keyHintCopy(hint: ProviderKey) {
 export function sponsorKeyLink(provider?: string): { label: string; href: string } | null {
   if (provider === 'api88') return { label: t('去 88API 获取密钥'), href: PROVIDERS.api88.keyUrl }
   if (provider === 'infistar') return { label: t('去 Infistar 获取密钥'), href: PROVIDERS.infistar.keyUrl }
+  if (provider === 'apimart') return { label: t('去 APIMart 获取密钥'), href: PROVIDERS.apimart.keyUrl }
   return null
 }
 

@@ -522,7 +522,7 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
   }).default
-  for (const id of ['api88', 'infistar']) {
+  for (const id of ['api88', 'infistar', 'apimart']) {
     const preset = view.catalogPreset(id)
     assert.ok(preset?.sponsor)
     const tree = Detail({

@@ -103,6 +103,7 @@
     "provider": [
       "api88",
       "infistar",
+      "apimart",
       "deepseek",
       "dashscope",
       "siliconflow",

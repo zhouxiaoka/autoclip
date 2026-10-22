@@ -11,7 +11,7 @@ const { loadTs } = require('./load-ts.cjs')
 const presets = Object.keys(JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/presets/provider_presets.json'), 'utf8')).providers)
 
 test('R16 #41 every preset survives frontend provider sanitizing (no other for known presets)', () => {
-  assert.equal(presets.length, 39)
+  assert.equal(presets.length, 40)
   const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
   const contract = loadTs(path.resolve(__dirname, '../src/analytics/successRateContract.ts'))
   for (const id of presets) {

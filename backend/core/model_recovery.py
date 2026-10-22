@@ -74,24 +74,42 @@ def remember_model(provider: str, base_url: str, api_key: str, saved_model: str,
         _remembered[_slot(provider, base_url, api_key, saved)] = alt
 
 
+def _listed_vision_ready(name: str, capabilities: Optional[Mapping[str, str]]) -> bool:
+    """Live tags win. Explicit ``text`` is never vision-ready, even if the id looks multimodal."""
+    from backend.core.model_catalog import is_image_model, supports_vision
+
+    if is_image_model(name):
+        return False
+    listed = (capabilities or {}).get(name)
+    if listed == "text":
+        return False
+    if listed == "multimodal":
+        return True
+    return supports_vision(name)
+
+
 def pick_available_vision_model(
     provider: str,
     live_ids: Sequence[str],
     *,
     exclude: Sequence[str] = (),
+    capabilities: Optional[Mapping[str, str]] = None,
 ) -> Optional[str]:
-    """First live vision model. Preset vision order, then the account list order."""
-    from backend.core.model_catalog import is_image_model, supports_vision
+    """First live vision model. Preset vision order, then the account list order.
+
+    Preset ids are only an ordering hint among ids the account still lists.
+    When the list carries capability tags, a text-only row is not vision-ready.
+    """
     from backend.core.provider_model_fetch import recommended_by_purpose
 
     skipped = {(name or "").strip() for name in exclude if (name or "").strip()}
     live = [name for name in live_ids if name and name not in skipped]
     recommended = recommended_by_purpose(provider, live).get("vision") or []
     for name in recommended:
-        if supports_vision(name) and not is_image_model(name):
+        if _listed_vision_ready(name, capabilities):
             return name
     for name in live:
-        if supports_vision(name) and not is_image_model(name):
+        if _listed_vision_ready(name, capabilities):
             return name
     return None
 
@@ -126,6 +144,7 @@ def resolve_available_model(
         provider,
         listed.models,
         exclude=(*(exclude or ()), failed_model),
+        capabilities=listed.capabilities,
     )
     if not alt:
         return None
