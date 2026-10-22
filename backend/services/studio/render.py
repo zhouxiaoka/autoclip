@@ -408,7 +408,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             # leave mismatched stream layouts when a selected interval is silent.
             cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
             if keep_audio:
-                cmd += ['-map', '0:a:0', '-af', 'aresample=48000:async=1:first_pts=0', '-c:a', 'aac', '-b:a', '160k']
+                audio_filter = 'aresample=48000:async=1:first_pts=0'
+                if overlay_path is not None and html_template in ('editorial', 'street'):
+                    # The HTML templates match the preview's -14 LUFS / -1 dBTP; dad_suit came out at
+                    # -22.1 LUFS. Classic keeps its mix byte for byte.
+                    measured = audio.measure_loudnorm(['-f', 'concat', '-safe', '0', '-i', str(concat)], project_cancellation.run, max(120, sum(durations)))
+                    audio_filter = audio.loudnorm_filter(measured)
+                cmd += ['-map', '0:a:0', '-af', audio_filter, '-c:a', 'aac', '-b:a', '160k']
             else:
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
