@@ -106,7 +106,7 @@ def _arm(monkeypatch, video):
     monkeypatch.setattr(jobs, '_apply_packaging', lambda _pid, value, *_a, **_k: value)
     monkeypatch.setattr(framing, 'is_installed', lambda: True)
     monkeypatch.setattr(framing, 'detect_cuts', lambda *_a, **_k: [])
-    monkeypatch.setattr(framing, '_grab_pair', lambda *_a, **_k: (video, video))
+    monkeypatch.setattr(framing, '_grab_shot', lambda _video, _start, _end, times, _folder, _key: [(at, (video, video)) for at in times])
     monkeypatch.setattr(framing, '_observe_pair', lambda _pair: {
         'frontal': [{'x': CENTER, 'w': 0.12, 'motion': 0.0, 'area': 1.0}],
         'turned': [],

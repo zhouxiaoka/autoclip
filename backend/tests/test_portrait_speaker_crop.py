@@ -61,10 +61,10 @@ def _talk_frame(frontal, turned, second, tick):
     return image
 
 
-def _encode(folder, count, path):
+def _encode(folder, count, path, extra=()):
     subprocess.run(
         [get_ffmpeg_path(), '-y', '-v', 'error', '-framerate', str(FPS), '-i', str(folder / '%04d.jpg'),
-         '-frames:v', str(count), '-pix_fmt', 'yuv420p', str(path)],
+         '-frames:v', str(count), *extra, '-pix_fmt', 'yuv420p', str(path)],
         check=True, capture_output=True, timeout=60,
     )
 
@@ -703,9 +703,142 @@ def test_face_qa_under_the_production_budget(tmp_path, monkeypatch):
     def timed_out(*_args, **_kwargs):
         raise ProbeError('timeout')
 
-    monkeypatch.setattr(face, '_grab_jpeg', timed_out)
+    monkeypatch.setattr(face, '_grab_frames', timed_out)
+    covered = {'ran': False}
+
+    def boxes(*_args):
+        covered['ran'] = True
+        return [(100.0, 1800.0, 80.0, 80.0)]
+
+    monkeypatch.setattr(face, 'detect_faces', boxes)
     skipped = face.check(Context(
         output=source, source=source, width=1080, height=1920, captions=True,
         scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
     ), 2.0)
-    assert skipped == ('skip', 'timeout'), skipped
+    assert covered['ran'] is True
+    assert skipped == ('fail', 'gt40'), skipped
+    quiet = face.check(Context(
+        output=source, source=source, width=1080, height=1920, captions=False,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
+    ), 2.0)
+    assert quiet == ('skip', 'timeout'), quiet
+
+
+def test_production_budget_samples_three_frames_across_the_longest_spans():
+    # The old cap was int(0.9 / 0.7) == 1, so a 0.9 s crop budget saw a single frame.
+    spans = [(0.0, 4.0, 0.2, 'crop'), (10.0, 1.2, 0.8, 'crop')]
+    plan = face._grab_plan(spans, 0.9)
+    assert len(plan) >= 3
+    assert int(0.9 / 0.7) == 1
+    long_times = sorted(when for index, when in plan if index == 0)
+    assert long_times[0] < 0.6 and long_times[-1] > 3.2, plan
+
+
+def test_a_frame_from_the_wrong_timestamp_is_discarded(tmp_path, monkeypatch):
+    video = _write_clip(tmp_path, 'stamp', [np.full((SOURCE[1], SOURCE[0], 3), 20, np.uint8)] * (FPS * 3))
+    original = face.run
+
+    def shifted(cmd, timeout, **kwargs):
+        proc = original(cmd, timeout, **kwargs)
+        proc.stderr = b'n:   0 pts: 0 pts_time:0.05\n'
+        return proc
+
+    monkeypatch.setattr(face, 'run', shifted)
+    assert face._grab_frames(video, [2.5], 2.0) == [None]
+
+
+def test_production_budget_rejects_a_bad_crop_the_middle_frame_would_pass(tmp_path, monkeypatch):
+    """The old 0.9 s budget sampled the middle once. Edges next to the cuts are the bad crop."""
+    frontal, turned = _faces()
+    length = 3.0
+    count = int(length * FPS)
+
+    def placed(image, face_image, size, cx):
+        _blit(image, cv2.resize(face_image, size), cx, 270)
+        return image
+
+    good = placed(np.full((SOURCE[1], SOURCE[0], 3), (230, 214, 186), np.uint8), frontal, (150, 190), 700)
+    bad = placed(np.full((SOURCE[1], SOURCE[0], 3), (18, 18, 22), np.uint8), turned, (200, 230), 700)
+    frames = []
+    for index in range(count):
+        second = index / FPS
+        frames.append(good if 0.9 <= second < 2.1 else bad)
+    video = _write_clip(tmp_path, 'edge-turn', frames)
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    turned_box = _detected(_frame_at(video, 0.36))[0]
+    crop = framing.crop_x_for_center(turned_box['x'], fraction)
+    grabbed = face._grab_frames(video, [0.36, 1.5, 2.64], 2.0, 480)
+    assert all(grabbed), 'each requested time has to come back, not the neighbouring keyframe'
+    commands = []
+    original = face.run
+
+    def spy(cmd, timeout, **kwargs):
+        commands.append([str(part) for part in cmd])
+        return original(cmd, timeout, **kwargs)
+
+    monkeypatch.setattr(face, 'run', spy)
+    turned_head = face.check(Context(
+        output=video, source=video, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, length, [(0.0, crop)])],
+    ), 2.0)
+    assert turned_head == ('fail', 'back_of_head'), turned_head
+    assert commands and all('-noaccurate_seek' not in cmd for cmd in commands)
+    assert any('-accurate_seek' in cmd and '-copyts' in cmd for cmd in commands)
+
+    single = np.full((SOURCE[1], SOURCE[0], 3), (210, 198, 170), np.uint8)
+    group = np.full((SOURCE[1], SOURCE[0], 3), (28, 28, 26), np.uint8)
+    face_image = cv2.resize(frontal, (120, 150))
+    _blit(single, face_image, 180, 270)
+    for cx in (180, 480, 780):
+        _blit(group, face_image, cx, 270)
+    grouped_frames = []
+    for index in range(count):
+        second = index / FPS
+        grouped_frames.append(single if 0.9 <= second < 2.1 else group)
+    grouped = _write_clip(tmp_path, 'edge-group', grouped_frames)
+    seen = _detected(_frame_at(grouped, 0.36))
+    assert len(seen) >= 3, seen
+    one = framing.crop_x_for_center(sorted(seen, key=lambda row: row['x'])[0]['x'], fraction)
+    cropped = face.check(Context(
+        output=grouped, source=grouped, width=1080, height=1920, captions=True,
+        scenes=[SceneSpan(0.0, length, [(0.0, one)])],
+    ), 2.0)
+    assert cropped == ('fail', 'group_crop'), cropped
+
+
+def test_fit_heavy_counts_people_not_only_frontal_faces(tmp_path):
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    assert face._single_face_fit(
+        [{'x': 0.22, 'w': 0.08, 'score': 0.91}],
+        [],
+        [{'x': 0.55, 'w': 0.04, 'score': 0.55}, {'x': 0.82, 'w': 0.035, 'score': 0.50}],
+        fraction,
+    ) is False
+    assert face._single_face_fit(
+        [{'x': 0.18, 'w': 0.06, 'score': 0.90}],
+        [{'x': 0.80, 'w': 0.09, 'score': 0.87}],
+        [],
+        fraction,
+    ) is True
+
+    group = _group_video(tmp_path)
+    held = face.check(Context(
+        output=group, source=group, width=1080, height=1920,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.5)], ['fit'])],
+    ), 2.0)
+    assert held[0] == 'pass' and held[1] != 'fit_heavy', held
+
+    frontal, turned = _faces()
+    frames = [_talk_frame(frontal, turned, 1.0, index % 2 == 1) for index in range(FPS * 2)]
+    video = _write_clip(tmp_path, 'one-face-fit', frames)
+    heavy = face.check(Context(
+        output=video, source=video, width=1080, height=1920,
+        scenes=[SceneSpan(0.0, 2.0, [(0.0, 0.5)], ['fit'])],
+    ), 2.0)
+    assert heavy == ('fail', 'fit_heavy'), heavy
+
+
+def test_tracking_detector_stays_at_point_six():
+    assert framing.TRACK_SCORE == 0.6
+    assert framing.WIDE_SCORE == 0.45
+    assert framing.WIDE_SCORE < framing.TRACK_SCORE <= framing.MIN_SCORE

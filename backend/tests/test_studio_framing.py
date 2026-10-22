@@ -1,5 +1,6 @@
 """Speaker-centred framing math and whole-clip subtitle styles for Studio drafts."""
 import itertools
+import subprocess
 import sys
 from pathlib import Path
 
@@ -64,12 +65,41 @@ def test_sample_offsets_stay_clear_of_cuts():
     # Short shot: one look in the middle, never on the cut frames themselves.
     assert framing.sample_offsets(10, 11) == [pytest.approx(10.375)]
     dense = framing.sample_offsets(10, 14)
-    assert len(dense) == 7 and dense[0] >= 10.3 and dense[-1] + framing.PAIR_GAP <= 13.7
+    assert len(dense) == 4 and dense[0] >= 10.3 and dense[-1] + framing.PAIR_GAP <= 13.7
     assert dense[1] - dense[0] == pytest.approx(framing.SAMPLE_INTERVAL)
     long = framing.sample_offsets(0, 20)
     assert len(long) >= 7 and long[0] == pytest.approx(.3) and all(b - a == pytest.approx(framing.SAMPLE_INTERVAL) for a, b in itertools.pairwise(long))
     assert framing.sample_offsets(0, .2) == [pytest.approx(0.1)]
     assert framing.sample_offsets(77.4, 77.77) == [pytest.approx(77.585)]
+
+
+def test_framing_decodes_each_shot_once(monkeypatch, tmp_path):
+    """One sequential extract per shot, not a seek per sample.
+
+    40 extracts a minute is the bound. A per-sample seek on this 8 s clip is 60 a minute.
+    """
+    calls = []
+
+    def fake_run(cmd, *args, **kwargs):
+        calls.append([str(part) for part in cmd])
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(framing.subprocess, "run", fake_run)
+    monkeypatch.setattr(framing, "is_installed", lambda: True)
+    monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [4.0])
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"0")
+    length = 8.0
+    draft = Draft(id="d", title="t", aspect="portrait", layout="crop",
+                  scenes=[Scene(id="clip", label="a", start=0, end=length)])
+    framing.auto_frame(video, draft, 1280, 720)
+    extracts = [cmd for cmd in calls if any(f"scale={framing.FRAME_WIDTH}" in part and "fps=" in part for part in cmd)]
+    samples = framing.sample_offsets(0, 4) + framing.sample_offsets(4, length)
+    assert len(extracts) == 2, extracts
+    assert len(extracts) < len(samples)
+    assert len(extracts) / (length / 60) <= framing.MAX_EXTRACTS_PER_MINUTE
+    assert all(cmd.count("-ss") == 1 for cmd in extracts)
+    assert all("-noaccurate_seek" not in cmd for cmd in extracts)
 
 
 def test_dissolve_times_mark_a_gradual_drift_and_ignore_one_jump():
@@ -111,7 +141,8 @@ def test_merge_points_drops_invisible_changes():
 
 def test_auto_frame_aligns_the_track_to_cuts(monkeypatch, tmp_path):
     monkeypatch.setattr(framing, "is_installed", lambda: True)
-    monkeypatch.setattr(framing, "_grab_pair", lambda video, at, folder, key: (folder / f"{key}-{at:.3f}-1.jpg", folder / f"{key}-2.jpg"))
+    monkeypatch.setattr(framing, "_grab_shot", lambda video, start, end, times, folder, key: [
+        (at, (folder / f"{key}-{at:.3f}-1.jpg", folder / f"{key}-2.jpg")) for at in times])
     # Scene "talk" (15 s): a quote card for 3 s, then the left speaker until a cut at 9 s, then the right speaker.
     monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [3.0, 9.0] if start == 0 else [])
     def observe(pair):
@@ -138,7 +169,8 @@ def test_auto_frame_aligns_the_track_to_cuts(monkeypatch, tmp_path):
 
 def test_auto_frame_leaves_people_free_footage_alone(monkeypatch, tmp_path):
     monkeypatch.setattr(framing, "is_installed", lambda: True)
-    monkeypatch.setattr(framing, "_grab_pair", lambda video, at, folder, key: (folder / f"{key}-1.jpg", folder / f"{key}-2.jpg"))
+    monkeypatch.setattr(framing, "_grab_shot", lambda video, start, end, times, folder, key: [
+        (at, (folder / f"{key}-1.jpg", folder / f"{key}-2.jpg")) for at in times])
     monkeypatch.setattr(framing, "detect_cuts", lambda video, start, length: [2.0])
     monkeypatch.setattr(framing, "_observe_pair", lambda pair: {"frontal": [], "turned": []})
     draft = Draft(id="d", title="t", aspect="portrait", layout="crop", scenes=[Scene(id="game", label="a", start=0, end=6)])

@@ -1,7 +1,8 @@
 """Shot-aware framing for the portrait crop layout.
 
 Work in shots, not on a clock. Each scene is first split at hard cuts (ffmpeg scene-change scores)
-and at dissolves, then every shot is classified from frame pairs taken about twice a second:
+and at dissolves, then every shot is classified from frame pairs taken about once a second.
+One shot is one sequential decode, not a seek per sample.
 OpenCV's YuNet model (bundled ONNX, MIT licence) finds faces. A turned-away head or the back of a
 head is never the crop centre. The window follows a visible frontal face, and when the transcript
 names who is speaking it follows that person's face. A run of looks that vote to show the whole
@@ -58,9 +59,11 @@ NOSE_OPEN = 0.13           # extra room only when both eyes are clearly open
 OPEN_EYE = 0.30            # eye-span / face-width that earns the extra nose room
 FRONTAL_EYE_MIN = 0.15     # eye-span / face-width below this is a collapsed, non-frontal landmark set
 MIN_SCORE = 0.72           # close-up score below this is a false box (backs of heads land near 0.64)
-WIDE_SCORE = 0.45          # a small face in a wide shot still counts as a person below MIN_SCORE
+TRACK_SCORE = 0.6          # single-face tracking. A box below this is not a crop centre
+WIDE_SCORE = 0.45          # only for counting people when a look would otherwise be one face
 PERSON_MIN = 0.02          # face width below this fraction is noise, not a person
-SAMPLE_INTERVAL = 0.5      # seconds between looks; long shots are not stuck at a fixed handful
+SAMPLE_INTERVAL = 1.0      # seconds between looks inside one sequential decode of the shot
+MAX_EXTRACTS_PER_MINUTE = 40  # one sequential decode per shot; samples inside it are not seeks
 TAIL_SHOT = 0.15           # a final fragment at least this long still gets its own crop
 DISSOLVE_STEP = 0.25       # seconds between frames when looking for a crossfade
 DISSOLVE_WINDOW = 1.0      # a dissolve drifts across about this much time
@@ -533,31 +536,55 @@ def sample_offsets(start: float, end: float) -> list[float]:
 
 
 # ------------------------------------------------------------------ frames ---
-def _grab_pair(video: Path, at: float, folder: Path, key: str) -> tuple[Path, Path] | None:
+def _grab_shot(video: Path, abs_start: float, abs_end: float, times: list[float], folder: Path, key: str):
+    """Decode one shot once and pair frames for each sample time.
+
+    `times` are absolute seconds. A separate seek per sample is what made framing about
+    three times slower on a long source. The fps filter walks forward from a single seek.
+    """
     from backend.services import render_limits
-    pattern = folder / f"{key}-%d.jpg"
-    cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(), "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "2",
-           "-vf", f"fps=1/{PAIR_GAP},scale={FRAME_WIDTH}:-2", "-q:v", "4", "-y", str(pattern)]
+    if not times:
+        return []
+    length = max(PAIR_GAP, abs_end - abs_start)
+    pattern = folder / f"{key}-%04d.jpg"
+    rate = f"{1 / PAIR_GAP:.4g}"
+    cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(),
+           "-ss", f"{max(0.0, abs_start):.3f}", "-t", f"{length:.3f}", "-i", str(video),
+           "-an", "-vf", f"fps={rate},scale={FRAME_WIDTH}:-2", "-q:v", "4", "-y", str(pattern)]
     cmd, priority = render_limits.low_priority(cmd)
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=30, **priority)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=max(30, length * 2), **priority)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return None
-    first, second = folder / f"{key}-1.jpg", folder / f"{key}-2.jpg"
-    if not first.exists():
-        return None
-    return first, second if second.exists() else first
+        return [(at, None) for at in times]
+    frames: dict[int, Path] = {}
+    for path in folder.glob(f"{key}-*.jpg"):
+        try:
+            frames[int(path.stem.rsplit("-", 1)[-1]) - 1] = path
+        except ValueError:
+            continue
+    if not frames:
+        return [(at, None) for at in times]
+    paired = []
+    for at in times:
+        rel = max(0.0, at - abs_start)
+        index = min(frames, key=lambda i: abs(i * PAIR_GAP - rel))
+        first = frames[index]
+        second = frames.get(index + 1, first)
+        paired.append((at, (first, second)))
+    return paired
 
 
-_detectors: dict[tuple[int, int], Any] = {}
+_detectors: dict[tuple[int, int, float], Any] = {}
 _detector_lock = threading.Lock()
 
 
-def _detector(cv2: Any, width: int, height: int) -> Any:
-    """One YuNet instance per frame size. Caller holds _detector_lock during inference."""
-    key = (width, height)
+def _detector(cv2: Any, width: int, height: int, score: float = TRACK_SCORE) -> Any:
+    """One YuNet instance per frame size and score floor. Caller holds _detector_lock."""
+    key = (width, height, round(float(score), 3))
     if key not in _detectors:
-        _detectors[key] = cv2.FaceDetectorYN.create(str(MODEL), "", key, score_threshold=WIDE_SCORE, nms_threshold=0.3, top_k=50)
+        _detectors[key] = cv2.FaceDetectorYN.create(
+            str(MODEL), "", (width, height), score_threshold=float(score), nms_threshold=0.3, top_k=50,
+        )
     return _detectors[key]
 
 
@@ -678,37 +705,54 @@ def _observe_pair(pair: tuple[Path, Path]) -> dict[str, list[dict[str, float]]] 
     height, width = first.shape[:2]
     # The DNN holds mutable input/output buffers. Concurrent renders must not
     # overwrite another video's input while its inference is still running.
+    def _score_of(face) -> float:
+        try:
+            return float(face[14]) if len(face) > 14 else 1.0
+        except (TypeError, ValueError):
+            return 1.0
+
+    def _item(face, motion: float) -> dict[str, float]:
+        box_w = float(face[2])
+        return {
+            "x": float((float(face[0]) + box_w / 2) / width),
+            "w": box_w / width,
+            "motion": motion,
+            "area": box_w * float(face[3]),
+            "score": _score_of(face),
+        }
+
     with _detector_lock:
-        _, faces = _detector(cv2, width, height).detect(first)
+        _, faces = _detector(cv2, width, height, TRACK_SCORE).detect(first)
         faces = faces.copy() if faces is not None else None
         other = None
         if second is not None and second.shape == first.shape:
-            _, other = _detector(cv2, width, height).detect(second)
+            _, other = _detector(cv2, width, height, TRACK_SCORE).detect(second)
             other = other.copy() if other is not None else None
+        tracking = [face for face in (faces if faces is not None else []) if _person_box(face, width)]
+        wide_rows = None
+        # The 0.45 net runs only when tracking still looks like one or two people, and its
+        # boxes never become a crop centre. YuNet drops anything under its create() threshold,
+        # so the tracking net stays at 0.6 and cannot see these faces itself.
+        if len(tracking) < 3:
+            _, wide_rows = _detector(cv2, width, height, WIDE_SCORE).detect(first)
+            wide_rows = wide_rows.copy() if wide_rows is not None else None
     frontal: list[dict[str, float]] = []
     turned: list[dict[str, float]] = []
-    if faces is None or len(faces) == 0:
-        return {"frontal": frontal, "turned": turned}
+    wide: list[dict[str, float]] = []
+    if (faces is None or len(faces) == 0) and (wide_rows is None or len(wide_rows) == 0):
+        return {"frontal": frontal, "turned": turned, "wide": wide}
     grey_a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
     grey_b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY) if second is not None and second.shape == first.shape else None
-    for face in faces:
-        if not _person_box(face, width):
-            continue
-        box_w = float(face[2])
-        try:
-            score = float(face[14]) if len(face) > 14 else 1.0
-        except (TypeError, ValueError):
-            score = 1.0
-        item = {
-            "x": float((float(face[0]) + box_w / 2) / width),
-            "w": box_w / width,
-            "motion": _mouth_motion(cv2, face, grey_a, grey_b, width, height),
-            "area": box_w * float(face[3]),
-            "score": score,
-        }
+    for face in tracking:
+        motion = _mouth_motion(cv2, face, grey_a, grey_b, width, height)
         # A head that is frontal in only one frame of the pair is mid-turn. Do not crop to it.
-        (frontal if _frontal_in_pair(face, other, width) else turned).append(item)
-    return {"frontal": frontal, "turned": turned}
+        (frontal if _frontal_in_pair(face, other, width) else turned).append(_item(face, motion))
+    if wide_rows is not None:
+        for face in wide_rows:
+            if _score_of(face) >= TRACK_SCORE or not _person_box(face, width):
+                continue
+            wide.append(_item(face, 0.0))
+    return {"frontal": frontal, "turned": turned, "wide": wide}
 
 
 def _frontal_in_pair(face, others, width: int) -> bool:
@@ -994,7 +1038,7 @@ def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fractio
     a pair when they do. None means show the whole frame: there is no face to put in the window.
     """
     frontals = list(sample.get("frontal") or [])
-    people = frontals + list(sample.get("turned") or [])
+    people = frontals + list(sample.get("turned") or []) + list(sample.get("wide") or [])
     # Three or more people who cannot share the window are a group, even when only one
     # of them cleared the close-up score. A wide shot is not a single-face punch-in.
     if len(people) >= 3 and not _fits(people, fraction):
@@ -1077,7 +1121,10 @@ def _stabilize(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         break
                 if not placed:
                     clusters.append({"xs": [face["x"]], "members": [(index, kind, face)]})
-    rebuilt = [{"offset": sample["offset"], "t": sample["t"], "frontal": [], "turned": []} for sample in samples]
+    rebuilt = [{
+        "offset": sample["offset"], "t": sample["t"], "frontal": [], "turned": [],
+        "wide": [dict(face) for face in (sample.get("wide") or [])],
+    } for sample in samples]
     for cluster in clusters:
         hits = {index for index, _kind, _face in cluster["members"]}
         if len(hits) < 2:
@@ -1237,21 +1284,26 @@ def scan_speakers(video: Path, scenes) -> list[dict[str, Any]]:
             faces = grabbed = 0
             for index, (shot_start, shot_end) in enumerate(split_shots(length, detect_cuts(video, scene.start, length))):
                 samples: list[dict[str, Any]] = []
-                for j, at in enumerate(sample_offsets(shot_start, shot_end)):
-                    pair = _grab_pair(video, scene.start + at, folder, f"{scene.id}-{index}-{j}")
+                offsets = sample_offsets(shot_start, shot_end)
+                grabbed_shot = _grab_shot(
+                    video, scene.start + shot_start, scene.start + shot_end,
+                    [scene.start + at for at in offsets], folder, f"{scene.id}-{index}",
+                )
+                for at, (_abs, pair) in zip(offsets, grabbed_shot):
                     if not pair:
                         continue
                     grabbed += 1
                     observed = _observe_pair(pair)
                     if observed is None:
                         continue
-                    if observed["frontal"] or observed["turned"]:
+                    if observed["frontal"] or observed["turned"] or observed.get("wide"):
                         faces += 1
                     samples.append({
                         "offset": at - shot_start,
                         "t": scene.start + at,
                         "frontal": observed["frontal"],
                         "turned": observed["turned"],
+                        "wide": observed.get("wide") or [],
                     })
                 shots.append((shot_start, shot_end, samples))
             scans.append({"shots": shots, "faces": faces, "samples": grabbed})

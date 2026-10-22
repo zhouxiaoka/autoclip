@@ -8,9 +8,11 @@ estimate, not a magazine or street-cut layout.
 
 The crop check looks at the source, not the rendered window. A turned-away head,
 a window with nobody in it, or one person sliced out of a group photo fails once
-that run lasts more than a second. Several frames are read per long crop when the
-budget allows. A seek that does not finish is a skip, never a pass. Fit is a miss
-when it covers more than 10% of the clip and a single frontal face was there to crop.
+that run lasts more than a second. The production crop budget still reads at least
+three frames, in one accurate seek, spread across the longest spans and their edges.
+A seek that does not finish is a skip, never a pass, and a skip does not cancel the
+caption-overlap check. Fit is a miss when it covers more than 10% of the clip and a
+single person was there to crop. A wide group, including small low-score faces, is not.
 """
 from __future__ import annotations
 
@@ -97,7 +99,7 @@ def judge_presence(spans: list[tuple[float, str]]) -> tuple[str, str]:
 
 
 def judge_fit_ratio(unjustified: float, duration: float) -> tuple[str, str]:
-    """Fail when fit covers more than 10% and those shots still had a single frontal face."""
+    """Fail when fit covers more than 10% and those shots still had a single person to crop."""
     if duration <= 0 or unjustified / duration <= _FIT_LIMIT:
         return 'pass', 'frontal'
     return 'fail', 'fit_heavy'
@@ -186,9 +188,9 @@ def _width_overlap(face: dict, left: float, right: float) -> float:
     return overlap / face['w'] if face['w'] else 0.0
 
 
-def _presence_kind(frontals, turned, left: float, right: float) -> str:
+def _presence_kind(frontals, turned, left: float, right: float, wide=None) -> str:
     from backend.services.studio import framing
-    people = list(frontals) + list(turned)
+    people = list(frontals) + list(turned) + list(wide or [])
     covered = [face for face in frontals if _width_overlap(face, left, right) >= _FACE_OVERLAP]
     in_window = [face for face in people if _width_overlap(face, left, right) >= _FACE_OVERLAP]
     # A family photo or a wide group cropped down to one person.
@@ -203,23 +205,67 @@ def _presence_kind(frontals, turned, left: float, right: float) -> str:
     return 'empty'
 
 
+_MIN_LOOKS = 3
+_PTS_SLOP = 0.5
+
+
 def _grab_jpeg(path, at: float, timeout: float, width: int = 320):
-    """One keyframe-aligned JPEG. Accurate decode of a huge source does not fit the QA budget."""
-    from backend.utils.ffmpeg_utils import get_ffmpeg_path
-    proc = run([
-        get_ffmpeg_path(), '-v', 'error', '-ss', f'{max(0.0, at):.3f}', '-noaccurate_seek',
-        '-i', str(path), '-an', '-frames:v', '1', '-vf', f'scale={width}:-2',
-        '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1',
-    ], timeout)
-    if proc.returncode != 0 or not proc.stdout:
+    """One accurately seeked JPEG. `-ss` before `-i` stays accurate; a keyframe-only seek does not."""
+    frames = _grab_frames(path, [at], timeout, width)
+    blob = frames[0] if frames else None
+    if not blob:
         raise ProbeError('unreadable')
-    return proc.stdout
+    return blob
 
 
-def _read_faces(path, at: float, timeout: float):
-    """(width, height, frontal faces, turned faces) in normalised source coordinates."""
+def _grab_frames(path, times: list[float], timeout: float, width: int = 480) -> list[bytes | None]:
+    """Accurate JPEGs for several timestamps, one ffmpeg process.
+
+    Input seek before `-i` with accurate seek and `-copyts`, so each frame's pts can be
+    checked against the request. A frame that landed on a different shot is dropped.
+    """
+    if not times:
+        return []
+    import re
+    import shutil
+    import tempfile
+    from pathlib import Path
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    folder = Path(tempfile.mkdtemp(prefix='ac-qa-'))
+    cmd = [get_ffmpeg_path(), '-v', 'info', '-nostats']
+    for when in times:
+        cmd += ['-copyts', '-accurate_seek', '-ss', f'{max(0.0, when):.3f}', '-i', str(path)]
+    for index in range(len(times)):
+        cmd += [
+            '-map', f'{index}:v:0', '-an', '-frames:v', '1',
+            '-vf', f"scale={width}:-2,select=eq(n\\,0),showinfo", '-q:v', '5', str(folder / f'{index}.jpg'),
+        ]
+    try:
+        proc = run(cmd, timeout)
+        stderr = proc.stderr or b''
+        if isinstance(stderr, str):
+            stderr = stderr.encode('utf-8', 'replace')
+        # One seek can print later frames before the muxer stops. The first frame of each
+        # output is the one written, and its pts has to be the timestamp that was requested.
+        pts = [float(match) for match in re.findall(
+            rb'n:\s*0\s+pts:\s*-?\d+\s+pts_time:\s*([0-9eE.+-]+)', stderr,
+        )]
+        frames: list[bytes | None] = []
+        for index, when in enumerate(times):
+            jpg = folder / f'{index}.jpg'
+            actual = pts[index] if index < len(pts) else None
+            if not jpg.is_file() or jpg.stat().st_size == 0 or actual is None or abs(actual - when) > _PTS_SLOP:
+                frames.append(None)
+                continue
+            frames.append(jpg.read_bytes())
+        return frames
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _faces_in_jpeg(blob: bytes):
+    """(width, height, frontal, turned, wide) in normalised source coordinates, or None without YuNet."""
     from backend.services.studio import framing
-    blob = _grab_jpeg(path, at, timeout, 480)
     cv2 = framing.load_cv2()
     if cv2 is None:
         return None
@@ -229,38 +275,81 @@ def _read_faces(path, at: float, timeout: float):
         raise ProbeError('unreadable')
     height, width = image.shape[:2]
     _scores, found = _detect(cv2, image, framing.WIDE_SCORE)
-    frontal, turned = [], []
+    frontal, turned, wide = [], [], []
     if found is not None:
         for row in found:
             if not framing._person_box(row, width):
                 continue
+            try:
+                score = float(row[14]) if len(row) > 14 else 1.0
+            except (TypeError, ValueError):
+                score = 1.0
             box_w = float(row[2])
-            item = {'x': (float(row[0]) + box_w / 2) / width, 'w': box_w / width}
-            (frontal if framing.is_frontal(row) else turned).append(item)
-    return width, height, frontal, turned
+            item = {'x': (float(row[0]) + box_w / 2) / width, 'w': box_w / width, 'score': score}
+            if score < framing.TRACK_SCORE:
+                wide.append(item)
+            elif framing.is_frontal(row):
+                frontal.append(item)
+            else:
+                turned.append(item)
+    return width, height, frontal, turned, wide
+
+
+def _read_faces(path, at: float, timeout: float):
+    """(width, height, frontal, turned, wide) in normalised source coordinates."""
+    blob = _grab_jpeg(path, at, timeout, 480)
+    return _faces_in_jpeg(blob)
 
 
 def _grab_plan(spans, timeout: float | None = None):
-    """(span index, absolute time). Several looks on a long crop; one look on a fit or a short crop.
+    """(span index, absolute time). At least three looks, including on the 0.9 s crop budget.
 
-    A tight budget keeps the longest spans and gives each grab enough time to open the file.
-    The production crop check is 0.9 s, which is one keyframe, not a dozen accurate seeks.
+    Longest spans are first. The first look on a span sits near its start, the next near its
+    end, so a crop inherited across a cut is not judged from the calm middle of the long span.
+    `timeout` is accepted so callers can pass the budget; one ffmpeg process reads the plan,
+    so the budget does not collapse the plan to a single frame.
     """
-    required = []
-    extra = []
-    for index, (at, duration, _crop_x, mode) in enumerate(spans):
-        fracs = (0.5,) if mode == 'fit' or duration < 1.5 else (0.2, 0.5, 0.8)
-        required.append((index, at + duration * fracs[0]))
-        extra.extend((duration, index, at + duration * frac) for frac in fracs[1:])
-    cap = _MAX_GRABS
-    if timeout is not None:
-        cap = min(cap, max(1, int(float(timeout) / 0.7)))
-    if len(required) > cap:
-        keep = set(sorted(range(len(spans)), key=lambda i: spans[i][1], reverse=True)[:cap])
-        return [item for item in required if item[0] in keep]
-    room = cap - len(required)
-    extra.sort(reverse=True)
-    return required + [(index, when) for _duration, index, when in extra[:room]]
+    del timeout
+    candidates = []
+    for index, (at, duration, _crop_x, _mode) in enumerate(spans):
+        fracs = (0.12, 0.88, 0.5) if duration >= 0.8 else (0.5,)
+        for place, frac in enumerate(fracs):
+            candidates.append((index, at + duration * frac, duration, place))
+    candidates.sort(key=lambda item: (-item[2], item[3], item[0]))
+    chosen: list[tuple[int, float]] = []
+    seen: set[tuple[int, float]] = set()
+    counts: dict[int, int] = {}
+
+    def take(item, limit: int) -> None:
+        index, when, _duration, _place = item
+        key = (index, round(when, 3))
+        if key in seen or counts.get(index, 0) >= limit or len(chosen) >= _MAX_GRABS:
+            return
+        seen.add(key)
+        counts[index] = counts.get(index, 0) + 1
+        chosen.append((index, when))
+
+    for item in candidates:
+        take(item, 1)
+    for item in candidates:
+        if len(chosen) >= _MIN_LOOKS:
+            break
+        take(item, _MIN_LOOKS)
+    return chosen
+
+
+def _single_face_fit(frontal, turned, wide, fraction: float) -> bool:
+    """True when this fit look still had one person who should have been cropped."""
+    from backend.services.studio import framing
+    people = list(frontal) + list(turned) + list(wide)
+    if len(people) >= 3 or len(frontal) >= 2:
+        return False
+    if len(people) >= 2 and any(float(face.get('score', 1)) < framing.MIN_SCORE for face in people):
+        return False
+    if not frontal:
+        return False
+    sample = {'t': 0.0, 'offset': 0.0, 'frontal': frontal, 'turned': turned, 'wide': wide}
+    return framing._center_for(sample, {}, [], fraction) is not None
 
 
 def _presence_check(ctx, timeout: float) -> tuple[str, str]:
@@ -277,41 +366,44 @@ def _presence_check(ctx, timeout: float) -> tuple[str, str]:
     if source is None or not getattr(source, 'is_file', lambda: False)():
         return 'pass', 'none'
     plan = _grab_plan(spans, timeout)
-    share = timeout / max(1, len(plan))
     layout = getattr(ctx, 'layout', '') or ''
     kinds_by_span: list[list[str]] = [[] for _ in spans]
-    frontals_by_span: list[list[int]] = [[] for _ in spans]
+    fit_flags: list[list[bool]] = [[] for _ in spans]
     judged = False
     try:
-        for index, when in plan:
-            _at, _duration, crop_x, mode = spans[index]
-            read = _read_faces(source, when, share)
-            if read is None:
-                return 'skip', 'no_detector'
-            judged = True
-            width, height, frontal, turned = read
-            frontals_by_span[index].append(len(frontal))
-            if mode == 'fit':
-                kinds_by_span[index].append('fit')
-                continue
-            if layout == 'window':
-                from backend.services.studio.jobs import INTERVIEW_WINDOW
-                out_w, out_h = INTERVIEW_WINDOW
-            else:
-                out_w, out_h = ctx.width, ctx.height
-            fraction = framing.window_fraction(width, height, out_w, out_h)
-            left = crop_x * (1 - fraction)
-            kinds_by_span[index].append(_presence_kind(frontal, turned, left, left + fraction))
+        frames = _grab_frames(source, [when for _index, when in plan], timeout, 480)
     except ProbeError as error:
-        if not judged:
-            return 'skip', error.reason
+        return 'skip', error.reason
+    for (index, _when), blob in zip(plan, frames):
+        if not blob:
+            continue
+        read = _faces_in_jpeg(blob)
+        if read is None:
+            return 'skip', 'no_detector'
+        judged = True
+        width, height, frontal, turned, wide = read
+        _at, _duration, crop_x, mode = spans[index]
+        if layout == 'window':
+            from backend.services.studio.jobs import INTERVIEW_WINDOW
+            out_w, out_h = INTERVIEW_WINDOW
+        else:
+            out_w, out_h = ctx.width, ctx.height
+        fraction = framing.window_fraction(width, height, out_w, out_h)
+        if mode == 'fit':
+            kinds_by_span[index].append('fit')
+            fit_flags[index].append(_single_face_fit(frontal, turned, wide, fraction))
+            continue
+        left = crop_x * (1 - fraction)
+        kinds_by_span[index].append(_presence_kind(frontal, turned, left, left + fraction, wide))
+    if not judged:
+        return 'skip', 'unreadable'
     kinds = []
     unjustified = 0.0
     for index, span in enumerate(spans):
         labels = kinds_by_span[index]
         if span[3] == 'fit':
-            counts = frontals_by_span[index]
-            if counts and max(counts) < 2 and any(count == 1 for count in counts):
+            flags = fit_flags[index]
+            if flags and all(flags):
                 unjustified += span[1]
             kinds.append((span[1], 'fit'))
             continue
@@ -346,9 +438,11 @@ def check(ctx, timeout: float) -> tuple[str, str]:
                           packaged=ctx.packaged, title_y=ctx.title_y)
     presence_limit = timeout if not rects else max(0.05, timeout * 0.45)
     presence = _presence_check(ctx, presence_limit)
-    if presence[0] in ('fail', 'skip'):
+    if presence[0] == 'fail':
         return presence
     if not rects:
+        if presence[0] == 'skip':
+            return presence
         return 'pass', 'none'
     if ctx.output is None or not getattr(ctx.output, 'is_file', lambda: False)():
         return 'skip', 'unreadable'
