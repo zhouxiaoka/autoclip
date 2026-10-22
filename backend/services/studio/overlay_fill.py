@@ -843,7 +843,112 @@ def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[
     return items
 
 
-def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words, line_limit: float | None = None) -> list[tuple]:
+def cue_lines(cue_start: float, cue_end: float, rows: list[tuple], scenes) -> list[tuple] | None:
+    """The subtitle lines a packaged cue was built from, as (src lo, src hi, out lo, out hi, text).
+
+    Packaging groups consecutive draft lines (``packaging.draft_lines``: rows clipped to each
+    scene, in timeline order) and stamps the cue with the first line's start and the last
+    line's end. A cue across a cold open can therefore run backwards in source time
+    (1245.78 -> 1236.22). Rebuilding the lines the same way recovers the real spoken parts.
+    None when the rows do not reproduce the cue's bounds.
+    """
+    if not rows or not scenes:
+        return None
+    from backend.services.studio.audio import scene_duration
+    from backend.services.studio.packaging_render import timeline
+    lines = []
+    for scene, (src_start, src_end, offset) in zip(scenes, timeline(scenes)):
+        src_start, src_end = float(src_start), float(src_end)
+        length = scene_duration(scene)
+        for start, end, text, _speaker in rows:
+            if end <= src_start or start >= src_end:
+                continue
+            lo, hi = max(start, src_start), min(end, src_end)
+            if hi - lo < min(.15, (end - start) * .2):
+                continue
+            out_lo = offset + lo - src_start
+            out_hi = min(offset + length, offset + hi - src_start)
+            if out_hi > out_lo:
+                lines.append((lo, hi, out_lo, out_hi, text))
+    cue_start, cue_end = float(cue_start or 0), float(cue_end or 0)
+    for first, line in enumerate(lines):
+        if abs(line[0] - cue_start) > .05:
+            continue
+        for last in range(first, min(len(lines), first + 40)):
+            if abs(lines[last][1] - cue_end) <= .05:
+                return lines[first:last + 1]
+    return None
+
+
+def _clock_rough(pieces: list[str], lines: list[tuple]) -> list[tuple]:
+    """Split the pieces over the lines by text length, then map each into its line's kept time.
+
+    The translation follows the source line by line, so a piece's share of the Chinese text
+    lands on the same share of the source text: 我完全不同意 stays on "I completely disagree."
+    Lines get their own length of the clock, so silence and cuts between lines take no text.
+    A piece that straddles two lines goes to the line holding most of it.
+    """
+    weights = [max(1, len(' '.join(str(line[4] or '').split()))) for line in lines]
+    clock = []
+    cursor = 0.0
+    for line, weight in zip(lines, weights):
+        clock.append((cursor, cursor + weight, line[2], line[3]))
+        cursor += weight
+    rough = []
+    for piece, c0, c1 in _length_bounds(pieces, 0.0, cursor):
+        best = None
+        best_len = 0.0
+        for k0, k1, out_lo, out_hi in clock:
+            ov0, ov1 = max(c0, k0), min(c1, k1)
+            if ov1 - ov0 > best_len + 1e-6:
+                best_len = ov1 - ov0
+                scale = (out_hi - out_lo) / (k1 - k0)
+                best = (piece, out_lo + (ov0 - k0) * scale, out_lo + (ov1 - k0) * scale)
+        if best is None:
+            _k0, _k1, out_lo, out_hi = clock[-1]
+            best = (piece, max(out_lo, out_hi - .05), out_hi)
+        rough.append(best)
+    return rough
+
+
+def _place_on_lines(pieces: list[str], lines: list[tuple], total: int, fps: int, source_words, line_limit: float | None) -> list[tuple]:
+    """Every piece once, on the kept footage where its line is spoken."""
+    rough = None
+    aligned = _align_phrase_times(pieces, source_words, min(l[0] for l in lines), max(l[1] for l in lines)) if source_words else None
+    if aligned:
+        mapped = []
+        for piece, t0, t1 in aligned:
+            best = None
+            best_len = 0.0
+            for lo, hi, out_lo, out_hi, _text in lines:
+                ov0, ov1 = max(t0, lo), min(t1, hi)
+                if ov1 - ov0 > best_len + 1e-6:
+                    best_len = ov1 - ov0
+                    scale = (out_hi - out_lo) / max(hi - lo, 1e-6)
+                    best = (piece, out_lo + (ov0 - lo) * scale, out_lo + (ov1 - lo) * scale)
+            if best is None:
+                mapped = None
+                break
+            mapped.append(best)
+        if mapped and all(b[1] >= a[1] for a, b in zip(mapped, mapped[1:])):
+            rough = mapped
+    if rough is None:
+        rough = _clock_rough(pieces, lines)
+    placed = _place_rough(rough, total, fps, None)
+    if len(placed) < len(rough):
+        # Frame rounding pushed a piece past its end. Retile the run so none is lost.
+        first, last = _frames(rough[0][1], fps), min(total, max(_frames(rough[-1][2], fps), _frames(rough[0][1], fps) + len(rough)))
+        counts = _frame_counts(max(1, last - first), [max(width(piece), 1) for piece, _a, _b in rough])
+        placed, cursor = [], first
+        for (piece, _a, _b), count in zip(rough, counts):
+            if count <= 0 or cursor >= total:
+                continue
+            placed.append((piece, cursor / fps, (cursor + count) / fps, cursor, cursor + count))
+            cursor += count
+    return _hold_phrases(placed, line_limit)
+
+
+def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, total: int, fps: int, source_words, line_limit: float | None = None, lines: list[tuple] | None = None) -> list[tuple]:
     """Place each phrase on the output clock once, at the moment it is spoken.
 
     A cue that crosses a cut used to restart its whole phrase list inside every shot.
@@ -854,10 +959,15 @@ def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, 
     still meets the caption page exactly.
     """
     spans = _kept_spans(cue_start, cue_end, scenes)
+    whole = bool(spans) and len(spans) == 1 and abs(spans[0][0] - cue_start) <= 1e-3 and abs(spans[0][1] - cue_end) <= 1e-3
+    if lines and not whole:
+        # The cue's own subtitle lines, in timeline order and on kept footage only. The span
+        # [cue_start, cue_end] also covers removed source time and other shots (a cold open),
+        # and a length split over it dropped phrases that were spoken in a kept shot.
+        return _place_on_lines(pieces, lines, total, fps, source_words, line_limit)
     if not spans:
         return []
     src_lo, src_hi, out_lo, out_hi = spans[0]
-    whole = len(spans) == 1 and abs(src_lo - cue_start) <= 1e-3 and abs(src_hi - cue_end) <= 1e-3
     aligned = _align_phrase_times(pieces, source_words, cue_start, cue_end) if source_words else None
     if whole and not aligned:
         frames = _clip_frames(out_lo, out_hi, total, fps)
@@ -888,6 +998,10 @@ def _once_per_clip(pieces: list[str], cue_start: float, cue_end: float, scenes, 
             best = (piece, span_out + (ov0 - span_lo) * scale, span_out + (ov1 - span_lo) * scale)
         if best:
             rough.append(best)
+    return _place_rough(rough, total, fps, line_limit)
+
+
+def _place_rough(rough: list[tuple], total: int, fps: int, line_limit: float | None) -> list[tuple]:
     placed = []
     for piece, ot0, ot1 in rough:
         start = _frames(ot0, fps)
@@ -925,6 +1039,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     # One caption line. Two full phrases used to share a moment and overflow the box.
     group_limit = phrase_limit if (template or '') == 'editorial' else phrase_limit * 10**6
     roster = [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])]
+    rows = _transcript_rows(transcript)
     for cue in cues:
         text = str(_get(cue, 'text', '')).strip()
         if not text:
@@ -942,9 +1057,11 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         if not pieces:
             continue
         timed = _timed_in_cue(cue, word_timing, scenes)
+        cue_start, cue_end = float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0)
         spoken = _once_per_clip(
-            pieces, float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
+            pieces, cue_start, cue_end,
             scenes, total, fps, _source_words(cue, word_timing), phrase_limit,
+            lines=cue_lines(cue_start, cue_end, rows, scenes) if rows else None,
         )
         if not spoken:
             continue
