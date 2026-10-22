@@ -795,7 +795,7 @@ def _project_strategy(project_id, strategy_id):
     return replace(strategy, template=template) if template and strategy.aspect == 'portrait' else strategy
 
 
-def _apply_framing(project_id, value, strategy_id, video, burned, cache, *, portrait_crop=False):
+def _apply_framing(project_id, value, strategy_id, video, burned, cache, portrait_crop=False):
     """Pick true vertical speaker framing when it is safe; otherwise keep the full frame on a backdrop.
 
     Burned-in captions would be cut by a 9:16 window, so those sources always keep the full frame.
@@ -1183,7 +1183,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
             if now:
                 with llm_usage.timed('framing'):
-                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache, portrait_crop=use_html)
+                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache, use_html)
             planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id))
     with llm_usage.timed('packaging'):
         _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], burned, packaging_cache)
