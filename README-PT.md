@@ -318,6 +318,15 @@ Dentro do Docker, `localhost` é o contêiner. Use um endereço do host que o co
       🎁 <strong>Oferta para AutoClip</strong>: Novos usuários podem receber <strong>$5 em créditos de teste</strong> pelo <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">link de indicação</a>, conforme as condições da promoção. <a href="docs/INFISTAR_SETUP.en.md">Guia de configuração (inglês)</a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      Agradecemos à APIMart por patrocinar este projeto! A APIMart é uma plataforma de API de baixo custo para geração de imagens e vídeos com IA — GPT-Image-2 a partir de <code>$0.006/image</code>, mais de 160 imagens por dólar. Uma única API assíncrona cobre imagem e vídeo: envie uma tarefa, receba um ID e obtenha os resultados por polling ou callback. Processe dezenas de milhares de imagens em lote sem timeouts e troque de modelo sem alterar o código. Pagamento conforme o uso, sem mensalidade — <a href="https://go.apimart.ai/tw-autoclip">cadastre-se aqui</a> para começar.
+    </td>
+  </tr>
 </table>
 
 ## Perguntas frequentes
