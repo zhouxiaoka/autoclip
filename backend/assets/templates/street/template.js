@@ -101,7 +101,10 @@
     var guests = (data.speakers || []).map(function (person) { return person.name; }).filter(function (item) {
       return item && /[\u4e00-\u9fff]/.test(item) && !hostName(item);
     });
-    return guests.length === 1 ? guests[0] : "";
+    // One Chinese guest replaces Jensen Huang. Several Chinese guests: do not guess.
+    // No Chinese form: Sam Altman stays. The cover title is not burned in that slot.
+    if (guests.length === 1) return guests[0];
+    return guests.length ? "" : name;
   }
 
   function speakerName(moment) {

@@ -252,10 +252,11 @@ def _cjk_guest_names(*blobs: str) -> list[str]:
 
 
 def _localize_zh_name(name: str, audience: str, *blobs: str) -> str:
-    """The name a Chinese audience should read. A Latin-only name becomes the one CJK guest, or ''.
+    """The Chinese form of a Latin name, or '' when this listing has no single CJK guest.
 
     黄仁勋 stays. Jensen Huang becomes 黄仁勋 when that Chinese name is the only guest in the
-    known names or the roster. An unmapped Latin name is dropped so the label shows the topic.
+    known names or the roster. An unmapped Latin name is left for the caller: the cover title
+    is no longer burned in its place.
     """
     name = (name or '').strip()
     if not name:
@@ -275,11 +276,50 @@ def _localize_zh_name(name: str, audience: str, *blobs: str) -> str:
     return ''
 
 
+_NOT_A_NAME = {
+    'the', 'a', 'an', 'how', 'why', 'what', 'when', 'where', 'who',
+    'interview', 'podcast', 'episode', 'official', 'full', 'on', 'and', 'with',
+}
+
+
+def _exact_person(text: str) -> str:
+    """A name and nothing else: 黄仁勋, or Sam Altman, or Mary J. Smith."""
+    text = ' '.join(str(text or '').split())
+    if not text or text.lower() in _HOST_NAMES:
+        return ''
+    if CJK.search(text) and not LATIN.search(text):
+        return text if re.fullmatch(r'[㐀-鿿]{2,4}', text) and text not in _HOST_NAMES else ''
+    words = text.split()
+    if not 2 <= len(words) <= 3:
+        return ''
+    if not all(re.fullmatch(r"[A-Z][A-Za-z'.-]{1,30}", word) for word in words):
+        return ''
+    if any(word.lower() in _HOST_NAMES or word.lower() in _NOT_A_NAME for word in words):
+        return ''
+    if len(words) == 3 and not re.fullmatch(r"[A-Z]\.?", words[1]):
+        return ''
+    return ' '.join(words)
+
+
+def _listing_guest(known_names: str) -> str:
+    """The one person a public title names. Empty when the title does not name one person.
+
+    ``Sam Altman on Astra, AGI...`` and ``Sam Altman: Never a Better Time`` and ``黄仁勋：五层蛋糕``
+    name the guest. A channel pasted after that title is not a second guess.
+    """
+    text = ' '.join(str(known_names or '').split())
+    if not text:
+        return ''
+    titled = re.split(r'[:：|｜]', text, maxsplit=1)[0].strip()
+    named = re.match(r'^(.+?)\s+on\s+\S', titled, flags=re.IGNORECASE)
+    return _exact_person(named.group(1) if named else titled)
+
+
 def _apply_audience_names(speakers: list[dict], cues: list[dict], audience: str, known_names: str) -> tuple[list[dict], list[dict]]:
     """Rewrite a Latin guest to the one Chinese name we actually know. Leave every other name as written.
 
-    Sam Altman stays Sam Altman when the package has no 黄仁勋 to put in his place. The street
-    and editorial label hides that Latin name for a Chinese audience at render time.
+    Sam Altman stays Sam Altman when the package has no 黄仁勋 to put in his place. Street
+    paints that Latin name: the cover title is not burned underneath it.
     """
     if audience != 'zh':
         return speakers, cues
@@ -575,6 +615,12 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
         role = str(item.get('role') or '').strip()[:60]
         seen.add(name.lower())
         speakers.append({'at': lines[index]['start'], 'name': name, 'role': '' if foreign_for(audience, role) else role})
+    if not speakers:
+        # The model often leaves speakers empty even when the public title names the guest.
+        # Street's nameplate is that name. It is not the cover title, and it is not a guess.
+        guest = _listing_guest(known_names)
+        if guest and guest.lower() not in seen and _names_allowed(guest, haystack) and not foreign_for(audience, guest):
+            speakers.append({'at': lines[0]['start'], 'name': guest, 'role': ''})
     tags = []
     if base['template'] == 'interview_zh':
         for item in _items(result.get('tags'))[:MAX_TAGS]:

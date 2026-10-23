@@ -194,11 +194,11 @@ def _cue_phrase(cue, text: str, listed: list[str]) -> str:
 def _cue_speaker_name(cue, speakers: list[dict], packaging=None) -> str:
     """The cue's own speaker, in the audience's writing. An unnamed line stays unnamed.
 
-    A Latin name on a Chinese video becomes the one CJK guest on the roster, or nothing.
-    It is not replaced with whoever happens to be the only person in the roster when the
-    cue never named them.
+    A Latin name on a Chinese video becomes the one CJK guest on the roster. With no Chinese
+    form, the Latin name stays: the cover title is not burned in its place. It is not replaced
+    with a different person the cue never named.
     """
-    from backend.services.studio.packaging import CJK, LATIN, _localize_zh_name, _speaker_name
+    from backend.services.studio.packaging import CJK, LATIN, _cjk_guest_names, _localize_zh_name, _speaker_name
     claimed = _speaker_name(
         str(_get(cue, 'text', '') or ''),
         _get(cue, 'start', 0) or 0,
@@ -210,8 +210,12 @@ def _cue_speaker_name(cue, speakers: list[dict], packaging=None) -> str:
     audience = str(_get(packaging, 'audience_language', '') or '')
     roster = ' '.join(item.get('name', '') for item in speakers if item.get('name'))
     localized = _localize_zh_name(claimed, audience, roster)
-    if audience == 'zh' and not localized and LATIN.search(claimed) and not CJK.search(claimed):
-        return ''
+    if audience == 'zh' and LATIN.search(claimed) and not CJK.search(claimed):
+        if localized:
+            return localized
+        if _cjk_guest_names(roster):
+            return ''
+        return claimed
     return localized or claimed
 
 
