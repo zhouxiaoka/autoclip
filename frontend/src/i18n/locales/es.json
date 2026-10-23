@@ -1691,7 +1691,7 @@
   "此 key 看起来属于 {{name}}。当前仍使用你选择的服务商，不会自动改。": "Esta clave parece de {{name}}. Seguiremos con el proveedor que elegiste; no lo cambiaremos automáticamente.",
   "去 88API 获取密钥": "Obtener una clave de 88API",
   "去 Infistar 获取密钥": "Obtener una clave de Infistar",
-  "赞助合作伙伴。一个 Key 调用语言和画面理解模型，接口地址已预设。": "Patrocinador. Una clave para modelos de lenguaje y comprensión visual. El endpoint ya está configurado.",
+  "赞助合作伙伴。一个 Key 调用语言、图像和视频模型，接口地址已预设。": "Patrocinador. Una clave para modelos de lenguaje, imagen y vídeo. El endpoint ya está configurado.",
   "在 APIMart 创建密钥后粘贴到这里即可，接口地址已预设。": "Crea una clave en APIMart y pégala aquí. El endpoint ya está configurado.",
   "去 APIMart 获取密钥": "Obtener una clave de APIMart",
   "APIMart": "APIMart",

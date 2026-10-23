@@ -16,6 +16,10 @@ test('catalog maps major providers to OhMyGame-style SVG icons', () => {
   assert.ok(fs.existsSync(path.join(dir, 'api88.jpg')))
   assert.ok(files.includes('infistar.svg'))
   assert.ok(files.includes('apimart.svg'))
+  const apimart = fs.readFileSync(path.join(dir, 'apimart.svg'), 'utf8')
+  assert.match(apimart, /currentColor/)
+  assert.equal((apimart.match(/<path /g) || []).length, 3)
+  assert.doesNotMatch(apimart, /M4\.2 19/)
 })
 
 test('ProviderCatalog renders img mark when icon exists', () => {

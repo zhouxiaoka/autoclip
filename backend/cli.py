@@ -298,7 +298,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
         ("grok", "Grok（xAI）", "需要 key"),
         ("api88", "88API Token聚合平台（赞助）", "需要 key，新用户注册赠送体验额度"),
         ("infistar", "Infistar 无限星河（赞助）", "需要 key，专属链接注册可领体验额度"),
-        ("apimart", "APIMart（赞助）", "需要 key，一个 Key 调用语言和画面理解模型"),
+        ("apimart", "APIMart（赞助）", "需要 key，一个 Key 调用语言、图像和视频模型"),
     ] + [
         (p.key, p.display_name, f"无需 key；默认 {p.base_url}" + (f"，默认模型 {p.default_model}" if p.default_model else "")
          + (f"。{p.context_hint}" if p.context_hint else ""))

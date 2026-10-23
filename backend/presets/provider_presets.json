@@ -169,7 +169,9 @@
         "api.apimart.ai"
       ],
       "capabilities": [
-        "language"
+        "language",
+        "image",
+        "video"
       ],
       "docs_url": "https://go.apimart.ai/tw-autoclip",
       "locked": true,
@@ -180,8 +182,8 @@
       "legacy_ui": true,
       "api_key_setting": "apimart_api_key",
       "placeholder": "sk-…",
-      "hint": "赞助合作伙伴。一个 Key 调用语言和画面理解模型，接口地址已预设。",
-      "cloud_hint": "赞助合作伙伴。一个 Key 调用语言和画面理解模型，接口地址已预设。",
+      "hint": "赞助合作伙伴。一个 Key 调用语言、图像和视频模型，接口地址已预设。",
+      "cloud_hint": "赞助合作伙伴。一个 Key 调用语言、图像和视频模型，接口地址已预设。",
       "sponsor": {
         "register_url": "https://go.apimart.ai/tw-autoclip",
         "guide_url": "https://docs.apimart.ai/en/quickstart",

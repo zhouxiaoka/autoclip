@@ -127,14 +127,19 @@ def test_apimart_preset_is_an_openai_compatible_sponsor():
     assert preset.sponsor["register_url"] == KEY_URL
     assert preset.api_key_setting == "apimart_api_key"
     assert preset.group == "recommended"
-    assert preset.capabilities == ("language",)
+    assert preset.capabilities == ("language", "image", "video")
     # Ordering hints only. They are intersected with the live list, never a menu.
     assert preset.default_model == ""
     assert preset.catalog == ()
     assert preset.catalog_image == ()
     assert preset.candidates["analysis"] == ("qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash")
     assert preset.candidates["vision"] == ("qwen3.8-flash", "gemini-3.8-flash")
+    assert preset.candidates["image"] == ()
+    # Catalog badges declare language / image / video. Empty image lists stay empty:
+    # OpenRouter (the peer with the same three caps) does not ship a model menu either.
     assert "生成画面" not in preset.hint
+    assert "语言、图像和视频" in preset.hint
+    assert preset.cloud_hint == preset.hint
     transport, base_url, cloud = resolve_cloud_preset("apimart")
     assert transport == "openai"
     assert base_url == BASE
