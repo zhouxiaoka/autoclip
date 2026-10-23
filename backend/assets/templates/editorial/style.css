@@ -1,110 +1,183 @@
+@import url("../../fonts/preview/faces.css");
+
+@font-face {
+  font-family: "Noto Sans CJK SC";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../fonts/NotoSansSC.ttf") format("truetype");
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-  margin: 0;
-  width: 720px;
-  height: 1280px;
+  width: 1080px;
+  height: 1920px;
   background: transparent;
   overflow: hidden;
-  color: #f6f5f3;
-  font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+  color: #F4EFE6;
+  font-family: "Noto Serif SC", serif;
 }
-/* Readable over any footage: a dark gradient behind the text bands plus a thin stroke and a
-   short offset shadow on the letters. No glow. The scrims only appear while their band has text. */
-body::before, body::after {
-  content: "";
+#scrim {
+  /* Drawn by ffmpeg (geq) at composite time. A gradient in the captured overlay is a full-frame alpha ramp, and ffv1 stores every pixel, so a 100s clip blows past the cache cap. */
   position: absolute;
   left: 0;
   right: 0;
-  pointer-events: none;
-  opacity: 0;
-}
-body::before { top: 0; height: 420px; background: linear-gradient(to bottom, rgba(10,10,9,.72) 0%, rgba(10,10,9,.45) 55%, rgba(10,10,9,0) 100%); }
-body::after { bottom: 0; height: 400px; background: linear-gradient(to top, rgba(10,10,9,.78) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%); }
-body:has(#hook:not(:empty))::before, body:has(#kicker:not(:empty))::before { opacity: 1; }
-body:has(#sub:not(:empty))::after { opacity: 1; }
-#kicker, #hook, #gloss, #num, #sub {
-  z-index: 1;
-  paint-order: stroke fill;
-  -webkit-text-stroke: 1.5px rgba(10,10,9,.55);
-  text-shadow: 0 2px 4px rgba(0,0,0,.6);
-}
-#kicker {
-  position: absolute;
-  top: 72px;
-  left: 48px;
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.18em;
-  color: rgba(246,245,243,.88);
-}
-#kicker i {
-  display: inline-block;
-  width: 18px;
-  height: 1px;
-  margin-right: 10px;
-  background: #f6f5f3;
-  vertical-align: middle;
+  bottom: 0;
+  height: 1000px;
+  background: linear-gradient(to bottom, rgba(12,10,8,0) 0%, rgba(12,10,8,.38) 38%, rgba(12,10,8,.78) 100%);
+  display: none;
 }
 #hook {
   position: absolute;
-  top: 108px;
-  left: 48px;
-  right: 48px;
+  left: 60px;
+  right: 60px;
+  top: 1110px;
+}
+#hook .kick {
+  position: absolute;
+  left: 0;
+  top: 4px;
   margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Instrument Serif", serif;
+  font-style: italic;
   font-weight: 400;
-  font-size: 64px;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  white-space: pre-line;
+  font-size: 44px;
+  line-height: 1;
+  color: #F2D98C;
+  letter-spacing: .3px;
+}
+#h-l {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 1110 + 66 = 1176, the line-box top that puts the ink on y 1192 even with an empty kicker. */
+  top: 66px;
+}
+#hook .ln {
+  display: block;
+  font-family: "Noto Serif SC", serif;
+  font-weight: 900;
+  font-size: 96px;
+  line-height: 1.16;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  color: #F4EFE6;
+}
+#hook .ln.acc {
+  color: #F2D98C;
+  background: linear-gradient(#C7243A, #C7243A) no-repeat 0 100% / 100% 5px;
+  width: max-content;
+  padding-bottom: 6px;
+}
+#hook .trk {
+  /* Fixed under the two-line headline. An empty kicker must not move this or the lines above. */
+  position: absolute;
+  left: 0;
+  top: 331px;
+  margin: 0;
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: .34em;
+  text-transform: uppercase;
+  color: rgba(244,239,230,.78);
+}
+#cap {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: 1560px;
+}
+#zh {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  font-size: 52px;
+  line-height: 1.32;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+#zh .p { color: rgba(244,239,230,.38); }
+#zh .p.past { color: #F4EFE6; }
+#zh .p.now {
+  color: #F4EFE6;
+  background: linear-gradient(#F2D98C, #F2D98C) no-repeat 0 92% / var(--u, 0%) 6px;
+}
+#zh .p.acc {
+  font-family: "Noto Serif SC", serif;
+  font-weight: 900;
+  font-size: 1.2em;
+  line-height: 1;
+  display: inline-block;
+  transform: skewX(-9deg);
+  color: #F2D98C !important;
+  margin: 0 .08em;
+}
+#en {
+  margin-top: 14px;
+  font-family: "Instrument Serif", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 36px;
+  line-height: 1.25;
+  white-space: nowrap;
+  letter-spacing: .2px;
+}
+#en .w { color: rgba(244,239,230,.42); }
+#en .w.past { color: rgba(244,239,230,.9); }
+#en .w.now { color: #F2D98C; }
+#prog {
+  /* ffmpeg drawbox paints this hairline. Leaving it in the overlay recaptures every frame. */
+  position: absolute;
+  left: 60px;
+  top: 1826px;
+  height: 1px;
+  width: 0;
+  background: rgba(244,239,230,.8);
+  display: none;
+}
+#folio {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: 1842px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(244,239,230,.62);
+}
+#brand {
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: none;
+  color: rgba(244,239,230,.38);
 }
 #gloss {
   position: absolute;
-  top: 860px;
-  left: 48px;
+  left: 60px;
+  top: 980px;
   width: 420px;
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.45;
-  color: #f6f5f3;
-}
-#gloss b {
-  display: block;
-  margin-bottom: 4px;
-  font-family: "Instrument Serif", Georgia, serif;
-  font-weight: 400;
-  font-size: 22px;
+  color: #F4EFE6;
+  font-family: "Noto Serif SC", serif;
+  font-size: 28px;
 }
 #num {
   position: absolute;
-  top: 420px;
-  right: 48px;
-  margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
-  font-size: 84px;
+  right: 60px;
+  top: 980px;
+  color: #F2D98C;
+  font-family: "Instrument Serif", serif;
+  font-style: italic;
+  font-size: 72px;
   line-height: 1;
 }
-#num small {
-  display: block;
-  font-family: "Geist", "PingFang SC", sans-serif;
-  font-size: 16px;
-  letter-spacing: 0.08em;
-}
-#sub {
-  position: absolute;
-  top: 1040px;
-  left: 48px;
-  right: 48px;
-  margin: 0;
-  font-size: 32px;
-  line-height: 1.35;
-  max-height: 2.7em;
-  overflow: hidden;
-}
-#sub em {
-  font-family: "Instrument Serif", Georgia, serif;
-  font-style: italic;
-  font-weight: 400;
-}
-#sub strong { font-weight: 600; }
-/* Words not being spoken stay clearly legible; the current word is full white and bold. */
-#sub .w { opacity: .82; }

@@ -262,6 +262,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         with tempfile.TemporaryDirectory(prefix='ac-studio-render-') as temp:
             folder = Path(temp)
             offsets = _output_offsets(draft)
+            clip_total = (offsets[-1] + audio.scene_duration(draft.scenes[-1])) if draft.scenes else 0.0
             overlay_retried = False
             from backend.services.studio.packaging_html import HtmlRetry
             while True:
@@ -282,19 +283,18 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                         scene_overlay = overlay_path
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
-                            picture, label = packaging_render.picture_only(draft, scene, w, h)
-                            pack = draft.packaging
-                            # HTML overlay stands in for ASS, and its hook/titlebar is not the classic
-                            # title. Captions-on classic output still uses that title; burn the same
-                            # dialogues under a captions-off overlay (the overlay itself paints no title).
-                            if pack is not None and pack.captions_enabled is False and pack.title_lines:
-                                from backend.services.publish_export import _escape_filter_path
-                                ass_path = folder / f'{i}.title.ass'
-                                ass_path.write_text(packaging_render.scene_ass(pack, draft.scenes, i, titles_only=True), encoding='utf-8')
-                                ass = f"ass='{_escape_filter_path(ass_path)}':fontsdir='{_escape_filter_path(packaging_render.FONT_DIR)}'"
-                                picture += f';[{label}]{ass}[withtitle]'
-                                label = 'withtitle'
-                            tail, label = packaging_html.composite_tail(label, 1, w, h, overlay_grade)
+                            if html_template == 'street' and draft.layout == 'crop':
+                                picture, label = packaging_render.street_picture(
+                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                                )
+                            else:
+                                picture, label = packaging_render.picture_only(draft, scene, w, h)
+                            # Street and editorial paint their own title inside the template safe zone.
+                            # The classic top ASS (hook at y=250, interview title at y=150) covers the face.
+                            tail, label = packaging_html.composite_tail(
+                                label, 1, w, h, overlay_grade,
+                                template=html_template or '', offset=offsets[i], total=clip_total,
+                            )
                             built = (picture + ';' + tail, label)
                         elif packaged:
                             from backend.services.studio import packaging_render
@@ -408,7 +408,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             # leave mismatched stream layouts when a selected interval is silent.
             cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
             if keep_audio:
-                cmd += ['-map', '0:a:0', '-af', 'aresample=48000:async=1:first_pts=0', '-c:a', 'aac', '-b:a', '160k']
+                audio_filter = 'aresample=48000:async=1:first_pts=0'
+                if overlay_path is not None and html_template in ('editorial', 'street'):
+                    # The HTML templates match the preview's -14 LUFS / -1 dBTP; dad_suit came out at
+                    # -22.1 LUFS. Classic keeps its mix byte for byte.
+                    measured = audio.measure_loudnorm(['-f', 'concat', '-safe', '0', '-i', str(concat)], project_cancellation.run, max(120, sum(durations)))
+                    audio_filter = audio.loudnorm_filter(measured)
+                cmd += ['-map', '0:a:0', '-af', audio_filter, '-c:a', 'aac', '-b:a', '160k']
             else:
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]

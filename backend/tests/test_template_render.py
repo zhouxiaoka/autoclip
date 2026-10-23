@@ -82,10 +82,10 @@ def test_issue_367_html_build_fill_honors_captions_switch():
 
 
 def test_editorial_and_street_captions_off_keep_the_classic_title_style():
-    """HTML templates paint no hook/titlebar when captions are off, and burn the classic title instead.
+    """HTML templates keep their own title when captions are off. They do not burn the classic top title.
 
-    Editorial and street each run on both portrait packagings: interview (centred, 112px, whole clip)
-    and podcast (centred hook). The title dialogues match captions-on. Caption text does not.
+    The classic title document itself is unchanged: interview stays centred at 112px for the whole
+    clip, and the podcast hook stays at y=250 for 2.8s. Caption text is not in that document.
     """
     from backend.services.studio import packaging_render as pr
     scenes = [Scene(id='s', label='s', start=0, end=8)]
@@ -103,9 +103,11 @@ def test_editorial_and_street_captions_off_keep_the_classic_title_style():
         assert filled_on['words'] and filled_off['words'] == []
         assert filled_off['title_lines'] == body['title_lines']
         assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
-        assert paint_fill(filled_on, on) is filled_on
-        painted = paint_fill(filled_off, off)
-        assert painted['title_lines'] == [] and painted['hook']['text'] == ''
+        assert paint_fill(filled_on, on, html_template) is filled_on
+        painted = paint_fill(filled_off, off, html_template)
+        # Both templates paint the title in the safe zone. The classic top ASS is not burned over the face.
+        assert painted['title_lines'] == body['title_lines']
+        assert painted['hook']['text'] == '\n'.join(body['title_lines'])
         assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
         on_titles = [line for line in pr.scene_ass(on, scenes, 0).splitlines() if line.startswith('Dialogue:') and any(token in line for token in (',Title,', ',TitleAccent,', ',Hook,'))]
         off_titles = pr.scene_ass(off, scenes, 0, titles_only=True).splitlines()
@@ -214,7 +216,7 @@ def test_overlay_is_the_second_ffmpeg_input(tmp_path, monkeypatch):
     assert 'secret' not in str(classic['template_render'])
 
 
-def test_html_captions_off_burns_the_classic_title_and_captions_on_does_not(tmp_path, monkeypatch):
+def test_html_captions_off_does_not_burn_the_classic_title_over_the_face(tmp_path, monkeypatch):
     if subprocess.run(['ffmpeg', '-version'], capture_output=True).returncode != 0:
         pytest.skip('ffmpeg unavailable')
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
@@ -267,11 +269,7 @@ def test_html_captions_off_burns_the_classic_title_and_captions_on_does_not(tmp_
     for template in ('editorial', 'street'):
         drafted = off.model_copy(update={'id': f'd-{template}'})
         graph = graph_of(drafted, f'job-{template}', template)
-        assert 'ass=' in graph and '[withtitle]' in graph
-        burned = captured['ass']
-        assert '好的投资人' in burned and '字幕正文' not in burned
-        assert '\\an8' in burned and '\\fs112' in burned and '\\pos(540,' in burned
-        assert ',Hook,' not in burned
+        assert 'ass=' not in graph and '[withtitle]' not in graph
 
     on = off.model_copy(update={
         'id': 'd-on',

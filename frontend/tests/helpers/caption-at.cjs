@@ -32,7 +32,7 @@ function captionsAtWords(template, fill) {
   return (fill.words || []).map((word, index) => {
     const t = ((word.start_frame + word.end_frame) / 2) / fill.fps
     page.renderFrame(t)
-    return { index, t, html: page.document.getElementById('sub').innerHTML }
+    return { index, t, html: page.document.getElementById('zh').innerHTML }
   })
 }
 

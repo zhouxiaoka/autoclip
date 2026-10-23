@@ -12,7 +12,8 @@ function assertOneSentence(template) {
   assert.equal(rows.length, fill.words.length)
   for (const row of rows) {
     const current = fill.words[row.index].text
-    assert.match(row.html, new RegExp(current.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    const visible = template === 'street' ? current.replace(/[，。、！？：；,.!?]+$/g, '') : current
+    assert.match(row.html, new RegExp(visible.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     assert.equal(row.html.includes('class="w"'), false)
     for (const other of fill.words) {
       if (other.text === current) continue
@@ -29,21 +30,22 @@ test('street shows one repro sentence at a time', () => {
   assertOneSentence('street')
 })
 
-test('a paged caption renders at most two lines and one screen', () => {
+test('a phrase is one line, and the next phrase replaces it', () => {
   const paged = {
     fps: 30,
+    T: 2,
     words: [
-      { text: '有史以来最好的12个月。\n我认为作为一家公司，', start_frame: 0, end_frame: 30, emphasis: '' },
-      { text: '我们显然犯了一些错误，', start_frame: 30, end_frame: 60, emphasis: '错误' },
+      { text: '有史以来最好的12个月', start_frame: 0, end_frame: 30, emphasis: '' },
+      { text: '我们显然犯了一些错误', start_frame: 30, end_frame: 60, emphasis: '错误' },
     ],
   }
   for (const template of ['editorial', 'street']) {
     const rows = captionsAtWords(template, paged)
-    assert.equal(rows[0].html.includes('<br>'), true)
-    assert.equal(rows[0].html.split('<br>').length, 2)
+    assert.equal(rows[0].html.includes('<br>'), false)
+    assert.equal(rows[0].html.includes('有史以来最好的12个月'), true)
     assert.equal(rows[0].html.includes('我们显然'), false)
     assert.equal(rows[0].html.includes('class="w"'), false)
-    assert.equal(rows[1].html.includes('<em>'), true)
+    assert.equal(rows[1].html.includes('我们显然犯了一些错误'), true)
     assert.equal(rows[1].html.includes('<br>'), false)
     assert.equal(rows[1].html.includes('有史以来'), false)
   }

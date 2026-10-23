@@ -368,6 +368,25 @@ def crop_expression(scene: Scene, fallback: float) -> str:
     return expression
 
 
+CUT_EDGE = 0.006           # seconds; a track start rounded to 0.01 s can land up to 5 ms after its cut frame
+
+
+def on_cut_frames(scene: Scene) -> Scene:
+    """The scene with every later crop point starting just before its cut frame.
+
+    Track starts are cut times rounded to 0.01 s, so a cut on a frame at 3.8667 s is stored as
+    3.87 and `lt(t,3.87)` keeps the old crop on that frame. Starting 6 ms earlier lands before the
+    cut frame and after the frame before it at any rate up to 60 fps. The stored track and its QA
+    are untouched; only the render-time copy moves.
+    """
+    points = scene.crop_track or []
+    if len(points) <= 1:
+        return scene
+    moved = [points[0]] + [point.model_copy(update={"start": max(0.0, round(point.start - CUT_EDGE, 3))})
+                           if point.start > 0 else point for point in points[1:]]
+    return scene.model_copy(update={"crop_track": moved})
+
+
 def fit_spans(scene: Scene) -> list[tuple[float, float]]:
     """Scene-relative (start, end) ranges rendered as `fit` instead of the moving crop."""
     points = scene.crop_track or []
