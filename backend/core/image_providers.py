@@ -22,6 +22,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import requests
 
+from backend.core.aimlapi_attribution import aimlapi_headers
 from backend.core.llm_providers import is_local_url, normalize_base_url
 
 logger = logging.getLogger(__name__)
@@ -245,7 +246,8 @@ def _bearer(api_key: str, base_url: str) -> dict[str, str]:
         key = OPENAI_PLACEHOLDER_KEY
     if not key:
         raise ImageError("还没有配置生图密钥")
-    return {"Authorization": f"Bearer {key}"}
+    # 打 AI/ML API 时附带归因请求头（与对话请求一致）；其它地址返回空字典
+    return {"Authorization": f"Bearer {key}", **aimlapi_headers(base_url)}
 
 
 def _post_json(

@@ -49,6 +49,7 @@
 autoclip run talk.mp4 --json
 autoclip run talk.mp4 --srt talk.srt --min-score 0.5 --json
 autoclip run talk.mp4 --provider ollama --json
+autoclip run talk.mp4 --provider aimlapi --json       # AI/ML API，key 放环境变量 AUTOCLIP_API_KEY
 autoclip doctor --json
 autoclip list --json
 autoclip show <project_id> --json

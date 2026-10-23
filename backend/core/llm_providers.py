@@ -12,6 +12,8 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.core.aimlapi_attribution import aimlapi_headers, is_aimlapi_url
+
 logger = logging.getLogger(__name__)
 
 class ProviderType(Enum):
@@ -191,6 +193,7 @@ class DashScopeProvider(LLMProvider):
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 }
+                headers.update(aimlapi_headers(self.base_url))
                 payload = {
                     "model": self.model_name,
                     "messages": [{"role": "user", "content": full_input}],
@@ -255,6 +258,11 @@ class DashScopeProvider(LLMProvider):
         return _catalog_model_infos(ProviderType.DASHSCOPE)
 
 OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1"
+# 推理型号连通性测试的输出预算（官方 OpenAI 推理型号与 AI/ML API 网关）。给 1 时推理型号光思考就超了，
+# 服务端直接 400 "Could not finish the message because max_tokens ... was reached"，key 明明是好的，
+# 设置页却报连接失败。实测 2026-10-07：openai/gpt-6-luna（AI/ML API 预设的默认模型）给 1 个 token 必 400，
+# 给 10 就能返回。留 256 有富余；探针只发两个字，用不到的额度不计费。其余型号仍给 1。
+CONNECTION_PROBE_MAX_TOKENS = 256
 # 本地/自建 OpenAI 兼容服务（Ollama、vLLM、LM Studio 等）通常不校验 key，但 SDK 要求非空
 OPENAI_COMPATIBLE_PLACEHOLDER_KEY = "EMPTY"
 # 通义千问 OpenAI 兼容接口：中国站 / 国际站（alibabacloud.com 开通的 key 只能打国际站，#45）
@@ -457,6 +465,10 @@ class OpenAIProvider(LLMProvider):
                 http_client = make_openai_http_client(self.base_url)
                 if http_client is not None:
                     client_kwargs["http_client"] = http_client
+                # 归因请求头只在目标就是 AI/ML API 时附带，别的兼容接口一律不发
+                attribution = aimlapi_headers(self.base_url)
+                if attribution:
+                    client_kwargs["default_headers"] = attribution
             self.client = openai.OpenAI(**client_kwargs)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
@@ -517,7 +529,9 @@ class OpenAIProvider(LLMProvider):
                     logger.warning(f"OpenAI API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
             
             # 使用最简单的测试。推理型号的输出上限也算推理 token，给 1 会因上限截断报错（#333）。
-            response = self.call("测试", max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 1)
+            # AI/ML API 的默认型号 openai/gpt-6-luna 同样是推理型号，但走的不是官方地址，单独放宽。
+            probe = CONNECTION_PROBE_MAX_TOKENS if (uses_max_completion_tokens(self.model_name, self.base_url) or is_aimlapi_url(self.base_url)) else 1
+            response = self.call("测试", max_tokens=probe)
             return response and response.content is not None
         except Exception as e:
             logger.error(f"OpenAI连接测试失败 (base_url={self.base_url or OPENAI_OFFICIAL_BASE_URL}): {e}")

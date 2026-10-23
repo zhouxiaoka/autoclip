@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 # 各家仍在维护的稳定别名 / 旗舰型号。实时列表失败时用这份，也作为下拉靠前的常用项。
 # 日期以 2026-09 公开文档为准；具体可用性以账号权限为准。
 CURATED_MODELS: Dict[str, List[str]] = {
+    # AI/ML API 是聚合网关：一个 key 覆盖下面各家，型号名带厂商前缀（openai/…、anthropic/…）。
+    "aimlapi": [
+        "openai/gpt-6-luna",
+        "openai/gpt-6.1-sol",
+        "anthropic/claude-sonnet-5.5",
+        "google/gemini-3.8-flash",
+        "deepseek/deepseek-v4-pro",
+        "moonshot/kimi-k3",
+        "zhipu/glm-5.2",
+        "alibaba/qwen3.7-max",
+    ],
     "dashscope": [
         "qwen3.8-max",
         "qwen3.8-flash",
@@ -83,6 +94,7 @@ CURATED_MODELS: Dict[str, List[str]] = {
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
+    "aimlapi": "openai/gpt-6-luna",
     "dashscope": "qwen-plus",
     "openai": "gpt-5-mini",
     "gemini": "gemini-3.8-flash",
@@ -96,6 +108,7 @@ DEFAULT_MODELS: Dict[str, str] = {
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
+    "aimlapi": "AI/ML API",
     "dashscope": "通义千问",
     "openai": "OpenAI",
     "gemini": "Gemini",
@@ -223,6 +236,9 @@ _OPENAI_CHAT_PREFIXES = (
 _DATED_SNAPSHOT = re.compile(r"^(.+)-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
 
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+AIMLAPI_MODELS_BASE_URL = "https://api.aimlapi.com/v1"
+# AI/ML API 的 /models 里对话、图像、视频、语音混在一起，id 上看不出来，只有 type 能区分
+AIMLAPI_CHAT_MODEL_TYPE = "openai/chat-completions"
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 _CACHE_TTL_SECONDS = 300.0
@@ -388,6 +404,24 @@ async def fetch_openai_compatible_models(base_url: str, api_key: str) -> List[st
     return _extract_openai_model_ids(data)
 
 
+async def fetch_aimlapi_models(api_key: str, base_url: str = "") -> List[str]:
+    """AI/ML API：按 `type` 只留对话模型，否则 900+ 条里大半是图像 / 视频 / 语音。"""
+    from backend.core.llm_providers import normalize_base_url
+
+    url = normalize_base_url(base_url) or AIMLAPI_MODELS_BASE_URL
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    data = await _http_get_json(f"{url}/models", headers=headers)
+    items = data.get("data", data) if isinstance(data, dict) else data
+    names: List[str] = []
+    for item in items or []:
+        if not isinstance(item, dict) or item.get("type") != AIMLAPI_CHAT_MODEL_TYPE:
+            continue
+        name = item.get("id") or item.get("name")
+        if name:
+            names.append(str(name))
+    return names
+
+
 async def fetch_gemini_models(api_key: str) -> List[str]:
     if not api_key:
         raise ValueError("缺少 Gemini API Key")
@@ -434,6 +468,8 @@ def _is_official_openai(base_url: str) -> bool:
 async def fetch_live_models(provider: str, api_key: str = "", base_url: str = "") -> List[str]:
     if provider == "gemini":
         return await fetch_gemini_models(api_key)
+    if provider == "aimlapi":
+        return await fetch_aimlapi_models(api_key, base_url)
     url = _official_base_url(provider, base_url)
     return await fetch_openai_compatible_models(url, api_key)
 

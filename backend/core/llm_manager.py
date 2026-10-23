@@ -92,6 +92,7 @@ class LLMManager:
         """加载设置"""
         default_settings = {
             "llm_provider": "dashscope",
+            "aimlapi_api_key": "",
             "dashscope_api_key": "",
             "openai_api_key": "",
             # OpenAI 兼容接口地址；空 = 官方。环境变量 OPENAI_BASE_URL 作为兜底
@@ -124,6 +125,7 @@ class LLMManager:
                         api = saved_settings["api"]
                         api_keys = api["api_keys"]
                         default_settings.update({
+                            "aimlapi_api_key": api_keys.get("aimlapi", ""),
                             "dashscope_api_key": api_keys.get("dashscope", ""),
                             "openai_api_key": api_keys.get("openai", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
@@ -218,6 +220,7 @@ class LLMManager:
     # Docker / 本地脚本模式没有设置页可用，只能靠环境变量（env.example 里也是这么写的），
     # 但此前这里只读 settings.json，导致 API_DASHSCOPE_API_KEY 等变量形同虚设。
     _ENV_KEY_FALLBACKS = {
+        "aimlapi_api_key": ("API_AIMLAPI_API_KEY", "AIMLAPI_API_KEY"),
         "dashscope_api_key": ("API_DASHSCOPE_API_KEY", "DASHSCOPE_API_KEY"),
         "openai_api_key": ("API_OPENAI_API_KEY", "OPENAI_API_KEY"),
         "gemini_api_key": ("API_GEMINI_API_KEY", "GEMINI_API_KEY"),
