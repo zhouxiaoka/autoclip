@@ -13,15 +13,21 @@ import math
 import re
 
 from backend.services.studio.caption_layout import lines_for, page_screens, width
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
-# Phrase budget on the 1080px canvas. One line, no wrap: street 100px inside 30px
-# insets (cap height about 93px, inside the 90–96 band of the preview), editorial 52px inside 60px insets.
+# Phrase budget on the 1080px canvas. One line, no wrap. Street captions are 48px
+# inside 30px insets (a title-sized 100px line read as a hook). Editorial is 52px
+# inside 60px insets. News and cinema stay in the same caption band.
 # A longer sentence is split into phrases.
 _CANVAS = 1080
 _EDITORIAL_FONT = 52
 _EDITORIAL_INSET = 60
-_STREET_FONT = 100
+_STREET_FONT = 48
+_NEWS_FONT = 42
+_NEWS_INSET = 72
+_CINEMA_FONT = 40
+_CINEMA_INSET = 80
 _MIN_PHRASE_SEC = 0.6
 _LEAD = set('的了着过地得吗呢吧啊呀')
 _SOURCE_LIMIT = 34
@@ -43,6 +49,10 @@ def caption_line_limit(template: str, safe_area: str = 'xiaohongshu') -> int | N
     if template == 'street':
         inset = _STREET_INSET.get(safe_area, _STREET_INSET['xiaohongshu'])
         return (_CANVAS - 2 * inset) // _STREET_FONT
+    if template == 'news':
+        return (_CANVAS - 2 * _NEWS_INSET) // _NEWS_FONT
+    if template == 'cinema':
+        return (_CANVAS - 2 * _CINEMA_INSET) // _CINEMA_FONT
     return None
 
 
@@ -1413,6 +1423,8 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         # The preview shows about 6-8 characters for about 1.5s, not a full 18-character line.
         phrase_limit = min(phrase_limit, _EDITORIAL_SCREEN)
         group_limit = phrase_limit
+    if (template or '') in {'news', 'cinema'}:
+        group_limit = phrase_limit
     # A flash under 0.6s may join its neighbour a little past the screen size.
     hold_limit = phrase_limit + 2 if (template or '') == 'editorial' else phrase_limit
     roster = [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])]
@@ -1424,7 +1436,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         phrase = _cue_phrase(cue, text, emphasis)
         raw_original = str(_get(cue, 'original', '') or '')
         # The preview keeps the whole English sentence on one line and shrinks it. The template trims what still overflows.
-        original = ' '.join(raw_original.split()) if (template or '') in {'editorial', 'street'} else _source_line(raw_original, source_limit)
+        original = ' '.join(raw_original.split()) if (template or '') in HTML_TEMPLATE_IDS else _source_line(raw_original, source_limit)
         speaker = _agree_speaker(
             _cue_speaker_name(cue, roster, packaging),
             float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
@@ -1571,6 +1583,6 @@ def paint_fill(fill: dict, packaging, template: str | None = None) -> dict:
     painted = _without_video_title(fill)
     if _get(packaging, 'captions_enabled', True) is not False:
         return painted
-    if template in {'street', 'editorial'}:
+    if template in HTML_TEMPLATE_IDS:
         return painted
     return {**painted, 'kicker': '', 'deck': '', 'hook_trk': '', 'credit': ''}

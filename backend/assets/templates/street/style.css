@@ -35,17 +35,16 @@ html, body {
   font-family: "Noto Sans CJK SC", sans-serif;
   font-weight: 700;
   font-variation-settings: "wght" 700;
-  font-size: 100px;
-  /* A fixed 110px line box: a shrunk phrase keeps the English line at y 1449. */
-  line-height: 110px;
+  font-size: 48px;
+  /* A fixed 64px line box: a shrunk phrase keeps the English line from jumping. */
+  line-height: 64px;
   color: #fff;
-  -webkit-text-stroke: 14px #000;
+  -webkit-text-stroke: 4px #000;
   paint-order: stroke fill;
-  text-shadow: 0 10px 0 #000;
+  text-shadow: 0 2px 0 #000;
   white-space: nowrap;
   display: inline-block;
 }
-#zh.k { color: #D7FF3A; }
 #en {
   margin-top: 16px;
   font-family: "Anton", "Noto Sans CJK SC", sans-serif;

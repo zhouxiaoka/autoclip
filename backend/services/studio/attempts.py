@@ -293,6 +293,8 @@ def generation_summary(data, variants=None, started=None) -> dict:
         'landscape_count': len(variants) - len(packaged),
         'editorial_count': count(lambda v: (report(v) or {}).get('template') == 'editorial' and (report(v) or {}).get('downgraded') is not True),
         'street_count': count(lambda v: (report(v) or {}).get('template') == 'street' and (report(v) or {}).get('downgraded') is not True),
+        'news_count': count(lambda v: (report(v) or {}).get('template') == 'news' and (report(v) or {}).get('downgraded') is not True),
+        'cinema_count': count(lambda v: (report(v) or {}).get('template') == 'cinema' and (report(v) or {}).get('downgraded') is not True),
         'classic_count': count(classic),
         'html_downgrade_count': count(lambda v: (report(v) or {}).get('downgraded') is True),
         'speaker_framed_count': count(lambda v: v.get('framing') == 'speaker'),

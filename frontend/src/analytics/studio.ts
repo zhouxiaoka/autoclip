@@ -134,7 +134,7 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
   const supplied = body.get?.('flow_id')
   const flow_id = typeof supplied === 'string' && /^t-[a-z0-9-]{10,100}$/.test(supplied) ? supplied : telemetryId()
   const chosen = body.get?.('html_template')
-  const template = chosen === 'editorial' || chosen === 'street' || chosen === 'classic' ? chosen : undefined
+  const template = chosen === 'editorial' || chosen === 'street' || chosen === 'news' || chosen === 'cinema' || chosen === 'classic' ? chosen : undefined
   const recommendedRaw = body.get?.('recommended_template')
   const recommended_template = recommendedRaw === 'editorial' || recommendedRaw === 'street' || recommendedRaw === 'classic' ? recommendedRaw : undefined
   return { material_origin: 'user', flow_id, source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,

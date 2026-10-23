@@ -503,7 +503,9 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                   if (!document.fonts) return;
                   const specs = [
                     ['36px Anton', 'AG'],
-                    ['700 100px "Noto Sans CJK SC"', '中'],
+                    ['700 48px "Noto Sans CJK SC"', '中'],
+                    ['600 42px "Noto Sans CJK SC"', '中'],
+                    ['500 40px "Noto Sans CJK SC"', '中'],
                     ['500 52px "Noto Sans CJK SC"', '中'],
                     ['900 96px "Noto Serif SC"', '中'],
                     ['italic 44px "Instrument Serif"', 'Ag'],
@@ -569,9 +571,10 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     """
     from backend.services.studio.overlay_fill import build_fill, paint_fill
     from backend.services.studio.template_choice import blocking_reason
+    from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
     started_wall = time.monotonic()
-    requested = template if template in {'editorial', 'street'} else 'classic'
+    requested = template if template in HTML_TEMPLATE_IDS else 'classic'
 
     def finish(job: OverlayJob) -> OverlayJob:
         return _stamp(job, started_wall)
@@ -579,7 +582,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     reason = blocking_reason(features, runtime_ready=True if capture else None)
     if reason:
         return finish(_downgrade(reason, requested=requested))
-    if template not in {'editorial', 'street'}:
+    if template not in HTML_TEMPLATE_IDS:
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
     frames = overlay_frame_count(duration, fps)

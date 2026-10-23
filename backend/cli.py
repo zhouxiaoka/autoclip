@@ -610,7 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument('--srt', help='本地 SRT 字幕文件')
     q.add_argument('--instruction', default='')
     q.add_argument('--portrait-style', choices=['auto', 'interview', 'podcast'], default='auto', help='竖版版式；画幅和文字语言仍按平台')
-    q.add_argument('--template', choices=['editorial', 'street', 'classic'], help='剪辑风格（mcp_v2_tools 开关控制，默认打开；AUTOCLIP_FLAGS=mcp_v2_tools=off 可关闭）：editorial 杂志风 / street 街头快剪 / classic 经典。结果里的 template 是实际用的风格')
+    q.add_argument('--template', choices=['editorial', 'street', 'news', 'cinema', 'classic'], help='剪辑风格（mcp_v2_tools 开关控制，默认打开；AUTOCLIP_FLAGS=mcp_v2_tools=off 可关闭）：editorial 杂志风 / street 街头快剪 / news 新闻 / cinema 电影 / classic 经典。结果里的 template 是实际用的风格')
     q.add_argument('--browser', choices=['chrome', 'edge', 'firefox', 'safari'])
     q.add_argument('--timeout', type=float, default=7200, help='等待秒数；超时不会取消项目')
     q.add_argument('--json', action='store_true', help='只在 stdout 输出 JSON 结果')

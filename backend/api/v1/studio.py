@@ -132,7 +132,7 @@ async def import_visual(
     platforms: list[str] = Form(['douyin']),
     auto_start: bool = Form(False),
     portrait_style: Literal['auto', 'interview', 'podcast'] = Form('auto'),
-    html_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
+    html_template: Optional[Literal['editorial', 'street', 'news', 'cinema', 'classic']] = Form(None),
     recommended_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
     brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),

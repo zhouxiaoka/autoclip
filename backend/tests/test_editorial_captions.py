@@ -363,11 +363,13 @@ def test_caption_line_limit_matches_the_template_box():
     editorial = (ROOT / 'backend/assets/templates/editorial/style.css').read_text(encoding='utf-8')
     street_css = (ROOT / 'backend/assets/templates/street/style.css').read_text(encoding='utf-8')
     assert 'font-size: 52px' in editorial and 'left: 60px' in editorial and 'right: 60px' in editorial
-    assert 'font-size: 100px' in street_css and 'line-height: 110px' in street_css
+    assert 'font-size: 48px' in street_css and 'line-height: 64px' in street_css
     assert 'left: 30px' in street_css and 'right: 30px' in street_css
     assert caption_line_limit('editorial', 'douyin') == (1080 - 120) // 52
     for area in ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts'):
-        assert caption_line_limit('street', area) == (1080 - 60) // 100
+        assert caption_line_limit('street', area) == (1080 - 60) // 48
+    assert caption_line_limit('news') == (1080 - 144) // 42
+    assert caption_line_limit('cinema') == (1080 - 160) // 40
 
 
 def test_caption_breaks_do_not_depend_on_jieba():

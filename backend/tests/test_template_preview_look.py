@@ -205,7 +205,7 @@ def test_emphasis_is_a_word_and_the_headline_stays_on_the_cover():
     painted = _render('street', street)
     zh = painted['0.5']['zh']
     source = painted['0.5']['en']['html']
-    assert zh['html'] == 'AI现在就能干一半' and zh['className'] == 'k'
+    assert zh['html'] == 'AI现在就能干一半' and zh['className'] == ''
     assert re.search(r'class="w k[^"]*">AI<', source)
     assert not re.search(r'class="w k[^"]*">half<', source, re.I)
     # The cue never named a speaker, and the topic is the cover title, so the bottom label is empty.
@@ -314,7 +314,9 @@ def test_prepare_overlay_paints_the_preview_marks(tmp_path, monkeypatch):
     editorial_shots = overlay('editorial', editorial)
     for name in ('early', 'late'):
         _width, _height, rows = _png_size_and_rows(street_shots[name])
-        assert _near(rows, STREET_MARK) > 40, name
+        # The Chinese line stays a white caption. Lime is the English keyword, not a yellow title.
+        assert _near(rows, (255, 255, 255)) > 40, name
+        assert _near(rows, STREET_MARK) <= 40, name
         _width, _height, rows = _png_size_and_rows(editorial_shots[name])
         assert _near(rows, EDITORIAL_GOLD) > 40, name
 
@@ -419,7 +421,8 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
     assert any(rect['slot'] == 'kicker' for rect in frames['0.5']['rects'])
     assert any(rect['slot'] == 'credit' for rect in still['0.5']['rects'])
     street_css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
-    assert 'text-align: center' in street_css and 'font-size: 100px' in street_css and '#D7FF3A' in street_css
+    assert 'text-align: center' in street_css and 'font-size: 48px' in street_css and '#D7FF3A' in street_css
+    assert 'font-size: 100px' not in street_css and '#zh.k' not in street_css
     editorial_css = (TEMPLATES / 'editorial' / 'style.css').read_text(encoding='utf-8')
     assert '#F4EFE6' in editorial_css and '#F2D98C' in editorial_css and '#C7243A' in editorial_css
 
@@ -631,10 +634,48 @@ def test_street_caption_is_the_preview_size_and_shrinks_only_on_overflow(tmp_pat
         assert len(runs) == 2, (name, runs)
         measured[name] = runs
     zh, en = measured['short']
-    assert abs(zh[0] - 1331) <= 8 and 90 <= zh[1] - zh[0] + 1 <= 96, zh  # preview: ink 1331-1424 at 100px
-    assert abs((zh[2] + zh[3]) / 2 - 540) <= 6, zh
-    assert abs(en[0] - 1449) <= 6 and abs(en[1] - 1481) <= 6, en
-    # Ten glyphs at 100px fill the 1000px line without shrinking; the English line does not move.
+    assert abs(zh[0] - 1326) <= 16 and 32 <= zh[1] - zh[0] + 1 <= 56, zh
+    assert abs((zh[2] + zh[3]) / 2 - 540) <= 8, zh
+    assert abs(en[0] - 1406) <= 20, en
+    # A caption-sized line stays inside the 1000px column. The English line does not jump when the phrase grows.
     full_zh, full_en = measured['full']
-    assert 90 <= full_zh[1] - full_zh[0] + 1 <= 96 and full_zh[3] - full_zh[2] <= 1000, full_zh
-    assert abs(full_en[0] - 1449) <= 6, full_en
+    assert 32 <= full_zh[1] - full_zh[0] + 1 <= 56 and full_zh[3] - full_zh[2] <= 1000, full_zh
+    assert abs(full_en[0] - en[0]) <= 8, (full_en, en)
+
+
+def test_mac_acceptance_captions_stay_and_cover_titles_do_not():
+    """The 1.5.7 Mac frames kept the cover title off, then painted the caption as a title.
+
+    Editorial 「走过弯路」 was a whole-line gold serif above the English line.
+    Street 「我们公司确实走过弯路」 was a 100px yellow billboard on the black lower half.
+    Both strings are the dialogue caption and must remain. The cover lines must not.
+    """
+    editorial, _ = _paint(
+        'editorial',
+        title_lines=['我们曾掉队', '现在执行力最强'],
+        emphasis=[{'at': 0.2, 'text': '走过弯路'}],
+        cues=[{'start': 0.2, 'end': 4.0, 'text': '走过弯路', 'original': 'had some missteps as a company'}],
+    )
+    frame = _render('editorial', editorial, times=['1.0'])['1.0']
+    painted = json.dumps(frame, ensure_ascii=False)
+    assert '我们曾掉队' not in painted and '现在执行力最强' not in painted
+    assert '走过弯路' in frame['zh']['html']
+    assert 'missteps' in frame['en']['html']
+    assert 'class="p acc' not in frame['zh']['html']
+    assert frame['hook']['html'] == ''
+    assert not any(rect['slot'] == 'hook' for rect in frame['rects'])
+
+    street, _ = _paint(
+        'street',
+        title_lines=['我们曾掉队', '现在执行力全球最强'],
+        emphasis=[{'at': 0.2, 'text': '我们公司确实走过弯路'}],
+        cues=[{'start': 0.2, 'end': 4.0, 'text': '我们公司确实走过弯路', 'original': 'I think we clearly had some missteps as'}],
+    )
+    shot = _render('street', street, times=['1.0'])['1.0']
+    body = json.dumps(shot, ensure_ascii=False)
+    assert '我们曾掉队' not in body and '现在执行力全球最强' not in body
+    assert shot['zh']['html'] == '我们公司确实走过弯路' and shot['zh']['className'] == ''
+    assert 'missteps' in shot['en']['html']
+    assert shot['title']['text'] == ''
+    css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
+    assert 'font-size: 48px' in css and 'font-size: 100px' not in css

@@ -32,7 +32,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const reason = showReason ? clipReason({ evidence: draft?.scenes[0]?.evidence, framing: variant.framing }) : null
   const packaging = draft?.packaging
   const rendered = job?.result?.template_render?.template
-  const template = rendered === 'editorial' || rendered === 'street' || rendered === 'classic' ? rendered : packaging?.template
+  const template = rendered === 'editorial' || rendered === 'street' || rendered === 'news' || rendered === 'cinema' || rendered === 'classic' ? rendered : packaging?.template
   const analytics: VariantProperties = {
     strategy_id: variant.strategy_id, framing: variant.framing, template,
     packaging_style: packaging ? packaging.style || (packaging.template === 'podcast_en' ? 'pop' : 'classic') : undefined,

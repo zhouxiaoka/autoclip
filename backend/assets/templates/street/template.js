@@ -1,5 +1,5 @@
 /* 街头快剪，1080×1920。画面在模板外铺到 y=1290，这里从 1290 起是实心黑。
-   中文一次一句，整句在关键词上变黄绿，并做 120ms 的 1.18→1 弹出。
+   中文一次一句，字号是字幕而不是标题，整句不再铺成黄绿大字。弹出仍是 120ms 的 1.18→1。
    英文原句留在这一句换走之前，关键词从说到的那一刻起保持黄绿。
    左下只留当前说话人的名字。短话题是封面标题，不烧进成片。renderFrame(t) 只由 t 决定。 */
 (function () {
@@ -289,9 +289,10 @@
       // Rebuild from the phrase so a trim on a fallback face cannot stick.
       seenPhrase = phrase;
       zh.innerHTML = esc(text);
-      zh.className = phrase.key ? "k" : "";
-      // The preview's 100px; shrink only when the phrase would not fit the 1000px line.
-      fit(zh, 100, 72, 4, 1000, '700 100px "Noto Sans CJK SC"');
+      // The whole sentence in yellow read as a title card. Keywords stay on the English line.
+      zh.className = "";
+      // Caption size. Shrink only when the phrase would not fit the 1000px line.
+      fit(zh, 48, 32, 2, 1000, '700 48px "Noto Sans CJK SC"');
       // The hash carries the scale itself: a popping flag made capture keep the 1.18 frame for the whole ease.
       var popped = ease((t - (phrase.t0 || 0)) / 0.12);
       scale = (1.18 + (1 - 1.18) * popped).toFixed(3);
@@ -325,10 +326,10 @@
     var rects = [];
     var moment = momentAt(t);
     var phrase = moment ? phraseAt(moment, t) : null;
-    if (phrase) rects.push({slot: "subtitle", x: 30, y: 1331, w: 1020, h: 92});
+    if (phrase) rects.push({slot: "subtitle", x: 30, y: 1326, w: 1020, h: 56});
     // Captions-off hook sits in the black band under the picture, not on the face (head zone ends at 1290).
     if (titleSticker(t)) rects.push({slot: "title", x: 40, y: 1360, w: 1000, h: 192});
-    if (moment && phrase && enShown(moment, t).length) rects.push({slot: "source", x: 30, y: 1449, w: 1020, h: 32});
+    if (moment && phrase && enShown(moment, t).length) rects.push({slot: "source", x: 30, y: 1406, w: 1020, h: 36});
     if (labelFor(moment)) rects.push({slot: "hook", x: 40, y: 1812, w: 1000, h: 65});
     if (numberHtml(t)) rects.push({slot: "number", x: 40, y: 80, w: 360, h: 84});
     var index = Math.max(0, Math.floor(t * (data.fps || 30) + 1e-4));

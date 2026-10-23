@@ -24,7 +24,7 @@
     },
     {
       "t": 1,
-      "hash": "|<span class=\"p acc now\" style=\"--u:100%\">投资人</span>|||0|1.000",
+      "hash": "|<span class=\"p now\" style=\"--u:100%\">投资人</span>|||0|1.000",
       "rects": [
         {
           "slot": "subtitle",
@@ -34,7 +34,7 @@
           "h": 61
         }
       ],
-      "sub": "<span class=\"p acc now\" style=\"--u:100%\">投资人</span>",
+      "sub": "<span class=\"p now\" style=\"--u:100%\">投资人</span>",
       "topic": ""
     },
     {
@@ -83,9 +83,9 @@
         {
           "slot": "subtitle",
           "x": 30,
-          "y": 1331,
+          "y": 1326,
           "w": 1020,
-          "h": 92
+          "h": 56
         }
       ],
       "sub": "你",
@@ -98,9 +98,9 @@
         {
           "slot": "subtitle",
           "x": 30,
-          "y": 1331,
+          "y": 1326,
           "w": 1020,
-          "h": 92
+          "h": 56
         },
         {
           "slot": "number",
@@ -115,14 +115,14 @@
     },
     {
       "t": 1,
-      "hash": "看|k|||1.000|42秒|",
+      "hash": "看||||1.000|42秒|",
       "rects": [
         {
           "slot": "subtitle",
           "x": 30,
-          "y": 1331,
+          "y": 1326,
           "w": 1020,
-          "h": 92
+          "h": 56
         },
         {
           "slot": "number",
@@ -156,9 +156,9 @@
         {
           "slot": "subtitle",
           "x": 30,
-          "y": 1331,
+          "y": 1326,
           "w": 1020,
-          "h": 92
+          "h": 56
         },
         {
           "slot": "number",

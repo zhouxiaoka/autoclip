@@ -49,4 +49,4 @@ def test_render_normalises_only_the_html_template_path():
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1] / 'services' / 'studio' / 'render.py').read_text(encoding='utf-8')
     block = source[source.index("audio_filter = 'aresample=48000:async=1:first_pts=0'"):source.index("'-c:a', 'aac', '-b:a', '160k']\n            else:")]
-    assert "overlay_path is not None and html_template in ('editorial', 'street')" in block
+    assert "overlay_path is not None and html_template in HTML_TEMPLATE_IDS" in block

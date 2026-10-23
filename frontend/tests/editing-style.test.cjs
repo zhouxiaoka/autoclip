@@ -62,8 +62,10 @@ test('bundled style previews stay inside the size budget', () => {
   const dir = path.join(__dirname, '../src/assets/editing-style')
   const names = fs.readdirSync(dir).filter(name => !name.startsWith('.'))
   assert.deepEqual(names.sort(), [
+    'cinema.poster.webp', 'cinema.preview.mp4', 'cinema.preview.webm',
     'classic.poster.webp', 'classic.preview.mp4', 'classic.preview.webm',
     'editorial.poster.webp', 'editorial.preview.mp4', 'editorial.preview.webm',
+    'news.poster.webp', 'news.preview.mp4', 'news.preview.webm',
     'street.poster.webp', 'street.preview.mp4', 'street.preview.webm',
   ])
   let total = 0

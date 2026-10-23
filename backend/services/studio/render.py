@@ -13,6 +13,7 @@ from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
 from backend.services.studio import audio
 from backend.services.studio.store import directory
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, STYLE_IDS
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 from backend.core import project_cancellation
@@ -231,7 +232,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     overlay_path = None
     overlay_grade = ''
     overlay_job = None
-    if html_template in ('editorial', 'street'):
+    if html_template in HTML_TEMPLATE_IDS:
         from backend.services.studio import packaging_html
         from backend.services.studio.templates.registry import TemplateRegistryError, get
         try:
@@ -249,7 +250,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         overlay_path = overlay_job.path if overlay_job else None
     elif html_fallback == 'rank':
         from backend.services.studio.packaging_html import OverlayJob
-        requested = requested_template if requested_template in ('editorial', 'street') else 'classic'
+        requested = requested_template if requested_template in HTML_TEMPLATE_IDS else 'classic'
         overlay_job = OverlayJob(None, 'classic', False, 'rank', 'none', 'skipped', requested_template=requested)
     out_dir = directory(project_id) / 'output' / 'studio'
     if not directory(project_id).is_dir():
@@ -409,7 +410,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
             if keep_audio:
                 audio_filter = 'aresample=48000:async=1:first_pts=0'
-                if overlay_path is not None and html_template in ('editorial', 'street'):
+                if overlay_path is not None and html_template in HTML_TEMPLATE_IDS:
                     # The HTML templates match the preview's -14 LUFS / -1 dBTP; dad_suit came out at
                     # -22.1 LUFS. Classic keeps its mix byte for byte.
                     measured = audio.measure_loudnorm(['-f', 'concat', '-safe', '0', '-i', str(concat)], project_cancellation.run, max(120, sum(durations)))
@@ -433,7 +434,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
-        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in ('editorial', 'street'):
+        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in HTML_TEMPLATE_IDS:
             from backend.services.packaging_runtime import downgrade_warning
             hint = downgrade_warning(overlay_job.downgrade_reason)
             if hint and hint not in warnings:
@@ -474,7 +475,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             result['template'] = overlay_job.template
             result['requested_template'] = overlay_job.requested_template
         else:
-            requested = requested_template if requested_template in ('editorial', 'street', 'classic') else 'classic'
+            requested = requested_template if requested_template in STYLE_IDS else 'classic'
             result['template'] = 'classic'
             result['requested_template'] = requested
         return result

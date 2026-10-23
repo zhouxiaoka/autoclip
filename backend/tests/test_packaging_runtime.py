@@ -173,6 +173,8 @@ def test_classic_family_stays_classic_even_when_the_runtime_is_ready(monkeypatch
         assert runtime.effective_template(requested) == "classic"
     assert runtime.effective_template("editorial") == "editorial"
     assert runtime.effective_template("street") == "street"
+    assert runtime.effective_template("news") == "news"
+    assert runtime.effective_template("cinema") == "cinema"
 
 
 def test_a_probe_failure_still_returns_classic(monkeypatch):
