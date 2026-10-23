@@ -887,3 +887,100 @@ def test_tracking_detector_stays_at_point_six():
     assert framing.TRACK_SCORE == 0.6
     assert framing.WIDE_SCORE == 0.45
     assert framing.WIDE_SCORE < framing.TRACK_SCORE <= framing.MIN_SCORE
+
+
+def test_profile_talker_beats_a_silent_frontal_guest():
+    """A side-profile speaker next to a guest facing the camera is the crop centre.
+
+    YuNet marks the profile as turned. Returning the only frontal face used to punch in on
+    the guest while the name card still named the profile.
+    """
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    sample = {
+        'offset': 0.4, 't': 0.4,
+        'frontal': [{'x': 0.74, 'w': 0.10, 'motion': 0.2, 'area': 1, 'score': 0.93}],
+        'turned': [{'x': 0.22, 'w': 0.14, 'motion': 8, 'area': 2, 'score': 0.88}],
+    }
+    center = framing._center_for(sample, {}, [], fraction)
+    assert center == pytest.approx(0.22)
+    left, right = _window(framing.crop_x_for_subject(center, 0.14, fraction), fraction)
+    assert left <= 0.22 - 0.07 and right >= 0.22 + 0.07
+    assert not (left <= 0.74 <= right)
+
+
+def test_bound_profile_is_not_replaced_by_the_listener():
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    sample = {
+        'offset': 1.0, 't': 1.0,
+        'frontal': [{'x': 0.74, 'w': 0.10, 'motion': 6, 'area': 1, 'score': 0.93}],
+        'turned': [{'x': 0.22, 'w': 0.14, 'motion': 1, 'area': 2, 'score': 0.88}],
+    }
+    cues = [{'start': 0, 'end': 5, 'speaker': 'host', 'text': '[host] hello'}]
+    assert framing._center_for(sample, {'host': 0.20}, cues, fraction) == pytest.approx(0.22)
+
+
+def test_edge_truncated_face_is_pulled_inward_and_an_interior_face_is_not():
+    fraction = framing.window_fraction(*SOURCE, 1080, 1920)
+    assert framing.crop_x_for_subject(0.30, 0.10, fraction) == pytest.approx(
+        framing.crop_x_for_center(0.30, fraction),
+    )
+    edge = framing.crop_x_for_subject(0.08, 0.16, fraction)
+    assert edge > 0.02
+    left, right = _window(edge, fraction)
+    assert left <= 0.08 <= right
+    # About one face width past the inward edge of the box (0.16), still short of the guest.
+    assert right >= 0.30
+    assert not (left <= 0.74 <= right)
+    clamped_left, clamped_right = _window(framing.crop_x_for_center(0.08, fraction), fraction)
+    assert clamped_left == pytest.approx(0.0, abs=1e-6)
+    assert right > clamped_right
+
+
+def test_unlabeled_scene_locks_onto_the_talking_profile_and_fits_a_silent_guest(tmp_path):
+    """The arrogance failure: one scene, no speaker labels, crop_x swinging 0.8 ↔ 0.0.
+
+    Shot A is the two-shot (profile talking on the left, silent guest on the right).
+    Shot B is the guest alone and silent. Shot C is the profile close-up, box cut by the
+    left edge. The window stays on the profile, the guest reaction is shown whole, and
+    the close-up is not clamped to crop_x 0.
+    """
+    def look(offset, t, frontal, turned):
+        return {'offset': offset, 't': t, 'frontal': frontal, 'turned': turned, 'wide': []}
+
+    guest = {'x': 0.74, 'w': 0.10, 'motion': 0.2, 'area': 1, 'score': 0.93}
+    profile = {'x': 0.22, 'w': 0.14, 'motion': 8, 'area': 2, 'score': 0.88}
+    # Mouth motion below the talking threshold: a profile close-up often looks still,
+    # and the crop still has to stay on the person who was talking in the two-shot.
+    close = {'x': 0.08, 'w': 0.16, 'motion': 1, 'area': 3, 'score': 0.90}
+    shot_a = [look(at, at, [dict(guest)], [dict(profile)]) for at in (0.4, 1.6, 2.8, 4.0, 5.2)]
+    shot_b = [look(at - 6, at, [{**guest, 'motion': 0.0}], []) for at in (6.4, 7.6, 8.8)]
+    shot_c = [look(at - 10, at, [], [dict(close)]) for at in (10.4, 11.6, 12.8, 14.0, 15.2)]
+    scans = [{'shots': [(0.0, 6.0, shot_a), (6.0, 10.0, shot_b), (10.0, 16.0, shot_c)],
+              'faces': 13, 'samples': 13}]
+    draft = Draft(id='d', title='t', aspect='portrait', layout='crop',
+                  scenes=[Scene(id='talk', label='a', start=0, end=16)])
+    cues = framing.cues_from_entries([
+        {'start': 0, 'end': 16, 'text': 'I say this in the company all the time'},
+    ])
+    assert cues and all(not cue.get('speaker') for cue in cues)
+    result = framing.auto_frame(tmp_path / 'clip.mp4', draft, *SOURCE, scans=scans, cues=cues)
+    track = result['scenes'][0]['crop_track']
+    fraction = result['window_fraction']
+    assert _active_point(track, 8.0)['mode'] == 'fit', track
+    assert _active_point(track, 12.0)['crop_x'] > 0.02, track
+
+    def covers_speaker(at, center, width):
+        point = _active_point(track, at)
+        assert point['mode'] == 'crop', (at, track)
+        left, right = _window(point['crop_x'], fraction)
+        assert left <= center <= right
+        assert right >= center + width / 2
+        assert not (left <= 0.74 <= right)
+
+    covers_speaker(1.0, 0.22, 0.14)
+    covers_speaker(12.0, 0.08, 0.16)
+    for point in track:
+        if point['mode'] != 'crop':
+            continue
+        left, right = _window(point['crop_x'], fraction)
+        assert not (left <= 0.74 <= right), point
