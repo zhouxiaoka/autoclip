@@ -265,7 +265,7 @@ def test_new_tools_stay_hidden_when_the_flag_is_off(data_dir, monkeypatch):
     assert 'list_styles' in visible and 'cancel_job' in visible
     styles = mcp_server.list_styles()
     assert styles['ok'] is True
-    assert [row['id'] for row in styles['styles']] == ['editorial', 'street', 'classic']
+    assert [row['id'] for row in styles['styles']] == ['editorial', 'street', 'news', 'cinema', 'classic']
 
 
 def test_legacy_tools_are_deprecated_and_do_not_take_api_key(data_dir, monkeypatch):

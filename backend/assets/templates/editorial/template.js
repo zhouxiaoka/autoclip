@@ -162,15 +162,17 @@
       var text = String(phrase.s || "");
       var mark = phrase.acc ? String(phrase.hl || "") : "";
       var at = mark ? text.indexOf(mark) : -1;
-      if (at >= 0) {
-        // Gold serif on the emphasis only: 「AI其实是一块」 stays sans, 「五层蛋糕」 turns gold.
+      // Gold serif on a shorter emphasis only: 「AI其实是一块」 stays sans, 「五层蛋糕」 turns gold.
+      // The whole caption in that face is a cover-style title (「走过弯路」), so it stays a caption.
+      var partial = at >= 0 && mark.length < text.length;
+      if (partial) {
         var open = '<span class="p' + state + '" style="--u:' + sweep + '%">';
         if (at > 0) html += open + esc(text.slice(0, at)) + "</span>";
         html += '<span class="p acc' + state + '" style="--u:' + sweep + '%">' + esc(mark) + "</span>";
         if (at + mark.length < text.length) html += open + esc(text.slice(at + mark.length)) + "</span>";
         continue;
       }
-      html += '<span class="p' + (phrase.acc ? " acc" : "") + state + '" style="--u:' + sweep + '%">' + esc(text) + "</span>";
+      html += '<span class="p' + state + '" style="--u:' + sweep + '%">' + esc(text) + "</span>";
     }
     return html;
   }

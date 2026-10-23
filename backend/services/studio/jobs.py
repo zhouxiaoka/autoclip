@@ -15,6 +15,7 @@ from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.project_completion import sync_project_completion
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
 from backend.services.studio.render import render_draft
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='studio')
@@ -52,12 +53,12 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
     from backend.services.studio.template_choice import recorded_style
     style = recorded_style(html_template, requested_template)
     job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'brand_outro': brand_outro, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump(), **style}
-    if html_template in ('editorial', 'street') and style['template'] in ('editorial', 'street'):
+    if html_template in HTML_TEMPLATE_IDS and style['template'] in HTML_TEMPLATE_IDS:
         job['html_template'] = html_template
         job['html_safe_area'] = safe_area
     elif html_fallback == 'rank':
         job['html_fallback'] = 'rank'
-        if requested_template in ('editorial', 'street'):
+        if requested_template in HTML_TEMPLATE_IDS:
             job['requested_template'] = requested_template
     if _variant_identity is not None:
         job['variant_links'] = [list(_variant_identity)]
@@ -190,7 +191,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
                 render_kwargs.update(html_template=html_template, features=features, safe_area=safe_area)
             elif html_fallback:
                 render_kwargs.update(html_fallback=html_fallback, features=features)
-                if requested_template in ('editorial', 'street'):
+                if requested_template in HTML_TEMPLATE_IDS:
                     render_kwargs['requested_template'] = requested_template
             result = render_draft(
                 project_id, source(project_id), draft, job_id, lambda p: update(percent=p),
@@ -1273,7 +1274,7 @@ def template_export_kwargs(variant) -> dict:
         }
     if variant.get('html_fallback'):
         kwargs = {'html_fallback': variant['html_fallback']}
-        if variant.get('requested_template') in ('editorial', 'street'):
+        if variant.get('requested_template') in HTML_TEMPLATE_IDS:
             kwargs['requested_template'] = variant['requested_template']
         return kwargs
     return {}

@@ -100,7 +100,7 @@ export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
-  html_template?: 'editorial' | 'street' | 'classic'
+  html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean
 }
@@ -157,7 +157,7 @@ export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
-  html_template?: 'editorial' | 'street' | 'classic'
+  html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
 }
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }

@@ -11,7 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-HTML_TEMPLATE_IDS = ('editorial', 'street')
+HTML_TEMPLATE_IDS = ('editorial', 'street', 'news', 'cinema')
+STYLE_IDS = (*HTML_TEMPLATE_IDS, 'classic')
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
 PACKAGING_FIELDS = ('title_lines', 'cues', 'kicker', 'emphasis', 'numbers', 'gloss', 'speakers', 'stickers')
 
@@ -55,7 +56,7 @@ class CanvasSpec(BaseModel):
         if width < 2 or height < 2 or width % 2 or height % 2:
             raise UserFacingError('overlay_px 必须是偶数像素')
         if (width, height) != (1080, 1920):
-            raise UserFacingError('杂志风和街头快剪的叠加层是 1080×1920')
+            raise UserFacingError('HTML 叠加层是 1080×1920')
         return width, height
 
 
@@ -169,7 +170,7 @@ class CoverSpec(BaseModel):
 
 class TemplateSpec(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    id: Literal['editorial', 'street']
+    id: Literal['editorial', 'street', 'news', 'cinema']
     version: Literal[1]
     name: NameSpec
     fit: FitSpec

@@ -77,7 +77,7 @@ def get_version() -> Dict[str, Any]:
     return {'version': __version__}
 
 
-@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / classic，且只在 mcp_v2_tools 打开时接受；关闭时传了风格返回 disabled。返回的 template 是实际用的风格，requested_template 是请求值。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
+@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / news / cinema / classic，且只在 mcp_v2_tools 打开时接受；关闭时传了风格返回 disabled。返回的 template 是实际用的风格，requested_template 是请求值。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
 def start_quick_output(source: str, platforms: Optional[List[str]] = None, name: Optional[str] = None,
                        srt_path: Optional[str] = None, instruction: str = '', browser: Optional[str] = None,
                        portrait_style: str = 'auto', template: Optional[str] = None) -> Dict[str, Any]:
@@ -442,14 +442,14 @@ def list_styles() -> Dict[str, Any]:
     """Editing styles the produce/template parameter accepts. No extra knobs."""
     if not _v2_enabled():
         return _disabled()
-    from backend.services.studio.template_recommend import TEMPLATES
     catalog = (
         {'id': 'editorial', 'name': '杂志风'},
         {'id': 'street', 'name': '街头快剪'},
+        {'id': 'news', 'name': '新闻'},
+        {'id': 'cinema', 'name': '电影'},
         {'id': 'classic', 'name': '经典'},
     )
-    styles = [row for row in catalog if row['id'] in TEMPLATES]
-    return {'ok': True, 'styles': styles}
+    return {'ok': True, 'styles': list(catalog)}
 
 
 def _sync_v2_tools() -> None:
@@ -487,7 +487,7 @@ async def _list_tools():
 server.list_tools = _list_tools  # type: ignore[method-assign]
 _V2_SPECS = (
     (cancel_job, 'cancel_job', '取消一条仍在进行的出片或切片任务，停掉它的 ffmpeg。不删除已写出的成片。查不到返回 unknown。'),
-    (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
+    (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、news（新闻）、cinema（电影）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
 )
 
 from backend.services import mcp_telemetry

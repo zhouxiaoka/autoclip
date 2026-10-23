@@ -1,0 +1,30 @@
+id: cinema
+version: 1
+name: {zh: 电影, en: Cinema}
+fit:
+  formats: {sit_down_interview: 0.75, keynote_stage: 0.65, podcast_studio: 0.4, street_interview: 0.2}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: window
+  face_y: 0.42
+  head_zone: [220, 980]
+  zoom:
+    mode: creep
+    creep: 0.03
+    intro: {from: 1.04, dur: 1.2}
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.05:saturation=0.8"
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 160, alt_top: 160}
+    subtitle: {top: 1668, max_rows: 2}
+  safe_area: douyin
+  limits: {emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: cinema_3x4, from_overlay: true}
+qa: {}

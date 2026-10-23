@@ -78,12 +78,12 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion', 'copy_and_save'],
     output_rating: ['ready', 'needs_edit', 'unusable'],
-    template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
-    requested_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
-    from_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
-    to_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
-    recommended: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
-    recommended_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
+    requested_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
+    from_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
+    to_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
+    recommended: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
+    recommended_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
     reason_code: ['seated_interview', 'street_quick', 'speech', 'default', 'timeout'],
     flag_variant: ['visual', 'text'],
     source_kind: ['link', 'file', 'none'],
@@ -126,7 +126,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
   if (typeof input.downgraded === 'boolean') out.downgraded = input.downgraded
-  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'ttfc_ms', 'stage_ms_download', 'stage_ms_transcribe', 'stage_ms_analyze', 'stage_ms_render', 'latency_ms', 'first_frame_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count', 'retry_count', 'degrade_count', 'billable_calls_before_failure', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls']) {
+  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'ttfc_ms', 'stage_ms_download', 'stage_ms_transcribe', 'stage_ms_analyze', 'stage_ms_render', 'latency_ms', 'first_frame_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'news_count', 'cinema_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count', 'retry_count', 'degrade_count', 'billable_calls_before_failure', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {

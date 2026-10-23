@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
+
 Goal = Literal['content', 'highlight', 'promo']
 Language = Literal['source', 'zh', 'en', 'ja']
 
@@ -92,7 +94,7 @@ class PackagingGloss(BaseModel):
 
 
 _CLASSIC_TEMPLATES = {'interview_zh', 'podcast_en'}
-_HTML_TEMPLATES = {'editorial', 'street'}
+_HTML_TEMPLATES = set(HTML_TEMPLATE_IDS)
 _CLASSIC_STYLES = {
     'interview_zh': ('classic', 'boxed', 'spotlight'),
     'podcast_en': ('pop', 'boxed', 'cinematic'),
@@ -300,11 +302,11 @@ class OutputVariant(BaseModel):
     # Shadow quality report. Absent when the gate is off. Never changes the file.
     qa: QaReport | None = None
     # Set on the top three scored portrait clips when the import chose an HTML template.
-    html_template: Literal['editorial', 'street'] | None = None
+    html_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
     # The other automatic portrait clips record why they stayed on classic.
     html_fallback: Literal['rank'] | None = None
     # The import choice, kept when this clip renders classic because it was not in the top three.
-    requested_template: Literal['editorial', 'street'] | None = None
+    requested_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
 
 
 class ImportOptions(BaseModel):
@@ -317,7 +319,7 @@ class ImportOptions(BaseModel):
     platforms: list[str] = Field(default_factory=lambda: ['douyin'], min_length=1, max_length=8)
     auto_start: bool = False
     portrait_style: Literal['auto', 'interview', 'podcast'] = 'auto'
-    html_template: Literal['editorial', 'street', 'classic'] | None = None
+    html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
     recommended_template: Literal['editorial', 'street', 'classic'] | None = None
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
 

@@ -606,6 +606,7 @@ def test_counts_templates_framing_and_fallbacks_without_content():
     assert generation_summary(SNAPSHOT) == {
         'variant_count': 3, 'completed_variant_count': 1, 'failed_variant_count': 1, 'on_demand_variant_count': 1, 'skipped_variant_count': 1,
         'platform_count': 2, 'interview_count': 1, 'podcast_count': 1, 'landscape_count': 0, 'editorial_count': 0, 'street_count': 0,
+        'news_count': 0, 'cinema_count': 0,
         'classic_count': 2, 'html_downgrade_count': 0, 'speaker_framed_count': 1, 'full_frame_count': 1, 'framing_pending_count': 0,
         'framing_captions_count': 0, 'outro_applied_count': 0, 'outro_fallback_count': 0, 'outro_unknown_count': 1,
         'packaging_fallback_count': 1, 'trimmed_count': 1, 'burned_captions': False, 'duration_ms': 240000}
@@ -632,7 +633,19 @@ def test_a_rank_skip_is_classic_and_not_a_downgrade():
         {'job_id': 'j1', 'status': 'completed', 'result': {'template_render': {'template': 'classic', 'requested_template': 'editorial', 'downgraded': False, 'downgrade_reason': 'rank', 'outcome': 'skipped'}}},
         {'job_id': 'j2', 'status': 'completed', 'result': {'template_render': {'template': 'classic', 'requested_template': 'editorial', 'downgraded': True, 'downgrade_reason': 'over_budget', 'outcome': 'downgraded'}}}],
         'drafts': []})
-    assert (s['html_downgrade_count'], s['classic_count'], s['editorial_count']) == (1, 2, 0)
+    assert (s['html_downgrade_count'], s['classic_count'], s['editorial_count'], s['news_count'], s['cinema_count']) == (1, 2, 0, 0, 0)
+
+
+def test_news_and_cinema_renders_are_counted_unless_downgraded():
+    s = generation_summary({'output_variants': [
+        {'draft_id': 'n', 'render_job_id': 'jn', 'strategy_id': 'douyin', 'status': 'completed'},
+        {'draft_id': 'c', 'render_job_id': 'jc', 'strategy_id': 'douyin', 'status': 'completed'},
+        {'draft_id': 'd', 'render_job_id': 'jd', 'strategy_id': 'douyin', 'status': 'completed'}], 'jobs': [
+        {'job_id': 'jn', 'status': 'completed', 'result': {'template_render': {'template': 'news', 'downgraded': False}}},
+        {'job_id': 'jc', 'status': 'completed', 'result': {'template_render': {'template': 'cinema', 'downgraded': False}}},
+        {'job_id': 'jd', 'status': 'completed', 'result': {'template_render': {'template': 'news', 'downgraded': True}}}],
+        'drafts': []})
+    assert (s['news_count'], s['cinema_count'], s['html_downgrade_count'], s['classic_count']) == (1, 1, 1, 1)
 
 
 def test_recommendation_fields_are_kept():

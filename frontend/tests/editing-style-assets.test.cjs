@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const src = path.join(__dirname, '../src')
 const read = rel => fs.readFileSync(path.join(src, rel), 'utf8')
-const STYLES = ['editorial', 'street', 'classic']
+const STYLES = ['editorial', 'street', 'news', 'cinema', 'classic']
 
 test('every style poster and preview (webm + mp4) is a local bundled asset', () => {
   const media = read('features/studio/editingStyleMedia.ts')

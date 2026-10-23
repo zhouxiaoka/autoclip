@@ -9,7 +9,7 @@ import re
 
 from backend.core.event_catalog import detect_os, normalize_os
 
-TEMPLATES = ('editorial', 'street', 'classic', 'interview_zh', 'podcast_en', 'landscape', 'none')
+TEMPLATES = ('editorial', 'street', 'news', 'cinema', 'classic', 'interview_zh', 'podcast_en', 'landscape', 'none')
 ENCODERS = ('libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox')
 DOWNGRADE_REASONS = ('none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode')
 FAILURE_REASONS = ('none', 'capture', 'encode', 'runtime', 'timeout', 'unknown')
