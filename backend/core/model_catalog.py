@@ -199,13 +199,36 @@ def default_model_for(provider: str) -> str:
     return DEFAULT_MODELS.get(provider, "qwen-plus")
 
 
+# 对话补全以外的家族。search / tts 按词切，避免误伤 research、attestation 这类名字。
+_NON_CHAT_FAMILY = re.compile(
+    r"(?:^|[-_/])(?:realtime|transcribe|tts|moderation|embedding|embed|search)(?:$|[-_/])"
+    r"|deep[-_]research"
+    r"|(?:^|[-_/])(?:babbage|davinci)(?:$|[-_/]|\d)"
+    r"|(?:^|[-_/])text-[a-z0-9][a-z0-9._-]*-001$"
+)
+_NON_CHAT_SUBSTRINGS = ("embedding", "whisper", "moderation", "transcribe", "realtime", "deep-research", "deep_research")
+
+
+def is_non_chat_family(name: str) -> bool:
+    """Realtime, speech, moderation, search, embeddings, and legacy completion models.
+
+    A Vision tag must not make these selectable chat or vision models.
+    """
+    lowered = (name or "").strip().lower()
+    if not lowered:
+        return False
+    if any(token in lowered for token in _NON_CHAT_SUBSTRINGS):
+        return True
+    return _NON_CHAT_FAMILY.search(lowered) is not None
+
+
 def is_chat_model(name: str, provider: str = "", official: bool = True) -> bool:
     """过滤掉嵌入 / 语音 / 生图等非对话型号。自建兼容接口不过滤前缀，只去掉明显非文本项。"""
     raw = (name or "").strip()
     if not raw:
         return False
     lowered = raw.lower()
-    if any(token in lowered for token in _SKIP_SUBSTR):
+    if is_non_chat_family(lowered) or any(token in lowered for token in _SKIP_SUBSTR):
         return False
     if provider == "openai" and official:
         return lowered.startswith(_OPENAI_CHAT_PREFIXES)

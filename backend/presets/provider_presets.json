@@ -8,6 +8,8 @@
     "88api": "api88",
     "88api.ai": "api88",
     "api.88api.ai": "api88",
+    "apimart.ai": "apimart",
+    "api.apimart.ai": "apimart",
     "deepseek-ai": "deepseek",
     "moonshot": "kimi",
     "moonshotai-cn": "kimi",
@@ -148,6 +150,53 @@
           "qwen3.8-flash",
           "qwen3.8-max",
           "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
+    },
+    "apimart": {
+      "display_name": "APIMart",
+      "ui_name": "APIMart",
+      "short_name": "APIMart",
+      "catalog_label": "APIMart",
+      "group": "recommended",
+      "protocol": "openai-completions",
+      "base_url": "https://api.apimart.ai/v1",
+      "accepted_hosts": [
+        "api.apimart.ai"
+      ],
+      "capabilities": [
+        "language"
+      ],
+      "docs_url": "https://go.apimart.ai/tw-autoclip",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "apimart_api_key",
+      "placeholder": "sk-…",
+      "hint": "赞助合作伙伴。一个 Key 调用语言和画面理解模型，接口地址已预设。",
+      "cloud_hint": "赞助合作伙伴。一个 Key 调用语言和画面理解模型，接口地址已预设。",
+      "sponsor": {
+        "register_url": "https://go.apimart.ai/tw-autoclip",
+        "guide_url": "https://docs.apimart.ai/en/quickstart",
+        "offer": "获取 API Key",
+        "description": "在 APIMart 创建密钥后粘贴到这里即可，接口地址已预设。"
+      },
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "qwen3.8-flash",
+          "gemini-3.8-flash",
+          "deepseek-v4-flash"
+        ],
+        "vision": [
+          "qwen3.8-flash",
           "gemini-3.8-flash"
         ],
         "asr": [],
@@ -1176,6 +1225,8 @@
     "console_hosts": [
       "ai.google.dev",
       "aistudio.google.com",
+      "apimart.ai",
+      "docs.apimart.ai",
       "aliyun.com",
       "bailian.console.aliyun.com",
       "chat.deepseek.com",
@@ -1192,6 +1243,7 @@
       "platform.openai.com",
       "www.88api.ai",
       "www.aliyun.com",
+      "www.apimart.ai",
       "www.deepseek.com",
       "www.infistar.ai",
       "www.infistar.cc",

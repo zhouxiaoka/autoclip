@@ -137,6 +137,16 @@ def test_bad_endpoint_from_html_or_bare_404(status, body):
 
 
 @pytest.mark.stdlib_only
+@pytest.mark.parametrize("body", [
+    {"error": {"code": "DeploymentNotFound", "message": "DeploymentNotFound"}},
+    {"error": {"code": "DeploymentNotFound", "message": "The API deployment for this resource does not exist."}},
+    "DeploymentNotFound",
+])
+def test_deployment_not_found_is_a_missing_model(body):
+    _assert_safe(classify_upstream_error(404, body), UpstreamErrorType.MODEL_NOT_FOUND, False)
+
+
+@pytest.mark.stdlib_only
 def test_json_string_and_sdk_repr_do_not_change_class_or_leak():
     body = json.dumps({"error": {"code": "invalid_api_key", "message": f"Incorrect API key provided: {SECRET}"}})
     result = classify_upstream_error(401, body)

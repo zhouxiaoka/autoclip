@@ -36,18 +36,18 @@ CONSUMERS = (
 )
 
 
-def test_catalog_has_thirty_nine_grouped_providers():
+def test_catalog_has_forty_grouped_providers():
     catalog = provider_presets.get_catalog()
     assert catalog.schema_version == 1
     assert catalog.version >= 1
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 39
+    assert len(catalog.providers) == 40
     groups = {}
     for item in catalog.providers.values():
         groups[item.group] = groups.get(item.group, 0) + 1
-    assert groups == {"recommended": 2, "popular": 10, "local": 4, "more": 23}
+    assert groups == {"recommended": 3, "popular": 10, "local": 4, "more": 23}
     assert set(catalog.providers) >= {
-        "api88", "infistar", "deepseek", "dashscope", "siliconflow", "seed", "glm",
+        "api88", "infistar", "apimart", "deepseek", "dashscope", "siliconflow", "seed", "glm",
         "kimi", "minimax-cn", "xiaomi", "openai", "gemini", "whisper", "sensevoice",
         "ollama", "lmstudio", "openrouter", "anthropic", "grok", "qianfan", "hunyuan",
     }
@@ -59,7 +59,7 @@ def test_existing_product_defaults_are_preserved():
     assert cloud_presets.CLOUD_PRESETS["api88"].base_url == "https://api.88api.ai/v1"
     assert cloud_presets.CLOUD_PRESETS["api88"].default_model == ""
     assert cloud_presets.CLOUD_PRESETS["infistar"].base_url == "https://infistar.cc/v1"
-    assert set(cloud_presets.CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88"}
+    assert set(cloud_presets.CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart"}
     assert local_presets.LOCAL_PRESETS["ollama"].base_url == "http://localhost:11434/v1"
     assert local_presets.LOCAL_PRESETS["ollama"].default_model == "qwen2.5:7b"
     assert local_presets.LOCAL_PRESETS["lmstudio"].base_url == "http://localhost:1234/v1"
@@ -86,6 +86,17 @@ def test_existing_product_defaults_are_preserved():
         assert provider_presets.candidates_for(provider, "vision") == models
         assert provider_presets.candidates_for(provider, "image") == ()
         assert all(model_catalog.supports_vision(model) for model in models)
+    assert provider_presets.candidates_for("apimart", "analysis") == (
+        "qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash",
+    )
+    assert provider_presets.candidates_for("apimart", "vision") == (
+        "qwen3.8-flash", "gemini-3.8-flash",
+    )
+    assert provider_presets.get_provider("apimart").default_model == ""
+    assert provider_presets.get_provider("apimart").catalog == ()
+    assert model_catalog.supports_vision("qwen3.8-flash")
+    assert model_catalog.supports_vision("gemini-3.8-flash")
+    assert not model_catalog.supports_vision("deepseek-v4-flash")
     dashscope = provider_presets.get_provider("dashscope")
     assert dashscope.candidates["asr"] == ("qwen-audio-3.1-asr-flash", "qwen-audio-3.0-asr-flash")
     assert provider_presets.get_provider("api88").candidates["asr"] == ()
@@ -147,11 +158,11 @@ def test_importlib_resources_finds_the_catalog():
     assert found == CATALOG_PATH
     catalog = provider_presets.load_provider_catalog()
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 39
+    assert len(catalog.providers) == 40
 
 
 def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
-    """A wheel installed away from the checkout must still load 39 providers."""
+    """A wheel installed away from the checkout must still load 40 providers."""
     wheel_dir = tmp_path / "wheel"
     installed = tmp_path / "installed"
     elsewhere = tmp_path / "elsewhere"
@@ -198,7 +209,7 @@ assert Path(backend.__file__).resolve().is_relative_to(root)
 assert Path(provider_presets.__file__).resolve().is_relative_to(root)
 provider_presets.reset_catalog_cache()
 catalog = provider_presets.get_catalog()
-assert len(catalog.providers) == 39
+assert len(catalog.providers) == 40
 assert catalog.path.resolve().is_relative_to(root)
 resource = provider_presets._resource_presets_path()
 assert resource is not None and resource.resolve().is_relative_to(root)

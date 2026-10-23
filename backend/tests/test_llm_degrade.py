@@ -60,6 +60,7 @@ def test_candidate_order_is_sponsor_popular_other():
     ]) == ["sponsor-m", "popular-m", "other-m"]
     assert degrade.provider_group("api88") == "sponsor"
     assert degrade.provider_group("infistar") == "sponsor"
+    assert degrade.provider_group("apimart") == "sponsor"
     assert degrade.provider_group("dashscope") == "popular"
     assert degrade.provider_group("compatible") == "other"
 

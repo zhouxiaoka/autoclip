@@ -14,6 +14,7 @@ import pytest
 from backend.core.model_catalog import supports_vision
 from backend.core.model_recovery import (
     clear_remembered_models,
+    pick_available_analysis_model,
     pick_available_vision_model,
     provider_for_endpoint,
     remembered_model,
@@ -54,6 +55,30 @@ def test_live_list_supplies_a_vision_model_when_no_preset_hint_is_offered():
     assert pick_available_vision_model("dashscope", live, exclude=["qwen-vl-plus"]) == "qwen3-vl-plus"
     assert pick_available_vision_model("dashscope", ["qwen-plus", "qwen-vl-plus"], exclude=["qwen-vl-plus"]) is None
     assert pick_available_vision_model("compatible", ["text-only-model", "custom-vl"], exclude=["retired"]) == "custom-vl"
+
+
+def test_analysis_order_skips_a_dead_id_and_non_chat_families():
+    live = [
+        "gpt-5-search-api", "omni-moderation-latest", "chatgpt-4o-latest",
+        "other-chat", "qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash",
+        "text-embedding-3-large",
+    ]
+    # The first analysis hint that is still listed wins over an earlier non-chat id.
+    assert pick_available_analysis_model("apimart", live, exclude=["chatgpt-4o-latest"]) == "qwen3.8-flash"
+    # A missing earlier hint keeps preset order. deepseek stays eligible: it is chat, not vision.
+    assert pick_available_analysis_model(
+        "apimart", ["other-chat", "deepseek-v4-flash", "gemini-3.8-flash"], exclude=["chatgpt-4o-latest"],
+    ) == "gemini-3.8-flash"
+    assert pick_available_analysis_model(
+        "apimart", ["gpt-5-search-api", "deepseek-v4-flash"], exclude=["chatgpt-4o-latest"],
+    ) == "deepseek-v4-flash"
+
+
+def test_analysis_falls_back_to_the_first_live_chat_model():
+    live = ["gpt-5-search-api", "omni-moderation-latest", "other-chat", "text-embedding-3-large"]
+    assert pick_available_analysis_model("apimart", live, exclude=["chatgpt-4o-latest"]) == "other-chat"
+    assert pick_available_analysis_model("compatible", live) == "other-chat"
+    assert pick_available_analysis_model("apimart", ["gpt-5-search-api", "text-embedding-3-large"]) is None
 
 
 def test_provider_comes_from_the_endpoint_identity_or_the_bailian_host():

@@ -80,14 +80,17 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     """全局异常处理器"""
     request_id = getattr(request.state, 'request_id', None)
     
-    # 记录异常详情
+    # 记录异常详情。校验错误的 str() 会带上被截断的 input，密钥尾巴要先抹掉。
+    from backend.core.log_redaction import redact_text
     logger.error(
-        f"未处理的异常: {type(exc).__name__}: {str(exc)}",
+        "未处理的异常: %s: %s",
+        type(exc).__name__,
+        redact_text(str(exc)),
         extra={
             "request_id": request_id,
             "path": request.url.path,
             "method": request.method,
-            "traceback": traceback.format_exc()
+            "traceback": redact_text(traceback.format_exc()),
         }
     )
     if not isinstance(exc, (HTTPException, RequestValidationError, StarletteHTTPException)):
@@ -277,11 +280,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 def handle_starlette_http_exception(exc: StarletteHTTPException, request_id: str = None) -> JSONResponse:
     """处理StarletteHTTPException"""
+    from backend.core.log_redaction import redact_text
+    message = redact_text(str(exc.detail))
     return create_error_response(
         status_code=exc.status_code,
         error_code=f"STARLETTE_{exc.status_code}",
-        message=str(exc.detail),
-        request_id=request_id
+        message=message,
+        request_id=request_id,
+        detail=message,
     )
 
 

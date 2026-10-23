@@ -1,5 +1,5 @@
 """
-云端 OpenAI 兼容预设：DeepSeek / Seed / Kimi / GLM / Grok / Infistar / 88API（赞助）。
+云端 OpenAI 兼容预设：DeepSeek / Seed / Kimi / GLM / Grok / Infistar / 88API / APIMart（赞助）。
 
 底层仍是 openai + 官方 base_url，和 Ollama 预设同一套路，但必须带各家自己的 key，
 不能复用用户的 OpenAI key。设置页、CLI、MCP 都用 `--provider deepseek` 这种名字。

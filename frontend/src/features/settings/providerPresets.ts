@@ -147,6 +147,10 @@ export function analysisCandidates(name?: string): string[] {
   return getProvider(name)?.candidates.analysis || []
 }
 
+export function visionCandidates(name?: string): string[] {
+  return getProvider(name)?.candidates.vision || []
+}
+
 export function imageCandidates(name?: string): string[] {
   return getProvider(name)?.candidates.image || []
 }

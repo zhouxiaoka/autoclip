@@ -217,6 +217,12 @@ def test_config_source_enum_never_carries_strings():
     assert config_source('gemini', 'https://proxy.example/v1', preset.default_model) == 'customized'
     assert config_source('gemini', preset.base_url, 'my-private-finetune') == 'customized'
     assert config_source('compatible', 'https://gw.example/v1', 'm1') == 'customized'
+    apimart = get_provider('apimart')
+    assert config_source('apimart', apimart.base_url, 'qwen3.8-flash') == 'preset'
+    assert config_source('apimart', apimart.base_url, 'account-only-model') == 'preset'
+    assert config_source('apimart', 'https://proxy.example/v1', 'qwen3.8-flash') == 'customized'
+    api88 = get_provider('api88')
+    assert config_source('api88', api88.base_url, 'account-only-model') == 'preset'
 
 
 def test_connection_test_endpoint_reports_config_source(monkeypatch):

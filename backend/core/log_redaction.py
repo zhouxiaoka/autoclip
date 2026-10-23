@@ -34,6 +34,9 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)([\"']?(?:x-goog-api-key|x-api-key|api[_-]?key|apikey|access[_-]?token|secret[_-]?key|password)[\"']?\s*[:=]\s*)([\"'])(?:\\.|(?!\2)[^\\\r\n])*\2"), r"\1\2" + REDACTED + r"\2"),
     # key=value / "key": "value" credential fields
     (re.compile(r"(?i)([\"']?(?:x-goog-api-key|x-api-key|api[_-]?key|apikey|access[_-]?token|secret[_-]?key|password)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])[^\s\"',;}&]+"), r"\1" + REDACTED),
+    # Pydantic truncates long inputs as input_value='sk-…TAIL'. The sk- pattern
+    # stops at the ellipsis and would leave the key tail in logs and 422 bodies.
+    (re.compile(r"input_value=.*?(?=,\s*input_type=)", re.DOTALL), "input_value=" + REDACTED),
     # Well-known key shapes
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}"), REDACTED),
     (re.compile(r"\bAIza[0-9A-Za-z_\-]{10,}"), REDACTED),

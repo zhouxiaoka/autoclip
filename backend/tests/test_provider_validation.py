@@ -239,6 +239,7 @@ def test_success_probes_with_about_sixteen_tokens_and_returns_models(monkeypatch
     assert result.model_ids == ['gpt-4o-mini', 'gpt-4o']
     assert posted[0]['max_tokens'] == 16
     assert posted[0]['model'] == 'gpt-4o-mini'
+    assert posted[0]['stream'] is False
 
 
 @pytest.mark.parametrize('provider', ['gemini', 'compatible'])

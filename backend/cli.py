@@ -62,7 +62,7 @@ def _err(msg: str) -> None:
 
 def _add_llm_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("模型（不填则用桌面应用设置页里的配置）")
-    g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio")
+    g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / apimart，或本地预设 ollama / lmstudio")
     g.add_argument("--model", help="模型名，如 qwen-plus、gpt-4o-mini、qwen2.5:7b")
     g.add_argument("--base-url", help="OpenAI 兼容接口地址（provider=openai 时用；ollama/lmstudio 有默认值）")
     g.add_argument("--api-key", help="已弃用。请改用环境变量 AUTOCLIP_API_KEY；仍传入时会在 stderr 打印警告")
@@ -298,6 +298,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
         ("grok", "Grok（xAI）", "需要 key"),
         ("api88", "88API Token聚合平台（赞助）", "需要 key，新用户注册赠送体验额度"),
         ("infistar", "Infistar 无限星河（赞助）", "需要 key，专属链接注册可领体验额度"),
+        ("apimart", "APIMart（赞助）", "需要 key，一个 Key 调用语言和画面理解模型"),
     ] + [
         (p.key, p.display_name, f"无需 key；默认 {p.base_url}" + (f"，默认模型 {p.default_model}" if p.default_model else "")
          + (f"。{p.context_hint}" if p.context_hint else ""))

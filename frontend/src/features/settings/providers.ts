@@ -1,10 +1,10 @@
 import { t } from '../../i18n'
 import { getCatalog, getProvider } from './providerPresets'
 
-export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
+export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string }
 type CloudPreset = { baseUrl: string; defaultModel: string }
-export type SponsorId = 'infistar' | 'api88'
+export type SponsorId = 'infistar' | 'api88' | 'apimart'
 type Sponsor = { id: SponsorId; registerUrl: string; guideUrl: string; offer: string; description: string }
 type ProviderGroup = 'sponsor' | 'cloud' | 'compatible' | 'local'
 const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
@@ -17,14 +17,14 @@ const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
 type ProviderEntry = { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; group: ProviderGroup; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor; referralUrl?: string }
 
 const UI_KEYS: ProviderKey[] = [
-  'dashscope', 'openai', 'compatible', 'api88', 'infistar',
+  'dashscope', 'openai', 'compatible', 'api88', 'infistar', 'apimart',
   'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok',
   'ollama', 'lmstudio',
 ]
 
 function groupFor(key: ProviderKey): ProviderGroup {
   if (key === 'compatible') return 'compatible'
-  if (key === 'api88' || key === 'infistar') return 'sponsor'
+  if (key === 'api88' || key === 'infistar' || key === 'apimart') return 'sponsor'
   if (key === 'ollama' || key === 'lmstudio') return 'local'
   return 'cloud'
 }
@@ -52,7 +52,7 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
       get contextHint() { return t(row.context_hint) },
     }
   }
-  if (row.sponsor && (key === 'api88' || key === 'infistar')) {
+  if (row.sponsor && (key === 'api88' || key === 'infistar' || key === 'apimart')) {
     entry.sponsor = {
       id: key,
       registerUrl: row.sponsor.register_url,

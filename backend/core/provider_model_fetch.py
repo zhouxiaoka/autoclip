@@ -61,6 +61,9 @@ class AccountModelList:
     # Connection-test telemetry only: integer upstream status and a coarse network kind.
     http_status: int = 0
     network_kind: str = ""
+    # Live capability from the account list. Only ``multimodal`` is stored: a Text
+    # tag never vetoes the name heuristic. Not part of the public API payload.
+    capabilities: dict[str, str] = field(default_factory=dict)
 
     def as_api(self) -> dict:
         return {
@@ -124,6 +127,77 @@ def normalize_model_id(raw: Any) -> str:
     if not name or not _MODEL_ID.fullmatch(name):
         return ""
     return name
+
+
+_NON_CHAT_CATEGORIES = frozenset({"image", "video", "audio"})
+_VISION_TAGS = frozenset({"vision", "omni"})
+_CHAT_TAGS = frozenset({"text", "vision", "omni"})
+
+
+def capability_from_tags(tags: Any) -> str | None:
+    """APIMart ``capability_tags`` may only add vision.
+
+    ``Vision`` or ``Omni`` means multimodal. A ``Text`` tag does not veto the
+    name heuristic (Gemini 3.5–3.8, Qwen3.x and Claude are tagged Text and still
+    accept images). Unknown or empty tags return None.
+    Docs: https://docs.apimart.ai/en/api-reference/texts/models/list
+    """
+    if not isinstance(tags, Sequence) or isinstance(tags, (str, bytes)):
+        return None
+    lowered = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+    if lowered & _VISION_TAGS:
+        return "multimodal"
+    return None
+
+
+def apimart_listing_entry(item: Any) -> tuple[str, str | None] | None:
+    """One APIMart ``/v1/models`` row. None drops image, video, audio, and non-chat tags."""
+    if isinstance(item, str):
+        name = normalize_model_id(item)
+        return (name, None) if name else None
+    if not isinstance(item, Mapping):
+        return None
+    name = normalize_model_id(item.get("id") or item.get("name"))
+    if not name:
+        return None
+    from backend.core.model_catalog import is_non_chat_family
+    category = str(item.get("category") or "").strip().lower()
+    if category in _NON_CHAT_CATEGORIES or is_non_chat_family(name):
+        return None
+    tags = item.get("capability_tags")
+    capability = capability_from_tags(tags)
+    if isinstance(tags, list) and tags and capability is None:
+        lowered = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+        if lowered and not (lowered & _CHAT_TAGS):
+            return None
+    return name, capability
+
+
+def _page_models(payload: Any, protocol: str, provider: str) -> tuple[list[str], dict[str, str]]:
+    if (provider or "").strip().lower() != "apimart":
+        return extract_model_ids(payload, protocol=protocol), {}
+    ids: list[str] = []
+    capabilities: dict[str, str] = {}
+    seen: set[str] = set()
+    for item in _payload_items(payload, protocol):
+        entry = apimart_listing_entry(item)
+        if not entry:
+            continue
+        name, capability = entry
+        if name in seen:
+            continue
+        seen.add(name)
+        ids.append(name)
+        if capability:
+            capabilities[name] = capability
+    return ids, capabilities
+
+
+def _stamp_provider_query(url: str, provider: str) -> str:
+    """APIMart publishes category and capability tags only when ``expand=category``."""
+    if (provider or "").strip().lower() == "apimart":
+        return _with_query(url, expand="category")
+    return url
 
 
 def extract_model_ids(payload: Any, *, protocol: str = "openai-completions") -> list[str]:
@@ -375,8 +449,10 @@ def fetch_provider_models(
         url = _with_query(url, limit=ANTHROPIC_PAGE_SIZE)
     elif resolved_protocol == "google-generative-ai":
         url = _with_query(url, pageSize=GEMINI_PAGE_SIZE)
+    url = _stamp_provider_query(url, provider)
 
     collected: list[str] = []
+    capabilities: dict[str, str] = {}
     seen: set[str] = set()
     pages = 0
     truncated = False
@@ -425,7 +501,7 @@ def fetch_provider_models(
         if not _is_models_page(payload, resolved_protocol):
             return _failed(_as_classified(UpstreamErrorType.BAD_ENDPOINT), host, pages=pages)
 
-        page_ids = extract_model_ids(payload, protocol=resolved_protocol)
+        page_ids, page_caps = _page_models(payload, resolved_protocol, provider)
         for name in page_ids:
             if name in seen:
                 continue
@@ -434,6 +510,8 @@ def fetch_provider_models(
                 break
             seen.add(name)
             collected.append(name)
+            if name in page_caps:
+                capabilities[name] = page_caps[name]
         if truncated:
             break
 
@@ -452,6 +530,7 @@ def fetch_provider_models(
             url = _with_query(_models_url(base_url, resolved_protocol), limit=ANTHROPIC_PAGE_SIZE, after_id=cursor)
         else:
             url = _with_query(_models_url(base_url, resolved_protocol), limit=ANTHROPIC_PAGE_SIZE, after=cursor)
+        url = _stamp_provider_query(url, provider)
 
     if pages >= MAX_PAGES and previous_cursor:
         truncated = True
@@ -468,6 +547,7 @@ def fetch_provider_models(
         recommended=recommended,
         truncated=truncated,
         source="live",
+        capabilities=capabilities,
         message_key=_message_key(ok=True, truncated=truncated, recommended=recommended, had_candidates=had_candidates),
         base_url_host=host,
         pages=pages,

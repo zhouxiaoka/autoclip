@@ -1,7 +1,9 @@
 """1.5.7 terminal-event identity: provider slug + config_source enum, never URL/key/custom names.
 
 ``provider`` is a catalog slug (or ``other``); ``config_source`` is ``preset`` when the role's
-connection uses the catalog base URL and a catalog model id, else ``customized``.
+connection uses the catalog base URL. A non-empty catalog also requires a known model id.
+Live-list presets (empty catalog, including APIMart, 88API and Infistar) stay ``preset``
+for whatever id the account currently offers.
 """
 from __future__ import annotations
 
@@ -33,7 +35,9 @@ def config_source(provider: str | None, base_url: str | None, model: str | None)
         return 'customized'
     model_id = (model or '').strip()
     known = {preset.default_model, *(preset.catalog or ()), *(m for ids in preset.candidates.values() for m in ids)}
-    if model_id and model_id not in known:
+    known.discard('')
+    # Empty catalog means the account list is the menu. Any live id on the preset URL is still preset.
+    if model_id and model_id not in known and preset.catalog:
         return 'customized'
     return 'preset'
 

@@ -125,6 +125,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
         if disables_qwen_thinking(name, base):
             # Qwen3.5–3.8 on Bailian think by default (RC156 Win QA #18); allowlist only, see llm_providers.
             payload['enable_thinking'] = False
+        # APIMart (and other compatible hosts) stream unless this is explicitly false.
+        payload['stream'] = False
         return token_param_kwargs(name, base, payload)  # OpenAI o-series / gpt-5+ reject max_tokens (#333)
 
     body = build_body(model)

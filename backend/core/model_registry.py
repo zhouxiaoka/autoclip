@@ -300,6 +300,21 @@ def _records(connection, raw, data):
             # Same name rules the pipeline uses for capability=auto. Only ever "multimodal":
             # an unfamiliar ID is never labelled text-only.
             capability, source = 'multimodal', 'name'
+        if getattr(connection, 'provider', None) == 'apimart':
+            # Vision/Omni tags add multimodal. A Text tag leaves the name heuristic
+            # in place. Non-chat families are dropped even when tagged Vision.
+            from backend.core.provider_model_fetch import capability_from_tags
+            category = str(item.get('category') or '').strip().lower()
+            if category in {'image', 'video', 'audio'} or model_catalog.is_non_chat_family(name):
+                continue
+            tags = item.get('capability_tags')
+            if isinstance(tags, list) and tags:
+                lowered = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+                if lowered and not (lowered & {'text', 'vision', 'omni'}):
+                    continue
+            tagged = capability_from_tags(tags)
+            if tagged:
+                capability, source = tagged, 'provider'
         catalog = _catalog_record(connection.provider, name, data)
         image = ('image' in outputs if outputs is not None else
                  catalog.get('image_output', False) or name in image_catalog.MODELS.get(connection.provider, []) or name in model_catalog.IMAGE_MODELS.get(connection.provider, []))
@@ -373,7 +388,9 @@ async def _discover_from_provider(connection, refresh=False):
                 if not token:
                     return raw
         headers = {'Authorization': 'Bearer ' + endpoint['api_key']} if endpoint['api_key'] else {}
+        params = {'expand': 'category'} if connection.provider == 'apimart' else None
         payload = await model_catalog._http_get_json(endpoint['base_url'] + '/models', headers=headers,
+                                                      params=params,
                                                       trust_env=not is_local_url(endpoint['base_url']))
         raw = payload.get('data', []) if isinstance(payload, dict) else payload
         if not isinstance(raw, list):

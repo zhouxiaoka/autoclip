@@ -16,7 +16,7 @@ miss (``vision_unsupported``), not an upstream class: save stays allowed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import is_local_url, uses_max_completion_tokens
@@ -178,6 +178,19 @@ def _with_detail(classified: ClassifiedUpstreamError, http_status=None, network_
                             hint_key=classified.hint_key, http_status=http_status, network_kind=network_kind)
 
 
+def _non_stream_completion(payload: Any) -> bool:
+    """A chat completion object, not an SSE stream or an empty 2xx body."""
+    if not isinstance(payload, dict):
+        return False
+    choices = payload.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    message = choices[0].get('message')
+    if not isinstance(message, dict):
+        return False
+    return isinstance(message.get('content'), str)
+
+
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
     from backend.core.llm_providers import guarded_chat_kwargs, token_param_kwargs
@@ -187,6 +200,8 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
         'messages': [{'role': 'user', 'content': 'ok'}],
         'max_tokens': tokens,
     }))
+    # Hosts such as APIMart default to text/event-stream unless this is false.
+    payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
     try:
         with httpx.Client(timeout=PROBE_TIMEOUT, trust_env=not is_local_url(base)) as client:
@@ -209,6 +224,15 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
         return _with_detail(html, status)
     if response.status_code >= 400:
         return _with_detail(_classify(response.status_code, text[:4000]), status)
+    # A 200 SSE body used to look like success and then fail every real job.
+    if 'text/event-stream' in content_type or text.lstrip().startswith('data:'):
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
+    try:
+        parsed = response.json()
+    except Exception:  # noqa: BLE001 - non-JSON 2xx is not a completion
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
+    if not _non_stream_completion(parsed):
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
     return None
 
 

@@ -83,7 +83,8 @@ class CustomModelOffer(BaseModel):
 
 
 class Connection(BaseModel):
-    model_config = ConfigDict(extra='ignore')
+    # hide_input_in_errors: str(ValidationError) otherwise keeps the tail of a long api_key.
+    model_config = ConfigDict(extra='ignore', hide_input_in_errors=True)
     id: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=100)
     provider: str = 'openai'
@@ -241,6 +242,7 @@ class Transcription(BaseModel):
 
 
 class ModelSettings(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
     _migration_warnings: list[str] = PrivateAttr(default_factory=list)
     version: Literal[1] = 1
     connections: list[Connection] = Field(default_factory=list, max_length=100)

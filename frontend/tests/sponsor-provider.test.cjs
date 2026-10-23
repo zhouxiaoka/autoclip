@@ -24,9 +24,9 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     './providerUrl': load('providerUrl.ts', {}),
   }).default
   const options = providers.providerPickerOptions()
-  assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'infistar'])
+  assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'infistar', 'apimart'])
   for (const placement of ['home_setup', 'settings_model']) {
-    for (const provider of ['api88', 'infistar']) {
+    for (const provider of ['api88', 'infistar', 'apimart']) {
       const preset = providers.PROVIDERS[provider]
       const nodes = flatten(Fields({ connection: { provider, api_key: '' }, placement, onChoose() {}, onEdit() {} }))
       const text = nodes.filter(n => typeof n === 'string').join(' ')
@@ -45,4 +45,7 @@ test('sponsor selection, offer, registration link and attribution follow the cho
   }
   assert.equal(providers.PROVIDERS.api88.sponsor.registerUrl, 'https://88api.ai/sign-up?aff=2PIc')
   assert.equal(providers.PROVIDERS.api88.cloud.baseUrl, 'https://api.88api.ai/v1')
+  assert.equal(providers.PROVIDERS.apimart.keyUrl, 'https://go.apimart.ai/tw-autoclip')
+  assert.equal(providers.PROVIDERS.apimart.sponsor.registerUrl, 'https://go.apimart.ai/tw-autoclip')
+  assert.equal(access.sponsorKeyLink('apimart').href, 'https://go.apimart.ai/tw-autoclip')
 })
