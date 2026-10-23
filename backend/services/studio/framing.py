@@ -3,15 +3,17 @@
 Work in shots, not on a clock. Each scene is first split at hard cuts (ffmpeg scene-change scores)
 and at dissolves, then every shot is classified from frame pairs taken about once a second.
 One shot is one sequential decode, not a seek per sample.
-OpenCV's YuNet model (bundled ONNX, MIT licence) finds faces. A turned-away head or the back of a
-head is never the crop centre. The window follows a visible frontal face, and when the transcript
-names who is speaking it follows that person's face. A run of looks that vote to show the whole
-frame stays a fit segment when it lasts at least a second.
+OpenCV's YuNet model (bundled ONNX, MIT licence) finds faces. The back of a head is never the crop
+centre. A side profile is, when that mouth is the one moving, or when the transcript names that
+person. The window follows that face. When the transcript has no speaker labels, one person who
+does the talking holds the window for the scene, and a silent listener is shown whole instead of
+punched in. A run of looks that vote to show the whole frame stays a fit segment when it lasts
+at least a second.
 
-- a shot with one frontal face that fits the window → `crop`, centred on that face (the active
-  speaker when a cue says who);
-- a shot where several people must all stay in frame, or where the only face is turned away →
-  `fit`: the whole frame on a blurred backdrop, so nobody is sliced off;
+- a shot with one face that fits the window → `crop`, centred on that face (the talking profile
+  when the other person is only listening, or the named speaker when a cue says who);
+- a shot where several people must all stay in frame, or where the only face is a silent
+  turned-away head → `fit`: the whole frame on a blurred backdrop, so nobody is sliced off;
 - a shot without a usable face (quote cards, slides, screen recordings) → `fit` as well.
 
 The window jumps on a cut and eases when the speaker changes inside a shot. OpenCV is not part of
@@ -315,6 +317,37 @@ def crop_x_for_center(center_x: float, fraction: float) -> float:
     if fraction >= 1:
         return .5
     return max(0.0, min(1.0, (center_x - fraction / 2) / (1 - fraction)))
+
+
+_EDGE_TOUCH = 0.02  # a box this close to the frame border is cut off by the source, not a full head
+
+
+def crop_x_for_subject(center_x: float, width: float, fraction: float) -> float:
+    """Place the window on a face box.
+
+    A box that sits inside the frame uses the same position as `crop_x_for_center`. A box that
+    touches the left or right border is a head the source already sliced. The portrait window
+    then shifts inward by about one face width (capped at half the window) so the inward side
+    of the head and shoulder stays inside. The sliver already on the frame border may fall
+    outside. A box that touches both borders, or that is wider than the window, keeps the
+    plain centre; the caller fits when the face itself cannot fit.
+    """
+    if fraction >= 1 or width <= 1e-6:
+        return crop_x_for_center(center_x, fraction)
+    left = center_x - width / 2
+    right = center_x + width / 2
+    touches_left = left <= _EDGE_TOUCH
+    touches_right = right >= 1 - _EDGE_TOUCH
+    if touches_left == touches_right:
+        return crop_x_for_center(center_x, fraction)
+    pad = min(width, fraction / 2)
+    if touches_left:
+        need_left, need_right = center_x, min(1.0, right + pad)
+    else:
+        need_left, need_right = max(0.0, left - pad), center_x
+    if need_right - need_left > fraction + 1e-6:
+        return crop_x_for_center(center_x, fraction)
+    return crop_x_for_center((need_left + need_right) / 2, fraction)
 
 
 def segment_track(samples: list[tuple[float, float]], min_hold: int = MIN_HOLD, min_jump: float = MIN_JUMP) -> list[dict[str, float]]:
@@ -1061,18 +1094,33 @@ def _fits(faces: list[dict[str, float]], fraction: float) -> bool:
     return right - left <= fraction + 1e-6
 
 
+def _unique_talker(faces: list[dict[str, float]], fraction: float) -> float | None:
+    """The one mouth that is moving, or the clearly louder of two, when that face fits the window."""
+    talking = [face for face in faces if float(face.get("motion", 0)) >= MOTION_THRESHOLD and face["w"] <= fraction]
+    if len(talking) == 1:
+        return talking[0]["x"]
+    if len(talking) >= 2:
+        ordered = sorted(talking, key=lambda face: float(face["motion"]), reverse=True)
+        if ordered[0]["motion"] >= ordered[1]["motion"] * 1.5:
+            return ordered[0]["x"]
+    return None
+
+
 def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fraction: float) -> float | None:
     """Normalised centre for one sample, or None when the shot should fit the whole frame.
 
     Three or more people who do not fit the window stay together (a group photo or a wide shot),
     even when a cue overlaps and even when only one of them cleared the close-up score. A small
     low-score face still counts as another person, so a wide shot is not a single-face punch-in.
-    A bound speaker who has turned away is not replaced by someone else or by the back of their
-    head. Two frontal faces with no unique speaker are kept when they do not fit, and centred as
-    a pair when they do. None means show the whole frame: there is no face to put in the window.
+    A bound speaker who has turned into profile stays the centre. They are not replaced by
+    someone else. With no binding, the face whose mouth is moving wins over a silent frontal
+    face, including a side profile YuNet did not call frontal. Two frontal faces with no unique
+    speaker are kept when they do not fit, and centred as a pair when they do. None means show
+    the whole frame: there is no face to put in the window.
     """
     frontals = list(sample.get("frontal") or [])
-    people = frontals + list(sample.get("turned") or []) + list(sample.get("wide") or [])
+    turned = list(sample.get("turned") or [])
+    people = frontals + turned + list(sample.get("wide") or [])
     # Three or more people who cannot share the window are a group, even when only one
     # of them cleared the close-up score. A wide shot is not a single-face punch-in.
     if len(people) >= 3 and not _fits(people, fraction):
@@ -1089,10 +1137,19 @@ def _center_for(sample: dict[str, Any], binding: dict[str, float], cues, fractio
         near = [face for face in frontals if abs(face["x"] - bound) <= CLUSTER_RADIUS and face["w"] <= fraction]
         if near:
             return min(near, key=lambda face: abs(face["x"] - bound))["x"]
+        # The named person is in profile. Stay on that head instead of the listener facing camera.
+        turned_near = [face for face in turned if abs(face["x"] - bound) <= CLUSTER_RADIUS and face["w"] <= fraction]
+        if turned_near:
+            return min(turned_near, key=lambda face: abs(face["x"] - bound))["x"]
         # The bound person is off screen. One remaining frontal face is who is actually there.
         if len(frontals) == 1 and frontals[0]["w"] <= fraction:
             return frontals[0]["x"]
         return None
+    # A talking profile next to a silent frontal guest is the speaker. Checking the single
+    # frontal face first used to crop the guest and leave the profile out of the window.
+    talker = _unique_talker(frontals + turned, fraction)
+    if talker is not None:
+        return talker
     wide = [face for face in frontals if face["w"] > fraction]
     if len(frontals) == 1 and wide:
         return None
@@ -1251,51 +1308,150 @@ def _with_ease(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return eased
 
 
-def _crop_point(start: float, center: float | None, fraction: float) -> dict[str, Any]:
-    if center is None:
-        return {"start": round(start, 2), "crop_x": .5, "mode": "fit"}
-    return {"start": round(start, 2), "crop_x": round(crop_x_for_center(center, fraction), 3), "mode": "crop"}
+def _placed_crop(subject: dict[str, float] | None, fraction: float) -> float | None:
+    """crop_x for one look, or None when that look should show the whole frame."""
+    if not subject or float(subject.get("w", 0)) > fraction:
+        return None
+    return crop_x_for_subject(float(subject["x"]), float(subject.get("w", 0)), fraction)
 
 
-def _same_vote(previous: float | None, center: float | None, fraction: float) -> bool:
-    if previous is None or center is None:
-        return previous is None and center is None
-    return abs(crop_x_for_center(previous, fraction) - crop_x_for_center(center, fraction)) < MIN_JUMP
+def _same_vote(previous: dict[str, float] | None, subject: dict[str, float] | None, fraction: float) -> bool:
+    prev = _placed_crop(previous, fraction)
+    nxt = _placed_crop(subject, fraction)
+    if prev is None or nxt is None:
+        return prev is None and nxt is None
+    return abs(prev - nxt) < MIN_JUMP
 
 
-def _points_from_votes(votes: list[tuple[float, float | None]], shot_start: float, shot_length: float,
+def _points_from_votes(votes: list[tuple[float, dict[str, float] | None]], shot_start: float, shot_length: float,
                        fraction: float) -> list[dict[str, Any]]:
     """One point per run of agreeing looks. A fit run is kept, not dropped for lack of crop votes."""
     if not votes:
         return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
     runs: list[list[Any]] = []
-    for offset, center in votes:
-        if runs and _same_vote(runs[-1][1], center, fraction):
-            if center is not None:
-                runs[-1][2].append(center)
+    for offset, subject in votes:
+        if runs and _same_vote(runs[-1][1], subject, fraction):
+            if _placed_crop(subject, fraction) is not None:
+                runs[-1][2].append(subject)
             continue
-        runs.append([offset, center, [center] if center is not None else []])
+        runs.append([offset, subject, [subject] if _placed_crop(subject, fraction) is not None else []])
     points = []
-    for index, (offset, _center, centres) in enumerate(runs):
+    for index, (offset, _subject, subjects) in enumerate(runs):
         start = shot_start if index == 0 else shot_start + offset
-        median = statistics.median(centres) if centres else None
-        points.append(_crop_point(start, median, fraction))
+        if not subjects:
+            points.append({"start": round(start, 2), "crop_x": .5, "mode": "fit"})
+            continue
+        center = float(statistics.median(float(item["x"]) for item in subjects))
+        width = float(statistics.median(float(item.get("w", 0)) for item in subjects))
+        if width > fraction:
+            points.append({"start": round(start, 2), "crop_x": .5, "mode": "fit"})
+            continue
+        points.append({
+            "start": round(start, 2),
+            "crop_x": round(crop_x_for_subject(center, width, fraction), 3),
+            "mode": "crop",
+        })
     return points
 
 
+def _subject_for_center(faces: list[dict[str, float]], center: float) -> dict[str, float]:
+    """The face at `center`, or a zero-width marker when `center` is a pair midpoint."""
+    exact = [face for face in faces if abs(float(face["x"]) - center) <= 0.02]
+    if len(exact) == 1:
+        return exact[0]
+    return {"x": center, "w": 0.0, "motion": 0.0}
+
+
+def _dominant_talker(samples: list[dict[str, Any]], fraction: float) -> float | None:
+    """Horizontal place of the person who does the talking, when the votes agree.
+
+    Needs at least three talking looks, and a cluster that holds at least half of them inside
+    CLUSTER_RADIUS. Two people who split the scene (the middle of the votes sits outside that
+    radius) return None, so each shot can still follow its own talker.
+    """
+    votes: list[float] = []
+    for sample in samples:
+        if not isinstance(sample, dict):
+            continue
+        faces = list(sample.get("frontal") or []) + list(sample.get("turned") or [])
+        chosen = _unique_talker(faces, fraction)
+        if chosen is not None:
+            votes.append(chosen)
+    if len(votes) < 3:
+        return None
+    best_n = 0
+    best_x = None
+    for x in votes:
+        near = [vote for vote in votes if abs(vote - x) <= CLUSTER_RADIUS]
+        if len(near) > best_n:
+            best_n = len(near)
+            best_x = float(statistics.median(near))
+    if best_x is None or best_n * 2 < len(votes):
+        return None
+    if abs(float(statistics.median(votes)) - best_x) > CLUSTER_RADIUS:
+        return None
+    return best_x
+
+
+def _track_face(sample: dict[str, Any], binding: dict[str, float], cues, fraction: float,
+                dominant: float | None) -> dict[str, float] | None:
+    """Face box to crop, or None to show the whole frame.
+
+    Groups stay together: `_center_for` already returns None for them. When the scene has one
+    unlabeled talker, a silent face far from that place is the listener and is not punched in.
+    A different face that is actually talking still takes the window. Two people in frame keep
+    the talker when that person is also visible, instead of cropping the listener.
+    """
+    center = _center_for(sample, binding, cues, fraction)
+    faces = list(sample.get("frontal") or []) + list(sample.get("turned") or [])
+    near = []
+    if dominant is not None:
+        near = [face for face in faces if abs(float(face["x"]) - dominant) <= CLUSTER_RADIUS and face["w"] <= fraction]
+    # A profile close-up often has no frontal box and little mouth motion. `_center_for`
+    # then has nothing to return, but the face is still the person the scene is following.
+    # A group or a two-shot that already voted fit is left alone: one face only.
+    if center is None:
+        if len(faces) == 1 and near:
+            return near[0]
+        return None
+    subject = _subject_for_center(faces, center)
+    if dominant is None or abs(center - dominant) <= CLUSTER_RADIUS:
+        return subject
+    people = faces + list(sample.get("wide") or [])
+    if near and len(people) <= 2:
+        return min(near, key=lambda face: abs(float(face["x"]) - dominant))
+    if float(subject.get("motion", 0)) < MOTION_THRESHOLD:
+        return None
+    return subject
+
+
+def _shot_has_subject(samples: list[dict[str, Any]], dominant: float | None) -> bool:
+    """True when some look has a face worth cropping, including a talking or followed profile."""
+    for sample in samples:
+        if sample.get("frontal"):
+            return True
+        for face in sample.get("turned") or []:
+            if float(face.get("motion", 0)) >= MOTION_THRESHOLD:
+                return True
+            if dominant is not None and abs(float(face["x"]) - dominant) <= CLUSTER_RADIUS:
+                return True
+    return False
+
+
 def frame_observed(samples: list[dict[str, Any]], shot_start: float, shot_length: float, fraction: float,
-                   cues, binding: dict[str, float]) -> list[dict[str, Any]]:
+                   cues, binding: dict[str, float], dominant: float | None = None) -> list[dict[str, Any]]:
     """Track points for one shot from observed faces.
 
     Looks that vote fit become a fit segment when that run lasts at least MIN_SEGMENT.
     They are not discarded just because fewer than three looks voted for a crop. A shot
-    with no frontal face at all is shown whole. A crop never continues across looks that
-    found no face to centre on.
+    with no frontal face and no talking profile is shown whole. A crop never continues
+    across looks that found no face to centre on. `dominant` is the scene's unlabeled
+    talker; pass None when cues already bound speakers, or when the votes do not agree.
     """
     samples = _stabilize(samples)
-    if not samples or not any(sample.get("frontal") for sample in samples):
+    if not samples or not _shot_has_subject(samples, dominant):
         return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
-    votes = [(float(sample["offset"]), _center_for(sample, binding, cues, fraction)) for sample in samples]
+    votes = [(float(sample["offset"]), _track_face(sample, binding, cues, fraction, dominant)) for sample in samples]
     points = _points_from_votes(votes, shot_start, shot_length, fraction)
     return _with_ease(_steady(_absorb_short(points, shot_start, shot_length)))
 
@@ -1353,7 +1509,8 @@ def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, windo
     `window` overrides the output size, e.g. the 4:3 window of the interview template.
     `scans` reuses a `scan_speakers` pass, so several windows cost one detection.
     `cues` are speaker-labelled transcript rows (`start`, `end`, `speaker`); without them the
-    window still prefers the frontal face and fits a group.
+    window follows the mouth that is moving, and holds that person across shots when one
+    talker dominates. A group that does not fit the window is still shown whole.
     Tuple samples from an older scan keep the previous centre-only path.
     """
     if scans is None:
@@ -1365,9 +1522,16 @@ def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, windo
     scenes = []
     for scene, scan in zip(draft.scenes, scans):
         points: list[dict[str, Any]] = []
+        # A labelled transcript already pins each speaker. An unlabelled one (the usual
+        # interview export) locks the window to whoever is actually talking in this scene,
+        # so a later close-up of a silent guest is not punched in under the same name card.
+        scene_samples = [sample for _start, _end, samples in scan["shots"] for sample in samples if isinstance(sample, dict)]
+        dominant = None if binding else _dominant_talker(scene_samples, fraction)
         for shot_start, shot_end, samples in scan["shots"]:
             if samples and isinstance(samples[0], dict):
-                points += frame_observed(samples, shot_start, shot_end - shot_start, fraction, cues or [], binding)
+                points += frame_observed(
+                    samples, shot_start, shot_end - shot_start, fraction, cues or [], binding, dominant,
+                )
             else:
                 points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
         track = merge_points(points)
