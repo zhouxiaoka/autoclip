@@ -85,33 +85,29 @@ test('editorial and street match the golden frames at fixed timestamps', () => {
   assert.equal(JSON.stringify(streetAt).includes('不该出现'), false)
 })
 
-test('editorial headline stays under the face and street keeps the lower label', () => {
-  // Editorial holds the headline for the whole clip, below the face.
-  // Street captions-off shows the title as the opening hook sticker, and the label keeps the topic.
+test('the clip does not burn the cover title', () => {
+  // Editorial leaves the magazine headline off the clip. The deck is not in this fill.
+  // Street captions-off no longer paints an opening title sticker or the topic label.
 
   for (const template of ['editorial', 'street']) {
     const page = load(template)
     const fill = {...fills[template], words: []}
     page.setData(fill)
     page.renderFrame(0)
-    const hook = page.occupiedRects(0).find(rect => rect.slot === 'hook')
-    assert.ok(hook, template)
+    assert.equal(page.occupiedRects(0).find(rect => rect.slot === 'hook'), undefined, template)
     if (template === 'editorial') {
       assert.equal(page.document.getElementById('zh').innerHTML, '')
-      assert.match(page.document.getElementById('h-l').innerHTML, /好的投资人像飞行教练/)
-      assert.equal(hook.y, 1192)
+      assert.equal(page.document.getElementById('h-l').innerHTML, '')
       page.renderFrame(3)
-      assert.match(page.document.getElementById('h-l').innerHTML, /好的投资人像飞行教练/)
-      assert.equal(page.occupiedRects(3).find(rect => rect.slot === 'hook').y, hook.y)
+      assert.equal(page.document.getElementById('h-l').innerHTML, '')
+      assert.equal(page.occupiedRects(3).find(rect => rect.slot === 'hook'), undefined)
     } else {
-      const sub = page.document.getElementById('zh').innerHTML
-      assert.equal(sub, '')
-      assert.match(page.document.getElementById('title-hook').textContent, /街头一问/)
-      assert.equal(page.document.getElementById('topic').textContent, '街头一问')
-      assert.equal(hook.y, 1812)
+      assert.equal(page.document.getElementById('zh').innerHTML, '')
+      assert.equal(page.document.getElementById('title-hook').textContent, '')
+      assert.equal(page.document.getElementById('topic').textContent, '')
       page.renderFrame(4)
       assert.equal(page.document.getElementById('title-hook').textContent, '')
-      assert.equal(page.document.getElementById('zh').innerHTML, '')
+      assert.equal(page.document.getElementById('topic').textContent, '')
     }
   }
 })

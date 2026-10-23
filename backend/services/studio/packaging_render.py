@@ -180,13 +180,13 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     """ASS document for scene `index`; times are relative to that scene's start.
 
     Every caption screen is at most two lines (see caption_layout). Styles only change looks and
-    motion, never the layout contract: title on top, captions at the window edge, plate lower-left.
-    `titles_only` is the classic title layer with the caption rows left out. Street and editorial
-    paint their own title in the template and do not burn this document.
+    motion, never the layout contract: captions at the window edge, nameplate lower-left.
+    The cover owns the title. Interview used to pin ``title_lines`` for the whole clip; podcast,
+    cinematic and classic styles used a 2.8s opening card. Neither is burned.
+    `titles_only` is that empty title layer with the caption rows left out.
     """
     from backend.services.studio.caption_layout import timed_screens, width
     rows = timeline(scenes)
-    total = rows[-1][2] + (rows[-1][1] - rows[-1][0])
     offset = rows[index][2]
     length = rows[index][1] - rows[index][0]
     out = _Scene(offset, length)
@@ -202,21 +202,6 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     look = colours(packaging.palette)
     accent = look['accent']
     tag_texts = [t.text for t in packaging.tags] if packaging.tags_enabled else []
-
-    lines = packaging.title_lines
-    if interview and lines:
-        entrance = {'classic': '\\fscx88\\fscy88\\t(0,200,\\fscx100\\fscy100)\\fad(180,0)',
-                    'boxed': '\\fad(160,0)', 'spotlight': '\\fad(320,0)'}[style] if index == 0 else ''
-        for i, line in enumerate(lines):
-            y = 150 + i * 150
-            title_style = 'TitleAccent' if i == packaging.title_accent_line and len(lines) > 1 else 'Title'
-            move = f'\\move(540,{y + 40},540,{y},{i * 120},{i * 120 + 280})' if style == 'boxed' and index == 0 else f'\\pos(540,{y})'
-            size = min(112, int(1000 / max(width(line), 1)))  # one line always fits the 1080 px frame
-            out.add(3, 0, total, title_style, f'{{\\an8{move}\\fs{size}{entrance}}}{_esc(line)}')
-    elif lines:
-        size = min(66, int(920 / max(max(width(line) for line in lines), 1)))
-        hook = '\\N'.join(_esc(line) for line in lines)
-        out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\fs{size}\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{hook}')
 
     if titles_only:
         return _header(look) + '\n'.join(out.lines) + '\n'

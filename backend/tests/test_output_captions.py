@@ -84,11 +84,13 @@ def test_templated_output_has_no_caption_lines_when_off():
             strategy_id, output_captions=False)
         ass = pr.scene_ass(off.packaging, scenes, 0)
         assert '字幕正文' not in ass and 'caption line' not in ass
-        assert '标题还在' in ass
+        assert '标题还在' not in ass  # the cover owns the title; the clip does not burn it
         on = jobs._apply_strategy(
             {'id': 'd', 'title': 't', 'scenes': [{'id': 's', 'label': 's', 'start': 0.0, 'end': 4.0}], 'packaging': _clip(template)},
             strategy_id, output_captions=True)
-        assert '字幕正文' in pr.scene_ass(on.packaging, scenes, 0)
+        burned = pr.scene_ass(on.packaging, scenes, 0)
+        assert '字幕正文' in burned
+        assert '标题还在' not in burned
 
 
 def _package(_project, value, strategy_id, *_rest):

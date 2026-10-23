@@ -33,7 +33,8 @@ def test_events_are_clipped_to_each_scene_on_its_own_clock():
     assert any('第一句' in line and ',0:00:00.00,0:00:02.00,' in line for line in _dialogues(first))
     assert not any('第二句' in line for line in _dialogues(first))
     assert any('第二句' in line and ',0:00:00.00,0:00:02.00,' in line for line in _dialogues(second))
-    assert all('应该像飞行教练' in ''.join(_dialogues(doc)) for doc in (first, second))  # title stays pinned
+    joined = ''.join(_dialogues(first) + _dialogues(second))
+    assert '应该像飞行教练' not in joined and '好的投资人' not in joined
 
 
 def test_nameplate_appears_once_where_the_speaker_first_talks():
@@ -158,15 +159,13 @@ def test_every_style_keeps_captions_within_two_lines_and_renders(tmp_path, templ
     assert Image.open(frame).size == (1080, 1920)
 
 
-def test_long_title_lines_shrink_to_fit_the_frame():
-    from backend.services.studio.caption_layout import width
-    doc = pr.scene_ass(_packaging(title_lines=['AI无法替代视频编辑的关键：', '边干边学理解观众偏好需数月积累']), SCENES, 0)
-    titles = [line for line in _dialogues(doc) if line.split(',')[3] in ('Title', 'TitleAccent')]
-    assert len(titles) == 2
-    for line in titles:
-        size = int(re.search(r'\\fs(\d+)', line).group(1))
-        text = re.sub(r'\{[^}]*\}', '', line.split(',,0,0,0,,', 1)[1])
-        assert size <= 112 and size * width(text) <= 1000
+def test_long_title_lines_are_not_burned_into_the_clip():
+    text = 'AI无法替代视频编辑的关键：'
+    other = '边干边学理解观众偏好需数月积累'
+    doc = pr.scene_ass(_packaging(title_lines=[text, other]), SCENES, 0)
+    assert not any(line.split(',')[3] in ('Title', 'TitleAccent', 'Hook') for line in _dialogues(doc))
+    assert text not in doc and other not in doc
+    assert any('第一句' in line for line in _dialogues(doc))
 
 
 def test_interview_window_renders_title_canvas_and_window(tmp_path):
@@ -185,7 +184,7 @@ def test_interview_window_renders_title_canvas_and_window(tmp_path):
     assert image.size == (1080, 1920)
     assert image.getpixel((20, 1700)) == image.getpixel((1060, 1800))  # plain canvas below the window
     title_region = image.crop((200, 150, 880, 400))
-    assert max(max(px) for px in title_region.getdata()) > 180  # bright title text drawn on the dark canvas
+    assert max(max(px) for px in title_region.getdata()) < 48  # canvas only; the title stays on the cover
     window_row = [image.getpixel((x, pr.WIN_Y + 200)) for x in range(0, 1080, 60)]
     assert len(set(window_row)) > 3  # the source picture fills the 4:3 window
 
@@ -290,17 +289,22 @@ def test_issue_367_template_captions_can_be_switched_off():
     off = pr.scene_ass(_packaging(captions_enabled=False), SCENES, 0)
     assert '第一句' in on
     assert '第一句' not in off and 'first line' not in off
-    assert '好的投资人' in off  # title stays
+    assert '好的投资人' not in off and '应该像飞行教练' not in off
     assert _packaging().captions_enabled is True  # saved drafts keep captions
-    assert _title_dialogues(on) == _title_dialogues(off)
+    assert _title_dialogues(on) == _title_dialogues(off) == []
+    assert any('Sam Altman' in line and 'PlateName' in line for line in _dialogues(on))
 
 
-def test_captions_off_title_style_matches_captions_on_for_classic_templates():
-    """Interview stays a centred full-clip title; podcast stays the centred hook. Captions do not restyle either."""
+def test_classic_templates_do_not_burn_a_title_card():
+    """Interview, podcast and cinematic clips keep captions and nameplates, not a title card."""
     scenes = [Scene(id='s', label='s', start=0, end=8)]
-    interview = _packaging(cues=[{'start': 1.0, 'end': 3.0, 'text': '字幕正文', 'original': 'caption line'}])
+    interview = _packaging(
+        cues=[{'start': 1.0, 'end': 3.0, 'text': '字幕正文', 'original': 'caption line'}],
+        speakers=[{'at': 1.0, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+    )
     podcast = _packaging(
-        template='podcast_en', audience_language='en', title_lines=['Great investors', 'teach you to fly'],
+        template='podcast_en', audience_language='en', style='cinematic',
+        title_lines=['Great investors', 'teach you to fly'],
         cues=[{'start': 1.0, 'end': 3.0, 'text': 'Spoken line'}], speakers=[], tags=[],
     )
     for on_pack in (interview, podcast):
@@ -308,17 +312,15 @@ def test_captions_off_title_style_matches_captions_on_for_classic_templates():
         on = pr.scene_ass(on_pack, scenes, 0)
         off = pr.scene_ass(off_pack, scenes, 0)
         burned = pr.scene_ass(off_pack, scenes, 0, titles_only=True)
-        assert _title_dialogues(on) == _title_dialogues(off) == _dialogues(burned)
-        assert _title_dialogues(on)
+        assert _title_dialogues(on) == _title_dialogues(off) == _dialogues(burned) == []
         assert not any(',Plate' in line or ',Tag,' in line or ',TagPill,' in line for line in _dialogues(burned))
-    interview_title = '\n'.join(_title_dialogues(pr.scene_ass(interview, scenes, 0)))
-    assert '\\an8' in interview_title and '\\pos(540,' in interview_title and '\\fs112' in interview_title
-    assert ',Title,' in interview_title and ',TitleAccent,' in interview_title
-    assert ',0:00:08.00,' in interview_title and ',Hook,' not in interview_title
+        for line in on_pack.title_lines:
+            assert line not in on and line not in off
+    assert '字幕正文' in pr.scene_ass(interview, scenes, 0)
+    assert 'Sam Altman' in pr.scene_ass(interview, scenes, 0)
     assert '字幕正文' not in pr.scene_ass(interview.model_copy(update={'captions_enabled': False}), scenes, 0)
-    podcast_title = '\n'.join(_title_dialogues(pr.scene_ass(podcast, scenes, 0)))
-    assert ',Hook,' in podcast_title and '\\an8\\fs66' in podcast_title and '\\pos(540,250)' in podcast_title
-    assert ',0:00:02.80,' in podcast_title and 'Spoken line' not in pr.scene_ass(podcast.model_copy(update={'captions_enabled': False}), scenes, 0)
+    assert 'Spoken line' in pr.scene_ass(podcast, scenes, 0)
+    assert 'Spoken line' not in pr.scene_ass(podcast.model_copy(update={'captions_enabled': False}), scenes, 0)
 
 
 def test_issue_367_switched_off_captions_are_not_recovered_from_source(monkeypatch):

@@ -86,7 +86,7 @@ def test_chinese_podcast_captions_and_hook_fit_two_lines(style):
         caption=re.sub(r'\{[^}]*\}','',caption)
         assert len(caption.split('\\N'))<=2
         assert all(width(row)<=packaging_render._limit({'pop':82,'boxed':58,'cinematic':64}[style])/.95+1e-6 for row in caption.split('\\N'))
-    assert '这是第一行中文标题\\N这是第二行中文标题' in ass
+    assert '这是第一行中文标题' not in ass and '这是第二行中文标题' not in ass
 
 
 def test_long_source_paragraph_is_paginated_before_packaging_scene_cuts():

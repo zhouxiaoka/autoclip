@@ -194,7 +194,7 @@ def test_fill_keeps_the_source_line_and_the_speaker():
     assert ''.join(word['text'].replace('\n', '') for word in fill['words']) == 'AI现在就能干一半'
 
 
-def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
+def test_emphasis_is_a_word_and_the_headline_stays_on_the_cover():
     street, _ = _paint(
         'street',
         title_lines=['白领工作会最先没'],
@@ -208,10 +208,11 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     assert zh['html'] == 'AI现在就能干一半' and zh['className'] == 'k'
     assert re.search(r'class="w k[^"]*">AI<', source)
     assert not re.search(r'class="w k[^"]*">half<', source, re.I)
-    # The cue never named a speaker, so the only guest is not written onto this line.
-    assert painted['0.5']['topic']['text'] == '白领工作会最先没'
-    assert '特斯拉' not in painted['0.5']['topic']['text']
-    assert any(rect['slot'] == 'hook' and rect['y'] == 1812 for rect in painted['0.5']['rects'])
+    # The cue never named a speaker, and the topic is the cover title, so the bottom label is empty.
+    assert painted['0.5']['topic']['text'] == ''
+    assert painted['0.5']['title']['text'] == ''
+    assert '白领工作会最先没' not in json.dumps(painted['0.5'], ensure_ascii=False)
+    assert not any(rect['slot'] in ('hook', 'title') for rect in painted['0.5']['rects'])
 
     editorial, _ = _paint(
         'editorial',
@@ -222,9 +223,9 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
         cues=[{'start': 0.2, 'end': 4.0, 'text': 'AI其实是一块五层蛋糕', 'original': 'AI is a five layer cake'}],
     )
     frames = _render('editorial', editorial)
-    assert 'AI是五层蛋糕，' in frames['0.5']['hook']['html']
-    assert '最底层是能源' in frames['0.5']['hook']['html'] and 'ln acc' in frames['0.5']['hook']['html']
-    assert frames['3.0']['hook']['html'] == frames['0.5']['hook']['html']
+    assert frames['0.5']['hook']['html'] == '' and frames['3.0']['hook']['html'] == ''
+    assert 'AI是五层蛋糕' not in json.dumps(frames['0.5'], ensure_ascii=False)
+    assert not any(rect['slot'] == 'hook' for rect in frames['0.5']['rects'])
     # Preview: 「AI其实」 stays sans and only the key words take the gold serif.
     # A screen holds about 6-8 characters, so the sentence turns once: AI其实是 / 一块五层蛋糕.
     first = re.sub(r'<[^>]+>', '', frames['0.5']['zh']['html'])
@@ -236,11 +237,10 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     assert 'five' in frames['3.0']['en']['html'] and 'five' not in frames['0.5']['en']['html']
     assert frames['0.5']['kick']['text'] == 'Jensen Huang on the five-layer cake'
     assert frames['0.5']['trk']['text'] == 'FIVE-LAYER CAKE · JENSEN HUANG'
-    hook = next(rect for rect in frames['3.0']['rects'] if rect['slot'] == 'hook')
-    assert hook['y'] == 1192
+    assert any(rect['slot'] == 'kicker' for rect in frames['3.0']['rects'])
+    assert any(rect['slot'] == 'credit' for rect in frames['3.0']['rects'])
 
-    # Captions-off drops cues inside build_fill. Editorial keeps the magazine headline under the
-    # face. Street keeps the title in the black band, not on the face.
+    # Captions-off drops cues inside build_fill. The headline and the street topic stay off the clip.
     off_editorial = Packaging(
         version=2, template='editorial', audience_language='zh', title_lines=['AI是五层蛋糕，', '最底层是能源'],
         kicker='访谈', speakers=[{'at': 0, 'name': '黄仁勋', 'role': '英伟达'}],
@@ -248,10 +248,10 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
         captions_enabled=False,
     )
     hidden = _render('editorial', paint_fill(build_fill(off_editorial, 8, template='editorial'), off_editorial, 'editorial'))
-    assert 'AI是五层蛋糕' in hidden['3.0']['hook']['html']
+    assert hidden['3.0']['hook']['html'] == ''
+    assert 'AI是五层蛋糕' not in json.dumps(hidden['3.0'], ensure_ascii=False)
     assert hidden['3.0']['zh']['html'] == ''
-    hidden_hook = next(rect for rect in hidden['3.0']['rects'] if rect['slot'] == 'hook')
-    assert hidden_hook['y'] == 1192
+    assert not any(rect['slot'] == 'hook' for rect in hidden['3.0']['rects'])
     off_street = Packaging(
         version=2, template='street', audience_language='zh', title_lines=['白领工作会最先没'],
         speakers=[{'at': 0, 'name': '马斯克', 'role': '特斯拉'}],
@@ -260,11 +260,11 @@ def test_emphasis_is_a_word_and_the_editorial_headline_stays_up():
     )
     blank = _render('street', paint_fill(build_fill(off_street, 8, template='street'), off_street, 'street'))
     assert blank['0.5']['zh']['html'] == ''
-    assert '白领工作会最先没' in blank['0.5']['title']['text']
-    # Captions off: no cue says who is talking, so the guest's name is not put on the footage.
-    assert blank['0.5']['topic']['text'] == '白领工作会最先没'
+    assert blank['0.5']['title']['text'] == '' and blank['3.0']['title']['text'] == ''
+    # Captions off: no cue says who is talking, and the topic is not burned in its place.
+    assert blank['0.5']['topic']['text'] == '' and blank['3.0']['topic']['text'] == ''
     assert '马斯克' not in blank['3.0']['topic']['text']
-    assert '白领工作会最先没' in blank['3.0']['title']['text']
+    assert '白领工作会最先没' not in json.dumps(blank['0.5'], ensure_ascii=False)
 
 
 def test_prepare_overlay_paints_the_preview_marks(tmp_path, monkeypatch):
@@ -397,9 +397,10 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
     assert any(word['emphasis'] == '更多机会' for word in host)
     assert any(word['emphasis'] == '8 倍' for word in guest)
     painted = _render('street', fill)
-    assert painted['0.5']['topic']['text'] == '主持人：更闲的工作'
-    assert '黄仁勋：黄仁勋' not in painted['0.5']['topic']['text']
-    assert painted['3.0']['topic']['text'] == '黄仁勋：更闲的工作'
+    assert painted['0.5']['topic']['text'] == '主持人'
+    assert '更闲的工作' not in painted['0.5']['topic']['text']
+    assert painted['3.0']['topic']['text'] == '黄仁勋'
+    assert '更闲的工作' not in painted['3.0']['topic']['text']
     eight = next(word for word in fill['words'] if '8' in word['text'])
     spoken = f'{(eight["start_frame"] + 1) / fill["fps"]:.3f}'
     at_eight = _render('street', fill, times=[spoken, '0.5'])
@@ -413,9 +414,10 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
     assert frames['3.0']['trk']['text'] == frames['0.5']['trk']['text']
     quiet = {**editorial_fill, 'words': [], 'moments': []}
     still = _render('editorial', quiet)
-    hook_on = next(rect for rect in frames['0.5']['rects'] if rect['slot'] == 'hook')
-    hook_off = next(rect for rect in still['0.5']['rects'] if rect['slot'] == 'hook')
-    assert hook_on['y'] == hook_off['y'] == 1192
+    assert not any(rect['slot'] == 'hook' for rect in frames['0.5']['rects'])
+    assert not any(rect['slot'] == 'hook' for rect in still['0.5']['rects'])
+    assert any(rect['slot'] == 'kicker' for rect in frames['0.5']['rects'])
+    assert any(rect['slot'] == 'credit' for rect in still['0.5']['rects'])
     street_css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
     assert 'text-align: center' in street_css and 'font-size: 100px' in street_css and '#D7FF3A' in street_css
     editorial_css = (TEMPLATES / 'editorial' / 'style.css').read_text(encoding='utf-8')
@@ -459,9 +461,10 @@ def test_chinese_audience_sees_the_guest_name_only_on_the_guest_line():
     ]
     fill = build_fill(Packaging.model_validate(result), 8, template='street', transcript=transcript)
     painted = _render('street', fill)
-    assert painted['0.5']['topic']['text'] == '黄仁勋谈梦想'
+    assert painted['0.5']['topic']['text'] == ''
     assert 'Jensen' not in painted['0.5']['topic']['text']
-    assert painted['3.0']['topic']['text'] == '黄仁勋：黄仁勋谈梦想'
+    assert painted['3.0']['topic']['text'] == '黄仁勋'
+    assert '黄仁勋谈梦想' not in painted['3.0']['topic']['text']
 
 
 def test_street_picture_pads_a_1290_window_without_moving_the_draft():
@@ -552,7 +555,7 @@ def test_street_english_keeps_the_sentence_up_across_its_phrases():
     assert all(rect['slot'] != 'source' for rect in blank[late]['rects'])
 
 
-def test_captions_off_hook_stays_out_of_the_face():
+def test_captions_off_does_not_paint_a_title_on_the_clip():
     street = Packaging(
         version=2, template='street', audience_language='zh',
         title_lines=['AI来了会更闲？', '我完全不同意'],
@@ -563,13 +566,12 @@ def test_captions_off_hook_stays_out_of_the_face():
     painted = _render('street', fill, times=['1.0', '3.0', '4.0'])
     zone = _head_zone('street')
     assert zone == (0, 1290)
-    for stamp in ('1.0', '3.0'):
-        assert 'AI来了会更闲？' in painted[stamp]['title']['text']
-        assert '我完全不同意' in painted[stamp]['title']['text']
-        title = next(rect for rect in painted[stamp]['rects'] if rect['slot'] == 'title')
-        assert title['y'] >= zone[1]
+    for stamp in ('1.0', '3.0', '4.0'):
+        assert painted[stamp]['title']['text'] == ''
+        assert painted[stamp]['topic']['text'] == ''
+        assert 'AI来了会更闲' not in json.dumps(painted[stamp], ensure_ascii=False)
+        assert not any(rect['slot'] in ('title', 'hook') for rect in painted[stamp]['rects'])
         assert all(not _hits_zone(rect, zone) for rect in painted[stamp]['rects'])
-    assert painted['4.0']['title']['text'] == ''
 
     editorial = Packaging(
         version=2, template='editorial', audience_language='zh',
@@ -584,9 +586,9 @@ def test_captions_off_hook_stays_out_of_the_face():
     ezone = _head_zone('editorial')
     assert ezone == (280, 820)
     for stamp in ('1.0', '3.0'):
-        assert 'AI来了会更闲？' in frames[stamp]['hook']['html']
-        hook = next(rect for rect in frames[stamp]['rects'] if rect['slot'] == 'hook')
-        assert hook['y'] >= ezone[1]
+        assert frames[stamp]['hook']['html'] == ''
+        assert 'AI来了会更闲' not in json.dumps(frames[stamp], ensure_ascii=False)
+        assert not any(rect['slot'] == 'hook' for rect in frames[stamp]['rects'])
         assert all(not _hits_zone(rect, ezone) for rect in frames[stamp]['rects'])
 
 
