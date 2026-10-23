@@ -1,7 +1,7 @@
 /* 街头快剪，1080×1920。画面在模板外铺到 y=1290，这里从 1290 起是实心黑。
    中文一次一句，整句在关键词上变黄绿，并做 120ms 的 1.18→1 弹出。
    英文原句留在这一句换走之前，关键词从说到的那一刻起保持黄绿。
-   左下单行「名字：短话题」跟着当前说话人。renderFrame(t) 只由 t 决定。 */
+   左下只留当前说话人的名字。短话题是封面标题，不烧进成片。renderFrame(t) 只由 t 决定。 */
 (function () {
   var data = null;
   var seenPhrase = null;
@@ -21,40 +21,9 @@
     return 1 - Math.pow(1 - p, 3);
   }
 
-  function units(text) {
-    var total = 0;
-    for (var i = 0; i < text.length; i++) total += text.charCodeAt(i) > 255 ? 1 : 0.55;
-    return total;
-  }
-
-  function clipTopic(text) {
-    var out = "";
-    for (var i = 0; i < text.length; i++) {
-      if (units(out + text.charAt(i)) > 12) break;
-      out += text.charAt(i);
-    }
-    return out.replace(/[，。、！？：；,.!?\s]+$/g, "");
-  }
-
   function topicText() {
-    if (data.topic) return String(data.topic);
-    var lines = data.title_lines || [];
-    var raw = String(lines[0] || "").trim();
-    var names = (data.speakers || []).map(function (person) { return person.name; }).filter(Boolean);
-    for (var guard = 0; guard < 4; guard++) {
-      var changed = false;
-      for (var i = 0; i < names.length; i++) {
-        var marked = [names[i] + "：", names[i] + ":"];
-        for (var m = 0; m < marked.length; m++) {
-          if (raw.indexOf(marked[m]) >= 0) {
-            raw = raw.split(marked[m]).join("");
-            changed = true;
-          }
-        }
-      }
-      if (!changed) break;
-    }
-    return clipTopic(raw.trim());
+    // The short topic is the cover title. The bottom label keeps the speaker name only.
+    return "";
   }
 
   function moments() {
@@ -301,16 +270,9 @@
     seenPhrase = null;
   };
 
-  function captionsAreOff() {
-    return !(data.moments && data.moments.length) && !(data.words && data.words.length);
-  }
-
-  function titleSticker(t) {
-    // Captions off: the title is the preview hook for the opening, not the caption.
-    if (!captionsAreOff()) return "";
-    var lines = (data.title_lines || []).filter(Boolean);
-    if (!lines.length || t >= 3.4) return "";
-    return lines.join("\n");
+  function titleSticker() {
+    // Opening title cards belong on the cover, not in the clip.
+    return "";
   }
 
   window.renderFrame = function (t) {

@@ -70,25 +70,33 @@ def test_issue_367_html_build_fill_honors_captions_switch():
     filled_off = build_fill(off, 1.0)
     assert filled_on['words'] and filled_on['words'][0]['text'] == '第一句'
     assert filled_off['words'] == []
-    assert filled_off['title_lines'] == ['好的投资人']  # title stays
+    assert filled_off['title_lines'] == ['好的投资人']  # unpainted fill keeps the cover title
     assert filled_off['hook']['text'] == '好的投资人'
     # dict packaging (cache / older callers) must honor the flag too
     assert build_fill({'cues': [{'start': 0, 'end': 1, 'text': 'x'}], 'captions_enabled': False,
                        'title_lines': ['t']}, 1.0)['words'] == []
-    assert paint_fill(filled_on, on) is filled_on
-    painted = paint_fill(filled_off, off)
-    assert painted['title_lines'] == [] and painted['hook']['text'] == ''
-    assert filled_off['title_lines'] == ['好的投资人']  # stripping the paint does not drop the title
+    painted_on = paint_fill(filled_on, on)
+    painted_off = paint_fill(filled_off, off)
+    assert painted_on['words'] and painted_on['title_lines'] == [] and painted_on['hook']['text'] == '' and painted_on['topic'] == ''
+    assert painted_off['title_lines'] == [] and painted_off['hook']['text'] == '' and painted_off['topic'] == ''
+    assert filled_on['title_lines'] == ['好的投资人']  # stripping the paint does not drop the cover title
+    assert filled_off['title_lines'] == ['好的投资人']
 
 
-def test_editorial_and_street_captions_off_keep_the_classic_title_style():
-    """HTML templates keep their own title when captions are off. They do not burn the classic top title.
+def test_finished_clips_do_not_burn_the_cover_title():
+    """Editorial, street, interview and podcast clips do not burn title_lines.
 
-    The classic title document itself is unchanged: interview stays centred at 112px for the whole
-    clip, and the podcast hook stays at y=250 for 2.8s. Caption text is not in that document.
+    The unpainted fill and the cover still keep them. Captions follow captions_enabled.
+    Classic ASS has no Title, TitleAccent or Hook events, with captions on or off.
     """
     from backend.services.studio import packaging_render as pr
+    from backend.services.studio.cover_design import title_lines_for
     scenes = [Scene(id='s', label='s', start=0, end=8)]
+    cover_lines, accent = title_lines_for(
+        {'title': 'post', 'packaging': {'title_lines': ['封面标题', '第二行'], 'title_accent_line': 0}},
+        '', 'douyin',
+    )
+    assert cover_lines == ['封面标题', '第二行'] and accent == 0
     specs = [
         ('editorial', dict(template='interview_zh', audience_language='zh', title_lines=['好的投资人', '应该像飞行教练'], title_accent_line=1)),
         ('street', dict(template='interview_zh', audience_language='zh', title_lines=['街头一问', '七十秒'], title_accent_line=0)),
@@ -101,25 +109,24 @@ def test_editorial_and_street_captions_off_keep_the_classic_title_style():
         filled_on = build_fill(on, 8, template=html_template)
         filled_off = build_fill(off, 8, template=html_template)
         assert filled_on['words'] and filled_off['words'] == []
-        assert filled_off['title_lines'] == body['title_lines']
+        assert filled_on['title_lines'] == filled_off['title_lines'] == body['title_lines']
         assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
-        assert paint_fill(filled_on, on, html_template) is filled_on
-        painted = paint_fill(filled_off, off, html_template)
-        # Both templates paint the title in the safe zone. The classic top ASS is not burned over the face.
-        assert painted['title_lines'] == body['title_lines']
-        assert painted['hook']['text'] == '\n'.join(body['title_lines'])
-        assert filled_off['hook']['text'] == '\n'.join(body['title_lines'])
-        on_titles = [line for line in pr.scene_ass(on, scenes, 0).splitlines() if line.startswith('Dialogue:') and any(token in line for token in (',Title,', ',TitleAccent,', ',Hook,'))]
-        off_titles = pr.scene_ass(off, scenes, 0, titles_only=True).splitlines()
-        off_titles = [line for line in off_titles if line.startswith('Dialogue:')]
-        assert off_titles == on_titles and off_titles
-        blob = '\n'.join(off_titles)
-        assert '\\an8' in blob and '\\pos(540' in blob and '字幕正文' not in blob
-        assert all(line in body['title_lines'] or any(part in line for part in body['title_lines']) for line in off_titles)
-        if body['template'] == 'interview_zh':
-            assert ',Hook,' not in blob and '\\fs112' in blob and ',0:00:08.00,' in blob
-        else:
-            assert ',Hook,' in blob and '\\fs66' in blob and '\\pos(540,250)' in blob and ',0:00:02.80,' in blob
+        for pack, filled in ((on, filled_on), (off, filled_off)):
+            painted = paint_fill(filled, pack, html_template)
+            assert painted['title_lines'] == [] and painted['hook_lines'] == [] and painted['topic'] == ''
+            assert painted['hook']['text'] == ''
+            assert filled['title_lines'] == body['title_lines']
+        assert paint_fill(filled_on, on, html_template)['words']
+        assert paint_fill(filled_off, off, html_template)['words'] == []
+        for pack in (on, off):
+            doc = pr.scene_ass(pack, scenes, 0)
+            assert not any(token in doc for token in (',Title,', ',TitleAccent,', ',Hook,'))
+            for line in body['title_lines']:
+                assert line not in doc
+        assert '字幕正文' in pr.scene_ass(on, scenes, 0)
+        assert '字幕正文' not in pr.scene_ass(off, scenes, 0)
+        titles_only = [line for line in pr.scene_ass(off, scenes, 0, titles_only=True).splitlines() if line.startswith('Dialogue:')]
+        assert titles_only == []
 
 
 def test_missing_runtime_and_over_budget_downgrade_without_raising(tmp_path, monkeypatch):

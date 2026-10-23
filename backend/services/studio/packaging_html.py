@@ -248,9 +248,9 @@ def overlay_frame_count(duration: float, fps: int = 30) -> int:
 def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int) -> Path:
     """One file per template, painted fill and length. The name is a hash, not the caption.
 
-    Length is part of the key. Street and editorial keep the title when captions are off, so two
-    clips of one style can share a painted fill. The composite uses ``shortest=1``, and a shorter
-    cached movie would cut the longer output.
+    Length is part of the key. paint_fill drops the cover title, so two captions-off clips of
+    one style can share a painted fill once the hook stops growing. The composite uses
+    ``shortest=1``, and a shorter cached movie would cut the longer output.
     """
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))

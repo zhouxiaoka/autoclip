@@ -1549,18 +1549,28 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     }
 
 
-def paint_fill(fill: dict, packaging, template: str | None = None) -> dict:
-    """The fill the HTML template actually paints.
-
-    `build_fill` always keeps `title_lines` and the hook text. Street and editorial paint that
-    title in their own safe zone (the black lower band, or the magazine headline under the face).
-    The classic top title is not burned on top of either. Captions-on returns the same dict.
-    A caller that does not name an HTML template still clears the painted hook.
-    """
-    if _get(packaging, 'captions_enabled', True) is not False:
-        return fill
-    if template in {'street', 'editorial'}:
-        return fill
+def _without_video_title(fill: dict) -> dict:
+    """Drop the cover hook from the pixels. The unpainted fill keeps it for the cover."""
     hook = dict(fill.get('hook') or {})
     hook['text'] = ''
-    return {**fill, 'hook': hook, 'hook_lines': [], 'title_lines': [], 'kicker': '', 'deck': '', 'hook_trk': '', 'credit': ''}
+    return {**fill, 'hook': hook, 'hook_lines': [], 'title_lines': [], 'topic': ''}
+
+
+def paint_fill(fill: dict, packaging, template: str | None = None) -> dict:
+    """The fill the HTML template paints onto the video.
+
+    The cover still reads ``packaging.title_lines``. The clip does not burn a magazine
+    headline, an opening title card, or the street topic line. Captions, speaker names,
+    the editorial deck and byline, and the footer stay.
+
+    ``build_fill`` keeps ``title_lines`` so a caller that has not painted yet still sees
+    them. Stripping here also changes the overlay cache key, so an older movie that
+    burned the title is not reused. A caller that does not name an HTML template and
+    has captions off also clears the deck chrome.
+    """
+    painted = _without_video_title(fill)
+    if _get(packaging, 'captions_enabled', True) is not False:
+        return painted
+    if template in {'street', 'editorial'}:
+        return painted
+    return {**painted, 'kicker': '', 'deck': '', 'hook_trk': '', 'credit': ''}

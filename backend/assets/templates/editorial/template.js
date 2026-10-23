@@ -1,7 +1,7 @@
-/* 杂志风，1080×1920。标题停在预览的位置，整段都在，因为不压住字幕。
+/* 杂志风，1080×1920。大标题只在封面上，成片不烧杂志标题。
    中文按短语做卡拉 OK：没说到 38%，说到变纸白并扫一条黄油下划线。
    一个时刻最多一个倾斜的衬线金句。英文按词从暗到黄油再到纸白。
-   renderFrame(t) 只由 t 决定。关字幕时 fill 会把标题清掉。 */
+   刊头（deck）和署名还在。renderFrame(t) 只由 t 决定。 */
 (function () {
   var data = null;
   var seenMoment = null;
@@ -13,10 +13,8 @@
   }
 
   function lines() {
-    if (data.hook_lines && data.hook_lines.length) return data.hook_lines;
-    var text = (data.hook && data.hook.text) || "";
-    var parts = String(text).split("\n").filter(Boolean);
-    return parts.map(function (part, index) { return [part, parts.length > 1 && index === parts.length - 1]; });
+    // The magazine headline is the cover title. The clip does not burn it.
+    return [];
   }
 
   function moments() {

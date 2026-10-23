@@ -289,8 +289,8 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                                 )
                             else:
                                 picture, label = packaging_render.picture_only(draft, scene, w, h)
-                            # Street and editorial paint their own title inside the template safe zone.
-                            # The classic top ASS (hook at y=250, interview title at y=150) covers the face.
+                            # Street and editorial paint captions in the template safe zone.
+                            # The cover owns the title; this overlay does not burn a headline.
                             tail, label = packaging_html.composite_tail(
                                 label, 1, w, h, overlay_grade,
                                 template=html_template or '', offset=offsets[i], total=clip_total,

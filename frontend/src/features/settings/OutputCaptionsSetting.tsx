@@ -18,6 +18,6 @@ export function OutputCaptionsSwitch({ label, hint }: { label: string; hint: str
 export default function OutputCaptionsSetting() {
   return <OutputCaptionsSwitch
     label={t('自动成片压字幕')}
-    hint={t('默认开启。关闭后，新建的自动成片不压字幕，标题仍在。已有项目不受影响，单条成片可以在编辑里重新打开字幕。')}
+    hint={t('默认开启。关闭后，新建的自动成片不压字幕。标题只在封面上，不会烧进视频。已有项目不受影响，单条成片可以在编辑里重新打开字幕。')}
   />
 }
