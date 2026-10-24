@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "stage": "internal",
+  "version": "1.5.7",
+  "commit": "29583c5373f2a35f4465105e01e7151e88b9d28f",
+  "build_run_id": 40087677965,
+  "assets": {
+    "AutoClip Desktop_1.5.7_aarch64.dmg": "69451a5387bc4d95d8afe5c9e8792b92a1d4280f150c77105cccd1d34dfac4a9",
+    "AutoClip Desktop_1.5.7_x64-setup.exe": "7850ce791f176e2ac2a3424f63332c1692c6bdf3089f789681849f7d912d355b",
+    "AutoClip Desktop_1.5.7_x64-setup.exe.sig": "4ea0a43bd51b89929a6cccf80e6c8f0e4b2a71cf62ce3998526fed6dcb11054b",
+    "AutoClip.Desktop_1.5.7_aarch64.app.tar.gz": "8a779daaab3d68a8f09538cdebc579d9f3d9555fad0af25b2c1b9da30d86c9ca",
+    "AutoClip.Desktop_1.5.7_aarch64.app.tar.gz.sig": "627776cfadc35e39ad6589235c3f4223eb2ea918677d29be45ae1c1a67b49127",
+    "internal-build-provenance.json": "0a8c32289bd89872684d4695c9aed8f98bb12d8d32e87dfe6d221ad60f32e015"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows x64 (AutoClip PM acceptance host)",
+      "machine": "Windows desktop acceptance machine used by AutoClip PM for 1.5.7 dual-end QA",
+      "runtime": "packaged AutoClip Desktop 1.5.7 x64-setup from Desktop Build 40087677965",
+      "checks": {
+        "clean_install": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "upgrade_legacy": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "model_settings": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "local_with_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "local_without_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "visual_generation": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "failure_recovery": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "output_delivery": {
+          "status": "waived",
+          "waiver_reason": "Win tip-fresh street nameplate PASS on packaging for 1.5.7 RC lineage; earlier Win FAIL was stale 10-23 packaging reuse. Full case matrix not re-recorded on build 40087677965 exe."
+        },
+        "privacy_telemetry": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS arm64 on zhoukakadeMacBook-Pro",
+      "machine": "Apple Silicon MacBook Pro (zhoukk / zhoukakade); native arm64; isolated AutoClipQA dirs",
+      "runtime": "packaged AutoClip Desktop 1.5.7 aarch64 from Desktop Build 40087677965; adhoc-signed app",
+      "checks": {
+        "clean_install": {
+          "status": "waived",
+          "waiver_reason": "Mac tip package from Desktop Build 40087677965 installed to /Applications on zhoukakadeMacBook-Pro (zhoukk); empty-search 推荐 showed APIMart→88API→Infistar (evidence screenshots). Full checklist rows beyond provider-order/UI smoke not recorded as passed."
+        },
+        "upgrade_legacy": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "model_settings": {
+          "status": "waived",
+          "waiver_reason": "Mac tip: empty-search recommended provider order verified APIMart first after #488. Four-role invalid-key recovery matrix not re-recorded on this package."
+        },
+        "local_with_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "local_without_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "visual_generation": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "failure_recovery": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        },
+        "output_delivery": {
+          "status": "waived",
+          "waiver_reason": "Dual-end street nameplate accept PASS at tip 506b087 (same packaging lineage into 29583c53): Mac PASS zhoukakade; Win tip-fresh PASS (project ca5ebeb2…). Full ZIP/clipboard playback matrix not re-run on 29583c53 package."
+        },
+        "privacy_telemetry": {
+          "status": "waived",
+          "waiver_reason": "Owner ship decision 2026-10-24 for 1.5.7 tip 29583c53 / Desktop Build 40087677965. Full matrix not re-executed on this package; 1.5.6 passed rows and prior RC dual-end template QA carry forward. Not claimed passed."
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "157-street-nameplate",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "Street nameplate from listing title (#486) dual-end PASS at 506b087; tip 29583c53 is #488 on top of that RC. Formal per-package nameplate re-accept on 40087677965 not claimed passed; owner ships on prior dual-end PASS + Mac tip UI smoke."
+    },
+    {
+      "id": "157-apimart-recommended-first",
+      "platforms": [
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "Mac tip empty-search 推荐 order verified APIMart first (#488) with screenshots under evidence-29583c53. Recorded as waived-not-passed only because this owner-waiver receipt does not attach evidence files; behavior was observed."
+    },
+    {
+      "id": "157-title-cover-only",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "Burn-in titles cover-only (#483/#485) accepted in packaging re-renders before Desktop Build; not re-asserted as formal passed rows on build 40087677965 packages."
+    },
+    {
+      "id": "157-carry-forward-156",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "1.5.6 Internal Acceptance 37964412362 / prior RC matrix carry forward. 1.5.7 delta is templates + APIMart + street nameplate + title policy; owner ships with monitoring."
+    }
+  ],
+  "blockers": [],
+  "approval": {
+    "name": "Charlie Zhou (product owner)",
+    "approved_at": "2026-10-24T13:31:00Z"
+  },
+  "owner_waiver": {
+    "name": "Charlie Zhou (product owner)",
+    "approved_at": "2026-10-24T13:25:00Z",
+    "reason": "Owner decision 2026-10-24 (Asia/Singapore): after Mac tip 29583c53 UI verify (APIMart first in empty-search 推荐) and prior dual-end street nameplate PASS on the RC lineage, explicit chat confirmation to ship 1.5.7. Unexecuted checklist rows are waived, not passed. Pre-release via annotated tag after this Internal Acceptance; Release Acceptance + Promote follow checklist."
+  }
+}
