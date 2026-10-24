@@ -103,7 +103,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     qa_mode: ['shadow'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'other'],
     route: ['subtitle', 'visual'],
-    provider: ['api88', 'infistar', 'apimart', 'deepseek', 'dashscope', 'siliconflow', 'seed', 'glm', 'kimi', 'minimax-cn', 'xiaomi', 'openai', 'gemini', 'whisper', 'sensevoice', 'ollama', 'lmstudio', 'openrouter', 'anthropic', 'grok', 'groq', 'mistral', 'together', 'fireworks', 'huggingface', 'nvidia', 'cerebras', 'baseten', 'azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway', 'vercel-ai-gateway', 'moonshotai', 'minimax', 'ant-ling', 'qianfan', 'hunyuan', 'byteplus-modelark', 'compatible', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
+    provider: ['apimart', 'api88', 'infistar', 'deepseek', 'dashscope', 'siliconflow', 'seed', 'glm', 'kimi', 'minimax-cn', 'xiaomi', 'openai', 'gemini', 'whisper', 'sensevoice', 'ollama', 'lmstudio', 'openrouter', 'anthropic', 'grok', 'groq', 'mistral', 'together', 'fireworks', 'huggingface', 'nvidia', 'cerebras', 'baseten', 'azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway', 'vercel-ai-gateway', 'moonshotai', 'minimax', 'ant-ling', 'qianfan', 'hunyuan', 'byteplus-modelark', 'compatible', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
     config_source: ['preset', 'customized'],
     attribution_source: ['request', 'phase', 'local'],
     shutdown_kind: ['clean', 'parent_lost', 'crash', 'unknown'],
