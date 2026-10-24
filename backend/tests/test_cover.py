@@ -238,6 +238,53 @@ def test_seedream_text_to_image_skips_n_and_uses_url(data_dir):
     assert "n" not in body
 
 
+@pytest.mark.parametrize("entrypoint", ["provider", "cover_service"])
+def test_cover_generation_logs_redact_key_shaped_model(
+    entrypoint, data_dir, fake_frame, monkeypatch, caplog,
+):
+    import base64
+    import logging
+    from backend.core import image_providers
+    from backend.core.llm_telemetry import sanitize_model
+    from backend.services import cover
+
+    # Synthetic credential-shaped model; no real keys or network calls.
+    model = "sk-" + "x3-fixture-" + "a" * 32
+    expected_model = sanitize_model(model)
+    assert expected_model == "redacted"
+    session = _Session([_Resp(payload={
+        "data": [{"b64_json": base64.b64encode(fake_frame).decode("ascii")}],
+    })])
+    caplog.set_level(logging.INFO)
+    caplog.clear()
+
+    if entrypoint == "provider":
+        result = image_providers.generate_image(
+            provider="openai", api_key="fixture-key", base_url="",
+            request=image_providers.ImageRequest("fixture title", 1280, 720, model=model),
+            session=session,
+        )
+        assert result == fake_frame
+    else:
+        _project(data_dir)
+        monkeypatch.setattr(cover, "load_config", lambda: cover.CoverConfig(
+            enabled=True, provider="openai", api_key="fixture-key", model=model,
+        ))
+        monkeypatch.setattr(cover, "verify_endpoint", lambda cfg: {})
+        monkeypatch.setattr(cover, "read_image_text", lambda **kwargs: "fixture title")
+        result = cover.generate_cover(
+            project_id="p1", clip_id="1", title="fixture title", session=session,
+        )
+        assert result["ok"] and result["method"] == "model_bg"
+
+    # Only diagnostics are redacted; the provider still receives the selected model.
+    assert len(session.calls) == 1
+    assert session.calls[0][2]["json"]["model"] == model
+    assert "封面生图 provider=openai" in caplog.text
+    assert model not in caplog.text
+    assert f"model={expected_model}" in caplog.text
+
+
 def test_openai_generations_returns_b64(data_dir):
     from backend.core.image_providers import ImageRequest, generate_openai
 
@@ -287,7 +334,9 @@ def test_model_failure_falls_back_to_local_or_frame(data_dir, fake_frame, monkey
     )
     assert result["ok"]
     assert result["method"] in ("local_overlay", "frame")
-    assert result.get("warning")
+    from backend.services.cover import COVER_IMAGE_FALLBACK
+    assert result.get("warning") == COVER_IMAGE_FALLBACK
+    assert "upstream" not in (result.get("warning_detail") or "")
 
 
 class _TextSettings:
@@ -430,7 +479,11 @@ def test_request_failure_still_produces_local_cover_without_private_error(data_d
     assert result['ok'] and result['method'] in ('local_overlay', 'frame')
     assert Path(result['path']).read_bytes().startswith(b'\xff\xd8')
     assert len(calls) == 1  # A failed paid request is not replayed automatically.
-    assert result['warning'] and 'private-' not in result['warning'] and 'synthetic-key' not in result['warning']
+    from backend.services.cover import COVER_IMAGE_FALLBACK
+    detail = result.get('warning_detail') or ''
+    assert result['warning'] == COVER_IMAGE_FALLBACK
+    assert 'private-' not in result['warning'] and 'private-' not in detail
+    assert 'synthetic-key' not in result['warning'] and 'synthetic-key' not in detail
 
 
 def test_ocr_connection_failure_preserves_already_generated_cover(data_dir, fake_frame):

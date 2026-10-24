@@ -1,4 +1,4 @@
-export const HTML_TEMPLATE_CHOICES = ['editorial', 'street', 'classic'] as const
+export const HTML_TEMPLATE_CHOICES = ['editorial', 'street', 'news', 'cinema', 'classic'] as const
 export type HtmlTemplateChoice = (typeof HTML_TEMPLATE_CHOICES)[number]
 export type EditingStyle = HtmlTemplateChoice
 export const DEFAULT_HTML_TEMPLATE: HtmlTemplateChoice = 'editorial'
@@ -25,7 +25,7 @@ const EMPTY_SIGNALS: StyleSignals = {
 }
 
 export function chosenTemplate(value: string | undefined): HtmlTemplateChoice {
-  return value === 'street' || value === 'classic' ? value : DEFAULT_HTML_TEMPLATE
+  return value && (HTML_TEMPLATE_CHOICES as readonly string[]).includes(value) ? value as HtmlTemplateChoice : DEFAULT_HTML_TEMPLATE
 }
 
 /** Import fields for the HTML template. The flag-off path sends nothing. */
@@ -33,11 +33,8 @@ export function templateImportFields(enabled: boolean, value: string | undefined
   if (!enabled) return {}
   const html_template = chosenTemplate(value)
   const recommended_template = recommended === 'editorial' || recommended === 'street' || recommended === 'classic' ? recommended : undefined
+  // Recommendation stays on the three scored styles. news and cinema are explicit choices.
   return recommended_template ? { html_template, recommended_template } : { html_template }
-}
-
-export function isEditingStyle(value: unknown): value is EditingStyle {
-  return value === 'editorial' || value === 'street' || value === 'classic'
 }
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {

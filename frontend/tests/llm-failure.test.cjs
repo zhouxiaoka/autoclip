@@ -2,22 +2,28 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
-const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
 function loadClassifier() {
-  const file = path.join(__dirname, '../src/utils/llmFailure.ts')
-  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText
-  const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports })
-  return module.exports
+  return loadTs(path.join(__dirname, '../src/utils/llmFailure.ts'))
 }
 
 const { classifyLlmKeyFailure } = loadClassifier()
 
 const LEGACY = '没有可用的 LLM 提供商（当前选择：阿里通义千问 · qwen-plus），缺少 API Key 或本地服务地址。 请到「设置 → 模型」检查提供商、API Key 与模型名，点「测试连接」确认后重试。'
+
+test('invalid credentials use distinct localized copy even with a stale missing-key message', () => {
+  const { llmFailureText } = loadClassifier()
+  assert.equal(classifyLlmKeyFailure(LEGACY, 'llm_auth_invalid'), false)
+  const key = llmFailureText(LEGACY, 'llm_auth_invalid')
+  assert.equal(key, 'API Key 无效或已过期，请到设置里更新后再试')
+  for (const locale of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
+    const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${locale}.json`), 'utf8'))
+    assert.ok(catalog[key], locale)
+    if (locale !== 'zh') assert.notEqual(catalog[key], key)
+  }
+  assert.equal(llmFailureText(LEGACY, 'llm_not_configured'), LEGACY)
+})
 
 test('classifies a missing key, a failed provider test, and the stable code', () => {
   assert.equal(classifyLlmKeyFailure('anything', 'llm_not_configured'), true)

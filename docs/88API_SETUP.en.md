@@ -2,7 +2,7 @@
 
 [简体中文](88API_SETUP.md) · [Back to README](../README-EN.md)
 
-88API Token Platform sponsors AutoClip and provides OpenAI-compatible APIs for analysis, cover images and transcription.
+88API Token Platform sponsors AutoClip and provides OpenAI-compatible APIs for analysis and cover images.
 
 ## Register and create an API key
 
@@ -12,16 +12,15 @@ Register through the [AutoClip referral link](https://88api.ai/sign-up?aff=2PIc)
 
 ### New versions: select 88API directly
 
-1. Open **Settings → AI Models → AI service** and select **88API** in the recommended group. You can also configure it during first-run setup.
+1. Open **Settings → Providers & models** and select **88API** under **Recommended**. You can also configure it during first-run setup.
 2. Enter your 88API key. The preset base URL is `https://api.88api.ai/v1`. A saved `https://88api.ai/v1` still works and is not rewritten.
-3. Wait for your account's model list and choose an analysis model. For visual analysis, select a multimodal model that accepts images.
+3. Wait for your account's model list and choose an analysis model. To read pictures, pick a vision-capable model under visual understanding.
 4. Test the connection and save. Verify the result with a short video before larger jobs.
 
 No default text model or account allowlist is assumed. Use exact model IDs available to your account. Image and audio previews shown without a key are reference catalogs, not proof of account access.
 
 - **Covers** can reuse the AI service key with supported OpenAI Images models such as account-listed `gpt-image-1` or `dall-e-3`. Other image models depend on their actual API and returned capability metadata.
-- **Transcription** supports account-listed `whisper-1` through the OpenAI audio API with timestamps.
-- The platform also offers video generation and TTS; these are not corresponding AutoClip features.
+- The platform also offers video generation and TTS; these are not corresponding AutoClip features. Cloud transcription uses Alibaba Cloud Bailian or OpenAI.
 
 ### Older versions: use the OpenAI-compatible provider
 

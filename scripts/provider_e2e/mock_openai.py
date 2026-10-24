@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import select
 import socket
 import threading
 import time
@@ -243,20 +244,47 @@ class MockHandler(BaseHTTPRequestHandler):
             return
         if fault == 'slow':
             self.server.state.hit('slow')
-            time.sleep(self.server.state.slow_seconds)
+            # Stop as soon as the client goes away (backend killed / client timeout) instead of
+            # sleeping blind and then writing into a closed socket (BrokenPipe traceback, #59).
+            if not self._wait_or_disconnect(self.server.state.slow_seconds):
+                event['client_disconnected'] = True
+                self.server.state.record(event)
+                self.close_connection = True
+                return
         self.server.state.record(event)
         model = str((payload or {}).get('model') or 'mock-gpt')
         self._json(200, chat_payload(completion_body(text), model))
 
+    def _client_gone(self) -> bool:
+        try:
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            return bool(readable) and self.connection.recv(1, socket.MSG_PEEK) == b''
+        except (OSError, ValueError):
+            return True
+
+    def _wait_or_disconnect(self, seconds: float) -> bool:
+        """Sleep up to ``seconds``; False as soon as the peer has closed the connection."""
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if self._client_gone():
+                return False
+            time.sleep(min(0.2, max(0.0, deadline - time.monotonic())))
+        return not self._client_gone()
+
     def _json(self, status: int, payload: dict[str, Any], extra: dict[str, str] | None = None) -> None:
         body = json.dumps(payload).encode('utf-8')
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(body)))
-        for key, value in (extra or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            for key, value in (extra or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # The client already disconnected; nothing to deliver. Count it, never traceback.
+            self.server.state.record({'path': self.path, 'client_disconnected': True, 'status': status})
+            self.close_connection = True
 
 
 class MockServer(ThreadingHTTPServer):

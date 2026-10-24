@@ -23,6 +23,9 @@ RUN npm ci
 COPY frontend/ ./
 # Vite reads the shared application version for the web build.
 COPY src-tauri/tauri.conf.json /app/src-tauri/tauri.conf.json
+# Frontend imports the shared provider presets and the failure-code catalog.
+COPY backend/presets/provider_presets.json /app/backend/presets/provider_presets.json
+COPY backend/core/event_catalog.json backend/core/failure_messages.json /app/backend/core/
 
 # 构建前端
 RUN npm run build

@@ -10,6 +10,7 @@ from backend.pipeline.step5_clustering import ClusteringEngine
 from backend.utils.text_processor import TextProcessor
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_runtime_with_broken_native_dependency_is_not_installed(monkeypatch):
     monkeypatch.setattr(whisper_runtime, 'ensure_on_path', lambda: None)
     def broken(name):

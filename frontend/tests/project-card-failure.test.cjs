@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
@@ -26,10 +26,14 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true },
     }).outputText
-    vm.runInNewContext(code, {
+    runInSandbox(code, {
       module, exports: module.exports, console: { log() {} },
       require: (id) => {
         if (id in stubs) return stubs[id]
+        if (id === '@event-catalog' || id === '@failure-messages') {
+          const data = JSON.parse(fs.readFileSync(path.join(__dirname, id === '@event-catalog' ? '../../backend/core/event_catalog.json' : '../../backend/core/failure_messages.json'), 'utf8'))
+          return { default: data, __esModule: true }
+        }
         if (id.startsWith('.')) return load(path.resolve(path.dirname(file), `${id}.ts`))
         return require(id)
       },
@@ -63,12 +67,13 @@ test('successful retry does not show a stale failure', () => {
 test('restart-interrupted automatic project shows its reason and regenerates from the project page (RC156 #13)', async () => {
   const visited = []
   const buttons = {}
-  const html = renderCard('failed', '服务已重启，请重新生成', null, {
+  const restart = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8')).service_restarted
+  const html = renderCard('failed', restart, null, {
     project: { error_code: 'service_restarted', settings: { smart_import: { auto_start: true }, studio_generation_status: 'failed' } },
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, (to) => visited.push(to))
   assert.match(html, /role="alert"/)
-  assert.match(html, /服务已重启，请重新生成/)
+  assert.ok(html.includes(restart))
   assert.match(html, />重新生成</)
   await buttons['重新生成']()
   assert.deepEqual(visited, ['/project/test'])

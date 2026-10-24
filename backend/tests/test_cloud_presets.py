@@ -89,7 +89,7 @@ def test_manager_uses_seed_ark_key_not_openai(fake_openai, tmp_path):
 
 def test_curated_lists_drop_retired_aliases():
     assert "gpt-4o" not in CLOUD_PRESETS
-    assert set(CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88"}
+    assert set(CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart"}
 
 
 def test_infistar_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):

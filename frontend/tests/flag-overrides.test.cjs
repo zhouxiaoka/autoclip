@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 const jsx = (type, props) => ({ type, props })
@@ -16,7 +16,7 @@ function transpile(file) {
 function loadPanel(dev) {
   const file = path.join(__dirname, '../src/features/settings/FlagOverrides.tsx')
   const exports = {}
-  vm.runInNewContext(transpile(file), {
+  runInSandbox(transpile(file), {
     exports, module: { exports }, console,
     __env: { DEV: dev },
     require: (id) => {
@@ -57,7 +57,7 @@ function loadAppSection(dev) {
   const panel = loadPanel(dev)
   const file = path.join(__dirname, '../src/pages/SettingsPage.tsx')
   const exports = {}
-  vm.runInNewContext(transpile(file) + '\nexports.testAppSection = AppSection;', {
+  runInSandbox(transpile(file) + '\nexports.testAppSection = AppSection;', {
     exports, console,
     __env: { DEV: dev },
     require: (name) => {

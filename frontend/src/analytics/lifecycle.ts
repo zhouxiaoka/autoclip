@@ -10,29 +10,11 @@
  */
 import { getVersion } from '@tauri-apps/api/app'
 import { posthog, captureBusinessEvent, isAnalyticsEnabled } from './posthog'
+import { runtimeProperties } from './runtime'
 
 const INSTALL_FLAG_KEY = 'autoclip.analytics.installed'
 const LAST_VERSION_KEY = 'autoclip.analytics.lastVersion'
 const SESSION_COUNT_KEY = 'autoclip.analytics.sessionCount'
-
-/** 从 webview 的 UA 粗略解析操作系统，避免引入需要改 Rust 侧的 plugin-os 依赖。 */
-function detectOS(): string {
-  const ua = navigator.userAgent
-  if (/Mac/i.test(ua)) return 'macos'
-  if (/Win/i.test(ua)) return 'windows'
-  if (/Linux/i.test(ua)) return 'linux'
-  return 'unknown'
-}
-
-/** 粗略解析 CPU 架构（用于区分 Intel / Apple Silicon 等）。 */
-function detectArch(): string {
-  const ua = navigator.userAgent
-  if (/arm64|aarch64/i.test(ua)) return 'arm64'
-  // Apple Silicon webviews may report Intel; UA cannot establish Mac architecture.
-  if (/Mac/i.test(ua)) return 'unknown'
-  if (/x86_64|x64|Win64|WOW64/i.test(ua)) return 'x64'
-  return 'unknown'
-}
 
 async function getAppVersion(): Promise<string> {
   try {
@@ -60,7 +42,7 @@ function safeSet(key: string, value: string): void {
 }
 
 export interface RuntimeInfo { version: string; os: string; arch: string; locale: string }
-let runtimeInfo: RuntimeInfo = { version: 'unknown', os: detectOS(), arch: detectArch(), locale: typeof navigator !== 'undefined' ? navigator.language : '' }
+let runtimeInfo: RuntimeInfo = { version: import.meta.env.VITE_APP_VERSION || 'unknown', ...runtimeProperties(), locale: typeof navigator !== 'undefined' ? navigator.language : '' }
 
 /** 启动后缓存的运行环境（版本 / 系统 / 架构），供反馈等场景复用；不依赖埋点是否开启。 */
 export function getRuntimeInfo(): RuntimeInfo {
@@ -72,18 +54,17 @@ export function getRuntimeInfo(): RuntimeInfo {
  * 在 initAnalytics() 之后调用一次。posthog 未初始化时仅缓存运行环境。
  */
 export async function trackLaunch(): Promise<void> {
-  const version = await getAppVersion()
-  const os = detectOS()
-  const arch = detectArch()
+  const appVersion = await getAppVersion()
+  const { os, arch } = runtimeProperties()
   const locale = document.documentElement.lang || navigator.language
-  runtimeInfo = { version, os, arch, locale }
+  runtimeInfo = { version: appVersion, os, arch, locale }
 
   if (!isAnalyticsEnabled() || typeof posthog?.register !== 'function') return
 
   // 全局属性：后续每条事件自动携带
   try {
     posthog.register({
-      app_version: version,
+      app_version: appVersion,
       os,
       arch,
       app_locale: locale,
@@ -103,7 +84,7 @@ export async function trackLaunch(): Promise<void> {
     /* ignore */
   }
   if (!isInstalled) {
-    if (captureBusinessEvent('app_installed', { version, os, arch })) safeSet(INSTALL_FLAG_KEY, 'true')
+    if (captureBusinessEvent('app_installed', { app_version: appVersion, os, arch })) safeSet(INSTALL_FLAG_KEY, 'true')
   }
 
   // 版本更新
@@ -113,11 +94,11 @@ export async function trackLaunch(): Promise<void> {
   } catch {
     /* ignore */
   }
-  if (lastVersion && lastVersion !== version) {
-    captureBusinessEvent('app_updated', { from_version: lastVersion, to_version: version })
+  if (lastVersion && lastVersion !== appVersion) {
+    captureBusinessEvent('app_updated', { from_version: lastVersion, to_version: appVersion })
   }
-  safeSet(LAST_VERSION_KEY, version)
+  safeSet(LAST_VERSION_KEY, appVersion)
 
   // 每次启动
-  captureBusinessEvent('app_opened', { version, session_number: sessionCount })
+  captureBusinessEvent('app_opened', { app_version: appVersion, session_number: sessionCount })
 }

@@ -1,6 +1,6 @@
 import { projectProperties } from '../analytics/workflow'
 import { t } from '../i18n'
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
 import { apiConfigManager } from '../utils/apiConfig'
@@ -15,6 +15,10 @@ import {
 
 // 扩展Axios配置类型
 declare module 'axios' {
+  interface AxiosRequestConfig {
+    /* false = a single attempt (the caller polls on its own, e.g. the readiness probe). */
+    retry?: boolean
+  }
   interface InternalAxiosRequestConfig {
     metadata?: {
       startTime: number
@@ -38,6 +42,7 @@ const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504])
 const MAX_RETRIES = 2
 
 const shouldRetry = (error: any): boolean => {
+  if (error?.config?.retry === false || axios.isCancel(error)) return false
   const method = error?.config?.method?.toLowerCase()
   if (!method || !RETRYABLE_METHODS.has(method)) return false
 
@@ -49,6 +54,16 @@ const shouldRetry = (error: any): boolean => {
 }
 
 const getRetryDelay = (retryCount: number): number => 300 * Math.pow(2, retryCount)
+
+/* the wait before a retry ends at once when the request's signal aborts; nothing more is sent. */
+const waitForRetry = (ms: number, config: any) => new Promise<void>((resolve, reject) => {
+  const signal: AbortSignal | undefined = config?.signal
+  const cancelled = () => new axios.CanceledError(undefined, config)
+  if (signal?.aborted) { reject(cancelled()); return }
+  const onAbort = () => { clearTimeout(timer); reject(cancelled()) }
+  const timer = setTimeout(() => { signal?.removeEventListener?.('abort', onAbort); resolve() }, ms)
+  signal?.addEventListener?.('abort', onAbort, { once: true })
+})
 
 apiConfigManager.addListener((config) => {
   api.defaults.baseURL = config.baseUrl
@@ -84,8 +99,8 @@ const saveWithSystemDownload = async (
     if (!size) throw new Error('Empty media response')
     return { ...result, size }
   }, (result, _startedAt, props) => {
-    captureBusinessEvent('media_download_received', { ...props, size_bytes: result.size })
-    captureBusinessEvent('media_download_saved', { ...props, download_mode: 'native', size_bytes: result.size })
+    captureBusinessEvent('media_download_received', { ...props, size_bytes: result.size, legacy: true })
+    captureBusinessEvent('media_download_saved', { ...props, download_mode: 'native', size_bytes: result.size, legacy: true })
   })
   const { message } = await import('antd')
   message.success(t('已保存到下载文件夹'))
@@ -115,7 +130,9 @@ const filenameFromDisposition = (contentDisposition: string | undefined, fallbac
 api.interceptors.request.use(
   async (config) => {
     if (isTauriRuntime() && !apiConfigManager.isReady()) {
-      await apiConfigManager.waitForReady()
+      // a cancelled request stops waiting for the desktop backend config at once.
+      await apiConfigManager.waitForReady(undefined, config.signal as AbortSignal | undefined)
+      if (config.signal?.aborted) throw new axios.CanceledError(undefined, undefined, config)
     }
 
     config.baseURL = apiConfigManager.getBaseUrl()
@@ -150,7 +167,7 @@ api.interceptors.response.use(
           ...(error.config.metadata || { startTime: Date.now() }),
           retryCount: currentRetryCount + 1,
         }
-        await new Promise((resolve) => setTimeout(resolve, getRetryDelay(currentRetryCount)))
+        await waitForRetry(getRetryDelay(currentRetryCount), error.config)
         return api.request(error.config)
       }
     }
@@ -245,6 +262,8 @@ export interface BilibiliDownloadTask {
 export const settingsApi = {
   getOutputBranding: (): Promise<{ enabled: boolean }> => api.get('/settings/output-branding'),
   setOutputBranding: (enabled: boolean): Promise<{ enabled: boolean }> => api.put('/settings/output-branding', { enabled }),
+  getOutputCaptions: (): Promise<{ enabled: boolean }> => api.get('/settings/output-captions'),
+  setOutputCaptions: (enabled: boolean): Promise<{ enabled: boolean }> => api.put('/settings/output-captions', { enabled }),
   // 获取系统配置
   getSettings: (): Promise<any> => {
     return api.get('/settings')
@@ -266,7 +285,7 @@ export const settingsApi = {
       api_key: apiKey,
       base_url: options.baseUrl,
       model: options.model,
-    }), (result) => { captureBusinessEvent('provider_test_finished', { provider, outcome: result.success ? 'success' : 'failed' }) })
+    }), (result) => { captureBusinessEvent('provider_test_finished', { provider, outcome: result.success ? 'success' : 'error', legacy: true }) })
   },
 
   // 云端提供商模型名单：内置常用 + 有密钥时实时拉取服务商 /models
@@ -370,7 +389,7 @@ export const projectApi = {
       }), (created, startedAt, props) => {
         workflow.rememberProject(created.id, { material_origin: 'user' })
         workflow.watch('project', created.id, undefined, startedAt)
-        captureBusinessEvent('import_finished', { ...props, project_id: created.id, outcome: 'completed', stage: 'upload_received' })
+        captureBusinessEvent('import_finished', { ...props, project_id: created.id, outcome: 'success', stage: 'upload_received', legacy: true })
       })
       trackVideoImported({
         source: 'upload',
@@ -784,6 +803,8 @@ export interface WhisperModel {
   downloadProgress?: number | null
   localPath?: string | null
   errorMessage?: string | null
+  /** stable code; UI translates by code (8 locales).*/
+  errorCode?: 'whisper_download_failed' | string | null
   source?: 'huggingface' | 'hf-mirror' | 'custom' | null
 }
 
@@ -794,14 +815,19 @@ export interface WhisperModelDownload {
   message: string
 }
 
+export type WhisperModelSource = 'auto' | 'huggingface' | 'hf-mirror'
+
 // 语音识别 / Whisper 运行时与模型管理
 export const speechApi = {
-  getRuntimeStatus: (): Promise<WhisperRuntimeStatus> => api.get('/whisper/runtime-status'),
-  installRuntime: (): Promise<{ started: boolean; message: string }> => api.post('/whisper/install'),
+  getRuntimeStatus: (config?: AxiosRequestConfig): Promise<WhisperRuntimeStatus> => api.get('/whisper/runtime-status', config),
+  installRuntime: (config?: AxiosRequestConfig): Promise<{ started: boolean; message: string }> => api.post('/whisper/install', undefined, config),
   uninstallRuntime: (): Promise<{ success: boolean; message: string }> => api.post('/whisper/uninstall'),
-  getModels: (): Promise<WhisperModel[]> => api.get('/whisper-models'),
-  downloadModel: (model: string): Promise<WhisperModelDownload> => api.post('/whisper-models/download', { model }),
+  getModels: (config?: AxiosRequestConfig): Promise<WhisperModel[]> => api.get('/whisper-models', config),
+  downloadModel: (model: string, config?: AxiosRequestConfig): Promise<WhisperModelDownload> => api.post('/whisper-models/download', { model }, config),
   deleteModel: (model: string): Promise<unknown> => api.delete(`/whisper-models/${model}`),
+  /** E3: where Whisper models download from. auto probes huggingface.co and switches to hf-mirror when blocked. */
+  getModelSource: (): Promise<{ source: WhisperModelSource; effective: WhisperModelSource }> => api.get('/whisper/model-source'),
+  setModelSource: (source: WhisperModelSource): Promise<{ source: WhisperModelSource }> => api.put('/whisper/model-source', { source }),
 }
 
 export default api

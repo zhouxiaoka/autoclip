@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load(relativePath) {
@@ -11,12 +11,12 @@ function load(relativePath) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports })
+  runInSandbox(code, { module, exports: module.exports })
   return module.exports
 }
 
 const { classifyTimelineEmpty } = load('../src/utils/timelineFailure.ts')
-const { classifyLlmKeyFailure } = load('../src/utils/llmFailure.ts')
+const { classifyLlmKeyFailure } = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/utils/llmFailure.ts'))
 const { classifySubtitleFailure } = load('../src/utils/subtitleFailure.ts')
 
 // 与 backend empty_timeline_failure().user_message() 一致；CLI 会把它写进 last_error。

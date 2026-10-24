@@ -94,11 +94,17 @@ def test_rate_limits_and_server_errors_are_retried_but_auth_errors_are_not(monke
     import httpx
     from backend.services import cloud_transcription as ct
 
-    def status(code):
+    def status(code, body=b''):
+        # the retry decision sees the error _check_status classified (the real path)
         request = httpx.Request('POST', 'https://asr.example.com')
-        return httpx.HTTPStatusError('x', request=request, response=httpx.Response(code, request=request))
+        try:
+            ct._check_status(httpx.Response(code, request=request, content=body))
+        except ct.CloudTranscriptionError as error:
+            return error
+        raise AssertionError('no error raised')
     assert ct._retryable(status(429)) and ct._retryable(status(503)) and ct._retryable(httpx.ConnectError('down'))
     assert not ct._retryable(status(401)) and not ct._retryable(status(400))
+    assert not ct._retryable(status(429, b'{"error":{"message":"Insufficient balance"}}'))
     for value, expected in (('0', 1), ('abc', 8), ('4', 4)):
         monkeypatch.setenv('AUTOCLIP_ASR_CONCURRENCY', value)
         assert ct._workers() == expected

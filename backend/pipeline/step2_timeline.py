@@ -2,7 +2,6 @@
 Step 2: 时间线提取 - 为大纲中的每个话题定位具体时间区间
 """
 import json
-import logging
 import math
 import re
 from typing import List, Dict, Any, Optional
@@ -15,8 +14,12 @@ from ..utils.text_processor import TextProcessor
 from .quality import to_seconds, to_srt_time, save_report
 from .failures import PipelineFailure, http_status_of, timeline_failure_from_report
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
+from ..core.llm_degrade import chunk_call_budget
 
-logger = logging.getLogger(__name__)
+from backend.core.llm_telemetry import sanitize_exception_text
+from backend.core.failure_logging import failure_logger, chunk_failure_context
+
+logger = failure_logger(__name__)
 
 class TimelineExtractor:
     """从大纲和SRT字幕中提取精确时间线"""
@@ -40,7 +43,7 @@ class TimelineExtractor:
         self.timeline_chunks_dir = self.metadata_dir / "step2_timeline_chunks"
         self.llm_raw_output_dir = self.metadata_dir / "step2_llm_raw_output"
 
-    def extract_timeline(self, outlines: List[Dict]) -> List[Dict]:
+    def extract_timeline(self, outlines: List[Dict], *, chunk_budgets: Optional[Dict] = None) -> List[Dict]:
         """
         提取话题时间区间。
         新版特性：
@@ -63,7 +66,7 @@ class TimelineExtractor:
             return []
 
         if not self.srt_chunks_dir.exists():
-            logger.error(f"SRT块目录不存在: {self.srt_chunks_dir}。请先运行Step 1。")
+            logger.error("SRT块目录不存在。请先运行Step 1。")
             self.extraction_report["chunks"] = [{"outcome": "missing_subtitles"}]
             save_report({"step2_extraction": self.extraction_report}, self.metadata_dir)
             return []
@@ -85,7 +88,7 @@ class TimelineExtractor:
                 outlines_by_chunk[chunk_index].append(outline)
             else:
                 self.extraction_report["chunks"].append({"outcome": "missing_subtitles", "topics": 1})
-                logger.warning(f"  > 话题 '{outline.get('title', '未知')}' 缺少 chunk_index，将被跳过。")
+                logger.warning("  > 话题缺少 chunk_index，将被跳过。")
 
         all_timeline_data = []
         current_srt_entries = []
@@ -93,8 +96,17 @@ class TimelineExtractor:
         import threading
         from .concurrency import map_chunks
         parse_lock = threading.Lock()
+        if chunk_budgets is None:
+            chunk_budgets = {}
 
+        @chunk_failure_context("step2_timeline")
         def timeline_chunk(item):
+            # Keep each ledger across whole-extraction retries, including workers.
+            with chunk_call_budget(chunk_budgets.get(item[0])) as budget:
+                chunk_budgets[item[0]] = budget
+                return extract_chunk(item)
+
+        def extract_chunk(item):
             chunk_index, chunk_outlines = item
             srt_entries, parsed = [], []
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_outlines)} 个话题...")
@@ -108,14 +120,14 @@ class TimelineExtractor:
                 # 首先加载对应的SRT块文件，无论是否使用缓存都需要这些信息
                 srt_chunk_path = self.srt_chunks_dir / f"chunk_{chunk_index}.json"
                 if not srt_chunk_path.exists():
-                    logger.warning(f"  > 找不到对应的SRT块文件: {srt_chunk_path}，跳过整个块。")
+                    logger.warning("  > 找不到对应的SRT块文件，跳过整个块。")
                     return chunk_report, srt_entries, parsed
                 
                 with open(srt_chunk_path, 'r', encoding='utf-8') as f:
                     srt_chunk_data = json.load(f)
 
                 if not srt_chunk_data:
-                    logger.warning(f"  > SRT块文件为空: {srt_chunk_path}，跳过整个块。")
+                    logger.warning("  > SRT块文件为空，跳过整个块。")
                     return chunk_report, srt_entries, parsed
 
                 # 获取时间范围信息
@@ -163,7 +175,7 @@ class TimelineExtractor:
                                 )
                                 if status is not None:
                                     chunk_report["http_status"] = status
-                                logger.error("块 %s 模型调用失败: %s", chunk_index, call_error)
+                                logger.error("块 %s 模型调用失败: %s", chunk_index, sanitize_exception_text(call_error))
                                 break
                             if raw_response:
                                 cache_file = self.llm_raw_output_dir / f"chunk_{chunk_index}_attempt_{retry_count}.txt"
@@ -189,14 +201,14 @@ class TimelineExtractor:
                         )
                     except Exception as parse_error:
                         chunk_report["outcome"] = "chunk_error"
-                        logger.error("块 %s 第 %s 次解析失败: %s", chunk_index, retry_count + 1, parse_error)
+                        logger.error("块 %s 第 %s 次解析失败: %s", chunk_index, retry_count + 1, sanitize_exception_text(parse_error))
                     if retry_count == attempts - 1:
                         self._save_debug_response(raw_response, chunk_index, "final_parse_failure")
                         logger.warning("块 %s 无有效时间线%s", chunk_index, "（缓存无效）" if cached else "")
 
             except Exception as e:
                 chunk_report["outcome"] = "chunk_error"
-                logger.error(f"  > 处理块 {chunk_index} 时出错: {str(e)}")
+                logger.error(f"  > 处理块 {chunk_index} 时出错: {sanitize_exception_text(e)}")
                 return chunk_report, srt_entries, parsed
             return chunk_report, srt_entries, parsed
 
@@ -223,7 +235,7 @@ class TimelineExtractor:
                 logger.info(f"已为 {len(all_timeline_data)} 个片段分配了固定ID（1-{len(all_timeline_data)}）")
                 
             except Exception as e:
-                logger.error(f"对最终结果排序时出错: {e}。返回未排序的结果。")
+                logger.error(f"对最终结果排序时出错: {sanitize_exception_text(e)}。返回未排序的结果。")
 
         # 5. 程序化校正：对齐字幕边界 / 时长上下限 / 去重合并（docs/QUALITY_AND_PUBLISH_PLAN.md 线 1-B）
         if all_timeline_data:
@@ -243,7 +255,7 @@ class TimelineExtractor:
                 )
                 all_timeline_data = refined
             except Exception as e:  # noqa: BLE001
-                logger.error("时间线校正失败: %s", e)
+                logger.error("时间线校正失败: %s", sanitize_exception_text(e))
                 self.extraction_report["refinement_failed"] = True
                 save_report({"step2_extraction": self.extraction_report}, self.metadata_dir)
                 raise PipelineFailure("ANALYZE", "时间线字幕边界校正失败，本次未导出未经校验的片段。",
@@ -294,7 +306,7 @@ class TimelineExtractor:
                     timeline_item['outline'] = timeline_item['title']
                 if 'outline' not in timeline_item or 'start_time' not in timeline_item or 'end_time' not in timeline_item:
                     reasons["missing_fields"] += 1
-                    logger.warning(f"  > 从LLM返回的某个JSON对象格式不正确: {timeline_item}")
+                    logger.warning("  > LLM返回的JSON对象格式不正确")
                     continue
                 
                 # 将 chunk_index 添加回对象中，以便后续步骤使用
@@ -305,12 +317,12 @@ class TimelineExtractor:
                     # 验证时间格式
                     if not self._validate_time_format(timeline_item['start_time']):
                         reasons["invalid_time"] += 1
-                        logger.warning(f"  > 话题 '{timeline_item['outline']}' 开始时间格式不正确: {timeline_item['start_time']}")
+                        logger.warning("  > 话题开始时间格式不正确")
                         continue
                     
                     if not self._validate_time_format(timeline_item['end_time']):
                         reasons["invalid_time"] += 1
-                        logger.warning(f"  > 话题 '{timeline_item['outline']}' 结束时间格式不正确: {timeline_item['end_time']}")
+                        logger.warning("  > 话题结束时间格式不正确")
                         continue
                     
                     start_sec = self._timeline_seconds(timeline_item['start_time'])
@@ -321,31 +333,30 @@ class TimelineExtractor:
                     end_sec = min(end_sec, chunk_end_sec)
                     if end_sec <= start_sec:
                         reasons["outside_chunk_or_reversed"] += 1
-                        logger.warning("  > 时间区间倒序或不在当前字幕块内，跳过: %s", timeline_item)
+                        logger.warning("  > 时间区间倒序或不在当前字幕块内，跳过")
                         continue
                     # Normalize before downstream sorting: .5 means half a second,
                     # not five milliseconds, and MM:SS must gain the hours field.
                     timeline_item['start_time'] = to_srt_time(start_sec)
                     timeline_item['end_time'] = to_srt_time(end_sec)
 
-                    logger.info(f"  > 定位成功: {timeline_item['outline']} ({timeline_item['start_time']} -> {timeline_item['end_time']})")
+                    logger.info("  > 定位成功 response_length=%s", len(response))
                     validated_items.append(timeline_item)
                 except Exception as e:
                     reasons["invalid_time"] += 1
-                    logger.error(f"  > 验证单个时间戳时出错: {e} - 项目: {timeline_item}")
+                    logger.error(f"  > 验证单个时间戳时出错: {sanitize_exception_text(e)}")
                     continue
             
             return validated_items
 
         except Exception as e:
             reasons["malformed_json"] += 1
-            logger.error(f"  > 块 {chunk_index} 解析LLM响应时出错: {e}")
+            logger.error(f"  > 块 {chunk_index} 解析LLM响应时出错: {sanitize_exception_text(e)}")
             # 保存详细的错误信息
             error_info = {
-                "error": str(e),
+                "error": sanitize_exception_text(e),
                 "error_type": type(e).__name__,
                 "response_length": len(response),
-                "response_preview": response[:200],
                 "chunk_index": chunk_index,
                 "chunk_start": chunk_start,
                 "chunk_end": chunk_end
@@ -392,16 +403,16 @@ class TimelineExtractor:
         return time_str.replace(',', '.')
 
     def _save_debug_response(self, response: str, chunk_index: int, error_type: str) -> None:
-        """保存调试响应到文件"""
+        """仅保存响应长度，调试日志不得包含模型正文。"""
         try:
             debug_dir = self.metadata_dir / "debug_responses"
             debug_dir.mkdir(parents=True, exist_ok=True)
             debug_file = debug_dir / f"chunk_{chunk_index}_{error_type}.txt"
             with open(debug_file, 'w', encoding='utf-8') as f:
-                f.write(response)
-            logger.info(f"调试响应已保存到: {debug_file}")
+                f.write(f"response_length={len(response)}\n")
+            logger.info("调试响应已保存 length=%s", len(response))
         except Exception as e:
-            logger.error(f"保存调试响应失败: {e}")
+            logger.error(f"保存调试响应失败: {sanitize_exception_text(e)}")
 
     def save_timeline(self, timeline_data: List[Dict], output_path: Optional[Path] = None) -> Path:
         """
@@ -415,7 +426,7 @@ class TimelineExtractor:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(timeline_data, f, ensure_ascii=False, indent=2)
             
-        logger.info(f"时间数据已保存到: {output_path}")
+        logger.info("时间数据已保存")
         return output_path
 
     def load_timeline(self, input_path: Path) -> List[Dict]:
@@ -444,8 +455,9 @@ def run_step2_timeline(outline_path: Path, metadata_dir: Path = None, output_pat
         output_path = metadata_dir / "step2_timeline.json"
 
     last_failure = None
+    chunk_budgets = {}
     for attempt in range(MAX_ATTEMPTS):
-        timeline_data = extractor.extract_timeline(outlines)
+        timeline_data = extractor.extract_timeline(outlines, chunk_budgets=chunk_budgets)
         extractor.save_timeline(timeline_data, output_path)
         if timeline_data:
             return timeline_data

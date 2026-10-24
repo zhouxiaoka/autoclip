@@ -75,8 +75,10 @@ def test_unknown_model_retries_once_when_400_names_the_param():
 def test_other_400s_are_not_retried():
     provider, completions = _provider("gpt-4o-mini")
     completions.create = lambda **p: completions.calls.append(p) or (_ for _ in ()).throw(_BadRequest("invalid model"))
-    with pytest.raises(_BadRequest):
+    with pytest.raises(RuntimeError) as caught:
         provider.call("hi", max_tokens=10)
+    assert caught.value.status_code == 400
+    assert "invalid model" not in str(caught.value)
     assert len(completions.calls) == 1
 
 

@@ -1,6 +1,9 @@
+from backend.core.failure_codes import UserFacingError
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
 Goal = Literal['content', 'highlight', 'promo']
 Language = Literal['source', 'zh', 'en', 'ja']
@@ -19,6 +22,8 @@ class CropPoint(BaseModel):
     crop_x: float = Field(ge=0, le=1)
     # 'crop' follows crop_x; 'fit' shows the whole frame on a blurred backdrop (text cards, slides, no faces).
     mode: Literal['crop', 'fit'] = 'crop'
+    # Seconds spent easing from the previous crop_x. 0 is a hard cut (a shot change, or the first point).
+    ease: float = Field(default=0, ge=0, le=2)
 
 
 class Scene(BaseModel):
@@ -38,16 +43,22 @@ class Scene(BaseModel):
     @model_validator(mode='after')
     def interval(self):
         if self.end - self.start < .1:
-            raise ValueError('片段至少需要 0.1 秒')
+            raise UserFacingError('片段至少需要 0.1 秒')
         return self
 
 class PackagingCue(BaseModel):
-    """One caption line in source seconds: text in the audience language, plus the original."""
+    """One caption line in source seconds: text in the audience language, plus the original.
+
+    `emphasis` is one short phrase already inside `text`. `speaker` is who is talking.
+    Both default to empty so a version 1 payload saved before these fields still loads.
+    """
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     text: str = Field(min_length=1, max_length=600)
     original: str = Field(default='', max_length=900)
+    emphasis: str = Field(default='', max_length=30)
+    speaker: str = Field(default='', max_length=40)
 
 
 class PackagingSpeaker(BaseModel):
@@ -83,7 +94,7 @@ class PackagingGloss(BaseModel):
 
 
 _CLASSIC_TEMPLATES = {'interview_zh', 'podcast_en'}
-_HTML_TEMPLATES = {'editorial', 'street'}
+_HTML_TEMPLATES = set(HTML_TEMPLATE_IDS)
 _CLASSIC_STYLES = {
     'interview_zh': ('classic', 'boxed', 'spotlight'),
     'podcast_en': ('pop', 'boxed', 'cinematic'),
@@ -94,8 +105,10 @@ class Packaging(BaseModel):
     """Automatic template packaging, generated once per content and audience language.
 
     Version 1 is the classic ASS family (`interview_zh`, `podcast_en`) and stays readable.
-    Version 2 adds the HTML templates and the optional editorial/street fields. A version 1
-    payload that carries those fields is rejected, so old projects do not silently change shape.
+    Version 2 adds the HTML templates and the optional editorial/street lists (kicker, the
+    emphasis list, numbers, gloss). A version 1 payload that carries those lists is rejected.
+    Per-cue emphasis, the cue's speaker and `deck` are optional on version 1: old projects omit
+    them and still load, and classic ASS does not paint them.
     """
     model_config = ConfigDict(extra='forbid')
     version: Literal[1, 2] = 1
@@ -108,6 +121,8 @@ class Packaging(BaseModel):
     speakers: list[PackagingSpeaker] = Field(default_factory=list, max_length=8)
     tags: list[PackagingMark] = Field(default_factory=list, max_length=8)
     tags_enabled: bool = True
+    # #367: users can switch the template captions off; titles/nameplates stay.
+    captions_enabled: bool = True
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
@@ -117,6 +132,10 @@ class Packaging(BaseModel):
     mood: Literal['calm', 'serious', 'bold', 'warm', 'playful'] | None = None
     palette: Literal['azure', 'amber', 'coral', 'mint', 'lemon', 'rose', 'lilac'] | None = None
     kicker: str = Field(default='', max_length=16)
+    # English italic line above a magazine headline. Classic ASS ignores it.
+    deck: str = Field(default='', max_length=80)
+    # Magazine folio, for example "DWARKESH PODCAST · 2026.04.15". Empty keeps 原片 only.
+    issue: str = Field(default='', max_length=80)
     emphasis: list[PackagingMark] = Field(default_factory=list, max_length=12)
     numbers: list[PackagingNumber] = Field(default_factory=list, max_length=6)
     gloss: list[PackagingGloss] = Field(default_factory=list, max_length=6)
@@ -125,25 +144,25 @@ class Packaging(BaseModel):
     def short_title_lines(self):
         self.title_lines = [line.strip() for line in self.title_lines if line.strip()]
         if any(len(line) > 40 for line in self.title_lines):
-            raise ValueError('标题每行最多 40 个字符')
+            raise UserFacingError('标题每行最多 40 个字符')
         classic = self.template in _CLASSIC_TEMPLATES
         html = self.template in _HTML_TEMPLATES
         if not classic and not html:
-            raise ValueError('未知包装模板')
+            raise UserFacingError('未知包装模板')
         if html and self.version != 2:
-            raise ValueError('HTML 模板需要 packaging version 2')
+            raise UserFacingError('HTML 模板需要 packaging version 2')
         if html:
             from backend.services.studio.templates.registry import get
             get(self.template)
         extended = bool(self.kicker or self.emphasis or self.numbers or self.gloss)
         if self.version == 1 and extended:
-            raise ValueError('version 1 不包含扩展包装字段')
+            raise UserFacingError('version 1 不包含扩展包装字段')
         if classic:
             allowed = _CLASSIC_STYLES[self.template]
             if self.style is not None and self.style not in allowed:
-                raise ValueError('这个模板不支持所选样式')
+                raise UserFacingError('这个模板不支持所选样式')
         elif self.style is not None:
-            raise ValueError('这个模板不支持所选样式')
+            raise UserFacingError('这个模板不支持所选样式')
         return self
 
 
@@ -179,13 +198,13 @@ class Draft(BaseModel):
     @model_validator(mode='after')
     def title_version(self):
         if self.title_template_version == 6 and self.title_style in ('plain', 'impact', 'card'):
-            raise ValueError('文字模板版本 6 仅支持六款设计预设')
+            raise UserFacingError('文字模板版本 6 仅支持六款设计预设')
         if self.title_template_version in (4, 5) and self.title_style != 'comic':
-            raise ValueError('文字模板版本 4/5 仅支持漫画冲击')
+            raise UserFacingError('文字模板版本 4/5 仅支持漫画冲击')
         if self.title_style == 'editorial' and self.title_template_version < 2:
-            raise ValueError('极简大字需要文字模板版本 2 或更新')
+            raise UserFacingError('极简大字需要文字模板版本 2 或更新')
         if self.title_style in ('pixel', 'frosted') and self.title_template_version not in (3, 6):
-            raise ValueError('像素与磨砂模板需要文字模板版本 3 或 6')
+            raise UserFacingError('像素与磨砂模板需要文字模板版本 3 或 6')
         return self
 
 class CreateDraft(BaseModel):
@@ -207,7 +226,7 @@ class DuplicateDraft(BaseModel):
     def valid_title(self):
         self.title = self.title.strip()
         if not self.title:
-            raise ValueError('请填写新版本名称')
+            raise UserFacingError('请填写新版本名称')
         return self
 
 
@@ -283,11 +302,11 @@ class OutputVariant(BaseModel):
     # Shadow quality report. Absent when the gate is off. Never changes the file.
     qa: QaReport | None = None
     # Set on the top three scored portrait clips when the import chose an HTML template.
-    html_template: Literal['editorial', 'street'] | None = None
+    html_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
     # The other automatic portrait clips record why they stayed on classic.
     html_fallback: Literal['rank'] | None = None
     # The import choice, kept when this clip renders classic because it was not in the top three.
-    requested_template: Literal['editorial', 'street'] | None = None
+    requested_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
 
 
 class ImportOptions(BaseModel):
@@ -300,7 +319,7 @@ class ImportOptions(BaseModel):
     platforms: list[str] = Field(default_factory=lambda: ['douyin'], min_length=1, max_length=8)
     auto_start: bool = False
     portrait_style: Literal['auto', 'interview', 'podcast'] = 'auto'
-    html_template: Literal['editorial', 'street', 'classic'] | None = None
+    html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
     recommended_template: Literal['editorial', 'street', 'classic'] | None = None
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
 
@@ -335,5 +354,5 @@ class ConfirmPlan(BaseModel):
     @model_validator(mode='after')
     def unique_goals(self):
         if len(set(self.goals)) != len(self.goals):
-            raise ValueError('制作类型不能重复')
+            raise UserFacingError('制作类型不能重复')
         return self

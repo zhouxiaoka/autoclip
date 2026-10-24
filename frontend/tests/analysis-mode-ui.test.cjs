@@ -1,19 +1,22 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
-function load(file,mocks){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/features/studio',file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}});return exports}
+const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
+function load(file,mocks){const exports={};runInSandbox(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/features/studio',file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}});return exports}
 function view(mode,goals,available=true){
  const states=[mode,{visual_analysis:available,visual_model:'test-model'},false,{},goals,false,''];let index=0
  const calls=[]
  const element=(type,props)=>({type,props})
  const component=load('PlanSummary.tsx',{
  'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
- react:{useState:()=>{const n=index++;return [states[n],v=>{states[n]=v}]},useEffect:()=>{}},
+ react:{useState:()=>{const n=index++;return [states[n],v=>{states[n]=v}]},useEffect:()=>{},useRef:v=>({current:v})},
  'react/jsx-runtime':{jsx:element,jsxs:element,Fragment:'fragment'},
  '../../ui':{Btn:'button',Dialog:'dialog',Row:'row',Segmented:'segmented',fmtDuration:String},
  './types':{defaultImportOptions:{},goalLabels:{content:'content',highlight:'highlight',promo:'promo'},languages:[]},
  './ImportPreferences':{default:'preferences'},
- './api':{studioApi:{confirmPlan:async(...args)=>calls.push(args)},errorText:String}
+ './api':{studioApi:{confirmPlan:async(...args)=>calls.push(args)},errorText:String,errorCode:()=>undefined},
+ 'react-router-dom':{useNavigate:()=>()=>{}},'../../services/api':{speechApi:{}},
+ './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]}
  }).default
  const render=()=>{index=0;return component({projectId:'p',plan:{id:'plan',suggested_goals:goals,preferences:{goal:'content',aspect:'original',language:'source'},overrides:{}},status:'awaiting_confirmation',onChanged:()=>{}})}
  const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)]

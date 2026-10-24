@@ -1,0 +1,42 @@
+{
+ "fps": 30,
+ "kicker": "",
+ "hook": {
+  "text": "产品做太多反而拖累核心\n应更早专注智能本身",
+  "until_frame": 72
+ },
+ "title_lines": [
+  "产品做太多反而拖累核心",
+  "应更早专注智能本身"
+ ],
+ "words": [
+  {
+   "text": "我觉得我们在产品方面想做的事情太多了。那些事其实都很好，只是不如最重要的事好，那就是提升智能的通用能力。我们当时在做浏览器和Sora这类东西。",
+   "start_frame": 1229,
+   "end_frame": 1229,
+   "emphasis": ""
+  },
+  {
+   "text": "现在我们非常专注地要做人们的智能服务。",
+   "start_frame": 1229,
+   "end_frame": 1229,
+   "emphasis": ""
+  },
+  {
+   "text": "我认为我们的模型已经成为世界上最好的，未来几个月还会变得好得多。",
+   "start_frame": 1229,
+   "end_frame": 1229,
+   "emphasis": ""
+  },
+  {
+   "text": "人们确实在做非常了不起的事情，但这才是我们本应专注的。我本应要求所有人，这就是唯一重要的事，少去操心那些支线任务。",
+   "start_frame": 1229,
+   "end_frame": 1229,
+   "emphasis": ""
+  }
+ ],
+ "gloss": [],
+ "number": null,
+ "stickers": [],
+ "safe_area": "xiaohongshu"
+}

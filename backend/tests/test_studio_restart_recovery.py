@@ -10,6 +10,7 @@ from backend.models.base import Base
 from backend.models.project import Project, ProjectStatus
 from backend.schemas.base import PaginationParams
 from backend.services.project_service import ProjectService
+from backend.core.failure_codes import sentence
 from backend.services.studio import store
 from backend.services.studio.restart_recovery import reconcile_interrupted_projects
 
@@ -58,7 +59,7 @@ def test_startup_closes_a_run_killed_during_the_llm_stage(sessions, stage):
     assert reconcile_interrupted_projects(sessions) == ['p']
     disk = _disk()
     assert disk['generation']['status'] == 'failed'
-    assert disk['generation']['error'] == store.RESTART_MESSAGE == '服务已重启，请重新生成'
+    assert disk['generation']['error'] == store.RESTART_MESSAGE == sentence('service_restarted')
     assert disk['generation']['error_code'] == 'service_restarted'
     assert disk['generation']['failure_stage'] == stage
     assert disk['analysis']['status'] == 'failed' and disk['analysis']['error'] == store.RESTART_MESSAGE
@@ -114,6 +115,26 @@ def test_dead_cli_producer_is_recovered(sessions):
     assert _row(sessions).status.value == 'failed'
 
 
+def test_recover_uses_the_catalog_sentence_for_every_interrupted_piece(sessions):
+    catalog = sentence('service_restarted')
+    _project(sessions, {
+        'generation': {'status': 'rendering', 'auto_start': True},
+        'analysis': {'status': 'running', 'phase': 'rendering', 'run_id': 'r', 'instance': OLD},
+        'drafts': [{'id': 'd1'}, {'id': 'd2'}],
+        'jobs': [{'job_id': 'j1', 'status': 'running', 'instance': OLD}],
+        'output_variants': [
+            {'id': 'v1', 'render_job_id': 'j1', 'status': 'running', 'instance': OLD},
+            {'id': 'v2', 'status': 'completed', 'cover_job': {'status': 'running', 'instance': OLD}},
+        ]})
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    disk = _disk()
+    assert disk['jobs'][0]['error'] == catalog
+    assert disk['output_variants'][0]['error'] == catalog
+    assert disk['output_variants'][1]['cover_job']['error'] == catalog
+    assert disk['generation']['error'] == catalog
+    assert _row(sessions).error_message == catalog
+
+
 def test_killed_during_render_has_a_reason_on_the_project(sessions):
     # RC156 case 4b: previously failed with an empty error_message.
     _project(sessions, {
@@ -147,6 +168,25 @@ def test_render_killed_after_one_saved_video_is_partial_and_keeps_it(sessions):
     disk = _disk()
     assert disk['generation']['status'] == 'partial' and disk['generation']['completed_variant_count'] == 1
     assert disk['output_variants'][0]['status'] == 'completed'
+
+
+def test_restart_ignores_orphan_and_partial_files_without_completed_receipts(sessions):
+    done_job, done = _linked(1, 'completed')
+    cut_job, cut = _linked(2, 'running')
+    _project(sessions, _render_run([done_job, cut_job], [done, cut]))
+    folder = store.directory('p') / 'output/studio'
+    folder.mkdir(parents=True)
+    for name in ('j2.mp4', 'j2.part.mp4', 'j2.ready.part.mp4'):
+        (folder / name).write_bytes(b'orphan output without a durable completed receipt')
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    data = _disk()
+    assert data['generation']['status'] == 'partial'
+    assert data['generation']['completed_variant_count'] == 1
+    assert data['output_variants'][1]['status'] == 'failed'
+    row = _row(sessions)
+    assert row.status.value == 'failed'
+    assert row.total_clips == 1
+    assert row.error_code == 'service_restarted'
 
 
 def _render_run(jobs, variants):
@@ -217,10 +257,10 @@ def test_manual_confirmation_run_is_failed_and_keeps_its_wording(sessions):
     _project(sessions, data, auto=False)
     assert reconcile_interrupted_projects(sessions) == ['p']
     disk = _disk()
-    assert disk['analysis']['status'] == 'failed' and disk['analysis']['error'] == '服务已重启，请重试分析'
+    assert disk['analysis']['status'] == 'failed' and disk['analysis']['error'] == store.RESTART_MESSAGE == sentence('service_restarted')
     assert disk['analysis']['error_code'] == 'service_restarted' and 'message' not in disk['analysis']
     row = _row(sessions)
-    assert row.status.value == 'failed' and row.error_message == '服务已重启，请重试分析'
+    assert row.status.value == 'failed' and row.error_message == sentence('service_restarted')
 
 
 def test_one_unreadable_project_does_not_stop_the_others(sessions):

@@ -5,17 +5,19 @@ import pytest
 import yaml
 
 from backend.services.studio.templates.registry import TemplateRegistryError, load_directory, load_folder, load_shipping
-from backend.services.studio.templates.spec import TemplateSpec
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, TemplateSpec
 
 ROOT = Path(__file__).resolve().parents[1] / 'assets' / 'templates'
 
 
-def test_shipping_templates_are_editorial_and_street_only():
+def test_shipping_templates_are_the_four_html_styles():
     loaded = load_shipping()
-    assert set(loaded) == {'editorial', 'street'}
+    assert set(loaded) == set(HTML_TEMPLATE_IDS) == {'editorial', 'street', 'news', 'cinema'}
     editorial, street = loaded['editorial'], loaded['street']
     assert editorial.name.zh == '杂志风' and street.name.zh == '街头快剪'
-    assert editorial.canvas.overlay_px == (720, 1280) and editorial.canvas.fps == 30
+    assert loaded['news'].name.zh == '新闻' and loaded['cinema'].name.zh == '电影'
+    assert editorial.canvas.overlay_px == (1080, 1920) and editorial.canvas.fps == 30
+    assert street.canvas.overlay_px == (1080, 1920)
     assert editorial.overlay.slots['subtitle'].max_rows == 2
     assert street.overlay.limits['sticker_max'] == 2
     assert street.audio.bgm == 'none' and street.audio.optional_bed is True
@@ -26,7 +28,7 @@ def test_shipping_templates_are_editorial_and_street_only():
 
 
 def test_page_contract_exposes_the_three_hooks():
-    for name in ('editorial', 'street'):
+    for name in HTML_TEMPLATE_IDS:
         script = (ROOT / name / 'template.js').read_text(encoding='utf-8')
         assert 'window.setData' in script and 'window.renderFrame' in script and 'window.occupiedRects' in script
         assert 'Date.now' not in script and 'performance.now' not in script
@@ -34,7 +36,7 @@ def test_page_contract_exposes_the_three_hooks():
 
 def _copy_shipping(tmp_path: Path) -> Path:
     target = tmp_path / 'templates'
-    for name in ('editorial', 'street'):
+    for name in HTML_TEMPLATE_IDS:
         folder = target / name
         folder.mkdir(parents=True)
         for item in (ROOT / name).iterdir():

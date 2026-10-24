@@ -9,7 +9,7 @@ const OPT_OUT_KEY = 'autoclip.crashReports.optOut'
 
 let initialized = false
 let preferenceOverride: boolean | undefined
-const ANONYMOUS_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$/
+const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
 let pendingUserId: string | null = null
 
 function applyAnonymousUser(): void {
@@ -35,6 +35,12 @@ export function isCrashReportsEnabled(): boolean {
   }
 }
 
+/** only the packaged desktop production build reports (not `vite dev`, not a browser tab).*/
+function isPackagedDesktop(): boolean {
+  return Boolean(import.meta.env.PROD) && Boolean(import.meta.env.VITE_APP_VERSION) &&
+    typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+}
+
 export function initSentry(): void {
   if (initialized) return
   if (!DSN) {
@@ -43,6 +49,7 @@ export function initSentry(): void {
     }
     return
   }
+  if (!isPackagedDesktop()) return
   if (!isCrashReportsEnabled()) {
     if (import.meta.env.DEV) {
       console.info('[sentry] 用户已关闭崩溃报告')

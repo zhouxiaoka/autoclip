@@ -261,6 +261,8 @@ async def smart_retry_project(
         
         elif strategy == RetryStrategy.PROCESSING_ONLY:
             # 仅重试处理
+            from backend.api.v1 import transcription_gate
+            await transcription_gate.for_project(project_id)  # off the event loop
             processing_result = await retry_processing_only(project_id, db)
             return RetryResponse(
                 success=True,

@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load() {
@@ -12,12 +12,12 @@ function load() {
   }).outputText
   const styleFile = path.join(__dirname, '../src/features/studio/editingStyle.ts')
   const styleExports = {}
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(styleFile, 'utf8'), {
+  runInSandbox(ts.transpileModule(fs.readFileSync(styleFile, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText, { exports: styleExports })
   const exports = {}
   const events = []
-  vm.runInNewContext(code, {
+  runInSandbox(code, {
     exports,
     require: id => {
       if (id === '../../i18n') return { t: text => text }

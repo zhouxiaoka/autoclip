@@ -2,7 +2,6 @@
 Step 4: 标题生成 - 为高质量内容生成吸引人的标题
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -12,8 +11,9 @@ from collections import defaultdict
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
+from backend.core.failure_logging import failure_logger, chunk_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class TitleGenerator:
     """标题生成器"""
@@ -50,6 +50,7 @@ class TitleGenerator:
             
         all_clips_with_titles = []
 
+        @chunk_failure_context("step4_title")
         def title_chunk(item):
             chunk_index, chunk_clips = item
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_clips)} 个片段...")
@@ -68,17 +69,17 @@ class TitleGenerator:
                 raw_response = self.llm_client.call_with_retry(self.title_prompt, input_for_llm)
                 
                 if raw_response:
-                    # 保存LLM原始响应用于调试（但不用作缓存）
+                    # 调试文件不作缓存，仅保留响应长度。
                     llm_cache_path = self.llm_raw_output_dir / f"chunk_{chunk_index}.txt"
                     with open(llm_cache_path, 'w', encoding='utf-8') as f:
-                        f.write(raw_response)
-                    logger.info(f"  > LLM原始响应已保存到 {llm_cache_path}")
+                        f.write(f"response_length={len(raw_response)}\n")
+                    logger.info("  > LLM响应 length=%s", len(raw_response))
                     titles_map = self.llm_client.parse_json_response(raw_response)
                 else:
                     titles_map = {}
                 
                 if not isinstance(titles_map, dict):
-                    logger.warning(f"  > LLM返回的标题不是一个字典: {titles_map}，跳过该块。")
+                    logger.warning("  > LLM返回的标题不是一个字典，跳过该块 response_length=%s", len(raw_response or ""))
                     # 即使失败，也把原始片段加回去，避免数据丢失
                     return chunk_clips
 
@@ -87,21 +88,21 @@ class TitleGenerator:
                     generated_title = titles_map.get(clip_id)
                     if generated_title and isinstance(generated_title, str):
                         clip['generated_title'] = generated_title
-                        # 安全地获取outline标题用于日志显示
+                        # 日志仅保留标题长度。
                         outline = clip.get('outline', {})
                         if isinstance(outline, dict):
                             title = outline.get('title', '未知标题')
                         else:
                             title = str(outline)
-                        logger.info(f"  > 为片段 {clip_id} ('{title[:20]}...') 生成标题: {generated_title}")
+                        logger.info("  > 生成标题 outline_length=%s title_length=%s", len(title), len(generated_title))
                     else:
                         clip['generated_title'] = clip.get('outline', f"片段_{clip_id}")  # 使用outline作为fallback
-                        logger.warning(f"  > 未能为片段 {clip_id} 找到或解析标题，使用原始outline")
+                        logger.warning("  > 未能找到或解析标题，使用原始outline")
                 
                 return chunk_clips
 
             except Exception as e:
-                logger.error(f"  > 为块 {chunk_index} 生成标题时出错: {e}")
+                logger.error("生成标题失败: %s message_length=%s", type(e).__name__, len(str(e)))
                 # 即使出错，也添加原始数据以防丢失
                 return chunk_clips
 
@@ -115,7 +116,7 @@ class TitleGenerator:
         """保存带标题的片段数据"""
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(clips_with_titles, f, ensure_ascii=False, indent=2)
-        logger.info(f"带标题的片段数据已保存到: {output_path}")
+        logger.info("带标题的片段数据已保存 count=%s", len(clips_with_titles))
 
 def run_step4_title(high_score_clips_path: Path, output_path: Optional[Path] = None, metadata_dir: Optional[str] = None, prompt_files: Dict = None) -> List[Dict]:
     """

@@ -87,6 +87,31 @@ def load_clip_meta(project_id: str, clip_id: str) -> Dict[str, Any]:
     raise FileNotFoundError(f"项目 {project_id} 没有切片 {clip_id}")
 
 
+def cjk_font_family(font: Path) -> str:
+    """libass family for the file ``resolve_cjk_font`` actually found.
+
+    A macOS name here is wrong on Windows: libass then misses PingFang and
+    falls back to a different face than the preview.
+    """
+    stem = font.name.lower()
+    families = (
+        ('pingfang', 'PingFang SC'),
+        ('stheiti', 'STHeiti'),
+        ('arial unicode', 'Arial Unicode MS'),
+        ('notosanscjk', 'Noto Sans CJK SC'),
+        ('wqy', 'WenQuanYi Micro Hei'),
+        ('droidsansfallback', 'Droid Sans Fallback'),
+        ('msyh', 'Microsoft YaHei'),
+        ('simhei', 'SimHei'),
+        ('simsun', 'SimSun'),
+    )
+    for needle, family in families:
+        if needle in stem:
+            return family
+    from backend.services.studio.packaging_render import FONT
+    return FONT
+
+
 def resolve_cjk_font() -> Optional[Path]:
     candidates = [
         Path("/System/Library/Fonts/PingFang.ttc"),
@@ -232,10 +257,12 @@ def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[P
         if spec.get("w") and spec.get("h") and spec["h"] > spec["w"]:
             style = portrait_subtitle_style(style)
         if font:
-            # FontName 给 libass；mac 上 PingFang SC 通常能解析
-            style = "FontName=PingFang SC," + style
+            style = f"FontName={cjk_font_family(font)}," + style
+        from backend.services.studio.packaging_render import FONT_DIR
         nxt = "sub"
-        parts.append(f"[{last}]subtitles='{_escape_filter_path(srt_path)}':force_style='{style}'[{nxt}]")
+        parts.append(
+            f"[{last}]subtitles='{_escape_filter_path(srt_path)}':fontsdir='{_escape_filter_path(FONT_DIR)}':force_style='{style}'[{nxt}]"
+        )
         last = nxt
     if title_path is not None and font is not None:
         nxt = "out"

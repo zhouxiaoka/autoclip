@@ -1,22 +1,11 @@
 // RC156 Win QA #14b: local models need a larger context for long videos; the setup shows how.
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const fs = require('node:fs'), path = require('node:path')
 const React = require('react')
-const dir = path.join(__dirname, '../src/features/settings')
-function load(file, mocks) {
-  const exports = {}
-  const code = ts.transpileModule(fs.readFileSync(path.join(dir, file), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText
-  vm.runInNewContext(code, { exports, URL, require: id => {
-    if (id in mocks) return mocks[id]
-    if (id === 'react/jsx-runtime') return require(id)
-    throw Error(id)
-  } })
-  return exports
-}
-const providers = load('providers.ts', { '../../i18n': { t: text => text } })
+const { loadTs, PRESETS } = require('./load-ts.cjs')
+const load = loadTs
+const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
 const flatten = node => !React.isValidElement(node) ? [node] : [node, ...React.Children.toArray(node.props.children).flatMap(flatten)]
 const locales = Object.fromEntries(['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr'].map(lang =>
   [lang, JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))]))
@@ -37,14 +26,7 @@ test('local presets and local compatible servers get a context hint; cloud provi
 })
 
 test('the address row shows the hint for local setups only', () => {
-  const contractFile = path.join(__dirname, '../src/analytics/successRateContract.ts')
-  const contractMod = { exports: {} }
-  vm.runInNewContext(
-    ts.transpileModule(fs.readFileSync(contractFile, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
-    { exports: contractMod.exports, module: contractMod, URL },
-    { filename: contractFile },
-  )
-  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers, '../../analytics/successRateContract': contractMod.exports })
+  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers })
   const Fields = load('ProviderFields.tsx', {
     react: { useState: () => [false, () => {}] },
     antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
@@ -57,9 +39,9 @@ test('the address row shows the hint for local setups only', () => {
   }).default
   const hints = connection => flatten(Fields({ connection, placement: 'settings_model', onChoose() {}, onEdit() {} }))
     .filter(node => React.isValidElement(node) && node.type === 'row').map(node => node.props.hint).filter(h => typeof h === 'string')
-  assert.ok(hints({ provider: 'ollama', base_url: '' }).some(h => h.includes(OLLAMA) && h.includes('本机服务无需 API Key')))
+  assert.ok(hints({ provider: 'ollama', base_url: '' }).some(h => h.includes(OLLAMA) && h.includes('本机服务用默认地址即可。')))
   assert.ok(hints({ provider: 'lmstudio', base_url: '' }).some(h => h.includes(LMSTUDIO)))
-  assert.ok(hints({ provider: 'compatible', base_url: 'http://localhost:8000/v1', api_key: '' }).includes(GENERIC))
+  assert.ok(hints({ provider: 'compatible', base_url: 'http://localhost:8000/v1', api_key: '' }).some(h => h.includes(GENERIC)))
   assert.ok(!hints({ provider: 'compatible', base_url: 'https://openrouter.ai/api/v1', api_key: '' }).some(h => h.includes('16384')))
   assert.ok(!hints({ provider: 'dashscope', base_url: '', api_key: '' }).some(h => h.includes('16384')))
 })
@@ -76,6 +58,6 @@ test('the hints are translated in all 8 locales', () => {
 })
 
 test('backend presets and the frontend show the same sentences', () => {
-  const py = fs.readFileSync(path.join(__dirname, '../../backend/core/local_presets.py'), 'utf8')
-  for (const key of [OLLAMA, LMSTUDIO, GENERIC]) assert.ok(py.includes(key), key)
+  const json = fs.readFileSync(PRESETS, 'utf8')
+  for (const key of [OLLAMA, LMSTUDIO, GENERIC]) assert.ok(json.includes(key), key)
 })

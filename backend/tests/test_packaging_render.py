@@ -33,7 +33,8 @@ def test_events_are_clipped_to_each_scene_on_its_own_clock():
     assert any('第一句' in line and ',0:00:00.00,0:00:02.00,' in line for line in _dialogues(first))
     assert not any('第二句' in line for line in _dialogues(first))
     assert any('第二句' in line and ',0:00:00.00,0:00:02.00,' in line for line in _dialogues(second))
-    assert all('应该像飞行教练' in ''.join(_dialogues(doc)) for doc in (first, second))  # title stays pinned
+    joined = ''.join(_dialogues(first) + _dialogues(second))
+    assert '应该像飞行教练' not in joined and '好的投资人' not in joined
 
 
 def test_nameplate_appears_once_where_the_speaker_first_talks():
@@ -158,15 +159,13 @@ def test_every_style_keeps_captions_within_two_lines_and_renders(tmp_path, templ
     assert Image.open(frame).size == (1080, 1920)
 
 
-def test_long_title_lines_shrink_to_fit_the_frame():
-    from backend.services.studio.caption_layout import width
-    doc = pr.scene_ass(_packaging(title_lines=['AI无法替代视频编辑的关键：', '边干边学理解观众偏好需数月积累']), SCENES, 0)
-    titles = [line for line in _dialogues(doc) if line.split(',')[3] in ('Title', 'TitleAccent')]
-    assert len(titles) == 2
-    for line in titles:
-        size = int(re.search(r'\\fs(\d+)', line).group(1))
-        text = re.sub(r'\{[^}]*\}', '', line.split(',,0,0,0,,', 1)[1])
-        assert size <= 112 and size * width(text) <= 1000
+def test_long_title_lines_are_not_burned_into_the_clip():
+    text = 'AI无法替代视频编辑的关键：'
+    other = '边干边学理解观众偏好需数月积累'
+    doc = pr.scene_ass(_packaging(title_lines=[text, other]), SCENES, 0)
+    assert not any(line.split(',')[3] in ('Title', 'TitleAccent', 'Hook') for line in _dialogues(doc))
+    assert text not in doc and other not in doc
+    assert any('第一句' in line for line in _dialogues(doc))
 
 
 def test_interview_window_renders_title_canvas_and_window(tmp_path):
@@ -185,7 +184,7 @@ def test_interview_window_renders_title_canvas_and_window(tmp_path):
     assert image.size == (1080, 1920)
     assert image.getpixel((20, 1700)) == image.getpixel((1060, 1800))  # plain canvas below the window
     title_region = image.crop((200, 150, 880, 400))
-    assert max(max(px) for px in title_region.getdata()) > 180  # bright title text drawn on the dark canvas
+    assert max(max(px) for px in title_region.getdata()) < 48  # canvas only; the title stays on the cover
     window_row = [image.getpixel((x, pr.WIN_Y + 200)) for x in range(0, 1080, 60)]
     assert len(set(window_row)) > 3  # the source picture fills the 4:3 window
 
@@ -223,8 +222,12 @@ def test_packaged_cjk_loads_bundled_font_in_real_ffmpeg(tmp_path):
                             capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode == 0, result.stderr
     selections = '\n'.join(line for line in result.stderr.splitlines() if 'fontselect:' in line)
-    assert 'NotoSansSC' in selections, selections
+    assert 'NotoSansSC-Medium' in selections, selections
+    assert 'NotoSansSC.ttf' not in selections, selections
     assert 'failed to find any fallback' not in selections, selections
+    assert pr.FONT == 'Noto Sans SC Medium'
+    assert 'Noto Sans SC Medium' in ass.read_text(encoding='utf-8')
+    assert 'Noto Sans SC Thin' not in ass.read_text(encoding='utf-8')
 
 
 @pytest.mark.parametrize('at,fit', [(0.25, False), (0.75, True), (1.25, False)])
@@ -275,3 +278,58 @@ def test_re_render_of_an_old_empty_fallback_recovers_source_without_mutating_dra
     assert warnings == ['包装未能完整生成，已使用原字幕']
     burned = draft.model_copy(update={'packaging': draft.packaging.model_copy(update={'burned_captions': True})})
     assert render.recover_empty_packaging('project', burned, []) is burned
+
+
+def _title_dialogues(text):
+    return [line for line in _dialogues(text) if any(token in line for token in (',Title,', ',TitleAccent,', ',Hook,'))]
+
+
+def test_issue_367_template_captions_can_be_switched_off():
+    on = pr.scene_ass(_packaging(), SCENES, 0)
+    off = pr.scene_ass(_packaging(captions_enabled=False), SCENES, 0)
+    assert '第一句' in on
+    assert '第一句' not in off and 'first line' not in off
+    assert '好的投资人' not in off and '应该像飞行教练' not in off
+    assert _packaging().captions_enabled is True  # saved drafts keep captions
+    assert _title_dialogues(on) == _title_dialogues(off) == []
+    assert any('Sam Altman' in line and 'PlateName' in line for line in _dialogues(on))
+
+
+def test_classic_templates_do_not_burn_a_title_card():
+    """Interview, podcast and cinematic clips keep captions and nameplates, not a title card."""
+    scenes = [Scene(id='s', label='s', start=0, end=8)]
+    interview = _packaging(
+        cues=[{'start': 1.0, 'end': 3.0, 'text': '字幕正文', 'original': 'caption line'}],
+        speakers=[{'at': 1.0, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+    )
+    podcast = _packaging(
+        template='podcast_en', audience_language='en', style='cinematic',
+        title_lines=['Great investors', 'teach you to fly'],
+        cues=[{'start': 1.0, 'end': 3.0, 'text': 'Spoken line'}], speakers=[], tags=[],
+    )
+    for on_pack in (interview, podcast):
+        off_pack = on_pack.model_copy(update={'captions_enabled': False})
+        on = pr.scene_ass(on_pack, scenes, 0)
+        off = pr.scene_ass(off_pack, scenes, 0)
+        burned = pr.scene_ass(off_pack, scenes, 0, titles_only=True)
+        assert _title_dialogues(on) == _title_dialogues(off) == _dialogues(burned) == []
+        assert not any(',Plate' in line or ',Tag,' in line or ',TagPill,' in line for line in _dialogues(burned))
+        for line in on_pack.title_lines:
+            assert line not in on and line not in off
+    assert '字幕正文' in pr.scene_ass(interview, scenes, 0)
+    assert 'Sam Altman' in pr.scene_ass(interview, scenes, 0)
+    assert '字幕正文' not in pr.scene_ass(interview.model_copy(update={'captions_enabled': False}), scenes, 0)
+    assert 'Spoken line' in pr.scene_ass(podcast, scenes, 0)
+    assert 'Spoken line' not in pr.scene_ass(podcast.model_copy(update={'captions_enabled': False}), scenes, 0)
+
+
+def test_issue_367_switched_off_captions_are_not_recovered_from_source(monkeypatch):
+    from backend.services.studio import render
+    from backend.services.studio.models import Draft
+    draft = Draft(id='off', title='t', scenes=[{'id': 's', 'start': 0, 'end': 3}],
+                  packaging=_packaging(cues=[], fallback=True, captions_enabled=False))
+    monkeypatch.setattr(render, '_load_srt_entries', lambda _: [
+        {'start_time': '00:00:00,000', 'end_time': '00:00:03,000', 'text': 'source words'}])
+    warnings = []
+    assert render.recover_empty_packaging('p', draft, warnings) is draft
+    assert warnings == []

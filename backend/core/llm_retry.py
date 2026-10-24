@@ -49,6 +49,9 @@ def parse_retry_after(value: object) -> float | None:
 
 
 def retry_after_from_error(error: BaseException) -> float | None:
+    """The provider's Retry-After on the error or its EXPLICIT ``__cause__`` links (#3,
+    the rule): an exception that was merely being handled (an earlier, unrelated 429) never lends
+    its Retry-After to this one."""
     seen: set[int] = set()
     current: BaseException | None = error
     while current is not None and id(current) not in seen and len(seen) < 32:
@@ -59,12 +62,7 @@ def retry_after_from_error(error: BaseException) -> float | None:
         delay = _retry_after_from_headers(_headers_of(current))
         if delay is not None:
             return delay
-        if current.__cause__ is not None:
-            current = current.__cause__
-        elif not current.__suppress_context__:
-            current = current.__context__
-        else:
-            current = None
+        current = current.__cause__
     return None
 
 
@@ -94,9 +92,9 @@ def studio_code_for(error_type: UpstreamErrorType | str, status: int | None = No
     if value == UpstreamErrorType.CONNECTION.value:
         return "connection"
     if value in {UpstreamErrorType.INVALID_KEY.value, UpstreamErrorType.PERMISSION_DENIED.value}:
-        return "authentication"
+        return "llm_auth_invalid"
     if value == UpstreamErrorType.INSUFFICIENT_QUOTA.value:
-        return "authentication" if status in (401, 403) else "provider_error"
+        return "llm_auth_invalid" if status in (401, 403) else "provider_error"
     return "provider_error"
 
 

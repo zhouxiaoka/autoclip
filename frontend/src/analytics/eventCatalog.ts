@@ -5,6 +5,7 @@ export type Catalog = {
     required: string[]
     os: string[]
     os_aliases?: Record<string, string>
+    arch?: string[]
     analytics_environment: string[]
     runtime: string[]
   }
@@ -39,15 +40,6 @@ export function normalizeOs(value?: string | null, catalog?: Catalog): string | 
   const mapped = aliases[value] || value
   const allowed = catalog?.common.os || ['macos', 'windows', 'linux', 'unknown']
   return allowed.includes(mapped) ? mapped : undefined
-}
-
-export function detectOs(): string {
-  if (typeof navigator === 'undefined') return 'unknown'
-  const ua = navigator.userAgent
-  if (/Mac/i.test(ua)) return 'macos'
-  if (/Win/i.test(ua)) return 'windows'
-  if (/Linux/i.test(ua)) return 'linux'
-  return 'unknown'
 }
 
 export function listedEvents(catalog: Catalog): Set<string> {
@@ -115,6 +107,9 @@ export function validateEvent(
     }
     if (props.os !== undefined && !catalog.common.os.includes(String(props.os))) {
       errors.push(`${name}.os=${JSON.stringify(props.os)} is not a canonical os`)
+    }
+    if (props.arch !== undefined && !(catalog.common.arch || ['aarch64', 'x86_64', 'unknown']).includes(String(props.arch))) {
+      errors.push(`${name}.arch=${JSON.stringify(props.arch)} is not a canonical arch`)
     }
   }
   const forbiddenKeys = new Set((catalog.privacy?.forbidden_keys || []).map(key => key.toLowerCase()))

@@ -2,10 +2,8 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
-const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
-const file = path.join(__dirname, '../src/features/settings/providerAccess.ts')
 const providers = {
   PROVIDERS: {
     gemini: { name: 'Google Gemini' }, openai: { name: 'OpenAI' }, grok: { name: 'Grok' },
@@ -14,27 +12,14 @@ const providers = {
   },
 }
 function loadContract() {
-  const source = path.join(__dirname, '../src/analytics/successRateContract.ts')
-  const module = { exports: {} }
-  vm.runInNewContext(
-    ts.transpileModule(fs.readFileSync(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
-    { exports: module.exports, module, URL },
-    { filename: source },
-  )
-  return module.exports
+  return loadTs(path.join(__dirname, '../src/analytics/successRateContract.ts'))
 }
 const contract = loadContract()
-const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-const access = {}
-vm.runInNewContext(code, {
-  exports: access,
-  URL,
-  require: id => {
-    if (id === '../../i18n') return { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }
-    if (id === './providers') return providers
-    if (id === '../../analytics/successRateContract') return contract
-    throw new Error(id)
-  },
+const urls = loadTs('providerUrl.ts')
+const access = loadTs('providerAccess.ts', {
+  '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) },
+  './providers': providers,
+  '../../analytics/successRateContract': contract,
 })
 
 test('compatible URLs gain /v1, drop chat completions, and flag console hosts', () => {
@@ -46,11 +31,27 @@ test('compatible URLs gain /v1, drop chat completions, and flag console hosts', 
   assert.ok(pasted.warnings.includes('chat_completions'))
   const consoleHost = access.normalizeCompatibleUrl('https://platform.openai.com/api-keys')
   assert.ok(consoleHost.warnings.includes('console_host'))
-  assert.ok(!access.canEditAddress('api88'))
-  assert.ok(!access.canEditAddress('openai'))
-  assert.ok(!access.canEditAddress('dashscope'))
+  assert.equal(consoleHost.url, 'https://platform.openai.com/api-keys')
+  // Presets keep an editable「接口地址」(default prefilled); Azure/Cloudflare style empty URLs too.
+  assert.ok(access.canEditAddress('api88'))
+  assert.ok(access.canEditAddress('openai'))
+  assert.ok(access.canEditAddress('dashscope'))
   assert.ok(access.canEditAddress('compatible'))
   assert.ok(access.canEditAddress('ollama'))
+  assert.ok(access.canEditAddress('azure-openai'))
+  assert.ok(access.canEditAddress('cloudflare-workers-ai'))
+  assert.ok(access.canEditAddress('cloudflare-ai-gateway'))
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/providerAccess.ts'), 'utf8')
+  assert.match(source, /normalizeProviderUrl/)
+  assert.doesNotMatch(source, /VERSIONED/)
+})
+
+test('validation and settings share Gemini and ordinary chat roots', () => {
+  const root = 'https://generativelanguage.googleapis.com'
+  for (const [suffix, expected] of [['/v1beta', '/v1beta/openai'], ['/v1beta/openai', '/v1beta/openai'], ['/v1', '/v1']]) {
+    assert.equal(access.normalizeCompatibleUrl(root + suffix).url, root + expected)
+    assert.equal(access.normalizeCompatibleUrl(root + suffix).url, urls.normalizeProviderBaseUrl(root + suffix))
+  }
 })
 
 test('wrong-provider keys are hinted, never treated as a switch, and hosts stay sanitized', () => {
@@ -67,4 +68,49 @@ test('wrong-provider keys are hinted, never treated as a switch, and hosts stay 
   )
   assert.equal(access.passed({ success: false, error_type: 'invalid_key' }), false)
   assert.equal(access.passed({ success: true }), true)
+  assert.equal(access.VISION_UNSUPPORTED, 'vision_unsupported')
+  assert.match(access.validationCopy('vision_unsupported'), /不能看图/)
+})
+
+test('settings URL wrapper shares Gemini chat-root normalization', () => {
+  const root = 'https://generativelanguage.googleapis.com/v1beta'
+  for (const provider of ['gemini', 'compatible']) {
+    const normalized = access.normalizeCompatibleUrl(root, provider)
+    assert.equal(normalized.url, root + '/openai')
+    const pasted = access.normalizeCompatibleUrl(root + '/chat/completions', provider)
+    assert.equal(pasted.url, root + '/openai')
+    assert.ok(pasted.warnings.includes('chat_completions'))
+  }
+})
+
+// Catalog API and legacy hosts take precedence over website/console hints.
+test('Infistar API host is accepted and console detection follows the catalog', () => {
+  assert.equal(access.isConsoleHost('infistar.ai'), false)
+  assert.equal(access.normalizeCompatibleUrl('https://infistar.ai/v1').warnings.includes('console_host'), false)
+  const catalogAccess = loadTs('providerAccess.ts', {
+    '../../i18n': { t: x => x },
+    './providers': providers,
+    '../../analytics/successRateContract': contract,
+    './providerPresets': { getCatalog: () => ({
+      console_hosts: ['platform.deepseek.com', 'aistudio.google.com', 'platform.openai.com', 'console.fixture.test'],
+      console_suffixes: ['.console.fixture.test'],
+      providers: {
+      fixture: { base_url: 'https://platform.deepseek.com/v1', accepted_hosts: ['aistudio.google.com'] },
+    } }) },
+  })
+  assert.equal(catalogAccess.isConsoleHost('platform.deepseek.com'), false)
+  assert.equal(catalogAccess.isConsoleHost('aistudio.google.com'), false)
+  assert.equal(catalogAccess.isConsoleHost('platform.openai.com'), true)
+  assert.equal(catalogAccess.isConsoleHost('console.fixture.test'), true)
+  assert.equal(catalogAccess.isConsoleHost('account.console.fixture.test'), true)
+  assert.equal(catalogAccess.isConsoleHost('bailian.console.aliyun.com'), false)
+})
+
+
+test('Infistar API is accepted and address locks are projected from the catalog', () => {
+  const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/presets/provider_presets.json'), 'utf8'))
+  assert.equal(access.isConsoleHost('infistar.ai'), false)
+  assert.equal(access.normalizeCompatibleUrl('https://infistar.ai/v1').warnings.length, 0)
+  assert.deepEqual(Array.from(access.ADDRESS_LOCKED).sort(), Object.entries(catalog.providers)
+    .filter(([, row]) => row.locked && row.base_url).map(([id]) => id).sort())
 })

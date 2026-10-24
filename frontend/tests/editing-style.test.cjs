@@ -2,20 +2,20 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load(rel) {
   const exports = {}
   const source = fs.readFileSync(path.join(__dirname, '../src', rel), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, {
+  runInSandbox(ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText, { exports, CSS: { supports: () => true }, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL, RegExp })
   return exports
 }
 
 const style = load('features/studio/editingStyle.ts')
-const workflow = load('analytics/workflow.ts')
+const workflow = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts'))
 
 test('a manual style wins and a bad recommendation stays editorial', () => {
   const decision = (manual, recommended, current) => JSON.parse(JSON.stringify(style.selectionAfterRecommendation(manual, recommended, current)))
@@ -53,10 +53,7 @@ test('picker telemetry keeps recommendation enums and drops free text', () => {
   assert.equal(play.is_recommended, true)
   const legacy = workflow.safeStudioProperties({ trigger: 'manual' })
   assert.equal(legacy.trigger, 'manual')
-  const finished = workflow.safeStudioProperties(workflow.generationSummary({
-    generation: { recommended_template: 'editorial', accepted_recommendation: false },
-    output_variants: [], jobs: [], drafts: [],
-  }))
+  const finished = workflow.safeStudioProperties({ recommended_template: 'editorial', accepted_recommendation: false })
   assert.equal(finished.recommended_template, 'editorial')
   assert.equal(finished.accepted_recommendation, false)
 })
@@ -65,8 +62,10 @@ test('bundled style previews stay inside the size budget', () => {
   const dir = path.join(__dirname, '../src/assets/editing-style')
   const names = fs.readdirSync(dir).filter(name => !name.startsWith('.'))
   assert.deepEqual(names.sort(), [
+    'cinema.poster.webp', 'cinema.preview.mp4', 'cinema.preview.webm',
     'classic.poster.webp', 'classic.preview.mp4', 'classic.preview.webm',
     'editorial.poster.webp', 'editorial.preview.mp4', 'editorial.preview.webm',
+    'news.poster.webp', 'news.preview.mp4', 'news.preview.webm',
     'street.poster.webp', 'street.preview.mp4', 'street.preview.webm',
   ])
   let total = 0

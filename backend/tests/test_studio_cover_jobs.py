@@ -64,6 +64,7 @@ def test_interrupted_cover_is_failed_and_can_be_requested_again(tmp_path, monkey
     state = {'jobs': [], 'output_variants': [{'id': 'v', 'status': 'completed', 'cover': 'design',
              'cover_job': {'job_id': 'old', 'status': 'running', 'instance': 'previous-server'}}]}
     store.write('p', state)
+    store.recover('p')
     result = jobs.ai_cover_status('p', 'v')
     assert result['status'] == 'failed' and '重启' in result['error']
     assert store.read('p')['output_variants'][0]['status'] == 'completed'

@@ -13,9 +13,11 @@ from pathlib import Path
 from backend.services.studio.models import Draft, Packaging, Scene
 
 FONT_DIR = Path(__file__).resolve().parents[2] / 'assets' / 'fonts'
-# Use the bundled variable font's actual family (name ID 1). Its preferred
-# family (name ID 16) silently falls back on CoreText and older Fontconfig.
-FONT = 'Noto Sans SC Thin'
+# Static medium face (name ID 1). The variable file's name ID 1 is "Noto Sans SC Thin"
+# and its default axis is wght 100, so libass drew every style at the thinnest weight.
+# The preferred family "Noto Sans SC" still falls back on CoreText. Pillow title art
+# keeps the variable file and sets its own axis.
+FONT = 'Noto Sans SC Medium'
 W, H = 1080, 1920
 WIN_Y, WIN_H = 560, 810
 WHITE, SUB, INK, INK_SOFT = '&H00E6EAEC', '&H009BA2A6', '&H00191A1A', '&H26191A1A'
@@ -174,15 +176,17 @@ def _nameplate(scene: _Scene, at: float, name: str, role: str, y: int) -> None:
         scene.add(5, at, end, 'PlateRole', slide(y + 66, 80) + _esc(role), carry=False)
 
 
-def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None) -> str:
+def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None, *, titles_only: bool = False) -> str:
     """ASS document for scene `index`; times are relative to that scene's start.
 
     Every caption screen is at most two lines (see caption_layout). Styles only change looks and
-    motion, never the layout contract: title on top, captions at the window edge, plate lower-left.
+    motion, never the layout contract: captions at the window edge, nameplate lower-left.
+    The cover owns the title. Interview used to pin ``title_lines`` for the whole clip; podcast,
+    cinematic and classic styles used a 2.8s opening card. Neither is burned.
+    `titles_only` is that empty title layer with the caption rows left out.
     """
     from backend.services.studio.caption_layout import timed_screens, width
     rows = timeline(scenes)
-    total = rows[-1][2] + (rows[-1][1] - rows[-1][0])
     offset = rows[index][2]
     length = rows[index][1] - rows[index][0]
     out = _Scene(offset, length)
@@ -199,22 +203,10 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     accent = look['accent']
     tag_texts = [t.text for t in packaging.tags] if packaging.tags_enabled else []
 
-    lines = packaging.title_lines
-    if interview and lines:
-        entrance = {'classic': '\\fscx88\\fscy88\\t(0,200,\\fscx100\\fscy100)\\fad(180,0)',
-                    'boxed': '\\fad(160,0)', 'spotlight': '\\fad(320,0)'}[style] if index == 0 else ''
-        for i, line in enumerate(lines):
-            y = 150 + i * 150
-            title_style = 'TitleAccent' if i == packaging.title_accent_line and len(lines) > 1 else 'Title'
-            move = f'\\move(540,{y + 40},540,{y},{i * 120},{i * 120 + 280})' if style == 'boxed' and index == 0 else f'\\pos(540,{y})'
-            size = min(112, int(1000 / max(width(line), 1)))  # one line always fits the 1080 px frame
-            out.add(3, 0, total, title_style, f'{{\\an8{move}\\fs{size}{entrance}}}{_esc(line)}')
-    elif lines:
-        size = min(66, int(920 / max(max(width(line) for line in lines), 1)))
-        hook = '\\N'.join(_esc(line) for line in lines)
-        out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\fs{size}\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{hook}')
+    if titles_only:
+        return _header(look) + '\n'.join(out.lines) + '\n'
 
-    for cue in packaging.cues:
+    for cue in (packaging.cues if packaging.captions_enabled else []):
         start, end = cue.start, cue.end
         if end <= source_scene.start or start >= source_scene.end:
             continue
@@ -292,12 +284,119 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     return _header(look) + '\n'.join(out.lines) + '\n'
 
 
+STREET_WINDOW = (1080, 1290)
+PORTRAIT_FRAME = (1080, 1920)
+
+
+def _recast_crop(crop_x: float, source_w: int, source_h: int) -> float:
+    """Same speaker centre, expressed for the 1080×1290 street window instead of 9:16."""
+    from backend.services.studio.framing import crop_x_for_center, window_fraction
+    if source_w < 2 or source_h < 2:
+        return crop_x
+    old = window_fraction(source_w, source_h, *PORTRAIT_FRAME)
+    new = window_fraction(source_w, source_h, *STREET_WINDOW)
+    center = 0.5 if old >= 1 else old / 2 + crop_x * (1 - old)
+    return crop_x_for_center(center, new)
+
+
+def street_punches(draft: Draft, index: int, zoom=None) -> tuple[float, list[tuple[float, float]]]:
+    """(scale, scene-local spans) where the street window is punched in.
+
+    The preview's jump-cut feel: every new sentence flips between the two ``base.zoom.step``
+    framings (1.00 and 1.22), so about half of the sentence starts punch in, hard, on the
+    frame the sentence starts. ``base.zoom.intro`` holds the punched framing over the
+    first second. Spans are seconds from the start of scene ``index``.
+    """
+    from backend.services.studio.audio import scene_duration
+    if zoom is None:
+        try:
+            from backend.services.studio.templates.registry import get
+            zoom = get('street').base.zoom
+        except Exception:
+            return 1.0, []
+    steps = [float(item) for item in (getattr(zoom, 'step', None) or [])]
+    if getattr(zoom, 'mode', '') != 'step' or len(steps) < 2 or max(steps) <= min(steps):
+        return 1.0, []
+    scale = max(steps) / min(steps)
+    if not draft.scenes or not 0 <= index < len(draft.scenes):
+        return scale, []
+    rows = timeline(draft.scenes)
+    starts = []
+    cues = (draft.packaging.cues if draft.packaging else []) or []
+    for cue in cues:
+        at = to_output(float(cue.start), rows)
+        if at is not None:
+            starts.append(round(at, 3))
+    starts = sorted(set(starts))
+    intro = getattr(zoom, 'intro', None)
+    intro_end = float(intro.dur) if intro is not None else 0.0
+    offset, length = rows[index][2], scene_duration(draft.scenes[index])
+    points = sorted({0.0, length, *[s - offset for s in starts if 0 < s - offset < length],
+                     *([intro_end - offset] if 0 < intro_end - offset < length else [])})
+    spans = []
+    for lo, hi in zip(points, points[1:]):
+        mid = offset + (lo + hi) / 2
+        punched = mid < intro_end or sum(1 for s in starts if s <= mid) % 2 == 1
+        if not punched or hi - lo < 1e-3:
+            continue
+        if spans and abs(spans[-1][1] - lo) < 1e-6:
+            spans[-1] = (spans[-1][0], hi)
+        else:
+            spans.append((lo, hi))
+    return scale, [(round(lo, 3), round(hi, 3)) for lo, hi in spans]
+
+
+def _punch_chain(scale: float, spans: list[tuple[float, float]], face_y: float, width: int, height: int) -> str:
+    """``[win]`` -> ``[punched]``: the same window cropped ``scale`` times tighter, around the face line."""
+    enable = '+'.join(f'between(t,{lo:.3f},{max(lo, hi - 0.001):.3f})' for lo, hi in spans)
+    return (f"[win]split=2[wa][wb];"
+            f"[wb]crop=w='2*trunc(iw/{scale:.4f}/2)':h='2*trunc(ih/{scale:.4f}/2)':x='(iw-ow)/2':y='(ih-oh)*{face_y:.3f}',"
+            f"scale={width}:{height}:flags=bicubic,setsar=1[wz];"
+            f"[wa][wz]overlay=0:0:enable='{enable}'[punched]")
+
+
+def street_picture(draft: Draft, scene: Scene, source_w: int, source_h: int, index: int | None = None) -> tuple[str, str]:
+    """Cover-crop the tracked speaker into the top 1080×1290 window and leave black below.
+
+    The draft keeps the 9:16 crop_x so a classic fallback still frames the same face.
+    Only this picture retargets that centre onto the shorter window the preview uses.
+    With the scene ``index``, the window takes the template's step punch-ins (``street_punches``).
+    """
+    fallback = scene.crop_x if scene.crop_x is not None else draft.crop_x
+    points = []
+    for point in scene.crop_track or []:
+        points.append(point.model_copy(update={'crop_x': _recast_crop(point.crop_x, source_w, source_h)}))
+    recast = scene.model_copy(update={
+        'crop_x': _recast_crop(fallback if fallback is not None else 0.5, source_w, source_h),
+        'crop_track': points or None,
+    })
+    graph, label = picture_only(draft, recast, *STREET_WINDOW)
+    if graph.endswith('[base]'):
+        window = 'win'
+        if index is not None:
+            scale, spans = street_punches(draft, index)
+            if spans:
+                face_y = 0.40
+                try:
+                    from backend.services.studio.templates.registry import get
+                    face_y = float(get('street').base.face_y)
+                except Exception:
+                    pass
+                graph = graph[:-6] + '[win];' + _punch_chain(scale, spans, face_y, *STREET_WINDOW)
+                window = 'punched'
+                return graph + f';[{window}]pad=1080:1920:0:0:black,setsar=1[base]', 'base'
+        graph = graph[:-6] + '[win];[win]pad=1080:1920:0:0:black,setsar=1[base]'
+        return graph, 'base'
+    return graph, label
+
+
 def picture_only(draft: Draft, scene: Scene, w: int, h: int) -> tuple[str, str]:
     """The base picture without ASS. The HTML overlay is a later input."""
     from backend.services.publish_export import _layout_filters
-    from backend.services.studio.framing import layout_filter
+    from backend.services.studio.framing import layout_filter, on_cut_frames
     if draft.layout == 'crop':
-        return layout_filter(scene, draft.crop_x, w, h), 'base'
+        # The template outputs change crop on the cut frame itself; classic keeps its exact graph.
+        return layout_filter(on_cut_frames(scene), draft.crop_x, w, h), 'base'
     chain = ';'.join(_layout_filters(draft.layout if draft.layout in ('blur', 'fit') else 'fit', w, h))
     return chain, 'base'
 

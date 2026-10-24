@@ -110,8 +110,10 @@ def test_deepseek_envelopes(status, body, expected):
         (401, {"code": "InvalidApiKey", "message": "Invalid API-key provided.", "request_id": "private-id"}, UpstreamErrorType.INVALID_KEY),
         (429, {"code": "Throttling.RateQuota", "message": "Request rate exceeded"}, UpstreamErrorType.RATE_LIMITED),
         (403, {"code": "AllocationQuota.FreeTierOnly", "message": "Free tier allocation quota exceeded"}, UpstreamErrorType.INSUFFICIENT_QUOTA),
+        (404, {"error": {"message": "Model not exist.", "type": "invalid_request_error", "code": "model_not_found"}}, UpstreamErrorType.MODEL_NOT_FOUND),
+        (400, {"code": "InvalidParameter", "message": "Model not exist."}, UpstreamErrorType.MODEL_NOT_FOUND),
     ],
-    ids=["dashscope-key", "dashscope-rate", "dashscope-quota"],
+    ids=["dashscope-key", "dashscope-rate", "dashscope-quota", "dashscope-404-model", "dashscope-400-model-not-exist"],
 )
 def test_dashscope_native_envelopes(status, body, expected):
     result = classify_upstream_error(status, body)
@@ -132,6 +134,16 @@ def test_dashscope_native_envelopes(status, body, expected):
 )
 def test_bad_endpoint_from_html_or_bare_404(status, body):
     _assert_safe(classify_upstream_error(status, body), UpstreamErrorType.BAD_ENDPOINT, False)
+
+
+@pytest.mark.stdlib_only
+@pytest.mark.parametrize("body", [
+    {"error": {"code": "DeploymentNotFound", "message": "DeploymentNotFound"}},
+    {"error": {"code": "DeploymentNotFound", "message": "The API deployment for this resource does not exist."}},
+    "DeploymentNotFound",
+])
+def test_deployment_not_found_is_a_missing_model(body):
+    _assert_safe(classify_upstream_error(404, body), UpstreamErrorType.MODEL_NOT_FOUND, False)
 
 
 @pytest.mark.stdlib_only
@@ -190,8 +202,8 @@ def test_every_type_has_hint_and_closed_set():
 
 
 @pytest.mark.stdlib_only
-def test_existing_model_call_error_code_behavior_is_unchanged():
-    """本契约不得改写旧分类：401/403 仍是 authentication，402 仍是 provider_error。"""
+def test_model_call_error_code_separates_auth_from_missing_configuration():
+    """401/403 使用独立鉴权失败码；402 仍是 provider_error。"""
     from backend.pipeline.failures import model_call_error_code
 
     def _err(status: int) -> Exception:
@@ -199,8 +211,8 @@ def test_existing_model_call_error_code_behavior_is_unchanged():
         error.status_code = status  # type: ignore[attr-defined]
         return error
 
-    assert model_call_error_code(_err(401)) == "authentication"
-    assert model_call_error_code(_err(403)) == "authentication"
+    assert model_call_error_code(_err(401)) == "llm_auth_invalid"
+    assert model_call_error_code(_err(403)) == "llm_auth_invalid"
     assert model_call_error_code(_err(402)) == "provider_error"
     assert model_call_error_code(_err(429)) == "rate_limited"
     assert model_call_error_code(_err(503)) == "provider_error"
@@ -232,7 +244,7 @@ def test_frontend_contract_lists_stay_aligned():
     def const_list(name: str) -> list[str]:
         match = __import__("re").search(rf"export const {name} = \[((?:.|\n)*?)\] as const", text)
         assert match, name
-        return __import__("re").findall(r"'([a-z0-9_]+)'", match.group(1))
+        return __import__("re").findall(r"'([a-z0-9_-]+)'", match.group(1))
 
     assert set(const_list("UPSTREAM_ERROR_TYPES")) == UPSTREAM_ERROR_TYPES
     assert set(const_list("RETRYABLE_UPSTREAM_ERROR_TYPES")) == {item.value for item in RETRYABLE_TYPES}
@@ -241,6 +253,7 @@ def test_frontend_contract_lists_stay_aligned():
     assert set(const_list("FAILURE_STAGES")) == telemetry.FAILURE_STAGES
     assert set(const_list("RUN_LEVEL_FIELDS")) == telemetry.RUN_LEVEL_FIELDS
     assert set(const_list("LLM_REQUEST_FIELDS")) == telemetry.LLM_REQUEST_FIELDS
+    messages = json.loads((Path(__file__).resolve().parents[1] / "core" / "failure_messages.json").read_text(encoding="utf-8"))
     for error_type, hint in HINT_KEYS.items():
-        assert f"{error_type.value}:" in text
-        assert hint in text
+        assert messages[error_type.value] == hint
+        assert hint not in text

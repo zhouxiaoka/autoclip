@@ -1,0 +1,1261 @@
+{
+  "schema_version": 1,
+  "version": 1,
+  "issued_at": "2026-10-14T00:00:00Z",
+  "notes": "Single product catalog for AutoClip 1.5.7. Existing AutoClip defaults are preserved. International endpoints follow public docs and the MIT-licensed @earendil-works/pi-ai 0.99.2 catalog (Copyright Earendil Works / Mario Zechner); this is a compiled snapshot, not a verbatim dump. Domestic and sponsor rows are first-party. Trademarked names identify the vendor only.",
+  "local_context_hint": "本机或局域网模型：长视频请把上下文长度调到 16384 以上，否则字幕会被截断。",
+  "aliases": {
+    "88api": "api88",
+    "88api.ai": "api88",
+    "api.88api.ai": "api88",
+    "apimart.ai": "apimart",
+    "api.apimart.ai": "apimart",
+    "deepseek-ai": "deepseek",
+    "moonshot": "kimi",
+    "moonshotai-cn": "kimi",
+    "kimi-k2": "kimi",
+    "zhipu": "glm",
+    "zhipuai": "glm",
+    "bigmodel": "glm",
+    "xai": "grok",
+    "x-ai": "grok",
+    "doubao": "seed",
+    "volcengine": "seed",
+    "volcengine-ark": "seed",
+    "ark": "seed",
+    "bytedance": "seed",
+    "volces": "seed",
+    "infistar.cc": "infistar",
+    "wuxianxinghe": "infistar",
+    "lm-studio": "lmstudio",
+    "lm_studio": "lmstudio",
+    "local": "ollama",
+    "whisper_local": "whisper",
+    "sensevoice_local": "sensevoice",
+    "google": "gemini",
+    "azure-openai-responses": "azure-openai"
+  },
+  "providers": {
+    "apimart": {
+      "display_name": "APIMart",
+      "ui_name": "APIMart",
+      "short_name": "APIMart",
+      "catalog_label": "APIMart",
+      "group": "recommended",
+      "protocol": "openai-completions",
+      "base_url": "https://api.apimart.ai/v1",
+      "accepted_hosts": [
+        "api.apimart.ai"
+      ],
+      "capabilities": [
+        "language",
+        "image",
+        "video"
+      ],
+      "docs_url": "https://go.apimart.ai/tw-autoclip",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "apimart_api_key",
+      "placeholder": "sk-…",
+      "hint": "赞助合作伙伴。一个 Key 调用语言、图像和视频模型，接口地址已预设。",
+      "cloud_hint": "赞助合作伙伴。一个 Key 调用语言、图像和视频模型，接口地址已预设。",
+      "sponsor": {
+        "register_url": "https://go.apimart.ai/tw-autoclip",
+        "guide_url": "https://docs.apimart.ai/en/quickstart",
+        "offer": "获取 API Key",
+        "description": "在 APIMart 创建密钥后粘贴到这里即可，接口地址已预设。"
+      },
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "qwen3.8-flash",
+          "gemini-3.8-flash",
+          "deepseek-v4-flash"
+        ],
+        "vision": [
+          "qwen3.8-flash",
+          "gemini-3.8-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
+    },
+    "api88": {
+      "display_name": "88API Token聚合平台",
+      "ui_name": "88API Token聚合平台",
+      "short_name": "88API",
+      "catalog_label": "88API",
+      "group": "recommended",
+      "protocol": "openai-completions",
+      "base_url": "https://api.88api.ai/v1",
+      "capabilities": [
+        "language",
+        "image"
+      ],
+      "docs_url": "https://88api.ai/sign-up?aff=2PIc",
+      "locked": true,
+      "accepted_hosts": [
+        "88api.ai",
+        "api.88api.ai"
+      ],
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [
+        "gpt-image-1",
+        "dall-e-3",
+        "dall-e-2"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "api88_api_key",
+      "placeholder": "sk-…",
+      "hint": "赞助合作伙伴。聚合语言、图片与语音模型，接口地址已预设。",
+      "cloud_hint": "赞助合作伙伴。新用户注册赠送体验额度，站内提供人工客服。",
+      "sponsor": {
+        "register_url": "https://88api.ai/sign-up?aff=2PIc",
+        "guide_url": "https://github.com/zhouxiaoka/autoclip/blob/main/docs/88API_SETUP.md",
+        "offer": "新用户体验额度",
+        "description": "新用户通过专属链接注册可获体验额度；站内提供人工客服。"
+      },
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.8-flash",
+          "gemini-3.5-flash"
+        ],
+        "vision": [
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.8-flash",
+          "gemini-3.5-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
+    },
+    "infistar": {
+      "display_name": "Infistar 无限星河",
+      "ui_name": "Infistar 无限星河",
+      "short_name": "Infistar",
+      "catalog_label": "Infistar",
+      "group": "recommended",
+      "protocol": "openai-completions",
+      "base_url": "https://infistar.cc/v1",
+      "accepted_hosts": [
+        "infistar.cc",
+        "www.infistar.cc",
+        "infistar.ai",
+        "www.infistar.ai"
+      ],
+      "capabilities": [
+        "language",
+        "image"
+      ],
+      "docs_url": "https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [
+        "gpt-image-1",
+        "dall-e-3",
+        "doubao-seedream-5-0-260128",
+        "flux-1.1-pro",
+        "imagen-4",
+        "wanx2.1-t2i-turbo"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "infistar_api_key",
+      "placeholder": "sk-…",
+      "hint": "赞助合作伙伴。一个 Key 调用 Claude、GPT、Gemini、DeepSeek 等模型，接口地址已预设。",
+      "cloud_hint": "赞助合作伙伴。一个 Key 调 Claude / GPT / Gemini / DeepSeek 等模型，专属链接注册可领体验额度。",
+      "sponsor": {
+        "register_url": "https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
+        "guide_url": "https://github.com/zhouxiaoka/autoclip/blob/main/docs/INFISTAR_SETUP.md",
+        "offer": "$5 免费体验额度",
+        "description": "通过专属链接注册，可领取 $5 免费体验额度。"
+      },
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "doubao-seed-2-1-turbo-260628",
+          "doubao-seed-2-1-pro-260628",
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
+        "vision": [
+          "doubao-seed-2-1-turbo-260628",
+          "doubao-seed-2-1-pro-260628",
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "gemini-3.5-flash-lite",
+          "gemini-3.8-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
+    },
+    "deepseek": {
+      "display_name": "DeepSeek",
+      "short_name": "DeepSeek",
+      "catalog_label": "DeepSeek",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.deepseek.com",
+      "docs_url": "https://platform.deepseek.com/api_keys",
+      "default_model": "deepseek-flash",
+      "catalog": [
+        "deepseek-flash",
+        "deepseek-v4-pro"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "deepseek_api_key",
+      "placeholder": "sk-…",
+      "hint": "DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。",
+      "cloud_hint": "DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "deepseek-flash"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "dashscope": {
+      "display_name": "阿里云百炼",
+      "ui_name": "阿里云百炼",
+      "short_name": "阿里云百炼",
+      "catalog_label": "通义千问",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "capabilities": [
+        "language",
+        "asr",
+        "image"
+      ],
+      "docs_url": "https://bailian.console.aliyun.com/",
+      "referral": "https://www.aliyun.com/benefit?userCode=qmyj6jch",
+      "default_model": "qwen-plus",
+      "catalog": [
+        "qwen3.8-max",
+        "qwen3.8-flash",
+        "qwen3.7-plus",
+        "qwen-plus",
+        "qwen-plus-latest",
+        "qwen-max",
+        "qwen-max-latest",
+        "qwen-flash",
+        "qwen-vl-max",
+        "qwen-vl-plus"
+      ],
+      "catalog_image": [
+        "wanx2.1-t2i-turbo",
+        "wanx2.1-t2i-plus"
+      ],
+      "legacy_ui": true,
+      "api_key_setting": "dashscope_api_key",
+      "placeholder": "sk-…",
+      "hint": "阿里云百炼官方服务，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "qwen3.8-flash",
+          "qwen3.8-max",
+          "qwen-vl-plus",
+          "qwen-plus"
+        ],
+        "vision": [
+          "qwen-vl-plus",
+          "qwen3.8-flash"
+        ],
+        "image": [
+          "qwen-image-2.0",
+          "wan2.7-image",
+          "wanx2.1-t2i-turbo",
+          "wanx2.1-t2i-plus"
+        ],
+        "asr": [
+          "qwen-audio-3.1-asr-flash",
+          "qwen-audio-3.0-asr-flash"
+        ]
+      },
+      "auth": "api_key",
+      "locked": true
+    },
+    "siliconflow": {
+      "display_name": "硅基流动",
+      "short_name": "硅基流动",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "capabilities": [
+        "language",
+        "asr",
+        "image"
+      ],
+      "docs_url": "https://cloud.siliconflow.cn/account/ak",
+      "api_key_setting": "siliconflow_api_key",
+      "placeholder": "sk-…",
+      "hint": "硅基流动。国内直连，OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true
+    },
+    "seed": {
+      "display_name": "Seed（火山方舟）",
+      "ui_name": "Seed",
+      "short_name": "Seed",
+      "catalog_label": "Seed",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+      "capabilities": [
+        "language",
+        "image",
+        "video"
+      ],
+      "docs_url": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
+      "default_model": "doubao-seed-2-1-lite-260915",
+      "catalog": [
+        "doubao-seed-2-1-lite-260915",
+        "doubao-seed-2-1-pro-260915",
+        "doubao-seed-2-1-turbo-260628",
+        "doubao-seed-evolving"
+      ],
+      "catalog_image": [
+        "doubao-seedream-5-0-260128"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "seed_api_key",
+      "placeholder": "…",
+      "hint": "火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。",
+      "cloud_hint": "火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "doubao-seed-2-1-lite-260915"
+        ],
+        "vision": [
+          "doubao-seed-2-1-lite-260915"
+        ],
+        "image": [
+          "doubao-seedream-5-0-flash-260915",
+          "doubao-seedream-5-0-pro-260628",
+          "doubao-seedream-4-0-20260415",
+          "doubao-seedream-5-0-260128"
+        ],
+        "asr": []
+      },
+      "auth": "api_key",
+      "locked": true
+    },
+    "glm": {
+      "display_name": "智谱 GLM",
+      "ui_name": "智谱 GLM",
+      "short_name": "GLM",
+      "catalog_label": "GLM",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "capabilities": [
+        "language",
+        "image"
+      ],
+      "docs_url": "https://open.bigmodel.cn/usercenter/apikeys",
+      "default_model": "glm-5.3",
+      "catalog": [
+        "glm-5.3",
+        "glm-5.2",
+        "glm-4.7"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "glm_api_key",
+      "placeholder": "…",
+      "hint": "智谱开放平台。国内直连，glm-5.3 是当前旗舰。",
+      "cloud_hint": "智谱开放平台。国内直连，glm-5.3 是当前旗舰。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "glm-5.3"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true
+    },
+    "kimi": {
+      "display_name": "Kimi（月之暗面）",
+      "ui_name": "Kimi",
+      "short_name": "Kimi",
+      "catalog_label": "Kimi",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.moonshot.cn/v1",
+      "docs_url": "https://platform.moonshot.cn/console/api-keys",
+      "default_model": "kimi-k2.6",
+      "catalog": [
+        "kimi-k3",
+        "kimi-k2.6",
+        "kimi-k2.5",
+        "kimi-k2.7-code"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "kimi_api_key",
+      "placeholder": "sk-…",
+      "hint": "月之暗面 Kimi。国内直连，适合长字幕分析。",
+      "cloud_hint": "月之暗面 Kimi。国内直连，适合长字幕分析。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "kimi-k2.6",
+          "kimi-k3"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "minimax-cn": {
+      "display_name": "MiniMax",
+      "short_name": "MiniMax",
+      "group": "popular",
+      "protocol": "anthropic-messages",
+      "base_url": "https://api.minimaxi.com/anthropic",
+      "docs_url": "https://platform.minimaxi.com",
+      "locked": true,
+      "api_key_setting": "minimax_cn_api_key",
+      "hint": "MiniMax 国内。当前预置协议为 Anthropic Messages。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "capabilities": [
+        "language"
+      ]
+    },
+    "xiaomi": {
+      "display_name": "小米 MiMo",
+      "short_name": "MiMo",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "docs_url": "https://platform.xiaomimimo.com",
+      "api_key_setting": "xiaomi_api_key",
+      "hint": "小米 MiMo。国内直连，OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "openai": {
+      "display_name": "OpenAI",
+      "short_name": "OpenAI",
+      "catalog_label": "OpenAI",
+      "group": "popular",
+      "protocol": "openai-responses",
+      "base_url": "https://api.openai.com/v1",
+      "capabilities": [
+        "language",
+        "image"
+      ],
+      "docs_url": "https://platform.openai.com/api-keys",
+      "default_model": "gpt-5-mini",
+      "catalog": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano"
+      ],
+      "catalog_image": [
+        "gpt-image-1"
+      ],
+      "legacy_ui": true,
+      "api_key_setting": "openai_api_key",
+      "placeholder": "sk-…",
+      "hint": "OpenAI 官方服务，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "gpt-5-mini",
+          "gpt-4o-mini"
+        ],
+        "vision": [
+          "gpt-5-mini",
+          "gpt-4o-mini"
+        ],
+        "image": [
+          "gpt-image-2.5-flare",
+          "gpt-image-2",
+          "gpt-image-1",
+          "dall-e-3"
+        ],
+        "asr": [
+          "whisper-1"
+        ]
+      },
+      "auth": "api_key",
+      "locked": true
+    },
+    "gemini": {
+      "display_name": "Google Gemini",
+      "short_name": "Gemini",
+      "catalog_label": "Gemini",
+      "group": "popular",
+      "protocol": "google-generative-ai",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "docs_url": "https://aistudio.google.com/apikey",
+      "default_model": "gemini-3.8-flash",
+      "catalog": [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash"
+      ],
+      "legacy_ui": true,
+      "api_key_setting": "gemini_api_key",
+      "placeholder": "AIza…",
+      "hint": "Google AI Studio 的 Gemini 系列。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "gemini-3.8-flash",
+          "gemini-2.5-flash"
+        ],
+        "vision": [
+          "gemini-3.8-flash",
+          "gemini-2.5-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "whisper": {
+      "display_name": "Whisper",
+      "short_name": "Whisper",
+      "group": "local",
+      "protocol": "local",
+      "base_url": "",
+      "auth": "none",
+      "capabilities": [
+        "asr"
+      ],
+      "docs_url": "https://github.com/openai/whisper",
+      "locked": false,
+      "hint": "本机 Whisper，免费转字幕。",
+      "kind": "preset",
+      "candidates": {
+        "asr": [
+          "base"
+        ],
+        "analysis": [],
+        "vision": [],
+        "image": []
+      }
+    },
+    "sensevoice": {
+      "display_name": "SenseVoice",
+      "short_name": "SenseVoice",
+      "group": "local",
+      "protocol": "local",
+      "base_url": "",
+      "auth": "none",
+      "capabilities": [
+        "asr"
+      ],
+      "docs_url": "https://github.com/FunAudioLLM/SenseVoice",
+      "locked": false,
+      "hint": "本机 SenseVoice，免费转字幕。",
+      "kind": "preset",
+      "candidates": {
+        "asr": [
+          "SenseVoiceSmall"
+        ],
+        "analysis": [],
+        "vision": [],
+        "image": []
+      }
+    },
+    "ollama": {
+      "display_name": "Ollama（本地）",
+      "ui_name": "Ollama",
+      "short_name": "Ollama",
+      "group": "local",
+      "protocol": "openai-completions",
+      "base_url": "http://localhost:11434/v1",
+      "auth": "none",
+      "docs_url": "https://ollama.com/download",
+      "locked": false,
+      "default_model": "qwen2.5:7b",
+      "local_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "openai_api_key",
+      "placeholder": "",
+      "hint": "本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。",
+      "context_hint": "长视频请把上下文调到 16384 以上（环境变量 OLLAMA_CONTEXT_LENGTH 或模型参数 num_ctx），否则字幕开头会被截掉。",
+      "local_app": "Ollama",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "qwen2.5:7b"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "capabilities": [
+        "language"
+      ]
+    },
+    "lmstudio": {
+      "display_name": "LM Studio（本地）",
+      "ui_name": "LM Studio",
+      "short_name": "LM Studio",
+      "group": "local",
+      "protocol": "openai-completions",
+      "base_url": "http://localhost:1234/v1",
+      "auth": "none",
+      "docs_url": "https://lmstudio.ai",
+      "locked": false,
+      "default_model": "",
+      "local_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "openai_api_key",
+      "placeholder": "",
+      "hint": "本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。",
+      "context_hint": "长视频请在 LM Studio 加载模型时把上下文长度（Context Length）调到 16384 以上，否则会报错或截断字幕。",
+      "local_app": "LM Studio",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "capabilities": [
+        "language"
+      ]
+    },
+    "openrouter": {
+      "display_name": "OpenRouter",
+      "short_name": "OpenRouter",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://openrouter.ai/api/v1",
+      "capabilities": [
+        "language",
+        "image",
+        "video"
+      ],
+      "docs_url": "https://openrouter.ai/keys",
+      "api_key_setting": "openrouter_api_key",
+      "hint": "OpenRouter 聚合网关。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true
+    },
+    "anthropic": {
+      "display_name": "Anthropic",
+      "short_name": "Anthropic",
+      "group": "more",
+      "protocol": "anthropic-messages",
+      "base_url": "https://api.anthropic.com",
+      "docs_url": "https://console.anthropic.com/settings/keys",
+      "api_key_setting": "anthropic_api_key",
+      "hint": "Anthropic Claude。预置协议为 Anthropic Messages。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "grok": {
+      "display_name": "Grok（xAI）",
+      "ui_name": "Grok",
+      "short_name": "Grok",
+      "catalog_label": "Grok",
+      "group": "more",
+      "protocol": "openai-responses",
+      "base_url": "https://api.x.ai/v1",
+      "docs_url": "https://console.x.ai",
+      "default_model": "grok-4.6",
+      "catalog": [
+        "grok-4.6",
+        "grok-4.5",
+        "grok-4.3"
+      ],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "grok_api_key",
+      "placeholder": "xai-…",
+      "hint": "xAI Grok。需要 xAI 账号。",
+      "cloud_hint": "xAI Grok。需要 xAI 账号。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "grok-4.6"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "groq": {
+      "display_name": "Groq",
+      "short_name": "Groq",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.groq.com/openai/v1",
+      "docs_url": "https://console.groq.com/keys",
+      "api_key_setting": "groq_api_key",
+      "hint": "Groq。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "mistral": {
+      "display_name": "Mistral",
+      "short_name": "Mistral",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.mistral.ai/v1",
+      "docs_url": "https://console.mistral.ai/api-keys",
+      "api_key_setting": "mistral_api_key",
+      "hint": "Mistral。首版按 OpenAI 兼容地址预置。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "together": {
+      "display_name": "Together",
+      "short_name": "Together",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.together.ai/v1",
+      "docs_url": "https://api.together.ai/",
+      "api_key_setting": "together_api_key",
+      "hint": "Together AI。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "fireworks": {
+      "display_name": "Fireworks",
+      "short_name": "Fireworks",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.fireworks.ai/inference/v1",
+      "docs_url": "https://fireworks.ai/account/api-keys",
+      "api_key_setting": "fireworks_api_key",
+      "hint": "Fireworks。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "huggingface": {
+      "display_name": "Hugging Face",
+      "short_name": "Hugging Face",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://router.huggingface.co/v1",
+      "docs_url": "https://huggingface.co/settings/tokens",
+      "api_key_setting": "huggingface_api_key",
+      "hint": "Hugging Face Inference Router。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "nvidia": {
+      "display_name": "NVIDIA",
+      "short_name": "NVIDIA",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "docs_url": "https://build.nvidia.com/settings/api-key",
+      "api_key_setting": "nvidia_api_key",
+      "hint": "NVIDIA NIM。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "cerebras": {
+      "display_name": "Cerebras",
+      "short_name": "Cerebras",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.cerebras.ai/v1",
+      "docs_url": "https://cloud.cerebras.ai",
+      "api_key_setting": "cerebras_api_key",
+      "hint": "Cerebras。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "baseten": {
+      "display_name": "Baseten",
+      "short_name": "Baseten",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://inference.baseten.co/v1",
+      "docs_url": "https://app.baseten.co",
+      "api_key_setting": "baseten_api_key",
+      "hint": "Baseten Inference。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "azure-openai": {
+      "display_name": "Azure OpenAI",
+      "short_name": "Azure OpenAI",
+      "group": "more",
+      "protocol": "openai-responses",
+      "base_url": "",
+      "docs_url": "https://portal.azure.com",
+      "locked": false,
+      "api_key_setting": "azure_openai_api_key",
+      "hint": "Azure OpenAI。接口地址含资源名，需自行填写。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "capabilities": [
+        "language"
+      ]
+    },
+    "amazon-bedrock": {
+      "display_name": "Amazon Bedrock",
+      "short_name": "Bedrock",
+      "group": "more",
+      "protocol": "bedrock-converse-stream",
+      "base_url": "",
+      "docs_url": "https://console.aws.amazon.com/bedrock",
+      "locked": false,
+      "api_key_setting": "amazon_bedrock_api_key",
+      "hint": "Amazon Bedrock。区域与模型随账号而定。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "capabilities": [
+        "language"
+      ]
+    },
+    "google-vertex": {
+      "display_name": "Google Vertex",
+      "short_name": "Vertex",
+      "group": "more",
+      "protocol": "google-vertex",
+      "base_url": "",
+      "docs_url": "https://console.cloud.google.com/vertex-ai",
+      "locked": false,
+      "api_key_setting": "google_vertex_api_key",
+      "hint": "Google Vertex AI。区域随项目而定。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "capabilities": [
+        "language"
+      ]
+    },
+    "cloudflare-workers-ai": {
+      "display_name": "Cloudflare Workers AI",
+      "short_name": "Workers AI",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "",
+      "docs_url": "https://developers.cloudflare.com/workers-ai/",
+      "locked": false,
+      "api_key_setting": "cloudflare_workers_ai_api_key",
+      "hint": "Cloudflare Workers AI。地址含账号 ID，需自行填写。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "capabilities": [
+        "language"
+      ]
+    },
+    "cloudflare-ai-gateway": {
+      "display_name": "Cloudflare AI Gateway",
+      "short_name": "AI Gateway",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "",
+      "docs_url": "https://developers.cloudflare.com/ai-gateway/",
+      "locked": false,
+      "api_key_setting": "cloudflare_ai_gateway_api_key",
+      "hint": "Cloudflare AI Gateway。地址含账号与网关 ID。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "capabilities": [
+        "language"
+      ]
+    },
+    "vercel-ai-gateway": {
+      "display_name": "Vercel AI Gateway",
+      "short_name": "Vercel",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://ai-gateway.vercel.sh/v1",
+      "docs_url": "https://vercel.com/docs/ai-gateway",
+      "api_key_setting": "vercel_ai_gateway_api_key",
+      "hint": "Vercel AI Gateway。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "moonshotai": {
+      "display_name": "Moonshot AI",
+      "short_name": "Moonshot",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.moonshot.ai/v1",
+      "docs_url": "https://platform.moonshot.ai",
+      "api_key_setting": "moonshotai_api_key",
+      "hint": "Moonshot 国际。与国内 Kimi 地址不同。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "minimax": {
+      "display_name": "MiniMax International",
+      "short_name": "MiniMax Intl",
+      "group": "more",
+      "protocol": "anthropic-messages",
+      "base_url": "https://api.minimax.io/anthropic",
+      "docs_url": "https://www.minimax.io",
+      "api_key_setting": "minimax_api_key",
+      "hint": "MiniMax 国际。预置协议为 Anthropic Messages。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "ant-ling": {
+      "display_name": "蚂蚁百灵",
+      "short_name": "Ant Ling",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.ant-ling.com/v1",
+      "docs_url": "https://www.ant-ling.com",
+      "api_key_setting": "ant_ling_api_key",
+      "hint": "蚂蚁百灵。OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "qianfan": {
+      "display_name": "百度千帆",
+      "short_name": "千帆",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://qianfan.baidubce.com/v2",
+      "docs_url": "https://console.bce.baidu.com/qianfan",
+      "api_key_setting": "qianfan_api_key",
+      "hint": "百度千帆。国内公开文档常见地址，上线前须核实。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "hunyuan": {
+      "display_name": "腾讯混元",
+      "short_name": "混元",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+      "docs_url": "https://cloud.tencent.com/product/hunyuan",
+      "api_key_setting": "hunyuan_api_key",
+      "hint": "腾讯混元。国内公开文档常见地址，上线前须核实。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "capabilities": [
+        "language"
+      ]
+    },
+    "byteplus-modelark": {
+      "display_name": "BytePlus ModelArk",
+      "short_name": "BytePlus",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "docs_url": "https://console.byteplus.com/",
+      "api_key_setting": "byteplus_modelark_api_key",
+      "hint": "BytePlus ModelArk。东南亚节点，OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "accepted_hosts": [
+        "ark.ap-southeast.bytepluses.com",
+        "bytepluses.com"
+      ],
+      "capabilities": [
+        "language"
+      ]
+    }
+  },
+  "address_rules": {
+    "console_hosts": [
+      "ai.google.dev",
+      "aistudio.google.com",
+      "apimart.ai",
+      "docs.apimart.ai",
+      "aliyun.com",
+      "bailian.console.aliyun.com",
+      "chat.deepseek.com",
+      "chatgpt.com",
+      "console.cloud.google.com",
+      "console.volcengine.com",
+      "console.x.ai",
+      "dashscope.console.aliyun.com",
+      "deepseek.com",
+      "makersuite.google.com",
+      "openai.com",
+      "platform.deepseek.com",
+      "platform.moonshot.cn",
+      "platform.openai.com",
+      "www.88api.ai",
+      "www.aliyun.com",
+      "www.apimart.ai",
+      "www.deepseek.com",
+      "www.infistar.ai",
+      "www.infistar.cc",
+      "www.moonshot.cn",
+      "www.openai.com",
+      "www.volcengine.com"
+    ],
+    "console_suffixes": [
+      ".console.aliyun.com",
+      ".console.volcengine.com"
+    ]
+  }
+}

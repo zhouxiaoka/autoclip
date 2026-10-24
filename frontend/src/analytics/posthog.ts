@@ -12,6 +12,7 @@
 import posthog from 'posthog-js'
 import { apiConfigManager } from '../utils/apiConfig'
 import { routeName, type Properties } from './workflow'
+import { nativeRuntime, runtimeProperties } from './runtime'
 
 export const POSTHOG_KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined
 export const POSTHOG_HOST =
@@ -28,7 +29,14 @@ let publishedDistinctId = ''
 let pendingDistinctId = ''
 let retryIdentity = false
 let watchingIdentity = false
-const ANONYMOUS_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$/
+let identityRetryTimer: ReturnType<typeof setTimeout> | undefined
+let identityRetries = 0
+let publishedConsent: boolean | undefined
+let inflightConsent: boolean | undefined
+let watchingConsent = false
+let consentRetries = 0
+let consentRetryTimer: ReturnType<typeof setTimeout> | undefined
+const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
 
 /** Persist the SDK's anonymous id so backend events join the same person and experiment. */
 function publishAnonymousId(): void {
@@ -36,21 +44,39 @@ function publishAnonymousId(): void {
   let id = ''
   try { id = String(posthog.get_distinct_id?.() || '') } catch { return }
   if (!ANONYMOUS_ID.test(id) || id === publishedDistinctId) return
+  syncSentryUser(id)
+  // Packaged webviews cannot PUT to the initial relative /api/v1 URL.
+  if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+      && !apiConfigManager.isReady()) return
   // The desktop API port often arrives while the first attempt is still in flight.
-  if (id === pendingDistinctId) {
+  if (pendingDistinctId) {
     retryIdentity = true
     return
   }
   pendingDistinctId = id
   retryIdentity = false
+  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const timeout = controller ? setTimeout(() => controller.abort(), 5000) : undefined
   const finish = (ok: boolean) => {
+    if (timeout !== undefined) clearTimeout(timeout)
     if (pendingDistinctId === id) pendingDistinctId = ''
-    if (ok) {
+    if (ok && isAnalyticsEnabled()) {
       publishedDistinctId = id
-      syncSentryUser(id)
-    } else if (retryIdentity) {
+      identityRetries = 0
+      if (retryIdentity) {
+        retryIdentity = false
+        publishAnonymousId()
+      }
+    } else if (retryIdentity && isAnalyticsEnabled()) {
       retryIdentity = false
       publishAnonymousId()
+    } else if (isAnalyticsEnabled() && identityRetries < 5 && typeof setTimeout === 'function') {
+      // A ready port can still race a restart or a failed first request.
+      if (identityRetryTimer !== undefined) clearTimeout(identityRetryTimer)
+      identityRetryTimer = setTimeout(() => {
+        identityRetryTimer = undefined
+        publishAnonymousId()
+      }, 1000 * 2 ** identityRetries++)
     }
   }
   try {
@@ -59,6 +85,102 @@ function publishAnonymousId(): void {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ distinct_id: id }),
+      ...(controller ? { signal: controller.signal } : {}),
+    }).then((response) => finish(Boolean(response?.ok))).catch(() => finish(false))
+  } catch {
+    finish(false)
+  }
+}
+
+/**
+ * Tell the backend about an opt-out so backend Sentry (API and worker processes) stops
+ * attaching the anonymous user.id. Once the backend is ready the persisted preference is
+ * synced (on or off), so a re-enable whose write failed cannot leave UI=on / backend=off.
+ *
+ * X2r: mark published only after a successful PUT; retry failures; serialize so a rapid
+ * toggle cannot leave UI=off / backend=on (one in-flight request, then sync to latest).
+ */
+/**
+ * the preference the backend should hold. If the saved preference cannot be
+ * read (localStorage throws) and the user has not chosen in this session, only "off"
+ * may be sent — never "on".
+ */
+function consentIntent(): boolean {
+  if (!POSTHOG_KEY) return false
+  // re-read the shared storage on every send/retry. Another window may have turned
+  // analytics off since this one queued an "on"; storage OFF always wins over a stale intent.
+  // an explicit session OFF wins even when the storage write failed and storage
+  // still reads the old "on" — otherwise "off" would never be sent.
+  if (preferenceOverride === false) return false
+  try {
+    // Shared storage OFF still vetoes a stale session/queued "on".
+    return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
+  } catch {
+    return false
+  }
+}
+
+function publishConsent(): void {
+  const enabled = consentIntent()
+  if (typeof fetch !== 'function') return
+  if (!watchingConsent) {
+    watchingConsent = true
+    try { apiConfigManager.addListener(() => publishConsent()) } catch { /* port can arrive later */ }
+  }
+  if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+      && !apiConfigManager.isReady()) return
+  // Already in sync and nothing in flight. publishedConsent === undefined means the
+  // backend state is unknown (fresh launch, or a PUT whose response was lost), so the
+  // latest preference is always sent — including "on" (startup sync, lost response).
+  if (inflightConsent === undefined && publishedConsent === enabled) return
+  // One in-flight PUT at a time; finish() re-enters with the latest UI value.
+  if (inflightConsent !== undefined) return
+
+  inflightConsent = enabled
+  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const timeout = controller ? setTimeout(() => controller.abort(), 5000) : undefined
+  const finish = (ok: boolean) => {
+    if (timeout !== undefined) clearTimeout(timeout)
+    const sent = inflightConsent
+    inflightConsent = undefined
+    if (ok) {
+      publishedConsent = sent
+      consentRetries = 0
+      // UI may have moved while the PUT was in flight — sync to the latest preference.
+      if (publishedConsent !== consentIntent()) publishConsent()
+      return
+    }
+    // The backend may or may not have applied the PUT (e.g. written but response lost):
+    // forget what we think it holds so the next intent is never skipped as "in sync".
+    publishedConsent = undefined
+    if (consentRetries < 5 && typeof setTimeout === 'function') {
+      // Retry against whatever the UI wants now (not a stale mid-toggle value).
+      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+      consentRetryTimer = setTimeout(() => {
+        consentRetryTimer = undefined
+        publishConsent()
+      }, 1000 * 2 ** consentRetries++)
+      return
+    }
+    if (!consentIntent() && typeof setTimeout === 'function') {
+      // an opt-out never gives up. Keep retrying (capped) until the API recovers.
+      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+      consentRetryTimer = setTimeout(() => {
+        consentRetryTimer = undefined
+        publishConsent()
+      }, 30000)
+      return
+    }
+    consentRetries = 0
+    // Exhausted for "on"; a later toggle or apiConfig listener will try again.
+  }
+  try {
+    const base = String(apiConfigManager.getBaseUrl() || '/api/v1').replace(/\/$/, '')
+    void fetch(`${base}/settings/analytics-consent`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+      ...(controller ? { signal: controller.signal } : {}),
     }).then((response) => finish(Boolean(response?.ok))).catch(() => finish(false))
   } catch {
     finish(false)
@@ -76,7 +198,10 @@ function syncSentryUser(id: string | null): void {
 function watchAnonymousId(): void {
   if (watchingIdentity) return
   watchingIdentity = true
-  try { apiConfigManager.addListener(() => publishAnonymousId()) } catch { /* backend port can arrive later */ }
+  try { apiConfigManager.addListener(() => {
+    identityRetries = 0
+    publishAnonymousId()
+  }) } catch { /* backend port can arrive later */ }
 }
 
 const preferenceListeners = new Set<() => void>()
@@ -97,10 +222,6 @@ let remoteFlagsFresh = false
 export function markRemoteFlagsResponse(errorsLoading?: boolean): void {
   if (!errorsLoading) remoteFlagsFresh = true
   notifyRemoteFlags()
-}
-/** Test seam. */
-export function resetRemoteFlagsFresh(): void {
-  remoteFlagsFresh = false
 }
 function notifyRemoteFlags() {
   for (const listener of remoteFlagListeners) {
@@ -144,7 +265,7 @@ type FlagPropsTarget = {
 function applyFlagProperties(target: FlagPropsTarget) {
   try {
     const props = flagPersonProperties()
-    target.register?.(props)
+    target.register?.({ ...props, ...runtimeProperties() })
     // reload=false: callers either run before the first flag request (loaded) or reload right after.
     target.setPersonPropertiesForFlags?.(props, false)
   } catch { /* analytics cannot break the app */ }
@@ -176,6 +297,7 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
   try {
     return posthog.capture(name, {
       ...properties,
+      ...runtimeProperties(),
       schema_version: 2,
       app_version: import.meta.env.VITE_APP_VERSION || 'unknown',
       analytics_environment: import.meta.env.VITE_TELEMETRY_VALIDATION === 'true' ? 'validation' : import.meta.env.DEV ? 'development' : 'production',
@@ -194,7 +316,8 @@ export function isAnalyticsEnabled(): boolean {
   try {
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
-    return preferenceOverride ?? true
+    // an unreadable preference keeps SDK init, capture, flags and identity OFF.
+    return false
   }
 }
 
@@ -204,6 +327,8 @@ export function isAnalyticsEnabled(): boolean {
  */
 export function initAnalytics(): void {
   if (initialized) return
+  // P2: sync the persisted preference (on or off) once the backend is ready.
+  publishConsent()
   if (!POSTHOG_KEY) {
     if (import.meta.env.DEV) {
       console.info('[analytics] 未配置 VITE_PUBLIC_POSTHOG_KEY，埋点已禁用')
@@ -213,10 +338,12 @@ export function initAnalytics(): void {
   if (!isAnalyticsEnabled()) return
 
   try {
+    const id = nativeRuntime().distinct_id
     posthog.init(POSTHOG_KEY, {
     api_host: POSTHOG_HOST,
     // 桌面端从 file:// / 自定义协议加载，cookie 不可靠，统一用 localStorage 持久化匿名 ID
     persistence: 'localStorage',
+    ...(id && ANONYMOUS_ID.test(id) ? { bootstrap: { distinctID: id, isIdentifiedID: false } } : {}),
     // 未登录前不创建 person profile，保持匿名；登录后通过 identify 关联（见 ROADMAP Phase 1）
     person_profiles: 'identified_only',
     // Business events are explicit; DOM text may contain filenames or subtitles.
@@ -243,8 +370,8 @@ export function initAnalytics(): void {
     })
     flagsNetworkEnabled = true
     initialized = true
-    publishAnonymousId()
     watchAnonymousId()
+    publishAnonymousId()
   } catch {
     initialized = false
   }
@@ -261,6 +388,7 @@ export function setAnalyticsEnabled(enabled: boolean): void {
     /* localStorage 不可用时忽略 */
   }
   for (const listener of preferenceListeners) { try { listener() } catch { /* isolate observers */ } }
+  publishConsent()
   if (!initialized && enabled) initAnalytics()
   if (!initialized) return
   try {
@@ -272,6 +400,12 @@ export function setAnalyticsEnabled(enabled: boolean): void {
       posthog.opt_out_capturing()
       disableFlagNetwork()
       publishedDistinctId = ''
+      if (identityRetryTimer !== undefined) clearTimeout(identityRetryTimer)
+      identityRetryTimer = undefined
+      identityRetries = 0
+      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+      consentRetryTimer = undefined
+      consentRetries = 0
       syncSentryUser(null)
     }
   } catch { /* analytics cannot break settings */ }

@@ -71,7 +71,7 @@ def load_directory(root: Path) -> dict[str, TemplateSpec]:
         spec = load_folder(folder)
         found[spec.id] = spec
     if set(found) != set(HTML_TEMPLATE_IDS):
-        raise TemplateRegistryError('v1 只接受 editorial 和 street')
+        raise TemplateRegistryError('模板目录必须正好是 ' + '、'.join(HTML_TEMPLATE_IDS))
     return found
 
 

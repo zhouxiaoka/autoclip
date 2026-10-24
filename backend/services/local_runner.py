@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "ollama", "lmstudio")
+PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart", "ollama", "lmstudio")
 
 
 # ---------------------------------------------------------------- environment ---
@@ -85,6 +85,8 @@ def setup_logging(verbose: bool = False) -> None:
         sh.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
         handlers.append(sh)
     logging.basicConfig(level=logging.INFO, handlers=handlers, force=True)
+    from backend.core.log_redaction import install_log_redaction
+    install_log_redaction()
     if not verbose:
         # 第三方库的 WARNING 也不要刷屏
         for noisy in ("httpx", "openai", "urllib3", "faster_whisper", "sqlalchemy"):
@@ -149,7 +151,7 @@ def configure_llm(override: LLMOverride) -> Dict[str, Any]:
                 "dashscope": "dashscope_api_key", "openai": "openai_api_key",
                 "gemini": "gemini_api_key", "siliconflow": "siliconflow_api_key",
                 "deepseek": "deepseek_api_key",
-                "kimi": "kimi_api_key", "glm": "glm_api_key", "grok": "grok_api_key", "infistar": "infistar_api_key", "api88": "api88_api_key",
+                "kimi": "kimi_api_key", "glm": "glm_api_key", "grok": "grok_api_key", "infistar": "infistar_api_key", "api88": "api88_api_key", "apimart": "apimart_api_key",
                 "seed": "seed_api_key",
             }.get(provider)
             if key_field:
@@ -300,11 +302,18 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
 
 def prepare_project(req: RunRequest, link: bool = True) -> Path:
     """
-    建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。
+    CLI / MCP 建项入口：先跑 1.5.7 门禁（content 路线），再把视频放进 raw/（见 place_video）。
     返回 raw 里的视频路径。
     """
-    from backend.core.path_utils import get_project_directory
+    _resolve_inputs(req)
+    from backend.services.studio import preflight
+    # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
+    # source does not count; the content route always transcribes, whatever the global analysis mode.
+    preflight.check(preflight.ResolvedInputs(req.video, req.srt, entry='content'))
+    return _place_resolved(req, link)
 
+
+def _resolve_inputs(req: RunRequest) -> None:
     req.video = req.video.expanduser().resolve()
     if not req.video.exists():
         raise FileNotFoundError(f"视频不存在: {req.video}")
@@ -313,6 +322,18 @@ def prepare_project(req: RunRequest, link: bool = True) -> Path:
         if not req.srt.exists():
             raise FileNotFoundError(f"字幕不存在: {req.srt}")
 
+
+def place_video(req: RunRequest, link: bool = True) -> Path:
+    """
+    建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。不做门禁：
+    调用方（prepare_project、quick output）各自在建项入口判一次（ ）。
+    """
+    _resolve_inputs(req)
+    return _place_resolved(req, link)
+
+
+def _place_resolved(req: RunRequest, link: bool) -> Path:
+    from backend.core.path_utils import get_project_directory
     project_dir = get_project_directory(req.project_id)
     raw_dir = project_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)

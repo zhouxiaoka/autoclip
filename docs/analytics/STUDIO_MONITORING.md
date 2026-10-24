@@ -44,19 +44,21 @@
 
 保留固定标签 area=studio、phase、analysis_mode、goal、error_code、runtime、app_mode、build_environment。后端保留 desktop/web 的 environment，桌面启动器显式注入 production/development 的 build_environment，其他部署可设置 `AUTOCLIP_BUILD_ENVIRONMENT`，未设置时 unknown。前端 environment 延续 production/development。
 
+1.5.7（I650–I652）起控制上报量：只有打包后的桌面正式版或验收版初始化 Sentry。后端要求 mode=desktop、release 已知，且 `AUTOCLIP_BUILD_ENVIRONMENT` 恰好是 production 或 validation；前端要求 PROD 构建、版本号已知且运行在 Tauri 里。pytest、带 `backend/tests` 的源码树、未设置构建环境、web/Docker/脚本、`tauri dev` 和浏览器标签页一律不初始化，即使环境里有 `SENTRY_DSN`。SDK 端按客户端指纹（显式 fingerprint，否则异常类型加模块/函数，不含行号和正文）限流，每个进程每小时同一指纹最多 5 条；轮询接口 `get_processing_status`、`get_ai_models` 出错每个进程只报一次。已丢弃的事件不占额度。Windows asyncio Proactor 的断连噪音直接丢弃，且调用栈里不能有 `backend` 帧：ConnectionResetError（WinError 10054，以及 Proactor 改写成该类型的 64 / 995）、ConnectionAbortedError（10053）和 BrokenPipeError（109）。同一类型出现在业务代码里，或从 Proactor 回调进入后端后抛出，照报。已发出的旧版本安装包不受影响，服务端限速另定。
+
 1.5.2 候选的告警补充修复增加后端 `pipeline_stage` 标签，只允许 INGEST、SUBTITLE、ANALYZE、HIGHLIGHT、EXPORT、DONE。内容任务返回有阶段但没有错误码的结构化失败时保留该阶段；仍按原有异常规则上报，不隐藏未知故障。大纲模型请求失败使用已有的受控失败码，无法解析的回答归为 invalid_response；不增加请求重放。快速视觉推荐的抽帧进程失败、超时或文件错误会保留 screening 告警并降级到字幕方案，不能阻止导入。此补充尚未发布，已存在的 1.5.1 安装包不会自动获得这些改动。
 
 未公开 1.5.4 的补充修复把本地 `subprocess.TimeoutExpired` 归为已有 `timeout` 代码，保留 `render`、`screening` 等实际阶段。模型服务和本地进程都可能超时，因此查询须同时按 `phase` 和 `error_code` 分组，不能把全部 timeout 计为供应商故障；原有枚举及 SQL 不变。普通 I/O/权限错误或仅含 timeout 字样的正文不改类。补充验收用真实本地子进程超时验证分类、渲染终态、原素材/已完成文件保留和重新生成，并核对统计终态只记录受控代码且重复观察去重；原用户的视频合并超时原因仍待确认，不能用这些边界回归宣称消除了全部渲染超时。
 
 验证查询按 `release` 与 `build_environment` 筛选，并分组查看 `phase`、`error_code`、`pipeline_stage` 和事件数。生产事件可能没有 `telemetry_test` 标签，不能通过 `-telemetry_test:true` 查询为空认定没有生产故障；需用 `build_environment:production` 正向筛选。新增阶段只用于定位失败边界，不推断具体模型回答或素材内容。回归应覆盖抽帧失败不调用视觉服务、字幕降级、无错误码的阶段传递以及脱敏白名单，且用新安装包验证正常制作与失败后恢复。
 
-ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线保留 llm_not_configured、字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
+ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线以 llm_auth_invalid 区分上游 401/403 鉴权失败，llm_not_configured 仅用于未配置密钥；保留字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；模型返回 200 但内容校验失败抛 `ModelResponseInvalid`，归为 `invalid_response`（模型侧，R29）；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
 
-链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码、`failure_stage=ingest` 和 `http_status`，界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
+链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码和 `failure_stage=ingest`，**不记录**站点状态码（local 归因不带 `http_status`；`success_rate.sql` 按 error_code 剔除、界面提示也按 error_code 判断，都不依赖站点状态码），界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
 
 源视频本身走不了字幕路线时，在任何模型调用之前就失败（`backend/pipeline/media_precheck.py`，导入初筛、确认制作、内容管线入口与旧版导入任务共用）：比最短片段（短视频档 20 秒）还短归为 `source_too_short`，没有音轨且没有附带 SRT 归为 `source_no_audio`。能走画面路线时（画面识别已开启且模型支持图片）无声视频仍交给画面初筛，只有初筛仍选字幕路线才失败。两者都是用户素材问题，不是故障：本地失败记录保留错误码与失败阶段，界面显示可翻译的固定文案，**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`；旧版导入任务用 `ImportSourceUnusable`，`before_send` 按 `import_failure=source-input` 丢弃）。转写失败文案不再带内部异常名（如 `IndexError`），异常类型只进本地日志。
 
-进程被结束时还在跑的 Studio 任务（初筛 / 内容制作 / 渲染）不会再继续。启动时（`backend/services/studio/restart_recovery.py`）以及首页列表、打开项目读取 `studio.json` 时，恢复逻辑把这类 generation / analysis 持久化为失败：错误码 `service_restarted`，文案「服务已重启，请重新生成」（渲染中被结束的单条版本为「服务已重启，请重试这条」），并同步到项目索引，首页显示失败原因与「重新生成」入口（进入项目，走现有 `/studio/{id}/analyze` 或单条重试）。仍在运行的 CLI / MCP 制作进程（`generation.producer`）不受影响。`service_restarted` 是环境事件，不发送 Sentry（`UNREPORTED_STUDIO_ERROR_CODES`）。
+进程被结束时还在跑的 Studio 任务（初筛 / 内容制作 / 渲染）不会再继续。启动时（`backend/services/studio/restart_recovery.py`）以及首页列表、打开项目读取 `studio.json` 时，恢复逻辑把这类 generation / analysis 持久化为失败：错误码 `service_restarted`，文案「应用刚重启，这次制作已中断，请重试。」，并同步到项目索引，首页显示失败原因与「重新生成」入口（进入项目，走现有 `/studio/{id}/analyze` 或单条重试）。仍在运行的 CLI / MCP 制作进程（`generation.producer`）不受影响。`service_restarted` 是环境事件，不发送 Sentry（`UNREPORTED_STUDIO_ERROR_CODES`）。
 
 - [Studio 工程异常](https://autoclip-ts.sentry.io/issues/views/226393/)
 - [Studio 配置/素材警告](https://autoclip-ts.sentry.io/issues/views/226394/)
@@ -73,3 +75,5 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 没有发布新安装包。原生桌面保存已验证代码与回归桩，未在本轮重打 macOS/Windows 正式包；多目标部分成功、隐私关闭与重复观察通过离线回归。未向真实社交账号投稿，也未进行付费模型验收。Sentry 页面首次加载报错，重试后恢复；已保存工程异常与配置/素材警告两个 Issue View，排除 telemetry_test=true。未创建通知规则。
 
 自动制作在生成任何版本之前失败时，结果页的「重试」重新使用该项目已保存的导入选项和原素材；已有版本失败继续使用单条重试。恢复尝试沿用 flow_id，但重新登记 studio_generation_finished 的 attempt_id，终态按尝试去重。验收必须先看到真实失败码，再修正前置条件、从页面重试成功，并在 validation 查询中看到同一 flow 的失败与成功；不能把两个事件计成两个独立流程。
+
+1.5.7 R11：画面采样（`intelligence.sample()` 及其时长探测）里 ffmpeg 抽帧失败或超时，统一为 `FrameExtractError`，错误码 `frame_extract_failed`（属 `STUDIO_ERROR_CODES`，产品失败，计入成功率分母），阶段 `sample`；不再记为视觉服务不可用。AUTO 初筛遇到它时改走字幕，方案记 `degrade_reason=frame_extract_subtitle_fallback`；素材超过 120 分钟时在视觉配置检查和初筛之前就走字幕，记 `degrade_reason=source_too_long_subtitle_route`。这两个是成功出片上的降级原因，不是失败码。

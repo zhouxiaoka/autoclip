@@ -62,7 +62,7 @@ def _err(msg: str) -> None:
 
 def _add_llm_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("模型（不填则用桌面应用设置页里的配置）")
-    g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio")
+    g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / apimart，或本地预设 ollama / lmstudio")
     g.add_argument("--model", help="模型名，如 qwen-plus、gpt-4o-mini、qwen2.5:7b")
     g.add_argument("--base-url", help="OpenAI 兼容接口地址（provider=openai 时用；ollama/lmstudio 有默认值）")
     g.add_argument("--api-key", help="已弃用。请改用环境变量 AUTOCLIP_API_KEY；仍传入时会在 stderr 打印警告")
@@ -102,7 +102,7 @@ def cmd_produce(args: argparse.Namespace) -> int:
         elif ok:
             error_code = 'none'
         else:
-            error_code = mcp_telemetry.normalize_error(result.get('status'), ok=False)
+            error_code = mcp_telemetry.normalize_error(result.get('error_code') or result.get('status'), ok=False)  
         outcome = {'ok': ok, 'error_code': error_code, 'job_id': project_id, 'terminal': True}
         result['ok'] = ok
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -161,6 +161,8 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         _err(str(e))
         return 2
 
+    from backend.services.studio.readiness import TranscriptionNotReady
+    from backend.services.studio.preflight import SourceRejected
     req = RunRequest(
         video=Path(args.video),
         srt=Path(args.srt) if args.srt else None,
@@ -171,9 +173,15 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
     )
     try:
         video_in_raw = prepare_project(req, link=not args.copy)
-    except FileNotFoundError as e:
-        outcome.update(ok=False, error_code='invalid_input', job_id=req.project_id)
-        _err(str(e))
+    except (FileNotFoundError, TranscriptionNotReady, SourceRejected) as e:  # only preflight refusals
+        # #284: a source refusal keeps its own code (source_unreadable / source_too_short / source_no_audio).
+        code = e.code if isinstance(e, SourceRejected) else 'invalid_input'
+        outcome.update(ok=False, error_code=code, job_id=req.project_id)
+        if args.json:  # scripts read the contract from stdout
+            print(json.dumps({'ok': False, 'error_code': code, 'project_id': req.project_id,
+                              'error': str(e)}, ensure_ascii=False))
+        else:
+            _err(str(e))
         return 2
 
     if not args.json:
@@ -204,7 +212,8 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         outcome.update(ok=False, error_code=normalize_error(result.get('error_code') or result.get('status'), ok=False),
                        job_id=req.project_id, terminal=True)
         if args.json:
-            print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error")}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error"),
+                              "error_code": outcome.get("error_code")}, ensure_ascii=False))  
         else:
             _err(result.get("error") or "处理失败")
             print(_dim(f"日志：{os.getenv('LOG_FILE')}"), file=sys.stderr)
@@ -289,6 +298,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
         ("grok", "Grok（xAI）", "需要 key"),
         ("api88", "88API Token聚合平台（赞助）", "需要 key，新用户注册赠送体验额度"),
         ("infistar", "Infistar 无限星河（赞助）", "需要 key，专属链接注册可领体验额度"),
+        ("apimart", "APIMart（赞助）", "需要 key，一个 Key 调用语言、图像和视频模型"),
     ] + [
         (p.key, p.display_name, f"无需 key；默认 {p.base_url}" + (f"，默认模型 {p.default_model}" if p.default_model else "")
          + (f"。{p.context_hint}" if p.context_hint else ""))
@@ -600,7 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument('--srt', help='本地 SRT 字幕文件')
     q.add_argument('--instruction', default='')
     q.add_argument('--portrait-style', choices=['auto', 'interview', 'podcast'], default='auto', help='竖版版式；画幅和文字语言仍按平台')
-    q.add_argument('--template', choices=['editorial', 'street', 'classic'], help='剪辑风格（mcp_v2_tools 开关控制，默认打开；AUTOCLIP_FLAGS=mcp_v2_tools=off 可关闭）：editorial 杂志风 / street 街头快剪 / classic 经典。结果里的 template 是实际用的风格')
+    q.add_argument('--template', choices=['editorial', 'street', 'news', 'cinema', 'classic'], help='剪辑风格（mcp_v2_tools 开关控制，默认打开；AUTOCLIP_FLAGS=mcp_v2_tools=off 可关闭）：editorial 杂志风 / street 街头快剪 / news 新闻 / cinema 电影 / classic 经典。结果里的 template 是实际用的风格')
     q.add_argument('--browser', choices=['chrome', 'edge', 'firefox', 'safari'])
     q.add_argument('--timeout', type=float, default=7200, help='等待秒数；超时不会取消项目')
     q.add_argument('--json', action='store_true', help='只在 stdout 输出 JSON 结果')

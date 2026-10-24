@@ -10,6 +10,9 @@
 能不能看图不靠猜：「测试图片理解」通过后记下 base_url + 模型，配置变了就回到未验证。
 付费视觉调用仍由 analysis_preferences 的显式同意控制，这里只提供端点。
 """
+from backend.core.failure_codes import UserFacingError
+import contextvars
+from contextlib import contextmanager
 import json
 import os
 import threading
@@ -42,7 +45,7 @@ class VisionSettingsInput(BaseModel):
             return value
         parsed = urlparse(value)
         if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError('请填写完整的 HTTP(S) 接口根地址，不包含密钥或查询参数')
+            raise UserFacingError('请填写完整的 HTTP(S) 接口根地址，不包含密钥或查询参数')
         return value
 
     @model_validator(mode='after')
@@ -50,9 +53,9 @@ class VisionSettingsInput(BaseModel):
         self.model = self.model.strip()
         if self.mode == 'custom':
             if not self.base_url:
-                raise ValueError('请填写完整的 HTTP(S) 接口根地址，不包含密钥或查询参数')
+                raise UserFacingError('请填写完整的 HTTP(S) 接口根地址，不包含密钥或查询参数')
             if not self.model:
-                raise ValueError('请填写模型名称')
+                raise UserFacingError('请填写模型名称')
         return self
 
 
@@ -102,11 +105,17 @@ def _with_text_model(stored):
 
 def effective():
     from backend.services import ai_model_settings as ai
-    settings = ai.load()
+    try:
+        settings = ai.load()
+    except Exception:
+        raise UserFacingError('已保存的模型配置需要修复，请到「设置 → 模型」修复并保存后再生成。') from None
     if settings:
         endpoint = ai.vision_endpoint(settings)
         binding = settings.vision or settings.analysis
+        from backend.services.studio.failure_identity import settings_identity
         return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
+                # the identity of THIS connection, frozen with the endpoint it resolves to.
+                'identity': settings_identity(settings, 'vision'),
                 'mode': 'custom' if settings.vision else 'text_model', 'source': 'connections',
                 'text_model': binding.model if binding else '', 'timeout': settings.vision_timeout}
     saved = _saved()
@@ -179,21 +188,37 @@ def _resolve(body):
     if body.mode == 'text_model':
         resolved = _with_text_model(stored)
         if not resolved['base_url'] or not resolved['model']:
-            raise ValueError('当前文本模型不支持图片接口测试，请先保存 AI 模型设置，或另选视觉模型')
+            raise UserFacingError('当前文本模型不支持图片接口测试，请先保存 AI 模型设置，或另选视觉模型')
         return resolved
     return stored
+
+
+_tested_identity = contextvars.ContextVar('vision_tested_identity', default=None)
+
+
+@contextmanager
+def testing_identity(identity):
+    """the identity of the saved connection a settings-page test runs on."""
+    token = _tested_identity.set(dict(identity) if identity else None)
+    try:
+        yield
+    finally:
+        _tested_identity.reset(token)
 
 
 def test(body):
     from backend.services.studio.intelligence import vision_call
     import base64, struct, zlib
     config = _resolve(body)
+    identity = _tested_identity.get()  # else the sent config's identity
+    if identity:
+        config = {**config, 'identity': dict(identity)}
     def chunk(kind, data):
         return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
     image = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 32, 32, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + b'\xff\0\0' * 32) * 32)) + chunk(b'IEND', b'')
     result = vision_call([{'type': 'text', 'text': 'Identify the dominant color of this test image. Return only JSON: {"color":"red|green|blue|other"}.'}, {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(image).decode()}}], config=config)
     if result.get('color', '').lower() != 'red':
-        raise ValueError('接口已响应，但图像识别测试未通过；请确认所选模型支持图片输入')
+        raise UserFacingError('接口已响应，但图像识别测试未通过；请确认所选模型支持图片输入')
     # 记下通过验证的端点。只有已保存的配置才更新标记，未保存的表单值测试通过不落盘。
     with _lock:
         saved = _saved()

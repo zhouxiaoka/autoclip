@@ -1,4 +1,4 @@
-"""上游 HTTP 错误分类（1.5.8 成功率契约）。
+"""上游 HTTP 错误分类（1.5.7 成功率契约）。
 
 只提供能力：解析状态码 + 响应体，输出稳定枚举。不改现有调用链、不重试、不上报。
 后续埋点 / 设置页校验 / 退避 / 付费前预检都只应引用这里的枚举与 ``classify_upstream_error``。
@@ -33,21 +33,12 @@ class UpstreamErrorType(str, Enum):
 
 UPSTREAM_ERROR_TYPES: frozenset[str] = frozenset(item.value for item in UpstreamErrorType)
 
-# 中文句子即前端 i18n catalog key（八语必须同步）。
-# timeout / connection / rate_limited 与 pipeline.failures.MODEL_CALL_MESSAGES 同句，避免两套文案。
-HINT_KEYS: dict[UpstreamErrorType, str] = {
-    UpstreamErrorType.INVALID_KEY: "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。",
-    UpstreamErrorType.INSUFFICIENT_QUOTA: "账户余额或令牌额度不足，请充值或更换令牌后再试。",
-    UpstreamErrorType.PERMISSION_DENIED: "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。",
-    UpstreamErrorType.MODEL_NOT_FOUND: "当前分组或服务下没有这个模型，请换一个模型或分组。",
-    UpstreamErrorType.BAD_ENDPOINT: "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。",
-    UpstreamErrorType.RATE_LIMITED: "提供商限制了请求频率或额度，请检查配额并稍后重试。",
-    UpstreamErrorType.UPSTREAM_UNAVAILABLE: "模型服务暂时不可用，请稍后重试。",
-    UpstreamErrorType.TIMEOUT: "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
-    UpstreamErrorType.CONNECTION: "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
-    UpstreamErrorType.OUTPUT_TRUNCATED: "模型输出被截断，请稍后重试或换一个模型。",
-    UpstreamErrorType.UNKNOWN: "模型服务返回了无法识别的错误，请检查配置后重试。",
-}
+def _hint_keys() -> dict[UpstreamErrorType, str]:
+    from backend.core.failure_codes import sentence
+    return {item: sentence(item.value) for item in UpstreamErrorType}
+
+
+HINT_KEYS: dict[UpstreamErrorType, str] = _hint_keys()
 
 # 瞬时故障才重试。401/402/403/404、余额、权限、地址错、截断、未知一律不重试。
 RETRYABLE_TYPES: frozenset[UpstreamErrorType] = frozenset({
@@ -66,6 +57,7 @@ _CODE_QUOTA = frozenset({
     "insufficient_quota", "insufficient_user_quota", "insufficient_balance",
     "billing_not_active", "billing_quota_exceeded", "quota_exceeded",
     "allocationquota", "allocationquota.freetieronly", "throttling.allocationquota",
+    "arrearage",  # DashScope: account in arrears
 })
 _CODE_KEY = frozenset({
     "invalid_api_key", "invalid_key", "invalid_token", "authentication_error",
@@ -78,7 +70,7 @@ _CODE_RATE = frozenset({
 })
 _CODE_PERMISSION = frozenset({
     "permission_denied", "access_denied", "model_not_supported",
-    "forbidden",
+    "forbidden", "accessdenied", "accessdenied.unpurchased",  # DashScope
 })
 _CODE_RESOURCE = frozenset({"resource_exhausted"})
 
@@ -101,7 +93,7 @@ _PERMISSION_HINTS = (
     "ip whitelist", "ip 白名单",
 )
 _MODEL_HINTS = (
-    "model_not_found", "does not exist", "no available channel",
+    "model_not_found", "does not exist", "model not exist", "no available channel",
     "没有可用渠道", "模型不存在", "is not found",
 )
 _RATE_HINTS = ("rate limit", "too many requests", "retry later", "throttl", "频率")
@@ -212,6 +204,11 @@ def _classify(
     blob = " ".join(part for part in (code, kind, message, text.lower()) if part)
     named = _normalize_token(error_name or "")
 
+    # Azure-style DeploymentNotFound is a retired model id, not a wrong /v1 URL.
+    # The message often lacks the word "model", so a bare 404 would be bad_endpoint.
+    if _retired_deployment(code, kind, blob):
+        return UpstreamErrorType.MODEL_NOT_FOUND
+
     structured = _from_structured_code(code, kind, blob, status)
     if structured is not None:
         return structured
@@ -240,6 +237,11 @@ def _classify(
     if named in _CONNECTION_NAMES or _contains(blob, _CONNECTION_HINTS):
         return UpstreamErrorType.CONNECTION
     return UpstreamErrorType.UNKNOWN
+
+
+def _retired_deployment(code: str, kind: str, blob: str) -> bool:
+    compact = re.sub(r"[\s_]+", "", f"{code} {kind} {blob}")
+    return "deploymentnotfound" in compact
 
 
 def _from_structured_code(
@@ -425,3 +427,25 @@ def _parse_type(value: str) -> UpstreamErrorType:
         return UpstreamErrorType(value)
     except ValueError:
         return UpstreamErrorType.UNKNOWN
+
+
+_DNS_MARKERS = ('name or service not known', 'nodename nor servname', 'getaddrinfo', 'temporary failure in name resolution',
+                'no address associated', 'name resolution', 'failed to resolve', 'no such host', '11001')
+
+
+def network_kind_of(exc: BaseException | None) -> str:
+    """'dns' when a transport error is a name-resolution failure, '' otherwise.
+    Only the kind leaves this function; the exception text (may hold a host) never does.
+    (#3, the rule): only the explicit ``__cause__`` chain is walked; an exception
+    that was merely being handled (an earlier DNS failure) never decides this one."""
+    import socket
+    seen = 0
+    while exc is not None and seen < 8:
+        if isinstance(exc, socket.gaierror):
+            return 'dns'
+        text = str(exc).lower()
+        if any(marker in text for marker in _DNS_MARKERS):
+            return 'dns'
+        exc = exc.__cause__
+        seen += 1
+    return ''
