@@ -470,6 +470,46 @@ def test_chinese_audience_sees_the_guest_name_only_on_the_guest_line():
     assert '黄仁勋谈梦想' not in painted['3.0']['topic']['text']
 
 
+def test_street_paints_the_listing_guest_and_not_the_cover_title():
+    """Windows nameplate_or_speakers: empty model speakers, Latin guest, cover title stays off the clip."""
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio import packaging as packaging_mod
+
+    lines = [
+        {'start': 0.0, 'end': 4.0, 'text': 'You said we did not have our best last 12 months'},
+        {'start': 9.0, 'end': 14.0, 'text': 'Best 12 months yet'},
+    ]
+
+    def call(_prompt, _data):
+        return {
+            'title_lines': ['未来十二个月将是最佳'], 'accent_line': 0,
+            'segments': [
+                {'from': 0, 'to': 0, 'text': '你说我们过去没有最好的那12个月'},
+                {'from': 1, 'to': 1, 'text': '研究我们落后于目标'},
+            ],
+            'speakers': [], 'tags': [], 'highlights': [], 'marks': [],
+        }
+
+    result = packaging_mod.build_packaging(
+        {'title': '', 'hook': ''}, lines, platform_strategy('douyin'),
+        known_names='Sam Altman on Astra, AGI, and the future of OpenAI Sources Podcast', call=call,
+    )
+    assert [item['name'] for item in result['speakers']] == ['Sam Altman']
+    transcript = [
+        (0.0, 4.0, 'You said we did not have our best last 12 months?'),
+        (9.0, 14.0, '>> Best 12 months yet'),
+    ]
+    model = Packaging.model_validate(result)
+    fill = paint_fill(build_fill(model, 14, template='street', transcript=transcript), model, 'street')
+    painted = _render('street', fill, times=['1.0', '10.0'])
+    assert painted['1.0']['topic']['text'] == ''
+    assert painted['10.0']['topic']['text'] == 'Sam Altman'
+    assert painted['10.0']['title']['text'] == ''
+    blob = json.dumps(painted['10.0'], ensure_ascii=False)
+    assert '未来十二个月将是最佳' not in blob
+    assert any(rect['slot'] == 'hook' for rect in painted['10.0']['rects'])
+
+
 def test_street_picture_pads_a_1290_window_without_moving_the_draft():
     from backend.services.studio.models import Draft, Scene
     from backend.services.studio.packaging_render import street_picture
