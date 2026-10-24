@@ -50,7 +50,7 @@ test('catalog lists all 40 presets in the four product groups', () => {
   assert.equal(groups.popular.length, 10)
   assert.equal(groups.local.length, 4)
   assert.equal(groups.more.length, 23)
-  assert.equal(groups.recommended.map(row => row.id).join(','), 'api88,infistar,apimart')
+  assert.equal(groups.recommended.map(row => row.id).join(','), 'apimart,api88,infistar')
 })
 
 test('search matches display names and capability filter hides other types', () => {

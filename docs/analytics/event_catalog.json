@@ -101,9 +101,9 @@
       "corrupt"
     ],
     "provider": [
+      "apimart",
       "api88",
       "infistar",
-      "apimart",
       "deepseek",
       "dashscope",
       "siliconflow",
