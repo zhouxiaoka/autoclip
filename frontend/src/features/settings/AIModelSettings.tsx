@@ -20,6 +20,7 @@ import {
   cloudTranscriptionWaitExpired, CLOUD_TRANSCRIPTION_WAIT_MS,
 } from './defaultModelSlots'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
+import { requestClipboardScan, takePendingSelect } from './keyGuideBus'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
   const [ready, setReady] = useState<LocalAsrReady>({})
@@ -111,8 +112,13 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   const customSelected = settings?.connections.find(connection => connection.id === customConnectionId(selectedId))
 
   useEffect(() => {
-    setSelectedId(catalogPreset(requestedProvider)?.id || null)
+    const preset = catalogPreset(requestedProvider)
+    if (preset) setSelectedId(preset.id)
   }, [requestedProvider])
+  useEffect(() => {
+    const pending = takePendingSelect()
+    if (pending) setSelectedId(pending)
+  }, [settings])
 
   const cloudChoice = useRef(false)
   const cloudPending = useRef(false)
@@ -193,6 +199,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
         : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <header className="ac-settings-ai-head">
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
+          <Btn variant="text" size="sm" onClick={() => requestClipboardScan()}>{t('settings.key_guide.detect')}</Btn>
         </header>
         <div className="ac-model-section" data-section="default-models">
           <DefaultModels

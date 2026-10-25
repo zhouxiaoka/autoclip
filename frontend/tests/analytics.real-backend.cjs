@@ -861,6 +861,8 @@ function settingsHook(s, transport, initial) {
     './providerCatalogView':{assignAnalysis:value=>value,ensureCatalogConnection:value=>({settings:value,changed:false}),selectLocalAsr:value=>value},
     './providerPresets':{getProvider:()=>undefined},
     './customProvider':custom,
+    './keyGuide':loadTs('keyGuide.ts'),
+    './keyGuideBus':loadTs('keyGuideBus.ts'),
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }

@@ -15,8 +15,10 @@ import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 
-import { applyCustomProvider, mergeCustomList, type CustomProviderDraft } from './customProvider'
+import { applyCustomProvider, emptyDraft, emptyOffer, mergeCustomList, type CustomProviderDraft } from './customProvider'
 import { notifySettingsSaved } from '../studio/settingsReturn'
+import { CUSTOM_PROVIDER_ID, planPlacement, saveToast, type GuideEndpoint } from './keyGuide'
+import { registerKeyGuideApplier, stagePendingSelect, takePendingRequest, type KeyGuideRequest } from './keyGuideBus'
 
 
 /** 1.5.7: every failed connection test carries a closed-set code (+ integer HTTP status). */
@@ -282,11 +284,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   }
 
   /** Validate, persist, and report the first blocking problem so the caller can scroll to it.
-   * `patch` is merged first so a click can persist a choice made in the same turn as this save. */
-  const save = async (patch?: Partial<ModelSettings>): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
-    if (!settings) return { ok: false }
-    const current = patch ? { ...settings, ...patch } : settings
-    if (patch) setSettings(current)
+   * `patch` is merged first so a click can persist a choice made in the same turn as this save.
+   * `base` is an already-built document (key guide) so save does not close over a stale render. */
+  const save = async (patch?: Partial<ModelSettings>, base?: ModelSettings): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
+    const source = base ?? settings
+    if (!source) return { ok: false }
+    const current = patch ? { ...source, ...patch } : source
+    if (patch || base) setSettings(current)
     const effective = logic.coverFallback(current, lists)
     const finish = beginExperience('provider_configuration_save', summary(effective))
     const issue = logic.saveIssue(effective)
@@ -294,6 +298,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     setSaving(true); setError('')
     try {
       let next = effective
+      const noticed: Array<{ id: string; status?: string; errorType?: string }> = []
       for (const { role, connection, model } of logic.validationTargets(next)) {
         const modelChanged = savedRef.current?.[role]?.model !== next[role]?.model
           || savedRef.current?.[role]?.connection_id !== connection.id
@@ -302,6 +307,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const result = await probe(connection, model, vision, role)
         emitValidation(connection, result)
         next = logic.applyValidation(next, connection.id, result)
+        const row = next.connections.find(item => item.id === connection.id)
+        if (row) noticed.push({ id: row.id, status: row.validation_status, errorType: row.validation_error_type })
         if (passed(result)) {
           const normalized = { ...connection, base_url: result.normalized_base_url || connection.base_url }
           // Image/audio model ids carry no chat capability metadata.
@@ -311,11 +318,28 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         else setError(validationCopy(result.error_type, result.hint_key))
         setSettings(next)
       }
+      for (const connection of next.connections) {
+        if (noticed.some(item => item.id === connection.id)) continue
+        const previous = savedRef.current?.connections.find(item => item.id === connection.id)
+        const keyChanged = (connection.api_key || '') !== (previous?.api_key || '')
+        if (!keyChanged) continue
+        if (connection.validation_status === 'failed' || connection.validation_status === 'transient') {
+          noticed.push({ id: connection.id, status: connection.validation_status, errorType: connection.validation_error_type })
+        }
+      }
+      const toast = saveToast(noticed)
       const value = await modelSettingsApi.save(logic.forSave(next))
       setSettings(value); setDirty(false); autoCover.current = false
       finish('completed')
       savedRef.current = value
-      message.success(t('已保存'))
+      if (toast.kind === 'invalid') message.error(`${t('settings.key_guide.invalid_saved')} ${validationCopy(toast.errorType)}`.trim())
+      else if (toast.kind === 'failed') message.error(validationCopy(toast.errorType) || t('settings.key_guide.invalid_saved'))
+      else if (toast.kind === 'unverified') {
+        const warn = (message as { warning?: (text: string) => void }).warning
+        const text = t('settings.key_guide.unverified')
+        if (typeof warn === 'function') warn(text)
+        else message.error(text)
+      } else message.success(t('已保存'))
       const failed = [value, next].some(s => logic.validationTargets(s).some(({ connection }) => connection.validation_status === 'failed'))
       const visionFailed = logic.visionFollowLacksCapability(next, lists) || logic.visionFollowLacksCapability(value, lists)
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
@@ -443,6 +467,94 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       setTesting(false)
     }
   }
+
+  const applyKeyGuide = async (request: KeyGuideRequest) => {
+    const current = settingsRef.current
+    if (!current) return { ok: false }
+    const custom = request.providerId === CUSTOM_PROVIDER_ID
+    const preset = custom ? undefined : getProvider(request.providerId)
+    if (!custom && !preset) return { ok: false }
+    const endpoints: GuideEndpoint[] = current.connections.map(connection => ({
+      id: connection.id,
+      providerId: connection.provider,
+      baseUrl: connection.base_url || '',
+      apiKey: connection.api_key,
+      hasKey: !!connection.has_key,
+    }))
+    const plan = planPlacement({
+      endpoints,
+      providerId: request.providerId,
+      apiKey: request.apiKey,
+      baseUrl: request.baseUrl,
+      overwrite: request.overwrite,
+      officialBaseUrl: preset?.base_url || '',
+    })
+    if (plan.action === 'blocked') {
+      setError(t('settings.key_guide.keep'))
+      message.error(t('settings.key_guide.keep'))
+      return { ok: false, blocked: true }
+    }
+    if (plan.action === 'unchanged') {
+      stagePendingSelect(custom ? `custom:${plan.connectionId}` : request.providerId)
+      return { ok: true, connectionId: plan.connectionId }
+    }
+    let next = current
+    let connectionId = ''
+    if (plan.action === 'create' && plan.custom) {
+      // A first-run document has no analysis model. Bind a probe id so save can
+      // check the key; the user can change the model afterwards.
+      const draft = {
+        ...emptyDraft(),
+        name: plan.name,
+        base_url: plan.baseUrl,
+        api_key: plan.apiKey,
+        ...(!current.analysis ? { models: [emptyOffer('gpt-4o-mini')] } : {}),
+      }
+      next = applyCustomProvider(current, draft)
+      connectionId = next.connections[next.connections.length - 1]?.id || ''
+    } else if (plan.action === 'create' && preset) {
+      const ensured = ensureCatalogConnection(current, preset)
+      next = ensured.settings
+      const created = ensured.connection
+      if (!created) return { ok: false }
+      connectionId = created.id
+      next = logic.editConnection(next, created.id, { api_key: plan.apiKey })
+      if (next.analysis?.connection_id === created.id && !next.analysis.model) {
+        const model = preset.default_model || preset.candidates?.analysis?.[0] || ''
+        if (model) next = { ...next, analysis: { ...next.analysis, model, model_source: 'preset' } }
+      }
+    } else if (plan.action === 'update') {
+      connectionId = plan.connectionId
+      const patch: Partial<Connection> = { api_key: plan.apiKey }
+      if (plan.baseUrl) patch.base_url = plan.baseUrl
+      next = logic.editConnection(current, plan.connectionId, patch)
+    }
+    const connection = next.connections.find(item => item.id === connectionId)
+    const bound = logic.validationTargets(next).some(item => item.connection.id === connectionId)
+    if (connection && !bound) {
+      const model = preset?.default_model || preset?.candidates?.analysis?.[0] || (custom ? 'gpt-4o-mini' : '')
+      if (model) {
+        const result = await probe(connection, model, false, 'analysis')
+        emitValidation(connection, result)
+        next = logic.applyValidation(next, connection.id, result)
+        if (!passed(result)) setError(validationCopy(result.error_type, result.hint_key))
+      }
+    }
+    const selectId = custom ? `custom:${connectionId}` : request.providerId
+    if (connectionId && selectId) stagePendingSelect(selectId)
+    settingsRef.current = next
+    replace(next)
+    const outcome = await save(undefined, next)
+    return { ok: outcome.ok, blocked: false, connectionId }
+  }
+  const applyRef = useRef(applyKeyGuide)
+  applyRef.current = applyKeyGuide
+  useEffect(() => registerKeyGuideApplier(request => applyRef.current(request)), [])
+  useEffect(() => {
+    if (!settings) return
+    const request = takePendingRequest()
+    if (request) void applyRef.current(request)
+  }, [settings])
 
   const main = settings ? logic.mainConnection(settings) : undefined
   return {

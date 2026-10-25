@@ -68,6 +68,8 @@
       ]
     },
     "updater:default",
-    "process:default"
+    "process:default",
+    "deep-link:default",
+    "clipboard-manager:allow-read-text"
   ]
 }

@@ -11,6 +11,7 @@ import {
   canEditAddress, hintProviderForKey, keyHintCopy, normalizeCompatibleUrl,
   sponsorKeyLink, validationCopy,
 } from './providerAccess'
+import { offerPastedKey } from './keyGuideWatch'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
 const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
@@ -69,6 +70,10 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
           <Input.Password aria-label={label(t('API 密钥'))} autoComplete="new-password" value={connection.api_key ?? ''}
             status={failed && KEY_ERRORS.has(errorType) ? 'error' : undefined}
             placeholder={connection.has_key ? t('已保存；留空则不改') : preset?.placeholder || 'sk-…'}
+            onPaste={event => {
+              const text = event.clipboardData?.getData('text') || ''
+              if (text && offerPastedKey(text, key || connection.provider)) event.preventDefault()
+            }}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
           {preset?.sponsor && (
