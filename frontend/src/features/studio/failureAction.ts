@@ -1,5 +1,5 @@
 import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES } from '../../analytics/failureCodes'
-import { USER_CAUSE_REASONS } from '../../utils/llmFailure'
+import { USER_CAUSE_REASONS, llmFailureText } from '../../utils/llmFailure'
 /**
  * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
  * configured, key lacks permission) cannot be fixed by retrying: show 「去设置」 instead.
@@ -53,6 +53,19 @@ export function analysisPageFailure(
     failure_stage: analysis?.failure_stage,
     ...pickSecondary(analysis),
   }
+}
+
+/** User sentence for a settled page cause. The fine upstream type stays inside this reader. */
+export function pageFailureText(info: { error?: string | null; error_code?: string | null; upstream_error_type?: string | null }): string {
+  return llmFailureText(info.error, info.error_code, info.upstream_error_type)
+}
+
+export function analysisFailureText(
+  error: string | null | undefined,
+  analysis?: { error_code?: string; upstream_error_type?: string; failure_stage?: string } | null,
+  generation?: { error_code?: string } | null,
+): string {
+  return pageFailureText({ error, ...analysisPageFailure(analysis, generation) })
 }
 
 /** (PM rule): page hint and stats are separate. Stats keep the product-first primary cause

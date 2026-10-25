@@ -2181,8 +2181,9 @@ def _py_reads(path):
 
 TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTerminal(',
              'export function safeStudioProperties(', 'export function screeningIdentity(',
-             'export function receiptEventCauses(', 'export function pageFailureAction(',
-             'export function analysisPageFailure(')
+             'export function receiptEventCauses(',              'export function pageFailureAction(',
+             'export function analysisPageFailure(',
+             'export function pageFailureText(')
 _TS_READ = re.compile(r"""(\.\s*|\[\s*['"])(attribution_source|upstream_error_type|http_status|failure_stage|provider|config_source|base_url_host)\b(?!\s*[?]?:)""")
 
 
