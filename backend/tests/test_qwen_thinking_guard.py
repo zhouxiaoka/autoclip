@@ -127,7 +127,7 @@ def test_dashscope_compatible_payload_and_timeout(monkeypatch, model, expected):
     import requests
     sent = []
 
-    def post(url, headers=None, json=None, timeout=None):
+    def post(url, headers=None, json=None, timeout=None, **kwargs):
         sent.append((json, timeout))
         return SimpleNamespace(status_code=200, json=lambda: {'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}]})
 
@@ -135,6 +135,7 @@ def test_dashscope_compatible_payload_and_timeout(monkeypatch, model, expected):
     lp.DashScopeProvider('sk-test', model, base_url=CN, mode='compatible').call('x')
     payload, timeout = sent[0]
     assert payload.get('enable_thinking') == expected
+    assert payload.get('stream') is True
     assert timeout == (lp.LLM_CONNECT_TIMEOUT_SEC, lp.LLM_READ_TIMEOUT_SEC)
 
 

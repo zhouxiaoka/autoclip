@@ -130,7 +130,7 @@ def test_saved_dead_analysis_model_retries_once_through_call_with_retry(tmp_path
         assert manager.call_with_retry("提取大纲", {"rows": "2"}) == "三片"
 
     assert [item["model"] for item in sent] == [DEAD, ALT, ALT]
-    assert all(item.get("stream") is False for item in sent)
+    assert all(item.get("stream") is True for item in sent)
     assert listed["n"] == 1
     assert listed["provider"] == "apimart"
     assert listed["key"] == SECRET

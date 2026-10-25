@@ -150,54 +150,31 @@ class DashScopeProvider(LLMProvider):
                     self.mode, sanitize_model(model),
                     hostname_of_base_url(self.base_url) if self.mode == "compatible" else "sdk-generation")
         if self.mode == "native":
+            old_api_key = os.getenv("DASHSCOPE_API_KEY")
+            os.environ["DASHSCOPE_API_KEY"] = self.api_key
             try:
-                # 确保使用传入的API key，临时设置环境变量
-                old_api_key = os.getenv("DASHSCOPE_API_KEY")
-                os.environ["DASHSCOPE_API_KEY"] = self.api_key
-                
                 full_input = self._build_full_input(prompt, input_data)
+                call_kwargs = {key: value for key, value in kwargs.items() if key != "stream"}
                 if (model or "").strip().lower() in QWEN_HYBRID_THINKING_MODELS:
                     # 原生 SDK 只连百炼；清单内的混合思考模型关掉默认思考（见 QWEN_HYBRID_THINKING_MODELS）
-                    kwargs.setdefault("enable_thinking", False)
-                resp = self._ds_generation.call(
-                    model=model,
-                    prompt=full_input,
-                    api_key=self.api_key,
-                    stream=False,
-                    **kwargs
-                )
-                
-                # 恢复原来的环境变量
-                if old_api_key is not None:
-                    os.environ["DASHSCOPE_API_KEY"] = old_api_key
-                elif "DASHSCOPE_API_KEY" in os.environ:
-                    del os.environ["DASHSCOPE_API_KEY"]
-                if resp and getattr(resp, 'status_code', 200) == 200:
-                    if getattr(resp, 'output', None) and getattr(resp.output, 'text', None) is not None:
-                        usage = getattr(resp, 'usage', None)
-                        return LLMResponse(
-                            content=resp.output.text,
-                            usage={'input_tokens': usage.get('input_tokens'), 'output_tokens': usage.get('output_tokens')} if usage else None,
-                            model=model,
-                            finish_reason=getattr(resp.output, 'finish_reason', None)
-                        )
-                    logger.warning("API请求成功，但输出为空。")
-                    return LLMResponse(content="")
-                code = getattr(resp, 'code', 'N/A')
-                message = getattr(resp, 'message', '未知API错误')
-                error = RuntimeError(str(message))
-                error.status_code = getattr(resp, 'status_code', None)
-                error.body = {"code": code, "message": message}
-                raise error
+                    call_kwargs.setdefault("enable_thinking", False)
+                result = self._native_completion(model, full_input, call_kwargs)
+                if isinstance(result, LLMResponse):
+                    return result
+                return _native_llm_response(result, model)
             except Exception as e:
                 from backend.core.job_budget import promote_if_budget_spent
                 promote_if_budget_spent(e)
                 logger.error(f"DashScope(native)调用失败: {sanitize_exception_text(e)}")
                 raise log_safe_exception(e) from None
+            finally:
+                if old_api_key is not None:
+                    os.environ["DASHSCOPE_API_KEY"] = old_api_key
+                elif "DASHSCOPE_API_KEY" in os.environ:
+                    del os.environ["DASHSCOPE_API_KEY"]
         else:
             # compatible
             try:
-                import requests
                 full_input = self._build_full_input(prompt, input_data)
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
@@ -207,37 +184,72 @@ class DashScopeProvider(LLMProvider):
                     "model": model,
                     "messages": [{"role": "user", "content": full_input}],
                 }
-                payload.update({k: v for k, v in kwargs.items() if v is not None})
-                # Gateways such as APIMart answer with SSE unless stream is explicitly false.
-                payload["stream"] = False
+                payload.update({k: v for k, v in kwargs.items() if v is not None and k != "stream"})
                 if disables_qwen_thinking(model, self.base_url):
                     payload.setdefault("enable_thinking", False)  # 原始 HTTP 请求：顶层参数
                 url = f"{self.base_url}/chat/completions"
                 # 以前读超时只有 30 秒：长字幕的挑片调用必然超时。与 OpenAIProvider 保持一致。
-                # A running clip job shortens the read so this call cannot outlive the job cap.
-                from backend.core.job_budget import clip_job_read_timeout
-                read = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
-                resp = requests.post(url, headers=headers, json=payload,
-                                     timeout=(min(LLM_CONNECT_TIMEOUT_SEC, read), read))
-                if resp.status_code != 200:
-                    try:
-                        err = resp.json()
-                    except Exception:
-                        err = {"message": resp.text}
-                    error = RuntimeError(str(err))
-                    error.status_code = resp.status_code
-                    error.body = err
-                    raise error
-                data = resp.json()
-                content = data["choices"][0]["message"]["content"]
-                usage = data.get("usage")
-                finish_reason = data["choices"][0].get("finish_reason")
-                return LLMResponse(content=content, usage=usage, model=model, finish_reason=finish_reason)
+                # Streaming keeps the socket alive; the read timeout is still the idle cap,
+                # shortened to whatever the clip job has left.
+                from backend.core.llm_stream import post_chat_completion
+                timeout = _http_timeout(LLM_READ_TIMEOUT_SEC)
+                collected = post_chat_completion(
+                    url, headers=headers, payload=payload, timeout=timeout,
+                    refresh_timeout=lambda: _http_timeout(LLM_READ_TIMEOUT_SEC),
+                )
+                return LLMResponse(
+                    content=collected.content, usage=collected.usage, model=model,
+                    finish_reason=collected.finish_reason,
+                )
             except Exception as e:
                 from backend.core.job_budget import promote_if_budget_spent
                 promote_if_budget_spent(e)
                 logger.error(f"DashScope(compatible)调用失败: {sanitize_exception_text(e)}")
                 raise log_safe_exception(e) from None
+
+    def _native_completion(self, model: str, full_input: str, call_kwargs: dict) -> Any:
+        """Prefer a live stream. A refusal or a single JSON response uses the old parser."""
+        from backend.core.llm_degrade import consume_chunk_call
+        from backend.core.llm_stream import StreamRejected, collect_sdk, is_chunk_stream, stream_rejected
+
+        def issue(stream: bool) -> Any:
+            return self._ds_generation.call(
+                model=model,
+                prompt=full_input,
+                api_key=self.api_key,
+                stream=stream,
+                **call_kwargs,
+            )
+
+        resp = issue(True)
+        if is_chunk_stream(resp):
+            try:
+                collected = collect_sdk(resp)
+            except StreamRejected as rejected:
+                if not consume_chunk_call():
+                    raise rejected.error
+                logger.info("上游不接受 stream，改回整包响应再试一次")
+                resp = issue(False)
+            else:
+                usage = collected.usage or {}
+                if not usage:
+                    shaped = None
+                elif "input_tokens" in usage or "output_tokens" in usage:
+                    shaped = {"input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens")}
+                else:
+                    shaped = usage
+                return LLMResponse(
+                    content=collected.content or "",
+                    usage=shaped,
+                    model=model,
+                    finish_reason=collected.finish_reason,
+                )
+        status = getattr(resp, "status_code", None)
+        body = {"code": getattr(resp, "code", None), "message": getattr(resp, "message", None)}
+        if isinstance(status, int) and status != 200 and stream_rejected(status, body) and consume_chunk_call():
+            logger.info("上游不接受 stream，改回整包响应再试一次")
+            resp = issue(False)
+        return resp
     
     def test_connection(self) -> bool:
         """测试DashScope连接"""
@@ -422,6 +434,34 @@ def http_chat_body(payload: Dict[str, Any]) -> Dict[str, Any]:
     return body
 
 
+def _http_timeout(default_read: float):
+    """``(connect, read)`` for one chat POST. The read shrinks to the job budget."""
+    from backend.core.job_budget import clip_job_read_timeout
+    read = clip_job_read_timeout(default_read)
+    return (min(LLM_CONNECT_TIMEOUT_SEC, read), read)
+
+
+def _native_llm_response(resp: Any, model: str) -> LLMResponse:
+    if resp and getattr(resp, "status_code", 200) == 200:
+        output = getattr(resp, "output", None)
+        if output is not None and getattr(output, "text", None) is not None:
+            usage = getattr(resp, "usage", None)
+            return LLMResponse(
+                content=output.text,
+                usage={"input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens")} if usage else None,
+                model=model,
+                finish_reason=getattr(output, "finish_reason", None),
+            )
+        logger.warning("API请求成功，但输出为空。")
+        return LLMResponse(content="")
+    code = getattr(resp, "code", "N/A")
+    message = getattr(resp, "message", "未知API错误")
+    error = RuntimeError(str(message))
+    error.status_code = getattr(resp, "status_code", None)
+    error.body = {"code": code, "message": message}
+    raise error
+
+
 def _budget_request_timeout(default_read: float):
     """Per-request read timeout while a clip job is running. ``None`` outside a job."""
     from backend.core.job_budget import clip_job_active, clip_job_read_timeout
@@ -517,15 +557,16 @@ class OpenAIProvider(LLMProvider):
             payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, {
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
-                **kwargs,
+                **{key: value for key, value in kwargs.items() if key != "stream"},
             }))
-            # The SDK omits stream when the caller does not pass it, and several
-            # OpenAI-compatible hosts (APIMart) then return text/event-stream.
-            payload["stream"] = False
+            # A long think used to die on a silent socket. Stream when the host
+            # can; a refusal or a single JSON body is assembled the same way.
+            payload["stream"] = True
+            from backend.core.llm_stream import collect_sdk, create_openai_chat
             request_timeout = _budget_request_timeout(LLM_READ_TIMEOUT_SEC)
             try:
-                response = self.client.chat.completions.create(
-                    **payload, **({} if request_timeout is None else {"timeout": request_timeout}))
+                response = create_openai_chat(
+                    self.client, payload, request_timeout, lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
             except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
@@ -536,16 +577,12 @@ class OpenAIProvider(LLMProvider):
                 if not consume_chunk_call():
                     raise
                 logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", sanitize_model(model))
-                response = self.client.chat.completions.create(
-                    **to_max_completion_tokens(payload),
-                    **({} if request_timeout is None else {"timeout": request_timeout}))
-            
-            content = response.choices[0].message.content
-            usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            } if response.usage else None
+                response = create_openai_chat(
+                    self.client, to_max_completion_tokens(payload),
+                    _budget_request_timeout(LLM_READ_TIMEOUT_SEC),
+                    lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
+            collected = collect_sdk(response)
+            usage = collected.usage
             if usage:
                 logger.info(
                     "LLM usage model=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
@@ -556,10 +593,10 @@ class OpenAIProvider(LLMProvider):
                 )
             
             return LLMResponse(
-                content=content,
+                content=collected.content,
                 usage=usage,
                 model=model,
-                finish_reason=response.choices[0].finish_reason
+                finish_reason=collected.finish_reason,
             )
             
         except Exception as e:
@@ -618,6 +655,27 @@ class GeminiProvider(LLMProvider):
                 config = types.GenerateContentConfig(max_output_tokens=max_tokens)
 
             model = self.request_model()
+            from backend.core.llm_degrade import consume_chunk_call
+            from backend.core.llm_stream import StreamRejected, collect_sdk, exception_rejects_stream
+            method = getattr(self.client.models, "generate_content_stream", None)
+            if method is not None:
+                try:
+                    collected = collect_sdk(method(model=model, contents=full_input, config=config))
+                    return LLMResponse(
+                        content=collected.content if collected.content is not None else "",
+                        model=model,
+                        finish_reason=collected.finish_reason,
+                    )
+                except StreamRejected as rejected:
+                    if not consume_chunk_call():
+                        raise rejected.error
+                    logger.info("上游不接受 stream，改回整包响应再试一次")
+                except Exception as error:  # noqa: BLE001 - only a stream refusal falls back
+                    if not exception_rejects_stream(error):
+                        raise
+                    if not consume_chunk_call():
+                        raise
+                    logger.info("上游不接受 stream，改回整包响应再试一次")
             response = self.client.models.generate_content(
                 model=model,
                 contents=full_input,
@@ -663,8 +721,6 @@ class SiliconFlowProvider(LLMProvider):
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用硅基流动API"""
         try:
-            import requests
-            
             full_input = self._build_full_input(prompt, input_data)
             
             headers = {
@@ -676,28 +732,24 @@ class SiliconFlowProvider(LLMProvider):
             data = {
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
-                **kwargs,
+                **{key: value for key, value in kwargs.items() if key != "stream"},
             }
-            data["stream"] = False
-            
-            response = requests.post(
+            # Same idle cap as the other text calls, shortened while a clip job is running.
+            from backend.core.llm_stream import post_chat_completion
+            timeout = _http_timeout(LLM_READ_TIMEOUT_SEC)
+            collected = post_chat_completion(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json=data,
-                timeout=30
+                payload=data,
+                timeout=timeout,
+                refresh_timeout=lambda: _http_timeout(LLM_READ_TIMEOUT_SEC),
             )
             
-            response.raise_for_status()
-            result = response.json()
-            
-            content = result["choices"][0]["message"]["content"]
-            usage = result.get("usage")
-            
             return LLMResponse(
-                content=content,
-                usage=usage,
+                content=collected.content,
+                usage=collected.usage,
                 model=model,
-                finish_reason=result["choices"][0].get("finish_reason")
+                finish_reason=collected.finish_reason,
             )
             
         except Exception as e:

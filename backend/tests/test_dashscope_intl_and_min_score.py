@@ -53,7 +53,7 @@ def test_dashscope_compatible_call_hits_intl_endpoint(fake_dashscope_sdk, monkey
         def json(self):
             return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}], "usage": {}}
 
-    def fake_post(url, headers=None, json=None, timeout=None):
+    def fake_post(url, headers=None, json=None, timeout=None, **kwargs):
         captured.update(url=url, headers=headers, payload=json)
         return _Resp()
 

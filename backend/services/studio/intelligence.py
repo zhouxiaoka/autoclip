@@ -1,5 +1,6 @@
 """Bounded still-frame analysis through an OpenAI-compatible vision endpoint."""
 from backend.core.failure_codes import UserFacingError
+from backend.core.llm_stream import StreamError
 from backend.core.failure_attribution import ModelResponseInvalid  
 import base64
 import json
@@ -95,6 +96,21 @@ def vision_call_at(phase, content):
         raise
 
 
+def _http_error_detail(error) -> str:
+    cached = getattr(error, "_autoclip_detail", None)
+    if isinstance(cached, str):
+        return cached
+    try:
+        detail = error.read(4096).decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001
+        detail = ""
+    try:
+        error._autoclip_detail = detail
+    except Exception:  # noqa: BLE001
+        pass
+    return detail
+
+
 def vision_call(content, config=None, *, allow_event_list=False):
     from backend.core.project_cancellation import checkpoint
     checkpoint()  # the project was deleted: no more paid calls for it (RC156 #12)
@@ -125,8 +141,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
         if disables_qwen_thinking(name, base):
             # Qwen3.5–3.8 on Bailian think by default (RC156 Win QA #18); allowlist only, see llm_providers.
             payload['enable_thinking'] = False
-        # APIMart (and other compatible hosts) stream unless this is explicitly false.
-        payload['stream'] = False
+        # Long vision thinks keep the socket alive. A refusal or a JSON 2xx is read in load().
+        payload['stream'] = True
         return token_param_kwargs(name, base, payload)  # OpenAI o-series / gpt-5+ reject max_tokens (#333)
 
     body = build_body(model)
@@ -134,6 +150,27 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
     def request(payload):
         return urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(), headers=headers)
+
+    def load(payload):
+        from backend.core.job_budget import clip_job_read_timeout
+        from backend.core.llm_degrade import consume_chunk_call
+        from backend.core.llm_stream import read_completion_response, stream_rejected
+
+        def once(body):
+            timeout = clip_job_read_timeout(float(config.get('timeout', 180)))
+            with urllib.request.urlopen(request(body), timeout=timeout) as response:
+                return read_completion_response(response)
+
+        try:
+            return once(payload)
+        except urllib.error.HTTPError as error:
+            detail = _http_error_detail(error)
+            if payload.get('stream') is True and stream_rejected(error.code, detail) and consume_chunk_call():
+                error.close()
+                fallback = dict(payload)
+                fallback['stream'] = False
+                return once(fallback)
+            raise
 
     started = time.monotonic()
     _telem = {'retries': 0, 'result': None, 'error': None}
@@ -149,30 +186,20 @@ def vision_call(content, config=None, *, allow_event_list=False):
     try:
         while True:
             read_detail['text'] = None
-            req = request(body)
             try:
                 try:
-                    from backend.core.job_budget import clip_job_read_timeout
-                    with urllib.request.urlopen(req, timeout=clip_job_read_timeout(float(config.get('timeout', 180)))) as response:
-                        result = json.load(response)
+                    result = load(body)
                 except urllib.error.HTTPError as error:
-                    detail = ''
-                    if error.code == 400 and 'max_tokens' in body:
-                        try:
-                            detail = error.read(4096).decode('utf-8', 'replace')
-                        except Exception:  # noqa: BLE001
-                            detail = ''
-                        read_detail['text'] = detail
-                    if not asks_for_max_completion_tokens(detail):
+                    detail = _http_error_detail(error)
+                    read_detail['text'] = detail
+                    if not (error.code == 400 and 'max_tokens' in body and asks_for_max_completion_tokens(detail)):
                         raise
                     error.close()
                     read_detail['text'] = None
                     # One retry with the parameter the provider asked for; never more.
                     _telem['retries'] += 1
                     body = to_max_completion_tokens(body)
-                    from backend.core.job_budget import clip_job_read_timeout
-                    with urllib.request.urlopen(request(body), timeout=clip_job_read_timeout(float(config.get('timeout', 180)))) as response:
-                        result = json.load(response)
+                    result = load(body)
             except TimeoutError:
                 from backend.core.job_budget import JobDurationExceeded, budget_expired
                 if budget_expired():
@@ -183,11 +210,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 if read_detail['text'] is not None:
                     detail = read_detail['text']
                 else:
-                    detail = ''
-                    try:
-                        detail = error.read(4096).decode('utf-8', 'replace')
-                    except Exception:  # noqa: BLE001
-                        detail = ''
+                    detail = _http_error_detail(error)
                 error.close()
                 from backend.core.llm_retry import studio_code_for
                 from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
@@ -208,6 +231,14 @@ def vision_call(content, config=None, *, allow_event_list=False):
                     message = '视觉模型请求过于频繁，请稍后手动重试；不会自动重复请求'
                 else:
                     message = info.hint_key or f'视觉模型请求失败（HTTP {status}），请检查视觉模型设置后重试'
+                raise failure(studio_code_for(info.error_type, status), message, status) from None
+            except StreamError as error:
+                from backend.core.llm_retry import studio_code_for
+                from backend.core.upstream_errors import classify_upstream_error
+                status = error.status_code
+                detail = error.body if isinstance(error.body, (str, dict)) else str(error)
+                info = classify_upstream_error(status, detail)
+                message = info.hint_key or '视觉模型请求失败，请检查视觉模型设置后重试'
                 raise failure(studio_code_for(info.error_type, status), message, status) from None
             except urllib.error.URLError as error:
                 if isinstance(error.reason, TimeoutError):
