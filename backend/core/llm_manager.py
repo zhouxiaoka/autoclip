@@ -571,7 +571,7 @@ class LLMManager:
         from backend.core.project_cancellation import checkpoint
         override = kwargs.pop("model", None)
         route = kwargs.pop("_route", None)
-        checkpoint()  # 项目已删除：不再为它花钱（RC156 #12）
+        checkpoint()  # 项目已删除，或这次制作已超过总时长：不再为它花钱
         route = route or self._snapshot_call_route()
         provider, info = route.provider, route.info
         cache_path = _llm_cache_path(prompt, input_data)
@@ -604,7 +604,9 @@ class LLMManager:
                 cache_path.write_text(content, encoding="utf-8")
             return content
         except Exception as e:
+            from backend.core.job_budget import promote_if_budget_spent
             from backend.core.llm_telemetry import sanitize_exception_text
+            promote_if_budget_spent(e)
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None
 
@@ -652,6 +654,8 @@ class LLMManager:
         with chunk_call_budget():
             for index, model in enumerate(candidates):
                 while True:
+                    from backend.core.job_budget import ensure_clip_job_budget
+                    ensure_clip_job_budget()
                     if not consume_chunk_call():
                         raise last_error or chunk_last_error() or RuntimeError(
                             "llm chunk call budget exhausted"
@@ -660,6 +664,10 @@ class LLMManager:
                     try:
                         return self.call(prompt, input_data, model=model, _route=route, **kwargs)
                     except Exception as error:
+                        from backend.core.job_budget import JobDurationExceeded, promote_if_budget_spent
+                        if isinstance(error, JobDurationExceeded):
+                            raise
+                        promote_if_budget_spent(error)
                         last_error = error
                         remember_chunk_error(error)
                         info, status, retry_after = classify_http(error)

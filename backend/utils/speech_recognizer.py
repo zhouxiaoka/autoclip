@@ -483,7 +483,9 @@ class SpeechRecognizer:
                 # Never hand a bare model name to faster-whisper: its own download ignores the
                 # mirror fallback and shows no status (RC156 Win QA #6). Download via the manager.
                 try:
-                    cached_model = manager.ensure_downloaded(config.model)
+                    from backend.core.job_budget import pause_clip_job_budget
+                    with pause_clip_job_budget():
+                        cached_model = manager.ensure_downloaded(config.model)
                 except Exception as exc:  # noqa: BLE001
                     # 每个下载源的失败原因只进日志；界面文案不带异常名和原文（RC156 #11）。
                     logger.warning("Whisper 模型 %s 下载失败: %s: %s", config.model, type(exc).__name__, exc)
@@ -567,7 +569,9 @@ class SpeechRecognizer:
                 model = load_model("cpu", "int8")
 
             try:
-                segments, _info = transcribe_with_vad_fallback(model)
+                from backend.core.job_budget import pause_clip_job_budget
+                with pause_clip_job_budget():
+                    segments, _info = transcribe_with_vad_fallback(model)
             except RuntimeError as exc:
                 if device == "cpu":
                     raise
@@ -575,7 +579,9 @@ class SpeechRecognizer:
                     "Whisper 在 %s 上转写失败（%s），改用 CPU 重试",
                     device, type(exc).__name__,
                 )
-                segments, _info = transcribe_with_vad_fallback(load_model("cpu", "int8"))
+                from backend.core.job_budget import pause_clip_job_budget
+                with pause_clip_job_budget():
+                    segments, _info = transcribe_with_vad_fallback(load_model("cpu", "int8"))
 
             cues = [seg for seg in segments if (seg.get("text") or "").strip()]
             if not cues:

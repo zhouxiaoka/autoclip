@@ -1597,6 +1597,7 @@
   "正在重试成片版本": "Retrying the video version",
   "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。": "Couldn't reach the model service. Check the API endpoint and your network; for a local model, start its service first, then try again.",
   "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。": "The model took too long to respond. Check the service and your network, then try again; for a local model, make sure its service is still running.",
+  "这次制作已超过时间上限，已停止。请重试；服务商一直很慢时可以换一个更快的模型。": "This job hit the time limit and stopped. Retry, or switch to a faster model if the provider stays slow.",
   "提供商限制了请求频率或额度，请检查配额并稍后重试。": "The provider limited the request rate or quota. Check your quota and try again later.",
   "实验功能": "Experiments",
   "只在这台电脑上覆盖功能开关。关闭匿名统计后不会请求远程开关，没有覆盖时新功能保持关闭。": "Override feature flags on this computer only. With anonymous analytics off, no flag request is sent, and anything without an override stays off.",

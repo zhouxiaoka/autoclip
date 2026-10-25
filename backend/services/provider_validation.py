@@ -66,6 +66,8 @@ class ValidationResult:
     http_status: Optional[int] = None
     network_kind: str = ''
     empty_key: bool = False
+    # Symbolic upstream error.code / type, when the body had one. Not a message.
+    upstream_code: str = ''
 
     @property
     def error_code(self) -> str:
@@ -73,7 +75,8 @@ class ValidationResult:
             return ''
         from backend.core.connection_test_codes import connection_test_error_code
         return connection_test_error_code(self.error_type, http_status=self.http_status,
-                                          network_kind=self.network_kind, empty_key=self.empty_key)
+                                          network_kind=self.network_kind, empty_key=self.empty_key,
+                                          upstream_code=self.upstream_code)
 
     def as_api(self) -> dict:
         from backend.core.connection_test_codes import safe_http_status
@@ -130,6 +133,7 @@ def _failed(
         classified = _as_type(classified)
     return ValidationResult(
         http_status=http_status, network_kind=network_kind,
+        upstream_code=getattr(classified, 'upstream_code', '') or '',
         ok=False, result='transient' if classified.retryable else 'failed',
         error_type=classified.error_type.value,
         hint_key=classified.hint_key,
@@ -171,35 +175,53 @@ class _ProbeClassified(ClassifiedUpstreamError):
     """Classified probe failure plus telemetry-only integer status / network kind."""
     http_status: Optional[int] = None
     network_kind: str = ''
+    upstream_code: str = ''
 
 
-def _with_detail(classified: ClassifiedUpstreamError, http_status=None, network_kind='') -> ClassifiedUpstreamError:
+def _with_detail(classified: ClassifiedUpstreamError, http_status=None, network_kind='', upstream_code='') -> ClassifiedUpstreamError:
     return _ProbeClassified(error_type=classified.error_type, retryable=classified.retryable,
-                            hint_key=classified.hint_key, http_status=http_status, network_kind=network_kind)
+                            hint_key=classified.hint_key, http_status=http_status, network_kind=network_kind,
+                            upstream_code=upstream_code or '')
+
+
+def _completion_text(message: Any) -> str:
+    """Visible answer text. Empty, whitespace, and reasoning-only replies are not a success."""
+    if not isinstance(message, dict):
+        return ''
+    content = message.get('content')
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and isinstance(item.get('text'), str):
+                parts.append(item['text'])
+        return ''.join(parts).strip()
+    return ''
 
 
 def _non_stream_completion(payload: Any) -> bool:
-    """A chat completion object, not an SSE stream or an empty 2xx body."""
-    if not isinstance(payload, dict):
+    """A chat completion with a non-empty answer, not an SSE stream, error object, or blank 2xx."""
+    if not isinstance(payload, dict) or payload.get('error'):
         return False
     choices = payload.get('choices')
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         return False
-    message = choices[0].get('message')
-    if not isinstance(message, dict):
-        return False
-    return isinstance(message.get('content'), str)
+    return bool(_completion_text(choices[0].get('message')))
 
 
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
-    from backend.core.llm_providers import guarded_chat_kwargs, token_param_kwargs
+    from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
+    from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
-    payload = token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
         'model': model,
         'messages': [{'role': 'user', 'content': 'ok'}],
         'max_tokens': tokens,
-    }))
+    })))
     # Hosts such as APIMart default to text/event-stream unless this is false.
     payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
@@ -216,23 +238,28 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
         return _with_detail(_classify(None, '', error_name='ConnectionError'), network_kind=network_kind_of(exc))
     status = response.status_code
     text = response.text or ''
+    upstream = symbolic_error_code(text[:4000])
     if response.status_code == 429 or 500 <= response.status_code <= 599:
-        return _with_detail(_as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE), status)
+        return _with_detail(_as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE), status, upstream_code=upstream)
     content_type = (response.headers.get('content-type') or '').lower()
     html = _html_or_classify(response.status_code, text[:4000], content_type)
     if html:
-        return _with_detail(html, status)
+        return _with_detail(html, status, upstream_code=upstream)
     if response.status_code >= 400:
-        return _with_detail(_classify(response.status_code, text[:4000]), status)
+        return _with_detail(_classify(response.status_code, text[:4000]), status, upstream_code=upstream)
     # A 200 SSE body used to look like success and then fail every real job.
     if 'text/event-stream' in content_type or text.lstrip().startswith('data:'):
-        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status, upstream_code=upstream)
     try:
         parsed = response.json()
     except Exception:  # noqa: BLE001 - non-JSON 2xx is not a completion
-        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status, upstream_code=upstream)
     if not _non_stream_completion(parsed):
-        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
+        # Some gateways return HTTP 200 with an error envelope and no choices.
+        classified = _classify(None, text[:4000])
+        if classified.error_type is UpstreamErrorType.UNKNOWN:
+            classified = _as_type(UpstreamErrorType.UNKNOWN)
+        return _with_detail(classified, status, upstream_code=symbolic_error_code(parsed) or upstream)
     return None
 
 

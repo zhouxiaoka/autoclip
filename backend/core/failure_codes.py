@@ -40,6 +40,8 @@ def _local_sentence_code(error):
     return None
 def user_visible_error(error):
     from backend.pipeline.failures import PipelineFailure
+    if type(error).__name__ == "JobDurationExceeded":
+        return (str(error) or sentence("timeout"))[:700]
     if isinstance(error, PipelineFailure): return (error.user_message() or "")[:700]
     local = _local_sentence_code(error)
     if local:

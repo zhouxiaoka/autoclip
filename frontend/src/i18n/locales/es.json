@@ -1597,6 +1597,7 @@
   "正在重试成片版本": "Reintentando la versión del vídeo",
   "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。": "No se pudo conectar con el servicio del modelo. Revisa el endpoint de la API y la red; si es un modelo local, inicia antes su servicio y vuelve a intentarlo.",
   "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。": "El modelo tardó demasiado en responder. Revisa el servicio y la red y vuelve a intentarlo; si es un modelo local, comprueba que su servicio sigue en marcha.",
+  "这次制作已超过时间上限，已停止。请重试；服务商一直很慢时可以换一个更快的模型。": "Esta creación superó el límite de tiempo y se detuvo. Vuelve a intentarlo, o cambia a un modelo más rápido si el servicio sigue lento.",
   "提供商限制了请求频率或额度，请检查配额并稍后重试。": "El proveedor limitó la frecuencia de solicitudes o la cuota. Revisa tu cuota y vuelve a intentarlo más tarde.",
   "实验功能": "Experimentos",
   "只在这台电脑上覆盖功能开关。关闭匿名统计后不会请求远程开关，没有覆盖时新功能保持关闭。": "Anula los interruptores solo en este equipo. Con las estadísticas anónimas desactivadas no se solicitan interruptores y lo que no anules permanece apagado.",

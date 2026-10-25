@@ -152,7 +152,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
             req = request(body)
             try:
                 try:
-                    with urllib.request.urlopen(req, timeout=config.get('timeout', 180)) as response:
+                    from backend.core.job_budget import clip_job_read_timeout
+                    with urllib.request.urlopen(req, timeout=clip_job_read_timeout(float(config.get('timeout', 180)))) as response:
                         result = json.load(response)
                 except urllib.error.HTTPError as error:
                     detail = ''
@@ -169,9 +170,13 @@ def vision_call(content, config=None, *, allow_event_list=False):
                     # One retry with the parameter the provider asked for; never more.
                     _telem['retries'] += 1
                     body = to_max_completion_tokens(body)
-                    with urllib.request.urlopen(request(body), timeout=config.get('timeout', 180)) as response:
+                    from backend.core.job_budget import clip_job_read_timeout
+                    with urllib.request.urlopen(request(body), timeout=clip_job_read_timeout(float(config.get('timeout', 180)))) as response:
                         result = json.load(response)
             except TimeoutError:
+                from backend.core.job_budget import JobDurationExceeded, budget_expired
+                if budget_expired():
+                    raise JobDurationExceeded() from None
                 raise failure('timeout', '视觉模型响应超时，请稍后重试；原素材已保留。') from None
             except urllib.error.HTTPError as error:
                 status = error.code
@@ -206,6 +211,9 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 raise failure(studio_code_for(info.error_type, status), message, status) from None
             except urllib.error.URLError as error:
                 if isinstance(error.reason, TimeoutError):
+                    from backend.core.job_budget import JobDurationExceeded, budget_expired
+                    if budget_expired():
+                        raise JobDurationExceeded() from None
                     raise failure('timeout', '视觉模型连接超时，请检查网络后重试；原素材已保留') from None
                 raise failure('connection', '无法连接视觉模型，请检查接口地址与网络后重试') from None
             except (OSError, EOFError, HTTPException):

@@ -686,3 +686,67 @@ def test_r10_local_service_down_hint_only_for_loopback(monkeypatch, base, local)
     assert result.error_type == 'connection'
     expected = pv.LOCAL_SERVICE_DOWN_HINT_KEY if local else HINT_KEYS[UpstreamErrorType.CONNECTION]
     assert result.hint_key == expected
+
+
+@pytest.mark.parametrize('content', ['', '   ', None])
+def test_probe_rejects_an_empty_or_blank_answer(monkeypatch, content):
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': content}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gpt-4o-mini')
+    assert result.ok is False
+    assert result.as_api()['error_code'] == 'unknown'
+
+
+def test_probe_rejects_a_body_that_is_not_a_completion(monkeypatch):
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        return _FakeResponse(200, {'ok': True, 'message': 'pong'})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gpt-4o-mini')
+    assert result.ok is False
+    assert result.as_api()['error_code'] == 'unknown'
+
+
+@pytest.mark.parametrize('status,body,code', [
+    (400, {'error': {'code': 'context_length_exceeded', 'message': 'too long'}}, 'invalid_request'),
+    (400, {'code': 'InvalidParameter', 'message': 'range out of bounds'}, 'invalid_request'),
+    (400, {'error': {'code': 'content_filter', 'message': 'blocked'}}, 'invalid_request'),
+    (200, {'error': {'code': 'invalid_api_key', 'message': 'bad'}}, 'invalid_key'),
+])
+def test_probe_maps_upstream_error_code(monkeypatch, status, body, code):
+    def handler(method, url, headers, payload):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        return _FakeResponse(status, body)
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gpt-4o-mini')
+    assert result.ok is False
+    assert result.as_api()['error_code'] == code
+    assert result.as_api()['error_code'] != 'unknown' or code == 'unknown'
+
+
+def test_dashscope_probe_sends_enable_thinking_false(monkeypatch):
+    posted = []
+
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'qwen3.8-flash'}]})
+        posted.append(body)
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        _connection(base_url='https://dashscope.aliyuncs.com/compatible-mode/v1'),
+        'qwen3.8-flash',
+    )
+    assert result.ok is True
+    assert posted[0]['enable_thinking'] is False
+    assert 'extra_body' not in posted[0]
+    assert posted[0]['stream'] is False
