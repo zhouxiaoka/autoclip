@@ -133,19 +133,20 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
     assert snapshot.get("degrade_count", 0) == 0
 
 
-@pytest.mark.parametrize("second_status,second_type", [
-    (503, "upstream_unavailable"),
-    (418, None),
-    (None, None),
+@pytest.mark.parametrize("second_status,event_type,snapshot_type", [
+    (503, "upstream_unavailable", "upstream_unavailable"),
+    (418, "unknown", "unknown"),
+    (None, "timeout", None),
 ])
-def test_consecutive_failures_keep_latest_error_in_run_and_store(capture, monkeypatch, tmp_path, second_status, second_type):
+def test_consecutive_failures_keep_latest_error_in_run_and_store(
+    capture, monkeypatch, tmp_path, second_status, event_type, snapshot_type,
+):
     from backend.services.studio import store
 
     monkeypatch.setattr(telem, "configured_connection_fields", lambda: {})
     monkeypatch.setattr(store, "directory", lambda project_id: tmp_path / project_id)
     (tmp_path / "p1").mkdir()
     fields = ("http_status", "upstream_error_type", "failure_stage", "retry_count")
-    expected = dict(zip(fields, (second_status, second_type, "production", 1)))
     with telem.track_run():
         telem.request_finished(provider="openai", outcome="error", error=_StatusError("fixture", 429), stage="analyze")
         error = _StatusError("fixture", second_status) if second_status else TimeoutError()
@@ -164,9 +165,14 @@ def test_consecutive_failures_keep_latest_error_in_run_and_store(capture, monkey
     assert len(events) == 2
     assert events[0]["http_status"] == 429
     assert events[0]["upstream_error_type"] == "rate_limited"
+    assert {key: events[1].get(key) for key in fields} == dict(zip(
+        fields, (second_status, event_type, "production", 1)))
     saved = json.loads((tmp_path / "p1" / "metadata" / "studio.json").read_text())
-    for record in (events[1], snapshot, saved["generation"], saved["analysis"]):
-        assert {key: record.get(key) for key in fields} == expected
+    # A timeout without HTTP stays local: the request event names it, the snapshot does not.
+    snapshot_status = second_status if snapshot_type else None
+    for record in (snapshot, saved["generation"], saved["analysis"]):
+        assert {key: record.get(key) for key in fields} == dict(zip(
+            fields, (snapshot_status, snapshot_type, "production", 1)))
 
 
 @pytest.mark.parametrize("status", ["completed", "failed"])

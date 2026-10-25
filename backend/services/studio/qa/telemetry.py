@@ -109,11 +109,7 @@ def remember_distinct_id(value: str) -> bool:
         return False
     try:
         if _read_id(path) == value:
-            try:
-                from backend.core.sentry_setup import sync_anonymous_user
-                sync_anonymous_user(value)
-            except Exception:  # noqa: BLE001
-                logger.debug("Sentry user was not aligned with PostHog distinct_id")
+            _adopt_distinct_id(value)
             return True
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f'{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp')
@@ -127,12 +123,22 @@ def remember_distinct_id(value: str) -> bool:
         return False
     ok = _read_id(path) == value
     if ok:
-        try:
-            from backend.core.sentry_setup import sync_anonymous_user
-            sync_anonymous_user(value)
-        except Exception:  # noqa: BLE001 - Sentry identity is optional
-            logger.debug("Sentry user was not aligned with PostHog distinct_id")
+        _adopt_distinct_id(value)
     return ok
+
+
+def _adopt_distinct_id(value: str) -> None:
+    """File already has ``value``. Align this process's env and Sentry user.
+
+    The launch env is only a fallback. A settings change that returns 200 has
+    to replace it, or a later spawn still stamps events with the startup id.
+    """
+    os.environ["AUTOCLIP_ANONYMOUS_DEVICE_ID"] = value
+    try:
+        from backend.core.sentry_setup import sync_anonymous_user
+        sync_anonymous_user(value)
+    except Exception:  # noqa: BLE001 - Sentry identity is optional
+        logger.debug("Sentry user was not aligned with PostHog distinct_id")
 
 
 def anonymous_distinct_id() -> str:

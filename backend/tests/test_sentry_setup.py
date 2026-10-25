@@ -295,8 +295,12 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         assert captured[-1]['phase'] == phase
         clean = sentry_setup.before_send({'level': 'error', 'tags': captured[-1],
             'exception': {'values': [{'type': kind, 'value': str(error)}]}})
+        if status in {401, 403, 429, 503}:
+            assert clean is None
+            continue
+        assert clean is not None
         assert 'private-provider-body' not in str(clean) and 'synthetic-key' not in str(clean)
-        assert clean['level'] == ('warning' if code in ('llm_auth_invalid', 'rate_limited') else 'error')
+        assert clean['level'] == 'error'
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
     assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
 
@@ -311,20 +315,51 @@ def test_before_send_keeps_anonymous_user_id_and_allowlisted_tags(monkeypatch, t
         'exception': {'values': [{'type': 'Error', 'value': 'private key sk-secret'}]},
         'user': {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111', 'email': 'a@b.com', 'ip_address': '1.2.3.4'},
         'tags': {
-            'area': 'studio', 'error_code': 'provider_error', 'phase': 'production',
-            'provider': 'api88', 'upstream_error_type': 'rate_limited',
+            'area': 'studio', 'error_code': 'unexpected', 'phase': 'production',
+            'provider': 'api88', 'upstream_error_type': 'unknown',
             'base_url_host': '88api.ai', 'model': 'gpt-4o-mini',
-            'http_status': '429', 'failure_stage': 'analyze', 'private': 'secret',
+            'failure_stage': 'analyze', 'private': 'secret',
         },
     })
     assert clean['user'] == {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
     assert clean['tags']['provider'] == 'api88'
-    assert clean['tags']['upstream_error_type'] == 'rate_limited'
+    assert clean['tags']['upstream_error_type'] == 'unknown'
     assert clean['tags']['base_url_host'] == '88api.ai'
     assert clean['tags']['failure_stage'] == 'analyze'
     assert 'email' not in clean['user']
     assert 'private' not in clean['tags']
     assert 'sk-secret' not in json.dumps(clean)
+
+
+def test_provider_answers_do_not_spend_the_daily_budget(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    event = {
+        'event_id': '00000000-0000-0000-0000-000000000001',
+        'exception': {'values': [{'type': 'RateLimitError', 'value': 'private'}]},
+        'tags': {'http_status': '429', 'upstream_error_type': 'rate_limited', 'error_code': 'rate_limited'},
+    }
+    assert sentry_setup.before_send(event) is None
+    assert sentry_setup._before_send_limited(event) is None
+    assert not (tmp_path / 'sentry-daily.json').exists()
+
+
+def test_daily_cap_samples_after_full_fidelity_and_stops_at_the_hard_cap(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(sentry_setup, '_volume_allows', lambda _event: True)
+    base = {'exception': {'values': [{'type': 'RuntimeError', 'value': 'boom'}]},
+            'tags': {'error_code': 'unexpected'}}
+    drop = {**base, 'event_id': '00000000-0000-0000-0000-000000000001'}
+    keep = {**base, 'event_id': '00000000-0000-0000-0000-000000000000'}
+    for _ in range(sentry_setup.DAILY_FULL_FIDELITY):
+        assert sentry_setup._before_send_limited(dict(drop)) is not None
+    assert sentry_setup._before_send_limited(dict(drop)) is None
+    assert sentry_setup._before_send_limited(dict(keep)) is not None
+    state = json.loads((tmp_path / 'sentry-daily.json').read_text(encoding='utf-8'))
+    assert state['sent'] == sentry_setup.DAILY_FULL_FIDELITY + 1
+    state['sent'] = sentry_setup.DAILY_HARD_CAP
+    (tmp_path / 'sentry-daily.json').write_text(json.dumps(state), encoding='utf-8')
+    assert sentry_setup._before_send_limited(dict(keep)) is None
+    assert json.loads((tmp_path / 'sentry-daily.json').read_text(encoding='utf-8'))['sent'] == sentry_setup.DAILY_HARD_CAP
 
 
 def test_launcher_identity_fallback_and_late_file_override(monkeypatch, tmp_path):

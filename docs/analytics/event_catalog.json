@@ -353,6 +353,12 @@
     "forbidden_substrings": [
       "sk-"
     ],
+    "count_keys": [
+      "prompt_tokens",
+      "completion_tokens",
+      "reasoning_tokens",
+      "llm_calls"
+    ],
     "user_content_keys": [
       "text",
       "contact"
@@ -600,6 +606,23 @@
         "outcome": "request_outcome",
         "failure_stage": "failure_stage",
         "upstream_error_type": "upstream_error_type"
+      },
+      "optional_properties": {
+        "prompt_tokens": {
+          "description": "Non-negative integer token count. Not a prompt and not a secret.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "description": "Non-negative integer token count.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "description": "Non-negative integer token count.",
+          "format": "integer",
+          "minimum": 0
+        }
       }
     },
     "studio_import_requested": {
@@ -699,6 +722,25 @@
         "trigger": {
           "description": "Backend AttemptReceipt trigger, copied from the receipt. 1.5.7 emits initial, retry, and variant_retry. append_platform stays in the enum and is not emitted (append-platform is a 1.5.9 follow-up).",
           "values": "attempt_trigger"
+        },
+        "prompt_tokens": {
+          "description": "Run total. Non-negative integer; the name contains prompt but the value is a count, not user text.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "description": "Run total. Non-negative integer.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "llm_calls": {
+          "description": "Run total. Non-negative integer.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "http_status": {
+          "description": "Last provider HTTP status on a model failure, 400-599. Omitted for a local failure.",
+          "format": "integer"
         }
       }
     },
@@ -743,6 +785,25 @@
           "values": "upstream_error_type",
           "format": "comma_joined",
           "max_items": 3
+        },
+        "prompt_tokens": {
+          "description": "Run total. Non-negative integer; the name contains prompt but the value is a count, not user text.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "description": "Run total. Non-negative integer.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "llm_calls": {
+          "description": "Run total. Non-negative integer.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "http_status": {
+          "description": "Last provider HTTP status on a model failure, 400-599. Omitted for a local failure.",
+          "format": "integer"
         }
       }
     },

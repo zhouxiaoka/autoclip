@@ -142,6 +142,38 @@ test('already reminding the same version today does not offer it again even if t
   assert.equal(await updater.maybeCheckForUpdate(), null)
   assert.equal(closed, 1)
 })
+test('provider answers are dropped and the daily cap samples after full fidelity', () => {
+  const store = new Map()
+  const localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+  }
+  let config
+  const sentry = load('sentry', { '@sentry/react': { init: (c) => { config = c } } }, { localStorage, window: DESKTOP_WINDOW })
+  sentry.initSentry()
+  const dropped = config.beforeSend({
+    event_id: '00000000-0000-0000-0000-000000000001',
+    tags: { http_status: 429, upstream_error_type: 'rate_limited' },
+    exception: { values: [{ type: 'Error', value: 'private' }] },
+  })
+  assert.equal(dropped, null)
+  assert.equal(store.size, 0)
+  for (let i = 0; i < 15; i++) {
+    const kept = config.beforeSend({
+      event_id: '00000000-0000-0000-0000-000000000001',
+      exception: { values: [{ type: 'Error', value: 'x' }] },
+    })
+    assert.ok(kept)
+  }
+  assert.equal(config.beforeSend({
+    event_id: '00000000-0000-0000-0000-000000000001',
+    exception: { values: [{ type: 'Error', value: 'x' }] },
+  }), null)
+  assert.ok(config.beforeSend({
+    event_id: '00000000-0000-0000-0000-000000000000',
+    exception: { values: [{ type: 'Error', value: 'x' }] },
+  }))
+})
 test('offline automatic checks stay silent and do not persist a successful check', async () => {
   const store = new Map()
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) }

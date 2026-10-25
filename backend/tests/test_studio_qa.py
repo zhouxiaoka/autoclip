@@ -564,6 +564,43 @@ def test_analytics_identity_rejects_paths_and_stores_anonymous_ids(tmp_path, mon
     assert not list(tmp_path.glob('analytics.json.*.tmp'))
 
 
+def test_analytics_identity_change_is_used_by_later_events(tmp_path, monkeypatch):
+    import os
+    from backend.services.studio.qa import telemetry
+    old = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+    new = '018f6b2a-7c3d-7b2a-8c11-222222222222'
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', old)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    (tmp_path / 'analytics.json').write_text(json.dumps({'distinct_id': old}), encoding='utf-8')
+    assert telemetry.remember_distinct_id(new)
+    assert telemetry.anonymous_distinct_id() == new
+    assert os.environ['AUTOCLIP_ANONYMOUS_DEVICE_ID'] == new
+    # The file already matches. A second 200 must still replace a stale launch env.
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', old)
+    assert telemetry.remember_distinct_id(new)
+    assert os.environ['AUTOCLIP_ANONYMOUS_DEVICE_ID'] == new
+    captured = {}
+
+    def urlopen(request, timeout=1.5):
+        captured['body'] = json.loads(request.data.decode())
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        return _Resp()
+
+    monkeypatch.setattr(telemetry.urllib.request, 'urlopen', urlopen)
+    telemetry.emit_checked({'duration_ms': 1, 'checks': []}, 'loudness_target')
+    assert captured['body']['distinct_id'] == new
+    assert telemetry.stored_distinct_id() == new
+    assert telemetry._analytics_allowed() is True
+
+
 def test_identity_temp_file_includes_the_pid(tmp_path, monkeypatch):
     import os
     from pathlib import Path

@@ -11,6 +11,7 @@ export type Catalog = {
   }
   enums: Record<string, string[]>
   privacy?: {
+    count_keys?: string[]
     forbidden_keys?: string[]
     forbidden_substrings?: string[]
     user_content_keys?: string[]
@@ -112,12 +113,14 @@ export function validateEvent(
       errors.push(`${name}.arch=${JSON.stringify(props.arch)} is not a canonical arch`)
     }
   }
+  const countKeys = new Set((catalog.privacy?.count_keys || []).map(key => key.toLowerCase()))
   const forbiddenKeys = new Set((catalog.privacy?.forbidden_keys || []).map(key => key.toLowerCase()))
   const forbiddenSub = (catalog.privacy?.forbidden_substrings || []).map(item => item.toLowerCase())
   const userContent = new Set((catalog.privacy?.user_content_keys || []).map(key => key.toLowerCase()))
   const submitted = new Set(catalog.privacy?.user_submitted_events || [])
   if (spec.kind === 'user_submitted') submitted.add(name)
   for (const [key, value] of Object.entries(props)) {
+    if (countKeys.has(key.toLowerCase()) && typeof value === 'number' && Number.isFinite(value) && value >= 0) continue
     if (forbiddenKeys.has(key.toLowerCase())) errors.push(`${name} has forbidden property ${key}`)
     if (userContent.has(key.toLowerCase()) && !submitted.has(name)) errors.push(`${name} has user content ${key}`)
     if (typeof value === 'string') {

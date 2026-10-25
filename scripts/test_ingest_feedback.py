@@ -7,7 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ingest_app_feedback import known_ids_in, plan_posts, public_body  # noqa: E402
+from ingest_app_feedback import (  # noqa: E402
+    fetch_events,
+    known_ids_in,
+    plan_posts,
+    public_body,
+)
 
 
 def event(**overrides):
@@ -110,6 +115,68 @@ def test_error_code_and_transcription_context_survive_ingest() -> None:
     assert "private-path" not in post["body"] and "private-url" not in post["body"]
 
 
+def test_posthog_query_retries_503_and_429_but_not_other_client_errors() -> None:
+    import io
+    import os
+    import urllib.error
+    import urllib.request
+
+    import ingest_app_feedback as ingest
+
+    calls = {"n": 0}
+    sleeps: list[float] = []
+    original = urllib.request.urlopen
+    ingest.time.sleep = lambda delay: sleeps.append(delay)
+
+    class Body:
+        def __init__(self, payload: bytes):
+            self.payload = payload
+
+        def read(self) -> bytes:
+            return self.payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def flaky(req, timeout=30):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise urllib.error.HTTPError(req.full_url, 503, "busy", {}, io.BytesIO(b"busy"))
+        if calls["n"] == 2:
+            raise urllib.error.HTTPError(req.full_url, 429, "slow", {}, io.BytesIO(b"slow"))
+        return Body(b'{"results":[]}')
+
+    os.environ["POSTHOG_PERSONAL_API_KEY"] = "phx_test"
+    urllib.request.urlopen = flaky
+    try:
+        result = fetch_events(1)
+    finally:
+        urllib.request.urlopen = original
+    assert result["ok"] is True
+    assert calls["n"] == 3
+    assert sleeps == [0.4, 0.8]
+
+    calls["n"] = 0
+
+    def rejected(req, timeout=30):
+        calls["n"] += 1
+        raise urllib.error.HTTPError(req.full_url, 400, "bad", {}, io.BytesIO(b"nope"))
+
+    urllib.request.urlopen = rejected
+    try:
+        failed = fetch_events(1)
+    finally:
+        urllib.request.urlopen = original
+        os.environ.pop("POSTHOG_PERSONAL_API_KEY", None)
+    assert failed["ok"] is False
+    assert calls["n"] == 1
+    assert "400" in failed["note"]
+    assert "nope" in failed["note"]
+
+
 if __name__ == "__main__":
     test_bug_becomes_issue_without_email_or_secret()
     test_ideas_and_questions_go_to_discussions()
@@ -117,4 +184,5 @@ if __name__ == "__main__":
     test_same_batch_and_cap()
     test_public_body_has_no_contact_field()
     test_error_code_and_transcription_context_survive_ingest()
+    test_posthog_query_retries_503_and_429_but_not_other_client_errors()
     print("ok")

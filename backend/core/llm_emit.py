@@ -142,6 +142,17 @@ class _RunAcc:
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
 
+def _request_upstream_fallback(error: BaseException | None, http_status: int | None) -> str:
+    """Closed-set type for an error `llm_request_finished` that classify_run_upstream skipped.
+
+    Unknown HTTP, a timeout or connection with no status, and an error that has
+    neither an exception nor a status all still need a value. The body is not read.
+    """
+    name = type(error).__name__ if error is not None else None
+    kind = classify_upstream_error(http_status, None, error_name=name).error_type.value
+    return schema.sanitize_upstream_error_type(kind) or UpstreamErrorType.UNKNOWN.value
+
+
 def normalize_failure_stage(value: Any) -> str | None:
     if not isinstance(value, str) or not value:
         return None
@@ -666,6 +677,10 @@ def _request_properties(
     upstream = schema.sanitize_upstream_error_type(upstream_error_type)
     if upstream is None and (error is not None or status is not None):
         upstream = classify_run_upstream(error, status)
+    # Run snapshots still omit unknown and a timeout/connection with no HTTP status
+    # (those stay local). The request event itself always names a closed-set type.
+    if outcome_value == "error" and upstream is None:
+        upstream = _request_upstream_fallback(error, status)
     raw = {
         "provider": _provider_name(provider or ctx.get("provider")),
         "model": _safe_model(model or ctx.get("model")),

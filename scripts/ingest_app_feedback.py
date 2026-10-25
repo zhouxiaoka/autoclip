@@ -14,11 +14,13 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -156,16 +158,42 @@ def known_ids_in(texts: list[str]) -> set[str]:
     return found
 
 
+_RETRY_STATUS = frozenset({429, 503})
+_RETRY_DELAYS = (0.4, 0.8, 1.6)
+
+
+def _retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float:
+    raw = exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
+    try:
+        value = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return _RETRY_DELAYS[attempt]
+    if 0 < value <= 8:
+        return value
+    return _RETRY_DELAYS[attempt]
+
+
 def _http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None = None, body: Any = None) -> Any:
     data = None
     hdrs = {"Accept": "application/json", **(headers or {})}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         hdrs.setdefault("Content-Type", "application/json")
-    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read().decode("utf-8")
-    return json.loads(raw) if raw else {}
+    attempt = 0
+    while True:
+        req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as exc:
+            payload = exc.read()
+            if exc.code not in _RETRY_STATUS or attempt >= len(_RETRY_DELAYS):
+                raise urllib.error.HTTPError(
+                    exc.url, exc.code, exc.reason, exc.headers, io.BytesIO(payload),
+                ) from None
+            time.sleep(_retry_delay(exc, attempt))
+            attempt += 1
 
 
 def fetch_events(days: int) -> dict[str, Any]:

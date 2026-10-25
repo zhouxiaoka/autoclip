@@ -6,9 +6,22 @@ import * as Sentry from '@sentry/react'
 
 const DSN = import.meta.env.VITE_PUBLIC_SENTRY_DSN
 const OPT_OUT_KEY = 'autoclip.crashReports.optOut'
+const DAILY_KEY = 'autoclip.sentry.daily'
+// Provider answers (401/429/503 and the same closed set the backend drops) stay in PostHog.
+const EXPECTED_HTTP = new Set([401, 402, 403, 404, 408, 409, 429, 500, 502, 503, 504])
+const EXPECTED_UPSTREAM = new Set([
+  'invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found',
+  'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'output_truncated',
+])
+// Per device, per UTC day: 15 at full fidelity, then 1 in 10, hard stop at 40.
+const DAILY_FULL = 15
+const DAILY_CAP = 40
+const DAILY_SAMPLE_EVERY = 10
 
 let initialized = false
 let preferenceOverride: boolean | undefined
+let memoryDay = ''
+let memorySent = 0
 const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
 let pendingUserId: string | null = null
 
@@ -41,6 +54,43 @@ function isPackagedDesktop(): boolean {
     typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
 }
 
+function providerExpected(tags: { http_status?: unknown, upstream_error_type?: unknown } | undefined): boolean {
+  if (!tags) return false
+  const status = typeof tags.http_status === 'boolean' ? NaN : Number(tags.http_status)
+  if (EXPECTED_HTTP.has(status)) return true
+  return EXPECTED_UPSTREAM.has(String(tags.upstream_error_type || ''))
+}
+
+function sampledIn(eventId: string | undefined): boolean {
+  const hex = String(eventId || '').replace(/-/g, '')
+  if (!/^[0-9a-fA-F]+$/.test(hex)) return false
+  try {
+    return Number(BigInt(`0x${hex}`) % BigInt(DAILY_SAMPLE_EVERY)) === 0
+  } catch {
+    return false
+  }
+}
+
+function dailyAllows(eventId: string | undefined): boolean {
+  const day = new Date().toISOString().slice(0, 10)
+  let stored = 0
+  let readable = false
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DAILY_KEY) || 'null')
+    readable = true
+    if (parsed && parsed.day === day && Number.isFinite(parsed.sent) && parsed.sent >= 0) {
+      stored = Math.floor(parsed.sent)
+    }
+  } catch { /* blocked storage keeps the in-memory count */ }
+  const sent = memoryDay === day ? Math.max(stored, memorySent) : (readable ? stored : 0)
+  if (sent >= DAILY_CAP) return false
+  if (sent >= DAILY_FULL && !sampledIn(eventId)) return false
+  memoryDay = day
+  memorySent = sent + 1
+  try { localStorage.setItem(DAILY_KEY, JSON.stringify({ day, sent: memorySent })) } catch { /* memory only */ }
+  return true
+}
+
 export function initSentry(): void {
   if (initialized) return
   if (!DSN) {
@@ -71,6 +121,8 @@ export function initSentry(): void {
     maxBreadcrumbs: 0,
     beforeSend(event) {
       if (!isCrashReportsEnabled()) return null
+      if (providerExpected(event.tags)) return null
+      if (!dailyAllows(event.event_id)) return null
       // An allowlist avoids leaking request bodies, console text or exception
       // messages containing subtitles/paths. Preserve debug IDs for source maps.
       const userId = event.user && typeof event.user.id === 'string' ? event.user.id : undefined
