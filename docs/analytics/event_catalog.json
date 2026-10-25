@@ -88,6 +88,7 @@
       "subtitle_setup",
       "timeline_empty",
       "source_blocked",
+      "source_not_found",
       "source_too_short",
       "no_complete_version",
       "source_no_audio",
@@ -276,6 +277,7 @@
     ],
     "environment_error_codes": [
       "source_blocked",
+      "source_not_found",
       "service_restarted"
     ],
     "success_rate_v4": {
@@ -302,7 +304,8 @@
         "source_too_short",
         "source_no_audio",
         "source_unreadable",
-        "source_blocked"
+        "source_blocked",
+        "source_not_found"
       ],
       "product_failure_codes": [
         "whisper_not_installed",

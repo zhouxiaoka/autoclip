@@ -108,7 +108,7 @@ def effective():
     try:
         settings = ai.load()
     except Exception:
-        raise UserFacingError('已保存的模型配置需要修复，请到「设置 → 模型」修复并保存后再生成。') from None
+        raise UserFacingError('已保存的模型配置需要修复，请到「设置 → 服务商与模型」修复并保存后再生成。') from None
     if settings:
         endpoint = ai.vision_endpoint(settings)
         binding = settings.vision or settings.analysis

@@ -181,7 +181,7 @@ multiIf(
 | `output_truncated` | 计入 | 计入 |
 | `unknown` | 计入 | 计入 |
 
-**不要**把 `source_blocked`（B 站 403）、`source_too_short`、`source_no_audio` 标成 `upstream_error_type`。
+**不要**把 `source_blocked`（B 站 403，或私密 / 地区限制 / 人机验证）、`source_not_found`（链接不存在或已删除）、`source_too_short`、`source_no_audio` 标成 `upstream_error_type`。
 
 ### 4.3 `error_code` 与归因
 
@@ -190,7 +190,7 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率 **v
 | 归因 | 包含 | 全量口径分母 | 产品口径分母 |
 | --- | --- | --- | --- |
 | `user_both`（`user_hard`） | `outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)` | **剔除** | **剔除** |
-| `user_product_only`（`user_x`） | `error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)` | 计入 | **剔除** |
+| `user_product_only`（`user_x`） | `error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked, source_not_found)` | 计入 | **剔除** |
 | `product` | 其余，**明确包括** `frame_extract_failed`（本地抽帧失败）、`store_lock_timeout`（本机项目存储锁等待超时，本地原因、用户修不了，不记到服务商，不是模型 `timeout`）、`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`，以及 `unexpected`、`rate_limited`、`timeout`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 等 | 计入 | 计入 |
 
 `outcome_canon = success` 一律算成功，忽略错误字段。查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验只用 `event_catalog.json` → `attribution.success_rate_v4`（`overall_excluded_*`、`product_extra_excluded_error_codes`、`product_failure_codes`、`flow_definition`）；同文件的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes` 是 v4 之前的口径，仅留作历史，**不得**再用于成功率。
@@ -383,7 +383,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 - **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
 - **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。表 `version_releases` 里的版本另加发布时间下限：`{release_1_5_7}` 由执行 Promote 的人在贴 SQL 时填写。GitHub Release `published_at`（UTC，形如 `YYYY-MM-DDTHH:MM:SSZ`）写成 `'YYYY-MM-DD HH:MM:SS'`（去掉 `T` 和 `Z`，含该时刻）；空字符串则该版本全部不计入。1.5.6 及更早不在表里。
 - **全量成功率** 分母只剔除明确的用户行为：`outcome = cancelled`；`error_code ∈ (authentication, llm_auth_invalid, invalid_key, insufficient_quota, llm_not_configured, cancelled, user_cancelled)`；`upstream_error_type ∈ (invalid_key, insufficient_quota, permission_denied)`。
-- **产品成功率** 在全量基础上再剔除：`error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)`。
+- **产品成功率** 在全量基础上再剔除：`error_code ∈ (connection, source_too_short, source_no_audio, source_unreadable, source_blocked, source_not_found)`。
 - 两个口径都算 **产品失败**（不剔除）：`whisper_not_installed`、`service_restarted`、`model_not_found`、`bad_endpoint`。
 - 每个口径都报 **按次** 与 **按流程** 两个率；`outcome_canon = success` 一律算成功，忽略错误字段。
 

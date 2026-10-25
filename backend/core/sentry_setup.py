@@ -27,7 +27,7 @@ from backend.core.failure_codes import sentry_codes
 STUDIO_ERROR_CODES = sentry_codes()
 # Expected failures caused by the environment or by the user's own source (too short,
 # no audio track): never sent to Sentry, still recorded locally with their code.
-UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_too_short", "source_no_audio", "service_restarted"}
+UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_not_found", "source_too_short", "source_no_audio", "service_restarted"}
 # Legacy import task kinds (backend.tasks.import_processing) with the same meaning.
 UNREPORTED_IMPORT_FAILURE_KINDS = {"source-input"}
 PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE"}

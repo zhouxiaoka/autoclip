@@ -411,7 +411,7 @@ def test_visual_mode_without_vision_saves_but_blocks_generation(monkeypatch):
     loaded = ai.load()
     monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
     assert readiness.report()['checks']['visual']['code'] == 'vision_unsupported'
-    with pytest.raises(ValueError, match='设置 → 模型'):
+    with pytest.raises(ValueError, match='设置 → 服务商与模型'):
         readiness.ensure_analysis_usable()
 
 

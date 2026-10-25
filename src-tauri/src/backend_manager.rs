@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -36,6 +37,17 @@ pub struct BackendManager {
     /// so an unacknowledged shutdown intent can be recorded for exactly this backend.
     instance_id: Mutex<String>,
     marker_dir: Mutex<Option<PathBuf>>,
+    /// Set for quit, tray stop, update shutdown, and the stop half of a manual restart.
+    /// A hard kill leaves this false so the health loop can launch the backend again.
+    intentional_stop: Arc<AtomicBool>,
+    /// Crash-loop cap. Reset once a relaunched process stays up through a health tick.
+    crash_restarts: Arc<AtomicU8>,
+    /// Health-loop recovery calls `start` with this set, so an intentional stop that
+    /// lands first is not cleared and does not spawn another process.
+    crash_recovery: Arc<AtomicBool>,
+    /// Bumped on every launch that gets past the early returns. A health loop from an
+    /// older launch must not clear status or start another process after this moves.
+    generation: Arc<AtomicU64>,
     #[cfg(windows)]
     job: Mutex<Option<crate::windows_job::BackendJob>>,
 }
@@ -54,16 +66,30 @@ impl BackendManager {
             local_token: Mutex::new(String::new()),
             instance_id: Mutex::new(String::new()),
             marker_dir: Mutex::new(None),
+            intentional_stop: Arc::new(AtomicBool::new(false)),
+            crash_restarts: Arc::new(AtomicU8::new(0)),
+            crash_recovery: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(AtomicU64::new(0)),
             #[cfg(windows)]
             job: Mutex::new(None),
         }
     }
 
     pub fn start(&self, app_handle: AppHandle) -> Result<(), String> {
+        let recovering = self.crash_recovery.swap(false, Ordering::SeqCst);
         let mut status = self.status.lock().unwrap();
+        // Re-check under the same lock stop_with_intent holds after it sets the flag.
+        if recovering && self.intentional_stop.load(Ordering::SeqCst) {
+            return Ok(());
+        }
         if status.is_running {
             return Err("后端服务已在运行".to_string());
         }
+        if !recovering {
+            self.intentional_stop.store(false, Ordering::SeqCst);
+            self.crash_restarts.store(0, Ordering::SeqCst);
+        }
+        let launch_generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
         // 启动后端服务
         let launch = self.get_backend_launch(&app_handle)?;
@@ -188,9 +214,22 @@ impl BackendManager {
                 let status_clone = self.status.clone();
                 let process_clone = self.process.clone();
                 let app_handle_clone = app_handle.clone();
+                let intentional = self.intentional_stop.clone();
+                let crash_restarts = self.crash_restarts.clone();
+                let crash_recovery = self.crash_recovery.clone();
+                let generation = self.generation.clone();
 
                 thread::spawn(move || {
-                    Self::read_port_and_health_check(status_clone, process_clone, app_handle_clone);
+                    Self::read_port_and_health_check(
+                        status_clone,
+                        process_clone,
+                        app_handle_clone,
+                        intentional,
+                        crash_restarts,
+                        crash_recovery,
+                        generation,
+                        launch_generation,
+                    );
                 });
 
                 Ok(())
@@ -206,6 +245,8 @@ impl BackendManager {
     /// R16 #42: tell the backend why it is stopping (it writes its marker and answers 200, waited
     /// on for at most 3 s), then kill. A lost parent never comes through here.
     pub fn stop_with_intent(&self, intent: ShutdownIntent) -> Result<(), String> {
+        // Before the status lock, so a health-loop restart waiting on that lock sees the quit.
+        self.intentional_stop.store(true, Ordering::SeqCst);
         let mut status = self.status.lock().unwrap();
         let mut process = self.process.lock().unwrap();
         if status.port != 0 && process.as_mut().map_or(false, |c| matches!(c.try_wait(), Ok(None))) {
@@ -412,6 +453,11 @@ impl BackendManager {
         status: Arc<Mutex<BackendStatus>>,
         process: Arc<Mutex<Option<Child>>>,
         app_handle: AppHandle,
+        intentional_stop: Arc<AtomicBool>,
+        crash_restarts: Arc<AtomicU8>,
+        crash_recovery: Arc<AtomicBool>,
+        generation: Arc<AtomicU64>,
+        launch_generation: u64,
     ) {
         let (stdout, stderr) = {
             let mut process_guard = process.lock().unwrap();
@@ -431,9 +477,9 @@ impl BackendManager {
             });
         }
 
+        let mut emitted_started = false;
         if let Some(stdout) = stdout {
             let reader = BufReader::new(stdout);
-            let mut emitted_started = false;
 
             for line in reader.lines().flatten() {
                 println!("Backend output: {}", line);
@@ -457,8 +503,22 @@ impl BackendManager {
 
                             let status_health = status.clone();
                             let process_health = process.clone();
+                            let app_health = app_handle.clone();
+                            let intentional_health = intentional_stop.clone();
+                            let restarts_health = crash_restarts.clone();
+                            let recovery_health = crash_recovery.clone();
+                            let generation_health = generation.clone();
                             thread::spawn(move || {
-                                Self::health_check_loop(status_health, process_health);
+                                Self::health_check_loop(
+                                    app_health,
+                                    status_health,
+                                    process_health,
+                                    intentional_health,
+                                    restarts_health,
+                                    recovery_health,
+                                    generation_health,
+                                    launch_generation,
+                                );
                             });
 
                             emitted_started = true;
@@ -467,11 +527,87 @@ impl BackendManager {
                 }
             }
         }
+        if !emitted_started {
+            Self::restart_if_unexpected_exit(
+                &app_handle,
+                &status,
+                &process,
+                &intentional_stop,
+                &crash_restarts,
+                &crash_recovery,
+                &generation,
+                launch_generation,
+            );
+        }
     }
 
-    fn health_check_loop(status: Arc<Mutex<BackendStatus>>, process: Arc<Mutex<Option<Child>>>) {
+    /// Process died before `PORT=` (or the health loop has not taken over). Same guard as a later crash.
+    fn restart_if_unexpected_exit(
+        app_handle: &AppHandle,
+        status: &Arc<Mutex<BackendStatus>>,
+        process: &Arc<Mutex<Option<Child>>>,
+        intentional_stop: &Arc<AtomicBool>,
+        crash_restarts: &Arc<AtomicU8>,
+        crash_recovery: &Arc<AtomicBool>,
+        generation: &Arc<AtomicU64>,
+        launch_generation: u64,
+    ) {
+        let exited = {
+            let mut process_guard = process.lock().unwrap();
+            if let Some(child) = process_guard.as_mut() {
+                match child.try_wait() {
+                    Ok(None) => false,
+                    _ => {
+                        *process_guard = None;
+                        true
+                    }
+                }
+            } else {
+                true
+            }
+        };
+        if !exited || launch_replaced(generation, launch_generation) {
+            return;
+        }
+        let already = crash_restarts.load(Ordering::SeqCst);
+        if !should_auto_restart(intentional_stop.load(Ordering::SeqCst), already) {
+            if !intentional_stop.load(Ordering::SeqCst) {
+                let _ = claim_dead_launch(status, generation, launch_generation);
+            }
+            return;
+        }
+        let delay = crash_restart_delay(already);
+        thread::sleep(delay);
+        if intentional_stop.load(Ordering::SeqCst) || launch_replaced(generation, launch_generation) {
+            return;
+        }
+        if !claim_dead_launch(status, generation, launch_generation) {
+            return;
+        }
+        crash_restarts.fetch_add(1, Ordering::SeqCst);
+        crash_recovery.store(true, Ordering::SeqCst);
+        match app_handle.state::<BackendManager>().start(app_handle.clone()) {
+            Ok(()) => {}
+            Err(error) if error.contains("已在运行") => {}
+            Err(error) => eprintln!("自动重启后端失败: {error}"),
+        }
+    }
+
+    fn health_check_loop(
+        app_handle: AppHandle,
+        status: Arc<Mutex<BackendStatus>>,
+        process: Arc<Mutex<Option<Child>>>,
+        intentional_stop: Arc<AtomicBool>,
+        crash_restarts: Arc<AtomicU8>,
+        crash_recovery: Arc<AtomicBool>,
+        generation: Arc<AtomicU64>,
+        launch_generation: u64,
+    ) {
         loop {
             thread::sleep(Duration::from_secs(5));
+            if launch_replaced(&generation, launch_generation) {
+                break;
+            }
 
             // 检查状态
             let should_continue = {
@@ -506,11 +642,40 @@ impl BackendManager {
             };
 
             if process_exited {
-                // 更新状态
-                let mut status_guard = status.lock().unwrap();
-                *status_guard = BackendStatus::default();
+                if launch_replaced(&generation, launch_generation) {
+                    break;
+                }
+                let already = crash_restarts.load(Ordering::SeqCst);
+                if !should_auto_restart(intentional_stop.load(Ordering::SeqCst), already) {
+                    if !intentional_stop.load(Ordering::SeqCst) {
+                        eprintln!("后端进程已退出，自动重启次数已用尽");
+                        let _ = claim_dead_launch(&status, &generation, launch_generation);
+                    }
+                    break;
+                }
+                let delay = crash_restart_delay(already);
+                eprintln!(
+                    "后端进程意外退出，{} 秒后自动重启（第 {} 次）",
+                    delay.as_secs(),
+                    already + 1
+                );
+                thread::sleep(delay);
+                if intentional_stop.load(Ordering::SeqCst) || launch_replaced(&generation, launch_generation) {
+                    break;
+                }
+                if !claim_dead_launch(&status, &generation, launch_generation) {
+                    break;
+                }
+                crash_restarts.fetch_add(1, Ordering::SeqCst);
+                crash_recovery.store(true, Ordering::SeqCst);
+                match app_handle.state::<BackendManager>().start(app_handle.clone()) {
+                    Ok(()) => {}
+                    Err(error) if error.contains("已在运行") => {}
+                    Err(error) => eprintln!("自动重启后端失败: {error}"),
+                }
                 break;
             }
+            crash_restarts.store(0, Ordering::SeqCst);
 
             // 健康检查
             let port = {
@@ -560,6 +725,36 @@ fn new_instance_id() -> Result<String, String> {
 
 pub(crate) fn intent_acknowledged(result: &std::io::Result<bool>) -> bool {
     matches!(result, Ok(true))
+}
+
+/// Unexpected exit only. Quit, tray stop, update shutdown, and a manual restart's stop do not.
+pub(crate) const MAX_CRASH_RESTARTS: u8 = 3;
+
+pub(crate) fn should_auto_restart(intentional_stop: bool, restarts_already: u8) -> bool {
+    !intentional_stop && restarts_already < MAX_CRASH_RESTARTS
+}
+
+fn launch_replaced(generation: &AtomicU64, launch_generation: u64) -> bool {
+    generation.load(Ordering::SeqCst) != launch_generation
+}
+
+/// Drop this launch's status only while it is still the current one.
+fn claim_dead_launch(
+    status: &Arc<Mutex<BackendStatus>>,
+    generation: &AtomicU64,
+    launch_generation: u64,
+) -> bool {
+    let mut status_guard = status.lock().unwrap();
+    if launch_replaced(generation, launch_generation) {
+        return false;
+    }
+    *status_guard = BackendStatus::default();
+    true
+}
+
+/// 1s, 2s, then 4s. `restarts_already` is how many relaunches already happened.
+pub(crate) fn crash_restart_delay(restarts_already: u8) -> Duration {
+    Duration::from_secs(1_u64 << u32::from(restarts_already.min(2)))
 }
 
 pub(crate) const SHUTDOWN_MARKER_DIR_ENV: &str = "AUTOCLIP_SHUTDOWN_MARKER_DIR";
@@ -613,7 +808,7 @@ pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownInt
 
 #[cfg(test)]
 mod shutdown_intent_tests {
-    use super::{intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_unacknowledged_intent, shutdown_marker_dir, ShutdownIntent, SHUTDOWN_MARKER_DIR_ENV};
+    use super::{crash_restart_delay, intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_unacknowledged_intent, should_auto_restart, shutdown_marker_dir, ShutdownIntent, MAX_CRASH_RESTARTS, SHUTDOWN_MARKER_DIR_ENV};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
@@ -751,5 +946,26 @@ mod shutdown_intent_tests {
         assert!(start.contains("*self.marker_dir.lock().unwrap() = markers;"));
         let stop = &src[src.find("pub fn stop_with_intent").unwrap()..src.find("pub fn restart").unwrap()];
         assert!(stop.contains("self.marker_dir.lock()"));
+    }
+
+    #[test]
+    fn unexpected_exit_restarts_and_intentional_stop_does_not() {
+        assert!(should_auto_restart(false, 0));
+        assert!(should_auto_restart(false, MAX_CRASH_RESTARTS - 1));
+        assert!(!should_auto_restart(true, 0));
+        assert!(!should_auto_restart(false, MAX_CRASH_RESTARTS));
+        assert_eq!(crash_restart_delay(0).as_secs(), 1);
+        assert_eq!(crash_restart_delay(1).as_secs(), 2);
+        assert_eq!(crash_restart_delay(2).as_secs(), 4);
+        assert_eq!(crash_restart_delay(9).as_secs(), 4);
+        let src = include_str!("backend_manager.rs");
+        let stop = &src[src.find("pub fn stop_with_intent").unwrap()..src.find("pub fn restart").unwrap()];
+        let flag = stop.find("intentional_stop.store(true").unwrap();
+        let notify = stop.find("notify_shutdown_intent(").unwrap();
+        assert!(flag < notify, "quit is recorded before the process is asked to exit");
+        assert!(src.contains("should_auto_restart(intentional_stop.load(Ordering::SeqCst), already)"));
+        assert!(src.contains("crash_recovery.swap(false, Ordering::SeqCst)"));
+        assert!(src.contains("launch_replaced(&generation, launch_generation)"));
+        assert!(src.contains("claim_dead_launch("));
     }
 }

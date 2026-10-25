@@ -34,7 +34,7 @@ class PipelineFailure(RuntimeError):
         # llm_not_configured：没有可用提供商 / 缺少 API Key
         # llm_auth_invalid：上游拒绝密钥或权限（401/403）
         # whisper_not_installed | whisper_install_failed | transcription_empty | subtitle_setup
-        # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 模型」）
+        # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 服务商与模型」）
         # source_too_short | source_no_audio：源视频本身不能走字幕路线（media_precheck），用户输入，不上报
         self.code = code
         # Fine-grained upstream kind (insufficient_quota / invalid_key / …). Not a studio
@@ -49,11 +49,11 @@ class PipelineFailure(RuntimeError):
         return f"{self.message} {self.hint}".strip()
 
 
-HINT_CHECK_LLM = "请到「设置 → 模型」检查提供商、API Key 与模型名，点「测试连接」确认后重试。"
+HINT_CHECK_LLM = "请到「设置 → 服务商与模型」检查提供商、API Key 与模型名，点「测试连接」确认后重试。"
 # 缺密钥 / 提供商不可用 / 连接测试失败：明确要自备 key，并指到设置里的「模型」。
 HINT_BRING_OWN_KEY = (
     "需要自备 API Key（本机 Ollama / LM Studio 则先启动服务）。"
-    "到「设置 → 模型」填写提供商、密钥和模型名，点「测试连接」后再试。"
+    "到「设置 → 服务商与模型」填写提供商、密钥和模型名，点「测试连接」后再试。"
     "密钥在该提供商的控制台申请，只保存在这台机器上。"
 )
 CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
@@ -89,8 +89,8 @@ def llm_key_failure(stage: str, message: str) -> PipelineFailure:
     return PipelineFailure(stage, message, HINT_BRING_OWN_KEY, code=CODE_LLM_NOT_CONFIGURED)
 
 
-HINT_SUBTITLE = "到「设置 → 转写」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。"
-HINT_LOWER_THRESHOLD = "到「设置 → 模型 → 最低评分阈值」调低后重试，或换一个更强的模型。"
+HINT_SUBTITLE = "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。"
+HINT_LOWER_THRESHOLD = "到「设置 → 服务商与模型 → 最低评分阈值」调低后重试，或换一个更强的模型。"
 HINT_CHECK_FFMPEG = "确认 ffmpeg 可用（桌面版内置；Docker / 脚本模式请检查 PATH），以及原视频文件完整可播放。"
 # Legacy fallback when a caller returns [] without Step 2 diagnostics.
 # The extractor itself distinguishes request, response and duration failures.
@@ -160,7 +160,7 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
         code = last["error_code"]
         kind = last.get("upstream_error_type") or ""
         hints = {
-            "authentication": "请检查「设置 → 模型」中的密钥、模型权限和提供商配置，再测试连接。",
+            "authentication": "请检查「设置 → 服务商与模型」中的密钥、模型权限和提供商配置，再测试连接。",
             "rate_limited": MODEL_CALL_MESSAGES["rate_limited"],
             "timeout": MODEL_CALL_MESSAGES["timeout"],
             "connection": MODEL_CALL_MESSAGES["connection"],
@@ -239,14 +239,14 @@ def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> Pip
         return PipelineFailure(
             stage,
             "没有字幕可分析：视频不带字幕，且 Whisper 上次安装没有成功。",
-            "到「设置 → 转写」重试安装，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」重试安装，或重新导入时带上 .srt 字幕。",
             code="whisper_install_failed",
         )
     if code == "sensevoice_not_ready":
         return PipelineFailure(
             stage,
             "没有字幕可分析：SenseVoice 本次没有生成可用字幕。",
-            "到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
+            "到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
             code="subtitle_setup",
         )
     if code == "cloud_not_configured":
@@ -259,7 +259,7 @@ def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> Pip
     return PipelineFailure(
         stage,
         "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
-        "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+        "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
         code="whisper_not_installed",
     )
 
@@ -273,7 +273,7 @@ def missing_subtitle_failure() -> PipelineFailure:
         return cloud_transcription_failure("本次未获得可用转写结果。")
     if settings and settings.transcription and settings.transcription.provider == 'sensevoice_local':
         return PipelineFailure('SUBTITLE', '没有字幕可分析：SenseVoice 本次没有生成可用字幕。',
-                               '到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。',
+                               '到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。',
                                code='subtitle_setup')
 
     status = whisper_runtime.get_status()
@@ -282,14 +282,14 @@ def missing_subtitle_failure() -> PipelineFailure:
         return PipelineFailure(
             "SUBTITLE",
             "没有字幕可分析：视频不带字幕，且 Whisper 上次安装没有成功。",
-            "到「设置 → 转写」重试安装，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」重试安装，或重新导入时带上 .srt 字幕。",
             code="whisper_install_failed",
         )
     if state != "installed":
         return PipelineFailure(
             "SUBTITLE",
             "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
-            "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
             code="whisper_not_installed",
         )
     return PipelineFailure(
@@ -301,16 +301,16 @@ def missing_subtitle_failure() -> PipelineFailure:
 
 
 def failure_from_speech_error(message: str) -> PipelineFailure:
-    """转写异常收成同一套失败码，不再把「设置 → 语音识别」和「设置 → 转写」叠在一起。"""
-    text = (message or "").strip().replace("设置 → 语音识别", "设置 → 转写")
+    """转写异常收成同一套失败码，不再把「设置 → 语音识别」和「设置 → 默认模型 → 语音转字幕」叠在一起。"""
+    text = (message or "").strip().replace("设置 → 语音识别", "设置 → 默认模型 → 语音转字幕").replace("设置 → 转写", "设置 → 默认模型 → 语音转字幕")
     from backend.pipeline import media_precheck
 
     if media_precheck.is_no_audio_text(text):
-        # 视频本身没有音轨：不是转写设置的问题，不要指到「设置 → 转写」。
+        # 视频本身没有音轨：不是转写设置的问题，不要指到「设置 → 默认模型 → 语音转字幕」。
         return media_precheck.no_audio_failure("SUBTITLE")
     if 'SenseVoice' in text:
         return PipelineFailure('SUBTITLE', text,
-                               '' if '设置 → 转写' in text else '到「设置 → 转写」检查 SenseVoiceSmall，或导入 .srt 字幕。',
+                               '' if '设置 → 默认模型 → 语音转字幕' in text else '到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall，或导入 .srt 字幕。',
                                code='subtitle_setup')
     from backend.services import whisper_runtime
 
@@ -322,7 +322,7 @@ def failure_from_speech_error(message: str) -> PipelineFailure:
         return PipelineFailure(
             "SUBTITLE",
             "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
-            "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
             code="whisper_not_installed",
         )
     if any(token in text for token in ("未识别出任何语音", "没有从这段视频", "可用语音")):
@@ -332,5 +332,5 @@ def failure_from_speech_error(message: str) -> PipelineFailure:
             "确认视频里有清晰人声后重试，或重新导入时带上 .srt 字幕。",
             code="transcription_empty",
         )
-    hint = "" if "设置 → 转写" in text else HINT_SUBTITLE
+    hint = "" if "设置 → 默认模型 → 语音转字幕" in text else HINT_SUBTITLE
     return PipelineFailure("SUBTITLE", text, hint, code="subtitle_setup")

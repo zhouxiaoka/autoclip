@@ -121,7 +121,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
     # the frozen identity, else the config actually being sent (never re-read settings).
     identity = config.get('identity') or sent_vision_identity(config)
     if not base or not model:
-        raise UserFacingError('当前模型只能处理文字，不能看画面。请到「设置 → 模型」换一个能看图的模型，或改用字幕分析。')
+        raise UserFacingError('当前模型只能处理文字，不能看画面。请到「设置 → 服务商与模型」换一个能看图的模型，或改用字幕分析。')
     from backend.core.llm_providers import asks_for_max_completion_tokens, disables_qwen_thinking, to_max_completion_tokens, token_param_kwargs
     from backend.core.model_recovery import provider_for_endpoint, remember_model, remembered_model, resolve_available_model
 

@@ -11,7 +11,7 @@ export type FailurePlan = { message: string; destination: string | null; buttons
 /** The failed step's state, computed once (code health): one message, each button at most once, explicit order.*/
 export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSettings: boolean): FailurePlan {
   const action = pageFailureAction(info)
-  if (action.kind === 'retry') return { message: llmFailureText(info.error, info.error_code), destination: null, buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [] }
+  if (action.kind === 'retry') return { message: llmFailureText(info.error, info.error_code, info.upstream_error_type), destination: null, buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [] }
   const resume = returnedFromSettings && canRetry  // back from a successful save: 「继续制作」 leads
   const buttons: FailureButton[] = [{ key: 'settings', label: '去设置', cta: !resume }]
   if (canRetry) buttons[resume ? 'unshift' : 'push']({ key: 'continue', label: '继续制作', cta: resume })

@@ -40,7 +40,7 @@ MODEL_ERROR_CODES = frozenset({"timeout", "connection", "authentication", "rate_
                                "invalid_response", "output_truncated", "refused", "llm_auth_invalid"})
 # Codes that are decisively LOCAL in any layer. Other non-model codes (``unexpected``, ``validation``...)
 # cannot decide: the walk looks past them.
-LOCAL_ERROR_CODES = frozenset({"source_blocked", "source_too_short", "source_no_audio", "source_unreadable",
+LOCAL_ERROR_CODES = frozenset({"source_blocked", "source_not_found", "source_too_short", "source_no_audio", "source_unreadable",
                                "service_restarted", "whisper_not_installed", "whisper_install_failed",
                                "transcription_empty", "subtitle_setup", "timeline_empty", "store_lock_timeout",
                                "frame_extract_failed", "llm_not_configured", "missing_resource"})

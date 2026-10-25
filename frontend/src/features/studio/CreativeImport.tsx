@@ -30,7 +30,7 @@ import './studio.css'
 import './quick-output.css'
 
 function issueCopy(item: ReadinessIssue) {
-  if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
+  if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
   if (item.code === 'whisper_installing') return t('正在安装本地转写…')
   if (item.code === 'whisper_not_installed') return t('本地转写还没安装。已有字幕可以直接继续。')
@@ -39,7 +39,7 @@ function issueCopy(item: ReadinessIssue) {
   if (item.code === 'whisper_model_failed') return t('转写模型下载失败，请重试。已有字幕可以直接继续。')
   if (item.code === 'sensevoice_not_ready') return t('SenseVoice 还没准备好。已有字幕可以直接继续。')
   if (item.code === 'cloud_not_configured') return t('云端转写还没配好。已有字幕可以直接继续。')
-  if (item.key === 'visual' && item.code === 'vision_unsupported') return t('画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型后再生成。')
+  if (item.key === 'visual' && item.code === 'vision_unsupported') return t('画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。')
   if (item.key === 'visual') return t('画面分析需要可用的视觉模型。')
   if (item.key === 'ffmpeg') return t('找不到 FFmpeg，暂时无法处理视频。')
   return t('导入条件还没准备好。')
@@ -75,11 +75,11 @@ function longFormNotice(durationSec: number | null, platforms: string[]) {
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
   if (reason === 'analysis') return readiness?.checks?.analysis?.code === 'validation_failed'
-    ? t('模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
+    ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
     : t('请先连接 AI 服务，再导入视频。')
   if (reason === 'transcription') return t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
   if (reason === 'visual') return readiness?.checks?.visual?.code === 'vision_unsupported'
-    ? t('画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型后再生成。')
+    ? t('画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。')
     : t('请先配好画面分析模型，再生成成片。')
   if (reason === 'ffmpeg') return t('找不到 FFmpeg，无法生成成片。')
   return ''

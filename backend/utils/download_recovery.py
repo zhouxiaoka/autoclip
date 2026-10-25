@@ -11,8 +11,35 @@ COOKIE_ACCESS_HINT = '无法读取浏览器登录信息。请关闭浏览器后�
 # 也是前端 i18n 的 key（8 个 locale），改动时同步 frontend/src/i18n/locales/*.json。
 SOURCE_BLOCKED_HINT = '视频网站拒绝了这次下载（HTTP 403/412/429），常见于当前网络被网站风控或请求过于频繁。请稍后换个网络（如手机热点）重试，或在导入时选择已登录的浏览器读取 Cookie。'
 SOURCE_BLOCKED_CODE = 'source_blocked'
+# 找不到片源。也是前端 i18n 的 key，改动时同步 locales。不要带 URL、状态码或 yt-dlp 原文。
+SOURCE_NOT_FOUND_HINT = '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。'
+SOURCE_NOT_FOUND_CODE = 'source_not_found'
+# 私密、地区/年龄限制、版权或人机验证。仍用 source_blocked，但不用 403/412/429 那句（这里没有那些状态码）。
+SOURCE_ACCESS_HINT = '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。'
 # yt-dlp: "Unable to download webpage: HTTP Error 412: Precondition Failed"
+# 4120 不是 412：状态码后面必须是词边界。
 _BLOCKED_HTTP_ERROR = re.compile(r'\bhttp error (403|412|429)\b')
+_ACCESS_BLOCKED = re.compile(
+    r"sign in to confirm you.?re not a bot"
+    r"|not a bot"
+    r"|private video"
+    r"|video is private"
+    r"|not available in your country"
+    r"|geo[- ]restrict"
+    r"|copyright"
+    r"|age[- ]restricted"
+    r"|confirm your age"
+    r"|members[- ]only"
+    r"|join this channel"
+)
+_NOT_FOUND = re.compile(
+    r"\bhttp error (404|410)\b"
+    r"|video unavailable"
+    r"|has been removed"
+    r"|does not exist"
+    r"|no longer available"
+    r"|account associated with this video has been terminated"
+)
 
 
 def _browser_cookie_permission_failure(error):
@@ -75,4 +102,21 @@ def download_with_recovery(url: str, options: dict):
                 # hint, never yt-dlp's English text, URL or response.
                 raise PipelineFailure('INGEST', SOURCE_BLOCKED_HINT, code=SOURCE_BLOCKED_CODE,
                                       http_status=int(blocked[1])) from None
+            kind = _link_failure(text)
+            if kind:
+                code, hint = kind
+                raise PipelineFailure('INGEST', hint, code=code) from None
             raise
+
+
+def _link_failure(text: str):
+    """A missing or gated link that is not HTTP 403/412/429.
+
+    Access rules win over the generic "video unavailable" phrase. Nothing here
+    copies the extractor text, the URL, or a site status into the user sentence.
+    """
+    if _ACCESS_BLOCKED.search(text):
+        return SOURCE_BLOCKED_CODE, SOURCE_ACCESS_HINT
+    if _NOT_FOUND.search(text):
+        return SOURCE_NOT_FOUND_CODE, SOURCE_NOT_FOUND_HINT
+    return None

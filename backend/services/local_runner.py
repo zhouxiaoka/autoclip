@@ -164,7 +164,7 @@ def configure_llm(override: LLMOverride) -> Dict[str, Any]:
     if not info.get("available"):
         raise RuntimeError(
             f"LLM 提供商 {info.get('provider')} 未就绪：需要自备 API Key（或本机服务地址）。"
-            f" 用 --api-key / --base-url 指定，或到桌面应用「设置 → 模型」填写后点测试连接。"
+            f" 用 --api-key / --base-url 指定，或到桌面应用「设置 → 服务商与模型」填写后点测试连接。"
         )
     return info
 
@@ -178,7 +178,7 @@ def check_llm_connection() -> Dict[str, Any]:
         return {
             "ok": False,
             **info,
-            "error": "未配置 API Key。需要自备密钥，到「设置 → 模型」填写提供商、密钥和模型名后再测试连接。",
+            "error": "未配置 API Key。需要自备密钥，到「设置 → 服务商与模型」填写提供商、密钥和模型名后再测试连接。",
         }
     base_url = info.get("base_url")
     if base_url:
@@ -200,7 +200,7 @@ def check_llm_connection() -> Dict[str, Any]:
         return {
             "ok": ok,
             **info,
-            "error": None if ok else "连接测试失败。请到「设置 → 模型」核对自备的密钥和模型名后再试。",
+            "error": None if ok else "连接测试失败。请到「设置 → 服务商与模型」核对自备的密钥和模型名后再试。",
             **({"context_hint": hint} if hint else {}),
         }
     except Exception as e:  # noqa: BLE001

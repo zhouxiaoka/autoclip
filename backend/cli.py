@@ -335,7 +335,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(_dim(f"数据目录 {rep['data_dir']} · Python {rep['python']}"))
     line(rep["ffmpeg"]["ok"], "ffmpeg", rep["ffmpeg"].get("path") or rep["ffmpeg"].get("error", ""))
     w = rep["whisper"]
-    line(w["ok"], "whisper", ("faster-whisper 已安装" if w["ok"] else "未安装（无字幕的视频需要；桌面应用 设置 → 转写 一键安装）"))
+    line(w["ok"], "whisper", ("faster-whisper 已安装" if w["ok"] else "未安装（无字幕的视频需要；桌面应用 设置 → 默认模型 → 语音转字幕 一键安装）"))
     llm = rep["llm"]
     llm_desc = f"{llm.get('provider')} · {llm.get('model')}" + (f" · {llm['base_url']}" if llm.get("base_url") else "")
     line(llm["ok"], "模型", llm_desc + ("" if llm["ok"] else f"  {_dim(llm.get('error') or '')}"))

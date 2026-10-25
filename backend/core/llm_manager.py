@@ -212,7 +212,7 @@ class LLMManager:
         try:
             configured = ai.load()
         except Exception:
-            raise ValueError('已保存的模型配置需要修复，请到「设置 → 模型」修复并保存后再生成。') from None
+            raise ValueError('已保存的模型配置需要修复，请到「设置 → 服务商与模型」修复并保存后再生成。') from None
         if configured is not None:
             binding = ai.require_analysis(configured)
             connection = ai.connection_for(configured, binding)
@@ -579,7 +579,7 @@ class LLMManager:
             logger.info("LLM 缓存命中")
             return cache_path.read_text(encoding="utf-8")
         if not provider:
-            raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
+            raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 服务商与模型」填写")
 
         saved = str(info.get("model") or getattr(provider, "model_name", "") or "").strip()
         asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved

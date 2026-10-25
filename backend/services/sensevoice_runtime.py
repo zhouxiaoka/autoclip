@@ -154,7 +154,7 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
             raise  # Preserve the transcription timeout classification.
         if completed.returncode:
             _log_subprocess_failure(f'worker (exit={completed.returncode})', log)
-            raise RuntimeError('SenseVoice 模型运行失败，请到「设置 → 转写」重新准备模型；仍失败时附上脱敏日志')
+            raise RuntimeError('SenseVoice 模型运行失败，请到「设置 → 默认模型 → 语音转字幕」重新准备模型；仍失败时附上脱敏日志')
 
 
 def _installation_command(runtime):
@@ -254,7 +254,7 @@ def transcribe(video, output=None, language='auto', timeout=0, *, deny_network=F
     try:
         with operation(), tempfile.TemporaryDirectory(prefix='autoclip-sensevoice-') as temporary:
             if status()['status'] != 'ready':
-                raise RuntimeError('SenseVoice 尚未就绪，请到「设置 → 转写」准备 SenseVoiceSmall 模型')
+                raise RuntimeError('SenseVoice 尚未就绪，请到「设置 → 默认模型 → 语音转字幕」准备 SenseVoiceSmall 模型')
             audio, result = Path(temporary) / 'audio.wav', Path(temporary) / 'result.json'
             extracted = subprocess.run([get_ffmpeg_path(), '-nostdin', '-v', 'error', '-y', '-i', str(video),
                                         '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(audio)],

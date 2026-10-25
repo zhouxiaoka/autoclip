@@ -177,10 +177,10 @@ def test_d5_validation_handler_wipes_secret_loc_string():
 def test_d6_http_exception_keeps_top_level_detail():
     from backend.core.error_middleware import handle_http_exception
 
-    resp = handle_http_exception(HTTPException(status_code=400, detail="请到「设置 → 模型」改密钥"), None)
+    resp = handle_http_exception(HTTPException(status_code=400, detail="请到「设置 → 服务商与模型」改密钥"), None)
     payload = json.loads(resp.body)
-    assert payload["detail"] == "请到「设置 → 模型」改密钥"
-    assert payload["error"]["message"] == "请到「设置 → 模型」改密钥"
+    assert payload["detail"] == "请到「设置 → 服务商与模型」改密钥"
+    assert payload["error"]["message"] == "请到「设置 → 服务商与模型」改密钥"
 
 
 def test_d6_error_text_reads_detail_and_envelope():

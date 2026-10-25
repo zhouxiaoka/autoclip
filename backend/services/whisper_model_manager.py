@@ -55,7 +55,7 @@ def _source_file() -> Path:
 
 
 def saved_model_source() -> str:
-    """The choice from 设置 → 转写 → 模型下载源 (E3). Default auto."""
+    """The choice from 设置 → 默认模型 → 语音转字幕 → 模型下载源 (E3). Default auto."""
     try:
         import json
         value = str(json.loads(_source_file().read_text(encoding="utf-8")).get("source", "auto")).lower()
@@ -142,7 +142,7 @@ WHISPER_DOWNLOAD_ERROR_CODE = "whisper_download_failed"
 # User-facing download failure status API must never echo raw exception text
 # (URLs, query tokens, auth). Full detail stays in logs only.
 WHISPER_DOWNLOAD_USER_ERROR = (
-    "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，"
+    "Whisper 模型下载失败。请检查网络后到「设置 → 默认模型 → 语音转字幕」重新下载，"
     "或在下载源中改用 hf-mirror 镜像。"
 )
 # Sentry tag for a download that has reached the error state. The UI keeps
