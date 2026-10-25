@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import re
 
-from backend.services.studio.caption_layout import lines_for, page_screens, width
+from backend.services.studio.caption_layout import NO_LINE_START, display_text, lines_for, page_screens, width
 from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
@@ -525,7 +525,7 @@ def _wrap_units(text: str, limit: float, emphasis: str = '') -> list[str]:
             penalty = (limit - size) ** 2 * 0.2
             if size < 3:
                 penalty += 40
-            if chunk[:1] in _LEAD:
+            if chunk[:1] in _LEAD or chunk[:1] in NO_LINE_START:
                 penalty += 30
             if begin and crosses_word(''.join(units[:begin]), ''.join(units[begin:])):
                 penalty += 25
@@ -579,6 +579,23 @@ def _merge_isolated_emphasis(pieces: list[str], emphasis: str, limit: float) -> 
     return merged
 
 
+def _no_leading_closer(pieces: list[str]) -> list[str]:
+    """Don't start a line with ，。！？. The mark stays on the previous line."""
+    fixed: list[str] = []
+    for piece in pieces:
+        if fixed and piece and piece[0] in NO_LINE_START:
+            take = 0
+            while take < len(piece) and piece[take] in NO_LINE_START:
+                take += 1
+            fixed[-1] += piece[:take]
+            rest = piece[take:]
+            if rest:
+                fixed.append(rest)
+            continue
+        fixed.append(piece)
+    return [piece for piece in fixed if piece]
+
+
 def _no_leading_particle(pieces: list[str]) -> list[str]:
     """Don't start a line with 的/了/吗. The particle stays on the previous line."""
     fixed: list[str] = []
@@ -598,14 +615,14 @@ def _no_leading_particle(pieces: list[str]) -> list[str]:
 
 def _phrases(text: str, limit: float, emphasis: str = '') -> list[str]:
     """Short single-line pieces. Trailing punctuation is dropped, the same way the preview does."""
-    cleaned = str(text or '').strip().strip(_PUNCT).strip()
+    cleaned = display_text(text).strip(_PUNCT).strip()
     if not cleaned:
         return []
     parts = [part.strip() for part in re.split(r'[，。、！？：；,.!?]+', cleaned) if part.strip()]
     pieces: list[str] = []
     for part in parts:
         pieces.extend(_wrap_units(part, limit, emphasis))
-    pieces = _no_leading_particle(_merge_isolated_emphasis(pieces, emphasis, limit))
+    pieces = _no_leading_closer(_no_leading_particle(_merge_isolated_emphasis(pieces, emphasis, limit)))
     return pieces or [cleaned]
 
 
@@ -1434,11 +1451,11 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     roster = [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])]
     rows = _transcript_rows(transcript)
     for cue in cues:
-        text = str(_get(cue, 'text', '')).strip()
+        text = display_text(str(_get(cue, 'text', '')).strip())
         if not text:
             continue
         phrase = _cue_phrase(cue, text, emphasis)
-        raw_original = str(_get(cue, 'original', '') or '')
+        raw_original = display_text(str(_get(cue, 'original', '') or ''))
         # The preview keeps the whole English sentence on one line and shrinks it. The template trims what still overflows.
         original = ' '.join(raw_original.split()) if (template or '') in HTML_TEMPLATE_IDS else _source_line(raw_original, source_limit)
         speaker = _agree_speaker(

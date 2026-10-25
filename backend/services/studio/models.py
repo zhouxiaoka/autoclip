@@ -232,6 +232,7 @@ class DuplicateDraft(BaseModel):
 
 class ExportDraftRequest(BaseModel):
     revision: int = Field(ge=1)
+    variant_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
 
 
 class BrandingOptions(BaseModel):

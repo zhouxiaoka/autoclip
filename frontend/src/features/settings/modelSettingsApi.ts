@@ -29,6 +29,7 @@ export interface ModelSettings {
   version: 1
   saved?: boolean
   migration_warnings?: string[]
+  model_substitutions?: { purpose: string; saved_model: string; replacement: string }[]
   catalog_version?: number
   preset_update_available?: boolean
   seen_notices?: string[]

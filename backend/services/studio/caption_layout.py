@@ -15,6 +15,32 @@ CJK = re.compile(r'[　-〿㐀-鿿＀-￯]')
 CLAUSE = re.compile(r'[^，。！？!?；;、,：:]+[，。！？!?；;、,：:]*')
 AFTER = set('的了着过地得们吗呢吧啊')
 BEFORE = set('和与及在把被就而但又还也都让对从向为')
+# 避头尾: a line does not open on a closer, or end on an opener.
+NO_LINE_START = frozenset('，。！？、；：,.!?;:」』）)]}〉》】')
+NO_LINE_END = frozenset('「『（([〈《【')
+# English breaks avoid leaving a function word alone at the end of a line.
+_FUNCTION = frozenset({'a', 'an', 'the', 'of', 'to', 'and', 'or', 'in', 'on', 'for', 'at', 'by', 'as', 'from'})
+_SPEAKER_MARK = re.compile(r'^(?:>>\s*)+')
+_FILLER = re.compile(r'(?i)(?<![A-Za-z])(?:uh+|um+|erm)(?![A-Za-z])')
+
+
+def display_text(text: str) -> str:
+    """Caption text as burned. Speaker turns stay in the transcript; fillers are not words."""
+    cleaned = _SPEAKER_MARK.sub('', text or '')
+    cleaned = _FILLER.sub(' ', cleaned)
+    cleaned = re.sub(r'[ \t]+', ' ', cleaned)
+    cleaned = re.sub(r'\s+([，。！？、；：,.!?;:])', r'\1', cleaned)
+    return cleaned.strip(' ,')
+
+
+def _word_before(text: str, index: int) -> str:
+    end = index
+    while end > 0 and text[end - 1] == ' ':
+        end -= 1
+    start = end
+    while start > 0 and text[start - 1].isascii() and (text[start - 1].isalnum() or text[start - 1] == "'"):
+        start -= 1
+    return text[start:end].lower()
 
 
 def width(text: str) -> float:
@@ -29,8 +55,10 @@ def _cut(text: str, limit: float) -> int:
         if acc > limit:
             break
         nxt = text[i + 1]
+        if nxt in NO_LINE_START or ch in NO_LINE_END:
+            continue
         if ch == ' ':
-            rank = 0
+            rank = 5 if _word_before(text, i) in _FUNCTION else 0
         elif ch in AFTER or nxt in BEFORE:
             rank = 1
         elif CJK.match(ch) and CJK.match(nxt):
@@ -67,7 +95,7 @@ def lines_for(text: str, line_limit: float) -> list[str]:
             lines[-1] = lines[-1] + joiner + piece
         else:
             lines.append(piece)
-    return [line for line in lines if line]
+    return _avoid_orphan(_kinsoku([line for line in lines if line], line_limit), line_limit)
 
 
 def split_screens(text: str, line_limit: float) -> list[str]:
@@ -134,7 +162,7 @@ def page_lines(text: str, line_limit: float) -> list[str]:
     if not covered:
         return _hard_lines(text, line_limit)
     rendered = [text[start:end] for start, end in lines]
-    return _attach_break_spaces(rendered, line_limit)
+    return _kinsoku(_attach_break_spaces(rendered, line_limit), line_limit)
 
 
 def _hard_lines(text: str, line_limit: float) -> list[str]:
@@ -168,6 +196,54 @@ def _attach_break_spaces(lines: list[str], line_limit: float) -> list[str]:
             out[index - 1] += moved
             out[index] = out[index][spaces:]
     return [line for line in out if line]
+
+
+def _kinsoku(lines: list[str], line_limit: float) -> list[str]:
+    """Move a closer onto the previous line, and an opener onto the next, when it still fits."""
+    out = [line for line in lines if line]
+    index = 1
+    while index < len(out):
+        line = out[index]
+        if line and line[0] in NO_LINE_START:
+            take = 0
+            while take < len(line) and line[take] in NO_LINE_START:
+                take += 1
+            chunk = line[:take]
+            if width(out[index - 1] + chunk) <= line_limit + 1e-6:
+                out[index - 1] += chunk
+                out[index] = line[take:]
+                if not out[index]:
+                    out.pop(index)
+                    continue
+                continue
+        if out[index - 1] and out[index - 1][-1] in NO_LINE_END:
+            opener = out[index - 1][-1]
+            if width(opener + out[index]) <= line_limit + 1e-6:
+                out[index - 1] = out[index - 1][:-1]
+                out[index] = opener + out[index]
+                if not out[index - 1]:
+                    out.pop(index - 1)
+                    continue
+                continue
+        index += 1
+    return [line for line in out if line]
+
+
+def _avoid_orphan(lines: list[str], line_limit: float) -> list[str]:
+    """A one-word English tail joins a word from the line above when both still fit."""
+    if len(lines) < 2:
+        return lines
+    out = list(lines)
+    last_words = out[-1].split()
+    prev_words = out[-2].split()
+    if len(last_words) != 1 or not last_words[0].isascii() or len(prev_words) < 2:
+        return out
+    new_prev = ' '.join(prev_words[:-1])
+    new_last = f'{prev_words[-1]} {out[-1].strip()}'.strip()
+    if width(new_prev) <= line_limit + 1e-6 and width(new_last) <= line_limit + 1e-6:
+        out[-2] = new_prev
+        out[-1] = new_last
+    return out
 
 
 def page_screens(text: str, line_limit: float) -> list[str]:

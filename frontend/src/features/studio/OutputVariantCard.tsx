@@ -62,7 +62,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
       {failed && <p className="studio-output-hint studio-error">{t(variant.error || job?.error || '这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
-        {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}
+        {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {onDemand && <Btn variant="text" onClick={onProduce}>{t('生成这条')}</Btn>}
         {completed && variant.render_job_id && <Btn variant="text" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}

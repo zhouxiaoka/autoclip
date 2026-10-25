@@ -527,6 +527,14 @@ def public(settings: ModelSettings) -> dict:
             value['transcription'] = Transcription().model_dump()
             value.setdefault('migration_warnings', []).append('transcription_configuration_invalid')
     value['saved'] = path().exists() and 'settings_configuration_invalid' not in settings._migration_warnings
+    if settings.analysis and settings.analysis.model:
+        from backend.core.model_recovery import substitution_notices
+        pending = [
+            item for item in substitution_notices('analysis')
+            if item['saved_model'] == settings.analysis.model and item['replacement'] != settings.analysis.model
+        ]
+        if pending:
+            value['model_substitutions'] = pending
     for c in value['connections']:
         key = c.pop('api_key') or ''
         c['has_key'] = bool(key)

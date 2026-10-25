@@ -150,6 +150,9 @@ def test_saved_dead_analysis_model_retries_once_through_call_with_retry(tmp_path
     assert [item.get("model") for item in succeeded] == [ALT, ALT]
     assert succeeded[0]["retry_count"] == 1
     assert succeeded[1].get("retry_count", 0) == 0
+    notice = ai.public(ai.load())["model_substitutions"]
+    assert notice == [{"purpose": "analysis", "saved_model": DEAD, "replacement": ALT}]
+    assert SECRET not in json.dumps(notice)
 
 
 def test_api_model_name_uses_the_same_analysis_substitute(tmp_path, monkeypatch, caplog):

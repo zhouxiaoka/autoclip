@@ -347,6 +347,8 @@ def test_fallback_emphasis_uses_whole_words_and_an_empty_deck_stays_empty():
 def test_progress_bar_is_a_filter_not_an_overlay_frame():
     from backend.services.studio.packaging_html import composite_tail
     graph, label = composite_tail('base', 1, 1080, 1920, '', template='street', offset=12.5, total=100)
+    assert 'overlay=0:0:format=yuv420:eof_action=repeat[html]' in graph
+    assert 'overlay=0:0:format=yuv420:shortest=1' not in graph
     assert label == 'paced'
     assert "scale=w='max(2\\,min(1080\\,2*trunc(1080*(t+12.500)/100.000/2)))':h=12:eval=frame" in graph
     assert 'overlay=x=0:y=1908' in graph and '0xD7FF3A' in graph

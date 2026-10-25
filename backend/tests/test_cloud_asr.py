@@ -25,6 +25,59 @@ def test_cloud_asr_http_error_keeps_status_and_type(status, upstream, code):
     assert ctx == {'failure_stage': 'subtitle', 'http_status': status, 'upstream_error_type': upstream}
 
 
+def test_sse_errors_name_the_cause_and_long_audio_stays_under_three_minutes(tmp_path, monkeypatch):
+    import wave
+    from types import SimpleNamespace
+
+    from backend.services import cloud_transcription as asr
+
+    busy = asr._sse_failure({'code': 'Throttling.RateQuota', 'message': 'raw-secret'})
+    assert busy.upstream_error_type == 'rate_limited' and asr._retryable(busy)
+    assert '繁忙' in str(busy) and 'raw-secret' not in str(busy)
+    down = asr._sse_failure({'code': 'InternalError', 'message': 'stack trace secret'})
+    assert down.upstream_error_type == 'upstream_unavailable' and asr._retryable(down)
+    assert '暂时不可用' in str(down) and 'secret' not in str(down)
+    rejected = asr._sse_failure({'code': 'InvalidParameter', 'message': 'audio duration 362s exceeds'})
+    assert rejected.http_status == 400 and not asr._retryable(rejected)
+    assert '过长' in str(rejected) and '362' not in str(rejected)
+    assert asr.CHUNK_SAMPLES == 16000 * 150 and asr.CHUNK_SAMPLES < 16000 * 180
+
+    audio = tmp_path / 'source.wav'
+    frames = 16000 * 400
+    with wave.open(str(audio), 'wb') as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(16000)
+        target.writeframes(b'\0\0' * frames)
+    durations = []
+
+    def fake_chunk(_client, _connection, _model, chunk, _language):
+        with wave.open(str(chunk), 'rb') as source:
+            durations.append(source.getnframes() / source.getframerate())
+        return [{'text': 'hi', 'begin_time': 0, 'end_time': 500}], True
+
+    monkeypatch.setattr(asr, 'request_chunk', fake_chunk)
+    monkeypatch.setattr(asr, 'get_ffmpeg_path', lambda: 'controlled')
+
+    def extract(command, **kwargs):
+        import shutil
+        shutil.copyfile(audio, command[-1])
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(asr.subprocess, 'run', extract)
+    from backend.services import ai_model_settings as settings_mod
+    settings = settings_mod.ModelSettings(
+        connections=[settings_mod.Connection(id='asr', name='ASR', provider='dashscope', api_key='fixture')],
+        transcription=settings_mod.Transcription(provider='cloud', connection_id='asr', model='qwen-audio-3.1-asr-flash'),
+    )
+    video = tmp_path / 'talk.mp4'
+    video.write_bytes(b'0')
+    out = asr.transcribe(video, tmp_path / 'talk.srt', settings)
+    assert durations and max(durations) <= 150
+    assert len(durations) == 3
+    assert out.is_file()
+
+
 def test_missing_asr_key_real_transcribe_path_is_user_cause(tmp_path):
     """real cloud_transcription.transcribe with an empty key; dropping the invalid_key tag must fail this."""
     from backend.services import ai_model_settings as ai

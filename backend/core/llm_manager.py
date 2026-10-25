@@ -555,7 +555,7 @@ class LLMManager:
         except Exception:
             raise
         else:
-            remember_model(catalog, base, key, asked, alt)
+            remember_model(catalog, base, key, asked, alt, purpose="analysis")
             return response, chosen
         finally:
             llm_telemetry.reset_retry_count(token)

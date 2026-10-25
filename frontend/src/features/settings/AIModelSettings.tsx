@@ -232,6 +232,13 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
         </details>
       </>}
     </fieldset>
+    {settings.analysis && settings.model_substitutions?.filter(item => item.purpose === 'analysis' && item.saved_model === settings.analysis?.model).map(item => (
+      <p className="ac-note" role="status" key={item.replacement}>
+        {t('分析模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。', { saved: item.saved_model, replacement: item.replacement })}
+        {' '}
+        <Btn variant="text" size="sm" disabled={m.saving} onClick={() => void m.save({ analysis: { ...settings.analysis!, model: item.replacement } })}>{t('保存这个模型')}</Btn>
+      </p>
+    ))}
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">
       <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />

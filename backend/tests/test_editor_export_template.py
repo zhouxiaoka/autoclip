@@ -146,6 +146,59 @@ def test_editor_reexport_without_a_recorded_template_stays_classic(client, monke
     assert stored['snapshot']['packaging']['captions_enabled'] is captions
 
 
+def test_shared_draft_export_uses_the_named_variant(client, monkeypatch):
+    submitted, seen = _capture(monkeypatch)
+    editorial = {
+        'id': 'v-edit', 'draft_id': 'd', 'draft_revision': 2, 'strategy_id': 'douyin',
+        'html_template': 'editorial', 'branding': {'outro_enabled': True}, 'status': 'completed',
+    }
+    street = {
+        'id': 'v-street', 'draft_id': 'd', 'draft_revision': 2, 'strategy_id': 'tiktok',
+        'html_template': 'street', 'branding': {'outro_enabled': True}, 'status': 'completed',
+    }
+    store.write('p1', {'drafts': [_draft(True).model_dump()], 'jobs': [], 'output_variants': [editorial, street]})
+    result = client.post('/studio/p1/drafts/d/export', json={'revision': 2, 'variant_id': 'v-street'})
+    assert result.status_code == 200, result.text
+    assert seen == [{'html_template': 'street', 'safe_area': 'tiktok'}]
+    assert submitted[0][1]['html_template'] == 'street'
+
+
+def test_shared_draft_without_an_id_does_not_take_the_first_template(client, monkeypatch):
+    submitted, seen = _capture(monkeypatch)
+    editorial = {
+        'id': 'v-edit', 'draft_id': 'd', 'draft_revision': 2, 'strategy_id': 'douyin',
+        'html_template': 'editorial', 'branding': {'outro_enabled': True}, 'status': 'completed',
+    }
+    street = {
+        'id': 'v-street', 'draft_id': 'd', 'draft_revision': 2, 'strategy_id': 'tiktok',
+        'html_template': 'street', 'branding': {'outro_enabled': True}, 'status': 'completed',
+    }
+    store.write('p1', {'drafts': [_draft(True).model_dump()], 'jobs': [], 'output_variants': [editorial, street]})
+    result = client.post('/studio/p1/drafts/d/export', json={'revision': 2})
+    assert result.status_code == 200, result.text
+    # Comparing the two rows calls template_export_kwargs. Export itself must not.
+    assert 'html_template' not in submitted[0][1]
+    assert 'html_fallback' not in submitted[0][1]
+
+
+def test_shared_draft_matches_the_draft_aspect_when_no_variant_is_named(client, monkeypatch):
+    submitted, seen = _capture(monkeypatch)
+    draft = _draft(True).model_copy(update={'aspect': 'portrait'})
+    editorial = {
+        'id': 'v-edit', 'draft_id': 'd', 'draft_revision': 2, 'strategy_id': 'douyin',
+        'html_template': 'editorial', 'branding': {'outro_enabled': True}, 'status': 'completed',
+    }
+    wide = {
+        'id': 'v-wide', 'draft_id': 'd', 'draft_revision': 2, 'strategy_id': 'youtube_long',
+        'html_template': 'street', 'branding': {'outro_enabled': True}, 'status': 'completed',
+    }
+    store.write('p1', {'drafts': [draft.model_dump()], 'jobs': [], 'output_variants': [wide, editorial]})
+    result = client.post('/studio/p1/drafts/d/export', json={'revision': 2})
+    assert result.status_code == 200, result.text
+    assert seen == [{'html_template': 'editorial', 'safe_area': 'douyin'}]
+    assert submitted[0][1]['html_template'] == 'editorial'
+
+
 def test_automatic_dispatch_reuses_template_export_kwargs(root, monkeypatch):
     submitted = []
     seen = []
