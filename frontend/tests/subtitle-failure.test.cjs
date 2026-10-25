@@ -17,7 +17,7 @@ function loadClassifier() {
 
 const { classifySubtitleFailure } = loadClassifier()
 
-const LEGACY = '没有字幕可分析：视频不带字幕，且本地转写没有生成结果。 到「设置 → 转写」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。'
+const LEGACY = '没有字幕可分析：视频不带字幕，且本地转写没有生成结果。 到「设置 → 默认模型 → 语音转字幕」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。'
 
 test('classifies structured codes and the four user-facing cases', () => {
   assert.equal(classifySubtitleFailure('anything', 'whisper_not_installed'), 'whisper_not_installed')
@@ -26,7 +26,7 @@ test('classifies structured codes and the four user-facing cases', () => {
   assert.equal(classifySubtitleFailure('显卡失败', 'subtitle_setup'), 'subtitle_setup')
   assert.equal(classifySubtitleFailure(LEGACY), 'subtitle_unknown')
   assert.equal(
-    classifySubtitleFailure('没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。到「设置 → 转写」安装。'),
+    classifySubtitleFailure('没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。到「设置 → 默认模型 → 语音转字幕」安装。'),
     'whisper_not_installed',
   )
   assert.equal(
@@ -41,8 +41,8 @@ test('classifies structured codes and the four user-facing cases', () => {
 })
 
 test('does not treat unrelated failures as a transcription settings problem', () => {
-  assert.equal(classifySubtitleFailure('没有可用的 LLM 提供商。请到「设置 → 模型」检查。'), null)
-  assert.equal(classifySubtitleFailure('没有片段通过评分筛选。到「设置 → 模型 → 最低评分阈值」调低后重试。'), null)
+  assert.equal(classifySubtitleFailure('没有可用的 LLM 提供商。请到「设置 → 服务商与模型」检查。'), null)
+  assert.equal(classifySubtitleFailure('没有片段通过评分筛选。到「设置 → 服务商与模型 → 最低评分阈值」调低后重试。'), null)
   const timeline = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
   assert.equal(classifySubtitleFailure(timeline), null)
   assert.equal(classifySubtitleFailure(timeline, 'timeline_empty'), null)
@@ -65,9 +65,9 @@ test('safe cloud ASR failures keep the generic failure view and never request Wh
 })
 
 test('source_too_short / source_no_audio never open transcription settings (RC156 #10 #11)', () => {
-  const noAudio = '这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，请到「设置 → 模型」换一个能看图的模型。'
+  const noAudio = '这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，请到「设置 → 服务商与模型」换一个能看图的模型。'
   assert.equal(classifySubtitleFailure(noAudio, 'source_no_audio'), null)
   assert.equal(classifySubtitleFailure('视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。', 'source_too_short'), null)
   // Even text mentioning transcription settings stays out when the code says it is the source.
-  assert.equal(classifySubtitleFailure('字幕 设置 → 转写', 'source_no_audio'), null)
+  assert.equal(classifySubtitleFailure('字幕 设置 → 默认模型 → 语音转字幕', 'source_no_audio'), null)
 })

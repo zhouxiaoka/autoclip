@@ -49,7 +49,7 @@
 | --- | --- |
 | `provider` / `model` / `base_url_host` | 与上表相同；按本次 run 实际调用 |
 | `http_status` | 失败时 400–599 |
-| `upstream_error_type` | 上表闭集；站点拒绝（`source_blocked`）不标 |
+| `upstream_error_type` | 上表闭集；站点拒绝（`source_blocked`）和找不到片源（`source_not_found`）不标 |
 | `failure_stage` | 失败必填 |
 | `error_code` | 失败必填，∈ 现有 studio 错误码（缺失时后端写成 `unexpected`） |
 | `billable_calls_before_failure` | 失败时必有；成功路径不发 |

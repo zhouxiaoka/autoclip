@@ -232,16 +232,16 @@ def test_catalog_lists_every_rule_dong_named():
     assert {'cancelled', 'user_cancelled', 'authentication', 'llm_auth_invalid', 'invalid_key',
             'insufficient_quota', 'llm_not_configured'} <= set(V4['overall_excluded_error_codes'])
     assert set(V4['overall_excluded_upstream_types']) == {'invalid_key', 'insufficient_quota', 'permission_denied'}
-    assert set(V4['product_extra_excluded_error_codes']) == {'connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked'}
+    assert set(V4['product_extra_excluded_error_codes']) == {'connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found'}
     assert set(V4['product_failure_codes']) == {'whisper_not_installed', 'service_restarted', 'model_not_found', 'bad_endpoint'}
 
 
 def test_every_exclusion_and_product_failure_lands_in_the_right_denominator():
     # 2 ok; hard (N_HARD) out of both; user_x (N_X) only out of product; forced failures (N_PF) in both.
     assert _excl() == EXPECTED_EXCL
-    assert (N_HARD, N_X, N_PF) == (12, 5, 8)
-    # 8 forced product failures -> all/product denominators 15/10.
-    assert (EXPECTED_EXCL['q_all'], EXPECTED_EXCL['q_prod']) == (15, 10)
+    assert (N_HARD, N_X, N_PF) == (12, 6, 8)
+    # 8 forced product failures; user_x now includes source_not_found -> all/product denominators 16/10.
+    assert (EXPECTED_EXCL['q_all'], EXPECTED_EXCL['q_prod']) == (16, 10)
     assert set(PRODUCT_FAILURE_UPSTREAM) == set(V4['product_failure_codes'])
 
 

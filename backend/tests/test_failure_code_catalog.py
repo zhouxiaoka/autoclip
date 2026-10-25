@@ -27,7 +27,7 @@ HISTORICAL_SENTRY = {
     "validation", "missing_resource", "unexpected", "timeout", "connection", "authentication",
     "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused",
     "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed",
-    "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short",
+    "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_not_found", "source_too_short",
     "no_complete_version",
     "source_no_audio", "source_unreadable", "service_restarted", "frame_extract_failed",
     "store_lock_timeout", "network", "disk", "corrupt",
@@ -157,6 +157,22 @@ def test_provider_text_stays_out_of_the_user_message(caplog):
     assert failure_codes.user_visible_error(failure) == failure_codes.sentence("llm_auth_invalid")
     catalog = failure_codes.sentence("invalid_response")
     assert failure_codes.user_visible_error(ValueError(catalog)) == catalog
+    from backend.core.failure_attribution import AttributedError, FailureAttribution, attributed
+    class _Safe(AttributedError, RuntimeError):
+        pass
+    wrapped = _Safe("redacted")
+    attributed(
+        wrapped,
+        FailureAttribution._make("request", http_status=503, upstream_error_type="upstream_unavailable"),
+        http_status=503,
+        error_code="provider_error",
+    )
+    assert failure_codes.user_visible_error(wrapped) == failure_codes.sentence("upstream_unavailable")
+    assert "无法识别" not in failure_codes.user_visible_error(wrapped)
+    unknown = _Safe("redacted")
+    attributed(unknown, FailureAttribution._make("request", http_status=500, upstream_error_type="unknown"),
+               http_status=500, error_code="provider_error")
+    assert failure_codes.user_visible_error(unknown) == failure_codes.sentence("provider_error")
 
 
 @pytest.mark.stdlib_only

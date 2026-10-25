@@ -51,4 +51,44 @@ def user_visible_error(error):
     if _keep_authored(error, text): return text[:700]
     _omit(error)
     from backend.core.sentry_setup import studio_error_code
-    return sentence(studio_error_code(error))[:700]
+    code = studio_error_code(error)
+    fine = _fine_upstream_sentence(error, code)
+    return (fine or sentence(code))[:700]
+
+
+def _fine_upstream_sentence(error, coarse: str):
+    """503 is stored as coarse ``provider_error`` but already classified.
+
+    Use the fine sentence only when the coarse code is ``provider_error`` and a
+    known upstream type is already on a typed provider error. Do not parse an
+    arbitrary RuntimeError: a 401 dump and a raw balance sentence must stay
+    ``unexpected`` so the key and the provider text never reach the screen.
+    """
+    if coarse != "provider_error" or error is None:
+        return None
+    from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES, UpstreamErrorType, classify_exception, hint_key_for
+    attr = getattr(error, "attribution", None)
+    candidate = getattr(attr, "upstream_error_type", None) if attr is not None else None
+    if isinstance(candidate, str) and candidate in UPSTREAM_ERROR_TYPES:
+        # An explicit unknown stays the coarse sentence. Do not re-read the HTTP
+        # status: the boundary already decided this one was not a known type.
+        if candidate == UpstreamErrorType.UNKNOWN.value:
+            return None
+        return hint_key_for(candidate)
+    if isinstance(candidate, str) or not _typed_provider_error(error):
+        return None
+    kind = classify_exception(error).error_type
+    if kind is UpstreamErrorType.UNKNOWN:
+        return None
+    return hint_key_for(kind.value)
+
+
+def _typed_provider_error(error) -> bool:
+    from backend.core.failure_attribution import AttributedError, ProviderTransportError
+    if isinstance(error, (AttributedError, ProviderTransportError)):
+        return True
+    try:
+        from openai import APIError
+    except ImportError:
+        return False
+    return isinstance(error, APIError)

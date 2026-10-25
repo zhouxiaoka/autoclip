@@ -31,9 +31,9 @@ test('classifies the stable code and a last_error that has no code', () => {
 })
 
 test('does not treat model, scoring, or subtitle failures as an empty timeline', () => {
-  assert.equal(classifyTimelineEmpty('没有可用的 LLM 提供商，缺少 API Key。请到「设置 → 模型」点「测试连接」。'), false)
-  assert.equal(classifyTimelineEmpty('没有片段通过评分筛选。到「设置 → 模型 → 最低评分阈值」调低后重试。'), false)
-  assert.equal(classifyTimelineEmpty('没有字幕可分析：视频不带字幕。到「设置 → 转写」安装。'), false)
+  assert.equal(classifyTimelineEmpty('没有可用的 LLM 提供商，缺少 API Key。请到「设置 → 服务商与模型」点「测试连接」。'), false)
+  assert.equal(classifyTimelineEmpty('没有片段通过评分筛选。到「设置 → 服务商与模型 → 最低评分阈值」调低后重试。'), false)
+  assert.equal(classifyTimelineEmpty('没有字幕可分析：视频不带字幕。到「设置 → 默认模型 → 语音转字幕」安装。'), false)
   assert.equal(classifyTimelineEmpty(''), false)
   assert.equal(classifyTimelineEmpty(null, 'llm_not_configured'), false)
   assert.equal(classifyTimelineEmpty(null, 'whisper_not_installed'), false)
@@ -46,7 +46,7 @@ test('an empty timeline last_error does not open model or transcription settings
   assert.equal(classifySubtitleFailure(LAST_ERROR), null)
   assert.equal(classifySubtitleFailure(LAST_ERROR, 'timeline_empty'), null)
   assert.equal(classifySubtitleFailure(PROGRESS), null)
-  assert.equal(LAST_ERROR.includes('设置 → 模型'), false)
+  assert.equal(LAST_ERROR.includes('设置 → 服务商与模型'), false)
   assert.equal(LAST_ERROR.includes('API Key'), false)
   assert.equal(LAST_ERROR.includes('测试连接'), false)
 })

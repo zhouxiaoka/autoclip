@@ -48,7 +48,7 @@ class ImportSourceUnusable(ImportProcessingError):
     kind = "source-input"
 
 
-# 这些码已经带了「设置 → 转写」去向，归到缺字幕，即使用户原文里提过密钥。
+# 这些码已经带了「设置 → 默认模型 → 语音转字幕」去向，归到缺字幕，即使用户原文里提过密钥。
 _WHISPER_STATE_CODES = frozenset({
     "whisper_not_installed",
     "whisper_install_failed",
@@ -177,7 +177,7 @@ def _fail_import(
 
 
 def import_subtitle_failure(speech_error: Optional[str | CloudTranscriptionError] = None):
-    """导入关卡没有可用字幕时，沿用流水线同一套失败码和「设置 → 转写」提示。
+    """导入关卡没有可用字幕时，沿用流水线同一套失败码和「设置 → 默认模型 → 语音转字幕」提示。
 
     这只说明下一步该去哪，不表示 Whisper 一定能转写成功。
     """

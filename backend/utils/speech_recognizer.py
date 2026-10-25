@@ -179,23 +179,23 @@ def describe_whisper_failure(exc: BaseException) -> str:
     low = f"{type(exc).__name__} {exc}".lower()
     if isinstance(exc, ImportError) or "dll load failed" in low or "winerror 126" in low:
         return (
-            "Whisper 运行时依赖加载失败。请到「设置 → 转写」卸载后重新安装 Whisper，"
+            "Whisper 运行时依赖加载失败。请到「设置 → 默认模型 → 语音转字幕」卸载后重新安装 Whisper，"
             "然后重启 AutoClip；Windows 用户还需检查 Microsoft Visual C++ 运行库。"
         )
     if isinstance(exc, MemoryError) or any(token in low for token in ("out of memory", "bad_alloc", "cannot allocate memory")):
-        return "Whisper 转写时内存不足。请到「设置 → 转写」改用 tiny 或 base 模型，关闭其他占用内存的程序后重试。"
+        return "Whisper 转写时内存不足。请到「设置 → 默认模型 → 语音转字幕」改用 tiny 或 base 模型，关闭其他占用内存的程序后重试。"
     if isinstance(exc, PermissionError):
         return "Whisper 无法读写视频、模型或字幕文件。请检查文件访问权限，并确认文件没有被其他程序占用。"
     if any(token in low for token in ("connectionerror", "connecterror", "timeout", "certificate_verify_failed")):
-        return "Whisper 模型下载连接失败。请检查网络，并到「设置 → 转写」完成所选模型下载后重试。"
+        return "Whisper 模型下载连接失败。请检查网络，并到「设置 → 默认模型 → 语音转字幕」完成所选模型下载后重试。"
     if any(token in low for token in ("model.bin", "tokenizer.json", "config.json", "localentrynotfounderror")):
-        return "Whisper 模型文件缺失或不完整。请到「设置 → 转写」删除所选模型并重新下载后重试。"
+        return "Whisper 模型文件缺失或不完整。请到「设置 → 默认模型 → 语音转字幕」删除所选模型并重新下载后重试。"
     if any(token in low for token in ("invaliddataerror", "invalid data found", "does not have any audio", "no audio stream")):
         return "Whisper 无法解码视频音轨。请确认视频包含可播放的音频，或重新导入视频并附带 SRT 字幕。"
     if type(exc).__name__ in {"Fail", "InvalidArgument", "NoSuchFile"} or "onnxruntime" in low:
         return (
             "本地语音活动检测没有跑起来，字幕转写已中断。"
-            "请确认视频里有人声；若刚安装过 Whisper，到「设置 → 转写」重新安装后再试。"
+            "请确认视频里有人声；若刚安装过 Whisper，到「设置 → 默认模型 → 语音转字幕」重新安装后再试。"
         )
     if any(token in low for token in ("cuda", "cublas", "cudnn")):
         return (
@@ -207,7 +207,7 @@ def describe_whisper_failure(exc: BaseException) -> str:
     # 不把内部异常名（IndexError 之类）放进界面文案；类型和原文只进日志（RC156 #11）。
     return (
         "本地 Whisper 生成字幕失败。"
-        "请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨；"
+        "请到「设置 → 默认模型 → 语音转字幕」确认模型已下载，并检查视频有可播放的音轨；"
         "若仍失败，请通过反馈附上本次错误和脱敏日志。"
     )
 
@@ -451,7 +451,7 @@ class SpeechRecognizer:
 
         if not whisper_runtime.is_installed():
             raise SpeechRecognitionError(
-                "本地 Whisper 运行时未安装。请到「设置 → 转写」安装 Whisper，"
+                "本地 Whisper 运行时未安装。请到「设置 → 默认模型 → 语音转字幕」安装 Whisper，"
                 "并下载一个模型后再试。也可以重新导入时带上 .srt 字幕。"
             )
 
@@ -491,7 +491,7 @@ class SpeechRecognizer:
                     logger.warning("Whisper 模型 %s 下载失败: %s: %s", config.model, type(exc).__name__, exc)
                     raise SpeechRecognitionError(
                         f"Whisper 模型 {config.model} 下载失败。"
-                        "请检查网络后到「设置 → 转写」重新下载模型，或重新导入时带上 .srt 字幕。"
+                        "请检查网络后到「设置 → 默认模型 → 语音转字幕」重新下载模型，或重新导入时带上 .srt 字幕。"
                     ) from exc
             logger.info(
                 "使用 faster-whisper 生成字幕: model=%s lang=%s device=%s compute=%s",
@@ -606,7 +606,7 @@ class SpeechRecognizer:
             raise
         except ModuleNotFoundError as e:
             raise SpeechRecognitionError(
-                f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 转写」重新安装 Whisper。"
+                f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 默认模型 → 语音转字幕」重新安装 Whisper。"
             )
         except Exception as e:  # noqa: BLE001
             # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。

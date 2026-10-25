@@ -378,7 +378,7 @@ def endpoint_provider_ready(connection: Connection) -> bool:
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
     connection = next((c for c in settings.connections if c.id == assignment.connection_id), None)
     if connection is None:
-        raise ValueError('模型引用的服务连接已缺失，请到「设置 → 模型」重新选择并保存，完成修复后再生成。')
+        raise ValueError('模型引用的服务连接已缺失，请到「设置 → 服务商与模型」重新选择并保存，完成修复后再生成。')
     if not endpoint_provider_ready(connection):
         raise ValueError('请填写服务商接口地址并通过连接验证后再生成。')
     return connection
@@ -387,18 +387,18 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
 def ensure_runtime_bindings(settings: ModelSettings, *, require_vision: bool = False) -> None:
     """A lost explicit assignment is never consent to borrow another provider."""
     if {'analysis_configuration_invalid', 'vision_configuration_invalid'} & set(settings._migration_warnings):
-        raise ValueError('分析或视觉模型引用的服务连接已缺失或配置无效，请到「设置 → 模型」修复并保存后再生成。')
+        raise ValueError('分析或视觉模型引用的服务连接已缺失或配置无效，请到「设置 → 服务商与模型」修复并保存后再生成。')
     for binding in (settings.analysis, settings.vision):
         if binding is not None:
             connection = connection_for(settings, binding)
             if connection.validation_status == 'failed' and (binding is settings.analysis or settings.analysis_mode == 'visual' or require_vision):
-                raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」修复密钥或地址后再生成。')
+                raise ValueError('当前模型连接未通过校验。请到「设置 → 服务商与模型」修复密钥或地址后再生成。')
 
 
 def require_analysis(settings: ModelSettings) -> Assignment:
     ensure_runtime_bindings(settings)
     if settings.analysis is None:
-        raise ValueError('分析模型配置需要修复，请到「设置 → 模型」选择服务连接和模型并保存后再生成。')
+        raise ValueError('分析模型配置需要修复，请到「设置 → 服务商与模型」选择服务连接和模型并保存后再生成。')
     return settings.analysis
 
 

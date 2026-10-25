@@ -5,9 +5,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Btn } from '../../ui'
 import { useWorkspace } from './useWorkspace'
 import { studioApi, errorText } from './api'
-import { llmFailureText } from '../../utils/llmFailure'
 import PlanSummary from './PlanSummary'
 import { sourceFailure } from './importReadiness'
+import { analysisFailureText } from './failureAction'
 import { defaultImportOptions } from './types'
 import './studio.css'
 
@@ -27,7 +27,7 @@ export default function ImportReview() {
     <h1 className="ac-title">{t("确认要做什么")}</h1>
     <p className="studio-muted">{t("AI 先看一遍素材给出建议；你确认后才开始正式剪辑。")}</p>
     {running?<div className="studio-import-box"><h2>{producing?t("制作已经开始"):t("正在快速识别素材")}</h2><p className="studio-muted">{producing?t("可进入项目查看进度。"):t("先判断适合制作的类型，完成后由你确认；此时不会开始正式剪辑。")}</p>{producing&&<Btn variant="cta" onClick={()=>navigate(`/project/${id}`)}>{t("查看制作进度")}</Btn>}</div>:<PlanSummary projectId={id} plan={workspace.plan} status={workspace.analysis?.status} onChanged={refresh} onStarted={()=>navigate(`/project/${id}`)}/>}
-    {(error||actionError||workspace.analysis?.status==='failed')&&<p role="alert" className="studio-error">{t(actionError||error||llmFailureText(workspace.analysis?.error, workspace.analysis?.error_code))}</p>}
+    {(error||actionError||workspace.analysis?.status==='failed')&&<p role="alert" className="studio-error">{t(actionError||error||analysisFailureText(workspace.analysis?.error, workspace.analysis, workspace.generation))}</p>}
     {!running&&workspace.analysis?.status==='failed'&&sourceFailure(workspace.analysis.error_code)?<div className="studio-actions"><Btn size="sm" onClick={()=>navigate('/')}>{t("换一个视频")}</Btn></div>:!running&&(workspace.analysis?.status==='failed'||!workspace.plan)&&<div className="studio-actions"><Btn size="sm" loading={busy} onClick={retry}>{t("重新识别")}</Btn><Btn size="sm" onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn></div>}
     {workspace.plan&&<details className="studio-details"><summary>{t("查看导入的素材")}</summary><video controls preload="metadata" className="studio-source-video" src={studioApi.source(id)}/></details>}
   </main>

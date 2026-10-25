@@ -121,7 +121,7 @@ def test_silent_source_without_visual_route_is_blocked_before_screening(tmp_path
         with pytest.raises(PipelineFailure) as caught:
             planning.recommend(video, ImportOptions(auto_start=True, goal=goal))
         assert caught.value.code == 'source_no_audio', (mode, ready, goal)
-        assert '设置 → 转写' not in caught.value.user_message()
+        assert '设置 → 默认模型 → 语音转字幕' not in caught.value.user_message()
 
 
 def test_silent_source_with_srt_keeps_the_subtitle_route(tmp_path, monkeypatch):
@@ -251,7 +251,7 @@ def test_transcription_refuses_a_silent_video_before_any_provider(tmp_path, monk
     assert str(caught.value) == media_precheck.NO_AUDIO_MESSAGE
     failure = failure_from_speech_error(str(caught.value))
     assert failure.code == 'source_no_audio' and failure.hint == ''
-    assert '设置 → 转写' not in failure.user_message()
+    assert '设置 → 默认模型 → 语音转字幕' not in failure.user_message()
 
 
 def test_whisper_failure_text_never_names_the_exception():

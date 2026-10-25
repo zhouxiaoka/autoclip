@@ -96,7 +96,7 @@ export function gateKind(code: string | undefined): 'install' | 'installing' | n
 }
 
 /** failures of the source itself (user cause, excluded from the success rate); retrying cannot help.*/
-export const SOURCE_FAILURE_CODES = ['source_unreadable', 'source_too_short', 'source_no_audio'] as const
+export const SOURCE_FAILURE_CODES = ['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found'] as const
 export function sourceFailure(code: string | null | undefined): boolean {
   return !!code && (SOURCE_FAILURE_CODES as readonly string[]).includes(code)
 }

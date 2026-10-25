@@ -8,7 +8,7 @@ const { errorText } = loadTs(path.join(__dirname, '../src/features/studio/errorT
 const fail = data => ({ message: 'Request failed with status code 422', response: { data } })
 
 test('string detail wins', () => {
-  assert.equal(errorText(fail({ detail: '请到「设置 → 模型」改密钥', error: { message: '通用' } })), '请到「设置 → 模型」改密钥')
+  assert.equal(errorText(fail({ detail: '请到「设置 → 服务商与模型」改密钥', error: { message: '通用' } })), '请到「设置 → 服务商与模型」改密钥')
 })
 
 test('validation array: the specific field hint beats the generic envelope (F2)', () => {

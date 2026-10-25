@@ -46,7 +46,7 @@ PROBE_TIMEOUT = 20.0
 
 # E6: local model server (Ollama / LM Studio) not running -> connection refused on a local URL.
 LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。'
-VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型后再生成。'
+VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
 
 
 @dataclass

@@ -556,7 +556,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             except Exception as e:
                 logger.warning("生成字幕过程中发生未知错误: %s", type(e).__name__)
                 subtitle_path = None
-                subtitle_error = "本地 Whisper 生成字幕失败。请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨。"
+                subtitle_error = "本地 Whisper 生成字幕失败。请到「设置 → 默认模型 → 语音转字幕」确认模型已下载，并检查视频有可播放的音轨。"
         
         logger.info(f"下载完成 - 视频文件: {video_path}, 字幕文件: {subtitle_path}")
         

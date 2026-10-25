@@ -98,7 +98,7 @@ def test_missing_runtime_points_at_transcription_settings(tmp_path, monkeypatch)
     video.write_bytes(b"x")
     with pytest.raises(SpeechRecognitionError) as exc:
         recognizer._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
-    assert "设置 → 转写" in str(exc.value)
+    assert "设置 → 默认模型 → 语音转字幕" in str(exc.value)
     assert "语音识别" not in str(exc.value)
     assert ".srt" in str(exc.value)
 
@@ -107,7 +107,7 @@ def test_failure_text_has_no_local_path():
     message = describe_whisper_failure(RuntimeError(r"failed to open C:\Users\secret\clip.mp4"))
     assert "secret" not in message
     assert "clip.mp4" not in message
-    assert "设置 → 转写" in message
+    assert "设置 → 默认模型 → 语音转字幕" in message
 
 
 @pytest.mark.parametrize("error,expected", [
@@ -197,7 +197,7 @@ def test_failed_model_download_is_a_readable_settings_error(tmp_path, monkeypatc
     video.write_bytes(b"video")
     with pytest.raises(SpeechRecognitionError) as caught:
         _recognizer()._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
-    assert "设置 → 转写" in str(caught.value)
+    assert "设置 → 默认模型 → 语音转字幕" in str(caught.value)
     assert "未安装" not in str(caught.value)
 
 

@@ -18,7 +18,7 @@ Once you have local footage, a local language model, and any required speech mod
 
 ### What footage works best?
 
-Subtitle analysis is the default, so interviews, podcasts, lectures, spoken commentary, and livestream recordings with clear speech are a good fit. Gameplay can be cut from the picture: in Settings → Models, switch to a vision-capable model. Sampled frames are sent to that model and billed by the provider. One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. Music or other picture-led footage, without a vision-capable model, may not have enough subtitle information to identify highlights. There is no guaranteed clip count or quality.
+Subtitle analysis is the default, so interviews, podcasts, lectures, spoken commentary, and livestream recordings with clear speech are a good fit. Gameplay can be cut from the picture: in Settings → Providers and models, switch to a vision-capable model. Sampled frames are sent to that model and billed by the provider. One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. Music or other picture-led footage, without a vision-capable model, may not have enough subtitle information to identify highlights. There is no guaranteed clip count or quality.
 
 To see a result before you configure anything: when the home screen has no projects, click “用示例项目看看效果” (See an example project). The example ships inside the installer (`source.mp4` and `source.srt`) and needs no API key. It is not a separate sample download.
 
@@ -52,7 +52,7 @@ Inside Docker, `localhost` refers to the container. See the [Docker guide](DOCKE
 
 ### How do I choose subtitle analysis or game visual analysis?
 
-As of **v1.4.0** there are two routes. Subtitle analysis stays the default, including for existing settings. To cut from the picture, choose a vision-capable model in Settings → Models. After you confirm, the visual route finds separate events in a gameplay recording, produces editable highlights and promo drafts, and you edit them in the shared editor. An unconfirmed import can be resumed. Understanding and cutting start only after confirmation.
+As of **v1.4.0** there are two routes. Subtitle analysis stays the default, including for existing settings. To cut from the picture, choose a vision-capable model in Settings → Providers and models. After you confirm, the visual route finds separate events in a gameplay recording, produces editable highlights and promo drafts, and you edit them in the shared editor. An unconfirmed import can be resumed. Understanding and cutting start only after confirmation.
 
 One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. v1.4.0 does not include CTA motion, generative brand end cards, or karaoke / word-level subtitles.
 

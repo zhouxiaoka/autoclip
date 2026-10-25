@@ -141,9 +141,49 @@ def test_youtube_403_still_retries_format_once_before_source_blocked(monkeypatch
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize('message', ['HTTP Error 404: Not Found', 'Video unavailable', 'HTTP Error 4120: synthetic'])
-def test_other_download_errors_are_not_source_blocked(monkeypatch, message):
+@pytest.mark.parametrize('message', [
+    'HTTP Error 404: Not Found',
+    'Video unavailable',
+    'ERROR: [youtube] abc: This video has been removed by the uploader',
+])
+def test_missing_link_is_source_not_found(monkeypatch, message):
+    from backend.pipeline.failures import PipelineFailure
+    from backend.core.sentry_setup import studio_error_code, studio_failure_context, UNREPORTED_STUDIO_ERROR_CODES
     calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError(message)])
+    with pytest.raises(PipelineFailure) as caught:
+        module.download_with_recovery('https://www.youtube.com/watch?v=missing', {'quiet': True})
+    error = caught.value
+    assert len(calls) == 1
+    assert error.code == 'source_not_found' and error.stage == 'INGEST' and error.http_status is None
+    assert str(error) == module.SOURCE_NOT_FOUND_HINT
+    assert error.__cause__ is None
+    for leaked in ('HTTP Error', 'Not Found', 'unavailable', 'removed', 'youtube', 'missing'):
+        assert leaked not in str(error)
+    assert studio_error_code(error) == 'source_not_found'
+    assert 'source_not_found' in UNREPORTED_STUDIO_ERROR_CODES
+    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest'}
+
+
+@pytest.mark.parametrize('message', [
+    "ERROR: [youtube] abc: Sign in to confirm you're not a bot",
+    'ERROR: Private video. Sign in if you\'ve been granted access',
+    'ERROR: Video unavailable. This video is not available in your country',
+    'ERROR: This video is age-restricted',
+])
+def test_gated_link_is_source_blocked_without_status_hint(monkeypatch, message):
+    from backend.pipeline.failures import PipelineFailure
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError(message)])
+    with pytest.raises(PipelineFailure) as caught:
+        module.download_with_recovery('https://www.youtube.com/watch?v=gated', {'quiet': True})
+    error = caught.value
+    assert error.code == 'source_blocked' and error.http_status is None
+    assert str(error) == module.SOURCE_ACCESS_HINT
+    assert '403' not in str(error) and 'bot' not in str(error).lower() and 'country' not in str(error).lower()
+    assert len(calls) == 1
+
+
+def test_synthetic_4120_stays_an_unexpected_download_error(monkeypatch):
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError('HTTP Error 4120: synthetic')])
     with pytest.raises(yt_dlp.utils.DownloadError):
         module.download_with_recovery('https://www.bilibili.com/video/synthetic', {'quiet': True})
     assert len(calls) == 1

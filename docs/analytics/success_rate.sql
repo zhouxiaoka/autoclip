@@ -30,7 +30,7 @@
 --   全量口径分母剔除（user_hard，只剔除明确的用户行为）：
 --     outcome = cancelled；error_code IN (authentication, llm_auth_invalid, invalid_key, insufficient_quota,
 --     llm_not_configured, cancelled, user_cancelled)；upstream_error_type IN (invalid_key, insufficient_quota, permission_denied)。
---   产品口径分母再剔除（user_x）：error_code IN (connection, source_too_short, source_no_audio, source_unreadable, source_blocked)。
+--   产品口径分母再剔除（user_x）：error_code IN (connection, source_too_short, source_no_audio, source_unreadable, source_blocked, source_not_found)。
 --   两个口径都算产品失败（不剔除）：whisper_not_installed、service_restarted、model_not_found、bad_endpoint
 --   （error_code 或 upstream_error_type）。
 -- 只看 analytics_environment = 'production' 且 runtime = 'desktop'，排除内部 cohort。
@@ -89,7 +89,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
     , (ifNull(seq, 0), leaf, ts) AS ord
@@ -144,7 +144,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
   FROM base
@@ -186,7 +186,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x
   FROM base
 )
 SELECT stage, if(ec = '', '(空)', ec) AS error_code, o AS outcome,
@@ -264,7 +264,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
     , (ifNull(seq, 0), leaf, ts) AS ord

@@ -3,7 +3,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path')
 const { loadTs } = require('./load-ts.cjs')
-const KEY = 'Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。'
+const KEY = 'Whisper 模型下载失败。请检查网络后到「设置 → 默认模型 → 语音转字幕」重新下载，或在下载源中改用 hf-mirror 镜像。'
 
 test('errorCode selects translated copy; unknown code falls back to the server message', () => {
   const { whisperModelErrorText } = loadTs(path.join(__dirname, '../src/utils/whisperModelError.ts'))

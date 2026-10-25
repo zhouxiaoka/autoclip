@@ -1,6 +1,6 @@
 import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from '../analytics/failureCodes'
 
-/** 没有可用的模型：前端用来打开「设置 → 模型」，并换一句带自备密钥说明的文案。 */
+/** 没有可用的模型：前端用来打开「设置 → 服务商与模型」，并换一句带自备密钥说明的文案。 */
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 
@@ -13,9 +13,13 @@ export const USER_CAUSE_REASONS: Record<string, string> = Object.fromEntries(
   [...new Set([...USER_CAUSE_ERROR_CODES, ...USER_CAUSE_UPSTREAM_TYPES])].map(code => [code, USER_MESSAGES[code]]),
 )
 
-export function llmFailureText(error?: string | null, code?: string | null): string {
+export function llmFailureText(error?: string | null, code?: string | null, upstream?: string | null): string {
   if (code === STORE_LOCK_TIMEOUT) return STORE_LOCK_TIMEOUT_TEXT
   if (code === LLM_AUTH_INVALID) return USER_CAUSE_REASONS[LLM_AUTH_INVALID]
+  // Coarse provider_error / unexpected still say 「无法识别」 or 「请重试」. The fine type already
+  // has a sentence; use it when the stored text is that generic fallback (or empty).
+  const generic = !error || error === USER_MESSAGES.provider_error || error === USER_MESSAGES.unexpected || error === USER_MESSAGES.unknown
+  if (generic && upstream && upstream !== 'unknown' && USER_MESSAGES[upstream]) return USER_MESSAGES[upstream]
   return error || ''
 }
 

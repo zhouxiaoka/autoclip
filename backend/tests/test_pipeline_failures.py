@@ -72,7 +72,7 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
     assert "未配置LLM提供商" not in exc.value.message  # provider/raw text is logged, never shown (RC156 c5)
     assert exc.value.code == "llm_not_configured"
     assert "自备" in exc.value.hint
-    assert "设置 → 模型" in exc.value.hint
+    assert "设置 → 服务商与模型" in exc.value.hint
     assert "测试连接" in exc.value.hint
 
 
@@ -210,7 +210,7 @@ def test_adapter_fails_fast_when_llm_not_configured(adapter, monkeypatch, tmp_pa
     assert result["stage"] == "ANALYZE"
     assert result["error_code"] == "llm_not_configured"
     assert "Google Gemini · gemini-2.5-flash" in result["error"]
-    assert "设置 → 模型" in result["error"]
+    assert "设置 → 服务商与模型" in result["error"]
     assert "自备 API Key" in result["error"]
     assert "控制台" in result["error"]
     assert result["message"] == result["error"]
@@ -241,7 +241,7 @@ def test_adapter_fails_when_no_subtitle_and_auto_transcribe_yields_nothing(adapt
     assert result["stage"] == "SUBTITLE"
     assert result["error_code"] == "whisper_not_installed"
     assert "还没安装" in result["error"]
-    assert "设置 → 转写" in result["error"]
+    assert "设置 → 默认模型 → 语音转字幕" in result["error"]
     assert ".srt" in result["error"]
     # 以前会写一个空大纲然后「成功」；现在不该再产出 step1_outline.json
     assert not (tmp_path / "projects" / "proj-1" / "metadata" / "step1_outline.json").exists()
@@ -295,7 +295,7 @@ def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypat
     assert result["stage"] == "SUBTITLE"
     assert result["error_code"] == "subtitle_setup"
     assert "显卡" in result["error"]
-    assert "设置 → 转写" in result["error"]
+    assert "设置 → 默认模型 → 语音转字幕" in result["error"]
     assert result["message"] == result["error"]
 
 
@@ -318,7 +318,7 @@ def test_adapter_empty_timeline_does_not_send_user_to_model_settings(adapter, mo
     assert "20" in result["error"]
     assert "时间戳" in result["error"]
     assert "最短时长" in result["error"]
-    assert "设置 → 模型" not in result["error"]
+    assert "设置 → 服务商与模型" not in result["error"]
     assert "API Key" not in result["error"]
     assert "测试连接" not in result["error"]
     assert result["message"] == result["error"]
@@ -348,7 +348,7 @@ def test_empty_timeline_hint_survives_last_error_metadata():
     message = svc.latest_error_message(project)
     assert message == failure.user_message()
     assert svc.latest_error_code(project) == "timeline_empty"
-    assert "设置 → 模型" not in message
+    assert "设置 → 服务商与模型" not in message
     assert "API Key" not in message
 
 
@@ -484,7 +484,7 @@ def test_project_response_exposes_latest_task_error(monkeypatch):
         def order_by(self, *a, **k): return self
         def first(self): return self.rows[0] if self.rows else None
 
-    task = SimpleNamespace(error_message="没有片段通过评分筛选（3 个候选，阈值 0.7）。到「设置 → 模型 → 最低评分阈值」调低后重试。")
+    task = SimpleNamespace(error_message="没有片段通过评分筛选（3 个候选，阈值 0.7）。到「设置 → 服务商与模型 → 最低评分阈值」调低后重试。")
     svc = ProjectService.__new__(ProjectService)
     svc.db = SimpleNamespace(query=lambda model: Q([task]))
     project = SimpleNamespace(id="p1", status="failed", project_metadata={})
