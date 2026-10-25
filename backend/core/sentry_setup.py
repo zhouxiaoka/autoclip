@@ -30,7 +30,9 @@ STUDIO_ERROR_CODES = sentry_codes()
 # no audio track): never sent to Sentry, still recorded locally with their code.
 UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_not_found", "source_too_short", "source_no_audio", "service_restarted"}
 # Provider answers PostHog already records. They are not crashes.
-EXPECTED_PROVIDER_HTTP = frozenset({401, 402, 403, 404, 408, 409, 429, 500, 502, 503, 504})
+# 500 is not in this set: a local model-download failure is tagged 500 and must still
+# be reported. A provider 500 carries upstream_unavailable and is dropped by that tag.
+EXPECTED_PROVIDER_HTTP = frozenset({401, 402, 403, 404, 408, 409, 429, 502, 503, 504})
 EXPECTED_PROVIDER_UPSTREAM = frozenset({
     "invalid_key", "insufficient_quota", "permission_denied", "model_not_found",
     "bad_endpoint", "rate_limited", "upstream_unavailable", "output_truncated",
@@ -336,7 +338,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         return None  # Logging-only payloads can contain video text; do not send them.
     if (event.get("tags") or {}).get("error_code") in UNREPORTED_STUDIO_ERROR_CODES:
         return None
-    if _provider_expected(event.get("tags") or {}):
+    incoming = event.get("tags") or {}
+    if _provider_expected(incoming.get("http_status"), incoming.get("upstream_error_type")):
         return None
     clean["exception"] = {"values": values}
     kind, fingerprint = _import_monitoring_fields(event, hint)
@@ -390,16 +393,14 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     return clean
 
 
-def _provider_expected(tags: dict) -> bool:
+def _provider_expected(status: object, upstream: object) -> bool:
     """401/429/503 and the other provider answers belong in PostHog, not Sentry."""
-    status = tags.get("http_status")
     if isinstance(status, bool):
         status = None
     if isinstance(status, str) and status.isdigit():
         status = int(status)
     if isinstance(status, int) and status in EXPECTED_PROVIDER_HTTP:
         return True
-    upstream = tags.get("upstream_error_type")
     return isinstance(upstream, str) and upstream in EXPECTED_PROVIDER_UPSTREAM
 
 
@@ -513,32 +514,50 @@ _daily_lock = threading.Lock()
 _daily_memory: dict[str, int] = {}
 
 
-def _daily_allows(event: dict) -> bool:
-    """Per-device UTC day. Dropped events (callers) never reach this counter."""
+def _daily_state() -> tuple[str, Optional[Path], dict, int]:
     day = datetime.now(timezone.utc).date().isoformat()
     path = _daily_path()
+    state = _read_daily(path)
+    if state.get("day") != day:
+        state = {"day": day, "sent": _daily_memory.get(day, 0) if path is None else 0}
+    return day, path, state, int(state.get("sent") or 0)
+
+
+def _daily_would_send(event: dict) -> bool:
+    """Peek. Volume-rejected events must not consume this counter."""
     with _daily_lock:
-        state = _read_daily(path)
-        if state.get("day") != day:
-            state = {"day": day, "sent": _daily_memory.get(day, 0) if path is None else 0}
-        sent = int(state.get("sent") or 0)
+        _day, _path, _state, sent = _daily_state()
+    if sent >= DAILY_HARD_CAP:
+        return False
+    if sent >= DAILY_FULL_FIDELITY and not _sampled_in(event):
+        return False
+    return True
+
+
+def _daily_record(event: dict) -> None:
+    with _daily_lock:
+        day, path, state, sent = _daily_state()
         if sent >= DAILY_HARD_CAP:
-            return False
+            return
         if sent >= DAILY_FULL_FIDELITY and not _sampled_in(event):
-            return False
+            return
         sent += 1
         state["sent"] = sent
         _daily_memory.clear()
         _daily_memory[day] = sent
         _write_daily(path, state)
-        return True
 
 
 def _before_send_limited(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
-    """SDK hook: privacy and consent filters first, so dropped events never use the budget."""
+    """SDK hook: privacy first, then the daily peek, then the fingerprint budget.
+
+    A fingerprint that is already full does not advance the daily counter, and a
+    daily drop does not take a fingerprint slot.
+    """
     clean = before_send(event, hint)
-    if clean is None or not _daily_allows(clean) or not _volume_allows(clean):
+    if clean is None or not _daily_would_send(clean) or not _volume_allows(clean):
         return None
+    _daily_record(clean)
     return clean
 
 

@@ -128,12 +128,11 @@ def remember_distinct_id(value: str) -> bool:
 
 
 def _adopt_distinct_id(value: str) -> None:
-    """File already has ``value``. Align this process's env and Sentry user.
+    """File already has ``value``. Align this process's Sentry user.
 
-    The launch env is only a fallback. A settings change that returns 200 has
-    to replace it, or a later spawn still stamps events with the startup id.
+    Same-process events read the file first (``stored_distinct_id``). The launch
+    env stays the fallback for a missing file, including after the file is removed.
     """
-    os.environ["AUTOCLIP_ANONYMOUS_DEVICE_ID"] = value
     try:
         from backend.core.sentry_setup import sync_anonymous_user
         sync_anonymous_user(value)

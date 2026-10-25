@@ -575,11 +575,10 @@ def test_analytics_identity_change_is_used_by_later_events(tmp_path, monkeypatch
     (tmp_path / 'analytics.json').write_text(json.dumps({'distinct_id': old}), encoding='utf-8')
     assert telemetry.remember_distinct_id(new)
     assert telemetry.anonymous_distinct_id() == new
-    assert os.environ['AUTOCLIP_ANONYMOUS_DEVICE_ID'] == new
-    # The file already matches. A second 200 must still replace a stale launch env.
-    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', old)
+    # The launch env is only a fallback. The file wins for events in this process.
+    assert os.environ['AUTOCLIP_ANONYMOUS_DEVICE_ID'] == old
     assert telemetry.remember_distinct_id(new)
-    assert os.environ['AUTOCLIP_ANONYMOUS_DEVICE_ID'] == new
+    assert telemetry.anonymous_distinct_id() == new
     captured = {}
 
     def urlopen(request, timeout=1.5):

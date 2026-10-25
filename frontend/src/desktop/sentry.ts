@@ -8,7 +8,7 @@ const DSN = import.meta.env.VITE_PUBLIC_SENTRY_DSN
 const OPT_OUT_KEY = 'autoclip.crashReports.optOut'
 const DAILY_KEY = 'autoclip.sentry.daily'
 // Provider answers (401/429/503 and the same closed set the backend drops) stay in PostHog.
-const EXPECTED_HTTP = new Set([401, 402, 403, 404, 408, 409, 429, 500, 502, 503, 504])
+const EXPECTED_HTTP = new Set([401, 402, 403, 404, 408, 409, 429, 502, 503, 504])
 const EXPECTED_UPSTREAM = new Set([
   'invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found',
   'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'output_truncated',
