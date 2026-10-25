@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "AutoClip Desktop",
         "width": 1200,
         "height": 800,
@@ -89,6 +90,11 @@
     },
     "shell": {
       "open": true
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["autoclip"]
+      }
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlENzFDRkQ0OTZDRTMzRDIKUldUU004NlcxTTl4bldZcjJsNFhjMk9TTjFNWnhPc2s5c3lOQTVTcExpUkJDTUhrcmpwc2dadlIK",
