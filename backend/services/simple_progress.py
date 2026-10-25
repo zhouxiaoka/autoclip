@@ -269,6 +269,41 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
         logger.error(f"发送进度事件失败: {e}")
 
 
+def note_activity(project_id: str, message: str) -> None:
+    """Refresh an existing snapshot while a model stream is still producing.
+
+    The stage and percent stay put, so the bar does not jump. No snapshot means
+    this call is outside the pipeline and nothing is created.
+    """
+    if not project_id or not message or not store:
+        return
+    try:
+        current = store.get(project_id)
+    except Exception:  # noqa: BLE001 - progress must not fail the model call
+        return
+    if not current:
+        return
+    existing = current.get("message") or ""
+    if "失败" in existing or "错误" in existing:
+        return
+    payload = {
+        "project_id": project_id,
+        "stage": current.get("stage") or "",
+        "percent": int(current.get("percent") or 0),
+        "message": message,
+        "ts": int(time.time()),
+    }
+    for fn in list(_listeners):
+        try:
+            fn(payload)
+        except Exception:  # noqa: BLE001
+            logger.debug("进度监听器异常", exc_info=True)
+    try:
+        store.save(project_id, payload["stage"], payload["percent"], message, payload["ts"])
+    except Exception:  # noqa: BLE001
+        logger.debug("刷新进度失败", exc_info=True)
+
+
 def get_progress_snapshot(project_id: str) -> Optional[Dict[str, Any]]:
     """
     获取项目进度快照

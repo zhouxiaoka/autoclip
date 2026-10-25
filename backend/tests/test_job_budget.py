@@ -124,6 +124,7 @@ def test_openai_call_uses_the_remaining_budget_as_its_read_timeout(monkeypatch):
     with bound_clip_job(9):
         provider.call("hi")
     timeout = calls[0]["timeout"]
+    assert calls[0]["stream"] is True
     assert isinstance(timeout, httpx.Timeout)
     assert timeout.read <= 9
 

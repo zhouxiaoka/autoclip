@@ -251,8 +251,8 @@ def test_documented_errors_use_existing_codes(status, body, expected):
         assert fetched.error_type == expected.value
 
 
-def test_missing_stream_is_sse_and_callers_send_stream_false():
-    """APIMart returns text/event-stream unless the JSON body sets stream to false."""
+def test_callers_stream_and_the_probe_stays_a_single_json_body():
+    """Analysis calls consume SSE. The connection probe still forces stream false (#492)."""
     posted = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -269,7 +269,10 @@ def test_missing_stream_is_sse_and_callers_send_stream_false():
             payload = json.loads(self.rfile.read(length).decode() or "{}")
             posted.append(payload)
             if payload.get("stream") is not False:
-                sse = b'data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: [DONE]\n\n'
+                # Deltas assemble to the same answer the JSON branch returns.
+                first = json.dumps({"choices": [{"delta": {"content": '{"ok": '}}]})
+                second = json.dumps({"choices": [{"index": 0, "delta": {"content": "true}"}, "finish_reason": "stop"}]})
+                sse = f"data: {first}\n\ndata: {second}\n\ndata: [DONE]\n\n".encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Content-Length", str(len(sse)))
@@ -315,12 +318,12 @@ def test_missing_stream_is_sse_and_callers_send_stream_false():
             config={"base_url": base, "model": "qwen3.8-flash", "api_key": SECRET, "timeout": 10},
         )
         assert seen == {"ok": True}
-        assert posted[-1]["stream"] is False
+        assert posted[-1]["stream"] is True
 
         from backend.core.llm_providers import OpenAIProvider
         reply = OpenAIProvider(SECRET, "qwen3.8-flash", base_url=base).call("测试", max_tokens=16)
         assert reply.content == '{"ok": true}'
-        assert posted[-1]["stream"] is False
+        assert posted[-1]["stream"] is True
     finally:
         server.shutdown()
 
