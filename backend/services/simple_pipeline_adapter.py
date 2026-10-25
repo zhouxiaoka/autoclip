@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 
 from backend.services.simple_progress import emit_progress, clear_progress
+from backend.core.job_budget import JobDurationExceeded
 from backend.core.project_cancellation import ProjectDeleted
 from backend.pipeline.failures import (
     PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG, http_status_of,
@@ -450,6 +451,20 @@ class SimplePipelineAdapter:
             
         except ProjectDeleted:
             raise  # 项目已删除：停下，不写失败进度（RC156 #12）
+        except JobDurationExceeded as error:
+            # The wall-clock cap is a timeout the user can retry. The sentence is ours.
+            message = str(error)
+            failed = {
+                "status": "failed",
+                "project_id": self.project_id,
+                "task_id": self.task_id,
+                "stage": "ANALYZE",
+                "error": message,
+                "message": message,
+                "error_code": "timeout",
+            }
+            _carry_attribution(failed, error)
+            return failed
         except PipelineFailure as e:
             # 明确失败：带阶段和下一步提示，前端失败态 / 应用内反馈直接展示
             error_msg = e.user_message()

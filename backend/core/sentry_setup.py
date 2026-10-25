@@ -35,6 +35,8 @@ PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE
 
 def studio_error_code(error: Exception) -> str:
     from backend.core.project_cancellation import ServiceRestarted
+    if type(error).__name__ == "JobDurationExceeded":
+        return "timeout"
     if isinstance(error, ServiceRestarted):
         return 'service_restarted'
     from backend.services.studio.intelligence import VisionRequestError

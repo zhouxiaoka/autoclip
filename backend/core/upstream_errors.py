@@ -390,6 +390,17 @@ def _first_str(*values: Any) -> str:
     return ""
 
 
+def symbolic_error_code(body: Any) -> str:
+    """Normalized ``error.code`` / ``error.type`` from a response body. Empty when there is none.
+
+    Digits (Gemini's HTTP status stuffed into ``error.code``) are skipped. The value is a
+    token such as ``invalid_api_key``, never the message.
+    """
+    payload, text = _coerce_body(body)
+    code, kind, _message = _error_fields(payload, text)
+    return code or kind
+
+
 def _symbolic_code(*values: Any) -> str:
     """跳过纯数字状态码，只取 invalid_api_key / API_KEY_INVALID 这类符号。"""
     for value in values:

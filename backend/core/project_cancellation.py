@@ -190,6 +190,10 @@ def checkpoint(project_id: Optional[str] = None) -> None:
         return
     if is_stopped(project_id) or _marker_requests_stop(project_id):
         raise JobStopped(project_id or '')
+    # A clip job that has already used its wall-clock budget stops here, including
+    # between pipeline steps. Cancellation still wins: a deleted project raises above.
+    from backend.core.job_budget import ensure_clip_job_budget
+    ensure_clip_job_budget()
 
 
 def project_directory(project_id: str) -> Path:

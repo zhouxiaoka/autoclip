@@ -190,6 +190,8 @@ class DashScopeProvider(LLMProvider):
                 error.body = {"code": code, "message": message}
                 raise error
             except Exception as e:
+                from backend.core.job_budget import promote_if_budget_spent
+                promote_if_budget_spent(e)
                 logger.error(f"DashScope(native)调用失败: {sanitize_exception_text(e)}")
                 raise log_safe_exception(e) from None
         else:
@@ -212,8 +214,11 @@ class DashScopeProvider(LLMProvider):
                     payload.setdefault("enable_thinking", False)  # 原始 HTTP 请求：顶层参数
                 url = f"{self.base_url}/chat/completions"
                 # 以前读超时只有 30 秒：长字幕的挑片调用必然超时。与 OpenAIProvider 保持一致。
+                # A running clip job shortens the read so this call cannot outlive the job cap.
+                from backend.core.job_budget import clip_job_read_timeout
+                read = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
                 resp = requests.post(url, headers=headers, json=payload,
-                                     timeout=(LLM_CONNECT_TIMEOUT_SEC, LLM_READ_TIMEOUT_SEC))
+                                     timeout=(min(LLM_CONNECT_TIMEOUT_SEC, read), read))
                 if resp.status_code != 200:
                     try:
                         err = resp.json()
@@ -229,6 +234,8 @@ class DashScopeProvider(LLMProvider):
                 finish_reason = data["choices"][0].get("finish_reason")
                 return LLMResponse(content=content, usage=usage, model=model, finish_reason=finish_reason)
             except Exception as e:
+                from backend.core.job_budget import promote_if_budget_spent
+                promote_if_budget_spent(e)
                 logger.error(f"DashScope(compatible)调用失败: {sanitize_exception_text(e)}")
                 raise log_safe_exception(e) from None
     
@@ -249,7 +256,7 @@ class DashScopeProvider(LLMProvider):
             try:
                 # 直接调用call方法进行测试
                 response = self.call("测试", max_tokens=1)
-                if response and response.content:
+                if response and str(response.content or "").strip():
                     logger.info("DashScope API连接测试成功")
                     return True
                 else:
@@ -401,6 +408,33 @@ def guarded_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dic
     return dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request))
 
 
+def http_chat_body(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Raw HTTP JSON. The OpenAI SDK merges ``extra_body``; httpx/requests do not.
+
+    Connection probes and other direct posts must send ``enable_thinking`` /
+    ``thinking`` at the top level, or Qwen and DeepSeek keep their default thinking.
+    """
+    body = {key: value for key, value in payload.items() if key != "extra_body"}
+    extra = payload.get("extra_body")
+    if isinstance(extra, dict):
+        for key, value in extra.items():
+            body.setdefault(key, value)
+    return body
+
+
+def _budget_request_timeout(default_read: float):
+    """Per-request read timeout while a clip job is running. ``None`` outside a job."""
+    from backend.core.job_budget import clip_job_active, clip_job_read_timeout
+    if not clip_job_active():
+        return None
+    read = clip_job_read_timeout(default_read)
+    try:
+        import httpx
+        return httpx.Timeout(read, connect=min(LLM_CONNECT_TIMEOUT_SEC, read))
+    except ImportError:  # pragma: no cover
+        return read
+
+
 # OpenAI 官方的推理型号（o 系列、gpt-5 及以后）不认 max_tokens，返回 400 要求改用
 # max_completion_tokens（#333）。官方地址上的已知型号直接改名；其它情况（中转、Azure 等）
 # 等服务端 400 点名这个参数时再改名重试一次。DeepSeek / 百炼 / Ollama 等兼容接口请求体不变。
@@ -488,8 +522,10 @@ class OpenAIProvider(LLMProvider):
             # The SDK omits stream when the caller does not pass it, and several
             # OpenAI-compatible hosts (APIMart) then return text/event-stream.
             payload["stream"] = False
+            request_timeout = _budget_request_timeout(LLM_READ_TIMEOUT_SEC)
             try:
-                response = self.client.chat.completions.create(**payload)
+                response = self.client.chat.completions.create(
+                    **payload, **({} if request_timeout is None else {"timeout": request_timeout}))
             except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
@@ -500,7 +536,9 @@ class OpenAIProvider(LLMProvider):
                 if not consume_chunk_call():
                     raise
                 logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", sanitize_model(model))
-                response = self.client.chat.completions.create(**to_max_completion_tokens(payload))
+                response = self.client.chat.completions.create(
+                    **to_max_completion_tokens(payload),
+                    **({} if request_timeout is None else {"timeout": request_timeout}))
             
             content = response.choices[0].message.content
             usage = {
@@ -525,6 +563,8 @@ class OpenAIProvider(LLMProvider):
             )
             
         except Exception as e:
+            from backend.core.job_budget import promote_if_budget_spent
+            promote_if_budget_spent(e)
             logger.error("OpenAI调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None
     
@@ -541,7 +581,7 @@ class OpenAIProvider(LLMProvider):
             
             # 真实小请求：额度只剩一点时 max_tokens=1 也能通过。推理型号的输出上限也算推理 token。
             response = self.call("测试", max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 16)
-            return response and response.content is not None
+            return bool(response and str(response.content or "").strip())
         except Exception as e:
             logger.error("OpenAI连接测试失败 (base_url_host=%s): %s",
                          hostname_of_base_url(self.base_url or OPENAI_OFFICIAL_BASE_URL),
@@ -591,6 +631,8 @@ class GeminiProvider(LLMProvider):
             )
 
         except Exception as e:
+            from backend.core.job_budget import promote_if_budget_spent
+            promote_if_budget_spent(e)
             logger.error(f"Gemini调用失败: {sanitize_exception_text(e)}")
             raise log_safe_exception(e) from None
     
@@ -600,7 +642,7 @@ class GeminiProvider(LLMProvider):
             # 使用简单的测试提示
             response = self.call("测试", max_tokens=10)
             # 检查响应是否有效
-            if response and response.content:
+            if response and str(response.content or "").strip():
                 return True
             return False
         except Exception as e:
@@ -659,6 +701,8 @@ class SiliconFlowProvider(LLMProvider):
             )
             
         except Exception as e:
+            from backend.core.job_budget import promote_if_budget_spent
+            promote_if_budget_spent(e)
             logger.error(f"硅基流动调用失败: {sanitize_exception_text(e)}")
             raise log_safe_exception(e) from None
     
@@ -668,7 +712,7 @@ class SiliconFlowProvider(LLMProvider):
             # 使用简单的测试提示
             response = self.call("测试", max_tokens=10)
             # 检查响应是否有效
-            if response and response.content:
+            if response and str(response.content or "").strip():
                 return True
             return False
         except Exception as e:

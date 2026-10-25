@@ -44,8 +44,20 @@ def safe_http_status(status) -> int | None:
     return value if 100 <= value <= 599 else None
 
 
+# Upstream tokens that stay ``unknown`` after the shared classifier, but already have a
+# stable connection-test code. Matched on the normalized code/type only, never the message.
+_INVALID_REQUEST_CODES = frozenset({
+    'invalid_request_error', 'invalid_request', 'invalid_parameter', 'invalidparameter',
+    'context_length_exceeded', 'content_filter', 'content_policy_violation', 'content_filter_error',
+})
+
+
+def _request_token(upstream_code: str) -> str:
+    return (upstream_code or '').strip().lower().replace(' ', '_')
+
+
 def connection_test_error_code(error_type: str | None, *, http_status=None, network_kind: str = '',
-                               empty_key: bool = False) -> str:
+                               empty_key: bool = False, upstream_code: str = '') -> str:
     kind = (error_type or '').strip()
     status = safe_http_status(http_status)
     if kind == 'invalid_key' and empty_key:
@@ -54,6 +66,10 @@ def connection_test_error_code(error_type: str | None, *, http_status=None, netw
         return 'dns'
     if kind in _BY_TYPE:
         return _BY_TYPE[kind]
+    token = _request_token(upstream_code)
+    compact = token.replace('.', '')
+    if token in _INVALID_REQUEST_CODES or compact in _INVALID_REQUEST_CODES or token.startswith('invalidparameter.'):
+        return 'invalid_request'
     if status is not None and 500 <= status <= 599:
         return 'http_5xx'
     if status == 429:
