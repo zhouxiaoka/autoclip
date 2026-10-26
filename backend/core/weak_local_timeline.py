@@ -17,8 +17,8 @@ _SIZE = re.compile(r"(?:^|[^0-9a-z])(\d+(?:\.\d+)?)b(?:[^0-9a-z]|$)")
 _SMALL_ALIASES = ("phi3", "phi-3", "phi4-mini", "phi-4-mini", "tinyllama", "smollm")
 _NOT_TIMELINE = ("embed", "whisper", "rerank")
 
-# Substring the Studio failure card uses to offer model settings. Keep it in both hints.
-WEAK_LOCAL_TIMELINE_MARKER = "经常无法返回可用的时间线"
+# The only user-facing sentence for this failure. No topic counts, no retry essay.
+WEAK_LOCAL_TIMELINE_REASON = "当前本地模型无法返回可用时间线"
 
 
 def _clean(value) -> str:
@@ -59,40 +59,13 @@ def note_weak_local_timeline(report: dict, info) -> None:
         report["weak_local_timeline"] = True
 
 
-def _retries_spent(chunks: list) -> bool:
-    """The per-chunk JSON loop finished its budget (first try + two retries)."""
-    from backend.core.result_retry import MAX_ATTEMPTS
-
-    replies = [
-        chunk for chunk in chunks
-        if isinstance(chunk, dict) and chunk.get("source") != "cache"
-        and chunk.get("outcome") in {"invalid_response", "no_valid_ranges", "empty_response"}
-    ]
-    if not replies:
-        return False
-
-    def attempts(chunk: dict) -> int:
-        try:
-            return int(chunk.get("attempts") or 0)
-        except (TypeError, ValueError):
-            return 0
-
-    return all(attempts(chunk) >= MAX_ATTEMPTS for chunk in replies)
-
-
 def empty_interval_hint(report: dict, chunks: list) -> str:
     """Hint before the shared 「尚未进入评分」 sentence.
 
-    Cache replay keeps its own next step. A known-weak local model says the
-    model often cannot return a timeline and, once the chunk budget is gone,
-    that automatic retries already finished. Other models keep the generic hint.
+    A known-weak local model does not use this hint: the failure is the one
+    short sentence in ``failures.timeline_failure_from_report``. Cache replay
+    and every other model keep their existing next step.
     """
-    if any(chunk.get("source") == "cache" for chunk in chunks):
+    if any(isinstance(chunk, dict) and chunk.get("source") == "cache" for chunk in chunks):
         return "本次回放了项目中的模型缓存，未重新请求模型；请重新导入素材创建新项目再试。"
-    if report.get("weak_local_timeline"):
-        spent = "，自动重试已经用完" if _retries_spent(chunks) else ""
-        return (
-            f"这个模型{WEAK_LOCAL_TIMELINE_MARKER}{spent}。"
-            "请改用云端模型，或更大、能返回结构化时间区间的模型。"
-        )
     return "请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。"

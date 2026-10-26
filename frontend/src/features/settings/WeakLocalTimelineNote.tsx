@@ -4,7 +4,7 @@ import { t } from '../../i18n'
 export default function WeakLocalTimelineNote() {
   return (
     <p className="ac-note" role="status">
-      {t('这个本地小模型经常无法返回可用的时间线。可以保存，但制作前建议改用云端模型，或更大、能返回结构化时间区间的模型。')}
+      {t('这个本地模型往往剪不出片段，建议换更大的或云端模型')}
     </p>
   )
 }

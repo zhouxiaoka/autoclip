@@ -63,12 +63,57 @@ function renderModels(settings) {
 test('the analysis slot warns for qwen2.5:7b and still leaves the model selectable', () => {
   const tree = renderModels(settingsFor('ollama', 'qwen2.5:7b', 'http://127.0.0.1:11434/v1'))
   const text = textOf(tree)
-  assert.match(text, /这个本地小模型经常无法返回可用的时间线/)
-  assert.match(text, /可以保存/)
+  assert.match(text, /这个本地模型往往剪不出片段，建议换更大的或云端模型/)
+  assert.doesNotMatch(text, /结构化时间区间/)
   const card = flatten(tree).find(node => node?.props?.className === 'ac-purpose-card' && textOf(node).includes('精彩片段分析'))
   assert.ok(card)
   assert.equal(card.props.disabled, undefined)
   assert.equal(analysisUsesWeakLocalTimelineModel(settingsFor('ollama', 'qwen2.5:32b')), false)
-  assert.doesNotMatch(textOf(renderModels(settingsFor('ollama', 'qwen2.5:32b'))), /经常无法返回可用的时间线/)
-  assert.doesNotMatch(textOf(renderModels(settingsFor('dashscope', 'qwen2.5:7b', 'https://dashscope.aliyuncs.com/compatible-mode/v1'))), /经常无法返回可用的时间线/)
+  assert.doesNotMatch(textOf(renderModels(settingsFor('ollama', 'qwen2.5:32b'))), /往往剪不出片段/)
+  assert.doesNotMatch(textOf(renderModels(settingsFor('dashscope', 'qwen2.5:7b', 'https://dashscope.aliyuncs.com/compatible-mode/v1'))), /往往剪不出片段/)
+})
+
+test('a connected cloud model is the one home-card replacement; a lone 7b is not', () => {
+  const { recommendTimelineReplacement } = loadTs('timelineReplacement.ts', { '../../i18n': { t: key => key } })
+  const base = {
+    version: 1, saved: true, vision: null, cover: null, transcription: null,
+    cover_enabled: false, allow_send_frame: false, analysis_mode: 'subtitle', allow_visual_screening: false,
+    chunk_size: 5000, min_score_threshold: 0.7, max_clips_per_collection: 5,
+  }
+  const onlySmall = recommendTimelineReplacement({
+    ...base,
+    connections: [{ id: 'ollama', name: 'Ollama', provider: 'ollama', base_url: 'http://127.0.0.1:11434/v1' }],
+    analysis: { connection_id: 'ollama', model: 'qwen2.5:7b', capability: 'text', model_source: 'user' },
+  })
+  assert.equal(onlySmall, null)
+  const cloud = recommendTimelineReplacement({
+    ...base,
+    connections: [
+      { id: 'ollama', name: 'Ollama', provider: 'ollama', base_url: 'http://127.0.0.1:11434/v1' },
+      { id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: 'https://api.deepseek.com', has_key: true, validation_status: 'ok' },
+    ],
+    analysis: { connection_id: 'ollama', model: 'qwen2.5:7b', capability: 'text', model_source: 'user' },
+  })
+  assert.equal(cloud.displayName, 'DeepSeek')
+  assert.equal(cloud.model, 'deepseek-flash')
+  assert.equal(cloud.connectionId, 'ds')
+  const larger = recommendTimelineReplacement({
+    ...base,
+    connections: [{
+      id: 'ollama', name: 'Ollama', provider: 'ollama', base_url: 'http://127.0.0.1:11434/v1',
+      enabled_model_ids: ['qwen2.5:7b', 'qwen2.5:32b', 'qwen2.5:14b'],
+    }],
+    analysis: { connection_id: 'ollama', model: 'qwen2.5:7b', capability: 'text', model_source: 'user' },
+  })
+  assert.equal(larger.displayName, 'qwen2.5:14b')
+  assert.equal(larger.model, 'qwen2.5:14b')
+  const unchecked = recommendTimelineReplacement({
+    ...base,
+    connections: [
+      { id: 'ollama', name: 'Ollama', provider: 'ollama', base_url: 'http://127.0.0.1:11434/v1' },
+      { id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: 'https://api.deepseek.com', has_key: true, validation_status: 'unchecked' },
+    ],
+    analysis: { connection_id: 'ollama', model: 'qwen2.5:7b', capability: 'text', model_source: 'user' },
+  })
+  assert.equal(unchecked, null)
 })

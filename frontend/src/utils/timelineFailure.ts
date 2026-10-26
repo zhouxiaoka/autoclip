@@ -12,15 +12,15 @@ export function classifyTimelineEmpty(error?: string | null, code?: string | nul
   return text.includes('时间线提取为空') || text.includes('时间线为空')
 }
 
-/**
- * Backend hint substring for a known-weak local model that returned topics
- * without usable intervals (#428). Must stay inside weak_local_timeline.py.
- */
-export const WEAK_LOCAL_TIMELINE_MARKER = '经常无法返回可用的时间线'
+/** User-facing sentence. Same text as backend WEAK_LOCAL_TIMELINE_REASON. */
+export const WEAK_LOCAL_TIMELINE_REASON = '当前本地模型无法返回可用时间线'
+/** Stored on failures from before the short sentence. Still this failure, never shown raw. */
+const LEGACY_WEAK_MARKER = '经常无法返回可用的时间线'
 
 /** Terminal empty-interval copy, only after the backend has named a weak local model. */
 export function weakLocalTimelineFailure(error?: string | null, code?: string | null): boolean {
   if (code && code !== 'invalid_response') return false
   const text = error || ''
-  return text.includes('没有有效时间区间') && text.includes(WEAK_LOCAL_TIMELINE_MARKER)
+  if (text.includes(WEAK_LOCAL_TIMELINE_REASON)) return true
+  return text.includes('没有有效时间区间') && text.includes(LEGACY_WEAK_MARKER)
 }

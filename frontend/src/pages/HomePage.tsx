@@ -15,6 +15,11 @@ import FirstRunSetup from '../features/settings/FirstRunSetup'
 
 
 import { exampleProjectApi, projectApi } from '../services/api'
+import { modelSettingsApi, type ModelSettings } from '../features/settings/modelSettingsApi'
+import { forSave } from '../features/settings/modelSettingsLogic'
+import { syncFollowingCover } from '../features/settings/modelDefaults'
+import { recommendTimelineReplacement } from '../features/settings/timelineReplacement'
+import { studioApi } from '../features/studio/api'
 import { beginExperience } from '../analytics/experience'
 import { workflow } from '../analytics/observer'
 import { Btn } from '../ui'
@@ -35,6 +40,7 @@ const HomePage: React.FC = () => {
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null)
   const [setupRequest, setSetupRequest] = useState(0)
   const [exampleBusy, setExampleBusy] = useState(false)
+  const [aiSettings, setAiSettings] = useState<ModelSettings | null>(null)
 
   // 使用项目轮询Hook
   useProjectPolling({
@@ -102,6 +108,44 @@ const HomePage: React.FC = () => {
   // ProjectCard.handleRetry 已经发过 start/retryProcessing 请求，这里只负责
   // 提示 + 刷新列表，绝不能再发一次重试请求（会和卡片自身的请求叠加，并制造
   // loadProjects→重挂载→自动启动 的循环）。
+  useEffect(() => {
+    let live = true
+    modelSettingsApi.get().then(value => { if (live) setAiSettings(value) }).catch(() => { if (live) setAiSettings(null) })
+    return () => { live = false }
+  }, [])
+
+  const replacement = recommendTimelineReplacement(aiSettings)
+
+  const switchAndRetry = async (projectId: string) => {
+    const nextModel = recommendTimelineReplacement(aiSettings)
+    const project = projects.find(item => item.id === projectId)
+    if (!aiSettings || !nextModel || !project) {
+      message.error(t("重试失败，请稍后再试"))
+      return
+    }
+    const managed = !!(project.settings?.smart_import || project.processing_config?.smart_import)
+      || ['highlight', 'promo'].includes(project.settings?.creative?.goal || project.processing_config?.creative?.goal)
+    try {
+      const saved = await modelSettingsApi.save(forSave(syncFollowingCover(aiSettings, {
+        ...aiSettings,
+        analysis: {
+          connection_id: nextModel.connectionId,
+          model: nextModel.model,
+          capability: aiSettings.analysis?.capability || 'auto',
+          model_source: 'user',
+        },
+      })))
+      setAiSettings(saved)
+      if (managed) await studioApi.retry(projectId)
+      else await projectApi.retryProcessing(projectId)
+      message.success(t("已开始重试处理项目"))
+      await loadProjects()
+    } catch (error) {
+      message.error(t("重试失败，请稍后再试"))
+      console.error('Switch model and retry error:', error)
+    }
+  }
+
   const handleRetryProject = async () => {
     message.success(t("已开始重试处理项目"))
     try {
@@ -249,6 +293,8 @@ const HomePage: React.FC = () => {
                          onDelete={handleDeleteProject}
                          onRetry={() => handleRetryProject()}
                          onClick={() => handleProjectCardClick(project)}
+                         replacement={replacement}
+                         onSwitchAndRetry={switchAndRetry}
                        />
                      </div>
                    ))}

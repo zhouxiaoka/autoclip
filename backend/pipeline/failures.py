@@ -185,8 +185,11 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
                 rejected[reason] = rejected.get(reason, 0) + count
         invalid_ranges = rejected.get("invalid_time", 0) + rejected.get("outside_chunk_or_reversed", 0)
         detail = (f"其中 {invalid_ranges} 个候选的时间戳无效、倒序或不在当前字幕块内。" if invalid_ranges else "")
-        from backend.core.weak_local_timeline import empty_interval_hint
+        from backend.core.weak_local_timeline import WEAK_LOCAL_TIMELINE_REASON, empty_interval_hint
 
+        cached = any(isinstance(chunk, dict) and chunk.get("source") == "cache" for chunk in chunks)
+        if report.get("weak_local_timeline") and not cached:
+            return PipelineFailure("ANALYZE", WEAK_LOCAL_TIMELINE_REASON, "", code="invalid_response")
         return PipelineFailure(
             "ANALYZE", f"时间线模型回复没有有效时间区间（{topic_count} 个话题，{len(chunks)} 个字幕块）。{detail}",
             empty_interval_hint(report, chunks) + "这一步尚未进入评分或最短时长筛选。", code="invalid_response",

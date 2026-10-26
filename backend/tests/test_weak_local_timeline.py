@@ -6,19 +6,12 @@ import pytest
 
 from backend.core.result_retry import MAX_ATTEMPTS
 from backend.core.weak_local_timeline import (
-    WEAK_LOCAL_TIMELINE_MARKER,
+    WEAK_LOCAL_TIMELINE_REASON,
     empty_interval_hint,
     is_known_weak_local_timeline_model,
 )
 from backend.pipeline.failures import timeline_failure_from_report
 from backend.pipeline.step2_timeline import TimelineExtractor
-
-
-WEAK_HINT = (
-    "这个模型经常无法返回可用的时间线，自动重试已经用完。"
-    "请改用云端模型，或更大、能返回结构化时间区间的模型。"
-    "这一步尚未进入评分或最短时长筛选。"
-)
 
 
 @pytest.mark.parametrize(
@@ -54,29 +47,24 @@ def _chunks(outcome="invalid_response", attempts=MAX_ATTEMPTS, source="model", c
     ]
 
 
-def test_issue_428_weak_local_copy_says_retries_are_already_spent():
+def test_issue_428_weak_local_copy_is_one_short_sentence_without_counters():
     failure = timeline_failure_from_report(82, {
         "chunks": _chunks(), "parsed": 0, "output": 0, "weak_local_timeline": True,
     })
     text = failure.user_message()
     assert failure.code == "invalid_response"
-    assert text == f"时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 {WEAK_HINT}"
-    assert WEAK_LOCAL_TIMELINE_MARKER in text
-    assert "自动重试已经用完" in text
-    assert "请改用云端模型，或更大、能返回结构化时间区间的模型。" in text
-    assert "本地模型需支持当前字幕长度" not in text
+    assert text == WEAK_LOCAL_TIMELINE_REASON
+    assert "话题" not in text and "字幕块" not in text
+    assert "自动重试" not in text and "经常无法" not in text
     assert "11434" not in text and "http" not in text
 
 
-def test_weak_local_without_a_spent_budget_does_not_claim_retries_finished():
+def test_weak_local_without_a_spent_budget_still_hides_counters():
     failure = timeline_failure_from_report(2, {
         "chunks": _chunks(outcome="empty_response", attempts=1, count=1),
         "parsed": 0, "weak_local_timeline": True,
     })
-    text = failure.user_message()
-    assert WEAK_LOCAL_TIMELINE_MARKER in text
-    assert "自动重试已经用完" not in text
-    assert "请改用云端模型，或更大、能返回结构化时间区间的模型。" in text
+    assert failure.user_message() == WEAK_LOCAL_TIMELINE_REASON
 
 
 def test_cache_replay_keeps_the_reimport_hint_even_for_a_weak_local_model():
@@ -86,14 +74,14 @@ def test_cache_replay_keeps_the_reimport_hint_even_for_a_weak_local_model():
     })
     text = failure.user_message()
     assert "本次回放了项目中的模型缓存" in text
-    assert WEAK_LOCAL_TIMELINE_MARKER not in text
+    assert WEAK_LOCAL_TIMELINE_REASON not in text
 
 
 def test_cloud_empty_intervals_keep_the_generic_hint():
     failure = timeline_failure_from_report(82, {"chunks": _chunks(), "parsed": 0, "output": 0})
     assert empty_interval_hint({}, _chunks()).startswith("请换用能稳定返回结构化时间线的模型")
     assert "本地模型需支持当前字幕长度" in failure.user_message()
-    assert WEAK_LOCAL_TIMELINE_MARKER not in failure.user_message()
+    assert WEAK_LOCAL_TIMELINE_REASON not in failure.user_message()
 
 
 def test_extractor_stamps_only_a_boolean_for_qwen25_7b(tmp_path):

@@ -469,7 +469,6 @@
   "硅基流动": "SiliconFlow",
   "SiliconFlow 聚合平台，DeepSeek / Qwen 等开源模型。": "SiliconFlow oferece modelos abertos como DeepSeek e Qwen.",
   "本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。": "Ollama local, grátis e offline. Experimente: ollama pull qwen2.5:7b.",
-  "这个本地小模型经常无法返回可用的时间线。可以保存，但制作前建议改用云端模型，或更大、能返回结构化时间区间的模型。": "Este modelo local pequeno muitas vezes não consegue devolver uma linha do tempo utilizável. Você pode salvá-lo. Antes de uma execução longa, troque por um modelo na nuvem ou por um maior que devolva intervalos de tempo estruturados.",
   "本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。": "LM Studio local, grátis e offline. Carregue um modelo e inicie o Local Server.",
   "硅基流动 / 开源": "SiliconFlow / modelos abertos",
   "模型": "Modelo",
@@ -2008,5 +2007,11 @@
   "进度为估算，以阶段为准": "O progresso é uma estimativa; vale a etapa",
   "这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。": "Este pedido pode já ter sido cobrado pelo fornecedor. Confira o saldo e teste a conexão nas Configurações antes de tentar de novo.",
   "分析": "Análise",
-  "制作": "Produção"
+  "制作": "Produção",
+  "这个本地模型往往剪不出片段，建议换更大的或云端模型": "Este modelo local costuma não produzir clipes. Prefira um maior ou na nuvem.",
+  "当前本地模型无法返回可用时间线": "O modelo local atual não conseguiu devolver uma linha do tempo utilizável.",
+  "建议换用 {{model}} 后重试": "Tente de novo com {{model}}.",
+  "切换并重试": "Trocar e tentar de novo",
+  "去配置模型": "Configurar modelo",
+  "其他模型": "Outros modelos"
 }
