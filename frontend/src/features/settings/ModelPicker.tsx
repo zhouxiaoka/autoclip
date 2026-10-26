@@ -6,6 +6,8 @@ import type { Capability, Connection, ModelEntry, ModelList, ModelSettings } fro
 import { analysisModels } from './modelDefaults'
 import { endpointProviderReady } from './endpointProvider'
 import { connectionReady, type Role } from './modelSettingsLogic'
+import { isKnownWeakLocalTimelineModel } from './weakLocalTimeline'
+import WeakLocalTimelineNote from './WeakLocalTimelineNote'
 
 export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSettings['analysis_mode']) {
   if (role === 'cover') return models.filter(m => m.image)
@@ -43,6 +45,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
     ? (m.capability ? ` · ${m.capability === 'multimodal' ? t('多模态') : t('仅文字')}` : '')
     : role === 'transcription' && m.asr_note ? ` · ${t(m.asr_note)}` : ''
   const unknownCapability = (role === 'analysis' || role === 'vision') && !!model && !!connection && !list?.models.find(m => m.id === model)?.capability
+  const weakTimeline = role === 'analysis' && isKnownWeakLocalTimelineModel(connection?.provider, model, connection?.base_url)
   const stale = !!connection && connectionReady(connection) && !busy && (!!listError || !list || list.source !== 'live')
   // The generic preview warning is already covered by the row hint; account-specific warnings stay visible.
   const warning = list?.warning && list.warning !== '公开目录预览，填写 API Key 后确认账号可用模型。' ? t(list.warning) : ''
@@ -61,6 +64,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
     {(listError || warning) && <p className="ac-note ac-note--error">{listError || warning}</p>}
     {unknownCapability && onCapability && <Select aria-label={t('自定义模型类型')} style={{ width: '100%', marginTop: 8 }} value={capability || 'auto'}
       options={[{ value: 'auto', label: t('自动识别') }, { value: 'multimodal', label: t('多模态') }, { value: 'text', label: t('仅文字') }]} onChange={onCapability} />}
+    {weakTimeline && <WeakLocalTimelineNote />}
     {role === 'transcription' && models.length > 0 && !models.some(m => m.asr_supported) && <p className="ac-note">{t('该供应商的 ASR 尚未适配字幕时间戳，请选择阿里云、OpenAI 或本地 Whisper。')}</p>}
     {role === 'transcription' && (list?.preview || models.some(m => m.asr_preview)) && !model && !(warning || listError) && <small className="ac-note">{t('模型目录可预览；实际可用性以账号权限和服务商开通状态为准。')}</small>}
   </div>

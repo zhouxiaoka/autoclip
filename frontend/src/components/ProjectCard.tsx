@@ -12,7 +12,8 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
-import { classifyTimelineEmpty } from '../utils/timelineFailure'
+import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
+import { settingsReturnUrl } from '../features/studio/settingsReturn'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
@@ -272,6 +273,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }
   const failureText = llmFailureText(project.error_message || failedProgress?.message, project.error_code)
   const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)
+  const weakLocalTimeline = weakLocalTimelineFailure(failureText, project.error_code)
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText, project.error_code)
   const subtitleFailure = timelineEmpty
     ? null
@@ -360,6 +362,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             <div className="ac-project-recovery">
               {subtitleFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
               {llmKeyFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
+              {weakLocalTimeline && <Btn variant="text" size="sm" onClick={() => navigate(settingsReturnUrl('/settings?section=analysis', project.id))}>{t("模型设置")}</Btn>}
               <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
               <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
             </div>

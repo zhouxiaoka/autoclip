@@ -13,7 +13,8 @@ import { needsImportConfirmation } from '../features/studio/importRouting'
 import { studioApi, errorText } from '../features/studio/api'
 import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
-import { classifyTimelineEmpty } from '../utils/timelineFailure'
+import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
+import { settingsReturnUrl } from '../features/studio/settingsReturn'
 import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
 import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
 import ClipCard from '../components/ClipCard'
@@ -295,6 +296,7 @@ const ProjectDetailPage: React.FC = () => {
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
+  const weakLocalTimeline = weakLocalTimelineFailure(currentProject.error_message, currentProject.error_code)
   const failureContext = {
     source: 'failure' as const,
     project_id: currentProject.id,
@@ -357,8 +359,9 @@ const ProjectDetailPage: React.FC = () => {
           )}
           {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {weakLocalTimeline && <Btn variant="cta" onClick={() => navigate(settingsReturnUrl('/settings?section=analysis', currentProject.id))}>{t("模型设置")}</Btn>}
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
-              <Btn variant={llmKeyFailure || shownSubtitleKind ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
+              <Btn variant={llmKeyFailure || shownSubtitleKind || weakLocalTimeline ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
             </div>
           )}
         </div>

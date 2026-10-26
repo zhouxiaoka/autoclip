@@ -9,6 +9,8 @@ import {
   preferredOffer, PURPOSE_SLOTS, slotSummary, visionWarning, WHISPER_MODELS,
   type ModelGroup, type ModelOffer, type PurposeId, type SlotLine,
 } from './defaultModelSlots'
+import { analysisUsesWeakLocalTimelineModel } from './weakLocalTimeline'
+import WeakLocalTimelineNote from './WeakLocalTimelineNote'
 
 const SMART_HINT = '记下这个型号，只绑定这一家服务商。换服务商请用下面的固定选项。'
 
@@ -186,6 +188,7 @@ export default function DefaultModels({ settings, lists, onChange, transcription
                     : t('画面理解所选模型没有视觉能力。可以保存，开始生成前会拦住。')}
                 </p>
               )}
+              {slot.id === 'analysis' && analysisUsesWeakLocalTimelineModel(settings) && <WeakLocalTimelineNote />}
               {open === slot.id && (
                 <div id={`ai-defaults-panel-${slot.id}`}>
                   <PurposePanel settings={settings} lists={lists} purpose={slot.id} onChange={next => { onChange(next) }} />

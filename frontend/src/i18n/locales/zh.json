@@ -469,6 +469,7 @@
   "硅基流动": "硅基流动",
   "SiliconFlow 聚合平台，DeepSeek / Qwen 等开源模型。": "SiliconFlow 聚合平台，DeepSeek / Qwen 等开源模型。",
   "本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。": "本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。",
+  "这个本地小模型经常无法返回可用的时间线。可以保存，但制作前建议改用云端模型，或更大、能返回结构化时间区间的模型。": "这个本地小模型经常无法返回可用的时间线。可以保存，但制作前建议改用云端模型，或更大、能返回结构化时间区间的模型。",
   "本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。": "本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。",
   "硅基流动 / 开源": "硅基流动 / 开源",
   "模型": "模型",

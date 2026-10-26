@@ -47,6 +47,30 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
   }))
 }
 
+test('#428 a weak local timeline failure links to the analysis model without hiding the reason', () => {
+  const visited = []
+  const buttons = {}
+  const error = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
+  const html = renderCard('failed', error, null, {
+    project: { error_code: 'invalid_response' },
+    onButton: (label, onClick) => { buttons[label] = onClick },
+  }, to => visited.push(to))
+  assert.match(html, /经常无法返回可用的时间线/)
+  assert.match(html, /自动重试已经用完/)
+  buttons['模型设置']()
+  assert.deepEqual(visited, ['/settings?section=analysis&return_project=test'])
+})
+
+test('a generic invalid timeline does not add model settings on the project card', () => {
+  const buttons = {}
+  const error = '时间线模型回复没有有效时间区间（1 个话题，1 个字幕块）。 请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。这一步尚未进入评分或最短时长筛选。'
+  renderCard('failed', error, null, {
+    project: { error_code: 'invalid_response' },
+    onButton: (label, onClick) => { buttons[label] = onClick },
+  })
+  assert.equal(buttons['模型设置'], undefined)
+})
+
 test('failed project shows the persisted reason even after progress state is lost', () => {
   const html = renderCard('error', 'Whisper 模型文件缺失或不完整。')
   assert.match(html, /role="alert"/)
