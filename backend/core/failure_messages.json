@@ -28,6 +28,7 @@
   "subtitle_setup": "字幕没有准备好，请稍后重试。",
   "timeline_empty": "没有找到可以成片的片段。",
   "source_blocked": "这个来源暂时无法读取，请换一个视频或稍后重试。",
+  "file_locked": "下载的文件正被其他程序占用，请关闭占用它的程序后重试。",
   "source_not_found": "找不到这个视频，请核对链接或换一个视频。",
   "source_too_short": "视频太短，无法制作成片。",
   "no_complete_version": "所选平台没有可生成的完整内容版本",

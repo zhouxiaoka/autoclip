@@ -13,7 +13,7 @@
 1. **杀后端，任务落成 `service_restarted`。** 用现成的 provider e2e `kill_backend` 路径（`scripts/provider_e2e/harness.py` 的 `run_case`，`fault=kill`，`restart_after_kill=True`），mock 供应商，隔离数据目录。结果：`passed=true`，`error_code=service_restarted`，`status=failed`，`failure_stage=production`，`shutdown_kind=crash`，文案「应用刚重启，这次制作已中断，请重试。」耗时 53s。这是 Linux 上的 `SIGKILL`，不是 Windows 安装包，但走的是同一套恢复代码。
 2. **活着的空闲进程不会被标成重启失败。** `test_idle_producer_stays_in_production_until_the_process_exits`：子进程卡在 `time.sleep`，本机测得 `status=sleeping`、`cpu_percent=0.0`、RSS 约 9.7 MB，恢复逻辑保持 `production` / 「正在制作可发布成片」。杀掉该进程之后，同一项目变成 `service_restarted`。
 3. **自动拉起上限是 3 次。** `src-tauri/src/backend_manager.rs` 里 `MAX_CRASH_RESTARTS = 3`，`should_auto_restart` 在已重启 3 次或主动停止时返回 false；间隔 1s、2s、4s。单测 `unexpected_exit_restarts_and_intentional_stop_does_not` 写了这些断言。这台机器的 Cargo 1.83 编不过桌面壳（依赖要求 `edition2024`），**这个 Rust 单测今天没有执行**。健康检查只看进程是否退出；端口连不上但进程还在时，只打日志，不拉起。
-4. **界面在后端消失后会停在上一帧「制作中」。** `frontend/tests/workspace-polling.test.cjs`：网络错误最多再试 3 次，保留上一次成功的 `running` 快照（断言 `calls===4`、`data.length===1`、`errors.length===3`）。窗口一直聚焦时不会因为失焦再刷新。八语目录和 `failure_messages.json` 的 `service_restarted` 由 `studio-system-messages.test.cjs` 锁住。英文现在是 “The app restarted and this run was interrupted. Try again.”，不是反馈里那句 1.5.6 的 “The service restarted. Please generate again.”
+4. **界面在后端消失后不再只停到窗口失焦。** 快轮询合同没改：网络错误仍然最多再试 2 次（一共 3 次失败），HTTP 错误立刻停，没有成功快照时也停。若最后一帧还是制作中，页面开着时改为每 10 秒再读一次；后端拉起来并把任务写成 `service_restarted` 之后，这一下会换掉「正在制作」。焦点 / 可见性刷新仍在。`workspace-polling.test.cjs` 锁住快预算（`calls===4`）和慢探测读到 `failed`。八语目录和 `failure_messages.json` 的 `service_restarted` 由 `studio-system-messages.test.cjs` 锁住。英文现在是 “The app restarted and this run was interrupted. Try again.”，不是反馈里那句 1.5.6 的 “The service restarted. Please generate again.”
 5. **时间上限是另一条失败，不是重启。** `AUTOCLIP_CLIP_JOB_BUDGET_SEC` 覆盖默认 20 分钟（`test_env_budget_overrides_the_default_and_is_still_a_timeout`）。超时的错误码是 `timeout`，不会重试。反馈里的 15 分钟还没到默认上限。
 
 相关回归：`backend/tests/test_studio_restart_recovery.py`、`backend/tests/test_job_budget.py`、`scripts/tests/test_provider_e2e.py` 里 `kill_backend` / `service_restarted` 的判定。本次一起跑过，通过。
@@ -48,7 +48,7 @@ Stop-Process -Name autoclip-backend -Force
 - 杀之前、杀之后 `autoclip-backend` 与 `AutoClip` 各自的 PID、CPU、工作集。5 MB 量级更像壳；Python 后端空转也已经接近 10 MB，带模型会更大。两条要分开看。
 - 壳的 stderr：`后端进程意外退出，N 秒后自动重启（第 k 次）`。第 4 次应出现 `自动重启次数已用尽`，之后端口不再起来。
 - 拉起之后读本机 `studio.json`（数据目录下该项目的 `metadata/studio.json`）和项目接口：`error_code=service_restarted`，`failure_stage`，`shutdown_kind`，文案为目录句。
-- **窗口保持聚焦**再杀一次：界面是否仍停在「正在制作可发布成片」，而磁盘上已经是失败。然后切走再切回来，确认焦点刷新能读到失败句。这是现有轮询合同，还没有在安装包上眼见过。
+- **窗口保持聚焦**再杀一次：快轮询失败后，大约 10 秒内应自己换成 `service_restarted` 的失败句，不必先切走窗口。切走再切回来仍然会刷新。安装包上还没眼见过。
 - 另开一轮把 `AUTOCLIP_CLIP_JOB_BUDGET_SEC` 设成 `20`，后端保持存活：应在约 20 秒以 `timeout` 停，而不是 `service_restarted`，CPU 在等待模型时可以接近 0。
 
 ### 仍然只有反馈者本人能提供的
@@ -63,7 +63,7 @@ Stop-Process -Name autoclip-backend -Force
 ERROR: Unable to rename file: [WinError 32] The process cannot access the file because it is being used by another process: '...\raw\input.f299.mp4.part' -> '...\raw\input.f299.mp4'. Giving up after 3 retries
 ```
 
-错误码当时是 `unexpected`。
+错误码当时是 `unexpected`。重试用尽之后现在是 `file_locked`，用户句是「下载的文件正被其他程序占用，请关闭占用它的程序后重试。」不带路径，也不带 yt-dlp 的英文。成功率 v4 的剔除名单没有加这个码。
 
 ### 今天已经确认
 
@@ -73,7 +73,7 @@ yt-dlp 2026.08.19 的 `FileDownloader.try_rename` 只对 `errno` 为 `EACCES` / 
 
 - 不套我们的参数：4 次 `os.replace`（1 次加上 3 次重试），睡眠 `[0.01, 0.01, 0.01]`，然后 “Giving up after 3 retries”。这就是反馈里的行为。**默认重试不够。**
 - `recovery_options`：同一把锁在第 4 次放开则成功，睡眠含 `0.25 / 0.5 / 0.75` 秒。一直锁住则 9 次尝试后 “Giving up after 8 retries”，退避合计 9 秒。
-- `download_with_recovery` 在 yt-dlp 已经放弃之后**不会**再开第二次整段下载（`continuedl` 仍为 true，重试留在这一次 `YoutubeDL` 里）。调用方若自己传了 `file_access_retries` 或 `retry_sleep_functions['file_access']`，不会被覆盖。
+- `download_with_recovery` 在 yt-dlp 已经放弃之后**不会**再开第二次整段下载（`continuedl` 仍为 true，重试留在这一次 `YoutubeDL` 里）。放弃的是共享冲突时，抛出 `PipelineFailure`，码 `file_locked`，`studio_error_code` 不再是 `unexpected`，可见文案不含 `WinError`、路径或 “Giving up”。别的 rename 失败（例如磁盘满）仍是原来的 `DownloadError`。调用方若自己传了 `file_access_retries` 或 `retry_sleep_functions['file_access']`，不会被覆盖。
 
 对应测试：`backend/tests/test_download_rename_lock.py`。改动在 `backend/utils/download_recovery.py` 的 `FILE_ACCESS_RETRIES = 8` 和 `file_access_backoff`。这是草稿 PR 里的修复，还没有进安装包。
 
@@ -93,7 +93,7 @@ time.sleep(2)  # 短于约 9 秒的预算，修复后应成功
 ctypes.windll.kernel32.CloseHandle(handle)
 ```
 
-再跑一轮 `time.sleep(30)`：应在大约 9 秒后失败，文案是 “Giving up after 8 retries”，而不是 3。两边都抓 yt-dlp 的 stderr 和任务的 `error_code`。Linux 上做不到这一步。
+再跑一轮 `time.sleep(30)`：应在大约 9 秒后失败。yt-dlp 的 stderr 仍是 “Giving up after 8 retries”。任务的 `error_code` 应是 `file_locked`，界面是那句中文，而不是 `unexpected` 或带路径的英文。Linux 上做不到这一步。
 
 ### 仍然只有反馈者本人能提供的
 
@@ -168,3 +168,11 @@ autoclip run <带字幕的口播.mp4> --provider ollama --srt <file.srt> --json
 ### 仍然只有反馈者本人能提供的
 
 没有。对方已说会在下一版安装包上自己看；我们这边的门是安装包冒烟，不是他们的回复。
+
+## 进度条文案（和 20 分钟模型预算）
+
+「模型步骤最多约 20 分钟」以前只要进度条在就会出现，下载、本地 Whisper、导出也算进去。现在只有内容分析 / 片段定位带这句。下载、字幕处理、视频导出只保留已进行时间和「进度为估算」。八语沿用原来的那句 key，没有新句子。`studio-progress.test.cjs` 与 `studio-results-status.test.cjs` 锁住。
+
+## 这次没有做
+
+YouTube Cookie 产品、精确百分比、跨重启续跑、长下载墙钟、#481 的产品改动、Ollama 模型质量、预览和 ASS 字重对齐。`file_locked` 没有放进成功率 v4 的剔除名单。跨进程占文件这种环境失败仍会计入产品失败，避免这次顺手改测量口径。

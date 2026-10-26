@@ -20,6 +20,7 @@ const STAGE_LABEL: Record<string, string> = {
 
 const EASE_TAU_SEC = 90
 const RUNNING_CAP = 95
+const MODEL_BUDGET_STAGES = new Set(['ANALYZE', 'HIGHLIGHT'])
 
 export function stageBand(stage: string): { start: number; end: number } {
   let done = 0
@@ -75,6 +76,8 @@ export interface StudioProgressView {
   approximate: boolean
   /** Whole minutes since the run started, or null when the start is unknown. */
   elapsedMinutes: number | null
+  /** True only for model stages. Download, local transcription and export sit outside the 20-minute model cap. */
+  modelBudget: boolean
   detail: string
 }
 
@@ -119,6 +122,7 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
       percent,
       approximate: !measured,
       elapsedMinutes,
+      modelBudget: false,
       detail: analysis.progress_message || analysis.message || '正在生成可发布成片',
     }
   }
@@ -132,6 +136,7 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
       percent,
       approximate: !measured,
       elapsedMinutes,
+      modelBudget: false,
       detail: analysis.message || '',
     }
   }
@@ -154,6 +159,7 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
     percent: clampRunning(Math.max(reported, eased)),
     approximate,
     elapsedMinutes,
+    modelBudget: MODEL_BUDGET_STAGES.has(stage),
     detail: analysis.progress_message || analysis.message || '',
   }
 }

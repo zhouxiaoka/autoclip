@@ -48,7 +48,7 @@ export type PageFailureInfo = {
 export const BILLING_GUIDANCE = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
 
 const BARE_FAILURE = new Set(['', '错误', '失败', 'Error', 'error', '处理失败', '处理失败：错误'])
-const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked'])
+const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked', 'file_locked'])
 const TRANSCRIBE_STAGES = new Set(['subtitle', 'transcribe'])
 const ANALYZE_STAGES = new Set(['analyze', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'vision', 'highlight'])
 

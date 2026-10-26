@@ -23,6 +23,8 @@ SOURCE_NOT_FOUND_HINT = '找不到这个视频，它可能已被删除或链接�
 SOURCE_NOT_FOUND_CODE = 'source_not_found'
 # 私密、地区/年龄限制、版权或人机验证。仍用 source_blocked，但不用 403/412/429 那句（这里没有那些状态码）。
 SOURCE_ACCESS_HINT = '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。'
+# 这一次下载里的 rename 已经用完 file_access 预算。用户句只来自 failure_messages.json。
+FILE_LOCKED_CODE = 'file_locked'
 # yt-dlp: "Unable to download webpage: HTTP Error 412: Precondition Failed"
 # 4120 不是 412：状态码后面必须是词边界。
 _BLOCKED_HTTP_ERROR = re.compile(r'\bhttp error (403|412|429)\b')
@@ -128,7 +130,26 @@ def download_with_recovery(url: str, options: dict):
             if kind:
                 code, hint = kind
                 raise PipelineFailure('INGEST', hint, code=code) from None
+            if _rename_locked(text):
+                # yt-dlp already spent file_access_retries. Do not start another
+                # download, and do not keep the path or the English WinError text.
+                from backend.core.failure_codes import sentence
+                raise PipelineFailure('INGEST', sentence(FILE_LOCKED_CODE), code=FILE_LOCKED_CODE) from None
             raise
+
+
+def _rename_locked(text: str) -> bool:
+    """A rename that lost to a sharing lock, after yt-dlp's own retries.
+
+    Other rename failures (missing file, full disk) stay unclassified here.
+    """
+    if 'unable to rename file' not in text:
+        return False
+    return any(phrase in text for phrase in (
+        'winerror 32',
+        'being used by another process',
+        'sharing violation',
+    ))
 
 
 def _link_failure(text: str):

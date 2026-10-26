@@ -105,13 +105,46 @@ def test_a_finished_rename_failure_does_not_start_another_download(monkeypatch):
             raise yt_dlp.utils.DownloadError(ISSUE_410)
 
     monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
-    with pytest.raises(yt_dlp.utils.DownloadError, match=r'WinError 32') as caught:
+    from backend.core.failure_codes import sentence, user_visible_error
+    from backend.core.sentry_setup import UNREPORTED_STUDIO_ERROR_CODES, studio_error_code
+    from backend.pipeline.failures import PipelineFailure
+    with pytest.raises(PipelineFailure) as caught:
         module.download_with_recovery('https://www.youtube.com/watch?v=synthetic', {'quiet': True})
-    assert 'Giving up after 3 retries' in str(caught.value)
+    error = caught.value
+    assert error.code == module.FILE_LOCKED_CODE and error.stage == 'INGEST'
+    assert error.__cause__ is None
+    visible = user_visible_error(error)
+    assert visible == sentence('file_locked')
+    assert studio_error_code(error) == 'file_locked'
+    assert 'file_locked' in UNREPORTED_STUDIO_ERROR_CODES
+    leaked = ('WinError', 'Unable to rename', 'Giving up', '01e8b5f1', 'AppData', 'input.f299', 'yt-dlp')
+    blob = visible + str(error)
+    for piece in leaked:
+        assert piece not in blob
     assert len(calls) == 1
     assert calls[0]['file_access_retries'] == module.FILE_ACCESS_RETRIES
     assert calls[0]['continuedl'] is True
     assert calls[0]['retry_sleep_functions']['file_access'] is module.file_access_backoff
+
+
+def test_a_non_lock_rename_failure_stays_a_download_error(monkeypatch):
+    class Downloader:
+        def __init__(self, options):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def download(self, urls):
+            raise yt_dlp.utils.DownloadError(
+                'ERROR: Unable to rename file: [Errno 28] No space left on device')
+
+    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
+    with pytest.raises(yt_dlp.utils.DownloadError, match='No space left'):
+        module.download_with_recovery('https://example.com/v', {'quiet': True})
 
 
 def test_explicit_file_access_settings_are_not_replaced(monkeypatch):

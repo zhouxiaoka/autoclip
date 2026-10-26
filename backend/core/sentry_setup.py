@@ -28,7 +28,7 @@ from backend.core.failure_codes import sentry_codes
 STUDIO_ERROR_CODES = sentry_codes()
 # Expected failures caused by the environment or by the user's own source (too short,
 # no audio track): never sent to Sentry, still recorded locally with their code.
-UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_not_found", "source_too_short", "source_no_audio", "service_restarted"}
+UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "file_locked", "source_not_found", "source_too_short", "source_no_audio", "service_restarted"}
 # Provider answers PostHog already records. They are not crashes.
 # 500 is not in this set: a local model-download failure is tagged 500 and must still
 # be reported. A provider 500 carries upstream_unavailable and is dropped by that tag.

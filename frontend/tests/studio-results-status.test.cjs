@@ -5,9 +5,9 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage, error = 'failure') {
+function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage, error = 'failure', message = 'screening') {
   const workspace = {
-    analysis: { status, phase, message: 'screening', error, error_code: errorCode, failure_stage: failureStage },
+    analysis: { status, phase, message, error, error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
     drafts: [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
   }
@@ -273,6 +273,19 @@ test('running production shows a stage progress bar, not only spinner text', () 
   assert.match(html, /模型步骤最多约 20 分钟/)
   assert.match(html, /进度为估算，以阶段为准/)
   assert.doesNotMatch(html, /class="spin"/)
+})
+
+test('download, transcription and export progress omit the 20-minute model cap', () => {
+  const download = render(true, 'screening', 'running')
+  assert.match(download, /素材准备/)
+  assert.doesNotMatch(download, /模型步骤最多约 20 分钟/)
+  assert.match(download, /进度为估算，以阶段为准/)
+  const transcribe = render(true, 'production', 'running', [], [], undefined, undefined, 'failure', '正在生成字幕')
+  assert.match(transcribe, /字幕处理/)
+  assert.doesNotMatch(transcribe, /模型步骤最多约 20 分钟/)
+  const exporting = render(true, 'rendering', 'running')
+  assert.match(exporting, /视频导出/)
+  assert.doesNotMatch(exporting, /模型步骤最多约 20 分钟/)
 })
 
 test('a bare 错误 names the step, and a billable call adds the billing sentence', () => {

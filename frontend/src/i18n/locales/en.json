@@ -1983,6 +1983,7 @@
   "字幕没有准备好，请稍后重试。": "Subtitles aren't ready. Try again later.",
   "没有找到可以成片的片段。": "No clip could be made from this video.",
   "这个来源暂时无法读取，请换一个视频或稍后重试。": "This source can't be read right now. Try another video or wait and retry.",
+  "下载的文件正被其他程序占用，请关闭占用它的程序后重试。": "The downloaded file is in use by another program. Close that program and try again.",
   "找不到这个视频，请核对链接或换一个视频。": "This video can't be found. Check the link or try a different video.",
   "找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。": "This video can't be found. It may have been deleted, or the link is wrong. Check the link, or try a different video.",
   "这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。": "This video can't be accessed right now. It may be private, limited by region or age, or the site is asking you to sign in. Try a public video, or choose a signed-in browser so its cookies can be used when importing.",
