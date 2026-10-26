@@ -119,7 +119,11 @@ export default function StudioResults({ project, children, onCreateCollection, o
           <div className="studio-progress-track"><div className="studio-progress-fill" style={{ width: `${progress.percent}%` }} /></div>
           <div className="studio-progress-meta"><span>{t(progress.label)}</span><span className="ac-mono">{progress.percent}%</span></div>
         </div>
-        <p className="studio-muted">{progress.elapsedMinutes == null ? '' : progress.elapsedMinutes < 1 ? t('已进行不到 1 分钟') : t('已进行约 {{minutes}} 分钟', { minutes: progress.elapsedMinutes })}{progress.elapsedMinutes == null ? '' : ' · '}{t('模型步骤最多约 20 分钟')}{progress.approximate ? ` · ${t('进度为估算，以阶段为准')}` : ''}</p>
+        <p className="studio-muted">{[
+          progress.elapsedMinutes == null ? '' : progress.elapsedMinutes < 1 ? t('已进行不到 1 分钟') : t('已进行约 {{minutes}} 分钟', { minutes: progress.elapsedMinutes }),
+          progress.modelBudget ? t('模型步骤最多约 20 分钟') : '',
+          progress.approximate ? t('进度为估算，以阶段为准') : '',
+        ].filter(Boolean).join(' · ')}</p>
         {progress.detail && progress.detail !== progress.label && <p className="studio-muted">{t(progress.detail)}</p>}
         {workspace.analysis?.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}
       </div>}

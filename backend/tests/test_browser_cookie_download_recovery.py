@@ -164,8 +164,20 @@ def test_missing_link_is_source_not_found(monkeypatch, message):
     assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest'}
 
 
+# #481, v1.5.6 recorded this as unexpected. The apostrophe is U+2019, not ASCII.
+ISSUE_481_BOT_MESSAGE = (
+    'ERROR: [youtube] XuoqKYxDHVc: Sign in to confirm you\u2019re not a bot. '
+    'Use --cookies-from-browser or --cookies for the authentication. See  '
+    'https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  '
+    'for how to manually pass cookies. Also see  '
+    'https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  '
+    'for tips on effectively exporting YouTube cookies'
+)
+
+
 @pytest.mark.parametrize('message', [
     "ERROR: [youtube] abc: Sign in to confirm you're not a bot",
+    ISSUE_481_BOT_MESSAGE,
     'ERROR: Private video. Sign in if you\'ve been granted access',
     'ERROR: Video unavailable. This video is not available in your country',
     'ERROR: This video is age-restricted',
@@ -179,6 +191,8 @@ def test_gated_link_is_source_blocked_without_status_hint(monkeypatch, message):
     assert error.code == 'source_blocked' and error.http_status is None
     assert str(error) == module.SOURCE_ACCESS_HINT
     assert '403' not in str(error) and 'bot' not in str(error).lower() and 'country' not in str(error).lower()
+    for leaked in ('XuoqKYxDHVc', 'yt-dlp', 'cookies-from-browser', 'youtube'):
+        assert leaked not in str(error).lower()
     assert len(calls) == 1
 
 

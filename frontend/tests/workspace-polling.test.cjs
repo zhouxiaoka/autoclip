@@ -16,8 +16,28 @@ test('analysis and queued/running exports continue until all active work finishe
 })
 test('HTTP errors stop immediately; network failures are bounded and keep prior data',async()=>{
  for(const status of [401,404,429,500]){const c=setup();let calls=0;await pollWorkspace(async()=>{calls++;throw {response:{status}}},c.options);assert.equal(calls,1)}
- const c=setup();let calls=0;await pollWorkspace(async()=>{if(++calls===1)return snapshot('running');throw Error('network')},c.options)
+ const c=setup();let calls=0
+ const pending=pollWorkspace(async()=>{if(++calls===1)return snapshot('running');throw Error('network')},{...c.options,offlineIntervalMs:60_000})
+ const started=Date.now()
+ while(calls<4 && Date.now()-started<1000) await new Promise(resolve=>setTimeout(resolve,5))
  assert.equal(calls,4);assert.equal(c.data.length,1);assert.equal(c.errors.length,3)
+ c.controller.abort();await pending
+})
+test('network failures without a producing snapshot still stop after three',async()=>{
+ const c=setup();let calls=0
+ await pollWorkspace(async()=>{calls++;throw Error('network')},{...c.options,offlineIntervalMs:0})
+ assert.equal(calls,3);assert.equal(c.data.length,0);assert.equal(c.errors.length,3)
+})
+test('after the fast network budget a slow probe replaces a stale producing snapshot',async()=>{
+ const c=setup();let calls=0
+ await pollWorkspace(async()=>{
+  calls++
+  if(calls===1)return snapshot('running')
+  if(calls<5)throw Error('network')
+  return snapshot('failed')
+ },{...c.options,offlineIntervalMs:0})
+ assert.equal(calls,5);assert.equal(c.data.length,2);assert.equal(c.errors.length,3)
+ assert.equal(c.data.at(-1).analysis.status,'failed')
 })
 test('recovered network request resumes observation and a new observer refreshes terminal state',async()=>{
  const c=setup();let calls=0;const read=async()=>{if(++calls===1)throw Error('network');return snapshot('completed')}

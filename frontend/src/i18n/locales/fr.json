@@ -1983,6 +1983,7 @@
   "字幕没有准备好，请稍后重试。": "Les sous-titres ne sont pas prêts. Réessayez plus tard.",
   "没有找到可以成片的片段。": "Aucun passage exploitable n'a été trouvé pour la vidéo finale.",
   "这个来源暂时无法读取，请换一个视频或稍后重试。": "Cette source est illisible pour le moment. Essayez une autre vidéo ou réessayez plus tard.",
+  "下载的文件正被其他程序占用，请关闭占用它的程序后重试。": "Le fichier téléchargé est utilisé par un autre programme. Fermez-le, puis réessayez.",
   "找不到这个视频，请核对链接或换一个视频。": "Cette vidéo est introuvable. Vérifiez le lien, ou essayez une autre vidéo.",
   "找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。": "Cette vidéo est introuvable. Elle a peut-être été supprimée, ou le lien est incorrect. Vérifiez le lien, ou essayez une autre vidéo.",
   "这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。": "Cette vidéo est inaccessible pour le moment. Elle peut être privée, limitée par la région ou l’âge, ou le site demande de confirmer la connexion. Essayez une vidéo publique, ou choisissez un navigateur connecté pour utiliser ses cookies lors de l’import.",

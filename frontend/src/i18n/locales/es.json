@@ -1983,6 +1983,7 @@
   "字幕没有准备好，请稍后重试。": "Los subtítulos no están listos. Inténtalo más tarde.",
   "没有找到可以成片的片段。": "No se encontró ningún fragmento para el vídeo final.",
   "这个来源暂时无法读取，请换一个视频或稍后重试。": "Esta fuente no se puede leer ahora. Prueba otro vídeo o inténtalo más tarde.",
+  "下载的文件正被其他程序占用，请关闭占用它的程序后重试。": "El archivo descargado lo está usando otro programa. Ciérralo y vuelve a intentarlo.",
   "找不到这个视频，请核对链接或换一个视频。": "No se encuentra este vídeo. Comprueba el enlace o prueba con otro vídeo.",
   "找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。": "No se encuentra este vídeo. Puede haber sido eliminado o el enlace es incorrecto. Comprueba el enlace o prueba con otro vídeo.",
   "这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。": "Ahora mismo no se puede acceder a este vídeo. Puede ser privado, tener límite de región o edad, o el sitio pide confirmar el inicio de sesión. Prueba un vídeo público o elige un navegador con la sesión iniciada para usar sus cookies al importar.",

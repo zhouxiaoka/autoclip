@@ -88,6 +88,7 @@
       "subtitle_setup",
       "timeline_empty",
       "source_blocked",
+      "file_locked",
       "source_not_found",
       "source_too_short",
       "no_complete_version",
@@ -277,6 +278,7 @@
     ],
     "environment_error_codes": [
       "source_blocked",
+      "file_locked",
       "source_not_found",
       "service_restarted"
     ],

@@ -97,6 +97,43 @@ def test_run_owned_by_this_process_is_left_running(sessions):
     assert _row(sessions).status.value == 'processing'
 
 
+def test_idle_producer_stays_in_production_until_the_process_exits(sessions):
+    """A live, idle producer (~0% CPU, blocked in sleep) is not service_restarted.
+
+    Killing that process is what closes the run. This is the desktop-backend
+    distinction the health loop also uses: exit relaunches, an alive process does not.
+    """
+    import subprocess
+    import sys
+
+    import psutil
+
+    proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    try:
+        owner = psutil.Process(proc.pid)
+        data = _production()
+        data['generation']['producer'] = {'pid': proc.pid, 'created_at': owner.create_time()}
+        _project(sessions, data)
+        assert owner.is_running()
+        assert reconcile_interrupted_projects(sessions) == []
+        disk = _disk()
+        assert disk['generation']['status'] == 'production'
+        assert disk['analysis']['status'] == 'running'
+        assert disk['analysis']['message'] == '正在制作可发布成片'
+        assert _row(sessions).status.value == 'processing'
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    disk = _disk()
+    assert disk['generation']['status'] == 'failed'
+    assert disk['generation']['error_code'] == 'service_restarted'
+    assert disk['generation']['error'] == store.RESTART_MESSAGE
+    assert 'message' not in disk['analysis']
+    row = _row(sessions)
+    assert row.status.value == 'failed' and row.error_code == 'service_restarted'
+
+
 def test_live_cli_producer_is_not_failed_by_the_desktop(sessions):
     import psutil
     data = _production()
