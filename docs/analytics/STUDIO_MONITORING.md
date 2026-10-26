@@ -56,7 +56,7 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 
 链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码和 `failure_stage=ingest`，**不记录**站点状态码（local 归因不带 `http_status`；`success_rate.sql` 按 error_code 剔除、界面提示也按 error_code 判断，都不依赖站点状态码），界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
 
-找不到片源（HTTP 404/410、已删除、或只有 “Video unavailable”）归为 `source_not_found`，同样只记错误码和 `failure_stage=ingest`，不记链接、站点原文或状态码，不发送 Sentry，产品成功率按 error_code 剔除。私密、地区或年龄限制、版权，以及要求登录确认人机但没有落到 HTTP 403/412/429 的，仍是 `source_blocked`，提示换公开视频或在导入时用已登录浏览器的 Cookie。
+找不到片源（HTTP 404/410、已删除、或只有 “Video unavailable”）归为 `source_not_found`，同样只记错误码和 `failure_stage=ingest`，不记链接、站点原文或状态码，不发送 Sentry，产品成功率按 error_code 剔除。私密、地区或年龄限制、版权，以及要求登录确认人机但没有落到 HTTP 403/412/429 的，仍是 `source_blocked`，提示换公开视频或在导入时用已登录浏览器的 Cookie。浏览器登录库被占用、读不到 Cookie 时也记 `source_blocked`（不带站点状态码、不上报），界面用「完全退出该浏览器或换一个已登录的浏览器」那句；失败页主按钮回到导入并展开浏览器选择。这不保证网站会放行。
 
 源视频本身走不了字幕路线时，在任何模型调用之前就失败（`backend/pipeline/media_precheck.py`，导入初筛、确认制作、内容管线入口与旧版导入任务共用）：比最短片段（短视频档 20 秒）还短归为 `source_too_short`，没有音轨且没有附带 SRT 归为 `source_no_audio`。能走画面路线时（画面识别已开启且模型支持图片）无声视频仍交给画面初筛，只有初筛仍选字幕路线才失败。两者都是用户素材问题，不是故障：本地失败记录保留错误码与失败阶段，界面显示可翻译的固定文案，**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`；旧版导入任务用 `ImportSourceUnusable`，`before_send` 按 `import_failure=source-input` 丢弃）。转写失败文案不再带内部异常名（如 `IndexError`），异常类型只进本地日志。
 

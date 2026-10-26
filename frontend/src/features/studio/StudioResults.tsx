@@ -6,6 +6,7 @@ import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { failureSettings, sourceFailure } from './importReadiness'
+import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
 import { analysisFailureText, analysisPageFailure, receiptFailureInfo } from './failureAction'
 import FailureActions, { FailureCopy } from './FailureActions'
 import { displayedProgress, studioRunProgress } from './studioProgress'
@@ -47,6 +48,8 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const noteLegacy = (action: 'plan_adjust' | 'collection' | 'export_confirm') => trackLegacyEntry({ legacy_action: action }, flagAssigned('hide_legacy_entrypoints'))
   const failedCode = workspace.analysis?.error_code || workspace.generation?.error_code
   const sourceUnusable = workspace.analysis?.status === 'failed' && sourceFailure(failedCode)
+  const cookieRecovery = workspace.analysis?.status === 'failed' && browserCookieRecovery(failedCode, workspace.analysis?.error)
+  const canRetryAnalysis = automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job => job.status === 'completed'))
   const whisperSettings = workspace.analysis?.status === 'failed' && !sourceUnusable && failureSettings(failedCode).label === '打开转写设置' ? failureSettings(failedCode) : null
   // the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
@@ -129,10 +132,11 @@ export default function StudioResults({ project, children, onCreateCollection, o
         {workspace.analysis?.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}
       </div>}
       {workspace.analysis?.status==='failed' && sourceUnusable && <div className="ac-empty" role="alert"><b>{t("这个素材无法使用")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions"><Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
-      {workspace.analysis?.status==='failed' && whisperSettings && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions">{(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
-      {workspace.analysis?.status==='failed' && !sourceUnusable && !whisperSettings && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
+      {cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis?.error, workspace.analysis, workspace.generation)} /><p className="studio-muted">{t("下一步：回到导入，选择一个已登录的浏览器后再生成。")}</p><div className="studio-actions"><Btn variant="cta" disabled={!!busy} onClick={()=>navigate(stageBrowserCookieRecovery(project.source_url))}>{t("选择已登录的浏览器")}</Btn>{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn></div></div>}
+      {workspace.analysis?.status==='failed' && whisperSettings && !cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions">{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
+      {workspace.analysis?.status==='failed' && !sourceUnusable && !whisperSettings && !cookieRecovery && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
         <FailureActions info={failureInfo()}
-          canRetry={automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job=>job.status==='completed'))}
+          canRetry={canRetryAnalysis}
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
           onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}
           onSettings={destination=>navigate(settingsReturnUrl(destination, project.id))}>
@@ -141,7 +145,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
       <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
         onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} allowExport={!hideLegacy} onExport={()=>{ noteLegacy('export_confirm'); setExporting(d) }} onHistory={()=>setHistory(true)} />)}{loaded && !automatic && children}</div>
-      {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&!sourceUnusable&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
+      {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&!sourceUnusable&&!cookieRecovery&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
     </Section>}
     {actionError&&<p className="studio-error" role="alert">{actionError}</p>}
     <details className="studio-details studio-source-details"><summary>{visual?t("高光片段"):t("来源片段")} <span className="ac-mono">{workspace.events.length+(project.clips?.length||0)}</span>{t("· 需要换镜头时再选")}</summary>

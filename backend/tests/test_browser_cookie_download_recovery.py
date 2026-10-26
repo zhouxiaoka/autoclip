@@ -41,8 +41,14 @@ def test_anonymous_auth_failure_is_actionable_and_bounded(monkeypatch):
     with pytest.raises(RuntimeError) as caught:
         module.download_with_recovery('https://youtube.com/watch?v=synthetic', {'cookiesfrombrowser': ('chrome',), 'quiet': True})
     assert len(calls) == 2
-    assert '关闭浏览器' in str(caught.value)
+    assert caught.value.code == 'source_blocked'
+    assert '完全退出' in str(caught.value) and '换一个已登录的浏览器' in str(caught.value)
     assert 'synthetic' not in str(caught.value)
+    from backend.core.failure_codes import user_visible_error
+    from backend.core.sentry_setup import studio_error_code, UNREPORTED_STUDIO_ERROR_CODES
+    assert user_visible_error(caught.value) == module.COOKIE_ACCESS_HINT
+    assert studio_error_code(caught.value) == 'source_blocked'
+    assert 'source_blocked' in UNREPORTED_STUDIO_ERROR_CODES
 
 
 @pytest.mark.parametrize('url,extra', [('https://private.invalid/video', {}), ('https://youtube.com/watch?v=synthetic', {'cookiefile': 'synthetic-cookie-file'})])
@@ -51,7 +57,8 @@ def test_custom_sites_and_explicit_cookie_files_are_not_anonymously_retried(monk
     with pytest.raises(RuntimeError) as caught:
         module.download_with_recovery(url, {'cookiesfrombrowser': ('chrome',), 'quiet': True, **extra})
     assert len(calls) == 1
-    assert '关闭浏览器' in str(caught.value)
+    assert caught.value.code == 'source_blocked'
+    assert '完全退出' in str(caught.value) and '换一个已登录的浏览器' in str(caught.value)
 
 
 def test_other_cookie_errors_are_not_hidden_or_retried(monkeypatch):

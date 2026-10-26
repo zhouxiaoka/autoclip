@@ -1,7 +1,7 @@
 import { trackExperience } from '../../analytics/experience'
 import { useTranslation } from 'react-i18next'
 import { getLocale, t } from '../../i18n'
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type Ref } from 'react'
 import { Select } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
@@ -24,6 +24,7 @@ import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoSt
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
 import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
+import { cookieAssistFromLocation, stagedRecoveryUrl } from './browserCookieRecovery'
 import { SETTINGS_SAVED_EVENT } from './settingsReturn'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import './studio.css'
@@ -53,6 +54,24 @@ function repairLabel(item: ReadinessIssue) {
   return ''
 }
 
+
+function BrowserCookieControl({ browser, busy, onChange, assist, selectRef }: {
+  browser: string
+  busy: boolean
+  onChange: (value: string) => void
+  assist: boolean
+  selectRef?: Ref<HTMLSelectElement>
+}) {
+  return <>
+    <label className="studio-field" htmlFor={assist ? 'studio-browser-cookie' : undefined}>{t("使用浏览器登录状态")}
+      <select id={assist ? 'studio-browser-cookie' : undefined} ref={selectRef} value={browser} onChange={event => onChange(event.target.value)} disabled={busy}>
+        <option value="">{t("不使用")}</option>
+        {['chrome', 'edge', 'safari', 'firefox'].map(name => <option key={name} value={name}>{name}</option>)}
+      </select>
+    </label>
+    <p className="studio-muted">{assist ? t("还没有选择浏览器。选一个已登录的浏览器后再生成。这个浏览器如果正开着，请先完全退出，或换一个浏览器。") : t("仅在下载需要登录时选择，不会自动读取浏览器 Cookie。")}</p>
+  </>
+}
 
 function uiLocale() {
   try { return getLocale() } catch { return 'en' }
@@ -98,6 +117,18 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const templatesOn = useFlag('pkg_templates_v1') === true
   const visualOn = useFlag('pkg_template_picker_visual') === true
   const [browser, setBrowser] = useState('')
+  const assist = cookieAssistFromLocation(typeof window === 'undefined' ? '' : (window.location?.search || ''))
+  const browserRef = useRef<HTMLSelectElement | null>(null)
+  useEffect(() => {
+    if (!assist) return
+    setSource('link')
+    const incoming = stagedRecoveryUrl()
+    if (incoming) { setUrl(incoming); setFile(null) }
+    const node = browserRef.current
+    if (!node) return
+    try { node.focus() } catch { /* focus is optional */ }
+    try { node.scrollIntoView({ block: 'center' }) } catch { /* not a browser */ }
+  }, [assist])
   const [platforms, setPlatforms] = useState<string[]>(initialPlatforms.current.platforms)
   const [preferences, setPreferences] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -360,6 +391,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
         </div>)}
       </div>}
       {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec, platforms)}</p>}
+      {assist && <details className="studio-details" open><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl assist browser={browser} busy={busy} onChange={setBrowser} selectRef={browserRef} /></details>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
       <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
@@ -368,7 +400,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>
       <ImportPreferences value={options} onChange={setOptions}/>
       <label className="studio-field">{t("已有字幕（选填）")}<input type="file" accept=".srt" aria-label={t("已有字幕")} onChange={e=>setSubtitle(e.target.files?.[0] || null)}/>{subtitle&&<small>{subtitle.name}<button className="studio-link" onClick={()=>setSubtitle(null)}>{t("移除")}</button></small>}</label>
-      {source==='link'&&<details className="studio-details"><summary>{t("下载遇到登录限制时")}</summary><label className="studio-field">{t("使用浏览器登录状态")}<select value={browser} onChange={e=>setBrowser(e.target.value)}><option value="">{t("不使用")}</option>{['chrome','edge','safari','firefox'].map(b=><option key={b}>{b}</option>)}</select></label><p className="studio-muted">{t("仅在下载需要登录时选择，不会自动读取浏览器 Cookie。")}</p></details>}
+      {source==='link'&&<details className="studio-details"><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl browser={browser} busy={busy} onChange={setBrowser} assist={false} /></details>}
     </Dialog>
     <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec, platforms)} {t('请再选一个其他平台。')}</> : longFormNotice(longGate.durationSec, platforms)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />
   </section>

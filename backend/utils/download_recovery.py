@@ -14,8 +14,8 @@ from backend.pipeline.failures import PipelineFailure
 FILE_ACCESS_RETRIES = 8
 
 
-COOKIE_ACCESS_HINT = '无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。'
-# 也是前端 i18n 的 key（8 个 locale），改动时同步 frontend/src/i18n/locales/*.json。
+COOKIE_ACCESS_HINT = '无法读取浏览器登录信息。请完全退出该浏览器后再重试，或换一个已登录的浏览器。公开视频也可以不选浏览器。原素材已保留。'
+# 也是前端 i18n 的 key（8 个 locale），改动时同步 frontend/src/i18n/locales/*.json 与 browserCookieRecovery.ts。
 SOURCE_BLOCKED_HINT = '视频网站拒绝了这次下载（HTTP 403/412/429），常见于当前网络被网站风控或请求过于频繁。请稍后换个网络（如手机热点）重试，或在导入时选择已登录的浏览器读取 Cookie。'
 SOURCE_BLOCKED_CODE = 'source_blocked'
 # 找不到片源。也是前端 i18n 的 key，改动时同步 locales。不要带 URL、状态码或 yt-dlp 原文。
@@ -107,7 +107,7 @@ def download_with_recovery(url: str, options: dict):
                     retried_cookies = True
                     opts.pop('cookiesfrombrowser')
                     continue
-                raise RuntimeError(COOKIE_ACCESS_HINT) from None
+                _raise_cookie_access()
             text = str(error).lower()
             if not retried_subtitles and ('subtitle' in text or 'subtitles' in text) and (opts.get('writesubtitles') or opts.get('writeautomaticsub')):
                 retried_subtitles = True
@@ -118,7 +118,7 @@ def download_with_recovery(url: str, options: dict):
                 opts['format'] = 'bestvideo[height<=1080][protocol*=m3u8]+bestaudio[protocol*=m3u8]/best[height<=1080][protocol*=m3u8]/best[ext=mp4]/best'
                 continue
             if retried_cookies:
-                raise RuntimeError(COOKIE_ACCESS_HINT) from None
+                _raise_cookie_access()
             blocked = _BLOCKED_HTTP_ERROR.search(text)
             if blocked:
                 # The site refused this network/client (e.g. Bilibili 412 risk control on
@@ -136,6 +136,17 @@ def download_with_recovery(url: str, options: dict):
                 from backend.core.failure_codes import sentence
                 raise PipelineFailure('INGEST', sentence(FILE_LOCKED_CODE), code=FILE_LOCKED_CODE) from None
             raise
+
+
+def _raise_cookie_access():
+    """The browser cookie database could not be read.
+
+    Same code as a site access block so the studio card opens the existing
+    browser picker, and so this expected environment failure stays off Sentry.
+    The sentence is the quit-or-switch-browser hint, not the 403/bot copy.
+    No browser path, URL, or site status is attached.
+    """
+    raise PipelineFailure('INGEST', COOKIE_ACCESS_HINT, code=SOURCE_BLOCKED_CODE) from None
 
 
 def _rename_locked(text: str) -> bool:
