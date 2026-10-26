@@ -86,7 +86,7 @@ export interface RenderJob {
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
   branding: { outro_enabled: boolean; outro_version: string }
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; created_at: string; error?: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; created_at: string; error?: string; error_code?: string
   trimmed_to_sec?: number
   framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
   /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
@@ -100,6 +100,7 @@ export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
+  billable_calls_before_failure?: number
   html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean
@@ -115,7 +116,7 @@ export interface Workspace {
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
   /** Backend attempt receipts (#419), oldest first. */
   attempts?: AttemptReceipt[]
-  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; error_code?: string; upstream_error_type?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
+  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; progress_percent?: number; progress_stage?: string; progress_approximate?: boolean; progress_since?: number; progress_message?: string; created_at?: string; error?: string; error_code?: string; upstream_error_type?: string; failure_stage?: string; billable_calls_before_failure?: number; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }

@@ -38,22 +38,36 @@ def _local_sentence_code(error):
     if isinstance(error, subprocess.CalledProcessError): return "frame_extract_failed"
     if type(error) is RuntimeError and str(error).startswith("渲染镜头失败"): return "frame_extract_failed"
     return None
+_BARE = frozenset({"错误", "失败", "Error", "error", "处理失败", "处理失败：错误"})
+
+
+def _shown(text, code):
+    """A failure card never shows only 「错误」. Empty or bare text uses the catalog sentence."""
+    cleaned = (text or "").strip()
+    if not cleaned or cleaned in _BARE:
+        return sentence(code or "unknown")[:700]
+    return cleaned[:700]
+
+
 def user_visible_error(error):
     from backend.pipeline.failures import PipelineFailure
     if type(error).__name__ == "JobDurationExceeded":
-        return (str(error) or sentence("timeout"))[:700]
-    if isinstance(error, PipelineFailure): return (error.user_message() or "")[:700]
+        return _shown(str(error), "timeout")
+    if isinstance(error, PipelineFailure):
+        return _shown(error.user_message(), error.code or "unknown")
     local = _local_sentence_code(error)
     if local:
         _omit(error)
         return sentence(local)[:700]
     text = str(error) if error is not None else ""
-    if _keep_authored(error, text): return text[:700]
+    if _keep_authored(error, text):
+        from backend.core.sentry_setup import studio_error_code
+        return _shown(text, studio_error_code(error))
     _omit(error)
     from backend.core.sentry_setup import studio_error_code
     code = studio_error_code(error)
     fine = _fine_upstream_sentence(error, code)
-    return (fine or sentence(code))[:700]
+    return _shown(fine or sentence(code), code)
 
 
 def _fine_upstream_sentence(error, coarse: str):

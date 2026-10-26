@@ -42,6 +42,7 @@ function renderResults(workspace, studioApi, cards) {
     if (name === './importReadiness') return loadTs(path.resolve(ROOT, '../src/features/studio/importReadiness.ts'))
     if (name === './settingsReturn') return loadTs(path.resolve(ROOT, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return loadTs(path.resolve(ROOT, '../src/features/studio/failureAction.ts'))
+    if (name === './studioProgress') return loadTs(path.resolve(ROOT, '../src/features/studio/studioProgress.ts'))
     if (name === './FailureActions') {
       const out = {}
       const src = fs.readFileSync(path.join(ROOT, '../src/features/studio/FailureActions.tsx'), 'utf8')

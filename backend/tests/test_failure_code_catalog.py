@@ -257,6 +257,23 @@ def test_success_rate_sql_counts_frame_extract_failed_and_reports_degrades():
         assert f"'{code}'" in degrade_query, code
 
 
+def test_empty_model_body_is_a_usable_sentence_and_bare_error_is_replaced():
+    """api88 and other gateways can return a 200 with no choices. That is not bad user input,
+    and a failure card must not show only 「错误」."""
+    from backend.core import sentry_setup
+    for text in ("empty completion", "invalid completion", "completion was not an object"):
+        error = ValueError(text)
+        assert sentry_setup.studio_error_code(error) == "invalid_response"
+        visible = failure_codes.user_visible_error(error)
+        assert visible == failure_codes.sentence("invalid_response")
+        assert visible != "错误"
+    assert sentry_setup.studio_error_code(IndexError("choices")) == "invalid_response"
+    bare = failure_codes.user_visible_error(RuntimeError("错误"))
+    assert bare == failure_codes.sentence("unexpected") and bare != "错误"
+    authored = failure_codes.user_visible_error(failure_codes.UserFacingError("错误"))
+    assert authored == failure_codes.sentence("validation") and authored != "错误"
+
+
 def test_docs_list_new_codes():
     for doc in ('TRACKING_PLAN.md', 'STUDIO_MONITORING.md', 'LLM_TELEMETRY.md'):
         text = (ROOT / 'docs/analytics' / doc).read_text(encoding='utf-8')

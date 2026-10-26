@@ -16,6 +16,7 @@ import { packagingLabel, packagingFallbackHint } from './packagingLabel'
 import PublishKit from './PublishKit'
 import './quick-output.css'
 import { effectiveSubtitles } from './subtitleState'
+import { readableFailure, failureStep, BILLING_GUIDANCE } from './failureAction'
 
 const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
   speaker: '已按说话人重新取景',
@@ -24,7 +25,7 @@ const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
   full_frame_captions: '原片自带字幕，保留完整画面以免裁掉字幕',
 }
 
-export default function OutputVariantCard({ projectId, variant, draft, job, onRetry, onProduce, recommendation }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void; onProduce: () => void; recommendation?: { recommended_template?: VariantProperties['recommended_template']; accepted_recommendation?: boolean } }) {
+export default function OutputVariantCard({ projectId, variant, draft, job, onRetry, onProduce, recommendation, billable }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void; onProduce: () => void; recommendation?: { recommended_template?: VariantProperties['recommended_template']; accepted_recommendation?: boolean }; billable?: boolean }) {
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
   const [coverStamp, setCoverStamp] = useState(0)
@@ -60,7 +61,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       {packagingHint && <p className="studio-output-hint">{packagingHint}</p>}
       {reason && <p className="studio-clip-reason">{reason.kind === 'evidence' ? reason.evidence : t(reason.key)}</p>}
       <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
-      {failed && <p className="studio-output-hint studio-error">{t(variant.error || job?.error || '这条版本未完成，其他成片不受影响。')}</p>}
+      {failed && <p className="studio-output-hint studio-error">{t(failureStep(undefined, 'rendering', variant.error_code))}：{t(readableFailure(variant.error || job?.error, variant.error_code))}</p>}
+      {failed && billable && <p className="studio-billing">{t(BILLING_GUIDANCE)}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}

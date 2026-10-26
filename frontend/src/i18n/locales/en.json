@@ -1995,5 +1995,12 @@
   "文件已损坏，请重新下载或换一个文件。": "The file is damaged. Download it again or use another file.",
   "生图失败，已改成本地排版或截帧": "Image generation failed. A local layout or a video frame is used instead.",
   "生图标题校对未通过，已改成本地排版": "The generated title didn't match. A local layout is used instead.",
-  "已用视频截帧作为封面": "A frame from the video is used as the cover."
+  "已用视频截帧作为封面": "A frame from the video is used as the cover.",
+  "已进行不到 1 分钟": "Less than a minute so far",
+  "已进行约 {{minutes}} 分钟": "About {{minutes}} minutes so far",
+  "模型步骤最多约 20 分钟": "Model steps are capped at about 20 minutes",
+  "进度为估算，以阶段为准": "Progress is an estimate; the stage is what counts",
+  "这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。": "This request may already have been billed by the provider. Check your balance and test the connection in Settings before retrying.",
+  "分析": "Analysis",
+  "制作": "Production"
 }

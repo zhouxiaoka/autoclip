@@ -20,6 +20,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === 'react-router-dom') return { useNavigate: () => to => navigations.push(to), useLocation: () => ({ search: routeSearch.value }) }
     if (name === './settingsReturn') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
+    if (name === './studioProgress') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/studioProgress.ts'))
     if (name === '../../i18n') return { t: value => value }
     if (name === '../../ui') return { Btn: props => { buttons.push(props); return React.createElement('button', null, props.children) },
       Section: ({ children, description, right }) => React.createElement('section', null, description, right, children),
@@ -262,6 +263,33 @@ test('R29 #444 the re-run line shows only for a completed round with earlier fai
   const zero = at({ status: 'completed', not_redone_failed_count: 0 })
   assert.doesNotMatch(zero, NEW); assert.match(zero, DONE)
   assert.doesNotMatch(at({ status: 'partial', not_redone_failed_count: 2 }), NEW)
+})
+
+test('running production shows a stage progress bar, not only spinner text', () => {
+  const html = render(true, 'production', 'running')
+  assert.match(html, /role="progressbar"/)
+  assert.match(html, /内容分析/)
+  assert.match(html, /\d+%/)
+  assert.match(html, /模型步骤最多约 20 分钟/)
+  assert.match(html, /进度为估算，以阶段为准/)
+  assert.doesNotMatch(html, /class="spin"/)
+})
+
+test('a bare 错误 names the step, and a billable call adds the billing sentence', () => {
+  const sentence = '模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。'
+  const guidance = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
+  generationOverride.value = { auto_start: true, status: 'failed', billable_calls_before_failure: 2 }
+  try {
+    const html = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
+    assert.match(html, new RegExp('分析：' + sentence))
+    assert.match(html, new RegExp(guidance.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    assert.doesNotMatch(html, /<span class="studio-error">错误<\/span>/)
+  } finally {
+    generationOverride.value = null
+  }
+  const quiet = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
+  assert.match(quiet, new RegExp('分析：' + sentence))
+  assert.doesNotMatch(quiet, /可能已经由服务商计费/)
 })
 
 test('1.5.7 results page has no control that appends platforms', () => {
