@@ -324,7 +324,7 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
-      이 프로젝트를 후원해 주신 APIMart에 감사드립니다! APIMart는 AI 이미지와 동영상 생성을 위한 저비용 API 플랫폼입니다. GPT-Image-2는 <code>$0.006/image</code>부터 이용할 수 있으며, 1달러로 160장 이상을 만들 수 있습니다. 하나의 비동기 API로 이미지와 동영상을 모두 처리합니다. 작업을 제출해 ID를 받고, 폴링 또는 콜백으로 결과를 가져옵니다. 타임아웃 없이 수만 장을 배치로 처리하고, 코드를 바꾸지 않고 모델을 전환할 수 있습니다. 월 이용료 없는 종량제이며, <a href="https://go.apimart.ai/tw-autoclip">여기에서 가입</a>하면 바로 시작할 수 있습니다.
+      이 프로젝트를 후원해 주신 <strong>APIMart</strong>에 감사드립니다! <strong>APIMart</strong>는 AI 이미지와 동영상 생성을 위한 저비용 API 플랫폼입니다. GPT-Image-2는 <strong>$0.006/image</strong>부터 이용할 수 있으며, 1달러로 <strong>160</strong>장 이상을 만들 수 있습니다. 하나의 비동기 API로 이미지와 동영상을 모두 처리합니다. 작업을 제출해 ID를 받고, 폴링 또는 콜백으로 결과를 가져옵니다. 타임아웃 없이 수만 장을 배치로 처리하고, 코드를 바꾸지 않고 모델을 전환할 수 있습니다. 월 이용료 없는 종량제이며, <a href="https://go.apimart.ai/tw-autoclip">여기에서 가입</a>하면 바로 시작할 수 있습니다.
     </td>
   </tr>
 </table>
