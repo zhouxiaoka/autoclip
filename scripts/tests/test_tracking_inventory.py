@@ -84,7 +84,7 @@ class TrackingInventoryTests(unittest.TestCase):
 
     def test_current_version_enables_producer_gates(self) -> None:
         version = check.app_version(ROOT)
-        self.assertEqual(version, "1.5.7")
+        self.assertEqual(version, "1.5.8")
         self.assertTrue(check.transition_due(version))
         self.assertFalse(check.transition_due("1.5.6"))
         self.assertEqual(check.producer_transition_errors(ROOT), [])
