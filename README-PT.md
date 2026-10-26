@@ -324,7 +324,7 @@ Dentro do Docker, `localhost` é o contêiner. Use um endereço do host que o co
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
-      Agradecemos à APIMart por patrocinar este projeto! A APIMart é uma plataforma de API de baixo custo para geração de imagens e vídeos com IA — GPT-Image-2 a partir de <code>$0.006/image</code>, mais de 160 imagens por dólar. Uma única API assíncrona cobre imagem e vídeo: envie uma tarefa, receba um ID e obtenha os resultados por polling ou callback. Processe dezenas de milhares de imagens em lote sem timeouts e troque de modelo sem alterar o código. Pagamento conforme o uso, sem mensalidade — <a href="https://go.apimart.ai/tw-autoclip">cadastre-se aqui</a> para começar.
+      Agradecemos à <strong>APIMart</strong> por patrocinar este projeto! A <strong>APIMart</strong> é uma plataforma de API de baixo custo para geração de imagens e vídeos com IA — GPT-Image-2 a partir de <strong>$0.006/image</strong>, mais de <strong>160</strong> imagens por dólar. Uma única API assíncrona cobre imagem e vídeo: envie uma tarefa, receba um ID e obtenha os resultados por polling ou callback. Processe dezenas de milhares de imagens em lote sem timeouts e troque de modelo sem alterar o código. Pagamento conforme o uso, sem mensalidade — <a href="https://go.apimart.ai/tw-autoclip">cadastre-se aqui</a> para começar.
     </td>
   </tr>
 </table>
