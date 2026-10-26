@@ -39,6 +39,7 @@ function renderResults(workspace, studioApi, cards) {
     if (name === './api') return { studioApi, errorText: String }
     if (name === './OutputVariantCard') return { default: props => { cards.push(props); return null } }
     if (name === '../../utils/llmFailure') return loadTs(path.resolve(ROOT, '../src/utils/llmFailure.ts'))
+    if (name === '../../utils/timelineFailure') return loadTs(path.resolve(ROOT, '../src/utils/timelineFailure.ts'))
     if (name === './importReadiness') return loadTs(path.resolve(ROOT, '../src/features/studio/importReadiness.ts'))
     if (name === './browserCookieRecovery') return loadTs(path.resolve(ROOT, '../src/features/studio/browserCookieRecovery.ts'))
     if (name === './settingsReturn') return loadTs(path.resolve(ROOT, '../src/features/studio/settingsReturn.ts'))
