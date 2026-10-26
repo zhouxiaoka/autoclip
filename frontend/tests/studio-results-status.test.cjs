@@ -29,6 +29,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args), retry: async (...args) => calls.push(['retry', ...args]) }, errorText: String }
     if (name === '../../utils/llmFailure') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts'))
     if (name === './importReadiness') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/importReadiness.ts'))
+    if (name === './browserCookieRecovery') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/browserCookieRecovery.ts'))
     if (name === './platformLabel') return { platformLabel: String }
     if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
     if (name === '../../analytics/studio') return { trackLegacyEntry() {} }
@@ -106,6 +107,26 @@ test('R22 #212: a whisper_not_installed failure offers the transcription setting
   render(true, 'screening', 'failed', buttons, [], 'llm_not_configured')
   buttons.find(button => button.children === '模型设置').onClick()
   assert.deepEqual(navigations, ['/settings?section=ai'])
+})
+
+test('#481 source_blocked leads with the signed-in browser action', () => {
+  const hint = '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。'
+  const buttons = []
+  navigations.length = 0
+  const html = render(true, 'screening', 'failed', buttons, [], 'source_blocked', 'ingest', hint)
+  assert.match(html, /下载：/)
+  assert.ok(html.includes(hint))
+  assert.match(html, /下一步：回到导入，选择一个已登录的浏览器后再生成。/)
+  assert.doesNotMatch(html, /暂时没有可用成片|模型设置|去设置|打开转写设置/)
+  assert.equal(buttons.some(b => b.children === '模型设置' || b.children === '去设置' || b.children === '打开转写设置'), false)
+  const go = buttons.find(b => b.children === '选择已登录的浏览器')
+  assert.equal(go.variant, 'cta')
+  go.onClick()
+  assert.deepEqual(navigations, ['/?focus=browser-cookies'])
+  const retry = buttons.find(b => b.children === '重试')
+  assert.ok(retry)
+  assert.notEqual(retry.variant, 'cta')
+  assert.ok(buttons.some(b => b.children === '换一个视频'))
 })
 
 test('R24 #231: an unreadable source is shown at once as a source problem: no spinner, no retry, no settings, pick another file', () => {
