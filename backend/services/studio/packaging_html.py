@@ -214,7 +214,9 @@ def _editorial_scrim(width: int, height: int) -> str:
     wash = f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'"
     return (
         f"{_still(wash)}[scrim];"
-        f"[graded][scrim]overlay=0:{top}:format=yuv420:eof_action=repeat[based];"
+        # The wash is one looped frame. shortest stops it when the picture ends, so it cannot
+        # hold the composite open. The captured overlay below is the one that must not cut the scene.
+        f"[graded][scrim]overlay=0:{top}:format=yuv420:shortest=1:eof_action=repeat[based];"
     )
 
 
@@ -232,7 +234,9 @@ def composite_tail(base_label: str, overlay_index: int, width: int, height: int,
         f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
         f"{scrim}"
         f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
-        f"{base}[ov]overlay=0:0:format=yuv420:shortest=1[html]"
+        # Repeat the last captured frame. shortest=1 would end the scene when the movie is shorter.
+        # A longer movie cannot extend the file: the encode command stops at the scene length.
+        f"{base}[ov]overlay=0:0:format=yuv420:eof_action=repeat[html]"
     )
     bar = _progress_bar(template, offset, total, width, height)
     if not bar:
@@ -249,8 +253,9 @@ def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: in
     """One file per template, painted fill and length. The name is a hash, not the caption.
 
     Length is part of the key. paint_fill drops the cover title, so two captions-off clips of
-    one style can share a painted fill once the hook stops growing. The composite uses
-    ``shortest=1``, and a shorter cached movie would cut the longer output.
+    one style can share a painted fill once the hook stops growing. The composite repeats
+    the last overlay frame and the encode stops at the scene (``-t``). A shorter movie
+    must still not be reused for a longer clip.
     """
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
@@ -633,7 +638,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     except Exception as error:  # noqa: BLE001 - a capture failure must not fail the export
         report_overlay_failure(error)
         return finish(_downgrade('none', failure='capture', requested=template))
-    if not _cache_usable(dest):
+    if not _cached_overlay_fits(dest, frames, fps):
         dest.unlink(missing_ok=True)
         return finish(_downgrade('none', failure='encode', requested=template))
     _enforce_overlay_cap(dest.parent, keep=dest)

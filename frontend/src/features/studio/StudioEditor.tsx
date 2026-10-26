@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import StudioDownloadLink from './StudioDownloadLink'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText, type SourcePreview } from './api'
 import { useWorkspace } from './useWorkspace'
@@ -27,6 +27,8 @@ export default function StudioEditor() {
 function Editor({ projectId, draftId }: { projectId: string; draftId: string }) {
   useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const variantId = searchParams.get('variant') || undefined
   const { workspace, error: loadError, loading, refresh } = useWorkspace(projectId)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saved, setSaved] = useState('')
@@ -180,7 +182,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const render = async () => {
     await perform('render', async () => {
       const savedDraft = await save()
-      await studioApi.export(projectId, savedDraft.id, savedDraft.revision, savedDraft)
+      await studioApi.export(projectId, savedDraft.id, savedDraft.revision, savedDraft, variantId)
       refresh(); setNotice("渲染已开始，可以离开页面，之后在导出记录查看")
     })
   }

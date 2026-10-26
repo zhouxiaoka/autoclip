@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import threading
+import time
 from typing import Mapping, Optional, Sequence
 
 logger = logging.getLogger(__name__)
@@ -18,11 +19,18 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 # (provider, host, key digest, saved model) -> substitute id
 _remembered: dict[tuple[str, str, str, str], str] = {}
+# purpose + saved id -> {purpose, saved_model, replacement}. Model ids only.
+_notices: dict[tuple[str, str], dict[str, str]] = {}
+# Successful account lists, 60s. A timeout is not stored.
+_LIST_TTL_S = 60.0
+_lists: dict[tuple[str, str, str], tuple[float, object]] = {}
 
 
 def clear_remembered_models() -> None:
     with _lock:
         _remembered.clear()
+        _notices.clear()
+        _lists.clear()
 
 
 def _digest(api_key: str) -> str:
@@ -65,13 +73,54 @@ def remembered_model(provider: str, base_url: str, api_key: str, saved_model: st
     return None
 
 
-def remember_model(provider: str, base_url: str, api_key: str, saved_model: str, substitute: str) -> None:
+def remember_model(
+    provider: str, base_url: str, api_key: str, saved_model: str, substitute: str, *, purpose: str = "",
+) -> None:
     saved = (saved_model or "").strip()
     alt = (substitute or "").strip()
     if not saved or not alt or alt == saved:
         return
     with _lock:
         _remembered[_slot(provider, base_url, api_key, saved)] = alt
+        if purpose in {"analysis", "vision", "ocr"}:
+            _notices[(purpose, saved)] = {
+                "purpose": purpose, "saved_model": saved, "replacement": alt,
+            }
+
+
+def substitution_notices(purpose: str = "") -> list[dict[str, str]]:
+    """In-process swaps. Ids only: no keys, hosts, or response text."""
+    with _lock:
+        items = [dict(item) for item in _notices.values()]
+    if purpose:
+        return [item for item in items if item["purpose"] == purpose]
+    return items
+
+
+def _cached_account_list(*, base_url: str, api_key: str, provider: str, http):
+    """One successful ``/models`` read per account for a minute. Failures are not cached."""
+    from backend.core.provider_model_fetch import list_account_models
+
+    key = (
+        (provider or "compatible").strip().lower(),
+        _host(base_url),
+        _digest(api_key),
+    )
+    now = time.monotonic()
+    with _lock:
+        hit = _lists.get(key)
+        if hit is not None and now - hit[0] < _LIST_TTL_S:
+            return hit[1]
+    listed = list_account_models(
+        base_url=base_url,
+        api_key=api_key,
+        provider=provider or "compatible",
+        http=http,
+    )
+    if getattr(listed, "ok", False):
+        with _lock:
+            _lists[key] = (time.monotonic(), listed)
+    return listed
 
 
 def _listed_vision_ready(name: str, capabilities: Optional[Mapping[str, str]]) -> bool:
@@ -156,14 +205,10 @@ def resolve_available_analysis_model(
 ) -> Optional[str]:
     """One live-list lookup for a text call. ``None`` when no other chat model is listed."""
     from backend.core.llm_telemetry import sanitize_model
-    from backend.core.provider_model_fetch import list_account_models
 
     try:
-        listed = list_account_models(
-            base_url=base_url,
-            api_key=api_key,
-            provider=provider or "compatible",
-            http=http,
+        listed = _cached_account_list(
+            base_url=base_url, api_key=api_key, provider=provider, http=http,
         )
     except Exception:  # noqa: BLE001 — a list failure must not replace the original model error
         logger.info("text model list unavailable; not substituting")
@@ -224,14 +269,10 @@ def resolve_available_model(
 ) -> Optional[str]:
     """One live-list lookup. ``None`` when the list cannot be read or has no other vision model."""
     from backend.core.llm_telemetry import sanitize_model
-    from backend.core.provider_model_fetch import list_account_models
 
     try:
-        listed = list_account_models(
-            base_url=base_url,
-            api_key=api_key,
-            provider=provider or "compatible",
-            http=http,
+        listed = _cached_account_list(
+            base_url=base_url, api_key=api_key, provider=provider, http=http,
         )
     except Exception:  # noqa: BLE001 — a list failure must not replace the original model error
         logger.info("vision model list unavailable; not substituting")

@@ -57,6 +57,7 @@ def test_long_audio_merges_offsets_and_failure_does_not_publish_partial(monkeypa
     def extract(command, **kwargs):
         with wave.open(command[-1], 'wb') as audio:
             audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(16000)
+            # 181s crosses the 150s upload cut, so the second cue is shifted by 2:30.
             audio.writeframes(b'\0\0' * 16000 * 181)
         return SimpleNamespace(returncode=0)
     monkeypatch.setattr(asr.subprocess, 'run', extract)
@@ -70,7 +71,7 @@ def test_long_audio_merges_offsets_and_failure_does_not_publish_partial(monkeypa
     monkeypatch.setattr(asr, 'request_chunk', response)
     output = tmp_path / 'out.srt'
     asr.transcribe(tmp_path / 'video.mp4', output, selection)
-    assert '00:03:00,100 --> 00:03:00,800' in output.read_text()
+    assert '00:02:30,100 --> 00:02:30,800' in output.read_text()
     assert len(chunks) == 2
     output.unlink(); chunks.clear()
     def fail(*args):

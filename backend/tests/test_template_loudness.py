@@ -1,4 +1,4 @@
-"""HTML-template output is loudness-normalised to the preview's -14 LUFS / -1 dBTP; classic keeps its mix."""
+"""Exported audio is loudness-normalised to the preview's -14 LUFS / -1 dBTP."""
 import subprocess
 
 from backend.services.studio import audio
@@ -45,8 +45,10 @@ def test_without_a_measurement_the_mix_is_the_old_filter():
     assert audio.parse_loudnorm('{"input_i": "-inf", "input_tp": "-inf", "input_lra": "0", "input_thresh": "-70", "target_offset": "0"}') is None
 
 
-def test_render_normalises_only_the_html_template_path():
+def test_render_normalises_the_final_mix():
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1] / 'services' / 'studio' / 'render.py').read_text(encoding='utf-8')
-    block = source[source.index("audio_filter = 'aresample=48000:async=1:first_pts=0'"):source.index("'-c:a', 'aac', '-b:a', '160k']\n            else:")]
-    assert "overlay_path is not None and html_template in HTML_TEMPLATE_IDS" in block
+    start = source.index('Preview and QA both expect -14 LUFS')
+    block = source[start:source.index("'-c:a', 'aac', '-b:a', '160k']", start)]
+    assert 'measure_loudnorm' in block and 'loudnorm_filter' in block
+    assert 'html_template in HTML_TEMPLATE_IDS' not in block

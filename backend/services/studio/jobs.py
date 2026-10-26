@@ -1269,6 +1269,40 @@ def _submit_production(project_id, run_id, plan, *, attempt_id=None):
             mark_project(project_id, 'failed')
 
 
+def export_variant(variants, draft_id: str, *, variant_id: str | None = None, revision: int | None = None, aspect: str | None = None):
+    """The output row whose template this draft export should keep.
+
+    Several platform rows can share one draft. A named id wins. Otherwise one
+    row, the row at this revision, or the row whose strategy matches the draft
+    aspect. Differing templates without an id are not guessed from list order.
+    """
+    matched = [item for item in variants or [] if isinstance(item, dict) and item.get('draft_id') == draft_id]
+    if variant_id:
+        named = next((item for item in matched if item.get('id') == variant_id), None)
+        if named is not None:
+            return named
+    if len(matched) <= 1:
+        return matched[0] if matched else None
+    pool = [item for item in matched if revision is not None and item.get('draft_revision') == revision] or matched
+    if len(pool) == 1:
+        return pool[0]
+    if aspect and aspect != 'original':
+        from backend.services.platform_strategy import PLATFORM_STRATEGIES
+        sided = []
+        for item in pool:
+            spec = PLATFORM_STRATEGIES.get(str(item.get('strategy_id') or ''))
+            if spec is not None and spec.aspect == aspect:
+                sided.append(item)
+        if len(sided) == 1:
+            return sided[0]
+        if sided:
+            pool = sided
+    styles = {template_export_kwargs(item).get('html_template') for item in pool}
+    if len(styles) <= 1:
+        return pool[0]
+    return None
+
+
 def template_export_kwargs(variant) -> dict:
     """Template arguments recorded on an automatic variant.
 

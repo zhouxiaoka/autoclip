@@ -227,7 +227,7 @@ def test_retired_model_falls_back_to_a_live_candidate_not_chatgpt_4o_latest(capl
     "status, body, expected",
     [
         (401, {"error": {"message": f"Incorrect API key provided: {SECRET}", "type": "invalid_request_error", "code": "invalid_api_key"}}, UpstreamErrorType.INVALID_KEY),
-        (503, {"error": {"message": "No available channel for model retired-id", "type": "invalid_request_error", "code": "model_not_found"}}, UpstreamErrorType.MODEL_NOT_FOUND),
+        (503, {"error": {"message": "No available channel for model retired-id", "type": "invalid_request_error", "code": "model_not_found"}}, UpstreamErrorType.UPSTREAM_UNAVAILABLE),
         (404, {"error": {"code": "DeploymentNotFound", "message": "DeploymentNotFound"}}, UpstreamErrorType.MODEL_NOT_FOUND),
     ],
 )

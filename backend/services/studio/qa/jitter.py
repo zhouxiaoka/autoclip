@@ -3,7 +3,9 @@
 A flash is a reversal of at least the framing jump (12% of the width) inside
 0.8 s, more than once a minute. On a shot that is not panning, RMS motion above
 0.30 px also fails. The live frame sample is 96 px wide, so one sample pixel is
-about 11 px on a 1080-wide frame: this sample cannot see a 0.30 px wobble.
+about 11 px on a 1080-wide frame: shifts under 0.12 sample px are phase-correlation
+noise and are zeroed before that comparison. A pan is motion of at least 8 output
+px per frame; visible wobble below that still fails RMS.
 Shifts come from phase correlation, not a pixel search.
 """
 from __future__ import annotations
@@ -16,9 +18,13 @@ FLASHES_PER_MIN = 1.0
 RMS_PX = 0.30
 REVERSAL_S = 0.8
 MIN_JUMP = 0.12
-STATIC_MEAN_PX = 1.0
+# Output px/frame. Below this, motion is not a pan. 8 px is under 1% of 1080
+# and above the noise that survives SAMPLE_NOISE_PX.
+STATIC_MEAN_PX = 8.0
 # Sample-pixel reversals. One sample pixel is coarser than compression noise.
 SAMPLE_FLASH_PX = 3.0
+# Phase correlation on a 96px sample jitters below this. It is not camera motion.
+SAMPLE_NOISE_PX = 0.12
 _SAMPLE_W, _SAMPLE_H = 96, 54
 
 
@@ -65,6 +71,17 @@ def flashes_from_shifts(shifts: list[tuple[float, float]], min_px: float = SAMPL
             count += 1
         previous = sign
     return count
+
+
+def quiet_sample_noise(shifts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Zero sub-resolution sample shifts. A real wobble stays."""
+    quiet = []
+    for dx, dy in shifts:
+        if math.hypot(dx, dy) < SAMPLE_NOISE_PX:
+            quiet.append((0.0, 0.0))
+        else:
+            quiet.append((dx, dy))
+    return quiet
 
 
 def motion_stats(shifts: list[tuple[float, float]]) -> tuple[float, float]:
@@ -144,6 +161,7 @@ def check(ctx, timeout: float) -> tuple[str, str]:
     elif not has_track:
         return 'skip', 'unreadable'
     scale = width / _SAMPLE_W
+    raw = quiet_sample_noise(raw)
     rms, mean = motion_stats([(dx * scale, dy * scale) for dx, dy in raw])
     flash_count = max(track_flashes, flashes_from_shifts(raw))
     return judge_motion(flash_count, duration, rms, mean)

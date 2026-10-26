@@ -1,10 +1,10 @@
 """Captions-off HTML overlays must not be reused across clips of different lengths.
 
 paint_fill drops the title, and the hook length stops growing after about 2.4s, so two
-clips of the same style then have the same painted fill. The composite uses shortest=1.
-A cached overlay from the shorter clip cuts the longer one, and the saved file makes
-every retry fail the same way. Mac smoke on 42c1e002: a 57.9s editorial clip reused the
-project's 41s overlay.
+clips of the same style then have the same painted fill. A cached overlay from the
+shorter clip used to be reused, and ``shortest=1`` cut the longer one. The encode now
+stops at the scene and repeats a short overlay's last frame. Mac smoke on 42c1e002:
+a 57.9s editorial clip reused the project's 41s overlay.
 """
 import subprocess
 from types import SimpleNamespace
@@ -49,7 +49,7 @@ def test_captions_off_overlay_cache_keeps_each_clips_duration(tmp_path, monkeypa
     short_pack = _off('短片标题', '第一条字幕')
     long_pack = _off('更长成片的标题', '另一条字幕')
     # #475: captions-off used to paint the same pixels past the hook, so only the frame count
-    # kept a short overlay from being reused on a longer clip (`shortest=1` then cuts it).
+    # kept a short overlay from being reused on a longer clip.
     # The fill now records the clip duration (`T`). That still must not collapse the two movies.
     short_fill, long_fill = _painted(short_pack, 3, template), _painted(long_pack, 5, template)
     assert short_fill['T'] == 3 and long_fill['T'] == 5
@@ -158,3 +158,27 @@ def test_editor_reexport_captions_off_does_not_cut_the_longer_clip(tmp_path, mon
     long_video = root / 'output' / 'studio' / f"{saved['d-long']['job_id']}.mp4"
     assert html._overlay_duration(short_video) == pytest.approx(3, abs=0.5)
     assert html._overlay_duration(long_video) == pytest.approx(5, abs=0.5)
+
+
+def test_a_fresh_overlay_shorter_than_the_clip_is_discarded(tmp_path, monkeypatch):
+    if subprocess.run(['ffmpeg', '-version'], capture_output=True, check=False).returncode != 0:
+        pytest.skip('ffmpeg unavailable')
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_FLAGS', '')
+    monkeypatch.setenv('AUTOCLIP_TEMPLATE_BUDGET_SEC', '90')
+    blob = _png(tmp_path)
+    real = html.encode_ffv1
+
+    def shrink(holds, dest, fps=30, timeout=30, run=None):
+        real([(holds[0][0], 1)], dest, fps=fps, timeout=timeout, run=run)
+
+    monkeypatch.setattr(html, 'encode_ffv1', shrink)
+    job = html.prepare_overlay(
+        'p1', 'editorial', _off('标题', '字幕'), 3,
+        features={'pkg_templates_v1': True},
+        capture=lambda count, _fps: [{'index': 0, 'count': count, 'png': blob}],
+    )
+    assert job.path is None
+    assert job.failure_reason == 'encode' and job.downgraded is True
+    folder = store.directory('p1') / 'output' / 'studio' / 'overlays'
+    assert not list(folder.glob('*.mkv'))

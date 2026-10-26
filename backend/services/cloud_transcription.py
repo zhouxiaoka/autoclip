@@ -5,6 +5,7 @@ import base64
 import json
 import math
 import os
+import re
 import time
 from pathlib import Path
 import subprocess
@@ -27,6 +28,9 @@ def _workers() -> int:
 
 UPLOAD_WORKERS = _workers()  # parallel chunk uploads (16 gained only ~10 %)
 CHUNK_ATTEMPTS = 3  # parallel uploads meet rate limits more often: a busy chunk waits and retries alone
+# DashScope sync ASR rejects a chunk at the 180s / 10MB edge. 150s stays under both.
+CHUNK_SECONDS = 150
+CHUNK_SAMPLES = 16000 * CHUNK_SECONDS
 
 
 def _retryable(error: Exception) -> bool:
@@ -121,6 +125,27 @@ def normalize_segments(items, offset=0.0, milliseconds=False, duration=None, ide
     return result
 
 
+def _sse_failure(event: dict) -> CloudTranscriptionError:
+    """A DashScope SSE error. The public sentence names the kind; the body stays here."""
+    code = str(event.get('code') or '')
+    token = re.sub(r'[^a-z0-9]', '', code.lower())
+    kind = _upstream_type(None, {'code': code})
+    if any(part in token for part in ('throttl', 'toomany', 'ratequota')):
+        return CloudTranscriptionError('云端转写繁忙，请稍后重试。', upstream_error_type='rate_limited')
+    if any(part in token for part in ('internal', 'unavailable', 'badgateway', 'gateway', 'timeout')):
+        return CloudTranscriptionError('云端转写暂时不可用，请稍后重试。', upstream_error_type='upstream_unavailable')
+    if any(part in token for part in ('invalidparameter', 'audiolength', 'audioduration')):
+        return CloudTranscriptionError(
+            '云端转写拒绝了这段音频（过长、过短或格式不符合该模型）。请更换转写模型，或改用较短的视频。',
+            http_status=400,
+            upstream_error_type=kind,
+        )
+    return CloudTranscriptionError(
+        '云端转写失败，请检查账号权限、额度和模型。',
+        upstream_error_type=kind,
+    )
+
+
 def request_chunk(client, connection, model, audio, language):
     route = adapter(connection.provider, model)
     endpoint = chat_endpoint(connection, model)
@@ -150,8 +175,7 @@ def request_chunk(client, connection, model, audio, language):
                 events = [response.json()]
             for event in events:
                 if event.get('code') and event['code'] not in {'Success', '200'}:
-                    raise CloudTranscriptionError('云端转写失败，请检查账号权限、额度和模型。',
-                                                  upstream_error_type=_upstream_type(None, event))
+                    raise _sse_failure(event)
                 output = event.get('output') or {}
                 items = output.get('sentences') or [output.get('sentence') or {}]
                 for item in items:
@@ -187,7 +211,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
     from backend.utils.speech_recognizer import SpeechRecognizer, srt_has_cue_text
     if output.exists() and srt_has_cue_text(output):
         return output
-    # Each upload is <= 180 seconds / 5.76 MB PCM, including base64 < 10 MB.
+    # Each upload is <= 150 seconds / 4.8 MB PCM, including base64 < 10 MB.
     # Exact sample offsets avoid encoder delay/drift when merging long recordings.
     with tempfile.TemporaryDirectory(prefix='autoclip-asr-') as temp:
         audio = Path(temp) / 'source.wav'
@@ -206,7 +230,7 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
             chunks, offset = [], 0.0
             with wave.open(str(audio), 'rb') as source:
                 while True:
-                    samples = source.readframes(16000 * 180)
+                    samples = source.readframes(CHUNK_SAMPLES)
                     if not samples:
                         break
                     chunk = Path(temp) / f'chunk-{len(chunks):04d}.wav'

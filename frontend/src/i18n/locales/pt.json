@@ -5,6 +5,8 @@
   "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "A configuração anterior da capa é inválida. Selecione novamente um serviço nas configurações de capa. O arquivo original foi preservado.",
   "部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。": "Alguns usos não puderam ser migrados como estavam. As chaves de API foram mantidas e esses modelos voltaram aos padrões recomendados. Este aviso aparece só uma vez.",
   "服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。": "As recomendações de provedores foram atualizadas. As conexões salvas não mudam; as novas usarão as recomendações novas.",
+  "分析模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。": "O modelo de análise {{saved}} está indisponível. Desta vez foi usado {{replacement}}.",
+  "保存这个模型": "Salvar este modelo",
   "加载项目失败": "Não foi possível carregar os projetos",
   "项目删除成功": "Projeto excluído",
   "删除项目失败": "Não foi possível excluir o projeto",

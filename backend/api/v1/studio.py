@@ -648,7 +648,11 @@ def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = Non
         raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
     draft = Draft.model_validate(raw)
     call(validate_draft, project_id, draft)
-    variant = next((v for v in state.get('output_variants', []) if v['draft_id'] == draft_id), None)
+    variant = jobs.export_variant(
+        state.get('output_variants', []), draft_id,
+        variant_id=body.variant_id if body else None,
+        revision=draft.revision, aspect=draft.aspect,
+    )
     if variant:
         return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)), **jobs.template_export_kwargs(variant))
     return call(jobs.export, project_id, draft)

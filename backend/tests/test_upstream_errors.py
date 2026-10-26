@@ -59,7 +59,7 @@ def test_openai_envelopes(status, body, expected, retryable):
         (403, {"error": {"message": "用户余额不足", "type": "new_api_error", "code": "insufficient_user_quota"}}, UpstreamErrorType.INSUFFICIENT_QUOTA),
         (403, {"error": {"message": "无权访问 default 分组", "type": "new_api_error"}}, UpstreamErrorType.PERMISSION_DENIED),
         (403, {"error": {"message": "该令牌无权访问模型 gpt-4o", "type": "new_api_error"}}, UpstreamErrorType.PERMISSION_DENIED),
-        (503, {"error": {"message": "No available channel for model gpt-4o (under group default)", "type": "new_api_error", "code": "model_not_found"}}, UpstreamErrorType.MODEL_NOT_FOUND),
+        (503, {"error": {"message": "No available channel for model gpt-4o (under group default)", "type": "new_api_error", "code": "model_not_found"}}, UpstreamErrorType.UPSTREAM_UNAVAILABLE),
     ],
     ids=["newapi-401-token", "newapi-401-quota", "newapi-403-quota", "newapi-403-group", "newapi-403-model", "newapi-503-model"],
 )
@@ -134,6 +134,28 @@ def test_dashscope_native_envelopes(status, body, expected):
 )
 def test_bad_endpoint_from_html_or_bare_404(status, body):
     _assert_safe(classify_upstream_error(status, body), UpstreamErrorType.BAD_ENDPOINT, False)
+
+
+@pytest.mark.stdlib_only
+@pytest.mark.parametrize(
+    "status,body",
+    [
+        (504, "<html><head><title>504 Gateway Time-out</title></head><body>nginx</body></html>"),
+        (502, b"<html><body>502 Bad Gateway</body></html>"),
+        (503, {"error": {"message": "没有可用渠道", "type": "new_api_error", "code": "model_not_found"}}),
+        (504, {"error": {"message": "No available channel for model gpt-4o", "code": "model_not_found"}}),
+        (504, {"error": {"message": "gateway timeout"}}),
+    ],
+    ids=["html-504", "html-502", "channel-zh", "channel-504", "json-504"],
+)
+def test_gateway_and_channel_outage_are_retryable(status, body):
+    _assert_safe(classify_upstream_error(status, body), UpstreamErrorType.UPSTREAM_UNAVAILABLE, True)
+
+
+@pytest.mark.stdlib_only
+def test_channel_phrase_on_404_stays_a_missing_model():
+    body = {"error": {"message": "No available channel for model gpt-4o", "code": "model_not_found"}}
+    _assert_safe(classify_upstream_error(404, body), UpstreamErrorType.MODEL_NOT_FOUND, False)
 
 
 @pytest.mark.stdlib_only

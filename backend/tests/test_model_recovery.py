@@ -278,6 +278,34 @@ def test_bailian_catalog_rewrites_official_hosts_and_leaves_a_proxy_alone():
     assert proxy["urls"] == ["https://proxy.example.com/v1/models"]
 
 
+def test_bailian_ocr_default_is_empty_when_the_list_times_out():
+    from backend.core.image_providers import ImageError, default_ocr_model, read_image_text
+
+    def slow(url, *, headers, timeout, trust_env):
+        raise TimeoutError("timed out")
+
+    assert default_ocr_model("dashscope", model="qwen-vl-plus", api_key=SECRET, http=slow) == ""
+
+    def refuse(body):
+        raise AssertionError("posted")
+
+    with pytest.raises(ImageError, match="跳过校对"):
+        read_image_text(
+            provider="dashscope", api_key=SECRET, base_url="", model="",
+            image=b"\xff\xd8\xff", session=_OcrSession(refuse), http=slow,
+        )
+
+
+def test_a_second_ocr_default_reuses_the_account_list():
+    from backend.core.image_providers import default_ocr_model
+
+    seen = {"urls": []}
+    http = _models_http(["qwen-plus", "qwen3-vl-plus"], seen)
+    assert default_ocr_model("dashscope", api_key=SECRET, http=http) == "qwen3-vl-plus"
+    assert default_ocr_model("dashscope", api_key=SECRET, http=http) == "qwen3-vl-plus"
+    assert seen["urls"] == [COMPAT + "/models"]
+
+
 def test_bailian_ocr_default_is_empty_when_the_list_has_no_vision_model():
     from backend.core.image_providers import default_ocr_model
 
@@ -445,7 +473,7 @@ def test_advertised_retired_id_is_only_an_ordering_hint_and_recovers_once():
         http=_models_http(["qwen-vl-plus", "qwen3.8-flash", "qwen3-vl-plus"], seen),
     ) == "标题"
     assert [body["model"] for _url, body in session.sent] == ["qwen-vl-plus", "qwen3.8-flash"]
-    assert seen["urls"] == [COMPAT + "/models", COMPAT + "/models"]
+    assert seen["urls"] == [COMPAT + "/models"]
 
 
 def test_other_ocr_errors_do_not_fetch_a_substitute():
@@ -504,6 +532,7 @@ def test_verify_endpoint_keeps_a_saved_ocr_model_and_resolves_only_the_fallback(
     assert cfg.model == "wanx2.1-t2i-turbo" and cfg.ocr_model == ""
     assert seen["urls"] == [COMPAT + "/models"]
 
+    clear_remembered_models()
     monkeypatch.setattr(
         "backend.core.provider_model_fetch._default_http_get",
         _models_http(["qwen-plus"], {"urls": []}),

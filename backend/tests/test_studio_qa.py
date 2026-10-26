@@ -94,13 +94,25 @@ def test_jitter_track_and_sampled_motion(monkeypatch):
     steady = report.SceneSpan(0, 30, [(0.0, 0.40), (10.0, 0.55), (20.0, 0.70)])
     assert jitter.check(_ctx(width=width, scenes=[steady]), 1) == ('pass', 'calm')
 
-    def shaky(_path, _at, _timeout):
+    def noisy(_path, _at, _timeout):
+        # Under the 96px sample's noise floor. Scaling these used to fail RMS.
         return [(0.05, 0.0), (0.04, 0.0), (0.06, 0.0)]
 
-    monkeypatch.setattr(jitter, '_sample_shifts', shaky)
+    def wobble(_path, _at, _timeout):
+        # ~0.5 sample px is about 6 output px: visible, and not a pan.
+        return [(0.50, 0.0), (-0.45, 0.0), (0.55, 0.0)]
+
+    def pan(_path, _at, _timeout):
+        return [(2.0, 0.0), (2.1, 0.0), (1.9, 0.0)]
+
     ctx = _ctx(width=1080, scenes=[report.SceneSpan(0, 2)])
     ctx.output = type('File', (), {'is_file': lambda self: True})()
+    monkeypatch.setattr(jitter, '_sample_shifts', noisy)
+    assert jitter.check(ctx, 1) == ('pass', 'calm')
+    monkeypatch.setattr(jitter, '_sample_shifts', wobble)
     assert jitter.check(ctx, 1) == ('fail', 'rms')
+    monkeypatch.setattr(jitter, '_sample_shifts', pan)
+    assert jitter.check(ctx, 1) == ('pass', 'calm')
 
 
 def test_shift_estimator_sees_a_two_pixel_move():

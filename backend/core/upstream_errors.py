@@ -197,7 +197,10 @@ def _classify(
     reason = (finish_reason or "").strip().lower()
     if reason in _LENGTH_REASONS:
         return UpstreamErrorType.OUTPUT_TRUNCATED
+    # A gateway HTML page on 502/503/504 is an outage, not a wrong /v1 URL.
     if _looks_like_html(text, payload):
+        if status in {500, 502, 503, 504}:
+            return UpstreamErrorType.UPSTREAM_UNAVAILABLE
         return UpstreamErrorType.BAD_ENDPOINT
 
     code, kind, message = fields
@@ -257,6 +260,10 @@ def _from_structured_code(
     if tokens & _CODE_MODEL:
         if status == 404 and not _contains(blob, _MODEL_HINTS + ("model", "模型")):
             return UpstreamErrorType.BAD_ENDPOINT
+        # 88API stamps model_not_found on "no available channel" during a 5xx.
+        # That is the gateway, not a retired id, and must not swap the saved model.
+        if status in {500, 502, 503, 504} and _channel_outage(blob):
+            return UpstreamErrorType.UPSTREAM_UNAVAILABLE
         return UpstreamErrorType.MODEL_NOT_FOUND
     if tokens & _CODE_RATE:
         return UpstreamErrorType.RATE_LIMITED
@@ -273,9 +280,15 @@ def _from_structured_code(
     return None
 
 
+def _channel_outage(blob: str) -> bool:
+    return _contains(blob, ("no available channel", "没有可用渠道"))
+
+
 def _from_hints(blob: str, status: int | None) -> UpstreamErrorType | None:
     if _contains(blob, _QUOTA_HINTS):
         return UpstreamErrorType.INSUFFICIENT_QUOTA
+    if _channel_outage(blob) and status in {500, 502, 503, 504}:
+        return None
     if _contains(blob, _MODEL_HINTS) and status in {400, 404, 503, None}:
         return UpstreamErrorType.MODEL_NOT_FOUND
     if status == 429 or (status is None and _contains(blob, _RATE_HINTS)):

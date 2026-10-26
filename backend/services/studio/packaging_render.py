@@ -185,7 +185,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     cinematic and classic styles used a 2.8s opening card. Neither is burned.
     `titles_only` is that empty title layer with the caption rows left out.
     """
-    from backend.services.studio.caption_layout import timed_screens, width
+    from backend.services.studio.caption_layout import display_text, timed_screens, width
     rows = timeline(scenes)
     offset = rows[index][2]
     length = rows[index][1] - rows[index][0]
@@ -210,12 +210,16 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         start, end = cue.start, cue.end
         if end <= source_scene.start or start >= source_scene.end:
             continue
+        spoken = display_text(cue.text)
+        original_line = display_text(cue.original)
+        if not spoken and not original_line:
+            continue
         if interview:
             caption_style = 'CaptionBox' if style == 'boxed' else 'Caption'
             size = 58 if style == 'boxed' else 62
             # Burned captions sit at the bottom of the picture: put ours under the window instead.
             anchor, y = ('\\an8', WIN_Y + WIN_H + 30) if packaging.burned_captions else ('\\an2', WIN_Y + WIN_H - 22)
-            for s, e, text, original in timed_screens(cue.text, start, end, _limit(size), cue.original, _limit(36)):
+            for s, e, text, original in timed_screens(spoken, start, end, _limit(size), original_line, _limit(36)):
                 body = _esc_lines(text)
                 if style == 'spotlight':
                     body = _emphasize(body, tag_texts, accent)
@@ -229,7 +233,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         highlights = {h.text.lower() for h in packaging.highlights if cue.start <= h.at < cue.end}
         if style == 'boxed' or packaging.audience_language == 'zh':
             caption_style, size = {'boxed': ('CaptionBox', 58), 'cinematic': ('Cine', 64)}.get(style, ('Words', 82))
-            for s, e, text, _ in timed_screens(cue.text, start, end, _limit(size) / 0.95):
+            for s, e, text, _ in timed_screens(spoken, start, end, _limit(size) / 0.95):
                 body = _esc_lines(text)
                 if packaging.audience_language == 'zh':
                     body = _emphasize(body, list(highlights), accent)
@@ -237,7 +241,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                     body = re.sub(rf'(?i)\b({re.escape(_esc(word))})\b', lambda m: f'{{\\c{accent}}}{m.group(1)}{{\\c{WHITE}}}', body, count=1)
                 add_caption(2, s, e, caption_style, f'{{\\an2\\pos(540,1420)\\fad(90,90)}}{body}')
             continue
-        words = _words(cue.text, start, end, None)
+        words = _words(spoken, start, end, None)
         if style == 'cinematic':
             # One calm line of 2–5 words at a time; single-word flashes read as jittery.
             phrases = _chunks(words, max_words=5, max_chars=26)
