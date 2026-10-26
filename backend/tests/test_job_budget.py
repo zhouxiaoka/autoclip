@@ -21,6 +21,23 @@ from backend.core.upstream_errors import UpstreamErrorType
 from backend.tests.test_result_retry import _manager
 
 
+def test_env_budget_overrides_the_default_and_is_still_a_timeout(monkeypatch):
+    """AUTOCLIP_CLIP_JOB_BUDGET_SEC is the knob a desktop repro uses to force the cap."""
+    from backend.core.job_budget import clip_job_budget_seconds
+
+    monkeypatch.setenv('AUTOCLIP_CLIP_JOB_BUDGET_SEC', '1.5')
+    assert clip_job_budget_seconds() == 1.5
+    for raw in ('0', '-3', 'nope', ''):
+        monkeypatch.setenv('AUTOCLIP_CLIP_JOB_BUDGET_SEC', raw)
+        assert clip_job_budget_seconds() == float(CLIP_JOB_BUDGET_SEC)
+    monkeypatch.setenv('AUTOCLIP_CLIP_JOB_BUDGET_SEC', '0.05')
+    with bound_clip_job():
+        time.sleep(0.08)
+        with pytest.raises(JobDurationExceeded):
+            ensure_clip_job_budget()
+    assert studio_error_code(JobDurationExceeded()) == 'timeout'
+
+
 def test_default_cap_covers_one_slow_read_but_not_an_unbounded_retry_stack():
     assert CLIP_JOB_BUDGET_SEC == 20 * 60
     # One provider read is 600s and the SDK may retry it once. The cap stops the next one.

@@ -6,6 +6,13 @@ from yt_dlp.cookies import CookieLoadError
 
 from backend.pipeline.failures import PipelineFailure
 
+# yt-dlp 默认 file_access_retries=3，且不设 file_access 的 retry sleep，
+# 两次尝试之间只在 warn 里睡约 10ms。Windows 杀毒/索引锁住
+# .part → 成片 的 rename 时是 WinError 32（errno EACCES），30ms 内经常放不掉，
+# 于是报 “Giving up after 3 retries”（#410）。把这一次下载里的 rename 拉长到
+# 最多 8 次、合计约 9 秒；调用方显式传入的次数或 sleep 不覆盖。
+FILE_ACCESS_RETRIES = 8
+
 
 COOKIE_ACCESS_HINT = '无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。'
 # 也是前端 i18n 的 key（8 个 locale），改动时同步 frontend/src/i18n/locales/*.json。
@@ -60,11 +67,26 @@ def _browser_cookie_permission_failure(error):
     return cookie_failure and permission_failure
 
 
-def download_with_recovery(url: str, options: dict):
+def file_access_backoff(n=0) -> float:
+    """Seconds to wait before file-access retry ``n`` (0-based). Eight retries sum to 9s."""
+    return min(2.0, 0.25 * (int(n) + 1))
+
+
+def recovery_options(options: dict) -> dict:
+    """yt-dlp options for one download, including the Windows rename-lock budget."""
     opts = {**options, 'socket_timeout': 30, 'retries': 2,
             'fragment_retries': 2, 'extractor_retries': 2,
             'concurrent_fragment_downloads': 1, 'skip_unavailable_fragments': False,
             'continuedl': True}
+    opts.setdefault('file_access_retries', FILE_ACCESS_RETRIES)
+    sleeps = dict(opts.get('retry_sleep_functions') or {})
+    sleeps.setdefault('file_access', file_access_backoff)
+    opts['retry_sleep_functions'] = sleeps
+    return opts
+
+
+def download_with_recovery(url: str, options: dict):
+    opts = recovery_options(options)
     youtube = urlparse(url).hostname in {'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'}
     public_site = youtube or urlparse(url).hostname in {'bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'b23.tv'}
     retried_subtitles = retried_format = retried_cookies = False
