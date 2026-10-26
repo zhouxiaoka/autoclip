@@ -80,6 +80,30 @@ test('the 20-minute model cap applies only to analysis stages', () => {
   assert.equal(highlight.modelBudget, true)
 })
 
+test('merge leaves the capped download percent and keeps elapsed time', () => {
+  const merging = progress.studioRunProgress({
+    analysis: {
+      status: 'running', phase: 'screening', message: '正在合并音视频', percent: 99,
+      created_at: new Date(NOW - 5 * 60 * 1000).toISOString(),
+    },
+  }, NOW)
+  assert.equal(merging.label, '正在合并音视频')
+  assert.equal(merging.indeterminate, true)
+  assert.equal(merging.approximate, false)
+  assert.equal(merging.modelBudget, false)
+  assert.equal(merging.elapsedMinutes, 5)
+  const shown = progress.displayedProgress(merging, 95)
+  assert.equal(shown.floor, 95)
+  assert.equal(shown.view.indeterminate, true)
+  const downloading = progress.studioRunProgress({
+    analysis: { status: 'running', phase: 'screening', message: '准备素材', percent: 99 },
+  }, NOW)
+  assert.equal(downloading.label, '下载中')
+  assert.equal(downloading.percent, 95)
+  assert.equal(downloading.indeterminate, undefined)
+  assert.equal(progress.displayedProgress(downloading, 40).view.percent, 95)
+})
+
 test('download percent is the screening bar; rendering keeps the export band under 100', () => {
   const download = progress.studioRunProgress({
     analysis: { status: 'running', phase: 'screening', percent: 40, message: '正在下载' },

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { apiConfigManager } from '../../utils/apiConfig'
 import { studioApi, errorText } from './api'
 import { Workspace, emptyWorkspace } from './types'
-import { pollWorkspace } from './pollWorkspace'
+import { observeWorkspace } from './pollWorkspace'
 
 export function useWorkspace(projectId: string | undefined) {
   const [state, setState] = useState<Workspace>(emptyWorkspace)
@@ -17,11 +18,16 @@ export function useWorkspace(projectId: string | undefined) {
     const controller = new AbortController()
     setLoading(true)
     if (shown.current !== projectId) { shown.current = projectId; setLoaded(false); setState(emptyWorkspace) }
-    void pollWorkspace(signal => studioApi.get(projectId, signal), {
+    void observeWorkspace(signal => studioApi.get(projectId, signal), {
       signal: controller.signal,
       onData: data => { setState(data); setError(''); setLoaded(true) },
       onError: error => setError(errorText(error)),
       onSettled: () => setLoading(false),
+      // backend-started updates the API port and notifies listeners. Re-arm even
+      // when the fast network budget is already spent, without waiting for focus.
+      subscribeRestart: onRestart => apiConfigManager.addListener(config => {
+        if (config.isReady) onRestart()
+      }),
     })
     return () => controller.abort()
   }, [projectId, version])

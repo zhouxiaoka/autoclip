@@ -74,11 +74,20 @@ export interface StudioProgressView {
   label: string
   percent: number
   approximate: boolean
+  /** Merge/remux has no honest percent. The bar is busy; the label and elapsed time carry the state. */
+  indeterminate?: boolean
   /** Whole minutes since the run started, or null when the start is unknown. */
   elapsedMinutes: number | null
   /** True only for model stages. Download, local transcription and export sit outside the 20-minute model cap. */
   modelBudget: boolean
   detail: string
+}
+
+/** Download percent must not slide backward. A merge stage keeps the last floor without displaying it. */
+export function displayedProgress(view: StudioProgressView, floor: number): { view: StudioProgressView; floor: number } {
+  if (view.indeterminate) return { view, floor }
+  const percent = Math.max(floor, view.percent)
+  return { view: { ...view, percent }, floor: percent }
 }
 
 function elapsedSeconds(iso: string | undefined, nowMs: number): number | null {
@@ -128,6 +137,18 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
   }
 
   if (phase === 'screening') {
+    // Postprocess does not advance yt-dlp's download percent. Do not keep painting that cap.
+    if (analysis.message === '正在合并音视频') {
+      return {
+        label: '正在合并音视频',
+        percent: 0,
+        approximate: false,
+        indeterminate: true,
+        elapsedMinutes,
+        modelBudget: false,
+        detail: '',
+      }
+    }
     const measured = typeof analysis.percent === 'number'
     const clock = easeClock(analysis.progress_since, nowMs)
     const percent = clampRunning(measured ? analysis.percent! : easePercent('INGEST', 0, clock))

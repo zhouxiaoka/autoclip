@@ -357,7 +357,7 @@ async function mount(server, override = {}) {
     'analytics/flags': { flagEnabled: () => false, flagAssigned: () => false },
     'analytics/studio': { trackLegacyEntry() {} },
     'analytics/posthog': { captureBusinessEvent: (event, props) => { events.push({ event, props }); return true }, isAnalyticsEnabled: () => true, onAnalyticsPreferenceChange() {} },
-    'utils/apiConfig': { apiConfigManager: { isReady: () => true, getBaseUrl: () => '' } },
+    'utils/apiConfig': { apiConfigManager: { isReady: () => true, getBaseUrl: () => '', addListener: () => () => {} } },
   }
   const cache = new Map()
   const load = file => {

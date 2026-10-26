@@ -8,7 +8,7 @@ import { studioApi, errorText } from './api'
 import { failureSettings, sourceFailure } from './importReadiness'
 import { analysisFailureText, analysisPageFailure, receiptFailureInfo } from './failureAction'
 import FailureActions, { FailureCopy } from './FailureActions'
-import { studioRunProgress } from './studioProgress'
+import { displayedProgress, studioRunProgress } from './studioProgress'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
 import { Scene, Draft } from './types'
@@ -99,8 +99,9 @@ export default function StudioResults({ project, children, onCreateCollection, o
     progressFloor.current = 0
   }
   const progressRaw = studioRunProgress(workspace, progressNow)
-  const progress = progressRaw && { ...progressRaw, percent: Math.max(progressFloor.current, progressRaw.percent) }
-  if (progress) progressFloor.current = progress.percent
+  const progressShown = progressRaw && displayedProgress(progressRaw, progressFloor.current)
+  if (progressShown) progressFloor.current = progressShown.floor
+  const progress = progressShown?.view ?? null
   const billable = Math.max(workspace.analysis?.billable_calls_before_failure || 0, workspace.generation?.billable_calls_before_failure || 0)
   const failureInfo = (extra?: { error?: string }) => ({
     error: extra?.error ?? workspace.analysis?.error,
@@ -115,9 +116,9 @@ export default function StudioResults({ project, children, onCreateCollection, o
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={automatic ? (workspace.output_variants?.length || 0) : workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={automatic ? generationDescription : visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {progress && <div className="ac-empty studio-processing">
-        <div className="studio-progress" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-valuetext={t(progress.label)}>
-          <div className="studio-progress-track"><div className="studio-progress-fill" style={{ width: `${progress.percent}%` }} /></div>
-          <div className="studio-progress-meta"><span>{t(progress.label)}</span><span className="ac-mono">{progress.percent}%</span></div>
+        <div className="studio-progress" role="progressbar" aria-busy={progress.indeterminate || undefined} aria-valuenow={progress.indeterminate ? undefined : progress.percent} aria-valuemin={progress.indeterminate ? undefined : 0} aria-valuemax={progress.indeterminate ? undefined : 100} aria-valuetext={t(progress.label)}>
+          <div className="studio-progress-track"><div className={`studio-progress-fill${progress.indeterminate ? ' studio-progress-fill--busy' : ''}`} style={progress.indeterminate ? undefined : { width: `${progress.percent}%` }} /></div>
+          <div className="studio-progress-meta"><span>{t(progress.label)}</span>{!progress.indeterminate && <span className="ac-mono">{progress.percent}%</span>}</div>
         </div>
         <p className="studio-muted">{[
           progress.elapsedMinutes == null ? '' : progress.elapsedMinutes < 1 ? t('已进行不到 1 分钟') : t('已进行约 {{minutes}} 分钟', { minutes: progress.elapsedMinutes }),
