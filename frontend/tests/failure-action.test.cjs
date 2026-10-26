@@ -64,7 +64,7 @@ test('R24 page: FailureActions uses the page rule', () => {
 
 test('R24 page: StudioResults hands the secondary causes to FailureActions', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.match(src, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\.run_id\) \|\| analysisPageFailure\(workspace\.analysis, workspace\.generation\)/)
+  assert.match(src, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\?\.run_id\) \|\| analysisPageFailure\(workspace\.analysis, workspace\.generation\)/)
   const info = fa.analysisPageFailure(record)
   assert.deepEqual(info.secondary_error_codes, ['authentication'])
   assert.deepEqual(info.secondary_upstream_error_types, ['invalid_key'])
