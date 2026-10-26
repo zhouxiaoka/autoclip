@@ -214,7 +214,9 @@ def _editorial_scrim(width: int, height: int) -> str:
     wash = f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'"
     return (
         f"{_still(wash)}[scrim];"
-        f"[graded][scrim]overlay=0:{top}:format=yuv420:eof_action=repeat[based];"
+        # The wash is one looped frame. shortest stops it when the picture ends, so it cannot
+        # hold the composite open. The captured overlay below is the one that must not cut the scene.
+        f"[graded][scrim]overlay=0:{top}:format=yuv420:shortest=1:eof_action=repeat[based];"
     )
 
 
@@ -232,6 +234,8 @@ def composite_tail(base_label: str, overlay_index: int, width: int, height: int,
         f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
         f"{scrim}"
         f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
+        # Repeat the last captured frame. shortest=1 would end the scene when the movie is shorter.
+        # A longer movie cannot extend the file: the encode command stops at the scene length.
         f"{base}[ov]overlay=0:0:format=yuv420:eof_action=repeat[html]"
     )
     bar = _progress_bar(template, offset, total, width, height)
