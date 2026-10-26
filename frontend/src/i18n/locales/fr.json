@@ -1995,5 +1995,12 @@
   "文件已损坏，请重新下载或换一个文件。": "Le fichier est endommagé. Téléchargez-le à nouveau ou utilisez un autre fichier.",
   "生图失败，已改成本地排版或截帧": "La génération d'image a échoué. Une mise en page locale ou une image extraite est utilisée.",
   "生图标题校对未通过，已改成本地排版": "Le titre généré n'a pas été validé. Une mise en page locale est utilisée.",
-  "已用视频截帧作为封面": "Une image extraite de la vidéo sert de couverture."
+  "已用视频截帧作为封面": "Une image extraite de la vidéo sert de couverture.",
+  "已进行不到 1 分钟": "Moins d’une minute",
+  "已进行约 {{minutes}} 分钟": "Environ {{minutes}} minutes",
+  "模型步骤最多约 20 分钟": "Les étapes du modèle durent au plus environ 20 minutes",
+  "进度为估算，以阶段为准": "La progression est une estimation ; fiez-vous à l’étape",
+  "这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。": "Cette requête a peut-être déjà été facturée par le fournisseur. Vérifiez le solde et testez la connexion dans les réglages avant de réessayer.",
+  "分析": "Analyse",
+  "制作": "Production"
 }

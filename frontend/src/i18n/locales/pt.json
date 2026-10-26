@@ -1995,5 +1995,12 @@
   "文件已损坏，请重新下载或换一个文件。": "O arquivo está danificado. Baixe de novo ou use outro arquivo.",
   "生图失败，已改成本地排版或截帧": "A geração da imagem falhou. Um layout local ou um quadro do vídeo será usado.",
   "生图标题校对未通过，已改成本地排版": "O título gerado não conferiu. Um layout local será usado.",
-  "已用视频截帧作为封面": "Um quadro do vídeo é usado como capa."
+  "已用视频截帧作为封面": "Um quadro do vídeo é usado como capa.",
+  "已进行不到 1 分钟": "Menos de 1 minuto",
+  "已进行约 {{minutes}} 分钟": "Cerca de {{minutes}} minutos",
+  "模型步骤最多约 20 分钟": "As etapas do modelo duram no máximo cerca de 20 minutos",
+  "进度为估算，以阶段为准": "O progresso é uma estimativa; vale a etapa",
+  "这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。": "Este pedido pode já ter sido cobrado pelo fornecedor. Confira o saldo e teste a conexão nas Configurações antes de tentar de novo.",
+  "分析": "Análise",
+  "制作": "Produção"
 }

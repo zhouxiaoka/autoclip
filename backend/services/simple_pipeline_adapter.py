@@ -4,6 +4,7 @@
 
 import logging
 import os
+import time
 from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 
@@ -92,14 +93,70 @@ class TranscriptionProgress:
 
     @classmethod
     def finish_studio(cls, project_id: str) -> None:
+        """Leave the production message, and keep a project-scale percent.
+
+        The audio share (0–100) must not stay on screen as 100% while the rest
+        of the run continues, and it must not disappear. The number is the
+        SUBTITLE band (simple_progress), or whatever the project bar already
+        reached if that is further along.
+        """
+        from backend.services.simple_progress import compute_percent
+
         def restore(analysis):
-            if analysis.get('message') == STUDIO_TRANSCRIBING_MESSAGE:
-                analysis['message'] = STUDIO_PRODUCTION_MESSAGE
-                analysis.pop('percent', None)
+            if analysis.get('message') != STUDIO_TRANSCRIBING_MESSAGE:
+                return
+            analysis['message'] = STUDIO_PRODUCTION_MESSAGE
+            percent = compute_percent('SUBTITLE', TRANSCRIBE_DONE_SUBPERCENT)
+            previous = analysis.get('progress_percent')
+            if isinstance(previous, (int, float)):
+                percent = max(percent, int(previous))
+            analysis['percent'] = percent
+            analysis['progress_percent'] = percent
+            analysis['progress_stage'] = analysis.get('progress_stage') or 'SUBTITLE'
+            analysis['progress_approximate'] = False
         try:
             cls.studio_update(project_id, restore)
         except FileNotFoundError:
             pass
+
+
+def mirror_studio_progress(project_id: str, stage: str, percent: int, message: str, *, approximate: bool) -> None:
+    """Mirror one simple_progress snapshot into a running Studio production.
+
+    Download and transcription keep their own measured `percent` (bytes / audio).
+    The project bar lives in `progress_percent`. After transcription, `percent`
+    follows the project bar so the results page never goes blank.
+    DONE is not mirrored: the content pipeline finishes before Studio renders,
+    and 100% is reserved for a run that has actually finished.
+    """
+    if not project_id or stage == 'DONE':
+        return
+    shown = max(0, min(99, int(percent)))
+
+    def update(analysis):
+        previous = analysis.get('progress_percent')
+        if isinstance(previous, (int, float)) and shown < int(previous):
+            kept = int(previous)
+        else:
+            kept = shown
+        if (
+            analysis.get('progress_percent') == kept
+            and analysis.get('progress_stage') == stage
+            and analysis.get('progress_message') == message
+            and analysis.get('progress_approximate') is approximate
+            and (analysis.get('message') == STUDIO_TRANSCRIBING_MESSAGE or analysis.get('percent') == kept)
+        ):
+            return
+        if analysis.get('progress_stage') != stage or not isinstance(analysis.get('progress_since'), int):
+            analysis['progress_since'] = int(time.time())
+        analysis['progress_percent'] = kept
+        analysis['progress_stage'] = stage
+        analysis['progress_message'] = message
+        analysis['progress_approximate'] = approximate
+        if analysis.get('message') != STUDIO_TRANSCRIBING_MESSAGE:
+            analysis['percent'] = kept
+
+    TranscriptionProgress.studio_update(project_id, update)
 
 class SimplePipelineAdapter:
     """简化的流水线适配器，使用固定阶段进度系统"""

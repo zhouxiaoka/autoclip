@@ -24,6 +24,21 @@ executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='studio')
 def _generation_route(plan):
     route = (plan or {}).get('recommended_analysis') or (plan or {}).get('confirmed_analysis')
     return {'route': route} if route in ('subtitle', 'visual') else {}
+
+
+def _carried_progress(previous):
+    """Keep the project bar when production hands off to rendering.
+
+    The content pipeline stops around the highlight band. Rendering continues,
+    so the results page still has a stage and a percent. The ease clock starts
+    now; elapsed time on the card uses the generation start, not this clock.
+    """
+    import time
+    out = {'progress_stage': 'EXPORT', 'progress_approximate': True, 'progress_since': int(time.time())}
+    carried = previous.get('progress_percent') if isinstance(previous, dict) else None
+    if isinstance(carried, (int, float)) and not isinstance(carried, bool):
+        out['progress_percent'] = max(0, min(95, int(carried)))
+    return out
 # Local encodes are CPU-bound: run one at a time on its own worker so screening and
 # analysis of other imports never wait behind a render queue.
 render_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-render')
@@ -1135,7 +1150,7 @@ def _auto_generate(project_id, plan):
                 data['output_variants'].extend(variants)
                 data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
                 from backend.services.studio.failure_identity import carry_screening
-                data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
+                data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
             store.change(project_id, persist)
             _dispatch_pending_variants(project_id)
         except Exception as error:
@@ -1706,7 +1721,7 @@ def retry_variant(project_id, variant_id, retry=None):
             if item.get('status') != 'failed':
                 raise UserFacingError('只有失败的成片版本可以重试')
             receipt = _variant_attempt(data, retry, item)
-            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
             return _start_preparing(data, item)
         attempt_id = store.change(project_id, prepare)
         _submit_on_demand(project_id, variant_id, attempt_id)
@@ -1723,7 +1738,7 @@ def retry_variant(project_id, variant_id, retry=None):
         item.pop('error_code', None)
         data['generation'].update(status='rendering')
         receipt = _variant_attempt(data, retry, item)
-        data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
     _dispatch_pending_variants(project_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)

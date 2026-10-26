@@ -82,9 +82,25 @@ def studio_error_code(error: Exception) -> str:
     from backend.core.failure_attribution import ModelResponseInvalid
     if isinstance(error, ModelResponseInvalid):
         return ModelResponseInvalid.error_code  # 200 + content failed validation -> a model code
+    # A blank or unreadable model body (api88 and other gateways) is not a bad
+    # user input. "validation" would tell them to change the video.
+    if _empty_model_reply(error):
+        return "invalid_response"
     if isinstance(error, ValueError):
         return "validation"
     return "unexpected"
+
+
+_EMPTY_MODEL_REPLY = frozenset({
+    "empty completion",
+    "invalid completion",
+    "completion was not an object",
+    "choices",
+})
+
+
+def _empty_model_reply(error: Exception) -> bool:
+    return str(error).strip().lower() in _EMPTY_MODEL_REPLY
 
 
 _PIPELINE_FAILURE_STAGES = {"INGEST": "ingest", "SUBTITLE": "subtitle", "ANALYZE": "analyze",

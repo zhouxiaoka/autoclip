@@ -101,3 +101,10 @@
 .ac-platform-line p{margin:0}
 .ac-undo{display:flex;align-items:center;justify-content:space-between;gap:var(--ac-space-md);margin-top:var(--ac-space-md);padding:var(--ac-space-md) var(--ac-space-lg);border-radius:var(--ac-radius-sm);background:var(--ac-ink);color:var(--ac-bg)}
 .ac-undo-action{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.studio-progress{width:100%;max-width:420px;margin:2px auto 8px;text-align:left}
+.studio-progress-track{height:4px;background:var(--ac-line);border-radius:999px;overflow:hidden}
+.studio-progress-fill{height:100%;background:var(--ac-accent);border-radius:999px;transition:width .4s ease}
+.studio-progress-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px}
+.studio-progress-meta span{color:var(--ac-sub);font-size:12.5px}
+.studio-progress-meta .ac-mono{color:var(--ac-accent)}
+.studio-billing{margin:8px 0 0;color:var(--ac-sub);font-size:12.5px;line-height:1.6}
