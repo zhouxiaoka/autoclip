@@ -1413,3 +1413,62 @@ test('1.5.7 connection-test codes: 422 local validation, gemini-style results, t
   assert.equal(c.codeFromResult({ error_code: 'constructor' }), 'unknown')
   assert.equal(c.safeHttpStatus(503), 503); assert.equal(c.safeHttpStatus('503'), undefined)
 })
+
+test('implicit on adopts a backend analytics opt-out and does not PUT enabled true', async () => {
+  const storage = memory()
+  const puts = []
+  const sdk = {
+    init(_key, config) { config.loaded(sdk) },
+    capture() { return {} }, register() {},
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {}, set_config() {},
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => {
+      if (String(url).includes('/settings/privacy')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ analytics: false, crash_reports: true, distinct_id: '018f6b2a-7c3d-7b2a-8c11-222222222222' }),
+        })
+      }
+      if (String(url).includes('/settings/analytics-consent')) puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.includes(true), JSON.stringify(puts))
+  assert.deepEqual(puts, [false])
+  assert.equal(storage.getItem('autoclip.analytics.optOut'), 'true')
+  assert.equal(ph.isAnalyticsEnabled(), false)
+  assert.equal(ph.captureBusinessEvent('studio_import_started', {}), false)
+})
+
+test('a launch-frozen distinct id does not overwrite a newer backend id', async () => {
+  const launch = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  const newer = '018f6b2a-7c3d-7b2a-8c11-222222222222'
+  const identity = []
+  const sdk = {
+    init(_key, config) { config.loaded(sdk) },
+    register() {}, get_distinct_id: () => launch,
+    opt_in_capturing() {}, opt_out_capturing() {},
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: memory(),
+    window: { __AUTOCLIP_RUNTIME__: { os: 'macos', arch: 'arm64', distinct_id: launch } },
+    fetch: (url, opts) => {
+      if (String(url).includes('/settings/privacy')) {
+        return Promise.resolve({ ok: true, json: async () => ({ analytics: true, distinct_id: newer, crash_reports: true }) })
+      }
+      if (String(url).includes('/settings/analytics-identity')) identity.push(JSON.parse(opts.body).distinct_id)
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(identity, [])
+  assert.equal(ph.isAnalyticsEnabled(), true)
+})

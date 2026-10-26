@@ -302,9 +302,19 @@ class PrivacySettings(BaseModel):
 
 @router.get("/privacy")
 async def get_privacy():
-    """崩溃报告等隐私开关（桌面数据目录 privacy.json）。"""
+    """崩溃报告与统计开关（桌面数据目录 privacy.json）。
+
+    ``analytics`` is the backend opt-out. The UI must not rewrite it from an
+    implicit local default. ``distinct_id`` is the anonymous id already stored,
+    so a launch-frozen SDK id cannot clobber a newer one.
+    """
     from backend.core.sentry_setup import crash_reports_enabled
-    return PrivacySettings(crash_reports=crash_reports_enabled())
+    from backend.services.studio.qa.telemetry import _analytics_allowed, stored_distinct_id
+    return {
+        "crash_reports": crash_reports_enabled(),
+        "analytics": _analytics_allowed(),
+        "distinct_id": stored_distinct_id(),
+    }
 
 
 class AnalyticsIdentity(BaseModel):

@@ -22,6 +22,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _QUEUE_LIMIT = 64
+# Integer usage counts. A privacy scan must not treat prompt_tokens as a prompt.
+_COUNT_KEYS = frozenset({'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls'})
 _RETRY_DELAYS = (1.0, 2.0, 4.0)
 _file = threading.Lock()
 _state = threading.Lock()
@@ -121,7 +123,8 @@ def _prepare(pending) -> list[dict]:
             bad = [p.split('.', 1)[-1].split('=', 1)[0].split(' ', 1)[0]
                    for p in validate_event(name, {**props, **envelope, 'studio_schema_version': 2}, envelope=True)
                    if any(s in p for s in (' not in ', 'secret', 'URL'))]
-            if not [props.pop(key, None) for key in bad if key not in ('outcome', 'error_code', 'failure_stage')]:
+            # Integer token counts are not prompts. Never strip them as secrets.
+            if not [props.pop(key, None) for key in bad if key not in ('outcome', 'error_code', 'failure_stage') and key not in _COUNT_KEYS]:
                 break
         if validate_event(name, {**props, **envelope, 'studio_schema_version': 2}, envelope=True):
             logger.warning('%s failed catalog checks', name)

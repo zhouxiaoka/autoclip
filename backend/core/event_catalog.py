@@ -230,9 +230,12 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
     spec = event_spec(name, catalog) or {}
     if spec.get("kind") == "user_submitted":
         submitted.add(name)
+    count_keys = {str(key).lower() for key in privacy.get("count_keys") or []}
     errors: list[str] = []
     for key, value in props.items():
         lowered_key = str(key).lower()
+        if lowered_key in count_keys and isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            continue
         if lowered_key in forbidden_keys:
             errors.append(f"{name} has forbidden property {key}")
         if lowered_key in user_content and name not in submitted:

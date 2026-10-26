@@ -33,7 +33,11 @@ let identityRetryTimer: ReturnType<typeof setTimeout> | undefined
 let identityRetries = 0
 let publishedConsent: boolean | undefined
 let inflightConsent: boolean | undefined
+let backendDistinctId = ''
+let privacyResolved = false
+let privacyInflight = false
 let watchingConsent = false
+const preferenceListeners = new Set<() => void>()
 let consentRetries = 0
 let consentRetryTimer: ReturnType<typeof setTimeout> | undefined
 const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
@@ -44,6 +48,10 @@ function publishAnonymousId(): void {
   let id = ''
   try { id = String(posthog.get_distinct_id?.() || '') } catch { return }
   if (!ANONYMOUS_ID.test(id) || id === publishedDistinctId) return
+  // The SDK id is frozen at launch. A newer id already in analytics.json must win.
+  if (privacyInflight) return
+  const launchId = nativeRuntime().distinct_id
+  if (backendDistinctId && id === launchId && id !== backendDistinctId) return
   syncSentryUser(id)
   // Packaged webviews cannot PUT to the initial relative /api/v1 URL.
   if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
@@ -62,6 +70,7 @@ function publishAnonymousId(): void {
     if (pendingDistinctId === id) pendingDistinctId = ''
     if (ok && isAnalyticsEnabled()) {
       publishedDistinctId = id
+      backendDistinctId = id
       identityRetries = 0
       if (retryIdentity) {
         retryIdentity = false
@@ -105,6 +114,41 @@ function publishAnonymousId(): void {
  * read (localStorage throws) and the user has not chosen in this session, only "off"
  * may be sent — never "on".
  */
+/** No saved choice yet. An explicit on/off, or storage that cannot be read, is not implicit. */
+function implicitAnalyticsDefault(): boolean {
+  if (preferenceOverride !== undefined) return false
+  try {
+    return localStorage.getItem(OPT_OUT_STORAGE_KEY) === null
+  } catch {
+    return false
+  }
+}
+
+function stopCapturing(): void {
+  const optOut = posthog.opt_out_capturing as (options?: { captureEventName?: string | null }) => void
+  try {
+    optOut({ captureEventName: null })
+  } catch {
+    try { posthog.opt_out_capturing() } catch { /* analytics cannot break settings */ }
+  }
+  disableFlagNetwork()
+  publishedDistinctId = ''
+  if (identityRetryTimer !== undefined) clearTimeout(identityRetryTimer)
+  identityRetryTimer = undefined
+  identityRetries = 0
+  if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+  consentRetryTimer = undefined
+  consentRetries = 0
+  syncSentryUser(null)
+}
+
+function adoptBackendOptOut(): void {
+  preferenceOverride = false
+  try { localStorage.setItem(OPT_OUT_STORAGE_KEY, 'true') } catch { /* this session still stays off */ }
+  for (const listener of preferenceListeners) { try { listener() } catch { /* isolate observers */ } }
+  if (initialized) stopCapturing()
+}
+
 function consentIntent(): boolean {
   if (!POSTHOG_KEY) return false
   // re-read the shared storage on every send/retry. Another window may have turned
@@ -129,6 +173,36 @@ function publishConsent(): void {
   }
   if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
       && !apiConfigManager.isReady()) return
+  // An implicit "on" must not overwrite a backend opt-out. Ask once, then PUT the result.
+  // A fetch that throws in the same turn (tests, unreachable host) must not swallow the
+  // identity PUT that init issues before the next microtask.
+  if (implicitAnalyticsDefault() && !privacyResolved && !privacyInflight) {
+    privacyInflight = true
+    const release = (waited: boolean) => {
+      privacyInflight = false
+      privacyResolved = true
+      if (waited) {
+        publishConsent()
+        publishAnonymousId()
+      }
+    }
+    try {
+      const base = String(apiConfigManager.getBaseUrl() || '/api/v1').replace(/\/$/, '')
+      const pending = fetch(`${base}/settings/privacy`, { method: 'GET' })
+      if (pending && typeof (pending as Promise<Response>).then === 'function') {
+        void (pending as Promise<Response>).then(async (response) => {
+          if (!response?.ok || typeof response.json !== 'function') return
+          const body = await response.json()
+          if (body && typeof body.distinct_id === 'string' && ANONYMOUS_ID.test(body.distinct_id)) {
+            backendDistinctId = body.distinct_id
+          }
+          if (body && body.analytics === false && implicitAnalyticsDefault()) adoptBackendOptOut()
+        }).catch(() => undefined).then(() => release(true))
+        return
+      }
+    } catch { /* unknown backend keeps today's consent PUT */ }
+    release(false)
+  }
   // Already in sync and nothing in flight. publishedConsent === undefined means the
   // backend state is unknown (fresh launch, or a PUT whose response was lost), so the
   // latest preference is always sent — including "on" (startup sync, lost response).
@@ -204,7 +278,6 @@ function watchAnonymousId(): void {
   }) } catch { /* backend port can arrive later */ }
 }
 
-const preferenceListeners = new Set<() => void>()
 const remoteFlagListeners = new Set<() => void>()
 export function onAnalyticsPreferenceChange(listener: () => void): () => void {
   preferenceListeners.add(listener)
@@ -397,16 +470,7 @@ export function setAnalyticsEnabled(enabled: boolean): void {
       publishAnonymousId()
       if (!flagsNetworkEnabled) enableFlagNetwork()
     } else {
-      posthog.opt_out_capturing()
-      disableFlagNetwork()
-      publishedDistinctId = ''
-      if (identityRetryTimer !== undefined) clearTimeout(identityRetryTimer)
-      identityRetryTimer = undefined
-      identityRetries = 0
-      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
-      consentRetryTimer = undefined
-      consentRetries = 0
-      syncSentryUser(null)
+      stopCapturing()
     }
   } catch { /* analytics cannot break settings */ }
 }

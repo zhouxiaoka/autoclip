@@ -160,6 +160,17 @@ def test_valid_llm_request_and_privacy_rules():
     assert any("forbidden property" in item for item in privacy)
     assert any("secret" in item for item in privacy)
     assert any("full URL" in item for item in privacy)
+    counted = {**failed, "prompt_tokens": 12, "completion_tokens": 3}
+    assert event_catalog.validate_event("llm_request_finished", counted) == []
+    generation = {
+        "schema_version": 2, "runtime": "python", "app_version": "1.5.8",
+        "os": "linux", "arch": "x86_64", "analytics_environment": "validation",
+        "studio_schema_version": 2, "outcome": "success", "prompt_tokens": 12,
+        "completion_tokens": 3, "llm_calls": 1, "http_status": 200,
+    }
+    assert event_catalog.validate_event("studio_generation_finished", generation, envelope=True) == []
+    assert any("secret" in item for item in event_catalog.validate_event(
+        "llm_request_finished", {**ok, "note": "sk-secret"}))
 
 
 def test_producers_are_all_registered():
