@@ -265,15 +265,49 @@ def mark_project(project_id, status, **config):
                 p.completed_at = datetime.now(timezone.utc)
             db.commit()
 
+# yt-dlp 在后处理里跑 ffmpeg 合并时不再回调下载进度。百分比停在封顶的 99，
+# 界面会一直像卡在「下载中」。这里改阶段文案，不把合并伪装成下载条还在往前走。
+MERGE_MESSAGE = '正在合并音视频'
+# pp_key() 去掉 FFmpeg 前缀后的名字；别名留给直接用类名的钩子。字幕转换不在此列。
+_MERGE_POSTPROCESSORS = frozenset({
+    'Merger', 'FFmpegMerger',
+    'VideoRemuxer', 'FFmpegVideoRemuxer',
+    'VideoConvertor', 'FFmpegVideoConvertor',
+})
+
+
 def download_progress_hook(project_id, min_interval=1.0):
-    """把 yt-dlp 的下载百分比写进 analysis.percent。
+    """把 yt-dlp 的下载百分比写进 analysis.percent，合并开始后改成阶段文案。
 
     以前整段下载只显示「准备素材」，几分钟不动，用户以为卡死。音视频分两个文件下载时
-    百分比会回落，只写单调递增的值；最多每秒写一次。
+    百分比会回落，只写单调递增的值；最多每秒写一次，并且封顶 99（下完还要合并）。
+    合并/封装的 postprocessor 一开始就把文案换成「正在合并音视频」并清掉百分比，
+    避免界面停在 99。不写一条假的合并进度。
     """
-    state = {'at': 0.0, 'percent': -1}
+    state = {'at': 0.0, 'percent': -1, 'merging': False}
+
+    def mark_merging():
+        if state['merging']:
+            return
+        state['merging'] = True
+        try:
+            def mutate(data):
+                analysis = data.get('analysis')
+                if not analysis:
+                    return
+                analysis['message'] = MERGE_MESSAGE
+                analysis.pop('percent', None)
+            store.change(project_id, mutate)
+        except FileNotFoundError:
+            pass
+
     def hook(d):
-        if d.get('status') != 'downloading':
+        postprocessor = d.get('postprocessor')
+        if postprocessor:
+            if d.get('status') == 'started' and postprocessor in _MERGE_POSTPROCESSORS:
+                mark_merging()
+            return
+        if state['merging'] or d.get('status') != 'downloading':
             return
         total = d.get('total_bytes') or d.get('total_bytes_estimate')
         if not total:
@@ -293,7 +327,8 @@ def download(project_id, url, browser):
     from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
     folder = store.directory(project_id) / 'raw'
     folder.mkdir(exist_ok=True)
-    options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [download_progress_hook(project_id)], **ytdlp_js_runtimes()}
+    progress = download_progress_hook(project_id)
+    options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [progress], 'postprocessor_hooks': [progress], **ytdlp_js_runtimes()}
     if browser:
         options['cookiesfrombrowser'] = (browser,)
     from backend.utils.download_recovery import download_with_recovery

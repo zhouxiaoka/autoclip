@@ -66,3 +66,76 @@ export async function pollWorkspace(
     })
   }
 }
+
+/**
+ * One pollWorkspace call still stops on HTTP errors and after the fast network
+ * budget when nothing is in progress. This wrapper stays subscribed: when the
+ * desktop shell reports the backend is back, it starts a fresh poll even if the
+ * previous one already returned, and it interrupts a slow probe immediately.
+ */
+export async function observeWorkspace(
+  read: (signal: AbortSignal) => Promise<Workspace>,
+  options: {
+    signal: AbortSignal
+    onData: (data: Workspace) => void
+    onError: (error: unknown) => void
+    onSettled: () => void
+    intervalMs?: number
+    offlineIntervalMs?: number
+    /** Called once. Invoke the listener when the backend is known to be accepting requests again. */
+    subscribeRestart?: (onRestart: () => void) => () => void
+  },
+) {
+  const outer = options.signal
+  let inner: AbortController | null = null
+  let waiting: (() => void) | null = null
+  let epoch = 0
+  const stop = options.subscribeRestart?.(() => {
+    epoch += 1
+    inner?.abort()
+    waiting?.()
+  }) ?? (() => {})
+  try {
+    while (!outer.aborted) {
+      const seen = epoch
+      const current = new AbortController()
+      inner = current
+      if (epoch !== seen) current.abort()
+      const abortCurrent = () => current.abort()
+      outer.addEventListener('abort', abortCurrent)
+      try {
+        await pollWorkspace(read, {
+          signal: current.signal,
+          onData: options.onData,
+          onError: options.onError,
+          onSettled: options.onSettled,
+          intervalMs: options.intervalMs,
+          offlineIntervalMs: options.offlineIntervalMs,
+        })
+      } finally {
+        outer.removeEventListener('abort', abortCurrent)
+        if (inner === current) inner = null
+      }
+      if (outer.aborted) return
+      if (epoch !== seen) continue
+      if (!options.subscribeRestart) return
+      await new Promise<void>(resolve => {
+        if (outer.aborted || epoch !== seen) {
+          resolve()
+          return
+        }
+        const finish = () => {
+          if (waiting === finish) waiting = null
+          outer.removeEventListener('abort', finish)
+          resolve()
+        }
+        waiting = finish
+        if (outer.aborted || epoch !== seen) finish()
+        else outer.addEventListener('abort', finish, { once: true })
+      })
+      if (outer.aborted || epoch === seen) return
+    }
+  } finally {
+    stop()
+  }
+}

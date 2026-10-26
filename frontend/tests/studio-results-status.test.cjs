@@ -275,6 +275,16 @@ test('running production shows a stage progress bar, not only spinner text', () 
   assert.doesNotMatch(html, /class="spin"/)
 })
 
+test('merge does not keep a download percent on the studio bar', () => {
+  const html = render(true, 'screening', 'running', [], [], undefined, undefined, 'failure', '正在合并音视频')
+  assert.match(html, /正在合并音视频/)
+  assert.match(html, /aria-busy="true"/)
+  assert.match(html, /studio-progress-fill--busy/)
+  assert.doesNotMatch(html, /下载中/)
+  assert.doesNotMatch(html, /\d+%/)
+  assert.doesNotMatch(html, /进度为估算，以阶段为准/)
+})
+
 test('download, transcription and export progress omit the 20-minute model cap', () => {
   const download = render(true, 'screening', 'running')
   assert.match(download, /素材准备/)
