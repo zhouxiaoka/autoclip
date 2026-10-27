@@ -509,6 +509,7 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                   const specs = [
                     ['36px Anton', 'AG'],
                     ['700 48px "Noto Sans CJK SC"', '中'],
+                    ['700 64px "Noto Sans CJK SC"', '中'],
                     ['600 42px "Noto Sans CJK SC"', '中'],
                     ['500 40px "Noto Sans CJK SC"', '中'],
                     ['500 52px "Noto Sans CJK SC"', '中'],

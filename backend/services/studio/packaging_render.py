@@ -185,7 +185,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     cinematic and classic styles used a 2.8s opening card. Neither is burned.
     `titles_only` is that empty title layer with the caption rows left out.
     """
-    from backend.services.studio.caption_layout import display_text, timed_screens, width
+    from backend.services.studio.caption_layout import display_text, strip_speaker_prefix, timed_screens, width
     rows = timeline(scenes)
     offset = rows[index][2]
     length = rows[index][1] - rows[index][0]
@@ -212,6 +212,8 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             continue
         spoken = display_text(cue.text)
         original_line = display_text(cue.original)
+        if interview and packaging.audience_language == 'zh' and not packaging.speaker_prefix:
+            spoken = strip_speaker_prefix(spoken, cue.speaker)
         if not spoken and not original_line:
             continue
         if interview:

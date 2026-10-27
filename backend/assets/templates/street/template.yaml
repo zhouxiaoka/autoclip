@@ -27,6 +27,6 @@ overlay:
 fields:
   required: [title_lines, cues]
   optional: [kicker, emphasis, numbers, speakers, stickers]
-audio: {bgm: none, optional_bed: true}
+audio: {bgm: none, optional_bed: false}
 cover: {layout: street_3x4, from_overlay: true}
 qa: {}

@@ -35,15 +35,17 @@ html, body {
   font-family: "Noto Sans CJK SC", sans-serif;
   font-weight: 700;
   font-variation-settings: "wght" 700;
-  font-size: 48px;
-  /* A fixed 64px line box: a shrunk phrase keeps the English line from jumping. */
-  line-height: 64px;
+  /* Interview Street size. fitZh writes an inline font-size after the line wraps. */
+  font-size: 64px;
+  line-height: 84px;
   color: #fff;
-  -webkit-text-stroke: 4px #000;
+  -webkit-text-stroke: 10px #000;
   paint-order: stroke fill;
   text-shadow: 0 2px 0 #000;
-  white-space: nowrap;
-  display: inline-block;
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: block;
+  width: 100%;
 }
 #en {
   margin-top: 16px;
@@ -56,7 +58,8 @@ html, body {
   -webkit-text-stroke: 9px #000;
   paint-order: stroke fill;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 #en .w { opacity: .95; }
 #en .w.k.past, #en .w.k.now { color: #D7FF3A; }

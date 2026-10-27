@@ -1,6 +1,7 @@
 /* 街头快剪，1080×1920。画面在模板外铺到 y=1290，这里从 1290 起是实心黑。
-   中文一次一句，字号是字幕而不是标题，整句不再铺成黄绿大字。弹出仍是 120ms 的 1.18→1。
-   英文原句留在这一句换走之前，关键词从说到的那一刻起保持黄绿。
+   中文一次一句，访谈竖屏约 64px（描边约 10px），可以换行，不用 nowrap 把长句截在右边。
+   fitZh 在换行之后改行内字号；样式表不能用 font-size !important 挡住它。
+   英文原句留在这一句换走之前，同样换行，不省略号截断。关键词从说到的那一刻起保持黄绿。
    左下只留当前说话人的名字。短话题是封面标题，不烧进成片。renderFrame(t) 只由 t 决定。 */
 (function () {
   var data = null;
@@ -120,20 +121,6 @@
     return name || topic;
   }
 
-  function lineWidth(node) {
-    // A block stretched by the caption column reports the column, not the glyphs.
-    var display = node.style.display;
-    node.style.display = "inline-block";
-    var width = node.scrollWidth;
-    node.style.display = display;
-    var stroke = 0;
-    if (window.getComputedStyle) {
-      stroke = parseFloat(getComputedStyle(node).webkitTextStrokeWidth) || 0;
-    }
-    // The stroke is centered on the outline, so the full width hangs outside the glyphs.
-    return width + stroke;
-  }
-
   function faceReady(node, face) {
     if (!face || !document.fonts || !document.fonts.check) return true;
     // check(font) is false while any unicode-range file in the family is still pending.
@@ -145,51 +132,36 @@
     return !!document.fonts.check(face);
   }
 
-  function ellipsisText(node, limit, gauge) {
-    var box = gauge || node;
-    var text = String(node.textContent || "").replace(/…$/, "");
-    var parts = text.split(/\s+/).filter(Boolean);
-    if (parts.length > 1) {
-      while (parts.length > 1 && lineWidth(box) > limit) {
-        parts.pop();
-        node.textContent = parts.join(" ") + "…";
-      }
+  function lineBox(node, size) {
+    if (window.getComputedStyle) {
+      var height = parseFloat(getComputedStyle(node).lineHeight);
+      if (height > 0) return height;
     }
-    text = String(node.textContent || "");
-    var guard = 0;
-    while (lineWidth(box) > limit && text.replace(/…$/, "").length > 1 && guard < 80) {
-      text = text.replace(/…$/, "").slice(0, -1);
-      node.textContent = text + "…";
-      guard += 1;
-    }
+    return size * 1.3;
   }
 
-  function trimTo(node, limit) {
-    if (!node || typeof node.scrollWidth !== "number") return;
-    if (lineWidth(node) <= limit) return;
-    var kids = node.children;
-    if (kids && kids.length && node.removeChild) {
-      while (kids.length > 1 && lineWidth(node) > limit) node.removeChild(kids[kids.length - 1]);
-      if (lineWidth(node) > limit && kids.length) ellipsisText(kids[kids.length - 1], limit, node);
-      return;
-    }
-    ellipsisText(node, limit);
-  }
-
-  function fit(node, start, floor, step, limit, face) {
-    if (!node || typeof node.scrollWidth !== "number") return;
-    // A fallback face is wider than Anton. Shrinking against it freezes the line too small.
+  function fitWrap(node, start, floor, step, maxLines, face) {
+    if (!node) return;
+    // Inline style beats a stylesheet nowrap. Do not ellipsize: a long line wraps.
+    node.style.whiteSpace = "normal";
     if (!faceReady(node, face)) {
       node.style.fontSize = start + "px";
       return;
     }
     var size = start;
     node.style.fontSize = size + "px";
-    while (size > floor && lineWidth(node) > limit) {
+    if (typeof node.scrollHeight !== "number") return;
+    var guard = 0;
+    while (size > floor && node.scrollHeight > lineBox(node, size) * maxLines + 2 && guard < 40) {
       size -= step;
       node.style.fontSize = size + "px";
+      guard += 1;
     }
-    trimTo(node, limit);
+  }
+
+  function fitZh(node, start, floor, step, maxLines, face) {
+    // Chinese only. The stylesheet must not lock font-size with !important.
+    fitWrap(node, start, floor, step, maxLines, face);
   }
 
   function enState(t, word) {
@@ -294,14 +266,14 @@
       zh.innerHTML = esc(text);
       // The whole sentence in yellow read as a title card. Keywords stay on the English line.
       zh.className = "";
-      // Caption size. Shrink only when the phrase would not fit the 1000px line.
-      fit(zh, 48, 32, 2, 1000, '700 48px "Noto Sans CJK SC"');
+      // 64px, two lines. fitZh may step down after the wrap; it does not clip the phrase.
+      fitZh(zh, 64, 40, 2, 2, '700 64px "Noto Sans CJK SC"');
       // The hash carries the scale itself: a popping flag made capture keep the 1.18 frame for the whole ease.
       var popped = ease((t - (phrase.t0 || 0)) / 0.12);
       scale = (1.18 + (1 - 1.18) * popped).toFixed(3);
       zh.style.transform = "scale(" + scale + ")";
       en.innerHTML = moment ? enHtml(moment, t) : "";
-      if (en.innerHTML) fit(en, 36, 24, 2, 1000, "36px Anton");
+      if (en.innerHTML) fitWrap(en, 36, 24, 2, 2, "36px Anton");
     } else {
       cap.style.display = "none";
       zh.innerHTML = "";
@@ -329,10 +301,10 @@
     var rects = [];
     var moment = momentAt(t);
     var phrase = moment ? phraseAt(moment, t) : null;
-    if (phrase) rects.push({slot: "subtitle", x: 30, y: 1326, w: 1020, h: 56});
+    if (phrase) rects.push({slot: "subtitle", x: 30, y: 1318, w: 1020, h: 168});
     // Captions-off hook sits in the black band under the picture, not on the face (head zone ends at 1290).
     if (titleSticker(t)) rects.push({slot: "title", x: 40, y: 1360, w: 1000, h: 192});
-    if (moment && phrase && enShown(moment, t).length) rects.push({slot: "source", x: 30, y: 1406, w: 1020, h: 36});
+    if (moment && phrase && enShown(moment, t).length) rects.push({slot: "source", x: 30, y: 1502, w: 1020, h: 90});
     if (labelFor(moment)) rects.push({slot: "hook", x: 40, y: 1812, w: 1000, h: 65});
     if (numberHtml(t)) rects.push({slot: "number", x: 40, y: 80, w: 360, h: 84});
     var index = Math.max(0, Math.floor(t * (data.fps || 30) + 1e-4));

@@ -33,6 +33,26 @@ def display_text(text: str) -> str:
     return cleaned.strip(' ,')
 
 
+# Role labels burned in front of a Chinese line. Guest names are stripped only when they
+# match the cue's own speaker, so a sentence that merely mentions someone stays intact.
+_ROLE_PREFIX = re.compile(
+    r'^(?:(?:主持人|嘉宾|采访者|记者|host|interviewer|guest)\s*[:：]\s*)+',
+    re.IGNORECASE,
+)
+
+
+def strip_speaker_prefix(text: str, speaker: str = '') -> str:
+    """Drop a leading 「主持人：」 (or the cue's own name) from a Chinese caption.
+
+    Interview clips leave this off. The nameplate can still show who is talking.
+    """
+    cleaned = _ROLE_PREFIX.sub('', text or '')
+    name = (speaker or '').strip()
+    if name:
+        cleaned = re.sub(rf'^{re.escape(name)}\s*[:：]\s*', '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
 def _word_before(text: str, index: int) -> str:
     end = index
     while end > 0 and text[end - 1] == ' ':

@@ -63,9 +63,30 @@ def _bitrate(width: int, height: int, fps: int = 30) -> int:
     return max(1_500_000, int(width * height * fps * 0.13))
 
 
-def _args(name: str, width: int, height: int) -> list[str]:
-    rate = _bitrate(width, height)
-    vbr = ['-b:v', str(rate), '-maxrate', str(int(rate * 1.5)), '-bufsize', str(rate * 2)]
+# Vertical Street and the interview packs that use it. 720p with a sub-megabit rate
+# looked soft on a two-minute clip; production packs held up at 1080×1920 around 2 Mbps.
+STREET_INTERVIEW_SIZE = (1080, 1920)
+STREET_INTERVIEW_BITRATE = 2_000_000
+_HTML_NOT_STREET = frozenset({'editorial', 'news', 'cinema'})
+
+
+def _street_interview(visual: str | None, packaging: str | None) -> bool:
+    """Street vertical, including classic interview packaging that is not another HTML style."""
+    if visual == 'street' or packaging == 'street':
+        return True
+    return packaging == 'interview_zh' and visual not in _HTML_NOT_STREET
+
+
+def _args(name: str, width: int, height: int, *, rate: int | None = None) -> list[str]:
+    if rate is None:
+        rate = _bitrate(width, height)
+        vbr = ['-b:v', str(rate), '-maxrate', str(int(rate * 1.5)), '-bufsize', str(rate * 2)]
+        software = ['-c:v', SOFTWARE, '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p']
+    else:
+        # Cap and target are the same so a flat Street frame cannot drift above the band,
+        # and ABR (not CRF) keeps a two-minute clip from collapsing into a tiny file.
+        vbr = ['-b:v', str(rate), '-maxrate', str(rate), '-bufsize', str(rate * 2)]
+        software = ['-c:v', SOFTWARE, '-preset', 'veryfast', *vbr, '-pix_fmt', 'yuv420p']
     if name == 'h264_videotoolbox':
         return ['-c:v', name, *vbr, '-profile:v', 'high', '-pix_fmt', 'yuv420p']
     if name == 'h264_nvenc':
@@ -74,12 +95,19 @@ def _args(name: str, width: int, height: int) -> list[str]:
         return ['-c:v', name, '-preset', 'medium', '-global_quality', '21', *vbr, '-pix_fmt', 'nv12']
     if name == 'h264_amf':
         return ['-c:v', name, '-quality', 'balanced', '-rc', 'vbr_peak', *vbr, '-pix_fmt', 'yuv420p']
-    return ['-c:v', SOFTWARE, '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p']
+    return software
 
 
 def h264_args(width: int, height: int, name: str | None = None) -> list[str]:
     """Video codec arguments (codec, rate control, pixel format) for one encode."""
     return _args(name or encoder(), width, height)
+
+
+def packaging_h264_args(width: int, height: int, *, visual: str | None = None, packaging: str | None = None, name: str | None = None) -> list[str]:
+    """Shared talking-head rate, or the Street / interview 1080×1920 ~2 Mbps profile."""
+    if (width, height) == STREET_INTERVIEW_SIZE and _street_interview(visual, packaging):
+        return _args(name or encoder(), width, height, rate=STREET_INTERVIEW_BITRATE)
+    return h264_args(width, height, name)
 
 
 def run_with_fallback(build, run):
