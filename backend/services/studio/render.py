@@ -365,8 +365,14 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                             cmd += ['-filter_complex', graph]
                         from backend.services import video_encoder
 
-                        def build(name, base=cmd, clip_path=clip_path):
-                            return [*base, *video_encoder.h264_args(w, h, name), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
+                        pack_name = draft.packaging.template if draft.packaging is not None else None
+
+                        def build(name, base=cmd, clip_path=clip_path, pack_name=pack_name, visual=html_template):
+                            # Street vertical and classic interview stay 1080×1920 at ~2 Mbps.
+                            # Editorial, news, cinema and podcast keep the shared encoder rate.
+                            return [*base, *video_encoder.packaging_h264_args(
+                                w, h, visual=visual, packaging=pack_name, name=name,
+                            ), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
 
                         def run(full, length=scene.end - scene.start):
                             full, priority = render_limits.low_priority(full)

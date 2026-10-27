@@ -12,18 +12,19 @@ from __future__ import annotations
 import math
 import re
 
-from backend.services.studio.caption_layout import NO_LINE_START, display_text, lines_for, page_screens, width
+from backend.services.studio.caption_layout import NO_LINE_START, display_text, lines_for, page_screens, strip_speaker_prefix, width
 from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
-# Phrase budget on the 1080px canvas. One line, no wrap. Street captions are 48px
-# inside 30px insets (a title-sized 100px line read as a hook). Editorial is 52px
+# Phrase budget on the 1080px canvas. One line at the template's caption size.
+# Street is 64px inside 30px insets (a 116px line wrapped to two rows looked like a title).
+# The stylesheet may still wrap; it must not nowrap-truncate. Editorial is 52px
 # inside 60px insets. News and cinema stay in the same caption band.
 # A longer sentence is split into phrases.
 _CANVAS = 1080
 _EDITORIAL_FONT = 52
 _EDITORIAL_INSET = 60
-_STREET_FONT = 48
+_STREET_FONT = 64
 _NEWS_FONT = 42
 _NEWS_INSET = 72
 _CINEMA_FONT = 40
@@ -1454,15 +1455,26 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         text = display_text(str(_get(cue, 'text', '')).strip())
         if not text:
             continue
-        phrase = _cue_phrase(cue, text, emphasis)
         raw_original = display_text(str(_get(cue, 'original', '') or ''))
-        # The preview keeps the whole English sentence on one line and shrinks it. The template trims what still overflows.
+        # English wraps in the Street stylesheet. It is not clipped to a nowrap line.
         original = ' '.join(raw_original.split()) if (template or '') in HTML_TEMPLATE_IDS else _source_line(raw_original, source_limit)
         speaker = _agree_speaker(
             _cue_speaker_name(cue, roster, packaging),
             float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
             transcript, roster, word_timing,
         )
+        visual = template or ''
+        interview_burn = visual == 'street' or (
+            _get(packaging, 'template', '') == 'interview_zh' and visual not in {'editorial', 'news', 'cinema'}
+        )
+        # The nameplate can stay blank without a transcript turn. The cue's own
+        # speaker still marks a leading 「黄仁勋：」 that should not be burned.
+        claimed_speaker = str(_get(cue, 'speaker', '') or '').strip()
+        if interview_burn and str(_get(packaging, 'audience_language', '')) == 'zh' and not _get(packaging, 'speaker_prefix', False):
+            text = strip_speaker_prefix(text, claimed_speaker or speaker)
+        if not text:
+            continue
+        phrase = _cue_phrase(cue, text, emphasis)
         pieces = _phrases(text, phrase_limit, phrase)
         if not pieces:
             continue

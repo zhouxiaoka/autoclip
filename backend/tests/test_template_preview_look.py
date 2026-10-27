@@ -421,8 +421,8 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
     assert any(rect['slot'] == 'kicker' for rect in frames['0.5']['rects'])
     assert any(rect['slot'] == 'credit' for rect in still['0.5']['rects'])
     street_css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
-    assert 'text-align: center' in street_css and 'font-size: 48px' in street_css and '#D7FF3A' in street_css
-    assert 'font-size: 100px' not in street_css and '#zh.k' not in street_css
+    assert 'text-align: center' in street_css and 'font-size: 64px' in street_css and '#D7FF3A' in street_css
+    assert 'font-size: 100px' not in street_css and 'font-size: 116px' not in street_css and '#zh.k' not in street_css
     editorial_css = (TEMPLATES / 'editorial' / 'style.css').read_text(encoding='utf-8')
     assert '#F4EFE6' in editorial_css and '#F2D98C' in editorial_css and '#C7243A' in editorial_css
 
@@ -674,12 +674,12 @@ def test_street_caption_is_the_preview_size_and_shrinks_only_on_overflow(tmp_pat
         assert len(runs) == 2, (name, runs)
         measured[name] = runs
     zh, en = measured['short']
-    assert abs(zh[0] - 1326) <= 16 and 32 <= zh[1] - zh[0] + 1 <= 56, zh
+    assert abs(zh[0] - 1326) <= 24 and 40 <= zh[1] - zh[0] + 1 <= 96, zh
     assert abs((zh[2] + zh[3]) / 2 - 540) <= 8, zh
-    assert abs(en[0] - 1406) <= 20, en
+    assert abs(en[0] - 1418) <= 28, en
     # A caption-sized line stays inside the 1000px column. The English line does not jump when the phrase grows.
     full_zh, full_en = measured['full']
-    assert 32 <= full_zh[1] - full_zh[0] + 1 <= 56 and full_zh[3] - full_zh[2] <= 1000, full_zh
+    assert 40 <= full_zh[1] - full_zh[0] + 1 <= 96 and full_zh[3] - full_zh[2] <= 1020, full_zh
     assert abs(full_en[0] - en[0]) <= 8, (full_en, en)
 
 
@@ -718,4 +718,4 @@ def test_mac_acceptance_captions_stay_and_cover_titles_do_not():
     assert 'missteps' in shot['en']['html']
     assert shot['title']['text'] == ''
     css = (TEMPLATES / 'street' / 'style.css').read_text(encoding='utf-8')
-    assert 'font-size: 48px' in css and 'font-size: 100px' not in css
+    assert 'font-size: 64px' in css and 'font-size: 100px' not in css and 'font-size: 116px' not in css

@@ -123,6 +123,8 @@ class Packaging(BaseModel):
     tags_enabled: bool = True
     # #367: users can switch the template captions off; titles/nameplates stay.
     captions_enabled: bool = True
+    # Interview clips do not burn 「主持人：」 onto the Chinese line. The nameplate is separate.
+    speaker_prefix: bool = False
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False

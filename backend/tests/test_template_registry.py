@@ -20,7 +20,7 @@ def test_shipping_templates_are_the_four_html_styles():
     assert street.canvas.overlay_px == (1080, 1920)
     assert editorial.overlay.slots['subtitle'].max_rows == 2
     assert street.overlay.limits['sticker_max'] == 2
-    assert street.audio.bgm == 'none' and street.audio.optional_bed is True
+    assert street.audio.bgm == 'none' and street.audio.optional_bed is False
     assert editorial.audio.bgm == 'none' and editorial.audio.optional_bed is False
     assert editorial.base.zoom.mode == 'creep' and editorial.base.zoom.creep == 0.07
     assert street.base.zoom.step == [1.0, 1.22]
