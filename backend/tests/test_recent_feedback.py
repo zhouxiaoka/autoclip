@@ -332,7 +332,8 @@ def test_step2_refinement_error_never_exports_unvalidated_ranges(tmp_path, monke
     assert obj.extraction_report['refinement_failed']
 
 
-# #428: Ollama qwen2.5:7b, error_code invalid_response, this exact sentence.
+# #428 without a known-weak local model: the generic invalid_response sentence.
+# Ollama qwen2.5:7b uses the guidance in test_weak_local_timeline.py.
 ISSUE_428 = (
     '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 '
     '请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。'

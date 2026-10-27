@@ -2007,5 +2007,11 @@
   "进度为估算，以阶段为准": "Progress is an estimate; the stage is what counts",
   "这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。": "This request may already have been billed by the provider. Check your balance and test the connection in Settings before retrying.",
   "分析": "Analysis",
-  "制作": "Production"
+  "制作": "Production",
+  "这个本地模型往往剪不出片段，建议换更大的或云端模型": "This local model often can't produce clips. Prefer a larger or cloud model.",
+  "当前本地模型无法返回可用时间线": "The current local model could not return a usable timeline.",
+  "建议换用 {{model}} 后重试": "Try again with {{model}}.",
+  "切换并重试": "Switch and retry",
+  "去配置模型": "Configure model",
+  "其他模型": "Other models"
 }

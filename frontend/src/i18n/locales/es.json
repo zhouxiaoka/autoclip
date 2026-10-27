@@ -2007,5 +2007,11 @@
   "进度为估算，以阶段为准": "El progreso es una estimación; fíjate en la etapa",
   "这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。": "Es posible que el proveedor ya haya cobrado esta solicitud. Comprueba el saldo y prueba la conexión en Ajustes antes de reintentar.",
   "分析": "Análisis",
-  "制作": "Producción"
+  "制作": "Producción",
+  "这个本地模型往往剪不出片段，建议换更大的或云端模型": "Este modelo local suele no producir clips. Mejor uno más grande o en la nube.",
+  "当前本地模型无法返回可用时间线": "El modelo local actual no pudo devolver una línea de tiempo utilizable.",
+  "建议换用 {{model}} 后重试": "Vuelve a intentarlo con {{model}}.",
+  "切换并重试": "Cambiar y reintentar",
+  "去配置模型": "Configurar modelo",
+  "其他模型": "Otros modelos"
 }

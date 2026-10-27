@@ -8,6 +8,7 @@ import { studioApi, errorText } from './api'
 import { failureSettings, sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
 import { analysisFailureText, analysisPageFailure, receiptFailureInfo } from './failureAction'
+import { weakLocalTimelineFailure } from '../../utils/timelineFailure'
 import FailureActions, { FailureCopy } from './FailureActions'
 import { displayedProgress, studioRunProgress } from './studioProgress'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
@@ -140,7 +141,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
           onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}
           onSettings={destination=>navigate(settingsReturnUrl(destination, project.id))}>
-          <Btn disabled={!!busy} onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}
+          {!weakLocalTimelineFailure(failureInfo().error, failureInfo().error_code) && <Btn disabled={!!busy} onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn>}{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}
         </FailureActions></div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
       <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}

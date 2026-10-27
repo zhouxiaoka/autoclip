@@ -2,6 +2,7 @@ import { ReactNode } from 'react'
 import { t } from '../../i18n'
 import { Btn } from '../../ui'
 import { pageFailureAction, pageFailureText, presentedFailure, PageFailureInfo } from './failureAction'
+import { WEAK_LOCAL_TIMELINE_REASON, weakLocalTimelineFailure } from '../../utils/timelineFailure'
 
 export type FailureInfo = PageFailureInfo & { error?: string | null }
 export type FailureButton = { key: 'continue' | 'settings' | 'retry'; label: string; cta: boolean }
@@ -16,6 +17,13 @@ export type FailurePlan = {
 /** The failed step's state, computed once (code health): one message, each button at most once, explicit order.*/
 export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSettings: boolean): FailurePlan {
   const action = pageFailureAction(info)
+  if (action.kind === 'retry' && weakLocalTimelineFailure(info.error, info.error_code)) {
+    const card = presentedFailure(info, WEAK_LOCAL_TIMELINE_REASON)
+    return {
+      message: card.reason, step: card.step, billing: null, destination: null,
+      buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [],
+    }
+  }
   const reason = action.kind === 'retry' ? pageFailureText(info) : action.reason
   const card = presentedFailure(info, reason)
   if (action.kind === 'retry') return { message: card.reason, step: card.step, billing: card.billing, destination: null, buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [] }

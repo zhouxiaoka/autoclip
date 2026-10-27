@@ -15,7 +15,7 @@ function load(relativePath) {
   return module.exports
 }
 
-const { classifyTimelineEmpty } = load('../src/utils/timelineFailure.ts')
+const { classifyTimelineEmpty, weakLocalTimelineFailure } = load('../src/utils/timelineFailure.ts')
 const { classifyLlmKeyFailure } = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/utils/llmFailure.ts'))
 const { classifySubtitleFailure } = load('../src/utils/subtitleFailure.ts')
 
@@ -49,6 +49,28 @@ test('an empty timeline last_error does not open model or transcription settings
   assert.equal(LAST_ERROR.includes('设置 → 服务商与模型'), false)
   assert.equal(LAST_ERROR.includes('API Key'), false)
   assert.equal(LAST_ERROR.includes('测试连接'), false)
+})
+
+const WEAK = '当前本地模型无法返回可用时间线'
+const LEGACY = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
+const GENERIC = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。这一步尚未进入评分或最短时长筛选。'
+
+test('#428 weak-local empty intervals are not an empty timeline and keep the short sentence', () => {
+  assert.equal(weakLocalTimelineFailure(WEAK, 'invalid_response'), true)
+  assert.equal(weakLocalTimelineFailure(LEGACY, 'invalid_response'), true)
+  assert.equal(weakLocalTimelineFailure(WEAK), true)
+  assert.equal(weakLocalTimelineFailure(GENERIC, 'invalid_response'), false)
+  assert.equal(weakLocalTimelineFailure(WEAK, 'timeline_empty'), false)
+  assert.equal(classifyTimelineEmpty(WEAK, 'invalid_response'), false)
+  assert.equal(classifyLlmKeyFailure(WEAK, 'invalid_response'), false)
+  const backend = fs.readFileSync(path.join(__dirname, '../../backend/core/weak_local_timeline.py'), 'utf8')
+  assert.match(backend, /当前本地模型无法返回可用时间线/)
+  assert.doesNotMatch(backend, /自动重试已经用完/)
+  const detail = fs.readFileSync(path.join(__dirname, '../src/pages/ProjectDetailPage.tsx'), 'utf8')
+  const card = fs.readFileSync(path.join(__dirname, '../src/components/ProjectCard.tsx'), 'utf8')
+  assert.doesNotMatch(detail, /weakLocalTimelineFailure/)
+  assert.match(card, /去配置模型/)
+  assert.match(card, /切换并重试/)
 })
 
 test('failure screens do not route an empty timeline to Settings → Model', () => {

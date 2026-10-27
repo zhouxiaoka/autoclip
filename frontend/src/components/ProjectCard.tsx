@@ -12,7 +12,7 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
-import { classifyTimelineEmpty } from '../utils/timelineFailure'
+import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
@@ -43,9 +43,19 @@ interface ProjectCardProps {
   onDelete: (id: string) => void
   onRetry?: (id: string) => void
   onClick?: () => void
+  /** One already-connected replacement. Absent means the card offers model settings. */
+  replacement?: { displayName: string } | null
+  onSwitchAndRetry?: (id: string) => void | Promise<void>
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick }) => {
+function suggestLine(name: string) {
+  const text = t('建议换用 {{model}} 后重试', { model: name })
+  const at = text.indexOf(name)
+  if (at < 0) return text
+  return <>{text.slice(0, at)}<strong>{name}</strong>{text.slice(at + name.length)}</>
+}
+
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick, replacement, onSwitchAndRetry }) => {
   useTranslation()
   const navigate = useNavigate()
   const creative = project.settings?.creative || project.processing_config?.creative
@@ -272,18 +282,22 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }
   const failureText = llmFailureText(project.error_message || failedProgress?.message, project.error_code)
   const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)
+  const weakLocalTimeline = weakLocalTimelineFailure(failureText, project.error_code)
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText, project.error_code)
   const subtitleFailure = timelineEmpty
     ? null
     : classifySubtitleFailure(failureText, project.error_code)
 
-  const handleRetry = async (opts?: { silent?: boolean }) => {
+  const handleRetry = async (opts?: { silent?: boolean; stay?: boolean }) => {
     if (isRetrying) return
 
     setIsRetrying(true)
     try {
-      // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing
-      if (isManaged) {
+      // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing。
+      // 弱本地时间线失败留在首页卡上重试，不进详情。
+      if (isManaged && opts?.stay) {
+        await studioApi.retry(project.id)
+      } else if (isManaged) {
         navigate(regenerateInStudio ? `/project/${project.id}` : `/import/${project.id}`)
         return
       } else if (project.status === 'pending') {
@@ -308,7 +322,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     }
   }
 
+  const openSettings = () => navigate('/settings?section=analysis')
+  const switchAndRetry = async () => {
+    if (isRetrying || !onSwitchAndRetry) return
+    setIsRetrying(true)
+    try { await onSwitchAndRetry(project.id) }
+    finally { setIsRetrying(false) }
+  }
+
   const openProject = () => {
+    if (weakLocalTimeline) return
     if (!isManaged && project.status === 'pending') {
       message.warning(t("项目正在导入中，请稍后再查看详情"))
       return
@@ -324,39 +347,67 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
 
   return (
     <>
-      <article className="ac-card ac-project-card">
+      <article className={`ac-card ac-project-card${weakLocalTimeline ? ' ac-project-card--weak' : ''}`}>
         <div className="ac-card-thumb" style={{ backgroundImage: videoThumbnail ? `url(${videoThumbnail})` : undefined }}>
-          <button type="button" className="ac-project-open" aria-label={project.name} onClick={openProject}>
-            {!videoThumbnail && <Icon.Play size={30} />}
-            {thumbnailLoading && <span className="ac-project-thumbnail-loading">{t("生成封面中…")}</span>}
-          </button>
+          {weakLocalTimeline ? (
+            <div className="ac-project-open" aria-hidden="true" />
+          ) : (
+            <button type="button" className="ac-project-open" aria-label={project.name} onClick={openProject}>
+              {!videoThumbnail && <Icon.Play size={30} />}
+              {thumbnailLoading && <span className="ac-project-thumbnail-loading">{t("生成封面中…")}</span>}
+            </button>
+          )}
           <div className="ac-project-tags">
+            {weakLocalTimeline && <span className="ac-fail-pill"><StatusDot tone="error" label={t("失败")} /></span>}
             {isExample && <span className="ac-tag ac-tag--sans">{t("示例")}</span>}
             {project.video_category && project.video_category !== 'default' && <span className="ac-tag ac-tag--sans">{getCategoryInfo(project.video_category)}</span>}
           </div>
         </div>
         <div className="ac-card-body">
-          <button type="button" className="ac-project-title" onClick={openProject} title={project.name}>
-            <span className="ac-card-title">{project.name}</span>
-          </button>
-          {awaitingConfirmation ? (
+          {weakLocalTimeline ? (
+            <h3 className="ac-card-title">{project.name}</h3>
+          ) : (
+            <button type="button" className="ac-project-title" onClick={openProject} title={project.name}>
+              <span className="ac-card-title">{project.name}</span>
+            </button>
+          )}
+          {!weakLocalTimeline && (awaitingConfirmation ? (
             <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={() => navigate(`/import/${project.id}`)}>{t("查看建议")}</Btn></div>
           ) : isManaged && project.status === 'processing' ? (
             <StatusDot tone="accent" label={t("制作中 · 查看进度")} />
           ) : (
             <UnifiedStatusBar projectId={project.id} status={normalizedStatus} downloadProgress={progressPercent} />
-          )}
+          ))}
           {normalizedStatus === 'completed' && (
             <div className="ac-project-counts ac-mono">
               {isVisual ? t('成片草稿数量', { count: project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0 }) : <>{t("切片数量", { count: project.total_clips || 0 })}<span> · </span>{t("合集数量", { count: project.total_collections || 0 })}</>}
             </div>
           )}
-          {normalizedStatus === 'failed' && failureText && (
+          {weakLocalTimeline && (
+            <div className="ac-project-weak">
+              <p className="ac-project-weak-reason">{t("当前本地模型无法返回可用时间线")}</p>
+              {replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
+              <div className="ac-project-weak-actions">
+                {replacement?.displayName ? (
+                  <>
+                    <Btn variant="cta" loading={isRetrying} onClick={() => void switchAndRetry()}>{t("切换并重试")}</Btn>
+                    <Btn variant="text" onClick={openSettings}>{t("其他模型")}</Btn>
+                  </>
+                ) : (
+                  <>
+                    <Btn variant="cta" onClick={openSettings}>{t("去配置模型")}</Btn>
+                    <Btn variant="text" loading={isRetrying} onClick={() => handleRetry({ stay: true })}>{t("重试")}</Btn>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+          {!weakLocalTimeline && normalizedStatus === 'failed' && failureText && (
             <div className="ac-empty ac-project-error" role="alert">
               <span className="ac-mono">{t(failureText)}</span>
             </div>
           )}
-          {normalizedStatus === 'failed' && (
+          {!weakLocalTimeline && normalizedStatus === 'failed' && (
             <div className="ac-project-recovery">
               {subtitleFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
               {llmKeyFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}

@@ -55,6 +55,7 @@ class TimelineExtractor:
         logger.info("开始提取话题时间区间...")
         # Counts and stable codes only: safe to share without subtitles, keys or paths.
         self.extraction_report = {"topics": len(outlines), "chunks": [], "parsed": 0, "output": 0}
+        self._stamp_weak_local_timeline()
         # Clear this stage's previous-run result before any early failure.
         save_report({"step2": {"input": 0, "output": 0, "dropped": [], "merged": [],
                                "extended": 0, "trimmed": 0},
@@ -264,6 +265,19 @@ class TimelineExtractor:
         self.extraction_report["output"] = len(all_timeline_data)
         save_report({"step2_extraction": self.extraction_report}, self.metadata_dir)
         return all_timeline_data
+
+    def _stamp_weak_local_timeline(self) -> None:
+        """Record only a boolean. Model id and base URL stay off the shared report."""
+        from backend.core.weak_local_timeline import note_weak_local_timeline
+
+        getter = getattr(self.llm_client, "get_current_provider_info", None)
+        info = None
+        if callable(getter):
+            try:
+                info = getter()
+            except Exception:  # noqa: BLE001 - identity must not turn a timeline run into an unexpected failure
+                info = None
+        note_weak_local_timeline(self.extraction_report, info)
         
     def _parse_and_validate_response(self, response: str, chunk_start: str, chunk_end: str, chunk_index: int) -> List[Dict]:
         """增强的解析LLM的批量响应、验证并调整时间"""

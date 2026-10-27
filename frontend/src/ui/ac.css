@@ -415,6 +415,20 @@
 .ac-project-tags .ac-tag { position: static; }
 .ac-project-title { padding: 0; text-align: left; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
 .ac-project-card .ac-card-body { padding: 18px 20px 20px; gap: 12px; }
+.ac-project-card--weak .ac-card-thumb { cursor: default; }
+.ac-project-card--weak .ac-project-open { cursor: default; }
+.ac-project-card--weak .ac-card-title { margin: 0; font-size: 16px; font-weight: 600; min-height: 0; -webkit-line-clamp: 2; }
+.ac-fail-pill {
+  display: inline-flex; align-items: center; padding: 3px 10px 3px 8px;
+  border-radius: 999px; background: var(--ac-card);
+  box-shadow: 0 1px 2px rgba(26,26,25,.08);
+}
+.ac-fail-pill .ac-status { font-weight: 500; font-size: 12.5px; }
+.ac-project-weak { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ac-project-weak-reason { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ac-sub); }
+.ac-project-weak-suggest { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ac-ink); }
+.ac-project-weak-suggest strong { font-weight: 600; }
+.ac-project-weak-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .ac-project-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ac-project-counts { color: var(--ac-muted); font-size: 12.5px; }
 .ac-project-error { margin: 0; padding: 10px; text-align: left; font-size: 12.5px; overflow-wrap: anywhere; user-select: text; color: var(--ac-sub); }

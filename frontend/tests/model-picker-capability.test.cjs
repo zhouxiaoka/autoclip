@@ -14,6 +14,8 @@ function loadPicker() {
     './modelDefaults': { analysisModels: models => models },
     './endpointProvider': loadTs('endpointProvider.ts'),
     './modelSettingsLogic': { connectionReady: () => true, presetKey: c => c.provider },
+    './weakLocalTimeline': loadTs('weakLocalTimeline.ts'),
+    './WeakLocalTimelineNote': { default: 'weak-note' },
   }
   const code = ts.transpileModule(fs.readFileSync('src/features/settings/ModelPicker.tsx', 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -43,6 +45,28 @@ for (const provider of ['dashscope', 'compatible', 'openai']) {
     assert.equal(chosen, 'multimodal')
   })
 }
+function findNote(node) {
+  if (!node || typeof node !== 'object') return false
+  if (node.type === 'weak-note') return true
+  const children = node.props?.children
+  for (const child of Array.isArray(children) ? children.flat(5) : [children]) {
+    if (findNote(child)) return true
+  }
+  return false
+}
+test('analysis picker warns for a small local timeline model and still allows the choice', () => {
+  const picker = loadPicker()
+  const warned = picker({ role: 'analysis', model: 'qwen2.5:7b', connection: { id: 'local', provider: 'ollama', base_url: 'http://127.0.0.1:11434/v1' },
+    list: { source: 'live', models: [{ id: 'qwen2.5:7b', capability: 'text' }] }, busy: false, mode: 'subtitle', onChange() {}, onRefresh() {} })
+  assert.equal(findNote(warned), true)
+  assert.equal(warned.props.children[0].props.disabled, false)
+  const larger = picker({ role: 'analysis', model: 'qwen2.5:32b', connection: { id: 'local', provider: 'ollama' },
+    list: { source: 'live', models: [{ id: 'qwen2.5:32b', capability: 'text' }] }, busy: false, mode: 'subtitle', onChange() {}, onRefresh() {} })
+  assert.equal(findNote(larger), false)
+  const cloud = picker({ role: 'analysis', model: 'qwen2.5:7b', connection: { id: 'cloud', provider: 'dashscope' },
+    list: { source: 'live', models: [{ id: 'qwen2.5:7b', capability: 'text' }] }, busy: false, mode: 'subtitle', onChange() {}, onRefresh() {} })
+  assert.equal(findNote(cloud), false)
+})
 test('known provider capability needs no manual confirmation', () => {
   const picker = loadPicker()({ role: 'analysis', model: 'known-vision',
     connection: { id: 'one', provider: 'dashscope' }, list: { source: 'live', models: [{ id: 'known-vision', capability: 'multimodal' }] },

@@ -28,6 +28,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args), retry: async (...args) => calls.push(['retry', ...args]) }, errorText: String }
     if (name === '../../utils/llmFailure') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts'))
+    if (name === '../../utils/timelineFailure') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/timelineFailure.ts'))
     if (name === './importReadiness') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/importReadiness.ts'))
     if (name === './browserCookieRecovery') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/browserCookieRecovery.ts'))
     if (name === './platformLabel') return { platformLabel: String }
@@ -84,6 +85,20 @@ test('active automatic output never offers a second analysis submission', () => 
   assert.equal(buttons.some(button => button.children === '重试'), false)
 })
 
+
+test('#428 studio keeps a one-line reason and does not offer a second model picker', () => {
+  const buttons = []
+  navigations.length = 0
+  const weak = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
+  const html = render(true, 'production', 'failed', buttons, [], 'invalid_response', 'analyze', weak)
+  assert.match(html, /当前本地模型无法返回可用时间线/)
+  assert.doesNotMatch(html, /82|话题|字幕块|自动重试已经用完|切换并重试/)
+  assert.equal(buttons.some(button => button.children === '模型设置'), false)
+  const retry = buttons.find(button => button.children === '重试')
+  assert.ok(retry)
+  assert.notEqual(retry.variant, 'cta')
+  assert.deepEqual(navigations, [])
+})
 
 test('invalid API key renders the new copy instead of missing-key guidance', () => {
   const html = render(true, 'production', 'failed', [], [], 'llm_auth_invalid')
@@ -264,7 +279,7 @@ test('R22 #173: the real listener returns to the project on the one save notific
   assert.ok(app.includes('<SettingsReturnListener />'))
 })
 test('R22 code health: failure state computed once, each button at most once', () => {
-  const fa = loadTsx('../src/features/studio/FailureActions.tsx', name => name === './failureAction' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')) : name === '../../utils/llmFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts')) : name === 'react/jsx-runtime' ? require(name) : {})
+  const fa = loadTsx('../src/features/studio/FailureActions.tsx', name => name === './failureAction' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')) : name === '../../utils/llmFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts')) : name === '../../utils/timelineFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/timelineFailure.ts')) : name === 'react/jsx-runtime' ? require(name) : {})
   const keys = p => JSON.parse(JSON.stringify(p.buttons.map(b => `${b.key}${b.cta ? '*' : ''}`)))
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, false)), ['settings*', 'continue'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, true)), ['continue*', 'settings'])
@@ -272,6 +287,15 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
   assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。')
+  const weak = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
+  const weakPlan = fa.failurePlan({ error_code: 'invalid_response', error: weak }, true, false)
+  assert.equal(weakPlan.message, '当前本地模型无法返回可用时间线')
+  assert.equal(weakPlan.message.includes('82'), false)
+  assert.equal(weakPlan.destination, null)
+  assert.deepEqual(keys(weakPlan), ['retry'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'invalid_response', error: weak }, true, true)), ['retry'])
+  const generic = '时间线模型回复没有有效时间区间（1 个话题，1 个字幕块）。 请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。这一步尚未进入评分或最短时长筛选。'
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'invalid_response', error: generic }, true, false)), ['retry'])
 })
 
 // the results-page line for "this re-run finished, N earlier failures" shows only when the round completed
