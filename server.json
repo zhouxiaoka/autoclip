@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.zhouxiaoka/autoclip-mcp",
+  "title": "AutoClip",
+  "description": "Clip long videos into short clips with covers and captions. Local CLI and MCP.",
+  "version": "1.5.7.post1",
+  "websiteUrl": "https://zhouxiaoka.github.io/autoclip_intro/",
+  "repository": {
+    "url": "https://github.com/zhouxiaoka/autoclip",
+    "source": "github",
+    "id": "1015815983"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "autoclip-mcp",
+      "version": "1.5.7.post1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AUTOCLIP_API_KEY",
+          "description": "Model API key. Optional when desktop settings already include one.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

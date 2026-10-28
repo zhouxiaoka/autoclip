@@ -1,5 +1,7 @@
 """PyPI metadata for `uvx autoclip-mcp` and the skill install command. No publish."""
+import json
 from pathlib import Path
+import re
 import tomllib
 
 import pytest
@@ -25,10 +27,14 @@ def runtime_requirements(text: str) -> list[str]:
 
 @pytest.mark.stdlib_only
 def test_distribution_is_autoclip_mcp_and_keeps_runtime_pins():
+    from scripts.bump_version import pypi_version_matches_product
+
     project = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))['project']
     version = (ROOT / 'backend' / '__init__.py').read_text(encoding='utf-8')
+    product = re.search(r'^__version__\s*=\s*"([^"]+)"', version, re.MULTILINE)
     assert project['name'] == 'autoclip-mcp'
-    assert f'__version__ = "{project["version"]}"' in version
+    assert product and pypi_version_matches_product(product.group(1), project['version'])
+    assert f'__version__ = "{product.group(1)}"' in version
     assert project['scripts']['autoclip'] == 'backend.cli:main'
     assert project['scripts']['autoclip-mcp'] == 'backend.mcp_server:main'
     dependencies = project['dependencies']
@@ -44,6 +50,27 @@ def test_distribution_is_autoclip_mcp_and_keeps_runtime_pins():
         '.github/workflows/windows-install-smoke.yml',
     ):
         assert WHEEL_GLOB in (ROOT / relative).read_text(encoding='utf-8')
+
+
+@pytest.mark.stdlib_only
+def test_registry_metadata_matches_the_pypi_package():
+    project = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))['project']
+    server = json.loads((ROOT / 'server.json').read_text(encoding='utf-8'))
+    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+    name = server['name']
+    package = server['packages'][0]
+    assert name == 'io.github.zhouxiaoka/autoclip-mcp'
+    assert f'<!-- mcp-name: {name} -->' in readme
+    assert server['version'] == project['version']
+    assert 1 <= len(server['description']) <= 100
+    assert package['registryType'] == 'pypi'
+    assert package['registryBaseUrl'] == 'https://pypi.org'
+    assert package['identifier'] == project['name']
+    assert package['version'] == project['version']
+    assert package['runtimeHint'] == 'uvx'
+    assert package['transport'] == {'type': 'stdio'}
+    secret = package['environmentVariables'][0]
+    assert secret['name'] == 'AUTOCLIP_API_KEY' and secret['isSecret'] is True
 
 
 @pytest.mark.stdlib_only

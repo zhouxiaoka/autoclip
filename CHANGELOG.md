@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+- PyPI 包 `autoclip-mcp` 增加 `1.5.7.post1`（桌面版仍是 1.5.7）。包说明写入 Official MCP Registry 要求的 `mcp-name` 注释，并附上 `server.json`。上传到 PyPI 之后，还要由维护者用 `mcp-publisher` 做 GitHub 设备登录，才能登记到 Registry。
+
 ## [1.5.7] - 2026-10-15
 
 > 这是预发布版本，应用内更新暂不推送，需要手动下载安装。观察 24 小时没有问题后会转为正式版。
