@@ -97,6 +97,7 @@ src-tauri/.updater-public-key
 # Python / 打包产物
 build/
 dist/
+*.mcpb
 releases/
 *.toc
 *.pkg

@@ -280,6 +280,8 @@ The MCP client starts the server. For standalone debugging, run `autoclip mcp` i
 
 Replace `PROJECT_ID` with the project ID returned by production. MCP uses `start_quick_output` / `get_quick_output_status`; set the client’s `command` to the virtualenv’s absolute `autoclip` path and `args` to `["mcp"]`. Legacy `run` / `export` and clipping tools remain available. See [CLI / MCP](docs/CLI_AND_MCP.md) (Chinese), [OpenCode](docs/OPENCODE.en.md), and [Agent skill](skills/autoclip/SKILL.md) (Chinese).
 
+Smithery’s local stdio listing uses an MCPB bundle. From the repo root, run `python scripts/pack_mcpb.py`. The artifact is `dist/autoclip-mcp.mcpb` and is not committed. Publish with `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp` using the maintainer’s own login. The repository does not store an API key. Steps are in [CLI / MCP](docs/CLI_AND_MCP.md) (Chinese).
+
 ## Model setup
 
 | Option | Setup |

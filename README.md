@@ -280,6 +280,8 @@ MCP 服务由客户端启动。需要单独调试时，在另一个终端运行 
 
 把 `PROJECT_ID` 换成制作结果中的项目 ID。MCP 新入口为 `start_quick_output` / `get_quick_output_status`；客户端 `command` 指向虚拟环境中的 `autoclip` 绝对路径，`args` 为 `["mcp"]`。旧 `run` / `export` 和旧切片工具继续兼容。详见 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 与 [Agent skill](skills/autoclip/SKILL.md)。
 
+Smithery 本地 stdio 用 MCPB：在仓库根目录执行 `python scripts/pack_mcpb.py`，产物是 `dist/autoclip-mcp.mcpb`（不提交）。发布命令是 `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp`，需要维护者自己的登录，仓库不保存 API key。步骤见 [CLI / MCP](docs/CLI_AND_MCP.md)。
+
 ## 模型配置
 
 | 方式        | 配置                                                             |
