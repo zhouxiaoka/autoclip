@@ -136,6 +136,8 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 
 要发布 autoclip-mcp，推送 `mcp-v<version>`。该标签走 `pypi` environment，只允许从 `mcp-v*` 部署。Desktop Build 与发版工作流的 tag 过滤是 `v*`，只匹配以 `v` 开头的标签，不匹配 `mcp-v*`，因此桌面 `v*` 标签不会发到 PyPI，也不必在那些工作流里再排除 `mcp-v*`。
 
+PyPI 版本可以是产品版本的 post 发行（产品 `1.5.7`、包 `1.5.7.post1`），桌面端版本号不用跟着改。`README.md` 里要有 `<!-- mcp-name: io.github.zhouxiaoka/autoclip-mcp -->`，并与根目录 `server.json` 的 `name` 一致。上传到 PyPI 之后，维护者再在本机执行 `mcp-publisher login github`（GitHub 设备登录）和 `mcp-publisher publish`。CI 不跑 `mcp-publisher`。
+
 ## 相关文件
 
 | 用途 | 位置 |

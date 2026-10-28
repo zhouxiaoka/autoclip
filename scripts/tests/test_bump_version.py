@@ -30,6 +30,22 @@ class VersionTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(bump.main(['--check']), 1)
 
+    def test_pypi_post_release_keeps_the_desktop_version(self):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(bump.main(['--check']), 0)
+        text = bump.PYPROJECT.read_text()
+        replaced, count = re.subn(
+            r'(^\[project\][^\[]*?^version\s*=\s*")[^"]+(")',
+            r'\g<1>9.9.9\g<2>',
+            text,
+            count=1,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        self.assertEqual(count, 1)
+        bump.PYPROJECT.write_text(replaced)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(bump.main(['--check']), 1)
+
     def test_bump_preserves_locked_dependencies(self):
         bump.set_version('9.8.7')
         expected = re.sub(r'(name = "autoclip-desktop"\nversion = ")[^"]+', r'\g<1>9.8.7', self.original)

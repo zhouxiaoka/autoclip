@@ -15,6 +15,11 @@
   backend/__init__.py        CLI / MCP 的 __version__
   CHANGELOG.md               [未发布] → [X.Y.Z] - YYYY-MM-DD，再插入一个空的 [未发布]；底部 compare 链接
 
+`--check` 要求桌面壳、Cargo、桌面回退值和 __version__ 同为 X.Y.Z。
+pyproject 的发行版本可以与之相同，也可以是同一个 X.Y.Z 的 PEP 440 post 发行
+（例如产品 1.5.7、PyPI 1.5.7.post1）。下一次 `bump_version.py X.Y.Z` 会把
+pyproject 一并改回新产品版本。
+
 只用标准库。
 """
 
@@ -41,6 +46,16 @@ CHANGELOG = ROOT / "CHANGELOG.md"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 LOCK_VERSION = re.compile(r'(^name = "autoclip-desktop"\nversion = ")[^"]+("$)', re.MULTILINE)
+PYPROJECT_KEY = "pyproject.toml"
+
+
+def pypi_version_matches_product(product: str, pypi: str) -> bool:
+    """PyPI 发行号等于产品版本，或是它的 1.5.7.post1 这种 post 发行。"""
+    if not SEMVER.fullmatch(product or ""):
+        return False
+    if pypi == product:
+        return True
+    return re.fullmatch(re.escape(product) + r"\.post[1-9]\d*", pypi or "") is not None
 
 
 def _read(p: Path) -> str:
@@ -154,13 +169,19 @@ def main(argv: list[str] | None = None) -> int:
 
     versions = current_versions()
     if args.check or not args.version:
-        distinct = set(versions.values())
+        product_versions = {k: v for k, v in versions.items() if k != PYPROJECT_KEY}
+        distinct = set(product_versions.values())
+        pypi = versions.get(PYPROJECT_KEY, "")
         for k, v in versions.items():
             print(f"{k:20s} {v}")
-        if len(distinct) != 1:
+        product = next(iter(distinct)) if len(distinct) == 1 else ""
+        if len(distinct) != 1 or not pypi_version_matches_product(product, pypi):
             print("版本号不一致", file=sys.stderr)
             return 1
-        print(f"一致：{distinct.pop()}")
+        if pypi == product:
+            print(f"一致：{product}")
+        else:
+            print(f"一致：产品 {product}，PyPI {pypi}")
         return 0
 
     new = args.version.lstrip("v")

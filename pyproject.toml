@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoclip-mcp"
-version = "1.5.7"
+# PyPI 可以比桌面版多一个 post 发行（例如 1.5.7.post1）。桌面壳、Cargo 和
+# backend/__version__ 仍是 X.Y.Z；scripts/bump_version.py --check 允许这种组合。
+version = "1.5.7.post1"
 description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
 readme = "README.md"
 requires-python = ">=3.10"

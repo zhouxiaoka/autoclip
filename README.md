@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.zhouxiaoka/autoclip-mcp -->
+
 <div align="center">
 
 <img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
