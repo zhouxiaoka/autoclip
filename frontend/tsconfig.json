@@ -27,10 +27,11 @@
     "paths": {
       "@/*": ["./src/*"],
       "@provider-presets": ["../backend/presets/provider_presets.json"],
+      "@provider-quality": ["../backend/presets/provider_quality.json"],
       "@event-catalog": ["../backend/core/event_catalog.json"],
       "@failure-messages": ["../backend/core/failure_messages.json"]
     }
   },
-  "include": ["src", "../backend/presets/provider_presets.json", "../backend/core/event_catalog.json", "../backend/core/failure_messages.json"],
+  "include": ["src", "../backend/presets/provider_presets.json", "../backend/presets/provider_quality.json", "../backend/core/event_catalog.json", "../backend/core/failure_messages.json"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

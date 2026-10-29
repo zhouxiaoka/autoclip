@@ -15,6 +15,7 @@ import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogi
 import {
   FIRST_RUN_CHOICES,
   FIRST_RUN_DEFAULT,
+  firstRunOtherDefault,
   firstRunPrimaryAction,
   firstRunPrimaryLabel,
   firstRunSponsor,
@@ -23,7 +24,7 @@ import {
 
 const DISMISSED_KEY = 'autoclip.firstRunSetup.dismissed'
 
-const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: () => string; badge?: () => string }> = {
+const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: (name?: string) => string; badge?: () => string }> = {
   api88: {
     title: () => PROVIDERS.api88.short,
     detail: () => PROVIDERS.api88.sponsor?.description || PROVIDERS.api88.hint,
@@ -36,7 +37,7 @@ const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: () => s
   },
   other: {
     title: () => t('其他服务商'),
-    detail: () => t('去设置页选择 OpenAI、DeepSeek 等'),
+    detail: (name?: string) => t('建议先连接 {{name}}', { name: name || '' }),
   },
 }
 
@@ -45,7 +46,6 @@ const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: () => s
  * a blocked import can reopen it. One-click opens the sponsor site; deeplink write is L1.
  */
 export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?: (needed: boolean) => void; openRequest?: number }) {
-  useTranslation()
   const navigate = useNavigate()
   const m = useQuickConnect('home_setup')
   const { settings } = m
@@ -77,7 +77,11 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       trackExperience('setup_presented', { placement: 'home_setup', presentation_id: presentation.current, trigger: openRequest > 0 ? 'import_blocked' : 'initial' })
     }
   }, [showing, openRequest])
-  const action = (value: 'later' | 'open_settings' | 'one_click', provider?: 'api88' | 'infistar') =>
+  const translation = useTranslation() as { i18n?: { language?: string } } | void
+  const language = translation && translation.i18n ? translation.i18n.language : undefined
+  const otherDefault = firstRunOtherDefault(language)
+  const otherName = PROVIDERS[otherDefault].short
+  const action = (value: 'later' | 'open_settings' | 'one_click' | 'connect_recommended', provider?: string) =>
     trackExperience('setup_action', { placement: 'home_setup', presentation_id: presentation.current, action: value, ...(provider ? { provider } : {}) })
   if (!settings || !needed) return null
 
@@ -91,6 +95,12 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   const primary = () => {
     const next = firstRunPrimaryAction(choice)
     if (next === 'open_settings') { goSettings(); return }
+    if (next === 'connect_recommended') {
+      action('connect_recommended', otherDefault)
+      m.chooseProvider('analysis', otherDefault)
+      setStep('connect')
+      return
+    }
     const sponsor = firstRunSponsor(choice)
     if (!sponsor) return
     const preset = PROVIDERS[sponsor]
@@ -109,11 +119,11 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     : model ? t('已选好模型：{{model}}', { model })
     : main && connectionReady(main) ? t('请确认 API Key，或直接输入模型名')
     : t('等待 API Key')
-  const label = firstRunPrimaryLabel(choice, firstRunSponsor(choice) ? PROVIDERS[firstRunSponsor(choice)!].short : '')
+  const label = firstRunPrimaryLabel(choice, choice === 'other' ? otherName : (firstRunSponsor(choice) ? PROVIDERS[firstRunSponsor(choice)!].short : ''))
   const connecting = step === 'connect' && !!main
 
   return <Dialog open={open} onClose={later} title={t('选择 AI 服务商')}
-    description={connecting ? t('在浏览器完成注册后，把 API 密钥粘贴到下方。') : undefined}
+    description={connecting ? (choice === 'other' ? t('把 API 密钥粘贴到下方即可。') : t('在浏览器完成注册后，把 API 密钥粘贴到下方。')) : undefined}
     footer={<div className="ac-setup-foot">
       {connecting
         ? <Btn variant="text" size="sm" onClick={() => setStep('choose')}>{t('返回')}</Btn>
@@ -140,13 +150,14 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
                 onClick={() => setChoice(id)}>
                 <span className="ac-choice-text">
                   <b>{copy.title()}{copy.badge && <span className="ac-badge">{copy.badge()}</span>}</b>
-                  <span>{copy.detail()}</span>
+                  <span>{copy.detail(id === 'other' ? otherName : undefined)}</span>
                 </span>
                 {choice === id && <Icon.Check />}
               </button>
             })}
           </div>
           <p className="ac-note">{t('可随时在设置中更换')}</p>
+          {choice === 'other' && <p className="ac-note"><button type="button" className="ac-link-button" onClick={goSettings}>{t('去设置选择其他服务商')}</button></p>}
         </>}
       </div>
     </ConfigProvider>

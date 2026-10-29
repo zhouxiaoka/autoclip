@@ -5,6 +5,7 @@ const ts = require('typescript')
 
 const SETTINGS = path.join(__dirname, '../src/features/settings')
 const PRESETS = path.join(__dirname, '../../backend/presets/provider_presets.json')
+const PROVIDER_QUALITY = path.join(__dirname, '../../backend/presets/provider_quality.json')
 const EVENT_CATALOG = path.join(__dirname, '../../backend/core/event_catalog.json')
 const FAILURE_MESSAGES = path.join(__dirname, '../../backend/core/failure_messages.json')
 function jsonModule(file) {
@@ -27,6 +28,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   const requireImpl = (id) => {
     if (id in localMocks) return localMocks[id]
     if (id === '@provider-presets') return jsonModule(PRESETS)
+    if (id === '@provider-quality') return jsonModule(PROVIDER_QUALITY)
     if (id === '@event-catalog') return jsonModule(EVENT_CATALOG)
     if (id === '@failure-messages') return jsonModule(FAILURE_MESSAGES)
     if (id === 'react/jsx-runtime' || id === 'react') return require(id)

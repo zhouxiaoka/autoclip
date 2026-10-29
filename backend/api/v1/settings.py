@@ -944,6 +944,13 @@ async def get_local_presets():
     return {"presets": presets_as_dicts()}
 
 
+@router.get("/provider-quality")
+def get_provider_quality():
+    """Static success and latency tiers. No live provider or PostHog request."""
+    from backend.core.provider_quality import public_payload
+    return public_payload()
+
+
 @router.get("/compatible-models")
 async def list_compatible_models(base_url: str = "", provider: str = "openai", api_key: str = ""):
     """

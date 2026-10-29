@@ -1,4 +1,5 @@
 import raw from '@provider-presets'
+import { qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
 
 export type ProviderGroupId = 'recommended' | 'popular' | 'local' | 'more'
 export type PurposeId = 'analysis' | 'vision' | 'asr' | 'image'
@@ -29,6 +30,9 @@ export type ProviderPreset = {
   local_app: string
   sponsor?: { register_url: string; guide_url: string; offer: string; description: string }
   referral: string
+  success_tier?: SuccessTier
+  latency_tier?: LatencyTier
+  caveat_key?: string
 }
 
 export type ProviderCatalog = {
@@ -68,6 +72,7 @@ function parseProvider(id: string, rawProvider: unknown): ProviderPreset | undef
       }
     : undefined
   const display = row.display_name.trim()
+  const quality = qualityFor(id)
   return {
     id,
     kind: 'preset',
@@ -94,6 +99,11 @@ function parseProvider(id: string, rawProvider: unknown): ProviderPreset | undef
     local_app: String(row.local_app || ''),
     sponsor,
     referral: typeof row.referral === 'string' ? row.referral.trim() : '',
+    ...(quality ? {
+      success_tier: quality.success_tier,
+      latency_tier: quality.latency_tier,
+      ...(quality.caveat_key ? { caveat_key: quality.caveat_key } : {}),
+    } : {}),
   }
 }
 

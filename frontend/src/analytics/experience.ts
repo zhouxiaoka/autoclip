@@ -10,7 +10,7 @@ export type SetupStep = 'provider' | 'key' | 'connect'
 export type ExperienceEvent = 'setup_presented' | 'setup_action' | 'setup_step_done' | 'import_blocked' | 'settings_section_viewed' | 'example_project_viewed'
 const enums: Record<string, readonly string[]> = {
   entry_source: ['home_setup', 'direct'],
-  placement: ['home_setup', 'settings_model', 'import_card'], action: ['later', 'open_settings', 'one_click'],
+  placement: ['home_setup', 'settings_model', 'import_card'], action: ['later', 'open_settings', 'one_click', 'connect_recommended'],
   step: ['provider', 'key', 'connect'],
   trigger: ['initial', 'import_blocked', 'auto', 'manual', 'provider_change', 'load', 'edit', 'portrait_preset'],
   section: ['ai', 'publish', 'app', 'feedback'], role: ['analysis', 'vision', 'cover', 'transcription'],

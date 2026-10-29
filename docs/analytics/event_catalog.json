@@ -251,7 +251,8 @@
     "setup_action": [
       "later",
       "open_settings",
-      "one_click"
+      "one_click",
+      "connect_recommended"
     ],
     "setup_step": [
       "provider",

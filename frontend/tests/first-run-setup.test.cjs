@@ -100,7 +100,7 @@ test('first-run chooser defaults to 88API, opens the register URL, and never pas
   assert.equal(navigations.length, 0)
 })
 
-test('first-run Infistar opens its register URL; other providers go to settings', () => {
+test('first-run Infistar opens its register URL; other connects the measured default and can still open settings', () => {
   const infistar = renderFirstRun()
   flatten(infistar.render()).filter(n => n?.props?.['aria-checked'] !== undefined)[1].props.onClick()
   flatten(infistar.render()).filter(n => n?.type === 'button').at(-1).props.onClick()
@@ -110,8 +110,19 @@ test('first-run Infistar opens its register URL; other providers go to settings'
 
   const other = renderFirstRun()
   flatten(other.render()).filter(n => n?.props?.['aria-checked'] !== undefined)[2].props.onClick()
-  flatten(other.render()).filter(n => n?.type === 'button').at(-1).props.onClick()
-  assert.equal(other.links.length, 0)
+  const chosen = flatten(other.render())
+  assert.match(chosen.filter(n => typeof n === 'string').join(''), /建议先连接 DeepSeek/)
+  const settingsButton = chosen.find(n => n?.type === 'button' && String(n.props?.children).includes('去设置选择其他服务商'))
+  assert.ok(settingsButton)
+  settingsButton.props.onClick()
   assert.equal(other.navigations[0], '/settings?section=ai')
   assert.equal(other.events.some(e => e.event === 'setup_action' && e.props.action === 'open_settings'), true)
+
+  const connect = renderFirstRun()
+  flatten(connect.render()).filter(n => n?.props?.['aria-checked'] !== undefined)[2].props.onClick()
+  flatten(connect.render()).filter(n => n?.type === 'button').at(-1).props.onClick()
+  assert.equal(connect.links.length, 0)
+  assert.equal(connect.navigations.length, 0)
+  assert.equal(connect.store.settings.connections[0].provider, 'deepseek')
+  assert.equal(connect.events.some(e => e.event === 'setup_action' && e.props.action === 'connect_recommended' && e.props.provider === 'deepseek'), true)
 })

@@ -24,7 +24,7 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     './providerUrl': load('providerUrl.ts', {}),
   }).default
   const options = providers.providerPickerOptions()
-  assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'infistar', 'apimart'])
+  assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'infistar', 'apimart', 'deepseek', 'dashscope'])
   for (const placement of ['home_setup', 'settings_model']) {
     for (const provider of ['api88', 'infistar', 'apimart']) {
       const preset = providers.PROVIDERS[provider]

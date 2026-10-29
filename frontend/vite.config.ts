@@ -68,6 +68,7 @@ export default defineConfig(({ mode, command }) => {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         '@provider-presets': fileURLToPath(new URL('../backend/presets/provider_presets.json', import.meta.url)),
+        '@provider-quality': fileURLToPath(new URL('../backend/presets/provider_quality.json', import.meta.url)),
         '@event-catalog': fileURLToPath(new URL('../backend/core/event_catalog.json', import.meta.url)),
         '@failure-messages': fileURLToPath(new URL('../backend/core/failure_messages.json', import.meta.url)),
       },

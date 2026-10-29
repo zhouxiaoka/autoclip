@@ -183,6 +183,7 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
     with zipfile.ZipFile(wheels[0]) as archive:
         members = archive.namelist()
     assert "backend/presets/provider_presets.json" in members
+    assert "backend/presets/provider_quality.json" in members
     assert not any(name.startswith("backend/tests/") for name in members), "wheel must exclude backend test packages"
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--no-index", "--no-deps", "--target", str(installed), str(wheels[0])],
@@ -191,6 +192,7 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
     )
     assert not (installed / "presets").exists()
     assert (installed / "backend" / "presets" / "provider_presets.json").is_file()
+    assert (installed / "backend" / "presets" / "provider_quality.json").is_file()
     env = {
         key: value
         for key, value in os.environ.items()

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from backend.core.provider_presets import get_catalog, resolve_provider_id
+from backend.core.provider_quality import public_fields
 
 
 @dataclass(frozen=True)
@@ -98,8 +99,9 @@ def preset_display_name(preset_key: Optional[str]) -> Optional[str]:
 
 
 def presets_as_dicts() -> list[dict]:
-    return [
-        {
+    rows = []
+    for p in LOCAL_PRESETS.values():
+        rows.append({
             "key": p.key,
             "display_name": p.display_name,
             "base_url": p.base_url,
@@ -107,6 +109,6 @@ def presets_as_dicts() -> list[dict]:
             "docs_url": p.docs_url,
             "hint": p.hint,
             "context_hint": p.context_hint,
-        }
-        for p in LOCAL_PRESETS.values()
-    ]
+            **public_fields(p.key),
+        })
+    return rows

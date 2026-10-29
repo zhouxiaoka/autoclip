@@ -1,9 +1,10 @@
 import { t } from '../../i18n'
+import { compareRecommended, pickerBucket, qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
 import { getCatalog, getProvider } from './providerPresets'
 
 export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
-type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string }
-type CloudPreset = { baseUrl: string; defaultModel: string }
+type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
+type CloudPreset = { baseUrl: string; defaultModel: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
 export type SponsorId = 'infistar' | 'api88' | 'apimart'
 type Sponsor = { id: SponsorId; registerUrl: string; guideUrl: string; offer: string; description: string }
 type ProviderGroup = 'sponsor' | 'cloud' | 'compatible' | 'local'
@@ -14,7 +15,17 @@ const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
   { key: 'local', label: () => t("本机运行") },
 ]
 
-type ProviderEntry = { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; group: ProviderGroup; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor; referralUrl?: string }
+type ProviderEntry = { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; group: ProviderGroup; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor; referralUrl?: string }
+
+function measuredFields(id: string): { success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string } {
+  const row = qualityFor(id)
+  if (!row) return {}
+  return {
+    success_tier: row.success_tier,
+    latency_tier: row.latency_tier,
+    ...(row.caveat_key ? { caveat_key: row.caveat_key } : {}),
+  }
+}
 
 const UI_KEYS: ProviderKey[] = [
   'dashscope', 'openai', 'compatible', 'api88', 'infistar', 'apimart',
@@ -42,7 +53,11 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
     group: groupFor(key),
     referralUrl: row.referral || '',
   }
-  if (row.openai_compat_remap) entry.cloud = { baseUrl: row.base_url, defaultModel: row.default_model }
+  const measured = measuredFields(key)
+  if (measured.success_tier) entry.success_tier = measured.success_tier
+  if (measured.latency_tier) entry.latency_tier = measured.latency_tier
+  if (measured.caveat_key) entry.caveat_key = measured.caveat_key
+  if (row.openai_compat_remap) entry.cloud = { baseUrl: row.base_url, defaultModel: row.default_model, ...measured }
   if (row.local_compat_remap) {
     entry.local = {
       baseUrl: row.base_url,
@@ -50,6 +65,7 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
       docsUrl: row.docs_url,
       app: row.local_app || row.short_name,
       get contextHint() { return t(row.context_hint) },
+      ...measured,
     }
   }
   if (row.sponsor && (key === 'api88' || key === 'infistar' || key === 'apimart')) {
@@ -71,6 +87,7 @@ export const PROVIDERS: Record<ProviderKey, ProviderEntry> = UI_KEYS.reduce((acc
       get short() { return t('自定义兼容接口') },
       get hint() { return t('适用于 OpenRouter、第三方网关或自建服务。') },
       group: 'compatible',
+      ...measuredFields('compatible'),
       apiKeyField: 'openai_api_key',
       get placeholder() { return t('sk-…（自建服务可留空）') },
       keyUrl: '',
@@ -81,9 +98,18 @@ export const PROVIDERS: Record<ProviderKey, ProviderEntry> = UI_KEYS.reduce((acc
   return acc
 }, {} as Record<ProviderKey, ProviderEntry>)
 
-/** Slim setup list: the existing 「推荐」 group (sponsors). Success-rate tiers arrive with F1. */
+function recommendedCompare(a: ProviderKey, b: ProviderKey): number {
+  return compareRecommended(
+    { sponsor: PROVIDERS[a].sponsor, success_tier: PROVIDERS[a].success_tier, success_rate: qualityFor(a)?.success_rate },
+    { sponsor: PROVIDERS[b].sponsor, success_tier: PROVIDERS[b].success_tier, success_rate: qualityFor(b)?.success_rate },
+  )
+}
+
+/** Sponsors stay first. High/mid official providers follow by success tier. Low tiers stay in 官方供应商. */
 export function recommendedSetupProviders(): ProviderKey[] {
-  return (Object.keys(PROVIDERS) as ProviderKey[]).filter(key => PROVIDERS[key].group === 'sponsor')
+  return (Object.keys(PROVIDERS) as ProviderKey[])
+    .filter(key => pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier) === 'sponsor')
+    .sort(recommendedCompare)
 }
 
 export const providerPickerOptions = () => PROVIDER_GROUPS
@@ -91,11 +117,12 @@ export const providerPickerOptions = () => PROVIDER_GROUPS
     label: group.label(),
     options: (Object.keys(PROVIDERS) as ProviderKey[])
       .filter((key) => {
-        if (PROVIDERS[key].group !== group.key) return false
+        if (pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier) !== group.key) return false
         if (key === 'compatible') return true
         const preset = getProvider(key)
         return !preset || !!preset.base_url.trim() || !!PROVIDERS[key].local
       })
+      .sort((a, b) => group.key === 'sponsor' ? recommendedCompare(a, b) : 0)
       .map((key) => ({
         value: key,
         label: PROVIDERS[key].short,
