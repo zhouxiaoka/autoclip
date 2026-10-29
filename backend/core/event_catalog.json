@@ -275,6 +275,19 @@
       "update",
       "unknown",
       "crash"
+    ],
+    "diagnose_suggestion": [
+      "switch_model",
+      "install_transcription",
+      "change_material",
+      "keep_window",
+      "none"
+    ],
+    "diagnose_action": [
+      "switch_model",
+      "install_transcription",
+      "change_material",
+      "example"
     ]
   },
   "attribution": {
@@ -625,6 +638,28 @@
       ],
       "enums": {
         "provider": "asr_provider"
+      }
+    },
+    "diagnose_opened": {
+      "status": "keep",
+      "domain": "studio",
+      "required": [
+        "error_code",
+        "suggestion"
+      ],
+      "enums": {
+        "error_code": "studio_error_code",
+        "suggestion": "diagnose_suggestion"
+      }
+    },
+    "diagnose_action": {
+      "status": "keep",
+      "domain": "studio",
+      "required": [
+        "action"
+      ],
+      "enums": {
+        "action": "diagnose_action"
       }
     },
     "llm_request_finished": {

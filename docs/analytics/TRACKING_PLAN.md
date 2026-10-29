@@ -292,6 +292,13 @@ multiIf(
 
 这两个字段只做诊断，**不进**成功率分母口径。页面提示用的 `secondary_failure_stages` 只存在分析记录里，不上报。
 
+同一项目连续两次失败且最后两次 `error_code` 相同（`workspace.generation.repeat_failure`）时，失败页主按钮打开诊断面板。建议 id 是闭集，不是文案。
+
+| 事件 | 必填 | 说明 |
+| --- | --- | --- |
+| `diagnose_opened` | `error_code`, `suggestion` | 打开诊断。`suggestion` ∈ `switch_model` / `install_transcription` / `change_material` / `keep_window` / `none` |
+| `diagnose_action` | `action` | 用户点了建议或示例。`action` ∈ `switch_model` / `install_transcription` / `change_material` / `example` |
+
 ### 5.6 导出 / 下载
 
 | 事件 | 必填 | 说明 |

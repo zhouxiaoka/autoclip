@@ -28,7 +28,89 @@ export const WHISPER_GATE_CODES = [
 
 export const INSTALL_TRANSCRIPTION_LABEL = '安装转写'
 
+/** Stable ids for diagnose_opened.suggestion / diagnose_action.action. Chinese labels stay in the UI. */
+export const DIAGNOSE_SUGGESTIONS = ['switch_model', 'install_transcription', 'change_material', 'keep_window', 'none'] as const
+export const DIAGNOSE_ACTIONS = ['switch_model', 'install_transcription', 'change_material', 'example'] as const
+export type DiagnoseSuggestionId = Exclude<(typeof DIAGNOSE_SUGGESTIONS)[number], 'none'>
+export type DiagnoseActionId = (typeof DIAGNOSE_ACTIONS)[number]
+
 export type FailureAction = { kind: 'retry' } | { kind: 'settings'; reason?: string; destination: string; label?: string }
+
+/** One next step after the same error_code fails again. Pure: code, upstream type, failure stage. */
+export type SuggestedAction = {
+  id: DiagnoseSuggestionId
+  label: string
+  kind: 'settings' | 'home' | 'note'
+  destination?: string
+}
+
+const MODEL_CODES = [
+  'timeout',
+  'connection',
+  'authentication',
+  'rate_limited',
+  'provider_error',
+  'invalid_response',
+  'output_truncated',
+  'refused',
+  'llm_auth_invalid',
+  'llm_not_configured',
+  'network',
+] as const
+
+const MODEL_UPSTREAM = [
+  'invalid_key',
+  'insufficient_quota',
+  'permission_denied',
+  'model_not_found',
+  'bad_endpoint',
+  'rate_limited',
+  'upstream_unavailable',
+  'timeout',
+  'connection',
+  'output_truncated',
+] as const
+
+const MATERIAL_CODES = [
+  'source_unreadable',
+  'source_too_short',
+  'source_no_audio',
+  'source_not_found',
+  'source_blocked',
+  'file_locked',
+  'transcription_empty',
+  'subtitle_setup',
+  'timeline_empty',
+  'missing_resource',
+] as const
+
+const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
+
+export function suggestedAction(code?: string | null, upstream?: string | null, stage?: string | null): SuggestedAction | null {
+  if (code === 'service_restarted') {
+    return { id: 'keep_window', label: '保持窗口打开，或缩短素材', kind: 'note' }
+  }
+  if (isIn(WHISPER_GATE_CODES, code)) {
+    return { id: 'install_transcription', label: INSTALL_TRANSCRIPTION_LABEL, kind: 'settings', destination: TRANSCRIPTION_SETTINGS_DESTINATION }
+  }
+  if (isIn(MATERIAL_CODES, code)) {
+    return { id: 'change_material', label: '换素材 / 加字幕', kind: 'home', destination: '/' }
+  }
+  if (isIn(MODEL_CODES, code) || isIn(MODEL_UPSTREAM, upstream) || isIn(MODEL_UPSTREAM, code)) {
+    return { id: 'switch_model', label: '换模型重试', kind: 'settings', destination: settingsDestination(stage) }
+  }
+  return null
+}
+
+export function diagnoseSuggestionId(action: SuggestedAction | null | undefined): (typeof DIAGNOSE_SUGGESTIONS)[number] {
+  return action?.id || 'none'
+}
+
+/** True when the last two failures of this project share one error_code. */
+export function diagnoseInsteadOfRetry(repeat?: { count?: number | null; same_code?: boolean | null } | null): boolean {
+  const count = Number(repeat?.count)
+  return repeat?.same_code === true && Number.isFinite(count) && count >= 2
+}
 
 export function isTranscriptionInstall(action: FailureAction): action is { kind: 'settings'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL; reason?: string } {
   return action.kind === 'settings' && action.label === INSTALL_TRANSCRIPTION_LABEL
@@ -44,8 +126,6 @@ export function settingsDestination(failureStage?: string | null): string {
   const section = STAGE_SECTION[failureStage || '']
   return section ? `/settings?section=${section}` : SETTINGS_DESTINATION
 }
-
-const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
 
 /** One classification. A Whisper install gate is not fixed by retrying, so those codes open
  * transcription settings before any upstream type. Otherwise the controlled upstream type is
@@ -65,6 +145,14 @@ export type PageFailureInfo = {
   phase?: string | null
   billable_calls_before_failure?: number | null
   secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
+}
+
+/** Diagnose panel input. The only reader of this page's cause fields for the suggestion. */
+export function pageSuggestedAction(info: PageFailureInfo): { action: SuggestedAction | null; errorCode?: string | null } {
+  return {
+    action: suggestedAction(info.error_code, info.upstream_error_type, info.failure_stage),
+    errorCode: info.error_code,
+  }
 }
 
 /** Fixed sentence. No amount, no invoice. Shown only after a billable call already happened. */

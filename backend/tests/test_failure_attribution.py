@@ -2197,6 +2197,7 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function analysisPageFailure(',
              'export function pageFailureText(',
              'export function presentedFailure(',
+             'export function pageSuggestedAction(',
              'export function readableFailure(',
              'export function failureStep(')
 _TS_READ = re.compile(r"""(\.\s*|\[\s*['"])(attribution_source|upstream_error_type|http_status|failure_stage|provider|config_source|base_url_host)\b(?!\s*[?]?:)""")

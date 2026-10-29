@@ -651,6 +651,28 @@ def test_news_and_cinema_renders_are_counted_unless_downgraded():
 def test_recommendation_fields_are_kept():
     s = generation_summary({'generation': {'recommended_template': 'editorial', 'accepted_recommendation': False}, 'output_variants': [], 'jobs': [], 'drafts': []})
     assert s['recommended_template'] == 'editorial' and s['accepted_recommendation'] is False
+
+
+def test_repeat_failure_streak_is_on_workspace_generation_not_the_frozen_summary():
+    """X1: two trailing failures with the same error_code expose repeat_failure on generation."""
+    from backend.services.studio.attempts import public_workspace, repeat_failure
+    rows = lambda *pairs: {'generation': {'status': 'failed', 'error_code': pairs[-1][1]}, 'attempts': [
+        {'sequence': index, 'state': state, 'error_code': code} for index, (state, code) in enumerate(pairs, 1)]}
+    assert repeat_failure(rows(('failed', 'timeout'))) == {'count': 1, 'same_code': False}
+    same = rows(('failed', 'timeout'), ('failed', 'timeout'))
+    assert repeat_failure(same) == {'count': 2, 'same_code': True}
+    assert repeat_failure(rows(('failed', 'timeout'), ('failed', 'provider_error'))) == {'count': 2, 'same_code': False}
+    assert repeat_failure(rows(('failed', 'provider_error'), ('failed', 'timeout'), ('failed', 'timeout'))) == {'count': 3, 'same_code': True}
+    assert repeat_failure(rows(('failed', 'timeout'), ('completed', None), ('failed', 'timeout'))) == {'count': 1, 'same_code': False}
+    assert repeat_failure(rows(('failed', 'timeout'), ('partial', 'timeout'), ('failed', 'timeout'))) == {'count': 1, 'same_code': False}
+    assert repeat_failure(rows(('failed', 'timeout'), ('abandoned', None), ('open', None), ('failed', 'timeout'))) == {'count': 2, 'same_code': True}
+    assert repeat_failure(rows(('failed', ''), ('failed', ''))) == {'count': 2, 'same_code': False}
+    assert repeat_failure({'attempts': []}) == {'count': 0, 'same_code': False}
+    view = public_workspace(same)
+    assert view['generation']['repeat_failure'] == {'count': 2, 'same_code': True}
+    assert 'repeat_failure' not in same['generation']
+    assert 'repeat_failure' not in generation_summary(same)
+    assert public_workspace({'drafts': []}).get('generation') is None
 """a second 「重试这条」 joining the open variant-retry attempt goes through the same parent check and
 idempotency registration as the first request."""
 

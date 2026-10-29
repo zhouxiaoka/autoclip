@@ -297,7 +297,8 @@ def test_terminal_worker_before_binding_and_concurrent_dispatch_stays_consistent
         job = next(j for j in state['jobs'] if j['job_id'] == variant['render_job_id'])
         assert variant['status'] == job['status'] == ('completed' if success else 'failed')
         assert state['generation']['status'] == ('completed' if success else 'partial')
-        assert json.loads(project.path.read_bytes())['generation'] == state['generation']
+        stored = json.loads(project.path.read_bytes())['generation']
+        assert state['generation'] == {**stored, 'repeat_failure': {'count': 0, 'same_code': False}}
         assert len(executor.futures) == 1
         assert_preserved(project, state)
     finally:
@@ -580,6 +581,14 @@ def test_binding_read_denial_preserves_the_real_accepted_child_worker(project, m
         renders.close()
 
 
+def assert_public_matches_stored(stored, public):
+    """The API adds the live repeat_failure streak; everything else is the stored workspace."""
+    viewed = {key: public[key] for key in stored}
+    assert public['generation']['repeat_failure'] == {'count': 0, 'same_code': False}
+    viewed['generation'] = {key: value for key, value in viewed['generation'].items() if key != 'repeat_failure'}
+    assert viewed == stored
+
+
 def test_old_receipt_and_late_binding_cannot_mutate_later_attempts(project, monkeypatch):
     def prepare(data):
         data['analysis'] = {'status': 'running', 'run_id': 'new-run', 'phase': 'production', 'instance': store.INSTANCE}
@@ -599,10 +608,10 @@ def test_old_receipt_and_late_binding_cannot_mutate_later_attempts(project, monk
     ]
     store._pending_links[path] = {old_variant: 'ready'}
     after = project.client.get('/studio/p1').json()
-    assert {key: after[key] for key in before} == before
+    assert_public_matches_stored(before, after)
     assert not store.has_pending_receipts('p1')
     assert not store.bind_render(after, old_variant, 'ready')
-    assert {key: after[key] for key in before} == before
+    assert_public_matches_stored(before, after)
 
 
 def test_screening_rejected_handoff_with_read_denial_terminates_only_accepted_parent(project, monkeypatch):
