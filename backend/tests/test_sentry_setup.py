@@ -302,6 +302,8 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         assert 'private-provider-body' not in str(clean) and 'synthetic-key' not in str(clean)
         assert clean['level'] == 'error'
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
+    assert sentry_setup.studio_error_code(OSError('private-local-file')) == 'unexpected'
+    # A permission error without a sharing code is still reported. WinError 32 is the lock.
     assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
 
 
