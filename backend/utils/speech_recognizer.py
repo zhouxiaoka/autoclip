@@ -2,12 +2,15 @@
 语音识别工具 - 支持多种语音识别服务
 支持本地Whisper、OpenAI API、Azure Speech Services等多种语音识别服务
 """
+import contextvars
 import logging
 import re
 import subprocess
 import json
 import os
 import asyncio
+import threading
+import time
 import traceback
 from typing import Optional, List, Dict, Any, Union, Tuple
 from pathlib import Path
@@ -67,7 +70,7 @@ class SpeechRecognitionConfig:
     method: SpeechRecognitionMethod = SpeechRecognitionMethod.WHISPER_LOCAL
     language: LanguageCode = LanguageCode.AUTO
     model: str = "base"  # Whisper模型大小
-    timeout: int = 0  # 超时时间（秒），0表示无限制
+    timeout: int = 0  # 秒。0：本地 Whisper 按音长封顶（local_whisper_budget_seconds）；其它识别路径不额外限制
     output_format: str = "srt"  # 输出格式
     enable_timestamps: bool = True  # 是否启用时间戳
     enable_punctuation: bool = True  # 是否启用标点符号
@@ -210,6 +213,215 @@ def describe_whisper_failure(exc: BaseException) -> str:
         "请到「设置 → 默认模型 → 语音转字幕」确认模型已下载，并检查视频有可播放的音轨；"
         "若仍失败，请通过反馈附上本次错误和脱敏日志。"
     )
+
+
+# Local Whisper wall clock (C2). pause_clip_job_budget freezes the production /
+# render provider cap for this CPU work; it does not by itself stop a transcribe
+# that never calls an LLM. This deadline does. Model download stays on the
+# paused provider clock only — it is a network step with its own error, and it
+# is not charged against this transcribe cap.
+# 3× audio duration, but at least a few minutes so a very short clip is not cut
+# at 3× a few seconds. A positive config.timeout is the caller's cap and is not
+# raised to 3× duration.
+WHISPER_DURATION_MULTIPLIER = 3
+WHISPER_MIN_BUDGET_SEC = 180.0
+# ffprobe and faster-whisper both failed to report a length. Finite on purpose.
+# transcribe() usually returns a duration before the lazy decode; that length
+# replaces this provisional cap (see _WhisperClock.adopt_duration).
+WHISPER_UNKNOWN_DURATION_BUDGET_SEC = 30 * 60
+# How often the waiter rechecks a decode stuck inside the next segment.
+WHISPER_POLL_SEC = 0.25
+
+WHISPER_TIMEOUT_MESSAGE = (
+    "本地语音转写已超过时间上限，已停止。"
+    "请缩短视频，或到「设置 → 默认模型 → 语音转字幕」改用更小的模型后重试。"
+)
+
+
+def _positive_duration(value) -> Optional[float]:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    # NaN fails `> 0`. Reject inf so a bad probe cannot disable the cap.
+    if not (number > 0) or number == float("inf"):
+        return None
+    return number
+
+
+def local_whisper_budget_seconds(timeout: float, duration: Optional[float]) -> float:
+    """Seconds one local Whisper transcribe may run.
+
+    A positive ``timeout`` is honored as given. ``timeout`` 0 uses
+    ``3 × duration``, and at least ``WHISPER_MIN_BUDGET_SEC``. Unknown
+    duration uses ``WHISPER_UNKNOWN_DURATION_BUDGET_SEC``.
+    """
+    if timeout and float(timeout) > 0:
+        return float(timeout)
+    known = _positive_duration(duration)
+    if known is None:
+        return float(WHISPER_UNKNOWN_DURATION_BUDGET_SEC)
+    return max(float(WHISPER_MIN_BUDGET_SEC), WHISPER_DURATION_MULTIPLIER * known)
+
+
+def probe_media_duration(video_path) -> Optional[float]:
+    """One ffprobe via media_precheck. None when the length cannot be read.
+
+    The probe has its own 30s timeout and is not part of the Whisper clock.
+    Callers inside ``pause_clip_job_budget`` still do not spend the provider cap.
+    """
+    try:
+        from backend.pipeline.media_precheck import probe
+        found = probe(video_path) or {}
+    except Exception:  # noqa: BLE001 - a missing probe must not leave the cap unlimited
+        logger.debug("whisper duration probe failed", exc_info=True)
+        return None
+    return _positive_duration(found.get("duration"))
+
+
+class _WhisperClock:
+    """Deadline for one local Whisper run, shared by the decode thread and the waiter."""
+
+    def __init__(self, seconds: float, *, unknown_provisional: bool = False) -> None:
+        self.seconds = float(seconds)
+        self.started = time.monotonic()
+        self.deadline = self.started + self.seconds
+        self.unknown_provisional = unknown_provisional
+        self.cancelled = False
+        self.announced = False
+        self._lock = threading.Lock()
+
+    def remaining(self) -> float:
+        if self.cancelled:
+            return 0.0
+        return self.deadline - time.monotonic()
+
+    def elapsed(self) -> float:
+        return max(0.0, time.monotonic() - self.started)
+
+    def check(self) -> None:
+        if self.cancelled or time.monotonic() > self.deadline:
+            _fail_whisper_clock(self)
+
+    def adopt_duration(self, timeout: float, duration: Optional[float]) -> None:
+        """Replace an unknown-length cap, or grow one that is shorter than 3× the real length."""
+        if self.cancelled or (timeout and float(timeout) > 0):
+            return
+        budget = local_whisper_budget_seconds(0, duration)
+        if self.unknown_provisional or budget > self.seconds:
+            self.seconds = budget
+            self.deadline = self.started + budget
+            self.unknown_provisional = False
+
+
+def _fail_whisper_clock(clock: _WhisperClock) -> None:
+    with clock._lock:
+        first = not clock.announced
+        clock.announced = True
+        clock.cancelled = True
+    if first:
+        logger.warning("本地 Whisper 转写超过时间上限（%.0f 秒），已停止", clock.seconds)
+    raise SpeechRecognitionError(WHISPER_TIMEOUT_MESSAGE)
+
+
+def _ensure_whisper_clock(state: dict, video_path, timeout: float) -> _WhisperClock:
+    clock = state.get("clock")
+    if clock is not None:
+        return clock
+    probed = probe_media_duration(video_path)
+    state["total"] = probed
+    explicit = bool(timeout and float(timeout) > 0)
+    clock = _WhisperClock(
+        local_whisper_budget_seconds(timeout, probed),
+        unknown_provisional=probed is None and not explicit,
+    )
+    state["clock"] = clock
+    return clock
+
+
+def _close_segments(seg_iter) -> None:
+    closer = getattr(seg_iter, "close", None)
+    if not callable(closer):
+        return
+    try:
+        closer()
+    except Exception:  # noqa: BLE001 - closing the decoder must not hide the real error
+        logger.debug("whisper segment iterator close failed", exc_info=True)
+
+
+def _emit_whisper_progress(clock: _WhisperClock, processed, total, *, done: bool = False) -> None:
+    """Heartbeat for analysis.percent.
+
+    When the audio length is known, the fraction is processed / length (the
+    same segment ``report`` as before). When it is not, move across this
+    finite cap so the bar does not sit still for the whole transcribe.
+    """
+    from backend.utils.transcription_progress import report
+    audio = _positive_duration(total)
+    if audio is not None:
+        report(audio if done else processed, audio)
+        return
+    span = clock.seconds
+    if span > 0:
+        report(span if done else min(clock.elapsed(), span), span)
+
+
+def _pulse_whisper_progress(clock: _WhisperClock, state: dict) -> None:
+    """While the next segment is blocked and length is unknown, keep percent moving."""
+    if clock.cancelled or not state.get("settled"):
+        return
+    if _positive_duration(state.get("total")) is not None:
+        return
+    _emit_whisper_progress(clock, clock.elapsed(), None)
+
+
+def _await_whisper(clock: _WhisperClock, fn, *, pulse=None):
+    """Run ``fn`` until it finishes or ``clock`` runs out.
+
+    The segment loop checks the clock after every segment. This wait is what
+    stops a decode stuck inside ``next()`` between segments: the job fails as
+    timeout even if that call never returns. The daemon thread may still be
+    inside faster-whisper; it will not start another segment once cancelled.
+    """
+    holder: dict = {}
+    lock = threading.Lock()
+    ctx = contextvars.copy_context()
+
+    def run() -> None:
+        try:
+            value = ctx.run(fn)
+        except Exception as exc:  # noqa: BLE001 - re-raised on the caller thread
+            with lock:
+                holder["error"] = exc
+        else:
+            with lock:
+                holder["value"] = value
+
+    thread = threading.Thread(target=run, name="autoclip-whisper", daemon=True)
+    thread.start()
+    try:
+        while thread.is_alive():
+            left = clock.remaining()
+            if left <= 0:
+                break
+            thread.join(min(WHISPER_POLL_SEC, left))
+            if thread.is_alive() and pulse is not None:
+                pulse()
+    except BaseException:
+        clock.cancelled = True
+        raise
+    if thread.is_alive():
+        clock.cancelled = True
+        thread.join(WHISPER_POLL_SEC)
+    with lock:
+        error = holder.get("error")
+        done = "value" in holder
+        value = holder.get("value")
+    if error is not None:
+        raise error
+    if done:
+        return value
+    _fail_whisper_clock(clock)
 
 
 class SpeechRecognizer:
@@ -483,6 +695,9 @@ class SpeechRecognizer:
                 # Never hand a bare model name to faster-whisper: its own download ignores the
                 # mirror fallback and shows no status (RC156 Win QA #6). Download via the manager.
                 try:
+                    # Download is outside the Whisper transcribe clock (C2): a
+                    # network hang has its own error. It stays inside this pause
+                    # so it still does not spend the provider/clip-job budget.
                     from backend.core.job_budget import pause_clip_job_budget
                     with pause_clip_job_budget():
                         cached_model = manager.ensure_downloaded(config.model)
@@ -509,43 +724,76 @@ class SpeechRecognizer:
                 )
 
             audio_input = str(video_path)
+            # One clock for VAD retry and the CPU retry below. Download and
+            # model load stay outside it.
+            budget_state: dict = {"clock": None, "total": None, "settled": False}
 
             def transcribe(model, *, vad_filter: bool):
                 nonlocal audio_input
-                try:
-                    seg_iter, _info = model.transcribe(
-                        audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
-                    )
-                except TypeError as exc:
-                    if 'metadata_errors' not in str(exc) or not isinstance(audio_input, str):
-                        raise
-                    # Existing installations may already contain PyAV 19. Decode
-                    # with the bundled ffmpeg instead; don't patch global av.open.
-                    import numpy as np
-                    decoded = subprocess.run(
-                        [get_ffmpeg_path(), '-nostdin', '-v', 'error', '-i', str(video_path),
-                         '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', '-'],
-                        capture_output=True, timeout=config.timeout or 300,
-                    )
-                    if decoded.returncode or not decoded.stdout:
-                        raise SpeechRecognitionError(
-                            "Whisper 无法解码视频音轨。请确认视频有可播放的人声，或导入 SRT 字幕。"
-                        ) from exc
-                    audio_input = np.frombuffer(decoded.stdout, np.int16).astype(np.float32) / 32768.0
-                    seg_iter, _info = model.transcribe(
-                        audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
-                    )
-                # faster-whisper decodes lazily: each segment is real progress through the audio (RC156 #14).
-                from backend.utils.transcription_progress import report
-                total = getattr(_info, "duration", None)
-                collected = []
-                for s in seg_iter:
-                    collected.append({"start": s.start, "end": s.end, "text": s.text,
-                                      "words": [{"text": w.word, "start": w.start, "end": w.end}
-                                                for w in (getattr(s, "words", None) or [])]})
-                    report(s.end, total)
-                report(total, total)
-                return (collected, _info)
+                clock = _ensure_whisper_clock(budget_state, video_path, config.timeout)
+
+                def collect():
+                    nonlocal audio_input
+                    clock.check()
+                    seg_iter = None
+                    try:
+                        try:
+                            seg_iter, info = model.transcribe(
+                                audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
+                            )
+                        except TypeError as exc:
+                            if 'metadata_errors' not in str(exc) or not isinstance(audio_input, str):
+                                raise
+                            # Existing installations may already contain PyAV 19. Decode
+                            # with the bundled ffmpeg instead; don't patch global av.open.
+                            # The decode shares this Whisper cap (a timeout of 0 used to
+                            # fall through to 300s and then run with no further limit).
+                            import numpy as np
+                            left = clock.remaining()
+                            if left <= 0:
+                                clock.check()
+                            try:
+                                decoded = subprocess.run(
+                                    [get_ffmpeg_path(), '-nostdin', '-v', 'error', '-i', str(video_path),
+                                     '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', '-'],
+                                    capture_output=True, timeout=left, check=False,
+                                )
+                            except subprocess.TimeoutExpired:
+                                _fail_whisper_clock(clock)
+                            if decoded.returncode or not decoded.stdout:
+                                raise SpeechRecognitionError(
+                                    "Whisper 无法解码视频音轨。请确认视频有可播放的人声，或导入 SRT 字幕。"
+                                ) from exc
+                            audio_input = np.frombuffer(decoded.stdout, np.int16).astype(np.float32) / 32768.0
+                            clock.check()
+                            seg_iter, info = model.transcribe(
+                                audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
+                            )
+                        heard = _positive_duration(getattr(info, "duration", None))
+                        if heard is not None:
+                            budget_state["total"] = heard
+                            clock.adopt_duration(config.timeout, heard)
+                        # Settled before the first next() so a blocked decode still
+                        # has a heartbeat when the length never arrived.
+                        budget_state["settled"] = True
+                        total = budget_state.get("total")
+                        collected = []
+                        # faster-whisper decodes lazily: each segment is real progress (RC156 #14).
+                        for segment in seg_iter:
+                            clock.check()
+                            collected.append({"start": segment.start, "end": segment.end, "text": segment.text,
+                                              "words": [{"text": word.word, "start": word.start, "end": word.end}
+                                                        for word in (getattr(segment, "words", None) or [])]})
+                            _emit_whisper_progress(clock, segment.end, total)
+                        clock.check()
+                        _emit_whisper_progress(clock, total, total, done=True)
+                        return collected, info
+                    finally:
+                        _close_segments(seg_iter)
+
+                return _await_whisper(
+                    clock, collect, pulse=lambda: _pulse_whisper_progress(clock, budget_state),
+                )
 
             def transcribe_with_vad_fallback(model):
                 try:
@@ -609,6 +857,9 @@ class SpeechRecognizer:
                 f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 默认模型 → 语音转字幕」重新安装 Whisper。"
             )
         except Exception as e:  # noqa: BLE001
+            from backend.core.project_cancellation import ProjectDeleted
+            if isinstance(e, ProjectDeleted):
+                raise
             # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。
             # 这里已经变成给客户端的 SpeechRecognitionError，进程继续跑。
             logger.warning("本地 faster-whisper 生成字幕失败: %s: %s", type(e).__name__, e)
@@ -847,7 +1098,7 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         enable_timestamps: 是否保留时间戳（导入任务会传入）
         enable_punctuation: 是否保留标点（导入任务会传入）
         enable_speaker_diarization: 是否做说话人分离（导入任务会传入）
-        timeout: 超时秒数，0 表示不额外限制
+        timeout: 超时秒数。0 表示本地 Whisper 按音长封顶（约 3 倍，过短则至少数分钟）；其它方式不额外限制
         api_key: 云端转写密钥（导入任务会传入）
         
     Returns:

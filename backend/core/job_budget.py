@@ -6,7 +6,8 @@ cap the Studio screen stays on 「正在制作可发布成片」. One production
 job and one render tracked job each get this budget, so boundaries, burned
 captions, post copy, packaging and render model calls share it with the content
 pipeline. Local Whisper is paused: it is CPU work, not a slow provider, and a
-long transcribe must not consume the cap.
+long transcribe must not consume the cap. Whisper's own wall-clock cap
+lives in ``speech_recognizer`` (C2), not in a second ContextVar here.
 """
 from __future__ import annotations
 
@@ -106,7 +107,14 @@ def bound_clip_job(seconds: Optional[float] = None) -> Iterator[None]:
 
 @contextmanager
 def pause_clip_job_budget() -> Iterator[None]:
-    """Freeze the clock. Local Whisper must not spend the provider budget."""
+    """Freeze the provider/clip-job clock.
+
+    Time inside this block does not consume the production or render budget.
+    Local Whisper's own wall-clock cap lives in ``speech_recognizer`` (C2):
+    about 3× the audio duration, or ``config.timeout`` when that is set.
+    Model download uses this pause (so it still does not spend the provider
+    budget) but is not on that Whisper transcribe clock.
+    """
     budget = _current.get()
     if budget is None:
         yield
