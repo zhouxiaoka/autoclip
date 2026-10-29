@@ -1,9 +1,16 @@
-import { ReactNode, useState } from 'react'
+import { ComponentType, ReactNode, useState } from 'react'
 import { t } from '../../i18n'
 import { Btn } from '../../ui'
 import { diagnoseInsteadOfRetry, pageFailureAction, pageFailureText, presentedFailure, PageFailureInfo } from './failureAction'
-import DiagnosePanel from './DiagnosePanel'
 import { WEAK_LOCAL_TIMELINE_REASON, weakLocalTimelineFailure } from '../../utils/timelineFailure'
+
+type DiagnosePanelProps = {
+  open: boolean
+  onClose: () => void
+  info: FailureInfo
+  reason?: string | null
+  onSettings: (destination: string) => void
+}
 
 export type FailureInfo = PageFailureInfo & { error?: string | null }
 export type RepeatFailure = { count?: number | null; same_code?: boolean | null }
@@ -51,14 +58,24 @@ export default function FailureActions({ info, canRetry, returnedFromSettings, b
 }) {
   const plan = failurePlan(info, canRetry, returnedFromSettings, repeatFailure)
   const [diagnose, setDiagnose] = useState(false)
+  // The panel imports the readiness client and the sample-project API. Load it on click so the
+  // failure page does not pull axios while it is only showing 「重试」 or 「去设置」.
+  const [Panel, setPanel] = useState<ComponentType<DiagnosePanelProps> | null>(null)
+  const showDiagnose = () => {
+    if (Panel) { setDiagnose(true); return }
+    void import('./DiagnosePanel').then(mod => {
+      setPanel(() => mod.default)
+      setDiagnose(true)
+    })
+  }
   return <>
     <FailureCopyText step={plan.step} reason={plan.message} billing={plan.billing} />
     <div className="studio-actions">
       {plan.buttons.map(b => <Btn key={b.key} variant={b.cta ? 'cta' : undefined} disabled={busy} loading={b.key !== 'settings' && b.key !== 'diagnose' && retrying}
-        onClick={b.key === 'settings' ? () => onSettings(plan.destination as string) : b.key === 'diagnose' ? () => setDiagnose(true) : onRetry}>{t(b.label)}</Btn>)}
+        onClick={b.key === 'settings' ? () => onSettings(plan.destination as string) : b.key === 'diagnose' ? showDiagnose : onRetry}>{t(b.label)}</Btn>)}
       {children}
     </div>
-    <DiagnosePanel open={diagnose} onClose={() => setDiagnose(false)} info={info} reason={plan.message} onSettings={onSettings} />
+    {diagnose && Panel && <Panel open onClose={() => setDiagnose(false)} info={info} reason={plan.message} onSettings={onSettings} />}
   </>
 }
 
