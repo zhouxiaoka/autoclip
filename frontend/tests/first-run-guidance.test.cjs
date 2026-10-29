@@ -24,6 +24,23 @@ test('first-run defaults to 88API and maps choices to later / one-click / settin
   assert.equal(oneClick.values.name, '88API')
 })
 
+test('import card placement and setup steps stay on the experience whitelist', () => {
+  const props = experience.safeExperience({
+    placement: 'import_card',
+    step: 'connect',
+    trigger: 'initial',
+    provider: 'api88',
+    presentation_id: 't-aaaaaaaaaaaa',
+    api_key: 'sk-secret',
+  })
+  assert.equal(props.placement, 'import_card')
+  assert.equal(props.step, 'connect')
+  assert.equal(props.provider, 'api88')
+  assert.equal(props.api_key, undefined)
+  assert.equal(experience.safeExperience({ placement: 'import_card', step: 'trial' }).step, undefined)
+  assert.equal(experience.safeExperience({ placement: 'overlay' }).placement, undefined)
+})
+
 test('setup_action one_click keeps provider and drops keys, URLs and user text', () => {
   const props = experience.safeExperience({
     placement: 'home_setup',

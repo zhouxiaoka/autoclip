@@ -1490,6 +1490,7 @@ function load(file, mocks, clock) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX }, fileName: abs })
   const exports = {}
   const req = id => {
+    if (id === './ImportSetupCard') return { default: () => null }
     if (id in mocks) return mocks[id]
     if (id === 'react' || id === 'react/jsx-runtime') return require(id)
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks, clock)
@@ -1965,6 +1966,7 @@ function load(file, mocks) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX }, fileName: abs })
   const exports = {}
   const req = id => {
+    if (id === './ImportSetupCard') return { default: () => null }
     if (id in mocks) return mocks[id]
     if (id === 'react' || id === 'react/jsx-runtime') return require(id)
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks)

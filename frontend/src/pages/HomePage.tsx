@@ -204,7 +204,7 @@ const HomePage: React.FC = () => {
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
-          <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} />
+          <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} />
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
           {/* 项目管理区域 */}

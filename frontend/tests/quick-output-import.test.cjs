@@ -39,6 +39,7 @@ test('quick import submits platform targets, branding and auto-starts to results
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
   './importReadiness':loadReadiness(),'./browserCookieRecovery':require('./load-ts.cjs').loadTs(path.join(__dirname,'../src/features/studio/browserCookieRecovery.ts')),'./settingsReturn':{SETTINGS_SAVED_EVENT:'autoclip:model-settings-saved'},'./TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},'./studio.css':{},'./quick-output.css':{},
   '../settings/OutputCaptionsSetting':{OutputCaptionsSwitch:()=>null},
+  './ImportSetupCard':{default:()=>null},
  })
  const tree=nodes(component({onImported:async()=>{}}))
  await tree.find(node=>node.type==='button'&&node.props?.variant==='cta').props.onClick()
@@ -383,6 +384,7 @@ async function mountImport(window, React, h, calls, options = {}) {
     })
     const exports = {}
     const req = (id) => {
+      if (id === './ImportSetupCard') return { default: () => null }
       if (id in mocks) return mocks[id]
       if (id === 'react' || id === 'react/jsx-runtime') return require(id)
       if (id.startsWith('.')) {
