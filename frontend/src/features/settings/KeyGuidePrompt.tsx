@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Select, Input } from 'antd'
 import { t } from '../../i18n'
-import { Btn, Dialog } from '../../ui'
+import { Btn, Dialog, Row } from '../../ui'
 import { modelSettingsApi } from './modelSettingsApi'
 import { getCatalog } from './providerPresets'
 import { isLiveConnectable } from './providerCatalogView'
@@ -143,30 +143,27 @@ export default function KeyGuidePrompt() {
         </Btn>
       </>}
     >
-      {offer && <div className="ac-rows">
+      {offer && <div className="ac-rows ac-key-guide-fields">
         <p className="ac-note">{t('settings.key_guide.masked', { tail: keyTail(offer.key) })}</p>
         {offer.conflict && <p className="ac-note" role="status">{t('settings.key_guide.conflict')}</p>}
-        <label className="ac-row">
-          <span className="ac-row-label"><b>{t('settings.key_guide.pick')}</b></span>
+        <Row stack wide label={t('settings.key_guide.pick')}>
           <Select
             aria-label={t('settings.key_guide.pick')}
             value={selected}
             placeholder={t('settings.key_guide.pick_required')}
-            style={{ width: '100%' }}
             options={choices}
             onChange={value => setProviderId(value)}
           />
-        </label>
+        </Row>
         {(custom || !preset?.base_url) && (
-          <label className="ac-row">
-            <span className="ac-row-label"><b>{t('settings.key_guide.endpoint')}</b></span>
+          <Row stack wide label={t('settings.key_guide.endpoint')}>
             <Input
               aria-label={t('settings.key_guide.endpoint')}
               value={baseUrl}
               placeholder="https://example.com/v1"
               onChange={event => setBaseUrl(event.target.value)}
             />
-          </label>
+          </Row>
         )}
         {replace && <p className="ac-note" role="status">{t('settings.key_guide.keep')}</p>}
         {!providerId && <p className="ac-note">{t('settings.key_guide.pick_required')}</p>}

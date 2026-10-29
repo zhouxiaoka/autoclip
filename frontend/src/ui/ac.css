@@ -599,6 +599,13 @@ details.ac-provider-model-block[open] > summary.ac-provider-model-group::before 
   box-shadow: 0 8px 28px rgba(26, 26, 25, .08);
 }
 .ac-key-guide p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ac-ink); }
+/* 520px 对话框：标签在控件上方，避免整行 width:100% 的字段把标签挤成一字一行。 */
+.ac-key-guide-fields .ac-row-label { flex: 0 0 auto; max-width: 100%; }
+.ac-key-guide-fields .ac-row-control,
+.ac-key-guide-fields .ac-row-control--wide { min-width: 0; max-width: 100%; align-items: stretch; }
+.ac-key-guide-fields .ac-row-control > .ant-select,
+.ac-key-guide-fields .ac-row-control > .ant-input,
+.ac-key-guide-fields .ac-row-control > .ant-input-affix-wrapper { width: 100%; min-width: 0; max-width: 100%; }
 .ac-provider-model-off { margin-top: 8px; }
 .ac-provider-model-off > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border: 1px dashed var(--ac-line); border-radius: 999px; font-size: 12px; color: var(--ac-sub); user-select: none; }
 .ac-provider-model-off > summary::-webkit-details-marker { display: none; }
