@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from backend.core.provider_presets import get_catalog, get_provider, resolve_provider_id
+from backend.core.provider_quality import quality_for
 
 
 @dataclass(frozen=True)
@@ -23,11 +24,18 @@ class CloudPreset:
     api_key_setting: str
     docs_url: str
     hint: str
+    success_tier: Optional[str] = None
+    latency_tier: Optional[str] = None
+    caveat_key: Optional[str] = None
 
 
 def _cloud_presets() -> Dict[str, CloudPreset]:
-    return {
-        item.id: CloudPreset(
+    presets: Dict[str, CloudPreset] = {}
+    for item in get_catalog().providers.values():
+        if not item.openai_compat_remap:
+            continue
+        measured = quality_for(item.id)
+        presets[item.id] = CloudPreset(
             key=item.id,
             display_name=item.display_name,
             base_url=item.base_url,
@@ -35,10 +43,11 @@ def _cloud_presets() -> Dict[str, CloudPreset]:
             api_key_setting=item.api_key_setting,
             docs_url=item.docs_url,
             hint=item.cloud_hint,
+            success_tier=measured.success_tier if measured else None,
+            latency_tier=measured.latency_tier if measured else None,
+            caveat_key=measured.caveat_key if measured else None,
         )
-        for item in get_catalog().providers.values()
-        if item.openai_compat_remap
-    }
+    return presets
 
 
 CLOUD_PRESETS: Dict[str, CloudPreset] = _cloud_presets()

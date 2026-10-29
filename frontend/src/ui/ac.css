@@ -486,6 +486,7 @@
 }
 
 .ac-provider-card-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.ac-provider-card .ac-note { margin: 0; }
 .ac-provider-card-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--ac-ink); }
 .ac-provider-caps { display: flex; flex-wrap: wrap; gap: 6px; }
 .ac-provider-cap { font-size: 11px; letter-spacing: .04em; color: var(--ac-muted); }

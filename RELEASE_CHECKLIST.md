@@ -36,6 +36,7 @@
 - [ ] `python scripts/bump_version.py --check` 版本号一致
 - [ ] 本地统一检查：`python scripts/quality_gate.py --report /absolute/local/evidence/quality.json`；记录提交和未提交改动
 - [ ] 通读 `CHANGELOG.md [未发布]`：面向用户、能对应到 issue / PR、没有内部路径 / 密钥
+- [ ] 服务商实测档位：有 PostHog 凭证时跑 `python scripts/provider_quality_report.py`，用近 14 天设备级成功率与成功耗时 p50 核对 `backend/presets/provider_quality.json`；没有凭证时脚本只打印 HogQL，不阻塞发版
 
 ### 3.2 标签前：内部构建与双平台产品验收
 - [ ] 用 `bump_version.py X.Y.Z --commit` 准备未公开候选版本，但**不打 tag**；后续修复继续使用这个未公开编号

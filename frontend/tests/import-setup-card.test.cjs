@@ -75,8 +75,9 @@ test('the import card walks provider, key and connect, and the example path need
     assert.equal(host.textContent.includes('刚才的链接或文件会留着'), true)
     assert.equal(events.some(item => item.event === 'setup_presented' && item.props.placement === 'import_card' && item.props.trigger === 'initial'), true)
     const radios = [...host.querySelectorAll('[role="radio"]')]
-    assert.deepEqual(radios.map(node => node.getAttribute('aria-checked')), ['true', 'false', 'false'])
+    assert.deepEqual(radios.map(node => node.getAttribute('aria-checked')), ['true', 'false', 'false', 'false', 'false'])
     assert.equal(radios[0].textContent.includes('88API'), true)
+    assert.equal(radios[3].textContent.includes('DeepSeek'), true)
     await act(async () => { button(host, '先用示例视频看看效果').click() })
     assert.deepEqual(examples, ['open'])
     await act(async () => { button(host, '下一步').click() })

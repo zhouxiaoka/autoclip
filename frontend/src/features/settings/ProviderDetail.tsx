@@ -12,6 +12,7 @@ import {
   type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
+import ProviderQualityMarks from './providerQualityMarks'
 import { enabledModelIds } from './modelVisibility'
 
 const CAP_KEY: Record<string, string> = {
@@ -133,6 +134,7 @@ export default function ProviderDetail({
         </h3>
         {/* Sponsors: no long hint / marketing. Others keep one short line. */}
         {!isSponsor && <p className="ac-note">{t(preset.hint)}</p>}
+        <ProviderQualityMarks preset={preset} />
         {!isSponsor && (
           <div className="ac-provider-caps">
             {preset.capabilities.map(capability => CAP_KEY[capability] && (

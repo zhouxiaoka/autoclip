@@ -8,6 +8,7 @@ import {
   isCatalogConfigured, isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections, type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
+import ProviderQualityMarks from './providerQualityMarks'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
   all: 'settings.providers.filter.all',
@@ -112,6 +113,7 @@ function ProviderCard({
             ))}
           </span>
         )}
+        <ProviderQualityMarks preset={preset} />
       </span>
       <span className="ac-provider-card-action">
         {connected

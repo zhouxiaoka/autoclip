@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "window_days": 14,
+  "grain": "device",
+  "notes": "Static snapshot of device-level product success and the p50 duration of successful runs over the last 14 days. The app reads this file; it does not query PostHog at runtime. Refresh with scripts/provider_quality_report.py. Rates are fractions (0.91 = 91%). Tiers are derived from thresholds. Providers absent from this object have no tier and the UI hides the tags. Do not add a row without a measurement.",
+  "thresholds": {
+    "success_high_min": 0.8,
+    "success_mid_min": 0.6,
+    "latency_under_5m_exclusive_max_minutes": 5,
+    "latency_mid_inclusive_max_minutes": 20
+  },
+  "providers": {
+    "deepseek": {
+      "success_rate": 0.91,
+      "success_p50_minutes": 1.8
+    },
+    "dashscope": {
+      "success_rate": 0.81,
+      "success_p50_minutes": 3.9
+    },
+    "compatible": {
+      "success_rate": 0.8,
+      "success_p50_minutes": 5.2
+    },
+    "api88": {
+      "success_rate": 0.71,
+      "success_p50_minutes": 16.5
+    },
+    "ollama": {
+      "success_rate": 0.66,
+      "success_p50_minutes": 15.6
+    },
+    "lmstudio": {
+      "success_rate": 0.78,
+      "success_p50_minutes": 16
+    },
+    "gemini": {
+      "success_rate": 0.44,
+      "success_p50_minutes": 44,
+      "caveat_key": "settings.providers.caveat.gemini_free_rpm"
+    },
+    "openai": {
+      "success_rate": 0.36,
+      "success_p50_minutes": 12,
+      "caveat_key": "settings.providers.caveat.openai_network"
+    }
+  }
+}

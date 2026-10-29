@@ -51,6 +51,9 @@ class ProviderPreset:
     local_app: str
     sponsor: Optional[Dict[str, str]]
     referral: str
+    success_tier: Optional[str] = None
+    latency_tier: Optional[str] = None
+    caveat_key: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -158,6 +161,8 @@ def _parse_provider(key: str, raw: Any) -> Optional[ProviderPreset]:
     default_model = raw.get("default_model")
     if not isinstance(default_model, str):
         default_model = candidates["analysis"][0] if candidates["analysis"] else ""
+    from backend.core.provider_quality import quality_for
+    measured = quality_for(key)
     return ProviderPreset(
         id=key,
         kind=kind,
@@ -188,6 +193,9 @@ def _parse_provider(key: str, raw: Any) -> Optional[ProviderPreset]:
         local_app=str(raw.get("local_app") or "").strip(),
         sponsor=_sponsor(raw.get("sponsor")),
         referral=str(raw.get("referral") or "").strip() if isinstance(raw.get("referral"), str) else "",
+        success_tier=measured.success_tier if measured else None,
+        latency_tier=measured.latency_tier if measured else None,
+        caveat_key=measured.caveat_key if measured else None,
     )
 
 
