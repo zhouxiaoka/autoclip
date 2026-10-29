@@ -26,5 +26,8 @@ export default function EndpointProviderSetup({ connection, onEdit, m }: {
     {connection.validation_status === 'failed' && <p className="ac-note ac-note--error" role="alert">
       {validationCopy(connection.validation_error_type)}
     </p>}
+    {m.testWarning?.id === connection.id && connection.validation_status !== 'failed' && (
+      <p className="ac-note" role="status">{m.testWarning.text}</p>
+    )}
   </div>
 }

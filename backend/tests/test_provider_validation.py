@@ -110,24 +110,27 @@ def test_gemini_validation_requests_use_the_shared_chat_root(monkeypatch, path, 
     assert root + '/v1beta/chat/completions' not in calls
 
 
-def test_missing_v1_is_normalized_then_models_404_is_bad_endpoint(monkeypatch):
+def test_missing_v1_is_normalized_and_models_404_still_probes_chat(monkeypatch):
+    """A custom gateway that omits /models must not fail the test for that alone."""
     calls = []
 
     def handler(method, url, headers, body):
-        calls.append(url)
+        calls.append((method, url))
         if method == 'GET':
             assert url == 'https://gw.example/v1/models'
             return _FakeResponse(404, {'error': {'message': 'not found'}})
-        raise AssertionError('must not probe after /models 404')
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
 
     _patch_httpx(monkeypatch, handler)
     result = validate_connection(_connection(base_url='https://gw.example'), 'gpt-4o-mini')
-    assert result.ok is False
-    assert result.error_type == 'bad_endpoint'
-    assert result.hint_key == HINT_KEYS[UpstreamErrorType.BAD_ENDPOINT]
+    assert result.ok is True
+    assert result.warning == ''
     assert result.normalized_base_url == 'https://gw.example/v1'
     assert result.base_url_host == 'gw.example'
-    assert calls == ['https://gw.example/v1/models']
+    assert calls == [
+        ('GET', 'https://gw.example/v1/models'),
+        ('POST', 'https://gw.example/v1/chat/completions'),
+    ]
 
 
 def test_console_host_is_rejected_without_a_network_call(monkeypatch):
@@ -750,3 +753,197 @@ def test_dashscope_probe_sends_enable_thinking_false(monkeypatch):
     assert posted[0]['enable_thinking'] is False
     assert 'extra_body' not in posted[0]
     assert posted[0]['stream'] is False
+
+
+def test_unlisted_model_on_a_successful_list_warns_and_stays_ok(monkeypatch):
+    from backend.services.provider_validation import MODEL_NOT_LISTED_WARNING
+
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'llama3.2'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='o1', name='Ollama', provider='ollama', base_url='http://127.0.0.1:11434/v1'),
+        'not-pulled',
+    )
+    assert result.ok is True
+    assert result.result == 'ok'
+    assert result.error_code == ''
+    assert result.warning == MODEL_NOT_LISTED_WARNING
+    payload = result.as_api()
+    assert payload['ok'] is True
+    assert payload['warning'] == MODEL_NOT_LISTED_WARNING
+    assert payload['error_code'] == ''
+    assert 'not-pulled' not in payload['warning']
+
+
+def test_listed_local_model_has_no_warning(monkeypatch):
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'qwen2.5:7b'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='o1', name='Ollama', provider='ollama', base_url='http://127.0.0.1:11434/v1'),
+        'qwen2.5:7b',
+    )
+    assert result.ok is True
+    assert result.warning == ''
+    assert result.as_api()['warning'] == ''
+
+
+def test_models_404_and_chat_404_fails_from_the_probe(monkeypatch):
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append(method)
+        if method == 'GET':
+            return _FakeResponse(404, {'error': {'message': 'not found'}})
+        return _FakeResponse(404, {'error': {'message': 'no such path'}})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gpt-4o-mini')
+    assert calls == ['GET', 'POST']
+    assert result.ok is False
+    assert result.error_type == 'bad_endpoint'
+    assert result.warning == ''
+
+
+def test_models_405_does_not_fail_when_chat_probe_succeeds(monkeypatch):
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(405, {'error': {'message': 'method not allowed'}})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='l1', name='LM Studio', provider='lmstudio', base_url='http://localhost:1234/v1'),
+        'loaded-model',
+    )
+    assert result.ok is True
+    assert result.warning == ''
+
+
+def test_models_401_still_fails_the_connection(monkeypatch):
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append(method)
+        return _FakeResponse(401, {'error': {'message': 'Incorrect API key provided'}})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gpt-4o-mini')
+    assert result.ok is False
+    assert result.error_type == 'invalid_key'
+    assert calls == ['GET']
+
+
+def test_official_cloud_models_404_still_fails_before_the_chat_probe(monkeypatch):
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append(method)
+        if method == 'GET':
+            return _FakeResponse(404, {'error': {'message': 'not found'}})
+        raise AssertionError('official cloud must not probe after /models 404')
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='c', name='OpenAI', provider='openai', api_key='sk-test-key'),
+        'gpt-4o-mini',
+    )
+    assert result.ok is False
+    assert result.error_type == 'bad_endpoint'
+    assert result.warning == ''
+    assert calls == ['GET']
+
+
+def test_official_cloud_happy_path_has_no_warning(monkeypatch):
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='c', name='OpenAI', provider='openai', api_key='sk-test-key'),
+        'gpt-4o-mini',
+    )
+    assert result.ok is True
+    assert result.warning == ''
+    assert result.model_ids == ['gpt-4o-mini']
+
+
+def test_official_cloud_unlisted_model_does_not_use_the_local_warning(monkeypatch):
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='c', name='OpenAI', provider='openai', api_key='sk-test-key'),
+        'gpt-4o-mini',
+    )
+    assert result.ok is True
+    assert result.warning == ''
+
+
+def test_cover_still_rejects_a_model_missing_from_a_successful_list(monkeypatch):
+    """D2's warning is for chat connection tests. Image/audio keep MODEL_NOT_FOUND."""
+    def handler(method, url, headers, body):
+        assert method == 'GET'
+        return _FakeResponse(200, {'data': [{'id': 'other-model'}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(
+        ai.Connection(id='o1', name='Ollama', provider='ollama', base_url='http://127.0.0.1:11434/v1'),
+        'not-pulled', purpose='cover',
+    )
+    assert result.ok is False
+    assert result.error_type == 'model_not_found'
+    assert result.warning == ''
+
+
+def test_model_not_listed_warning_exists_in_all_eight_locales():
+    from pathlib import Path
+    from backend.services.provider_validation import MODEL_NOT_LISTED_WARNING
+
+    root = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
+    langs = ('zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru')
+    catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in langs}
+    assert catalogs['zh'][MODEL_NOT_LISTED_WARNING] == MODEL_NOT_LISTED_WARNING
+    for lang in langs:
+        text = catalogs[lang].get(MODEL_NOT_LISTED_WARNING)
+        assert text and str(text).strip(), f'{lang} missing D2 model-list warning'
+        if lang != 'zh':
+            assert text != MODEL_NOT_LISTED_WARNING, f'{lang} still uses Chinese source string'
+
+
+def test_http_test_endpoint_returns_the_model_list_warning(monkeypatch):
+    from backend.services.provider_validation import MODEL_NOT_LISTED_WARNING
+
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'llama3.2'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    app = FastAPI()
+    from backend.api.v1.settings import router
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/test', json={
+            'connection': ai.Connection(
+                id='o1', name='Ollama', provider='ollama', base_url='http://127.0.0.1:11434/v1',
+            ).model_dump(),
+            'model': 'not-pulled',
+        })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['ok'] is True
+    assert body['warning'] == MODEL_NOT_LISTED_WARNING
+    assert body['error_code'] == ''

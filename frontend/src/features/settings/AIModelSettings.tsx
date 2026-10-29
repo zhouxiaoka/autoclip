@@ -91,6 +91,9 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
               onRefresh={() => void m.discover(connection, true)}
               actions={<Btn variant="text" size="sm" disabled={!settings.analysis.model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>}
             />
+            {m.testWarning?.id === connection.id && (
+              <p className="ac-note" role="status">{m.testWarning.text}</p>
+            )}
           </Row>
         : <Row label={t('settings.providers.use_for_analysis')} hint={t('settings.providers.use_for_analysis_hint')}>
             <Btn size="sm" onClick={() => m.assignAnalysisConnection(connection)}>{t('settings.providers.use_for_analysis')}</Btn>
