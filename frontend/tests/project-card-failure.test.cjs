@@ -19,7 +19,7 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     '../stores/useSimpleProgressStore': {
       useSimpleProgressStore: (select) => select({ getProgress: () => ({ message: progressMessage }) }),
     },
-    '../ui': { Btn: ({ children, onClick }) => { if (extra.onButton) extra.onButton(children, onClick); return React.createElement('button', {}, children) }, Dialog: () => null, StatusDot: ({ label }) => React.createElement('span', {}, label), Icon: { Play: () => null, Refresh: () => null, Trash: () => null } },
+    '../ui': { Btn: ({ children, onClick, variant }) => { if (extra.onButton) extra.onButton(children, onClick, variant); return React.createElement('button', {}, children) }, Dialog: () => null, StatusDot: ({ label }) => React.createElement('span', {}, label), Icon: { Play: () => null, Refresh: () => null, Trash: () => null } },
   }
   function load(file) {
     const module = { exports: {} }
@@ -84,6 +84,29 @@ test('#428 home card without a replacement offers configure, and does not open t
   buttons['去配置模型']()
   assert.deepEqual(visited, ['/settings?section=analysis'])
   assert.equal(typeof buttons['重试'], 'function')
+})
+
+test('B2 home card: whisper gate codes lead with 安装转写 and keep retry secondary', () => {
+  for (const code of ['whisper_not_installed', 'whisper_install_failed', 'whisper_model_missing', 'whisper_model_failed']) {
+    const visited = []
+    const buttons = {}
+    renderCard('failed', '本地转写还没装好', null, {
+      project: { error_code: code },
+      onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
+    }, to => visited.push(to))
+    assert.equal(buttons['安装转写'].variant, 'cta', code)
+    assert.equal(buttons['重试'].variant, 'text', code)
+    assert.equal(buttons['转写设置'], undefined, code)
+    buttons['安装转写'].onClick()
+    assert.deepEqual(visited, ['/settings?section=speech'])
+  }
+  const buttons = {}
+  renderCard('failed', '请求超时', null, {
+    project: { error_code: 'timeout' },
+    onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
+  })
+  assert.equal(buttons['安装转写'], undefined)
+  assert.equal(buttons['重试'].variant, 'text')
 })
 
 test('a generic invalid timeline does not add model settings on the project card', () => {

@@ -106,17 +106,25 @@ test('invalid API key renders the new copy instead of missing-key guidance', () 
   assert.doesNotMatch(html, /需要你自己的 API Key|自备/)
 })
 
-test('R22 #212: a whisper_not_installed failure offers the transcription settings entry, not only model settings', () => {
-  for (const code of ['whisper_not_installed', 'whisper_install_failed']) {
+test('R22 #212 / B2: a whisper gate failure leads with 安装转写, retry stays secondary', () => {
+  for (const code of ['whisper_not_installed', 'whisper_install_failed', 'whisper_model_missing', 'whisper_model_failed']) {
     const buttons = []
     navigations.length = 0
     render(true, 'screening', 'failed', buttons, [], code)
-    const entry = buttons.find(button => button.children === '打开转写设置')
-    assert.ok(entry, `${code}: the failure page must link to transcription settings`)
-    assert.equal(buttons.some(button => button.children === '模型设置'), false)
+    const entry = buttons.find(button => button.children === '安装转写')
+    assert.ok(entry, `${code}: the failure page must lead with install transcription`)
+    assert.equal(entry.variant, 'cta', code)
+    const retry = buttons.find(button => button.children === '重试')
+    assert.ok(retry, `${code}: retry stays available beside install`)
+    assert.notEqual(retry.variant, 'cta', code)
+    assert.equal(buttons.some(button => button.children === '打开转写设置' || button.children === '模型设置' || button.children === '去设置'), false, code)
     entry.onClick()
     assert.deepEqual(navigations, ['/settings?section=speech'])
   }
+  const waiting = []
+  render(true, 'screening', 'failed', waiting, [], 'whisper_installing')
+  assert.ok(waiting.find(button => button.children === '打开转写设置'))
+  assert.equal(waiting.some(button => button.children === '安装转写'), false)
   const buttons = []
   navigations.length = 0
   render(true, 'screening', 'failed', buttons, [], 'llm_not_configured')
@@ -286,6 +294,13 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, false, true)), ['settings*'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
+  const install = fa.failurePlan({ error_code: 'whisper_not_installed' }, true, false)
+  assert.deepEqual(keys(install), ['settings*', 'continue'])
+  assert.equal(install.buttons[0].label, '安装转写')
+  assert.equal(install.destination, '/settings?section=speech')
+  assert.equal(install.buttons.some(button => button.key === 'retry'), false)
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'whisper_model_failed' }, true, true)), ['continue*', 'settings'])
+  assert.equal(fa.failurePlan({ error_code: 'whisper_model_failed' }, true, true).buttons.find(button => button.key === 'settings').label, '安装转写')
   assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。')
   const weak = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
   const weakPlan = fa.failurePlan({ error_code: 'invalid_response', error: weak }, true, false)

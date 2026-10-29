@@ -24,11 +24,11 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
       buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [],
     }
   }
-  const reason = action.kind === 'retry' ? pageFailureText(info) : action.reason
+  const reason = action.kind === 'settings' && action.reason ? action.reason : pageFailureText(info)
   const card = presentedFailure(info, reason)
   if (action.kind === 'retry') return { message: card.reason, step: card.step, billing: card.billing, destination: null, buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [] }
   const resume = returnedFromSettings && canRetry  // back from a successful save: 「继续制作」 leads
-  const buttons: FailureButton[] = [{ key: 'settings', label: '去设置', cta: !resume }]
+  const buttons: FailureButton[] = [{ key: 'settings', label: action.label || '去设置', cta: !resume }]
   if (canRetry) buttons[resume ? 'unshift' : 'push']({ key: 'continue', label: '继续制作', cta: resume })
   return { message: card.reason, step: card.step, billing: card.billing, destination: action.destination, buttons }
 }
