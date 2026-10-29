@@ -37,6 +37,8 @@ def verify_installed(args):
     assert medium.is_file() and medium.resolve().is_relative_to(root), "wheel is missing Noto Sans SC Medium"
     failure_messages = Path(backend.__file__).resolve().parent / "core" / "failure_messages.json"
     assert failure_messages.is_file() and failure_messages.resolve().is_relative_to(root), "wheel is missing failure_messages.json"
+    quality = Path(backend.__file__).resolve().parent / "presets" / "provider_quality.json"
+    assert quality.is_file() and quality.resolve().is_relative_to(root), "wheel is missing provider_quality.json"
     scene = Scene(id="font", start=0, end=1)
     packaging = Packaging(template="podcast_en", audience_language="zh",
                           title_lines=["中文字体测试"],

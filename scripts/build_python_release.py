@@ -22,7 +22,8 @@ def build(wheel: Path, out: Path):
     with zipfile.ZipFile(wheel) as archive:
         for name in ('backend/assets/models/face_detection_yunet_2023mar.onnx',
                      'backend/assets/models/face_detection_yunet-LICENSE.txt',
-                     'backend/presets/provider_presets.json'):
+                     'backend/presets/provider_presets.json',
+                     'backend/presets/provider_quality.json'):
             if name not in archive.namelist():
                 raise ValueError(f'missing wheel resource: {name}')
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
@@ -54,7 +55,8 @@ Source commit: {commit}
                              ('docs/CLI_AND_MCP.md', 'CLI_AND_MCP.md'),
                              ('docs/RELEASE_1_5.md', 'RELEASE_1_5.md'),
                              ('scripts/verify_python_wheel.py', 'verify_python_wheel.py'),
-                             ('backend/presets/provider_presets.json', 'backend/presets/provider_presets.json')]:
+                             ('backend/presets/provider_presets.json', 'backend/presets/provider_presets.json'),
+                             ('backend/presets/provider_quality.json', 'backend/presets/provider_quality.json')]:
             archive.write(ROOT / source, name)
         archive.writestr('README.md', instructions)
         archive.writestr('BUILD.json', json.dumps({'version': version, 'commit': commit, 'wheel_sha256': digest}, indent=2))
