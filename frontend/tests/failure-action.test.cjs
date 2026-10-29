@@ -103,6 +103,10 @@ test('X1 suggestedAction maps model, whisper, material and restart', () => {
   assert.equal(fa.diagnoseInsteadOfRetry({ count: 2, same_code: false }), false)
   assert.equal(fa.diagnoseInsteadOfRetry({ count: 1, same_code: true }), false)
   assert.equal(fa.diagnoseInsteadOfRetry(null), false)
+  const page = fa.pageSuggestedAction({ error_code: 'timeout', upstream_error_type: null, failure_stage: 'vision' })
+  assert.equal(page.action.id, 'switch_model')
+  assert.equal(page.action.destination, '/settings?section=vision')
+  assert.equal(page.errorCode, 'timeout')
 })
 })()
 

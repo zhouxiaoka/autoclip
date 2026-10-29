@@ -310,6 +310,7 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
         'reasoning_tokens': 0,
         'retry_count': 0,
         'degrade_count': 0,
+        'repeat_failure': {'count': 0, 'same_code': False},
     }
     assert state['output_variants'] == []
     assert ImportOptions(platforms=['tiktok', 'reels', 'tiktok']).platforms == ['tiktok', 'instagram_reels']

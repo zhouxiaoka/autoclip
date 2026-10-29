@@ -147,6 +147,14 @@ export type PageFailureInfo = {
   secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
 }
 
+/** Diagnose panel input. The only reader of this page's cause fields for the suggestion. */
+export function pageSuggestedAction(info: PageFailureInfo): { action: SuggestedAction | null; errorCode?: string | null } {
+  return {
+    action: suggestedAction(info.error_code, info.upstream_error_type, info.failure_stage),
+    errorCode: info.error_code,
+  }
+}
+
 /** Fixed sentence. No amount, no invoice. Shown only after a billable call already happened. */
 export const BILLING_GUIDANCE = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
 

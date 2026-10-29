@@ -4,7 +4,7 @@ import { t } from '../../i18n'
 import { Btn, Dialog, StatusDot } from '../../ui'
 import { trackDiagnoseAction, trackDiagnoseOpened } from '../../analytics/studio'
 import { studioApi } from './api'
-import { presentedFailure, suggestedAction, type PageFailureInfo, type SuggestedAction } from './failureAction'
+import { pageSuggestedAction, presentedFailure, type PageFailureInfo, type SuggestedAction } from './failureAction'
 import type { ImportReadiness } from './importReadiness'
 import { openExample } from './openExample'
 
@@ -42,14 +42,15 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
   const [fetched, setFetched] = useState<ImportReadiness | null | undefined>(undefined)
   const [exampleBusy, setExampleBusy] = useState(false)
   const [exampleError, setExampleError] = useState('')
-  const suggestion = suggestedAction(info.error_code, info.upstream_error_type, info.failure_stage)
+  const diagnosis = pageSuggestedAction(info)
+  const suggestion = diagnosis.action
   const card = presentedFailure(info, reason)
   const report = readiness !== undefined ? readiness : fetched
 
   useEffect(() => {
     if (!open) return
-    trackDiagnoseOpened(info.error_code, suggestion?.id)
-  }, [open, info.error_code, info.upstream_error_type, info.failure_stage, suggestion?.id])
+    trackDiagnoseOpened(diagnosis.errorCode, suggestion?.id)
+  }, [open, diagnosis.errorCode, suggestion?.id])
 
   useEffect(() => {
     if (!open || readiness !== undefined) return
