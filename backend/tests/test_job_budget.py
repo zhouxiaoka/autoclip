@@ -13,6 +13,7 @@ from backend.core.job_budget import (
     clip_job_read_timeout,
     ensure_clip_job_budget,
     pause_clip_job_budget,
+    suspend_clip_job_budget,
 )
 from backend.core.llm_retry import classify_for_retry
 from backend.core.project_cancellation import checkpoint
@@ -52,6 +53,17 @@ def test_checkpoint_stops_a_job_that_has_used_its_budget():
         with pytest.raises(JobDurationExceeded):
             checkpoint()
     checkpoint()
+
+
+def test_suspend_lets_a_spent_budget_be_recorded_and_then_returns():
+    with bound_clip_job(0):
+        with pytest.raises(JobDurationExceeded):
+            ensure_clip_job_budget()
+        with suspend_clip_job_budget():
+            ensure_clip_job_budget()
+        with pytest.raises(JobDurationExceeded):
+            ensure_clip_job_budget()
+    assert budget_expired() is False
 
 
 def test_pause_does_not_spend_the_budget_on_local_work():

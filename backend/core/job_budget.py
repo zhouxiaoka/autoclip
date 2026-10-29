@@ -2,9 +2,11 @@
 
 A single provider read may wait 600s and the SDK may retry it once. The manager
 can retry that whole attempt again, and a job makes several calls. Without a
-cap the Studio screen stays on 「正在制作可发布成片」. This budget is the total
-time for one production job. Local Whisper is paused: it is CPU work, not a
-slow provider, and a long transcribe must not consume the cap.
+cap the Studio screen stays on 「正在制作可发布成片」. One production tracked
+job and one render tracked job each get this budget, so boundaries, burned
+captions, post copy, packaging and render model calls share it with the content
+pipeline. Local Whisper is paused: it is CPU work, not a slow provider, and a
+long transcribe must not consume the cap.
 """
 from __future__ import annotations
 
@@ -120,6 +122,21 @@ def pause_clip_job_budget() -> Iterator[None]:
         if outermost:
             budget.started += time.monotonic() - (budget.paused_at or time.monotonic())
             budget.paused_at = None
+
+
+@contextmanager
+def suspend_clip_job_budget() -> Iterator[None]:
+    """Hide the budget while a failure is written down.
+
+    ``store.change`` stops a job that has already used its cap. The write that
+    records that stop has to run with the cap out of the way, then the cap
+    comes back for whoever bound it.
+    """
+    token = _current.set(None)
+    try:
+        yield
+    finally:
+        _current.reset(token)
 
 
 def promote_if_budget_spent(error: BaseException) -> None:
