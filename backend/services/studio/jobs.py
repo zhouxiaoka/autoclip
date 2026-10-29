@@ -129,9 +129,18 @@ def _freeze_phase_identity(project_id):
         logger.debug('phase identity was not frozen', exc_info=True)
 
 
+_BUDGETED_STAGES = frozenset(('production', 'render'))
+
+
 def _tracked(stage):
-    """Record model token usage of a studio job (first argument: project id) under `stage`."""
+    """Record model token usage of a studio job (first argument: project id) under `stage`.
+
+    Production and render each take the clip-job wall clock for the whole tracked
+    call. Boundaries, burned captions, post copy, packaging and render model calls
+    then share that cap. A nested content-pipeline bind does not clear it.
+    """
     def wrap(fn):
+        from contextlib import nullcontext
         from functools import wraps
 
         @wraps(fn)
@@ -139,7 +148,9 @@ def _tracked(stage):
             identity = kwargs.pop('_io_receipt', None)
             from backend.core.project_cancellation import ProjectDeleted, bind
             from backend.core import llm_telemetry
-            with bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage), llm_telemetry.track_run():
+            from backend.core.job_budget import bound_clip_job
+            budget = bound_clip_job() if stage in _BUDGETED_STAGES else nullcontext()
+            with budget, bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage), llm_telemetry.track_run():
                 if identity and identity[0] == 'analysis':
                     _freeze_phase_identity(project_id)
                 try:
@@ -158,6 +169,7 @@ def _tracked(stage):
 @_tracked('render')
 def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
     from backend.core import project_cancellation
+    from backend.core.job_budget import suspend_clip_job_budget
     started = monotonic()
     render_saved = False
     result = None
@@ -222,7 +234,9 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         try:
             _design_covers(project_id, draft, job_id)
         finally:
-            update(cover_pending=False)
+            # The video is already saved. Clearing this flag must not die on the cap.
+            with suspend_clip_job_budget():
+                update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
         _schedule_qa()
     except project_cancellation.JobStopped:
@@ -239,13 +253,15 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         store.mark_worker_error_reported()
         if render_saved:
             # Optional cover/index work cannot revoke an already committed video.
-            _sync_variant_status(project_id, job_id, 'completed')
+            with suspend_clip_job_budget():
+                _sync_variant_status(project_id, job_id, 'completed')
             _schedule_qa()
             return
         try:
             message = user_visible_error(error)
-            update(status='failed', error=message, error_code=studio_error_code(error), duration_ms=round((monotonic() - started) * 1000))
-            _sync_variant_status(project_id, job_id, 'failed', message)
+            with suspend_clip_job_budget():
+                update(status='failed', error=message, error_code=studio_error_code(error), duration_ms=round((monotonic() - started) * 1000))
+                _sync_variant_status(project_id, job_id, 'failed', message)
         except FileNotFoundError:
             pass
     finally:
@@ -1197,7 +1213,7 @@ def _still_this_run(data, attempt_id, run_id) -> bool:
 @_tracked('production')
 def _auto_generate(project_id, plan):
     """Produce and render platform variants after the cheap screening pass."""
-    from backend.core.job_budget import bind_clip_job, unbind_clip_job
+    from backend.core.job_budget import suspend_clip_job_budget
     started = monotonic()
     state = store.read(project_id)
     generation = state.get('generation') or {}
@@ -1206,31 +1222,26 @@ def _auto_generate(project_id, plan):
     platforms = generation.get('requested_platforms') or []
     branding = generation.get('branding') or {'outro_enabled': True, 'outro_version': 'v1'}
     skipped = []
-    budget = bind_clip_job()
     try:
-        try:
-            video = source(project_id)
-            derived_drafts, variants, events = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
+        video = source(project_id)
+        derived_drafts, variants, events = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
 
-            def persist(data):
-                if not _still_this_run(data, attempt_id, run_id):
-                    raise store.ConflictError('这次制作已结束')
-                data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
-                if events:
-                    data['events'] = events
-                attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
-                data['output_variants'].extend(variants)
-                data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
-                from backend.services.studio.failure_identity import carry_screening
-                data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
-            store.change(project_id, persist)
-            _dispatch_pending_variants(project_id)
-        except Exception as error:
-            unbind_clip_job(budget)
-            budget = None
+        def persist(data):
+            if not _still_this_run(data, attempt_id, run_id):
+                raise store.ConflictError('这次制作已结束')
+            data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
+            if events:
+                data['events'] = events
+            attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
+            data['output_variants'].extend(variants)
+            data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
+            from backend.services.studio.failure_identity import carry_screening
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
+        store.change(project_id, persist)
+        _dispatch_pending_variants(project_id)
+    except Exception as error:
+        with suspend_clip_job_budget():
             _fail_generation(project_id, error, started, skipped, attempt_id, run_id)
-    finally:
-        unbind_clip_job(budget)
 
 
 def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_id=None):
@@ -1695,38 +1706,35 @@ def _submit_on_demand(project_id, variant_id, attempt_id):
 
 @_tracked('production')
 def _produce_on_demand(project_id, variant_id):
-    from backend.core.job_budget import JobDurationExceeded, bind_clip_job, unbind_clip_job
-    budget = bind_clip_job()
+    from backend.core.job_budget import JobDurationExceeded, suspend_clip_job_budget
     try:
-        try:
-            state = store.read(project_id)
-            variant = next(item for item in state['output_variants'] if item['id'] == variant_id)
-            raw = next(item for item in state['drafts'] if item['id'] == variant['draft_id'])
-            video = source(project_id)
-            burned = _source_has_burned_subtitles(project_id, video)
-            strategy_id = variant['strategy_id']
-            value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
-            value = _apply_packaging(project_id, value, strategy_id, burned, {})
-            posts = _posts_for(project_id, [(strategy_id, value)], {})
-            value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
-            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
+        state = store.read(project_id)
+        variant = next(item for item in state['output_variants'] if item['id'] == variant_id)
+        raw = next(item for item in state['drafts'] if item['id'] == variant['draft_id'])
+        video = source(project_id)
+        burned = _source_has_burned_subtitles(project_id, video)
+        strategy_id = variant['strategy_id']
+        value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
+        value = _apply_packaging(project_id, value, strategy_id, burned, {})
+        posts = _posts_for(project_id, [(strategy_id, value)], {})
+        value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 
-            def ready(data):
-                for index, item in enumerate(data['drafts']):
-                    if item['id'] == draft['id']:
-                        data['drafts'][index] = {**draft, 'updated_at': store.now()}
-                target = next(item for item in data['output_variants'] if item['id'] == variant_id)
-                if framed:
-                    target['framing'] = framed
-                if (_content_key(value), strategy_id) in posts:
-                    target['post'] = posts[_content_key(value), strategy_id]
-                target['status'] = 'queued'  # ready: only now may a dispatcher render it
-                target.pop('instance', None)
-            store.change(project_id, ready)
-            _dispatch_pending_variants(project_id)
-        except Exception as error:
-            unbind_clip_job(budget)
-            budget = None
+        def ready(data):
+            for index, item in enumerate(data['drafts']):
+                if item['id'] == draft['id']:
+                    data['drafts'][index] = {**draft, 'updated_at': store.now()}
+            target = next(item for item in data['output_variants'] if item['id'] == variant_id)
+            if framed:
+                target['framing'] = framed
+            if (_content_key(value), strategy_id) in posts:
+                target['post'] = posts[_content_key(value), strategy_id]
+            target['status'] = 'queued'  # ready: only now may a dispatcher render it
+            target.pop('instance', None)
+        store.change(project_id, ready)
+        _dispatch_pending_variants(project_id)
+    except Exception as error:
+        with suspend_clip_job_budget():
             store.raise_owned_read_error(error)  # noqa: BLE001 - the variant shows the failure and can be retried
             logger.warning('On-demand variant failed: %s', type(error).__name__)
             capture_studio_exception(error, 'production')
@@ -1743,8 +1751,6 @@ def _produce_on_demand(project_id, variant_id):
                 sync_project_completion(project_id)
             except Exception:  # noqa: BLE001 - never lose the failure silently inside the executor
                 logger.exception('Could not record the on-demand failure')
-    finally:
-        unbind_clip_job(budget)
 
 
 def _retry_parent(data, parent_attempt_id):
@@ -2050,10 +2056,9 @@ def _add_confirmed_drafts(data, drafts):
 
 @_tracked('production')
 def _produce_selected(project_id, plan):
-    from backend.core.job_budget import bind_clip_job, unbind_clip_job
+    from backend.core.job_budget import suspend_clip_job_budget
     from backend.services.studio import intelligence
     started = monotonic()
-    budget = bind_clip_job()
     succeeded_goals, failed_goals, reported = [], [], []
     result_count = 0
     labels = {'content':'内容切片','highlight':'精彩高光','promo':'推广成片'}
@@ -2166,19 +2171,16 @@ def _produce_selected(project_id, plan):
             store.change(project_id, lambda data: store.settle_attempt(data, kind='production', analysis=result))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
-        unbind_clip_job(budget)
-        budget = None
-        store.raise_owned_read_error(error)
-        capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'))
-        failure = {'status':'failed','error':user_visible_error(error), 'error_code':studio_error_code(error),
-            'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
-            'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
-            'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000),
-            **studio_failure_context(error, 'production')}
-        try:
-            store.change(project_id, lambda data: store.settle_attempt(data, kind='production', analysis=failure))
-            mark_project(project_id,'failed')
-        except FileNotFoundError:
-            pass
-    finally:
-        unbind_clip_job(budget)
+        with suspend_clip_job_budget():
+            store.raise_owned_read_error(error)
+            capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'))
+            failure = {'status':'failed','error':user_visible_error(error), 'error_code':studio_error_code(error),
+                'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
+                'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
+                'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000),
+                **studio_failure_context(error, 'production')}
+            try:
+                store.change(project_id, lambda data: store.settle_attempt(data, kind='production', analysis=failure))
+                mark_project(project_id,'failed')
+            except FileNotFoundError:
+                pass
