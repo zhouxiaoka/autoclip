@@ -36,6 +36,21 @@ def test_usage_tracking_follows_each_chunk_call(monkeypatch, tmp_path):
     assert llm_usage.summary('p1')['stages']['outline']['calls'] == 6
 
 
+def test_gemini_defaults_below_the_cloud_pool(monkeypatch):
+    from backend.core import llm_manager
+
+    class Manager:
+        settings = {"llm_provider": "gemini", "llm_provider_preset": None, "openai_base_url": ""}
+
+    monkeypatch.delenv("AUTOCLIP_LLM_CONCURRENCY", raising=False)
+    monkeypatch.setattr(llm_manager, "get_llm_manager", lambda: Manager())
+    assert concurrency.workers() == concurrency.GEMINI_WORKERS
+    assert 1 <= concurrency.GEMINI_WORKERS <= 2
+    assert concurrency.GEMINI_WORKERS != concurrency.CLOUD_WORKERS
+    Manager.settings = {"llm_provider": "openai", "llm_provider_preset": None, "openai_base_url": "https://api.openai.com/v1"}
+    assert concurrency.workers() == concurrency.CLOUD_WORKERS
+
+
 def test_local_models_stay_sequential(monkeypatch):
     from backend.core import llm_manager
 

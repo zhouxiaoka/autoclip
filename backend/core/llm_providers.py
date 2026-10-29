@@ -629,6 +629,30 @@ class OpenAIProvider(LLMProvider):
         """获取OpenAI可用模型（内置常用名单；兼容接口的型号以服务端 `/models` 为准）"""
         return _catalog_model_infos(ProviderType.OPENAI)
 
+def _attach_gemini_error_body(error: BaseException) -> None:
+    """google-genai keeps the JSON on ``details`` / ``response``, not ``body``.
+
+    ``http_error_parts`` reads those attributes. Copy a structured body onto the
+    exception too, so a later wrapper that only forwards ``body`` still classifies
+    PerMinute vs PerDay.
+    """
+    if getattr(error, "body", None) not in (None, "", b""):
+        return
+    details = getattr(error, "details", None)
+    body = details if isinstance(details, (dict, list)) and details else None
+    if body is None:
+        from backend.core.upstream_errors import http_error_parts
+        _status, found = http_error_parts(error)
+        if isinstance(found, (dict, list)) and found:
+            body = found
+    if body is None:
+        return
+    try:
+        error.body = body  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 - a slotted SDK error still classifies via details
+        return
+
+
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
     
@@ -691,6 +715,7 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             from backend.core.job_budget import promote_if_budget_spent
             promote_if_budget_spent(e)
+            _attach_gemini_error_body(e)
             logger.error(f"Gemini调用失败: {sanitize_exception_text(e)}")
             raise log_safe_exception(e) from None
     
