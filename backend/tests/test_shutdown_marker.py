@@ -22,6 +22,7 @@ def isolated(tmp_path, monkeypatch):
     from backend.services.studio import failure_identity, shutdown_marker
     monkeypatch.setattr(failure_identity, 'provider_identity', lambda *_a, **_k: dict(LATER))
     shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
 
 
 def _variant(vid, status, code=None):
@@ -93,8 +94,13 @@ def test_screening_start_records_identity_and_failure_keeps_it(monkeypatch):
 
 # --- #43 ------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize('marker,kind', [(None, 'crash'), ('user_quit', 'clean'), ('update', 'clean'), ('parent_lost', 'parent_lost')])
-def test_restart_midway_through_rendering_records_shutdown_kind(marker, kind):
+@pytest.mark.parametrize('marker,kind,reason', [
+    (None, 'crash', 'crash'),
+    ('user_quit', 'clean', 'user_quit'),
+    ('update', 'clean', 'update'),
+    ('parent_lost', 'parent_lost', 'crash'),
+])
+def test_restart_midway_through_rendering_records_shutdown_kind(marker, kind, reason):
     from backend.services.studio.shutdown_marker import mark
     old = 'f' * 32
     if marker:
@@ -106,6 +112,7 @@ def test_restart_midway_through_rendering_records_shutdown_kind(marker, kind):
     assert data['generation']['status'] == 'partial'
     assert data['generation']['error_code'] == store.RESTART_CODE
     assert data['generation']['shutdown_kind'] == kind
+    assert data['generation']['restart_reason'] == reason
     assert data['analysis']['shutdown_kind'] == kind
     assert data['analysis']['failure_stage'] == 'render'
     assert data['analysis']['provider'] == 'deepseek'
@@ -117,6 +124,57 @@ def test_finished_render_without_restart_has_no_shutdown_kind():
             'output_variants': [_variant('a', 'completed'), _variant('b', 'failed', 'render')], 'jobs': []}
     assert store._recover_interrupted_run(data)
     assert 'shutdown_kind' not in data['generation']
+    assert 'restart_reason' not in data['generation']
+
+
+def test_unacked_marker_stays_unknown_on_the_generation():
+    from backend.services.studio.shutdown_marker import _root
+    old = 'c' * 32
+    root = _root()
+    root.mkdir(parents=True, exist_ok=True)
+    (root / old).write_text('unacked', encoding='ascii')
+    data = {'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'r', 'instance': old, **START},
+            'generation': {'status': 'production', 'auto_start': True}}
+    assert store._recover_interrupted_run(data)
+    assert data['generation']['shutdown_kind'] == 'unknown'
+    assert data['generation']['restart_reason'] == 'unknown'
+
+
+def test_restart_reason_survives_after_the_marker_file_is_gone():
+    from backend.services.studio import shutdown_marker
+    old = 'd' * 32
+    assert shutdown_marker.mark('update', old)
+    assert shutdown_marker.shutdown_kind(old) == 'clean'
+    (shutdown_marker._root() / old).unlink()
+    assert shutdown_marker.restart_reason(old) == 'update'
+
+
+def test_service_restarted_event_carries_restart_reason():
+    from backend.core.event_catalog import validate_event
+    from backend.services.studio import attempts, shutdown_marker
+    old = 'e' * 32
+    assert shutdown_marker.mark('user_quit', old)
+    pid = 'prestart'
+    (store.directory(pid) / 'metadata').mkdir(parents=True)
+    data = {'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'run-1', 'instance': old, **START},
+            'generation': {'status': 'production', 'auto_start': True, **START},
+            'drafts': [], 'jobs': [], 'output_variants': []}
+    receipt = attempts.open_attempt(data, 'generation', run_id='run-1', trigger='initial')
+    data['generation']['attempt_id'] = receipt['attempt_id']
+    store.write(pid, data)
+    state = store.recover(pid)
+    assert state['generation']['restart_reason'] == 'user_quit'
+    settled = state['attempts'][0]
+    assert settled['state'] == 'failed'
+    assert settled['summary']['restart_reason'] == 'user_quit'
+    event = attempts._terminal_event(settled)
+    assert event['event'] == 'studio_generation_finished'
+    assert event['properties']['restart_reason'] == 'user_quit'
+    assert event['properties']['error_code'] == 'service_restarted'
+    assert validate_event(event['event'], event['properties']) == []
+    success = attempts._terminal_event({**settled, 'state': 'completed', 'summary': {**settled['summary'], 'restart_reason': 'crash', 'shutdown_kind': 'crash'}})
+    assert 'restart_reason' not in success['properties']
+    assert 'shutdown_kind' not in success['properties']
 
 
 # --- #42 ------------------------------------------------------------------------------------
@@ -143,6 +201,7 @@ def _client(monkeypatch, token=TOKEN, client=LOOPBACK):
 def _kind_now():
     from backend.services.studio import shutdown_marker
     shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
     return shutdown_marker.shutdown_kind(store.INSTANCE)
 
 
