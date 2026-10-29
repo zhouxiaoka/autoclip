@@ -1,5 +1,5 @@
 """
-云端 OpenAI 兼容预设：DeepSeek / Seed / Kimi / GLM / Grok / Infistar / 88API（赞助）。
+云端 OpenAI 兼容预设：AI/ML API / DeepSeek / Seed / Kimi / GLM / Grok / Infistar / 88API（赞助）。
 
 底层仍是 openai + 官方 base_url，和 Ollama 预设同一套路，但必须带各家自己的 key，
 不能复用用户的 OpenAI key。设置页、CLI、MCP 都用 `--provider deepseek` 这种名字。
@@ -22,6 +22,15 @@ class CloudPreset:
 
 
 CLOUD_PRESETS: Dict[str, CloudPreset] = {
+    "aimlapi": CloudPreset(
+        key="aimlapi",
+        display_name="AI/ML API",
+        base_url="https://api.aimlapi.com/v1",
+        default_model="openai/gpt-6-luna",
+        api_key_setting="aimlapi_api_key",
+        docs_url="https://aimlapi.com/app/keys",
+        hint="AI/ML API 聚合网关。一个 key 打通 GPT / Claude / Gemini / Qwen / DeepSeek 等 300+ 对话模型。",
+    ),
     "deepseek": CloudPreset(
         key="deepseek",
         display_name="DeepSeek",
@@ -91,6 +100,9 @@ CLOUD_PRESETS: Dict[str, CloudPreset] = {
 API88_HOSTS = frozenset({"88api.ai", "api.88api.ai"})
 
 _ALIASES = {
+    "aiml": "aimlapi",
+    "aiml-api": "aimlapi",
+    "aimlapi.com": "aimlapi",
     "88api": "api88",
     "88api.ai": "api88",
     "api.88api.ai": "api88",
