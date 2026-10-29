@@ -54,6 +54,41 @@ test('extraction keeps one key and rejects urls, sentences, and short tokens', (
   assert.equal(guide.looksLikeApiKey('autoclip://import?key=' + GENERIC), false)
 })
 
+const AUDIT_PATH = '/workspace/docs/SUCCESS_RATE_PIPELINE_AUDIT_1_5_7.md'
+const AUDIT_NAME = 'SUCCESS_RATE_PIPELINE_AUDIT_1_5_7.md'
+const BASE64ISH = 'Ab3xY9kLm2Qp8Vn4Hs7Td1Wc6Rf0Zj5Ue'
+const HEX80 = '0123456789abcdef'.repeat(5)
+
+test('file paths and filenames are not api keys', () => {
+  assert.equal(guide.looksLikeApiKey(AUDIT_NAME), false)
+  assert.equal(guide.looksLikeApiKey(AUDIT_PATH), false)
+  assert.equal(guide.looksLikeApiKey('C:\\workspace\\docs\\' + AUDIT_NAME), false)
+  assert.equal(guide.extractApiKey(AUDIT_PATH), null)
+  assert.equal(guide.extractApiKey(AUDIT_NAME), null)
+  assert.equal(guide.extractApiKey('C:\\workspace\\docs\\' + AUDIT_NAME), null)
+  assert.equal(guide.extractApiKey('/tmp/SUCCESS_RATE_PIPELINE_AUDIT_1_5_7.json'), null)
+  assert.equal(guide.extractApiKey('docs/notes/' + AUDIT_NAME), null)
+  assert.equal(guide.extractApiKey('SUCCESS_RATE_PIPELINE_AUDIT_1_5_7.json'), null)
+  assert.equal(guide.extractApiKey('/workspace/docs/SUCCESS_RATE_PIPELINE_AUDIT_1_5_7'), null)
+  assert.equal(guide.extractApiKey('see ' + AUDIT_PATH + ' for the audit'), null)
+  assert.equal(guide.extractApiKey('see /workspace/docs/SUCCESS_RATE_PIPELINE_AUDIT_1_5_7 for the audit'), null)
+  assert.equal(guide.extractApiKey('/tmp/sk-proj-abcdefghijklmnopqrstuvwxyz'), null)
+  assert.equal(guide.pasteShouldMove(AUDIT_PATH, 'openai', TARGETS), false)
+
+  assert.equal(guide.extractApiKey(`api_key: ${GENERIC} see ${AUDIT_PATH}`), GENERIC)
+  assert.equal(guide.extractApiKey(`Bearer ${OPENAI}\n${AUDIT_PATH}`), OPENAI)
+  assert.equal(guide.extractApiKey(`use ${GENERIC} from ${AUDIT_PATH}`), GENERIC)
+  assert.equal(guide.extractApiKey(`use ${BASE64ISH} from ${AUDIT_PATH}`), null)
+  assert.equal(guide.looksLikeApiKey(GENERIC), true)
+  assert.equal(guide.looksLikeApiKey(OPENAI), true)
+  assert.equal(guide.looksLikeApiKey(GEMINI), true)
+  assert.equal(guide.looksLikeApiKey(BASE64ISH), true)
+  assert.equal(guide.extractApiKey(BASE64ISH), BASE64ISH)
+  assert.equal(guide.extractApiKey(HEX80), HEX80)
+  assert.equal(guide.extractApiKey('0123456789abcdef'.repeat(4)), null)
+  assert.equal(guide.looksLikeApiKey('Ab3xY9kLm2Qp8Vn4Hs7Td1Wc6Rf0Zj5Ue.12'), true)
+})
+
 test('autoclip links keep the key out of the path and reject other schemes', () => {
   const link = guide.parseAutoclipLink(`autoclip://import?key=${GENERIC}&base_url=https://gw.example/v1/chat/completions`)
   assert.equal(link.key, GENERIC)
@@ -180,6 +215,18 @@ test('key-guide strings exist in all eight locales', () => {
   }
   assert.match(locales[1]['settings.key_guide.paste'], /\{\{name\}\}/)
   assert.match(locales[0]['settings.key_guide.masked'], /\{\{tail\}\}/)
+})
+
+test('key guide dialog rows keep labels outside a full-width control', () => {
+  const prompt = fs.readFileSync(path.join(__dirname, '../src/features/settings/KeyGuidePrompt.tsx'), 'utf8')
+  const css = fs.readFileSync(path.join(__dirname, '../src/ui/ac.css'), 'utf8')
+  assert.match(prompt, /className="ac-rows ac-key-guide-fields"/)
+  assert.equal((prompt.match(/<Row stack wide /g) || []).length, 2)
+  assert.equal(prompt.includes('className="ac-row"'), false)
+  assert.equal(prompt.includes("width: '100%'"), false)
+  assert.match(css, /\.ac-key-guide-fields \.ac-row-label \{[^}]*flex:\s*0 0 auto/)
+  assert.match(css, /\.ac-key-guide-fields \.ac-row-control/)
+  assert.match(css, /\.ac-key-guide-fields \.ac-row-control > \.ant-select/)
 })
 
 test('deep link docs keep the New API placeholder line and do not log the key', () => {

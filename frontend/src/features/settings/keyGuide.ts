@@ -42,6 +42,8 @@ const PREFIXES: Array<[RegExp, string]> = [
 const GENERIC_SK = /^sk-[A-Za-z0-9][A-Za-z0-9_-]{19,}$/
 const LABELED = /(?:api[ _-]?key|token|secret|密钥)\s*[:=：]\s*['"]?([A-Za-z0-9_\-.]{16,200})/i
 const BEARER = /bearer\s+([A-Za-z0-9_\-.]{16,200})/i
+const PATH_SEPARATOR = /[\\/]/
+const FILENAME_EXTENSION = /\.[A-Za-z]{1,8}$/
 
 export function keyTail(value: string): string {
   const trimmed = value.trim()
@@ -57,11 +59,24 @@ export function prefixProviderId(apiKey: string): string | null {
   return null
 }
 
+function hasStrongKeyShape(value: string): boolean {
+  return prefixProviderId(value) !== null || GENERIC_SK.test(value)
+}
+
+/** A clipboard that is only a path or filename, not a sentence and not a URL. */
+function looksLikeFilePath(value: string): boolean {
+  const text = value.trim()
+  if (!text || /\s/.test(text)) return false
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return false
+  return PATH_SEPARATOR.test(text) || FILENAME_EXTENSION.test(text)
+}
+
 export function looksLikeApiKey(value: string): boolean {
   const key = value.trim()
   if (key.length < 20 || key.length > 200) return false
   if (/\s/.test(key)) return false
   if (/^https?:/i.test(key) || /^autoclip:/i.test(key)) return false
+  if (PATH_SEPARATOR.test(key) || FILENAME_EXTENSION.test(key)) return false
   if (prefixProviderId(key)) return true
   if (GENERIC_SK.test(key)) return true
   if (/^[0-9a-f]{32,64}$/i.test(key)) return false
@@ -70,7 +85,7 @@ export function looksLikeApiKey(value: string): boolean {
   return false
 }
 
-/** Pull one likely key out of clipboard or paste text. URLs and ordinary sentences are not keys. */
+/** Pull one likely key out of clipboard or paste text. URLs, file paths, filenames, and ordinary sentences are not keys. */
 export function extractApiKey(raw: string): string | null {
   const text = (raw || '').trim()
   if (!text || text.length > 4000) return null
@@ -81,8 +96,10 @@ export function extractApiKey(raw: string): string | null {
   const bearer = text.match(BEARER)
   if (bearer && looksLikeApiKey(bearer[1])) return bearer[1]
   if (looksLikeApiKey(text)) return text
+  if (looksLikeFilePath(text)) return null
   const tokens = text.match(/[A-Za-z0-9_\-.]{20,200}/g) || []
-  const keys = tokens.filter(looksLikeApiKey)
+  const pathy = PATH_SEPARATOR.test(text)
+  const keys = tokens.filter(token => looksLikeApiKey(token) && (!pathy || hasStrongKeyShape(token)))
   return keys.length === 1 ? keys[0] : null
 }
 
