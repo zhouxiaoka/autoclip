@@ -310,6 +310,9 @@ def failure_from_speech_error(message: str) -> PipelineFailure:
     if media_precheck.is_no_audio_text(text):
         # 视频本身没有音轨：不是转写设置的问题，不要指到「设置 → 默认模型 → 语音转字幕」。
         return media_precheck.no_audio_failure("SUBTITLE")
+    if "已超过时间上限" in text:
+        # Local Whisper wall clock (C2), same studio code as the clip-job cap.
+        return PipelineFailure("SUBTITLE", text, code="timeout")
     if 'SenseVoice' in text:
         return PipelineFailure('SUBTITLE', text,
                                '' if '设置 → 默认模型 → 语音转字幕' in text else '到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall，或导入 .srt 字幕。',

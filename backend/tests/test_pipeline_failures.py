@@ -302,6 +302,30 @@ def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypat
     assert result["message"] == result["error"]
 
 
+def test_adapter_records_local_whisper_wall_clock_as_timeout(adapter, monkeypatch, tmp_path):
+    """C2: a local Whisper cap is a subtitle timeout, not subtitle_setup."""
+    from backend.utils.speech_recognizer import SpeechRecognitionError, WHISPER_TIMEOUT_MESSAGE
+
+    _fake_manager(monkeypatch, available=True)
+    monkeypatch.setattr(
+        "backend.services.studio.readiness.transcription_check",
+        lambda: {"ok": True, "code": "whisper_installed", "repair": "none"},
+    )
+    video = tmp_path / "in.mp4"
+    video.write_bytes(b"x")
+
+    def fail(*_args, **_kwargs):
+        raise SpeechRecognitionError(WHISPER_TIMEOUT_MESSAGE)
+
+    monkeypatch.setattr("backend.utils.speech_recognizer.generate_subtitle_for_video", fail)
+    result = asyncio.run(adapter.process_project_sync(str(video), ""))
+    assert result["status"] == "failed"
+    assert result["stage"] == "SUBTITLE"
+    assert result["error_code"] == "timeout"
+    assert "时间上限" in result["error"]
+    assert "已停止" in result["error"]
+
+
 def test_adapter_empty_timeline_does_not_send_user_to_model_settings(adapter, monkeypatch, tmp_path):
     """连接已成功时，时间线为空不要再提示去改模型 / API Key（#182）。"""
     from backend.services import simple_pipeline_adapter as mod
