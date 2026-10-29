@@ -80,9 +80,11 @@ class OutlineExtractor:
         # 2. 基于时间智能分块（短 / 中视频整条一块，长视频 ~30 分钟一块）
         interval = 30 if profile.tier == "long" else max(1, int(profile.total_sec // 60) + 1)
         chunks = self.text_processor.chunk_srt_data(srt_data, interval_minutes=interval)
-        from .settings import processing_int
-        chunks = self.text_processor.limit_srt_chunk_size(chunks, processing_int("chunk_size", 5000, 1000, 10000))
-        logger.info(f"文本已按~{interval}分钟/块切分，共{len(chunks)}个块")
+        # 本地/兼容接口把有效分块上限压到 2000；step2 读这里写盘的字幕块，不再切分。
+        from .settings import effective_chunk_size
+        chunk_chars = effective_chunk_size()
+        chunks = self.text_processor.limit_srt_chunk_size(chunks, chunk_chars)
+        logger.info(f"文本已按~{interval}分钟/块切分，单块上限 {chunk_chars} 字符，共{len(chunks)}个块")
         
         # 3. 保存文本块和SRT块到中间文件
         chunk_files = self._save_chunks_to_files(chunks)
