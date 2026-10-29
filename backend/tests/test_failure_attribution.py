@@ -84,6 +84,7 @@ def isolated(tmp_path, monkeypatch):
     from backend.services.studio import failure_identity, shutdown_marker
     monkeypatch.setattr(failure_identity, 'provider_identity', lambda *_a, **_k: dict(LATER))
     shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
 
 
 def _snapshot(monkeypatch, snap):
@@ -166,9 +167,14 @@ def _mid_render(pid):
                                        {'id': 'b', 'status': 'running', 'render_job_id': 'j1'}]})
 
 
-@pytest.mark.parametrize('marker,kind', [(None, 'crash'), ('user_quit', 'clean'), ('update', 'clean'), ('parent_lost', 'parent_lost')])
+@pytest.mark.parametrize('marker,kind,reason', [
+    (None, 'crash', 'crash'),
+    ('user_quit', 'clean', 'user_quit'),
+    ('update', 'clean', 'update'),
+    ('parent_lost', 'parent_lost', 'crash'),
+])
 @pytest.mark.usefixtures('isolated')
-def test_97_restart_mid_render_records_shutdown_kind_through_store_read(marker, kind):
+def test_97_restart_mid_render_records_shutdown_kind_through_store_read(marker, kind, reason):
     from backend.services.studio.shutdown_marker import mark
     if marker:
         assert mark(marker, OLD)
@@ -177,9 +183,11 @@ def test_97_restart_mid_render_records_shutdown_kind_through_store_read(marker, 
     assert state['generation']['status'] == 'partial'
     assert state['generation']['error_code'] == store.RESTART_CODE
     assert state['generation']['shutdown_kind'] == kind
+    assert state['generation']['restart_reason'] == reason
     assert state['analysis']['shutdown_kind'] == kind
     on_disk = json.loads((store.directory('p97') / 'metadata' / 'studio.json').read_text(encoding='utf-8'))
     assert on_disk['generation']['shutdown_kind'] == kind
+    assert on_disk['generation']['restart_reason'] == reason
 
 
 @pytest.mark.usefixtures('isolated')
@@ -195,7 +203,8 @@ def test_99_marker_survives_until_the_terminal_is_written(monkeypatch):
     monkeypatch.setattr(store, 'write', broken)
     store.recover('p99')                    # recovery write fails
     assert marker.exists()                  # ... so the marker must still be there
-    shutdown_marker._consumed.clear()       # next process start
+    shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()       # next process start
     monkeypatch.setattr(store, 'write', real_write)
     state = store.recover('p99')
     assert state['generation']['shutdown_kind'] == 'clean'
@@ -331,7 +340,8 @@ def test_r20_99_second_project_of_same_instance_keeps_clean_after_first_released
         raise OSError('disk full')
     monkeypatch.setattr(store, 'write', broken)
     store.recover('pb')                     # B's recovery write fails
-    shutdown_marker._consumed.clear()       # app restarts again
+    shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()       # app restarts again
     monkeypatch.setattr(store, 'write', real_write)
     assert store.recover('pb')['generation']['shutdown_kind'] == 'clean'   # was 'crash' on 6fbacce3
     assert not (shutdown_marker._root() / OLD).exists()                  # released after the last one
@@ -442,6 +452,7 @@ def isolated__r21_415(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.delenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', raising=False)
     shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
 
 
 @pytest.fixture
@@ -716,6 +727,7 @@ def isolated__r22_415(tmp_path, monkeypatch):
     monkeypatch.delenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', raising=False)
     monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
     shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
 
 
 CONNECTIONS = [

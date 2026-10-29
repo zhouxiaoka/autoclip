@@ -28,7 +28,7 @@ RETRYABLE_PARENT = ('failed', 'partial')
 KEEP = 100
 PLAN_KEYS = ('recommendation_mode', 'analysis_mode', 'route')  # frozen from the attempt's own plan
 OUTPUT_FREE = ('platform_count', 'portrait_style', 'brand_outro_enabled', 'recommended_template', 'accepted_recommendation', 'burned_captions')
-SUMMARY_KEYS = ('provider', 'config_source', 'attribution_source', 'model', 'base_url_host', 'shutdown_kind',
+SUMMARY_KEYS = ('provider', 'config_source', 'attribution_source', 'model', 'base_url_host', 'shutdown_kind', 'restart_reason',
                 'billable_calls_before_failure', 'retry_count', 'degrade_count',
                 'llm_calls', 'prompt_tokens', 'completion_tokens', 'route', 'http_status', 'duration_ms',
                 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'completed_variant_count')
@@ -379,7 +379,7 @@ def _terminal_event(receipt):
     summary = receipt.get('summary') if isinstance(receipt.get('summary'), dict) else {}
     failed, local, generation = receipt.get('state') != 'completed', summary.get('attribution_source') == 'local', receipt.get('kind') == 'generation'
     props = {k: v for k, v in summary.items() if isinstance(v, bool) or (isinstance(v, str) and v) or (isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0)}
-    for key in (*(() if failed else ('shutdown_kind', 'billable_calls_before_failure', 'error_code', 'upstream_error_type', 'http_status')), *(('upstream_error_type', 'http_status') if local else ())):
+    for key in (*(() if failed else ('shutdown_kind', 'restart_reason', 'billable_calls_before_failure', 'error_code', 'upstream_error_type', 'http_status')), *(('upstream_error_type', 'http_status') if local else ())):
         props.pop(key, None)
     props.pop('analysis_mode' if generation else 'recommendation_mode', None)
     props.pop('route', None) if not generation else props.update(trigger=receipt['trigger']) if receipt.get('trigger') else None
