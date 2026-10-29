@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "ollama", "lmstudio")
+PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "minimax", "seed", "kimi", "glm", "grok", "infistar", "api88", "ollama", "lmstudio")
 
 
 # ---------------------------------------------------------------- environment ---

@@ -26,7 +26,7 @@ from backend.core.llm_providers import is_local_url
 
 # OpenAI-compatible chat roots use /v1 when the path is empty.
 _OPENAI_V1_PROVIDERS = frozenset({
-    'compatible', 'openai', 'api88', 'infistar', 'deepseek',
+    'compatible', 'openai', 'api88', 'infistar', 'deepseek', 'minimax',
     'siliconflow', 'ollama', 'lmstudio', 'grok', 'kimi',
 })
 

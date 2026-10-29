@@ -40,6 +40,23 @@ test('recommendations only select models returned by the service', () => {
   assert.equal(defaultModel('dashscope', [{ id: 'new-image-protocol', image: true }], true), '')
   assert.equal(defaultModel('infistar', [], false), '')
 })
+test('MiniMax text defaults prefer Flash then M3 and preserve explicit selections and media', () => {
+  const text = [{ id: 'MiniMax-M3', analysis: true, capability: 'text' }, { id: 'MiniMax-M3.1-Flash', analysis: true, capability: 'text' }]
+  const minimax = { id: 'main', provider: 'minimax' }
+  assert.equal(defaultModel('minimax', text), 'MiniMax-M3.1-Flash')
+  assert.equal(defaultModel('minimax', text.slice(0, 1)), 'MiniMax-M3')
+  assert.equal(analysisModels(text, 'visual').length, 0)
+  for (const model of ['MiniMax-M2.7', 'custom-model']) {
+    const state = blank()
+    state.analysis.model = model
+    state.vision = { connection_id: 'vision', model: 'existing-vision' }
+    state.cover = { connection_id: 'image', model: 'existing-image' }
+    const value = applyModelDefaults(state, minimax, text, false)
+    assert.equal(value.analysis.model, model)
+    assert.equal(value.vision.model, 'existing-vision')
+    assert.equal(value.cover.model, 'existing-image')
+  }
+})
 test('Infistar recommends newly discovered generation models without a static allowlist', () => {
   assert.equal(defaultModel('infistar', [{ id: 'new-image', image: true }], true), 'new-image')
 })

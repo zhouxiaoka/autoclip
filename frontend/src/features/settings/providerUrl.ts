@@ -9,7 +9,7 @@
  */
 
 const OPENAI_V1_PROVIDERS = new Set([
-  'compatible', 'openai', 'api88', 'infistar', 'deepseek',
+  'compatible', 'openai', 'api88', 'infistar', 'deepseek', 'minimax',
   'siliconflow', 'ollama', 'lmstudio', 'grok', 'kimi',
 ])
 

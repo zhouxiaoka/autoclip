@@ -121,6 +121,7 @@ class ApiKeys(BaseModel):
     gemini: str = Field(default="", description="Gemini API密钥")
     siliconflow: str = Field(default="", description="SiliconFlow API密钥（已不再作为独立提供商，仅兼容旧配置）")
     deepseek: str = Field(default="", description="DeepSeek 官方 API密钥")
+    minimax: str = Field(default="", description="MiniMax API key")
     kimi: str = Field(default="", description="Kimi / 月之暗面 API密钥")
     glm: str = Field(default="", description="智谱 GLM API密钥")
     grok: str = Field(default="", description="xAI Grok API密钥")
@@ -336,6 +337,7 @@ async def get_settings():
                     gemini=config.gemini_api_key,
                     siliconflow=config.siliconflow_api_key,
                     deepseek="",
+                    minimax="",
                     kimi="",
                     glm="",
                     grok="",
@@ -772,6 +774,7 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "gemini": keys.gemini,
         "siliconflow": keys.siliconflow,
         "deepseek": keys.deepseek,
+        "minimax": keys.minimax,
         "kimi": keys.kimi,
         "glm": keys.glm,
         "grok": keys.grok,
