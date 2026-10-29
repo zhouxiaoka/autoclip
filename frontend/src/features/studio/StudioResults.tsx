@@ -7,7 +7,7 @@ import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { failureSettings, sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
-import { analysisFailureText, analysisPageFailure, receiptFailureInfo } from './failureAction'
+import { analysisFailureText, analysisPageFailure, receiptFailureInfo, failureAction, isTranscriptionInstall } from './failureAction'
 import { weakLocalTimelineFailure } from '../../utils/timelineFailure'
 import FailureActions, { FailureCopy } from './FailureActions'
 import { displayedProgress, studioRunProgress } from './studioProgress'
@@ -52,6 +52,8 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const cookieRecovery = workspace.analysis?.status === 'failed' && browserCookieRecovery(failedCode, workspace.analysis?.error)
   const canRetryAnalysis = automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job => job.status === 'completed'))
   const whisperSettings = workspace.analysis?.status === 'failed' && !sourceUnusable && failureSettings(failedCode).label === '打开转写设置' ? failureSettings(failedCode) : null
+  const recoveryAction = failureAction(failedCode)
+  const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
   // the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
   const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
@@ -134,7 +136,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
       </div>}
       {workspace.analysis?.status==='failed' && sourceUnusable && <div className="ac-empty" role="alert"><b>{t("这个素材无法使用")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions"><Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
       {cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis?.error, workspace.analysis, workspace.generation)} /><p className="studio-muted">{t("下一步：回到导入，选择一个已登录的浏览器后再生成。")}</p><div className="studio-actions"><Btn variant="cta" disabled={!!busy} onClick={()=>navigate(stageBrowserCookieRecovery(project.source_url))}>{t("选择已登录的浏览器")}</Btn>{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn></div></div>}
-      {workspace.analysis?.status==='failed' && whisperSettings && !cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions">{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
+      {workspace.analysis?.status==='failed' && whisperSettings && !cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions">{installTranscription && <Btn variant="cta" disabled={!!busy} onClick={()=>navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}{!installTranscription && <Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>}{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
       {workspace.analysis?.status==='failed' && !sourceUnusable && !whisperSettings && !cookieRecovery && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
         <FailureActions info={failureInfo()}
           canRetry={canRetryAnalysis}

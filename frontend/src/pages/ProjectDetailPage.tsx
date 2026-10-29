@@ -16,6 +16,7 @@ import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifyTimelineEmpty } from '../utils/timelineFailure'
 import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
 import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
+import { failureAction, isTranscriptionInstall } from '../features/studio/failureAction'
 import ClipCard from '../components/ClipCard'
 import CollectionCard from '../components/CollectionCard'
 import CollectionPreviewModal from '../components/CollectionPreviewModal'
@@ -296,6 +297,9 @@ const ProjectDetailPage: React.FC = () => {
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
   const failureUpstream = currentProject.upstream_error_type || currentProject.processing_config?.upstream_error_type || currentProject.settings?.upstream_error_type
+  const recoveryAction = failureAction(currentProject.error_code, typeof failureUpstream === 'string' ? failureUpstream : null)
+  const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
+  const bodyOwnsInstall = shownSubtitleKind === 'whisper_not_installed' || shownSubtitleKind === 'whisper_install_failed'
   const failureContext = {
     source: 'failure' as const,
     project_id: currentProject.id,
@@ -359,7 +363,8 @@ const ProjectDetailPage: React.FC = () => {
           {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
-              <Btn variant={llmKeyFailure || shownSubtitleKind ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
+              {installTranscription && !bodyOwnsInstall && <Btn variant="cta" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
+              <Btn variant={llmKeyFailure || shownSubtitleKind || installTranscription ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
             </div>
           )}
         </div>

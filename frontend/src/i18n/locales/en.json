@@ -804,6 +804,7 @@
   "到「设置 → 默认模型 → 语音转字幕」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "In Settings → Default models → Speech to subtitles, check that Whisper is installed and a model is downloaded, or import it again with an .srt file.",
   "打开转写设置": "Open transcription settings",
   "转写设置": "Transcription",
+  "安装转写": "Install transcription",
   "草稿 · 待导出": "Draft · Not exported",
   "排队中": "Queued",
   "正在导出": "Exporting",

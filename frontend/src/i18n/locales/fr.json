@@ -804,6 +804,7 @@
   "到「设置 → 默认模型 → 语音转字幕」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "Dans Réglages → Modèles par défaut → Voix vers sous-titres, vérifiez que Whisper est installé et qu’un modèle est téléchargé, ou importez la vidéo à nouveau avec un fichier .srt.",
   "打开转写设置": "Ouvrir les réglages de transcription",
   "转写设置": "Transcription",
+  "安装转写": "Installer la transcription",
   "草稿 · 待导出": "Brouillon · Non exporté",
   "排队中": "En attente",
   "正在导出": "Export en cours",

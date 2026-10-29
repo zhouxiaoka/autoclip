@@ -5,6 +5,11 @@ import { USER_CAUSE_REASONS, llmFailureText } from '../../utils/llmFailure'
  * configured, key lacks permission) cannot be fixed by retrying: show 「去设置」 instead.
  * Mirrors event_catalog.json attribution.user_cause (contract-tested; same set the v4
  * success rate excludes as user cause).
+ *
+ * Whisper/ASR install gates are the same idea: retrying cannot install the runtime or model.
+ * Those four codes (readiness.GATE_CODES without the in-progress WAITING_CODES) open
+ * 「设置 → 语音转字幕」 with 「安装转写」. Keep this list aligned with
+ * backend/services/studio/readiness.py GATE_CODES and importReadiness.gateKind === 'install'.
  */
 export { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES }
 
@@ -13,8 +18,21 @@ export const SETTINGS_DESTINATION = '/settings?section=analysis'
  * `section=transcription` is not a recognised value there (falls back to the top of AI settings). */
 export const TRANSCRIPTION_SETTINGS_DESTINATION = '/settings?section=speech'
 
+/** Install/repair subset of readiness.GATE_CODES. Waiting codes stay off this list. */
+export const WHISPER_GATE_CODES = [
+  'whisper_not_installed',
+  'whisper_install_failed',
+  'whisper_model_missing',
+  'whisper_model_failed',
+] as const
 
-export type FailureAction = { kind: 'retry' } | { kind: 'settings'; reason: string; destination: string }
+export const INSTALL_TRANSCRIPTION_LABEL = '安装转写'
+
+export type FailureAction = { kind: 'retry' } | { kind: 'settings'; reason?: string; destination: string; label?: string }
+
+export function isTranscriptionInstall(action: FailureAction): action is { kind: 'settings'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL; reason?: string } {
+  return action.kind === 'settings' && action.label === INSTALL_TRANSCRIPTION_LABEL
+}
 
 /** Which settings row fixes a user-cause failure, keyed by failure_stage (one table):
  * subtitle = cloud transcription (ASR), vision = visual-understanding binding; everything else
@@ -29,9 +47,14 @@ export function settingsDestination(failureStage?: string | null): string {
 
 const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
 
-/** One classification: the controlled upstream type is the most precise signal and wins; the
- * coarse error_code is only used when upstream says nothing user-attributable. */
+/** One classification. A Whisper install gate is not fixed by retrying, so those codes open
+ * transcription settings before any upstream type. Otherwise the controlled upstream type is
+ * the most precise signal and wins; the coarse error_code is only used when upstream says
+ * nothing user-attributable. */
 export function failureAction(errorCode?: string | null, upstreamType?: string | null, failureStage?: string | null): FailureAction {
+  if (isIn(WHISPER_GATE_CODES, errorCode)) {
+    return { kind: 'settings', destination: TRANSCRIPTION_SETTINGS_DESTINATION, label: INSTALL_TRANSCRIPTION_LABEL }
+  }
   const code = isIn(USER_CAUSE_UPSTREAM_TYPES, upstreamType) ? upstreamType
     : isIn(USER_CAUSE_ERROR_CODES, errorCode) || isIn(USER_CAUSE_UPSTREAM_TYPES, errorCode) ? errorCode : ''
   return code ? { kind: 'settings', reason: USER_CAUSE_REASONS[code], destination: settingsDestination(failureStage) } : { kind: 'retry' }

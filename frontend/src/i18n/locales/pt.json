@@ -804,6 +804,7 @@
   "到「设置 → 默认模型 → 语音转字幕」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "Em Configurações → Provedores e modelos padrão → Fala para legendas, confira se o Whisper está instalado e se há um modelo baixado, ou importe de novo com um arquivo .srt.",
   "打开转写设置": "Abrir configurações de transcrição",
   "转写设置": "Transcrição",
+  "安装转写": "Instalar transcrição",
   "草稿 · 待导出": "Rascunho · Não exportado",
   "排队中": "Na fila",
   "正在导出": "Exportando",

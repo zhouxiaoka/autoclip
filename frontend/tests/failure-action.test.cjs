@@ -32,6 +32,40 @@ test('R21 #163: precise upstream type wins over the coarse error_code (one class
   assert.equal(fa.failureAction('insufficient_quota', 'rate_limited').reason, '余额或令牌额度不足，请充值或更换令牌后再试。')
   assert.equal(fa.failureAction('timeout', 'rate_limited').kind, 'retry')
 })
+
+test('B2: whisper gate codes open speech settings, a normal failure still retries', () => {
+  const readiness = loadTs(path.resolve(__dirname, '../src/features/studio/importReadiness.ts'))
+  assert.deepEqual([...fa.WHISPER_GATE_CODES], [
+    'whisper_not_installed', 'whisper_install_failed', 'whisper_model_missing', 'whisper_model_failed',
+  ])
+  for (const code of fa.WHISPER_GATE_CODES) {
+    const action = fa.failureAction(code)
+    assert.equal(action.kind, 'settings', code)
+    assert.equal(action.destination, '/settings?section=speech', code)
+    assert.equal(action.label, '安装转写', code)
+    assert.equal(readiness.gateKind(code), 'install', `${code} must stay the install half of readiness.GATE_CODES`)
+    const page = fa.pageFailureAction({ error_code: code })
+    assert.equal(page.kind, 'settings', code)
+    assert.equal(page.destination, '/settings?section=speech', code)
+    assert.equal(page.label, '安装转写', code)
+  }
+  for (const code of ['timeout', 'service_restarted', 'provider_error', 'transcription_empty', 'whisper_installing', 'whisper_model_downloading']) {
+    assert.equal(fa.failureAction(code).kind, 'retry', code)
+  }
+  const led = fa.pageFailureAction({ error_code: 'timeout', secondary_error_codes: ['whisper_model_missing'] })
+  assert.equal(led.kind, 'settings')
+  assert.equal(led.destination, '/settings?section=speech')
+  assert.equal(led.label, '安装转写')
+  const auth = fa.failureAction('llm_auth_invalid')
+  assert.equal(auth.kind, 'settings')
+  assert.equal(auth.destination, '/settings?section=analysis')
+  assert.equal(auth.label, undefined)
+  for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
+    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
+    assert.equal(typeof data['安装转写'], 'string', lang)
+    assert.ok(data['安装转写'].length > 0, lang)
+  }
+})
 })()
 
 // failure-action.test.cjs

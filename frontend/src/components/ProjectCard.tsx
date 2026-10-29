@@ -12,6 +12,7 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
+import { failureAction, isTranscriptionInstall } from '../features/studio/failureAction'
 import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
@@ -291,6 +292,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const subtitleFailure = timelineEmpty
     ? null
     : classifySubtitleFailure(failureText, project.error_code)
+  const upstream = project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type
+  const recoveryAction = failureAction(project.error_code, typeof upstream === 'string' ? upstream : null)
+  const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
 
   const handleRetry = async (opts?: { silent?: boolean; stay?: boolean }) => {
     if (isRetrying) return
@@ -413,7 +417,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           )}
           {!weakLocalTimeline && normalizedStatus === 'failed' && (
             <div className="ac-project-recovery">
-              {subtitleFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
+              {installTranscription && <Btn variant="cta" size="sm" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
+              {subtitleFailure && !installTranscription && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
               {llmKeyFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
               <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
               <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>

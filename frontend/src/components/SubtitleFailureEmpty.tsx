@@ -50,7 +50,7 @@ const SubtitleFailureEmpty: React.FC<{
         </span>
       )}
       <div style={{ marginTop: 16 }}>
-        <Btn variant="cta" size="sm" onClick={onOpenSettings}>{t("打开转写设置")}</Btn>
+        <Btn variant="cta" size="sm" onClick={onOpenSettings}>{t(kind === 'whisper_not_installed' || kind === 'whisper_install_failed' ? '安装转写' : '打开转写设置')}</Btn>
       </div>
     </div>
   )

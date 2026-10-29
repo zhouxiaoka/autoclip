@@ -52,7 +52,7 @@ test('1.5.7 retry_of only from the Retry button and only when the previous attem
   assert.equal(h.watchOf('studio-generation').properties.retry_of, undefined)
 })
 
-test('1.5.7 failed-state action per code: user-cause codes get 「去设置」 + reason, everything else keeps Retry', () => {
+test('1.5.7 failed-state action per code: user-cause codes get 「去设置」, whisper gates open install, everything else keeps Retry', () => {
   const fs = require('node:fs')
   const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
   const settings = { authentication: 'API Key 无效或已过期，请到设置里更新后再试', llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试', invalid_key: 'API Key 无效或已过期，请到设置里更新后再试', insufficient_quota: '余额或令牌额度不足，请充值或更换令牌后再试。', llm_not_configured: '还没有配置可用的模型，请先到设置里添加' }
@@ -61,8 +61,13 @@ test('1.5.7 failed-state action per code: user-cause codes get 「去设置」 +
   }
   assert.equal(fa.failureAction('provider_error', 'permission_denied').kind, 'settings')
   assert.equal(fa.failureAction('provider_error', 'invalid_key').reason, settings.invalid_key)
-  for (const code of ['service_restarted', 'timeout', 'connection', 'rate_limited', 'provider_error', 'whisper_not_installed', 'model_not_found', 'bad_endpoint', 'source_too_short', 'unexpected', '', undefined, null]) {
+  for (const code of ['service_restarted', 'timeout', 'connection', 'rate_limited', 'provider_error', 'model_not_found', 'bad_endpoint', 'source_too_short', 'unexpected', '', undefined, null]) {
     assert.equal(fa.failureAction(code).kind, 'retry', String(code))
+  }
+  for (const code of fa.WHISPER_GATE_CODES) {
+    const action = fa.failureAction(code)
+    assert.equal(action.kind, 'settings', code)
+    assert.equal(action.destination, '/settings?section=speech', code)
   }
   assert.equal(fa.failureAction('timeout', 'rate_limited').kind, 'retry')
   // single shared source: TS mirrors event_catalog attribution.user_cause (both copies)
@@ -79,7 +84,7 @@ test('1.5.7 failed-state action per code: user-cause codes get 「去设置」 +
   // reasons + button copy in all 8 locales
   for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
-    for (const key of ['去设置', '继续制作', ...new Set([...Object.values(settings), '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。'])]) assert.ok(data[key], `${lang}: ${key}`)
+    for (const key of ['去设置', '继续制作', '安装转写', ...new Set([...Object.values(settings), '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。'])]) assert.ok(data[key], `${lang}: ${key}`)
   }
   // UI wiring: rendered behaviour (FailureActions) is covered in studio-results-status
 })
