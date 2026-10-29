@@ -302,7 +302,9 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         assert 'private-provider-body' not in str(clean) and 'synthetic-key' not in str(clean)
         assert clean['level'] == 'error'
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
-    assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
+    assert sentry_setup.studio_error_code(OSError('private-local-file')) == 'unexpected'
+    # A sharing denial is the download lock, not an unclassified crash and not a provider error.
+    assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'file_locked'
 
 
 def test_before_send_keeps_anonymous_user_id_and_allowlisted_tags(monkeypatch, tmp_path):

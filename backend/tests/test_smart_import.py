@@ -811,7 +811,7 @@ def test_rescreen_dispatch_failure_preserves_plan_and_exports(client, source, mo
 ])
 def test_current_studio_accepts_shared_youtube_urls(client, source, monkeypatch, url):
     seen = []
-    def download(pid, link, browser):
+    def download(pid, link, browser, options=None):
         seen.append(link)
         (store.directory(pid) / 'raw/input.mp4').write_bytes(source.read_bytes())
     monkeypatch.setattr(jobs, 'download', download)

@@ -323,7 +323,36 @@ def download_progress_hook(project_id, min_interval=1.0):
             pass
     return hook
 
-def download(project_id, url, browser):
+def _classify_landed_source(video, options=None):
+    """Classify no-audio / unreadable as soon as the file is on disk.
+
+    ``recommend()`` still chooses the route. A definite source failure here is the
+    screening result, instead of a later thumbnail or probe error recorded as unexpected.
+    """
+    from backend.pipeline import media_precheck
+    from backend.services.studio import preflight
+    path = Path(video)
+    # A sharing lock is file_locked. Swallowing it inside probe() would look like
+    # an unreadable file, and the retry would then report the real source code.
+    try:
+        with path.open('rb') as handle:
+            handle.read(1)
+    except PermissionError:
+        raise
+    except OSError as error:
+        if getattr(error, 'winerror', None) in (32, 33):
+            raise
+    probed = media_precheck.probe(path)
+    subtitle = path.parent / 'input.srt'
+    goal = getattr(options, 'goal', None) or 'auto'
+    inputs = preflight.ResolvedInputs(path, subtitle if subtitle.is_file() else None, entry='studio', goal=goal)
+    material = preflight.probe_from_info(path, {'duration': probed.get('duration'), 'audio': probed.get('audio')})
+    failure = preflight.preflight(inputs, probe=material).source_failure
+    if failure is not None:
+        raise failure
+
+
+def download(project_id, url, browser, import_options=None):
     from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
     folder = store.directory(project_id) / 'raw'
     folder.mkdir(exist_ok=True)
@@ -352,12 +381,20 @@ def download(project_id, url, browser):
     from backend.models.project import Project
     from backend.utils.thumbnail_generator import generate_project_thumbnail
     video = source(project_id)
+    _classify_landed_source(video, import_options)
     with SessionLocal() as db:
         p = db.query(Project).filter(Project.id == project_id).first()
         if not p:
             raise FileNotFoundError('项目已删除')
+        # A thumbnail miss must not fail screening. ensure_project_thumbnail is the
+        # same rule for local uploads; this call used to be bare.
+        try:
+            thumbnail = generate_project_thumbnail(project_id, video)
+        except Exception:  # noqa: BLE001 - a thumbnail miss must not fail screening
+            logger.warning('Project thumbnail generation failed', exc_info=True)
+            thumbnail = None
         p.video_path = str(video)
-        p.thumbnail = generate_project_thumbnail(project_id, video)
+        p.thumbnail = thumbnail
         db.commit()
 
 
@@ -1890,7 +1927,7 @@ def _inspect(project_id, options, url, browser):
         mark_project(project_id, 'processing', awaiting_confirmation=False)
         if url:
             with llm_usage.timed('download'):
-                download(project_id, url, browser)
+                download(project_id, url, browser, options)
         store.change(project_id, lambda data:(data['analysis'].pop('percent', None), data['analysis'].update(message='快速判断适合的制作类型')))
         plan = recommend(source(project_id), options)
         ensure_project_thumbnail(project_id)

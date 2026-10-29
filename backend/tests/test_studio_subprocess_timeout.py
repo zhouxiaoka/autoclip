@@ -44,7 +44,8 @@ def test_real_process_timeout_retains_render_tag_and_scrubs_command(process_time
     (ValueError('timeout-shaped validation message'), 'validation'),
     (RuntimeError('TimeoutExpired in a message is not a typed timeout'), 'unexpected'),
     (OSError('timeout-shaped I/O failure'), 'unexpected'),
-    (PermissionError('timeout-shaped sharing failure'), 'unexpected'),
+    # The word "timeout" in the message must not win. The type is a file lock.
+    (PermissionError('timeout-shaped sharing failure'), 'file_locked'),
 ])
 def test_unrelated_errors_are_not_reclassified_by_message(error, expected):
     assert sentry_setup.studio_error_code(error) == expected

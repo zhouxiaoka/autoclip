@@ -69,7 +69,8 @@ def studio_error_code(error: Exception) -> str:
     if isinstance(error, LockTimeout):
         return "store_lock_timeout"  # a local product failure, never a model timeout
     # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
-    # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
+    # Recognize its typed failures. A sharing lock or an ffmpeg failure has its own
+    # code; unrelated programming errors stay unexpected.
     try:
         from openai import APIError
     except ImportError:
@@ -88,7 +89,31 @@ def studio_error_code(error: Exception) -> str:
         return "invalid_response"
     if isinstance(error, ValueError):
         return "validation"
+    io_code = _local_io_code(error)
+    if io_code:
+        return io_code
     return "unexpected"
+
+
+# Windows ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION. The same denial is a
+# PermissionError on other platforms (errno EACCES) with no winerror.
+_SHARING_WINERRORS = frozenset({32, 33})
+
+
+def _local_io_code(error: BaseException) -> str | None:
+    """Known local I/O failures that must not be stored as unexpected.
+
+    A file another process still holds is ``file_locked`` (already unreported).
+    ffmpeg/ffprobe exiting non-zero is ``frame_extract_failed``, the same code the
+    user-visible sentence already uses.
+    """
+    if isinstance(error, subprocess.CalledProcessError):
+        return "frame_extract_failed"
+    if isinstance(error, PermissionError):
+        return "file_locked"
+    if isinstance(error, OSError) and getattr(error, "winerror", None) in _SHARING_WINERRORS:
+        return "file_locked"
+    return None
 
 
 _EMPTY_MODEL_REPLY = frozenset({
