@@ -720,6 +720,17 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 
 **四种取值都算产品失败**（PM 口径）：`shutdown_kind` 只用于拆分原因，不从任何分母里剔除样本；`clean` 是否单独处理放到 1.5.9 之后再议。同一个 instance 下的多个项目读到同一个分类；记录在没有任何项目还引用该 instance 时才删除，修剪只在启动恢复之后于后台执行一次（退出路径不扫项目）：超过 50 条时按时间修剪，仍被未恢复项目引用的不删；读不了的项目只保护比它最后修改时间更新的记录；超过 1 小时的孤儿 `.tmp` 一并清理。只发枚举，instance id 不出本机。
 
+`shutdown_kind` 把壳标记 `user_quit` 和 `update` 都收成 `clean`，所以 `production / service_restarted` 和 `render / service_restarted` 看不出是用户退出、更新、崩溃还是系统杀掉。恢复把中断的 generation 写成 `service_restarted` 时，另写 `restart_reason`（`shutdown_marker.restart_reason`，与 `shutdown_kind` 同一次读标记、同一份进程内缓存）。字段在 generation 上，经 AttemptReceipt 摘要进入 `studio_generation_finished`；没有这次恢复就不发。闭集：
+
+| 值 | 含义 |
+|---|---|
+| `user_quit` | 标记内容是 `user_quit`（`shutdown_kind` 仍是 `clean`） |
+| `update` | 标记内容是 `update`（`shutdown_kind` 仍是 `clean`） |
+| `crash` | 该 instance 没有任何标记（与 `shutdown_kind=crash` 相同）；或标记是 `parent_lost`（壳被杀或崩溃）。分析枚举没有单独的 system-kill 值，`parent_lost` 仍只留在 `shutdown_kind` |
+| `unknown` | 标记是 `unacked`、读不了、内容无效，或 instance id 缺失/非法。与 `shutdown_kind` 相同：`unacked` 保持 `unknown` |
+
+四种取值都算产品失败，不从分母剔除。只发枚举。
+
 ### 1.5.7 一键重试
 
 终态事件可带 `retry_of`（被重试 attempt 的 `attempt_id`，`t-` id）。**attempt 归后端所有（#419）**：每个 v4 尝试是项目状态里的一条 AttemptReceipt（`attempt_id, flow_id, sequence, retry_of, kind, state, causes[]`），和业务状态同一次原子写入；失败态「重试」/「继续制作」/「重试这条」都走同一个 `POST /studio/{id}/retry`，后端校验父 attempt（必须是 failed/partial、没被重试过）、同一项目串行（第二个「重试这条」并入正在进行的那次）、幂等键防重复。前端观察器只投影回执：`studio_generation_finished` / `studio_production_finished` 的 `attempt_id`、`retry_of`、主因和 `secondary_*` 都取自回执，`$insert_id` = `studio-v1:{attempt_id}:finished`；顺序看 `sequence`，不看时间戳（终态事件带 `attempt_sequence` = 回执 `sequence`，`success_rate.sql` 按它取流程里最后一次 attempt，R25 #346）；重启或清空浏览器存储不改血缘。主因按 catalog 分层确定（产品优先，`failure_attribution`），页面另取第一个用户可修复的原因给「去设置」。不自动续跑。

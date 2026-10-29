@@ -762,15 +762,17 @@ from backend.services.studio.failure_identity import carry_screening  # noqa: E4
 def _record_restart_shutdown_kind(data, instance):
     """/ a render settled because of a restart records how the previous process ended."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
-    if not instance or not generation or generation.get('status') == 'rendering':
+    if not generation or generation.get('status') == 'rendering':
         return
     variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)]
     if generation.get('error_code') == RESTART_CODE or any(v.get('error_code') == RESTART_CODE for v in variants):
-        from backend.services.studio.shutdown_marker import shutdown_kind
-        kind = shutdown_kind(instance)
-        generation['shutdown_kind'] = kind
-        if isinstance(data.get('analysis'), dict):
-            data['analysis']['shutdown_kind'] = kind
+        from backend.services.studio.shutdown_marker import restart_reason, shutdown_kind
+        if instance:
+            kind = shutdown_kind(instance)
+            generation['shutdown_kind'] = kind
+            if isinstance(data.get('analysis'), dict):
+                data['analysis']['shutdown_kind'] = kind
+        generation['restart_reason'] = restart_reason(instance)
 
 
 def _recover_interrupted_run(data):
@@ -783,8 +785,10 @@ def _recover_interrupted_run(data):
     if not interrupted_run(data):
         return False
     analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
-    from backend.services.studio.shutdown_marker import shutdown_kind
-    kind = shutdown_kind((analysis or {}).get('instance'))
+    from backend.services.studio.shutdown_marker import restart_reason, shutdown_kind
+    instance = (analysis or {}).get('instance')
+    kind = shutdown_kind(instance)
+    reason = restart_reason(instance)
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
     variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
     if generation and generation.get('status') == 'rendering' and variants:
@@ -803,7 +807,7 @@ def _recover_interrupted_run(data):
             return False
         stage = generation['status']
         identity = attempt_identity(analysis, generation)
-        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, **identity)
+        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, restart_reason=reason, **identity)
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
                             'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now(),
                             'failure_stage': stage, 'shutdown_kind': kind, **identity, **carry_screening(analysis, generation)}

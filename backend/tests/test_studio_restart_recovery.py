@@ -72,6 +72,38 @@ def test_startup_closes_a_run_killed_during_the_llm_stage(sessions, stage):
     assert reconcile_interrupted_projects(sessions) == []
 
 
+@pytest.mark.parametrize('marker,reason', [
+    ('user_quit', 'user_quit'),
+    ('update', 'update'),
+    (None, 'crash'),
+    ('unacked', 'unknown'),
+    ('parent_lost', 'crash'),
+])
+def test_reconcile_writes_restart_reason(sessions, marker, reason):
+    from backend.services.studio import shutdown_marker
+    instance = 'ab' * 16
+    shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
+    if marker == 'unacked':
+        root = shutdown_marker._root()
+        root.mkdir(parents=True, exist_ok=True)
+        (root / instance).write_text('unacked', encoding='ascii')
+    elif marker:
+        assert shutdown_marker.mark(marker, instance)
+    _project(sessions, _production(instance=instance, stage='production'))
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    generation = _disk()['generation']
+    assert generation['error_code'] == 'service_restarted'
+    assert generation['failure_stage'] == 'production'
+    assert generation['restart_reason'] == reason
+
+
+def test_reconcile_unknown_instance_keeps_restart_reason_unknown(sessions):
+    _project(sessions, _production(instance='previous-process', stage='screening'))
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    assert _disk()['generation']['restart_reason'] == 'unknown'
+
+
 def test_previous_release_shape_completed_with_zero_clips_is_failed(sessions):
     # Before #8 the clips-only child run wrote completed while generation stayed in production.
     _project(sessions, _production(), status=ProjectStatus.COMPLETED)

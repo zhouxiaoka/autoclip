@@ -12,6 +12,13 @@ as service_restarted.
 On the next start the dead run's instance record is classified (cached per process):
 user_quit/update -> ``clean``, parent_lost -> ``parent_lost``, unacked -> ``unknown``, missing -> ``crash``,
 unreadable or invalid content -> ``unknown`` (also for a missing/invalid instance id).
+
+``restart_reason`` is the finer value stored on a recovered generation. It keeps the shell
+intent that ``shutdown_kind`` folds into ``clean``: ``user_quit`` / ``update`` stay themselves;
+a missing marker is ``crash``; ``parent_lost`` (shell killed or crashed) is ``crash`` because
+the analytics set has no separate kill value (``shutdown_kind`` still records ``parent_lost``);
+``unacked``, unreadable, invalid content, and a missing/invalid instance id stay ``unknown``.
+``unacked`` is not promoted to ``crash``.
 /#99: one record per instance in ONE directory (``<data dir>/shutdown_markers/<instance>``), one
 prune rule (run once at startup, in the background; never on the quit path). 's "shell got no 200 in time" is the same record with content ``unacked``, written by
 the shell only when no marker exists yet (a marker that landed in time wins). A record is released only
@@ -34,6 +41,8 @@ MARKER_KINDS = (*INTENT_KINDS, 'parent_lost')
 _KEEP = 50
 _lock = threading.Lock()
 _consumed: dict[tuple[str, str], str] = {}
+_restart_cached: dict[tuple[str, str], str] = {}
+RESTART_REASONS = ('user_quit', 'update', 'unknown', 'crash')
 
 
 MARKER_DIR_ENV = 'AUTOCLIP_SHUTDOWN_MARKER_DIR'
@@ -146,13 +155,19 @@ def prune_in_background() -> threading.Thread:
     return thread
 
 
-def _classify(path: Path) -> str:
+def _marker_text(path: Path) -> str | None:
+    """Marker body, ``''`` when unreadable, ``None`` when the file is missing."""
     if not path.exists():
-        return 'crash'
+        return None
     try:
-        content = path.read_text(encoding='ascii').strip()
+        return path.read_text(encoding='ascii').strip()
     except (OSError, UnicodeDecodeError):
-        return 'unknown'
+        return ''
+
+
+def _kind_from_text(content: str | None) -> str:
+    if content is None:
+        return 'crash'
     if content in INTENT_KINDS:
         return 'clean'
     if content == 'parent_lost':
@@ -160,20 +175,66 @@ def _classify(path: Path) -> str:
     return 'unknown'  # 'unacked' or anything unexpected
 
 
-def shutdown_kind(instance: str | None) -> str:
+def _restart_from_text(content: str | None) -> str:
+    if content is None:
+        return 'crash'
+    if content in INTENT_KINDS:
+        return content
+    if content == 'parent_lost':
+        return 'crash'  # shell killed/crashed; shutdown_kind keeps parent_lost
+    return 'unknown'  # unacked, unreadable, invalid — not a crash
+
+
+def _remember(key: tuple[str, str], path: Path) -> tuple[str, str]:
+    content = _marker_text(path)
+    kind, reason = _kind_from_text(content), _restart_from_text(content)
+    _consumed[key] = kind
+    _restart_cached[key] = reason
+    return kind, reason
+
+
+def _instance_key(instance: str | None):
     if not instance or not re.fullmatch(r'[0-9a-f]{32}', str(instance)):
-        return 'unknown'
+        return None
     try:
         root = _root()
     except Exception:  # noqa: BLE001
+        return None
+    return (str(root), instance), root / instance
+
+
+def shutdown_kind(instance: str | None) -> str:
+    located = _instance_key(instance)
+    if located is None:
         return 'unknown'
-    key = (str(root), instance)
+    key, path = located
     with _lock:
         if key in _consumed:  # several projects can share one dead instance
             return _consumed[key]
-        kind = _classify(root / instance)
-        _consumed[key] = kind
+        kind, _reason = _remember(key, path)
     return kind
+
+
+def restart_reason(instance: str | None) -> str:
+    """Why a recovered ``service_restarted`` run stopped. See the module note.
+
+    Cached with ``shutdown_kind`` so a later project of the same dead instance still
+    sees the reason after ``release`` deletes the marker file.
+    """
+    located = _instance_key(instance)
+    if located is None:
+        return 'unknown'
+    key, path = located
+    with _lock:
+        if key in _restart_cached:
+            return _restart_cached[key]
+        if key in _consumed:
+            # shutdown_kind was seeded without a reason; keep that kind, read the marker for this field.
+            reason = _restart_from_text(_marker_text(path))
+            _restart_cached[key] = reason
+            return reason
+        _kind, reason = _remember(key, path)
+    return reason
 
 
 def release(instance: str | None) -> None:

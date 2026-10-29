@@ -314,6 +314,7 @@ def test_generation_restart_carries_shutdown_kind():
     data['generation'] = {'status': 'production', 'auto_start': True}
     assert store._recover_interrupted_run(data)
     assert data['generation']['shutdown_kind'] == 'clean'
+    assert data['generation']['restart_reason'] == 'update'
     assert data['analysis']['shutdown_kind'] == 'clean'
 
 
