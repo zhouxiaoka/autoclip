@@ -119,15 +119,18 @@ def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt
 
 def test_outline_quota_failure_uses_classified_user_copy(tmp_path, prompt_files, monkeypatch):
     from backend.core.upstream_errors import HINT_KEYS, UpstreamErrorType
+    from backend.pipeline.failures import MODEL_CALL_MESSAGES
     srt = tmp_path / 'input.srt'
     srt.write_text(SRT, encoding='utf-8')
     error = type('PermissionDeniedError', (Exception,), {'status_code': 403})('Error code: 403 - insufficient_user_quota')
     extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
     with pytest.raises(PipelineFailure) as caught:
         extractor.extract_outline(srt)
-    assert caught.value.code == 'llm_auth_invalid'
+    assert caught.value.code == 'provider_error'
+    assert caught.value.code != 'llm_auth_invalid'
     assert caught.value.upstream_error_type == 'insufficient_quota'
     assert caught.value.user_message() == HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA]
+    assert MODEL_CALL_MESSAGES['llm_auth_invalid'] not in caught.value.user_message()
     assert 'insufficient_user_quota' not in caught.value.user_message()
 
 

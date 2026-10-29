@@ -96,6 +96,15 @@ test('a generic invalid timeline does not add model settings on the project card
   assert.equal(buttons['模型设置'], undefined)
 })
 
+test('a quota failure is not rewritten into an invalid-key prompt', () => {
+  const messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8'))
+  const html = renderCard('failed', messages.insufficient_quota, null, {
+    project: { error_code: 'llm_auth_invalid', upstream_error_type: 'insufficient_quota' },
+  })
+  assert.match(html, /充值或更换令牌/)
+  assert.doesNotMatch(html, /API Key 无效/)
+})
+
 test('failed project shows the persisted reason even after progress state is lost', () => {
   const html = renderCard('error', 'Whisper 模型文件缺失或不完整。')
   assert.match(html, /role="alert"/)

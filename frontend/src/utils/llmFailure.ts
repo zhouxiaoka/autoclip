@@ -8,13 +8,18 @@ export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 export const STORE_LOCK_TIMEOUT = 'store_lock_timeout'
 export const STORE_LOCK_TIMEOUT_TEXT = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
 
-/** The one user-cause reason table studio 「去设置」 reads it. Project cards only swap llm_auth_invalid.*/
+/** The one user-cause reason table studio 「去设置」 reads. Project cards pass upstream when they have it. */
 export const USER_CAUSE_REASONS: Record<string, string> = Object.fromEntries(
   [...new Set([...USER_CAUSE_ERROR_CODES, ...USER_CAUSE_UPSTREAM_TYPES])].map(code => [code, USER_MESSAGES[code]]),
 )
 
 export function llmFailureText(error?: string | null, code?: string | null, upstream?: string | null): string {
   if (code === STORE_LOCK_TIMEOUT) return STORE_LOCK_TIMEOUT_TEXT
+  // 88API 403 quota used to be stored as llm_auth_invalid. The fine type, or a
+  // sentence that already says 充值, must not be rewritten into 「密钥无效」.
+  if (upstream === 'insufficient_quota' || (error || '').trim() === USER_MESSAGES.insufficient_quota) {
+    return USER_MESSAGES.insufficient_quota
+  }
   if (code === LLM_AUTH_INVALID) return USER_CAUSE_REASONS[LLM_AUTH_INVALID]
   // Coarse provider_error / unexpected still say 「无法识别」 or 「请重试」. The fine type already
   // has a sentence; use it when the stored text is that generic fallback (or empty).

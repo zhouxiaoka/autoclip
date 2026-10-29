@@ -280,7 +280,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     error_message: project.error_message || failedProgress?.message || undefined,
     error_code: project.error_code || undefined,
   }
-  const failureText = llmFailureText(project.error_message || failedProgress?.message, project.error_code)
+  const failureText = llmFailureText(
+    project.error_message || failedProgress?.message,
+    project.error_code,
+    project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type,
+  )
   const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)
   const weakLocalTimeline = weakLocalTimelineFailure(failureText, project.error_code)
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText, project.error_code)
