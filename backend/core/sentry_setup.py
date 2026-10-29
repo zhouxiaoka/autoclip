@@ -95,22 +95,22 @@ def studio_error_code(error: Exception) -> str:
     return "unexpected"
 
 
-# Windows ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION. The same denial is a
-# PermissionError on other platforms (errno EACCES) with no winerror.
+# Windows ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION. A PermissionError
+# without one of these codes is a different denial (metadata, a directory) and
+# stays unexpected so it is still reported.
 _SHARING_WINERRORS = frozenset({32, 33})
 
 
 def _local_io_code(error: BaseException) -> str | None:
     """Known local I/O failures that must not be stored as unexpected.
 
-    A file another process still holds is ``file_locked`` (already unreported).
-    ffmpeg/ffprobe exiting non-zero is ``frame_extract_failed``, the same code the
-    user-visible sentence already uses.
+    A file another process still holds (WinError 32/33, including when Python
+    raises that as PermissionError) is ``file_locked``. ffmpeg/ffprobe exiting
+    non-zero is ``frame_extract_failed``, the same code the user-visible sentence
+    already uses.
     """
     if isinstance(error, subprocess.CalledProcessError):
         return "frame_extract_failed"
-    if isinstance(error, PermissionError):
-        return "file_locked"
     if isinstance(error, OSError) and getattr(error, "winerror", None) in _SHARING_WINERRORS:
         return "file_locked"
     return None

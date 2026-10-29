@@ -471,7 +471,7 @@ def test_link_import_uses_same_automatic_plan(client,source,monkeypatch):
     monkeypatch.setattr(jobs,'executor',Immediate())
     monkeypatch.setattr(intelligence,'ready',lambda:False)
     downloads=[]
-    def download(pid,url,browser):
+    def download(pid, url, browser, import_options=None):
         downloads.append((url,browser))
         shutil.copy2(source,store.directory(pid)/'raw/input.mp4')
     monkeypatch.setattr(jobs,'download',download)

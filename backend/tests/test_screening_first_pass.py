@@ -95,10 +95,13 @@ def test_local_io_codes_are_not_unexpected():
     locked = OSError('synthetic lock violation')
     locked.winerror = 33
     denied = PermissionError('private-local-file')
+    denied.winerror = 32
+    plain = PermissionError('controlled metadata read denial')
     ffmpeg = subprocess.CalledProcessError(1, ['ffmpeg', 'private-input'])
     assert sentry_setup.studio_error_code(sharing) == 'file_locked'
     assert sentry_setup.studio_error_code(locked) == 'file_locked'
     assert sentry_setup.studio_error_code(denied) == 'file_locked'
+    assert sentry_setup.studio_error_code(plain) == 'unexpected'
     assert sentry_setup.studio_error_code(ffmpeg) == 'frame_extract_failed'
     assert sentry_setup.studio_error_code(OSError('unrelated io')) == 'unexpected'
     assert 'file_locked' in sentry_setup.UNREPORTED_STUDIO_ERROR_CODES
@@ -189,8 +192,14 @@ def test_attached_srt_keeps_a_silent_download(monkeypatch, tmp_path):
     jobs._classify_landed_source(video, ImportOptions(auto_start=True, goal='content'))
 
 
+def _sharing_permission():
+    error = PermissionError('synthetic output permission')
+    error.winerror = 32
+    return error
+
+
 @pytest.mark.parametrize('error,code', [
-    (PermissionError('synthetic output permission'), 'file_locked'),
+    (_sharing_permission(), 'file_locked'),
     (subprocess.CalledProcessError(1, ['ffprobe']), 'frame_extract_failed'),
 ])
 def test_inspect_records_io_failures_instead_of_unexpected(monkeypatch, tmp_path, error, code):
