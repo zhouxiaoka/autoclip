@@ -25,6 +25,18 @@ test('invalid credentials use distinct localized copy even with a stale missing-
   assert.equal(llmFailureText(LEGACY, 'llm_not_configured'), LEGACY)
 })
 
+test('insufficient_quota is recharge copy, even when the coarse code says the key is invalid', () => {
+  const { llmFailureText } = loadClassifier()
+  const { USER_MESSAGES } = loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts'))
+  const quota = USER_MESSAGES.insufficient_quota
+  const key = USER_MESSAGES.llm_auth_invalid
+  assert.match(quota, /充值或更换令牌/)
+  assert.equal(llmFailureText(key, 'llm_auth_invalid', 'insufficient_quota'), quota)
+  assert.equal(llmFailureText(quota, 'llm_auth_invalid'), quota)
+  assert.equal(llmFailureText(USER_MESSAGES.provider_error, 'provider_error', 'insufficient_quota'), quota)
+  assert.equal(llmFailureText(LEGACY, 'llm_auth_invalid', 'invalid_key'), key)
+})
+
 test('503 coarse provider_error shows the upstream_unavailable sentence', () => {
   const { llmFailureText } = loadClassifier()
   const { USER_MESSAGES } = loadTs(path.join(__dirname, '../src/analytics/failureCodes.ts'))

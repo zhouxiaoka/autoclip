@@ -59,6 +59,7 @@ export interface Project {
   total_steps?: number
   error_message?: string
   error_code?: string
+  upstream_error_type?: string
 }
 
 interface ProjectStore {

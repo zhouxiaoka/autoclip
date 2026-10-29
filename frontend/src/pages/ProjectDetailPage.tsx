@@ -295,6 +295,7 @@ const ProjectDetailPage: React.FC = () => {
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
+  const failureUpstream = currentProject.upstream_error_type || currentProject.processing_config?.upstream_error_type || currentProject.settings?.upstream_error_type
   const failureContext = {
     source: 'failure' as const,
     project_id: currentProject.id,
@@ -394,7 +395,7 @@ const ProjectDetailPage: React.FC = () => {
           <b>{t("这次处理没有成功")}</b>
           {currentProject.error_message ? (
             <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-word' }}>
-              {t(llmFailureText(currentProject.error_message, currentProject.error_code))}
+              {t(llmFailureText(currentProject.error_message, currentProject.error_code, failureUpstream))}
             </span>
           ) : (
             t("可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。")

@@ -23,7 +23,11 @@ test('R21 #163: precise upstream type wins over the coarse error_code (one class
   const perm = '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。'
   assert.equal(fa.failureAction('llm_auth_invalid', 'permission_denied').reason, perm)
   assert.equal(fa.failureAction('authentication', 'permission_denied').reason, perm)
-  assert.equal(fa.failureAction('llm_auth_invalid', 'insufficient_quota').reason, '余额或令牌额度不足，请充值或更换令牌后再试。')
+  const quota = fa.failureAction('llm_auth_invalid', 'insufficient_quota')
+  assert.equal(quota.kind, 'settings')
+  assert.equal(quota.reason, '余额或令牌额度不足，请充值或更换令牌后再试。')
+  assert.equal(quota.reason.includes('API Key'), false)
+  assert.equal(fa.failureAction('provider_error', 'insufficient_quota').reason, quota.reason)
   // non-user upstream does not erase a user-cause code
   assert.equal(fa.failureAction('insufficient_quota', 'rate_limited').reason, '余额或令牌额度不足，请充值或更换令牌后再试。')
   assert.equal(fa.failureAction('timeout', 'rate_limited').kind, 'retry')

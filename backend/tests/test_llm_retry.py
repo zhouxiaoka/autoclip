@@ -125,6 +125,20 @@ def test_caller_can_request_fewer_attempts(monkeypatch):
     assert sleeps == []
 
 
+def test_quota_on_401_or_403_is_not_an_invalid_key():
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
+
+    for status in (401, 403, 402, 429, None):
+        assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, status) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INVALID_KEY, 401) == 'llm_auth_invalid'
+    assert studio_code_for(UpstreamErrorType.PERMISSION_DENIED, 403) == 'llm_auth_invalid'
+    body = {'error': {'message': '用户余额不足', 'type': 'new_api_error', 'code': 'insufficient_user_quota'}}
+    info = classify_upstream_error(403, body)
+    assert info.error_type is UpstreamErrorType.INSUFFICIENT_QUOTA
+    assert studio_code_for(info.error_type, 403) == 'provider_error'
+
+
 def test_retry_policy_uses_shared_classifier_and_retry_after():
     from backend.core.llm_retry import (
         MAX_RETRIES,

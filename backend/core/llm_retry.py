@@ -93,8 +93,10 @@ def studio_code_for(error_type: UpstreamErrorType | str, status: int | None = No
         return "connection"
     if value in {UpstreamErrorType.INVALID_KEY.value, UpstreamErrorType.PERMISSION_DENIED.value}:
         return "llm_auth_invalid"
+    # 401/403 quota (88API「余额不足」) is not a bad key. Keep the coarse code
+    # provider_error; the fine type stays upstream_error_type=insufficient_quota.
     if value == UpstreamErrorType.INSUFFICIENT_QUOTA.value:
-        return "llm_auth_invalid" if status in (401, 403) else "provider_error"
+        return "provider_error"
     return "provider_error"
 
 
