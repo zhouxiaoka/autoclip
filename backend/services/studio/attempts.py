@@ -58,6 +58,38 @@ def receipts(data) -> list:
     return value
 
 
+def repeat_failure(data) -> dict:
+    """Trailing failure streak for this project, from attempt receipts in sequence order.
+
+    ``count`` is how many ``failed`` receipts follow the last completed or partial one.
+    ``same_code`` is true when that streak has at least two and the last two share a
+    non-empty ``error_code``. Open and abandoned receipts neither count nor reset it.
+    Read at workspace time: ``generation_summary`` runs while the open receipt is still
+    open, so the streak is not frozen into the receipt summary.
+    """
+    ordered = sorted((item for item in receipts(data) if isinstance(item, dict)), key=lambda item: item.get('sequence') or 0)
+    streak = []
+    for receipt in ordered:
+        state = receipt.get('state')
+        if state in ('completed', 'partial'):
+            streak = []
+        elif state == 'failed':
+            code = receipt.get('error_code')
+            streak.append(code if isinstance(code, str) else '')
+    count = len(streak)
+    same = count >= 2 and bool(streak[-1]) and streak[-1] == streak[-2]
+    return {'count': count, 'same_code': same}
+
+
+def public_workspace(data) -> dict:
+    """API workspace: public receipts, plus ``generation.repeat_failure`` for the failure page."""
+    view = {**data, 'attempts': [public(a) for a in receipts(data)]}
+    generation = view.get('generation')
+    if isinstance(generation, dict):
+        view = {**view, 'generation': {**generation, 'repeat_failure': repeat_failure(data)}}
+    return view
+
+
 def find(data, attempt_id):
     return next((a for a in receipts(data) if a.get('attempt_id') == attempt_id), None) if attempt_id else None
 
@@ -262,7 +294,9 @@ def _millis(value):
 
 def generation_summary(data, variants=None, started=None) -> dict:
     """the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
-    (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only."""
+    (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only.
+    The consecutive-failure streak is ``repeat_failure`` on the live workspace generation, not here:
+    this summary is taken before the open receipt becomes terminal."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
     all_variants = [v for v in (data.get('output_variants') or [] if variants is None else variants) if isinstance(v, dict)]
     variants = [v for v in all_variants if v.get('status') != 'on_demand']

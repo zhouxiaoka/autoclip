@@ -71,6 +71,23 @@ test('failed automatic generation does not claim AI is still producing', () => {
   assert.doesNotMatch(render(true, 'screening', 'failed'), /AI 正在按所选平台制作成片/)
 })
 
+test('X1 two same-code failures lead with diagnose and keep retry secondary', () => {
+  generationOverride.value = { auto_start: true, status: 'failed', repeat_failure: { count: 2, same_code: true } }
+  try {
+    const buttons = []
+    render(true, 'production', 'failed', buttons, [], 'timeout', 'analyze')
+    const diagnose = buttons.find(button => button.children === '看看哪里不对')
+    const retry = buttons.find(button => button.children === '重试')
+    assert.ok(diagnose)
+    assert.equal(diagnose.variant, 'cta')
+    assert.ok(retry)
+    assert.notEqual(retry.variant, 'cta')
+    assert.ok(buttons.indexOf(diagnose) < buttons.indexOf(retry))
+  } finally {
+    generationOverride.value = null
+  }
+})
+
 test('failed automatic output exposes a retry that reuses the project and automatic route', async () => {
   const buttons = [], calls = []
   render(true, 'production', 'failed', buttons, calls)
@@ -294,6 +311,13 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, false, true)), ['settings*'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
+  const repeat = { count: 2, same_code: true }
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false, repeat)), ['diagnose*', 'retry'])
+  assert.equal(fa.failurePlan({ error_code: 'timeout' }, true, false, repeat).buttons[0].label, '看看哪里不对')
+  assert.equal(fa.failurePlan({ error_code: 'timeout' }, true, false, repeat).buttons[1].cta, false)
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false, repeat)), ['diagnose*'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false, { count: 2, same_code: false })), ['retry'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, false, repeat)), ['settings*', 'continue'])
   const install = fa.failurePlan({ error_code: 'whisper_not_installed' }, true, false)
   assert.deepEqual(keys(install), ['settings*', 'continue'])
   assert.equal(install.buttons[0].label, '安装转写')

@@ -87,6 +87,9 @@
 .studio-editor-main .studio-source-details{margin-top:22px}
 .studio-readiness{display:flex;flex-direction:column;gap:10px;margin:16px 0 2px;padding:12px 14px;border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-bg)}
 .studio-readiness-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.studio-diagnose{display:flex;flex-direction:column;gap:12px}
+.studio-diagnose .studio-readiness{margin:0}
+.studio-diagnose .studio-error,.studio-diagnose .studio-muted{margin:0}
 .studio-readiness-row .ac-status{min-width:0;line-height:1.45}
 .ac-dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--ac-space-md);min-height:280px;margin:var(--ac-space-sm) 0 var(--ac-space-lg);padding:var(--ac-space-3xl) var(--ac-space-xl);border:1px dashed var(--ac-line);border-radius:var(--ac-radius);background:var(--ac-bg);text-align:center;transition:border-color 160ms ease,background 160ms ease}
 .ac-dropzone.is-hot{border-color:var(--ac-accent);background:var(--ac-card)}

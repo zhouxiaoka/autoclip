@@ -116,6 +116,8 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     kind: ['first_clip', 'all_done', 'failed'],
     permission: ['granted', 'denied', 'default'],
     legacy_action: ['start_processing', 'collection', 'export_confirm', 'plan_adjust', 'preferences'],
+    suggestion: ['switch_model', 'install_transcription', 'change_material', 'keep_window', 'none'],
+    action: ['switch_model', 'install_transcription', 'change_material', 'example'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     let raw: unknown = input[key]

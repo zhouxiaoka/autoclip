@@ -226,6 +226,14 @@
       "status": "core",
       "domain": "asr"
     },
+    "diagnose_opened": {
+      "status": "keep",
+      "domain": "studio"
+    },
+    "diagnose_action": {
+      "status": "keep",
+      "domain": "studio"
+    },
     "llm_request_finished": {
       "status": "core",
       "domain": "llm"

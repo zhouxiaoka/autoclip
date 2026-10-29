@@ -101,6 +101,8 @@ export interface GenerationState {
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
   billable_calls_before_failure?: number
+  /** Consecutive failed attempts after the last success, and whether the last two share an error_code. */
+  repeat_failure?: { count: number; same_code: boolean }
   html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean

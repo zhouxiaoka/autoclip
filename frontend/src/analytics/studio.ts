@@ -32,6 +32,22 @@ export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** X1: the diagnose panel opened after two failures with the same error_code. */
+export function trackDiagnoseOpened(errorCode?: string | null, suggestion?: string | null) {
+  const safe = safeStudioProperties({ error_code: errorCode || 'unknown', suggestion: suggestion || 'none' })
+  captureBusinessEvent('diagnose_opened', {
+    ...safe,
+    error_code: typeof safe.error_code === 'string' ? safe.error_code : 'unknown',
+    suggestion: typeof safe.suggestion === 'string' ? safe.suggestion : 'none',
+  })
+}
+
+/** X1: the user took the suggested step, or tried the sample video. */
+export function trackDiagnoseAction(action: 'switch_model' | 'install_transcription' | 'change_material' | 'example') {
+  const safe = safeStudioProperties({ action })
+  if (typeof safe.action === 'string') captureBusinessEvent('diagnose_action', safe)
+}
+
 /** ASR readiness at import probe and submit. Enums and booleans only. */
 export function trackAsrReadiness(properties: Record<string, unknown>) {
   const props = safeStudioProperties(properties)

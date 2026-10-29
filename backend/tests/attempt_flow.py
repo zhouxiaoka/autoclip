@@ -86,7 +86,7 @@ def receipts(pid):
 def workspace(pid):
     """What GET /studio/{pid} returns for receipts (api/v1/studio.py workspace)."""
     data = store.read(pid)
-    return json.loads(json.dumps({**data, 'material_origin': 'user', 'attempts': [attempts.public(a) for a in attempts.receipts(data)]}))
+    return json.loads(json.dumps({**attempts.public_workspace(data), 'material_origin': 'user'}))
 
 
 def retry_variant(pid, vid, key):
