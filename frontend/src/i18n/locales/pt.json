@@ -1924,6 +1924,7 @@
   "hf-mirror 镜像": "hf-mirror (espelho)",
   "保存失败，请重试": "Falha ao salvar. Tente novamente.",
   "连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。": "Não foi possível conectar ao serviço de modelos local. Inicie o Ollama (ou LM Studio), confirme o endereço e a porta e toque em Testar novamente.",
+  "这个模型名不在服务器的模型列表里。请改选列表中已有的模型，否则后面生成时可能会失败。": "Este nome de modelo não está na lista do servidor. Escolha um que esteja na lista; caso contrário, a geração pode falhar depois.",
   "语言 · 视觉": "Linguagem · Visão",
   "连接": "Conexão",
   "可用模型": "Modelos disponíveis",

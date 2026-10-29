@@ -12,6 +12,13 @@ HTML, GET /models 404) use ``hint_key_for`` of the same enum.
 
 A followed visual-understanding model without vision is a local capability
 miss (``vision_unsupported``), not an upstream class: save stays allowed.
+
+Custom, local, and user-supplied OpenAI-compatible addresses treat ``/models``
+as advisory. A name missing from a successful list is ``warning``; the chat
+probe can still be ok. Cover and transcription still require that name
+(``model_not_found``) when the list succeeded. A 404 or unsupported ``/models``
+does not fail those addresses by itself. Official cloud providers keep a hard
+failure when ``/models`` itself fails.
 """
 from __future__ import annotations
 
@@ -46,6 +53,8 @@ PROBE_TIMEOUT = 20.0
 
 # E6: local model server (Ollama / LM Studio) not running -> connection refused on a local URL.
 LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。'
+# D2: selected name absent from a successful /models list. Non-blocking; also the i18n key.
+MODEL_NOT_LISTED_WARNING = '这个模型名不在服务器的模型列表里。请改选列表中已有的模型，否则后面生成时可能会失败。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
 
 
@@ -68,6 +77,8 @@ class ValidationResult:
     empty_key: bool = False
     # Symbolic upstream error.code / type, when the body had one. Not a message.
     upstream_code: str = ''
+    # Non-blocking. Empty when the test has nothing extra to say.
+    warning: str = ''
 
     @property
     def error_code(self) -> str:
@@ -95,6 +106,7 @@ class ValidationResult:
             'recommended': {key: list(value) for key, value in self.recommended.items()},
             'truncated': self.truncated,
             'message_key': self.message_key,
+            'warning': self.warning,
         }
 
 
@@ -150,11 +162,13 @@ def _ok(
     recommended: Optional[dict[str, list[str]]] = None,
     truncated: bool = False,
     message_key: str = '',
+    warning: str = '',
 ) -> ValidationResult:
     return ValidationResult(
         ok=True, result='ok', key_hint=key_hint,
         normalized_base_url=base, base_url_host=_host(base), model_ids=models,
         recommended=recommended or {}, truncated=truncated, message_key=message_key,
+        warning=warning,
     )
 
 
@@ -289,6 +303,35 @@ def _local_service_down(result: ValidationResult, base: str) -> ValidationResult
     return result
 
 
+def _custom_or_local_compat(connection: ai_models.Connection, base: str) -> bool:
+    """Addresses where ``/models`` is advisory: custom compat, Ollama, LM Studio, localhost.
+
+    Official cloud presets keep a hard failure when the list endpoint itself fails.
+    A user-supplied OpenAI-compatible base URL (a relay pasted onto a preset) is included.
+    """
+    provider = (connection.provider or '').strip().lower()
+    if provider in {'compatible', 'ollama', 'lmstudio'} or is_local_url(base):
+        return True
+    from backend.core.provider_presets import get_provider
+    preset = get_provider(provider)
+    if preset is None:
+        return False
+    if preset.local_compat_remap or preset.protocol == 'local':
+        return True
+    return (connection.base_url_source or '') == 'user' and preset.protocol == 'openai-completions'
+
+
+def _models_unsupported(error: ClassifiedUpstreamError, fetched: Any) -> bool:
+    """``/models`` 404, HTML, or a method the gateway does not implement.
+
+    Auth, quota, rate limit, and connection failures are still real test failures.
+    """
+    if error.error_type is UpstreamErrorType.BAD_ENDPOINT:
+        return True
+    status = int(getattr(fetched, 'http_status', 0) or 0)
+    return error.error_type is UpstreamErrorType.UNKNOWN and status in {404, 405, 501}
+
+
 def validate_connection(
     connection: ai_models.Connection, model: str,
     *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
@@ -322,28 +365,46 @@ def _validate_resolved(
         return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     api_key = resolved.api_key or ''
     models, models_error, fetched = _get_models(base, api_key, resolved.provider)
-    extras = dict(recommended=fetched.recommended, truncated=fetched.truncated, message_key=fetched.message_key)
+    list_known = models_error is None
+    advisory = _custom_or_local_compat(resolved, base)
+    if models_error and advisory and _models_unsupported(models_error, fetched):
+        # Gateways that omit /models: keep the chat probe (or, for image/audio, do not
+        # fail the test solely because the list URL is missing).
+        models_error = None
+        list_known = False
+        extras = dict(recommended={}, truncated=False, message_key='')
+    else:
+        extras = dict(recommended=fetched.recommended, truncated=fetched.truncated, message_key=fetched.message_key)
     if models_error:
         return _failed(models_error, base, hint, models, **extras,
                        http_status=getattr(fetched, 'http_status', 0) or None, network_kind=getattr(fetched, 'network_kind', ''))
     if not (model or '').strip():
         return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
+    selected = model.strip()
     if purpose in ('cover', 'transcription'):
         # Check authenticated account access, not paid image/audio generation. Never
         # send non-chat models to chat/completions or infer access from a catalog.
         # Bailian's three adapted sync ASR models are omitted from /models but still
         # transcribe, so a successful list fetch is enough for those ids.
+        # A missing list endpoint is not that check: do not hard-fail solely for it.
         from backend.core.asr_model_catalog import DASHSCOPE_SYNC
-        adapted = purpose == 'transcription' and resolved.provider == 'dashscope' and model.strip() in DASHSCOPE_SYNC
-        if model.strip() not in models and not adapted:
+        adapted = purpose == 'transcription' and resolved.provider == 'dashscope' and selected in DASHSCOPE_SYNC
+        if selected not in models and not adapted:
+            if not list_known:
+                return _ok(base, hint, models, **extras)
             return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
         return _ok(base, hint, models, **extras)
-    probe_error = _probe(base, api_key, model.strip())
+    # Analysis: a successful list that omits the name is a warning. The chat probe
+    # still decides ok/failed. Cover/transcription keep MODEL_NOT_FOUND above.
+    warning = ''
+    if list_known and not fetched.truncated and advisory and selected not in models:
+        warning = MODEL_NOT_LISTED_WARNING
+    probe_error = _probe(base, api_key, selected)
     if probe_error:
         return _failed(probe_error, base, hint, models, **extras,
                        http_status=getattr(probe_error, 'http_status', None),
                        network_kind=getattr(probe_error, 'network_kind', ''))
-    return _ok(base, hint, models, **extras)
+    return _ok(base, hint, models, **extras, warning=warning)
 
 
 def resolve_fetch_base(connection: ai_models.Connection) -> tuple[str, Optional[ClassifiedUpstreamError]]:

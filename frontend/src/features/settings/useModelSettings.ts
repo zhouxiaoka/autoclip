@@ -49,6 +49,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState('')
+  const [testWarning, setTestWarning] = useState<{ id: string; text: string } | null>(null)
   const [keyHints, setKeyHints] = useState<Record<string, string>>({})
   const versions = useRef<Record<string, number>>({})
   const alive = useRef(true)
@@ -140,6 +141,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const editConnection = (connection: Connection, patch: Partial<Connection>) => {
     if (!settings) return
     versions.current[connection.id] = (versions.current[connection.id] || 0) + 1
+    setTestWarning(current => (current?.id === connection.id ? null : current))
     update(logic.editConnection(settings, connection.id, patch))
     setLists(old => { const next = { ...old }; delete next[connection.id]; return next })
   }
@@ -204,6 +206,17 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       ...(passed(result) ? {} : { upstream_error_type: result.error_type || 'unknown' }),
     })
     if (result.key_hint) setKeyHints(old => ({ ...old, [connection.id]: result.key_hint as string }))
+  }
+
+  /** Keep a non-blocking list warning on screen. Returns the copy when the test itself passed. */
+  const acceptWarning = (connectionId: string, result: ValidationResult) => {
+    if (passed(result) && result.warning) {
+      const text = t(result.warning)
+      setTestWarning({ id: connectionId, text })
+      return text
+    }
+    setTestWarning(current => (current?.id === connectionId ? null : current))
+    return ''
   }
 
   const orderedIds = (listing?: { models?: string[]; recommended?: Record<string, string[]> }) => {
@@ -298,6 +311,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     setSaving(true); setError('')
     try {
       let next = effective
+      let warned = ''
       const noticed: Array<{ id: string; status?: string; errorType?: string }> = []
       for (const { role, connection, model } of logic.validationTargets(next)) {
         const modelChanged = savedRef.current?.[role]?.model !== next[role]?.model
@@ -310,12 +324,17 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const row = next.connections.find(item => item.id === connection.id)
         if (row) noticed.push({ id: row.id, status: row.validation_status, errorType: row.validation_error_type })
         if (passed(result)) {
+          const text = acceptWarning(connection.id, result)
+          if (text) warned = text
           const normalized = { ...connection, base_url: result.normalized_base_url || connection.base_url }
           // Image/audio model ids carry no chat capability metadata.
           if (role === 'analysis' || role === 'vision') backfillModels(normalized, result)
           else void discover(normalized, true, 'manual')
         }
-        else setError(validationCopy(result.error_type, result.hint_key))
+        else {
+          acceptWarning(connection.id, result)
+          setError(validationCopy(result.error_type, result.hint_key))
+        }
         setSettings(next)
       }
       for (const connection of next.connections) {
@@ -340,6 +359,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         if (typeof warn === 'function') warn(text)
         else message.error(text)
       } else message.success(t('已保存'))
+      if (warned) message.warning(warned)
       const failed = [value, next].some(s => logic.validationTargets(s).some(({ connection }) => connection.validation_status === 'failed'))
       const visionFailed = logic.visionFollowLacksCapability(next, lists) || logic.visionFollowLacksCapability(value, lists)
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
@@ -361,9 +381,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       setSettings(old => old && logic.applyValidation(old, connection.id, result))
       setDirty(true)
       if (passed(result)) {
+        const warn = acceptWarning(connection.id, result)
+        if (warn) message.warning(warn)
         backfillModels(connection, result)
         void discover(connection, true, 'manual')
-      }
+      } else acceptWarning(connection.id, result)
     } finally { setTesting(false) }
   }
 
@@ -385,8 +407,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         if (role === 'analysis' || role === 'vision') backfillModels(normalized, value)
         else void discover(normalized, true, 'manual')
         message.success(t('连接正常'))
+        const warn = acceptWarning(connection.id, value)
+        if (warn) message.warning(warn)
         setError('')
       } else {
+        acceptWarning(connection.id, value)
         const text = validationCopy(value.error_type, value.hint_key)
         setError(text)
         message.error(text)
@@ -454,8 +479,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         backfillModels(normalized, value)
         void discover(normalized, true, 'manual')
         message.success(t('连接正常'))
+        const warn = acceptWarning(connection.id, value)
+        if (warn) message.warning(warn)
         setError('')
       } else {
+        acceptWarning(connection.id, value)
         const text = validationCopy(value.error_type, value.hint_key)
         setError(text)
         message.error(text)
@@ -558,7 +586,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
 
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
-    settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
+    settings, lists, busy, listErrors, dirty, saving, testing, error, testWarning, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,

@@ -28,6 +28,8 @@ export interface ValidationResult {
   recommended?: Record<string, string[]>
   truncated?: boolean
   message_key?: string
+  /** Non-blocking. Set when a custom/local list succeeded but the chosen name is absent. */
+  warning?: string
   /** 1.5.7 telemetry: closed-set connection-test code and integer upstream status. */
   error_code?: string
   http_status?: number | null

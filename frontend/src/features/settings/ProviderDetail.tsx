@@ -193,6 +193,9 @@ export default function ProviderDetail({
                 {status === 'transient' && (
                   <p className="ac-note" role="status">{validationCopy(connection.validation_error_type)}</p>
                 )}
+                {m.testWarning?.id === connection.id && status !== 'failed' && (
+                  <p className="ac-note" role="status">{m.testWarning.text}</p>
+                )}
               </div>
             )}
           </section>
