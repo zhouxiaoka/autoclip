@@ -8,7 +8,7 @@ import { ConfigProvider } from 'antd'
 import { t } from '../../i18n'
 import { Btn, Dialog, Icon, StatusDot } from '../../ui'
 import { openExternalLink } from '../../utils/externalLinks'
-import { useModelSettings } from './useModelSettings'
+import { useQuickConnect } from './useQuickConnect'
 import { PROVIDERS } from './providers'
 import ProviderFields from './ProviderFields'
 import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogic'
@@ -47,7 +47,7 @@ const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: () => s
 export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?: (needed: boolean) => void; openRequest?: number }) {
   useTranslation()
   const navigate = useNavigate()
-  const m = useModelSettings('home_setup')
+  const m = useQuickConnect('home_setup')
   const { settings } = m
   const [open, setOpen] = useState(false)
   const [choice, setChoice] = useState<FirstRunChoice>(FIRST_RUN_DEFAULT)
@@ -81,6 +81,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     trackExperience('setup_action', { placement: 'home_setup', presentation_id: presentation.current, action: value, ...(provider ? { provider } : {}) })
   if (!settings || !needed) return null
 
+  // Only the overlay closes. The import zone stays on the setup card until analysis is actually saved.
   const later = () => { action('later'); try { sessionStorage.setItem(DISMISSED_KEY, '1') } catch { /* ignore */ } setOpen(false) }
   const goSettings = () => {
     action('open_settings')

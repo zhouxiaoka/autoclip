@@ -36,6 +36,15 @@ export interface SubmissionOptions {
   allowLinkWithoutWhisper?: boolean
 }
 
+/** Analysis is missing a usable model. A failed validation stays on the import zone. */
+export const NOT_CONFIGURED_CODES = ['not_configured', 'no_model', 'invalid_connection'] as const
+
+export function analysisNeedsSetup(report: ImportReadiness | null | undefined): boolean {
+  const analysis = report?.checks?.analysis
+  if (!analysis || analysis.ok !== false) return false
+  return (NOT_CONFIGURED_CODES as readonly string[]).includes(analysis.code)
+}
+
 const ORDER = ['analysis', 'transcription', 'visual', 'ffmpeg'] as const
 
 /** Gate the import button. An attached SRT covers a missing transcriber. A failed probe does not trap the user. */

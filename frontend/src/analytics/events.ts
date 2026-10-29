@@ -71,7 +71,7 @@ export function trackProcessingFailed(props: {
 export function trackSponsorLinkOpened(props: {
   sponsor: SponsorId
   target: 'register' | 'guide'
-  placement: 'settings_model' | 'home_setup'
+  placement: 'settings_model' | 'home_setup' | 'import_card'
 }): void {
   trackEvent(AnalyticsEvent.SponsorLinkOpened, props)
 }

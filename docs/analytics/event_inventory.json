@@ -150,6 +150,10 @@
       "status": "core",
       "domain": "setup"
     },
+    "setup_step_done": {
+      "status": "core",
+      "domain": "setup"
+    },
     "import_blocked": {
       "status": "core",
       "domain": "setup"

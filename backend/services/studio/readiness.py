@@ -23,15 +23,31 @@ def _connection_ready(connection) -> bool:
 
 
 def _analysis(settings: ai_models.ModelSettings) -> dict:
+    """Distinguish why analysis cannot run.
+
+    ``not_configured`` — nothing saved. ``no_model`` — a usable connection exists
+    but no analysis model is chosen. ``invalid_connection`` — a connection is
+    present or referenced but cannot serve requests (missing key or endpoint).
+    ``validation_failed`` stays separate: the user already saved a model and the
+    check failed, so the import zone must not turn into the first-run card.
+    """
     if getattr(settings, '_migration_warnings', None):
         return _check(False, 'settings_invalid', 'settings_ai')
     binding = settings.analysis
     connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
-    if binding and binding.model and _connection_ready(connection):
-        if getattr(connection, 'validation_status', 'unchecked') == 'failed':
-            return _check(False, 'validation_failed', 'settings_ai')
-        return _check(True, 'configured')
-    return _check(False, 'not_configured', 'settings_ai')
+    if binding is None:
+        if any(_connection_ready(item) for item in settings.connections):
+            return _check(False, 'no_model', 'settings_ai')
+        if settings.connections:
+            return _check(False, 'invalid_connection', 'settings_ai')
+        return _check(False, 'not_configured', 'settings_ai')
+    if connection is None or not _connection_ready(connection):
+        return _check(False, 'invalid_connection', 'settings_ai')
+    if not (binding.model or '').strip():
+        return _check(False, 'no_model', 'settings_ai')
+    if getattr(connection, 'validation_status', 'unchecked') == 'failed':
+        return _check(False, 'validation_failed', 'settings_ai')
+    return _check(True, 'configured')
 
 
 def ensure_analysis_usable() -> None:

@@ -65,7 +65,7 @@ function renderFirstRun() {
       StatusDot: 'status',
     },
     '../../utils/externalLinks': { openExternalLink: url => links.push(url) },
-    './useModelSettings': { useModelSettings: () => store },
+    './useQuickConnect': { useQuickConnect: () => store },
     './providers': providers,
     './ProviderFields': { default: () => React.createElement('div', { className: 'fields' }) },
     './modelSettingsLogic': {

@@ -60,6 +60,7 @@ function loadStudio(file, mocks, sandbox) {
   })
   const exports = {}
   const req = id => {
+    if (id === './ImportSetupCard') return { default: () => null }
     if (id in mocks) return mocks[id]
     if (id === 'react' || id === 'react/jsx-runtime') return require(id)
     if (id.startsWith('./')) {

@@ -81,6 +81,11 @@ export const PROVIDERS: Record<ProviderKey, ProviderEntry> = UI_KEYS.reduce((acc
   return acc
 }, {} as Record<ProviderKey, ProviderEntry>)
 
+/** Slim setup list: the existing 「推荐」 group (sponsors). Success-rate tiers arrive with F1. */
+export function recommendedSetupProviders(): ProviderKey[] {
+  return (Object.keys(PROVIDERS) as ProviderKey[]).filter(key => PROVIDERS[key].group === 'sponsor')
+}
+
 export const providerPickerOptions = () => PROVIDER_GROUPS
   .map((group) => ({
     label: group.label(),

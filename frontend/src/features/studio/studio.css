@@ -110,3 +110,14 @@
 .studio-progress-meta span{color:var(--ac-sub);font-size:12.5px}
 .studio-progress-meta .ac-mono{color:var(--ac-accent)}
 .studio-billing{margin:8px 0 0;color:var(--ac-sub);font-size:12.5px;line-height:1.6}
+.ac-import-setup{display:flex;flex-direction:column;gap:18px}
+.ac-import-setup h2{margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em;color:var(--ac-ink)}
+.ac-import-setup h2+p{margin:8px 0 0}
+.ac-import-steps{display:flex;flex-wrap:wrap;gap:8px 16px;margin:0;padding:0;list-style:none;color:var(--ac-muted);font-size:12.5px}
+.ac-import-steps li[data-current="true"]{color:var(--ac-ink)}
+.ac-import-steps li[data-done="true"]{color:var(--ac-sub)}
+.ac-import-setup .studio-field{margin:0}
+.ac-import-setup .studio-field input{width:100%}
+.ac-import-setup-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ac-import-setup-side{display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0}
+.ac-import-setup-side .studio-link{font-size:12.5px}

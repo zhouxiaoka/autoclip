@@ -243,6 +243,21 @@
       "preset",
       "customized"
     ],
+    "setup_placement": [
+      "home_setup",
+      "settings_model",
+      "import_card"
+    ],
+    "setup_action": [
+      "later",
+      "open_settings",
+      "one_click"
+    ],
+    "setup_step": [
+      "provider",
+      "key",
+      "connect"
+    ],
     "attribution_source": [
       "request",
       "phase",
@@ -536,7 +551,10 @@
       "required": [
         "placement",
         "trigger"
-      ]
+      ],
+      "enums": {
+        "placement": "setup_placement"
+      }
     },
     "setup_action": {
       "status": "core",
@@ -544,7 +562,23 @@
       "required": [
         "placement",
         "action"
-      ]
+      ],
+      "enums": {
+        "placement": "setup_placement",
+        "action": "setup_action"
+      }
+    },
+    "setup_step_done": {
+      "status": "core",
+      "domain": "setup",
+      "required": [
+        "placement",
+        "step"
+      ],
+      "enums": {
+        "placement": "setup_placement",
+        "step": "setup_step"
+      }
     },
     "import_blocked": {
       "status": "core",

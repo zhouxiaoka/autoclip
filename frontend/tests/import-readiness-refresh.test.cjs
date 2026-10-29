@@ -130,7 +130,12 @@ test('saving the first-run dialog makes the import page ready without a reload',
     './PlatformPicker': { default: 'platform-picker' },
     './api': {
       studioApi: {
-        readiness: async () => { const value = probes.length ? ready : notReady; probes.push(value); return value },
+        readiness: async () => {
+          const queue = [notReady, ready, notReady, ready]
+          const value = queue[Math.min(probes.length, queue.length - 1)]
+          probes.push(value)
+          return value
+        },
         readinessProbe: async () => ready,
         import: async body => { imports.push(body); return { project_id: 'project-1' } },
       },
@@ -160,6 +165,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
     './studio.css': {},
     './quick-output.css': {},
     '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    './ImportSetupCard': { default: function ImportSetupCard() { return null } },
   }
   runInSandbox(code, {
     exports, window, Event, URL, URLSearchParams, FormData: FormDataMock, setTimeout, clearTimeout, console,
@@ -173,13 +179,9 @@ test('saving the first-run dialog makes the import page ready without a reload',
   await ticks()
   tree = draw()
   assert.equal(probes.length, 1)
-  assert.ok(tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('分析模型还没配好')))
-  tree.find(node => node.type === 'textarea').props.onChange({ target: { value: 'https://youtube.com/watch?v=video' } })
-  tree = draw()
-  await button(tree, '生成成片').props.onClick()
-  assert.equal(imports.length, 0)
-  tree = draw()
-  assert.equal(tree.find(node => node.props?.className === 'studio-error')?.props?.children, '请先连接 AI 服务，再导入视频。')
+  assert.equal(tree.some(node => node.type === 'textarea'), false)
+  assert.equal(button(tree, '生成成片'), undefined)
+  assert.ok(tree.some(node => node.type && node.type.name === 'ImportSetupCard'))
 
   const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
   let settings = { saved: false, connections: [], analysis: null }
@@ -231,7 +233,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
       StatusDot: 'status',
     },
     '../../utils/externalLinks': { openExternalLink() {} },
-    './useModelSettings': { useModelSettings: () => store },
+    './useQuickConnect': { useQuickConnect: () => store },
     './providers': providers,
     './ProviderFields': { default: () => React.createElement('div', { className: 'fields' }) },
     './modelSettingsLogic': {
@@ -250,10 +252,22 @@ test('saving the first-run dialog makes the import page ready without a reload',
 
   tree = draw()
   assert.equal(probes.length, 2)
-  assert.equal(tree.some(node => String(node.props?.label || '').includes('分析模型还没配好')), false)
+  assert.equal(tree.some(node => node.type && node.type.name === 'ImportSetupCard'), false)
   assert.equal(tree.some(node => node.props?.className === 'studio-readiness'), false)
+  tree.find(node => node.type === 'textarea').props.onChange({ target: { value: 'https://youtube.com/watch?v=video' } })
+  tree = draw()
   await button(tree, '生成成片').props.onClick()
   assert.equal(imports.length, 1)
+  assert.equal(imports[0].get('url'), 'https://youtube.com/watch?v=video')
+  window.dispatchEvent(new Event(settingsReturn.SETTINGS_SAVED_EVENT))
+  await ticks()
+  tree = draw()
+  const card = tree.find(node => node.type && node.type.name === 'ImportSetupCard')
+  assert.equal(card.props.keptMaterial, true)
+  window.dispatchEvent(new Event(settingsReturn.SETTINGS_SAVED_EVENT))
+  await ticks()
+  tree = draw()
+  assert.equal(tree.find(node => node.type === 'textarea').props.value, 'https://youtube.com/watch?v=video')
   tree = draw()
   assert.equal(tree.some(node => node.props?.className === 'studio-error'), false)
 })

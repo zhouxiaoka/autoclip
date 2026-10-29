@@ -17,7 +17,8 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { analysisNeedsSetup, asrReadinessProperties, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
@@ -104,7 +105,13 @@ function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   return ''
 }
 
-export default function CreativeImport({ onImported, blocked = false, onBlocked }: { onImported: () => Promise<void>; blocked?: boolean; onBlocked?: () => void }) {
+export default function CreativeImport({ onImported, blocked = false, onBlocked, onExample, exampleBusy = false }: {
+  onImported: () => Promise<void>
+  blocked?: boolean
+  onBlocked?: () => void
+  onExample?: () => void
+  exampleBusy?: boolean
+}) {
   useTranslation()
   const navigate = useNavigate()
   const remembered = flagEnabled('remember_platforms')
@@ -210,10 +217,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     }, UNDO_MS)
     return () => window.clearTimeout(timer)
   }, [pending])
+  const analysisBlocked = analysisNeedsSetup(readiness)
   useEffect(() => {
     if (pasteFlag !== 'autostart' && !dropZone) return
     const onPaste = (event: ClipboardEvent) => {
       const target = event.target
+      if (target instanceof HTMLElement && target.closest('.ac-import-setup')) return
       if (target instanceof HTMLElement && target.closest('input, textarea, [contenteditable="true"]') && !target.closest('.ac-creative-import')) return
       const text = event.clipboardData?.getData('text') || ''
       if (!importUrlKind(text) || !shouldAutoStart(pasteFlag, 'paste')) return
@@ -222,7 +231,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [pasteFlag, dropZone, busy, settled, allowLink, source])
+  }, [pasteFlag, dropZone, busy, settled, allowLink, source, analysisBlocked])
   const issues = visibleIssues(readiness, !!subtitle, blockOptions)
   const repair = async (item: ReadinessIssue) => {
     // #353: the readiness list's install button goes through the one recovery controller (no second install flow).
@@ -282,6 +291,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (starting.current) return
     if (next.file) { setFile(next.file); setUrl(''); setSource('file') }
     else if (next.url) { setUrl(next.url); setFile(null); setSource('link') }
+    // The setup card owns the zone. Keep the material, but do not start or reopen the overlay.
+    if (analysisBlocked) return
     if (!shouldAutoStart(pasteFlag, trigger)) return
     if (!readyToStart(trigger, next)) return
     setPending({ trigger })
@@ -362,6 +373,13 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   }
   const names = platforms.map(platformLabel).join(uiLocale().toLowerCase().startsWith('zh') ? '、' : ', ')
   const youtubeLongOnlyTooShort = longGate.durationSec != null && longGate.durationSec < YOUTUBE_LONG_MIN_SEC && platforms.length > 0 && platforms.every(platform => platform === 'youtube_long')
+  if (analysisBlocked) {
+    return <section className="ac-creative-import">
+      <div className="studio-import-box">
+        <ImportSetupCard onExample={onExample} exampleBusy={exampleBusy} keptMaterial={Boolean(url.trim() || file)} />
+      </div>
+    </section>
+  }
   return <section className="ac-creative-import">
     <h1 className="ac-title">{t("放入视频，直接生成可发布成片。")}</h1>
     <p className="studio-muted">{t("选择发布平台，AI 会自动挑选内容、完成剪辑与渲染。生成后可直接下载或继续编辑。")}</p>

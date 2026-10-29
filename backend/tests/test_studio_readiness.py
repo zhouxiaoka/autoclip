@@ -72,6 +72,30 @@ def test_saved_document_is_ready_without_a_provider_call(monkeypatch):
     assert 'sk-test-key' not in json.dumps(result)
 
 
+def test_analysis_codes_separate_a_missing_model_from_a_failed_check(monkeypatch):
+    empty_key = Connection(id='ai', name='OpenAI', provider='openai', api_key='')
+    missing_key = report_for(monkeypatch, document(
+        connections=[empty_key],
+        analysis=Assignment(connection_id='ai', model='gpt-4o', capability='text'),
+    ))
+    assert missing_key['checks']['analysis'] == {'ok': False, 'code': 'invalid_connection', 'repair': 'settings_ai'}
+    untouched = report_for(monkeypatch, document(connections=[empty_key], analysis=None))
+    assert untouched['checks']['analysis'] == {'ok': False, 'code': 'invalid_connection', 'repair': 'settings_ai'}
+
+    ready = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key')
+    no_model = report_for(monkeypatch, document(connections=[ready], analysis=None))
+    assert no_model['checks']['analysis'] == {'ok': False, 'code': 'no_model', 'repair': 'settings_ai'}
+    local = Connection(id='local', name='Ollama', provider='ollama')
+    assert report_for(monkeypatch, document(connections=[local], analysis=None))['checks']['analysis']['code'] == 'no_model'
+
+    failed = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key', validation_status='failed')
+    checked = report_for(monkeypatch, document(
+        connections=[failed],
+        analysis=Assignment(connection_id='ai', model='gpt-4o', capability='text'),
+    ))
+    assert checked['checks']['analysis'] == {'ok': False, 'code': 'validation_failed', 'repair': 'settings_ai'}
+
+
 def test_nothing_saved_asks_for_an_ai_connection(monkeypatch):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness

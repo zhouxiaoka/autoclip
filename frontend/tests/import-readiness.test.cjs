@@ -21,6 +21,7 @@ function loadReadiness() {
 }
 
 const readiness = loadReadiness()
+function ImportSetupCardMark() { return null }
 const realErrorText = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'), {}, path.join(__dirname, '../src/features/studio'))
 const check = (ok, code, repair) => ({ ok, code, repair })
 function report(overrides = {}) {
@@ -143,6 +144,7 @@ function render(options = {}) {
     './studio.css': {},
     './quick-output.css': {},
     '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    './ImportSetupCard': { default: ImportSetupCardMark },
   }
   runInSandbox(code, { FormData: FormDataMock, exports, require: id => { assert.ok(id in mocks, id); return mocks[id] } })
   const tree = nodes(exports.default({ onImported: async () => {}, blocked: !!options.blocked, onBlocked: () => blocked.push('setup') }))
@@ -153,16 +155,13 @@ function button(tree, label) {
   return tree.find(node => node.type === 'button' && node.props?.children === label)
 }
 
-test('the banner installs whisper, opens first-run setup, and blocks an unready import', async () => {
+test('the banner installs whisper and blocks an unready import', async () => {
   const failing = report({
-    analysis: check(false, 'not_configured', 'settings_ai'),
     transcription: check(false, 'whisper_not_installed', 'install_whisper'),
   })
   const opened = render({ report: failing, blocked: true })
   assert.ok(opened.tree.some(node => node.props?.className === 'studio-readiness'))
-  await button(opened.tree, '连接 AI 服务').props.onClick()
-  assert.deepEqual(opened.blocked, ['setup'])
-  assert.deepEqual(opened.navigations, [])
+  assert.equal(opened.tree.some(node => node.type === ImportSetupCardMark), false)
   await button(opened.tree, '安装 Whisper').props.onClick()
   // #353: the banner button goes through the one recovery controller, never a page-owned install call.
   assert.deepEqual(opened.installs, ['open:whisper_not_installed', 'controller.install'])
@@ -178,6 +177,28 @@ test('the banner installs whisper, opens first-run setup, and blocks an unready 
   await button(withSubtitle.tree, '生成成片').props.onClick()
   assert.equal(withSubtitle.calls.length, 1)
   assert.equal(withSubtitle.calls[0].get('subtitle'), '[object Object]')
+})
+
+test('an unconfigured analysis model replaces the import zone and keeps a failed validation on it', () => {
+  for (const code of ['not_configured', 'no_model', 'invalid_connection']) {
+    const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }), blocked: true })
+    assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), true, code)
+    assert.equal(view.tree.some(node => node.type === 'textarea'), false, code)
+    assert.equal(button(view.tree, '生成成片'), undefined, code)
+    assert.equal(readiness.analysisNeedsSetup(report({ analysis: check(false, code, 'settings_ai') })), true, code)
+  }
+  for (const code of ['validation_failed', 'settings_invalid']) {
+    const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
+    assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), false, code)
+    assert.ok(button(view.tree, '生成成片'), code)
+    assert.equal(readiness.analysisNeedsSetup(report({ analysis: check(false, code, 'settings_ai') })), false, code)
+  }
+    assert.equal(readiness.analysisNeedsSetup(null), false)
+  const kept = render({ report: report({ analysis: check(false, 'not_configured', 'settings_ai') }), url: 'https://youtube.com/watch?v=kept' })
+  assert.equal(kept.tree.find(node => node.type === ImportSetupCardMark).props.keptMaterial, true)
+  const restored = render({ url: 'https://youtube.com/watch?v=kept' })
+  assert.equal(restored.tree.find(node => node.type === 'textarea').props.value, 'https://youtube.com/watch?v=kept')
+  assert.equal(restored.tree.some(node => node.type === ImportSetupCardMark), false)
 })
 
 test('a failed provider check blocks generation and points at model settings', async () => {
