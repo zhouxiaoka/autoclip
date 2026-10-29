@@ -139,6 +139,59 @@ def test_quota_on_401_or_403_is_not_an_invalid_key():
     assert studio_code_for(info.error_type, 403) == 'provider_error'
 
 
+def test_gemini_retry_delay_seconds_are_retry_after():
+    from backend.core.llm_retry import parse_retry_after, retry_after_from_error
+
+    assert parse_retry_after("17s") == 17.0
+    assert parse_retry_after("17.234s") == 17.234
+    assert parse_retry_after("86400s") == 120.0
+    assert parse_retry_after({"seconds": 17, "nanos": 500_000_000}) == 17.5
+    error = Exception("429 RESOURCE_EXHAUSTED")
+    error.code = 429
+    error.details = {
+        "error": {
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "You exceeded your current quota",
+            "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"}],
+        }
+    }
+    assert retry_after_from_error(error) == 17.0
+    # An explicit header still wins over the body delay.
+    error.response = SimpleNamespace(headers={"Retry-After": "3"}, status_code=429)
+    assert retry_after_from_error(error) == 3.0
+
+
+def test_gemini_per_minute_429_is_retried(monkeypatch):
+    concurrency.reset_limiter()
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    n = {"i": 0}
+
+    def flaky():
+        n["i"] += 1
+        if n["i"] < 2:
+            error = Exception("429 RESOURCE_EXHAUSTED")
+            error.code = 429
+            error.details = {
+                "error": {
+                    "code": 429,
+                    "status": "RESOURCE_EXHAUSTED",
+                    "message": "You exceeded your current quota, please check your plan and billing details.",
+                    "details": [
+                        {"violations": [{"quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]},
+                        {"retryDelay": "17s"},
+                    ],
+                }
+            }
+            raise error
+        return "ok"
+
+    assert _manager({"fn": flaky}).call_with_retry("p") == "ok"
+    assert n["i"] == 2
+    assert sleeps == [17.0]
+    concurrency.reset_limiter()
+
+
 def test_retry_policy_uses_shared_classifier_and_retry_after():
     from backend.core.llm_retry import (
         MAX_RETRIES,

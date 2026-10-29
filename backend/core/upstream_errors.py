@@ -172,15 +172,21 @@ def classify_exception(error: BaseException, *, finish_reason: str | None = None
 
 
 def http_error_parts(error: BaseException) -> tuple[int | None, Any]:
-    """沿异常取出 ``(status_code, body)``，读不到 body 时退回 ``str(error)``。"""
+    """沿异常取出 ``(status_code, body)``，读不到 body 时退回 ``str(error)``。
+
+    google-genai 把响应 JSON 放在 ``details``（以及 ``response``）上，不设 ``body``。
+    这里把那份 JSON 交给分类器，才能读到 ``quotaId`` / ``retryDelay``。
+    """
     status = _status_from_obj(error)
     body: Any = _first_attr(error, "body")
     response = _first_attr(error, "response")
     if response is not None:
         if status is None:
             status = _status_from_obj(response)
-        if body is None:
+        if _missing_body(body):
             body = _body_from_response(response)
+    if _missing_body(body):
+        body = _body_from_details(error)
     if body is None:
         body = str(error) if error.args else ""
     return status, body
@@ -268,6 +274,9 @@ def _from_structured_code(
     if tokens & _CODE_RATE:
         return UpstreamErrorType.RATE_LIMITED
     if tokens & _CODE_RESOURCE:
+        distinguished = _classify_gemini_quota(blob)
+        if distinguished is not None:
+            return distinguished
         return (
             UpstreamErrorType.INSUFFICIENT_QUOTA
             if _contains(blob, _QUOTA_HINTS)
@@ -285,6 +294,12 @@ def _channel_outage(blob: str) -> bool:
 
 
 def _from_hints(blob: str, status: int | None) -> UpstreamErrorType | None:
+    # Unparsed Gemini text still carries quotaId / retryDelay. Read those before the
+    # generic "exceeded your current quota" phrase, which both RPM and RPD share.
+    if status == 429 or "resource_exhausted" in blob:
+        distinguished = _classify_gemini_quota(blob)
+        if distinguished is not None:
+            return distinguished
     if _contains(blob, _QUOTA_HINTS):
         return UpstreamErrorType.INSUFFICIENT_QUOTA
     if _channel_outage(blob) and status in {500, 502, 503, 504}:
@@ -363,20 +378,119 @@ def _parse_json_object(text: str) -> dict[str, Any] | None:
 
 def _error_fields(payload: dict[str, Any] | None, text: str) -> tuple[str, str, str]:
     if not payload:
-        return "", "", text.lower()
+        return "", "", _with_quota_signals(text.lower(), _loose_quota_signals(text.lower()))
     error = payload.get("error")
     if not isinstance(error, dict):
-        error = {}
-    details = error.get("details") if isinstance(error.get("details"), list) else []
+        error = payload if _looks_like_error_object(payload) else {}
+    details = _detail_dicts(error, payload)
     reasons = []
     for item in details:
-        if isinstance(item, dict) and item.get("reason"):
+        if item.get("reason"):
             reasons.append(str(item["reason"]))
     # Gemini 把 HTTP 状态写在 error.code（数字），真正的原因在 details[].reason。
+    # quotaId / retryDelay 不在 reason 里，必须另外带进分类文本。
     code = _symbolic_code(*reasons, error.get("reason"), error.get("code"), payload.get("code"))
     kind = _symbolic_code(error.get("type"), error.get("status"), payload.get("type"), payload.get("status"))
     message = _first_str(error.get("message"), payload.get("message"), error.get("msg"))
-    return _normalize_token(code), _normalize_token(kind), (message or text).lower()
+    blob = (message or text).lower()
+    return _normalize_token(code), _normalize_token(kind), _with_quota_signals(blob, _quota_signals(details))
+
+
+def _looks_like_error_object(payload: dict[str, Any]) -> bool:
+    return any(key in payload for key in ("message", "status", "details", "code"))
+
+
+def _detail_dicts(*sources: dict[str, Any]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for source in sources:
+        details = source.get("details")
+        if not isinstance(details, list):
+            continue
+        marker = id(details)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        found.extend(item for item in details if isinstance(item, dict))
+    return found
+
+
+def _quota_signals(details: list[dict[str, Any]]) -> tuple[list[str], bool]:
+    quota_ids: list[str] = []
+    has_delay = False
+    for item in details:
+        violations = item.get("violations")
+        if isinstance(violations, list):
+            for violation in violations:
+                if not isinstance(violation, dict):
+                    continue
+                quota_id = violation.get("quotaId")
+                if quota_id is None:
+                    quota_id = violation.get("quota_id")
+                if isinstance(quota_id, str) and quota_id.strip():
+                    quota_ids.append(quota_id.strip())
+        if _retry_delay_value(item) is not None:
+            has_delay = True
+    return quota_ids, has_delay
+
+
+def _retry_delay_value(item: dict[str, Any]) -> Any:
+    if "retryDelay" in item:
+        return item.get("retryDelay")
+    if "retry_delay" in item:
+        return item.get("retry_delay")
+    return None
+
+
+def _loose_quota_signals(text: str) -> tuple[list[str], bool]:
+    """Pull quotaId / retryDelay out of an unparsed Gemini body (JSON or Python repr)."""
+    lowered = (text or "").lower()
+    if "quotaid" not in lowered and "retrydelay" not in lowered and "retry_delay" not in lowered:
+        return [], False
+    ids = re.findall(r"quota_?id[\"']?\s*[:=]\s*[\"']?([a-z0-9_\-]+)", lowered)
+    has_delay = re.search(
+        r"retry_?delay[\"']?\s*[:=]\s*[\"']?\d+(?:\.\d+)?s",
+        lowered,
+    ) is not None
+    return ids, has_delay
+
+
+def _with_quota_signals(text: str, signals: tuple[list[str], bool]) -> str:
+    quota_ids, has_delay = signals
+    extras = [f"ac_quota_id={quota_id.lower()}" for quota_id in quota_ids]
+    if has_delay:
+        extras.append("ac_retry_delay=1s")
+    if not extras:
+        return text
+    return f"{text} {' '.join(extras)}".strip()
+
+
+def _classify_gemini_quota(blob: str) -> UpstreamErrorType | None:
+    """PerMinute or a RetryInfo delay is RPM. Only an all-PerDay quota with no delay is exhausted."""
+    ids = re.findall(r"ac_quota_id=([^\s]+)", blob)
+    has_delay = "ac_retry_delay=" in blob
+    if not ids and not has_delay:
+        ids, has_delay = _loose_quota_signals(blob)
+        ids = [item.lower() for item in ids]
+    if not ids and not has_delay:
+        return None
+    if any(_per_minute(item) for item in ids) or has_delay:
+        return UpstreamErrorType.RATE_LIMITED
+    if ids and all(_per_day(item) for item in ids):
+        return UpstreamErrorType.INSUFFICIENT_QUOTA
+    return None
+
+
+def _compact_quota_id(quota_id: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (quota_id or "").lower())
+
+
+def _per_minute(quota_id: str) -> bool:
+    return "perminute" in _compact_quota_id(quota_id)
+
+
+def _per_day(quota_id: str) -> bool:
+    return "perday" in _compact_quota_id(quota_id)
 
 
 def _looks_like_html(text: str, payload: dict[str, Any] | None) -> bool:
@@ -425,6 +539,27 @@ def _symbolic_code(*values: Any) -> str:
         if text and not text.isdigit():
             return text
     return ""
+
+
+def _missing_body(body: Any) -> bool:
+    return body is None or body == "" or body == b""
+
+
+def _body_from_details(error: BaseException) -> Any:
+    """google-genai stores the response JSON on ``details``, not ``body``."""
+    details = _first_attr(error, "details")
+    if isinstance(details, dict) and details:
+        return details
+    if isinstance(details, list) and details:
+        status = _first_attr(error, "status")
+        return {
+            "error": {
+                "message": _first_attr(error, "message") or "",
+                "status": status if isinstance(status, str) else "",
+                "details": details,
+            }
+        }
+    return None
 
 
 def _first_attr(obj: Any, name: str) -> Any:

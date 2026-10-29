@@ -86,6 +86,87 @@ def test_gemini_envelopes(status, body, expected):
     _assert_safe(result, expected, expected in RETRYABLE_TYPES)
 
 
+# Real free-tier GenerateContent 429s. RPM and RPD share the same status, code and
+# "exceeded your current quota" sentence; only quotaId / retryDelay separate them.
+_GEMINI_RPM = {
+    "error": {
+        "code": 429,
+        "message": "You exceeded your current quota, please check your plan and billing details. Please retry in 17.048s.",
+        "status": "RESOURCE_EXHAUSTED",
+        "details": [
+            {"@type": "type.googleapis.com/google.rpc.Help", "links": [{"description": "Learn more", "url": "https://ai.google.dev/gemini-api/docs/rate-limits"}]},
+            {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{
+                "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                "quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                "quotaDimensions": {"location": "global", "model": "gemini-2.5-flash"},
+                "quotaValue": "15",
+            }]},
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"},
+        ],
+    }
+}
+_GEMINI_RPD = {
+    "error": {
+        "code": 429,
+        "message": "You exceeded your current quota, please check your plan and billing details.",
+        "status": "RESOURCE_EXHAUSTED",
+        "details": [
+            {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{
+                "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                "quotaDimensions": {"model": "gemini-2.0-flash", "location": "global"},
+            }]},
+        ],
+    }
+}
+
+
+@pytest.mark.stdlib_only
+def test_gemini_free_tier_per_minute_is_retryable_rate_limit():
+    result = classify_upstream_error(429, _GEMINI_RPM)
+    _assert_safe(result, UpstreamErrorType.RATE_LIMITED, True)
+    # PerDay with a RetryInfo delay is still a wait, not a dead balance.
+    delayed = {
+        "error": {
+            **_GEMINI_RPD["error"],
+            "details": [
+                *_GEMINI_RPD["error"]["details"],
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "86399s"},
+            ],
+        }
+    }
+    _assert_safe(classify_upstream_error(429, delayed), UpstreamErrorType.RATE_LIMITED, True)
+
+
+@pytest.mark.stdlib_only
+def test_gemini_free_tier_per_day_without_delay_is_quota():
+    _assert_safe(classify_upstream_error(429, _GEMINI_RPD), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+    # Prose "Please retry in 17s" is not RetryInfo.retryDelay.
+    prose = {"error": {"code": 429, "message": "You exceeded your current quota. Please retry in 17s.", "status": "RESOURCE_EXHAUSTED"}}
+    _assert_safe(classify_upstream_error(429, prose), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+
+
+@pytest.mark.stdlib_only
+def test_gemini_sdk_details_reach_the_classifier_without_a_body_attr():
+    """google-genai puts the JSON on ``details`` and the HTTP code on ``code``."""
+    error = Exception("429 RESOURCE_EXHAUSTED")
+    error.code = 429
+    error.status = "RESOURCE_EXHAUSTED"
+    error.details = _GEMINI_RPM
+    result = classify_exception(error)
+    _assert_safe(result, UpstreamErrorType.RATE_LIMITED, True)
+    status, body = http_error_parts(error)
+    assert status == 429
+    assert body["error"]["details"][1]["violations"][0]["quotaId"].endswith("PerMinutePerProjectPerModel-FreeTier")
+
+    daily = Exception("429 RESOURCE_EXHAUSTED")
+    daily.code = 429
+    daily.details = _GEMINI_RPD["error"]["details"]
+    daily.status = "RESOURCE_EXHAUSTED"
+    daily.message = _GEMINI_RPD["error"]["message"]
+    _assert_safe(classify_exception(daily), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+
+
 @pytest.mark.stdlib_only
 @pytest.mark.parametrize(
     "status,body,expected",
