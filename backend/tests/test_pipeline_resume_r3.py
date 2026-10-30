@@ -120,6 +120,46 @@ def test_subtitle_reuse_when_source_matches_but_model_changed(tmp_path, monkeypa
     assert decision['start_step'] == 'step1'
 
 
+def test_model_mismatch_clears_stale_steps_so_retry_is_not_done(tmp_path, monkeypatch):
+    """P1 #7: after model change, leftover step2/3/4 must not make a later decide return done.
+
+    Bug sequence: stamp_ok=False → restart step1 without clearing → step1 write_stamp
+    (new model) → step2 fails → retry sees four files + matching stamp → start_step=done
+    and serves the old model's step4_titles.json.
+    """
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'old', 'model': 'A', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'attached'})
+    for step, _ in pr.STEP_ARTIFACTS:
+        _write_step(meta, step, [{'model': 'A', 'step': step}])
+
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'new', 'model': 'B', 'prompt_hash': 'abc',
+    })
+    first = pr.decide_resume(video=video, srt=srt, metadata_dir=meta, fresh=False)
+    assert first['stamp_ok'] is False
+    assert first['start_step'] == 'step1'
+    assert first['skip_transcription'] is True
+    assert srt.exists(), 'P1 #6: attached SRT must survive step invalidation'
+    assert not (meta / 'step4_titles.json').exists()
+    assert not (meta / 'step2_timeline.json').exists()
+    assert (meta / pr.STAMP_NAME).exists(), 'stamp kept until next successful step rewrite'
+
+    # Simulate step1 success under model B, then step2 raising (no step2 written).
+    _write_step(meta, 'step1', [{'model': 'B', 'outline': 'new'}])
+    pr.write_stamp(meta, video=video)
+
+    second = pr.decide_resume(video=video, srt=srt, metadata_dir=meta, fresh=False)
+    assert second['stamp_ok'] is True
+    assert second['start_step'] != 'done'
+    assert second['start_step'] == 'step2'
+    assert second['reuse_steps'] == frozenset({'step1'})
+
+
 def test_resume_from_step2_when_step1_present_and_stamp_matches(tmp_path, monkeypatch):
     video = _video(tmp_path)
     srt = _srt(video)

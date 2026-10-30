@@ -202,6 +202,11 @@ def decide_resume(
     skip_transcription = srt_reusable(video, srt, stamp)
     stamp_ok = model_matches(stamp, prompt_files)
 
+    if not stamp_ok:
+        # P1 #7: invalidate stale step2/3/4 from the previous model/prompt.
+        # Keep SRT + stamp (stamp is rewritten after the next successful step).
+        clear_step_artifacts(metadata_dir)
+
     if not skip_transcription:
         return {
             'resumed_from': 'none',
@@ -254,6 +259,25 @@ def decide_resume(
     }
 
 
+def clear_step_artifacts(metadata_dir: Path) -> None:
+    """P1 #7: drop model step products only; keep stamp and SRT.
+
+    Used when the stamp's provider/model/prompt no longer matches so a retry
+    cannot treat leftover step2/3/4 from the old model as complete after step1
+    rewrites the stamp.
+    """
+    metadata_dir = Path(metadata_dir)
+    if not metadata_dir.is_dir():
+        return
+    for _, filename in STEP_ARTIFACTS:
+        path = metadata_dir / filename
+        if path.is_file():
+            path.unlink()
+    scored = metadata_dir / 'step3_all_scored.json'
+    if scored.is_file():
+        scored.unlink()
+
+
 def clear_pipeline_cache(metadata_dir: Path, *, raw_dir: Path | None = None) -> None:
     """「从头重做」: drop step artifacts and stamp; only delete ASR-generated input.srt.
 
@@ -264,15 +288,11 @@ def clear_pipeline_cache(metadata_dir: Path, *, raw_dir: Path | None = None) -> 
     metadata_dir = Path(metadata_dir)
     stamp = read_stamp(metadata_dir) if metadata_dir.is_dir() else None
     srt_origin = str((stamp or {}).get('srt_origin') or '')
+    clear_step_artifacts(metadata_dir)
     if metadata_dir.is_dir():
-        for _, filename in STEP_ARTIFACTS:
-            path = metadata_dir / filename
-            if path.is_file():
-                path.unlink()
-        for extra in (STAMP_NAME, 'step3_all_scored.json'):
-            path = metadata_dir / extra
-            if path.is_file():
-                path.unlink()
+        stamp_path = metadata_dir / STAMP_NAME
+        if stamp_path.is_file():
+            stamp_path.unlink()
     if raw_dir is not None and srt_origin == 'asr':
         srt = Path(raw_dir) / 'input.srt'
         if srt.is_file():
