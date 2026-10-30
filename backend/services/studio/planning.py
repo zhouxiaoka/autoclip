@@ -72,6 +72,51 @@ def resolve_route(analysis_mode: str, goal: str, duration: float | None, *, ai_s
     return 'subtitle'
 
 
+
+def preview_route(duration: float | None, has_subtitle: bool, has_audio: bool | None, analysis_mode: str = 'auto') -> dict:
+    """Import-time card before download. Same formal route as resolve_route/recommend.
+
+    Returns ``preview_route`` one of ``platform_subtitle`` / ``local_transcription`` / ``visual``,
+    plus ``recommended_analysis``, ``warn_visual_too_long``, and the source flags.
+    """
+    mode = analysis_mode or 'auto'
+    if has_subtitle:
+        card = 'platform_subtitle'
+    elif has_audio is False:
+        card = 'visual'
+    else:
+        card = 'local_transcription'
+
+    warn = False
+    if card == 'platform_subtitle':
+        formal = 'subtitle'
+    elif card == 'visual':
+        # No audio: prefer visual when the mode allows; overlong forces subtitle with a tip.
+        goal = 'highlight'
+        want_visual = mode in ('visual', 'auto')
+        formal = resolve_route('visual' if want_visual else 'subtitle', goal, duration, ai_screened=want_visual)
+        if (duration or 0) > VISUAL_MAX_SOURCE_SEC:
+            warn = True
+            formal = 'subtitle'
+    else:
+        # Has audio, no platform subtitle → local transcription unless user forced visual and length allows.
+        if mode == 'visual':
+            formal = resolve_route('visual', 'highlight', duration)
+            if formal == 'subtitle' and (duration or 0) > VISUAL_MAX_SOURCE_SEC:
+                warn = True
+        else:
+            formal = resolve_route(mode, 'content', duration)
+
+    return {
+        'preview_route': card,
+        'recommended_analysis': formal,
+        'warn_visual_too_long': warn,
+        'has_manual_subtitle': bool(has_subtitle),
+        'has_audio': has_audio,
+        'duration': duration,
+    }
+
+
 def preferred_analysis_mode() -> str | None:
     """The analysis mode recommend() will read (``analysis_preferences.load``: new settings, else the legacy
     analysis-preferences.json). None when the saved preference is unreadable: recommend() then refuses on its

@@ -195,3 +195,12 @@ export async function observeStudioWorkspace<T extends StudioSnapshot>(projectId
   }
   return snapshot
 }
+
+/** F4: URL preview card shown after inspect-url. */
+export function trackImportPreviewShown(properties: {
+  route: 'platform_subtitle' | 'local_transcription' | 'visual'
+  duration_bucket: 'short' | 'medium' | 'long' | 'unknown'
+  has_platform_subtitle: boolean
+}) {
+  captureBusinessEvent('import_preview_shown', safeStudioProperties(properties))
+}

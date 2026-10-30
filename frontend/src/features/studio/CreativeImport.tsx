@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
 import PlatformPicker from './PlatformPicker'
 import { studioApi, errorText, errorCode } from './api'
-import { trackAsrReadiness, trackAutoChoiceOverridden, trackOneClickStarted, trackOneClickUndone, trackQuickOutputPlatforms } from '../../analytics/studio'
+import { trackAsrReadiness, trackAutoChoiceOverridden, trackImportPreviewShown, trackOneClickStarted, trackOneClickUndone, trackQuickOutputPlatforms } from '../../analytics/studio'
 import { telemetryId } from '../../analytics/workflow'
 import { featureSnapshot, flagAssigned, flagEnabled, flagValue, useFlag } from '../../analytics/flags'
 import TemplatePicker, { templateImportFields, type HtmlTemplateChoice } from './TemplatePicker'
@@ -17,17 +17,18 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { analysisNeedsSetup, asrReadinessProperties, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type PreviewRouteKind, type ReadinessIssue } from './importReadiness'
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
-import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
+import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldArmAutostart, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
 import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
-import { cookieAssistFromLocation, stagedRecoveryUrl } from './browserCookieRecovery'
+import { browserCookieRecovery, cookieAssistFromLocation, stageBrowserCookieRecovery, stagedRecoveryUrl } from './browserCookieRecovery'
 import { SETTINGS_SAVED_EVENT } from './settingsReturn'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
+import UrlPreview, { type UrlInspectPreview } from './UrlPreview'
 import './studio.css'
 import './quick-output.css'
 
@@ -132,7 +133,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const templatesOn = useFlag('pkg_templates_v1') === true
   const visualOn = useFlag('pkg_template_picker_visual') === true
   const [browser, setBrowser] = useState('')
-  const assist = cookieAssistFromLocation(typeof window === 'undefined' ? '' : (window.location?.search || ''))
+  const [cookieAssistLocal, setCookieAssistLocal] = useState(false)
+  const assist = cookieAssistLocal || cookieAssistFromLocation(typeof window === 'undefined' ? '' : (window.location?.search || ''))
   const browserRef = useRef<HTMLSelectElement | null>(null)
   useEffect(() => {
     if (!assist) return
@@ -153,6 +155,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const [settled, setSettled] = useState(false)
   const [platformOpen, setPlatformOpen] = useState(!!reuse.current?.platforms?.length)
   const [pending, setPending] = useState<{ trigger: 'paste' | 'drop' } | null>(null)
+  const [urlPreview, setUrlPreview] = useState<UrlInspectPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewTicket = useRef(0)
+  const previewUrlRef = useRef('')
+
   const [dragging, setDragging] = useState(false)
   const [longGate, setLongGate] = useState<{ open: boolean; durationSec: number | null; trigger: 'paste' | 'drop' | 'button' }>({ open: false, durationSec: null, trigger: 'button' })
   useEffect(() => {
@@ -293,17 +300,86 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     if (trigger !== 'button') setError('')
     return true
   }
+  const clearPreview = () => {
+    previewTicket.current += 1
+    previewUrlRef.current = ''
+    setUrlPreview(null)
+    setPreviewLoading(false)
+  }
+  const runInspect = async (nextUrl: string, trigger: 'paste' | 'drop' | 'blur' = 'paste') => {
+    const trimmed = nextUrl.trim()
+    if (!importUrlKind(trimmed)) { clearPreview(); return null }
+    if (previewUrlRef.current === trimmed && urlPreview) return urlPreview
+    const ticket = ++previewTicket.current
+    previewUrlRef.current = trimmed
+    setPreviewLoading(true)
+    setPending(null)
+    try {
+      const result = await studioApi.inspectUrl({
+        url: trimmed,
+        ...(browser ? { browser } : {}),
+      })
+      if (ticket !== previewTicket.current) return null
+      const preview = result as UrlInspectPreview
+      setUrlPreview(preview)
+      setLongGate(prev => ({ ...prev, durationSec: typeof preview.duration === 'number' ? preview.duration : null }))
+      trackImportPreviewShown({
+        route: preview.preview_route,
+        duration_bucket: durationBucket(preview.duration),
+        has_platform_subtitle: !!preview.has_manual_subtitle,
+      })
+      return preview
+    } catch (e) {
+      if (ticket !== previewTicket.current) return null
+      setUrlPreview(null)
+      const code = errorCode(e)
+      const message = t(errorText(e))
+      if (browserCookieRecovery(code, errorText(e))) {
+        stageBrowserCookieRecovery(trimmed)
+        setCookieAssistLocal(true)
+      }
+      setError(message)
+      return null
+    } finally {
+      if (ticket === previewTicket.current) setPreviewLoading(false)
+    }
+  }
+  const needsPreviewTranscriptionInstall = !!(
+    urlPreview?.preview_route === 'local_transcription'
+    && readiness?.checks?.transcription?.ok === false
+    && !subtitle
+    && !readiness?.checks?.transcription?.skippable
+    && isRecoveryCode(readiness?.checks?.transcription?.code)
+  )
   const arm = (trigger: 'paste' | 'drop', next: { url?: string; file?: File }) => {
     // drop, global paste and the file picker all come through here; while a submit is running
     // (including its readiness re-check) the source is locked, so what is shown is what gets uploaded.
     if (starting.current) return
-    if (next.file) { setFile(next.file); setUrl(''); setSource('file') }
-    else if (next.url) { setUrl(next.url); setFile(null); setSource('link') }
+    if (next.file) {
+      setFile(next.file); setUrl(''); setSource('file'); clearPreview()
+      if (analysisBlocked) return
+      if (!shouldAutoStart(pasteFlag, trigger)) return
+      if (!readyToStart(trigger, next)) return
+      setPending({ trigger })
+      return
+    }
+    if (next.url) { setUrl(next.url); setFile(null); setSource('link') }
     // The setup card owns the zone. Keep the material, but do not start or reopen the overlay.
     if (analysisBlocked) return
-    if (!shouldAutoStart(pasteFlag, trigger)) return
-    if (!readyToStart(trigger, next)) return
-    setPending({ trigger })
+    // F4: inspect first; autostart countdown begins only after the preview card is ready.
+    void (async () => {
+      const preview = await runInspect(next.url || '', trigger)
+      if (!preview) return
+      if (!shouldArmAutostart(pasteFlag, trigger, true)) return
+      const needsInstall = preview.preview_route === 'local_transcription'
+        && readiness?.checks?.transcription?.ok === false
+        && !subtitle
+        && !readiness?.checks?.transcription?.skippable
+        && isRecoveryCode(readiness?.checks?.transcription?.code)
+      if (needsInstall) return
+      if (!readyToStart(trigger, next)) return
+      setPending({ trigger })
+    })()
   }
   const undo = () => {
     const trigger = pending?.trigger
@@ -313,6 +389,20 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null, confirmed = false) => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
+    if (source === 'link' && url.trim() && !urlPreview && !previewLoading) {
+      const preview = await runInspect(url.trim(), 'blur')
+      if (!preview) return
+      if (preview.preview_route === 'local_transcription'
+        && readiness?.checks?.transcription?.ok === false
+        && !subtitle
+        && !readiness?.checks?.transcription?.skippable
+        && isRecoveryCode(readiness?.checks?.transcription?.code)) {
+        const check = readiness?.checks?.transcription
+        resumeSubmit.current = true
+        recover.open(check!.code, check!.model)
+        return
+      }
+    }
     if (platforms.includes('youtube_long') && !confirmed) {
       if (!readyToStart(trigger, undefined, fresh ?? readiness)) return
       setLongGate(prev => ({ ...prev, open: true, trigger }))
@@ -356,7 +446,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       const result = await studioApi.import(body)
       trackOneClickStarted({
         trigger, flow_id: flowId, platform_count: platforms.length, platform_source: platformSource.current,
-        has_subtitle: !!subtitle, transcription_route: transcriptionRoute({ hasSubtitle: !!subtitle, code: readiness?.checks?.transcription?.code, skippedWhisper }),
+        has_subtitle: !!subtitle, transcription_route: transcriptionRoute({
+          hasSubtitle: !!subtitle,
+          code: readiness?.checks?.transcription?.code,
+          skippedWhisper,
+          previewRoute: source === 'link' ? (urlPreview?.preview_route as PreviewRouteKind | undefined) : undefined,
+        }),
       }, flagAssigned('one_click_paste_start') || flagAssigned('remember_platforms') || flagAssigned('link_import_without_whisper') || flagAssigned('import_drop_zone'))
       trackQuickOutputPlatforms({ platform_count: platforms.length, portrait_style: options.portrait_style || 'auto' })
       if (remembered) writeRememberedPlatforms(platforms)
@@ -395,12 +490,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       {dropZone ? <div className={`ac-dropzone${dragging ? ' is-hot' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
         <p className="ac-dropzone-title">{t('把链接或视频放在这里')}</p>
         <p className="ac-dropzone-hint">{t('粘贴链接，或拖入一个视频文件。')}</p>
-        <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} disabled={busy}/></label>
+        <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); clearPreview(); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} onBlur={event => { const value = event.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} disabled={busy}/></label>
         {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
         <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
       </div> : <>
         <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>!busy&&setSource(v)} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
-        {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>setUrl(e.target.value)} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>:<label className="studio-file"><span>{file?.name || t("选择一段视频")}</span><input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={e=>{ const picked = e.target.files?.[0] || null; setFile(picked); if (picked) arm('drop', { file: picked }) }}/><small>MP4 / MOV / MKV / WEBM / AVI</small></label>}
+        {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>:<label className="studio-file"><span>{file?.name || t("选择一段视频")}</span><input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={e=>{ const picked = e.target.files?.[0] || null; setFile(picked); if (picked) arm('drop', { file: picked }) }}/><small>MP4 / MOV / MKV / WEBM / AVI</small></label>}
       </>}
       {templatesOn && visualOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <StyleProbeLine sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} />}
       {remembered ? <div className="ac-platform-line"><p>{t('为 {{names}} 制作', { names })}</p><button type="button" className="studio-link" disabled={busy} onClick={() => setPlatformOpen(open => !open)}>{t('改')}</button></div> : null}
@@ -416,6 +511,21 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}
+      {(source === 'link' && (previewLoading || urlPreview)) && <UrlPreview
+        preview={urlPreview}
+        loading={previewLoading}
+        needsTranscriptionInstall={needsPreviewTranscriptionInstall}
+        installing={repairing}
+        onInstallTranscription={() => {
+          const check = readiness?.checks?.transcription
+          resumeSubmit.current = false
+          setError('')
+          recover.open(check?.code || 'whisper_not_installed', check?.model)
+          void recover.install()
+        }}
+        onConfirm={() => { setPending(null); void submit('button') }}
+        onDismiss={() => { clearPreview(); setUrl(''); setPending(null) }}
+      />}
       {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec, platforms)}</p>}
       {assist && <details className="studio-details" open><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl assist browser={browser} busy={busy} onChange={setBrowser} selectRef={browserRef} /></details>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}

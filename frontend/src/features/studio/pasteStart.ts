@@ -27,6 +27,12 @@ export function shouldAutoStart(flag: string, trigger: StartTrigger): boolean {
   return flag === 'autostart' && (trigger === 'paste' || trigger === 'drop')
 }
 
+/** F4: paste/drop autostart countdown starts only after the URL preview card is ready. */
+export function shouldArmAutostart(flag: string, trigger: StartTrigger, previewReady: boolean): boolean {
+  if (trigger === 'drop') return shouldAutoStart(flag, trigger)
+  return shouldAutoStart(flag, trigger) && previewReady
+}
+
 export function undoDeadline(now: number): number {
   return now + UNDO_MS
 }

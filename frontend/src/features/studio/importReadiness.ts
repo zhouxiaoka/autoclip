@@ -71,12 +71,38 @@ export function visibleIssues(report: ImportReadiness | null, hasSubtitle: boole
   })
 }
 
-/** Enum only. A link that skipped the local transcriber is reported as platform captions, which is what the backend tries first. */
-export function transcriptionRoute(input: { hasSubtitle: boolean; code?: string; skippedWhisper: boolean }): TranscriptionRoute {
+export type PreviewRouteKind = 'platform_subtitle' | 'local_transcription' | 'visual'
+
+/** Enum only. Prefer F4 preview route when present; else fall back to skippedWhisper guess. */
+export function transcriptionRoute(input: {
+  hasSubtitle: boolean
+  code?: string
+  skippedWhisper: boolean
+  previewRoute?: PreviewRouteKind | null
+}): TranscriptionRoute {
   if (input.hasSubtitle) return 'srt'
+  if (input.previewRoute === 'platform_subtitle') return 'platform_subs'
+  if (input.previewRoute === 'local_transcription') {
+    return input.code === 'cloud_configured' ? 'cloud' : 'whisper'
+  }
+  if (input.previewRoute === 'visual') return 'platform_subs'
   if (input.skippedWhisper) return 'platform_subs'
   if (input.code === 'cloud_configured') return 'cloud'
   return 'whisper'
+}
+
+/** Duration buckets for import_preview_shown (no raw seconds). */
+export function durationBucket(seconds: number | null | undefined): 'short' | 'medium' | 'long' | 'unknown' {
+  if (seconds == null || !(seconds > 0)) return 'unknown'
+  if (seconds < 180) return 'short'
+  if (seconds < 1200) return 'medium'
+  return 'long'
+}
+
+/** Local-transcription ETA minutes for the preview card (ceil of source minutes, min 1). */
+export function transcriptionEtaMinutes(durationSec: number | null | undefined): number | null {
+  if (durationSec == null || !(durationSec > 0)) return null
+  return Math.max(1, Math.ceil(durationSec / 60))
 }
 
 export function repairDestination(repair: RepairAction): string | null {

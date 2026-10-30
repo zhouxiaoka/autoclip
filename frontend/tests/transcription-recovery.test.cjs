@@ -46,7 +46,8 @@ function fakeApi(script) {
   const log = []
   return {
     log,
-    readiness: async () => script.report(),
+    inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true }),
+        readiness: async () => script.report(),
     getRuntimeStatus: async () => script.runtime ? script.runtime() : { status: 'installing', progress: 0 },
     getModels: async () => script.models ? script.models() : [],
     installRuntime: async () => { log.push('runtime'); if (script.installFails) throw new Error('x') },
@@ -1515,8 +1516,8 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     'react-router-dom': { useNavigate: () => navigate },
     '../../ui': { Btn, Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label) },
     './PlatformPicker': { default: () => null },
-    './api': { studioApi: { readiness, readinessProbe: signal => readiness(signal), import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
-    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
+    './api': { studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true, has_audio: true }), readiness, readinessProbe: signal => readiness(signal), import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
+    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
     '../../analytics/flags': { useFlag: () => false, flagEnabled: name => dropZone && name === 'import_drop_zone', flagValue: name => autostart && name === 'one_click_paste_start' ? 'autostart' : 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
     '../../analytics/experience': { trackExperience() {} },
@@ -1527,9 +1528,10 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     './ImportPreferences': { default: () => null },
     '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}), getRuntimeStatus: async () => ({ status: 'installing', progress: 0 }), getModels: async () => [], ...speech } },
     './platformLabel': { platformLabel: id => id },
-    './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, writeRememberedPlatforms() {} },
-    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000, ...pasteStart },
+    './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, takeReuseImport: () => null, writeRememberedPlatforms() {} },
+    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldArmAutostart: () => false, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000, ...pasteStart },
     './importPreferencesStore': { readImportPreferences: () => null },
+    './UrlPreview': { default: 'url-preview' },
     './studio.css': {}, './quick-output.css': {},
     '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
   }
@@ -1564,6 +1566,7 @@ test('R20 #166: while submit re-probes readiness the form is locked and nothing 
   const view = await render({ readiness, importImpl: async () => ({ project_id: 'p' }) })
   await typeUrl(view.host, 'https://youtube.com/watch?v=one')
   await act(async () => { startButton(view.host).click() })
+  await act(async () => {}); await act(async () => {})
   // probe 2 is still waiting
   assert.equal(pending.length, 1)
   assert.equal(view.calls.length, 0)
@@ -1588,7 +1591,7 @@ for (const [code, label] of [['whisper_not_installed', '需要先安装本地转
     await typeUrl(view.host, 'https://youtube.com/watch?v=one')
     assert.equal(view.host.querySelector('[role=alertdialog]'), null)
     await act(async () => { startButton(view.host).click() })
-    await act(async () => {})
+    await act(async () => {}); await act(async () => {}); await act(async () => {})
     assert.equal(view.calls.length, 1)
     const dialog = view.host.querySelector('[role=alertdialog]')
     assert.ok(dialog, 'the gate dialog must be rendered')
@@ -1602,7 +1605,7 @@ test('R20 #167: an ordinary 422 shows the error line, not the gate dialog', asyn
   const view = await render({ readiness: async () => READY, importImpl: async () => { throw axios422('视频文件为空，请重新选择') } })
   await typeUrl(view.host, 'https://youtube.com/watch?v=one')
   await act(async () => { startButton(view.host).click() })
-  await act(async () => {})
+  await act(async () => {}); await act(async () => {}); await act(async () => {})
   assert.equal(view.host.querySelector('[role=alertdialog]'), null)
   assert.equal(view.host.querySelector('[role=alert]').textContent, '视频文件为空，请重新选择')
   act(() => view.root.unmount())
@@ -1686,6 +1689,9 @@ test('R22 #209: real paste-to-start: an idle paste swaps the source, a paste dur
   // lock released by the failure: the same real paste path now takes the link
   await pasteText('https://youtube.com/watch?v=idle')
   assert.equal(view.host.querySelector('textarea').value, 'https://youtube.com/watch?v=idle')
+  // F4: autostart arms only after inspect preview is ready
+  await act(async () => {})
+  await act(async () => {})
   assert.ok([...view.host.querySelectorAll('button')].some(b => b.textContent === '撤销'), 'idle paste arms auto start')
   act(() => view.root.unmount())
 })
@@ -1713,7 +1719,8 @@ const button = (host, text) => [...host.querySelectorAll('button')].find(b => b.
 async function openWaiting(view) {
   await typeUrl(view.host, 'https://youtube.com/watch?v=one')
   await act(async () => { startButton(view.host).click() })
-  await act(async () => {}); await act(async () => {})
+  // F4: submit awaits inspect before import; flush microtasks twice
+  await act(async () => {}); await act(async () => {}); await act(async () => {})
   const dialog = view.host.querySelector('[role=alertdialog]')
   assert.ok(dialog, 'waiting dialog rendered')
   assert.equal(dialog.getAttribute('aria-label'), '等待安装完成')
