@@ -134,7 +134,7 @@ def _sponsor(raw: Any) -> Optional[Dict[str, str]]:
         return None
     out = {
         key: str(raw[key])
-        for key in ("register_url", "guide_url", "offer", "description")
+        for key in ("register_url", "guide_url", "offer", "description", "topup_url")
         if isinstance(raw.get(key), str) and raw[key]
     }
     return out or None

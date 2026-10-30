@@ -6,7 +6,7 @@ export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | '
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
 type CloudPreset = { baseUrl: string; defaultModel: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
 export type SponsorId = 'infistar' | 'api88' | 'apimart'
-type Sponsor = { id: SponsorId; registerUrl: string; guideUrl: string; offer: string; description: string }
+type Sponsor = { id: SponsorId; registerUrl: string; guideUrl: string; offer: string; description: string; topupUrl?: string }
 type ProviderGroup = 'sponsor' | 'cloud' | 'compatible' | 'local'
 const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
   { key: 'sponsor', label: () => t('推荐') },
@@ -75,6 +75,7 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
       guideUrl: row.sponsor.guide_url,
       get offer() { return t(row.sponsor!.offer) },
       get description() { return t(row.sponsor!.description) },
+      ...(row.sponsor.topup_url ? { topupUrl: row.sponsor.topup_url } : {}),
     }
   }
   return entry

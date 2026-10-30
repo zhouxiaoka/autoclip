@@ -10,6 +10,7 @@ import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
+import { openExternalLink } from '../utils/externalLinks'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
 import { ADD_PROVIDER_HINT, failureAction, isTranscriptionInstall, SWITCH_MODEL_LABEL } from '../features/studio/failureAction'
@@ -452,7 +453,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               {installTranscription && <Btn variant="cta" size="sm" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
               {switchModelPrimary && !installTranscription && <Btn variant="cta" size="sm" loading={isRetrying} onClick={openSwitchDialog}>{t(SWITCH_MODEL_LABEL)}</Btn>}
               {addProviderPrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => navigate(recoveryAction.destination)}>{t(recoveryAction.label || '去设置')}</Btn>}
-              {rechargePrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => navigate(recoveryAction.destination)}>{t(recoveryAction.label || '去充值')}</Btn>}
+              {rechargePrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => {
+                const url = (recoveryAction.destination || '').trim()
+                if (/^https?:\/\//i.test(url)) void openExternalLink(url)
+                else navigate(url || '/settings?section=analysis')
+              }}>{t(recoveryAction.label || '去充值')}</Btn>}
               {subtitleFailure && !installTranscription && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
               {llmKeyFailure && !switchModelPrimary && !addProviderPrimary && !rechargePrimary && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
               <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>}

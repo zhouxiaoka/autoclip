@@ -234,3 +234,22 @@ def test_retry_policy_uses_shared_classifier_and_retry_after():
         UpstreamErrorType.TIMEOUT,
         UpstreamErrorType.CONNECTION,
     }
+
+
+def test_x3_insufficient_quota_is_not_llm_auth_invalid():
+    """A2/X3: quota must stay provider_error so the frontend can offer recharge."""
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.upstream_errors import UpstreamErrorType
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, 403) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, 402) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, 429) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA) != 'llm_auth_invalid'
+
+
+def test_x3_sponsor_topup_url_prefers_topup_over_register():
+    from backend.core import cloud_presets
+    for key in ('api88', 'infistar', 'apimart'):
+        url = cloud_presets.sponsor_topup_url(key)
+        assert url and url.startswith('http'), key
+    assert cloud_presets.sponsor_topup_url('openai') is None
+    assert cloud_presets.sponsor_topup_url(None) is None

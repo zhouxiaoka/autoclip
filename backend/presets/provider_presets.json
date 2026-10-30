@@ -67,7 +67,8 @@
         "register_url": "https://go.apimart.ai/tw-autoclip",
         "guide_url": "https://docs.apimart.ai/en/quickstart",
         "offer": "获取 API Key",
-        "description": "在 APIMart 创建密钥后粘贴到这里即可，接口地址已预设。"
+        "description": "在 APIMart 创建密钥后粘贴到这里即可，接口地址已预设。",
+        "topup_url": "https://www.apimart.ai/"
       },
       "kind": "preset",
       "candidates": {
@@ -120,7 +121,8 @@
         "register_url": "https://88api.ai/sign-up?aff=2PIc",
         "guide_url": "https://github.com/zhouxiaoka/autoclip/blob/main/docs/88API_SETUP.md",
         "offer": "新用户体验额度",
-        "description": "新用户通过专属链接注册可获体验额度；站内提供人工客服。"
+        "description": "新用户通过专属链接注册可获体验额度；站内提供人工客服。",
+        "topup_url": "https://88api.ai/"
       },
       "kind": "preset",
       "candidates": {
@@ -181,7 +183,8 @@
         "register_url": "https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
         "guide_url": "https://github.com/zhouxiaoka/autoclip/blob/main/docs/INFISTAR_SETUP.md",
         "offer": "$5 免费体验额度",
-        "description": "通过专属链接注册，可领取 $5 免费体验额度。"
+        "description": "通过专属链接注册，可领取 $5 免费体验额度。",
+        "topup_url": "https://www.infistar.cc/"
       },
       "kind": "preset",
       "candidates": {

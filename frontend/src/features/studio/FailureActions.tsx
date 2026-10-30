@@ -1,4 +1,5 @@
 import { ComponentType, ReactNode, useState } from 'react'
+import { openExternalLink } from '../../utils/externalLinks'
 import { t } from '../../i18n'
 import { Btn } from '../../ui'
 import {
@@ -8,7 +9,9 @@ import {
   pageFailureAction,
   pageFailureText,
   presentedFailure,
+  RECHARGE_HINT,
   RECHARGE_LABEL,
+  SPONSOR_PROVIDERS,
   SWITCH_MODEL_LABEL,
   PageFailureInfo,
 } from './failureAction'
@@ -90,7 +93,9 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
     return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'switch_model', buttons })
   }
   if (action.kind === 'recharge') {
-    const card = presentedFailure(info, pageFailureText(info))
+    const sponsor = (SPONSOR_PROVIDERS as readonly string[]).includes(action.provider)
+    const reason = sponsor ? RECHARGE_HINT : pageFailureText(info)
+    const card = presentedFailure(info, reason)
     const buttons: FailureButton[] = [{ key: 'recharge', label: action.label || RECHARGE_LABEL, cta: true }]
     if (canRetry) buttons.push({ key: 'retry', label: '重试', cta: false })
     return finish({
@@ -143,8 +148,13 @@ export default function FailureActions({
       return onSettings('/settings?section=analysis')
     }
     if (key === 'recharge') {
+      const url = (plan.destination || '').trim()
+      if (/^https?:\/\//i.test(url)) {
+        void openExternalLink(url)
+        return
+      }
       if (plan.rechargeProvider && onRecharge) return onRecharge(plan.rechargeProvider)
-      return onSettings(plan.destination || '/settings?section=analysis')
+      return onSettings(url || '/settings?section=analysis')
     }
     if (key === 'fresh') return (onFreshRetry || onRetry)()
     return onRetry()
