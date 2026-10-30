@@ -158,12 +158,19 @@ export function portraitDesign(draft: Draft): Draft {
   return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, subtitle_style: 'bold', ...withTitle}
 }
 
+/** Absolute range on the original source (seconds). T2 first-30-min window. */
+export interface SourceWindow { start: number; end: number }
+
 export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
   html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
+  source_window?: SourceWindow | null
 }
+
+/** T2: first-success devices are nudged to process only the first 30 minutes. */
+export const FIRST_WINDOW_END_SEC = 1800
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
 export interface ImportPlan {

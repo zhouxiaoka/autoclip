@@ -191,6 +191,8 @@ async def import_visual(
     url: Optional[str] = Form(None),
     browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = Form(None),
     video: Optional[UploadFile] = File(None),
+    source_window_start: Optional[float] = Form(None, ge=0),
+    source_window_end: Optional[float] = Form(None, gt=0),
     features: str = Form(''),
     db: Session = Depends(get_db),
 ):
@@ -229,11 +231,18 @@ async def import_visual(
             await video.close()
             raise
     try:
+        source_window = None
+        if source_window_end is not None:
+            source_window = {
+                'start': float(source_window_start or 0),
+                'end': float(source_window_end),
+            }
         prefs = ImportOptions(
             goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
             platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
             recommended_template=recommended_template,
             branding={'outro_enabled': brand_outro_enabled},
+            source_window=source_window,
         )
         project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
     except BaseException:

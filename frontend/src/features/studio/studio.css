@@ -142,3 +142,6 @@
 .studio-switch-model-option.is-selected{border-color:var(--ac-accent);box-shadow:0 0 0 1px var(--ac-accent)}
 .studio-switch-model-name{display:flex;flex-direction:column;gap:2px;min-width:0}
 .studio-switch-model-name strong{font-size:14px}
+
+.studio-first-window{margin:12px 0 0;padding:10px 12px;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-bg, #f8fafc)}
+.studio-first-window .studio-muted{margin:0}

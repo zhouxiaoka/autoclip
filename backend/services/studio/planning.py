@@ -24,6 +24,25 @@ VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sour
 SOURCE_TOO_LONG_CODE = 'source_too_long_subtitle_route'
 VISUAL_SOURCE_TOO_LONG_MESSAGE = '画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。'
 assert VISUAL_MAX_SOURCE_SEC == 120 * 60  # keep the i18n key in sync with the limit
+
+FIRST_WINDOW_END_SEC = 1800.0  # T2: first-success tip suggests processing only the first 30 minutes
+
+
+def planning_duration(full_duration: float, options: ImportOptions) -> float:
+    """Duration used for blockers / route when ``options.source_window`` is set (T2).
+
+    Clip timestamps stay on the original timeline; only planning cost uses the window length.
+    """
+    window = getattr(options, 'source_window', None)
+    if window is None:
+        return float(full_duration)
+    start = float(window.start)
+    end = float(window.end)
+    if end <= start:
+        return float(full_duration)
+    return float(min(full_duration, max(0.0, end - start)))
+
+
 FRAME_EXTRACT_FALLBACK_CODE = 'frame_extract_subtitle_fallback'
 FRAME_EXTRACT_FALLBACK_MESSAGE = '读取素材画面失败，已改用字幕分析继续制作。'
 
@@ -227,7 +246,8 @@ def recommend(video: Path, options: ImportOptions):
     info = intelligence._probe(video)
     # #345: "unreadable" and "under 1 s" are different failures with their own codes;
     # an unreadable probe is retried with an ffmpeg decode before failing.
-    duration = source_duration(video, info)
+    full_duration = source_duration(video, info)
+    duration = planning_duration(full_duration, options)
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
     # sources over 120 min go to the subtitle route BEFORE any vision config
