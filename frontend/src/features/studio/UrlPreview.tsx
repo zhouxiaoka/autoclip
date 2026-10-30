@@ -6,6 +6,7 @@ import {
   type PreviewRouteKind,
 } from './importReadiness'
 import { VISUAL_SOURCE_TOO_LONG_MESSAGE } from './planningCopy'
+import { FIRST_WINDOW_END_SEC } from './types'
 
 export type UrlInspectPreview = {
   title?: string | null
@@ -62,6 +63,16 @@ function totalEtaLine(durationSec: number | null | undefined, route: PreviewRout
   return t('预计总耗时约 {{minutes}} 分钟', { minutes })
 }
 
+/** T2: gate the first-30-min tip on no success history and source longer than 30 min. */
+export function shouldSuggestFirstWindow(
+  hasSuccessHistory: boolean,
+  durationSec: number | null | undefined,
+  endSec: number = FIRST_WINDOW_END_SEC,
+): boolean {
+  if (hasSuccessHistory) return false
+  return typeof durationSec === 'number' && durationSec > endSec
+}
+
 export default function UrlPreview({
   preview,
   loading,
@@ -69,8 +80,11 @@ export default function UrlPreview({
   installing,
   onInstallTranscription,
   onConfirm,
+  onConfirmFirstWindow,
+  onConfirmFull,
   onDismiss,
   confirmLabel,
+  suggestFirstWindow,
 }: {
   preview: UrlInspectPreview | null
   loading?: boolean
@@ -78,8 +92,11 @@ export default function UrlPreview({
   installing?: boolean
   onInstallTranscription?: () => void
   onConfirm?: () => void
+  onConfirmFirstWindow?: () => void
+  onConfirmFull?: () => void
   onDismiss?: () => void
   confirmLabel?: string
+  suggestFirstWindow?: boolean
 }) {
   if (loading) {
     return <div className="studio-url-preview" data-testid="url-preview-loading" role="status">
@@ -88,6 +105,7 @@ export default function UrlPreview({
   }
   if (!preview) return null
   const eta = totalEtaLine(preview.duration ?? null, preview.preview_route)
+  const showFirstWindow = Boolean(suggestFirstWindow && onConfirmFirstWindow && onConfirmFull)
   return (
     <div className="studio-url-preview" data-testid="url-preview" role="region" aria-label={t('视频预览')}>
       <div className="studio-url-preview-main">
@@ -106,17 +124,31 @@ export default function UrlPreview({
           )}
         </div>
       </div>
+      {showFirstWindow && (
+        <div className="studio-first-window" role="status" data-testid="t2-first-window-prompt">
+          <p className="studio-muted">{t('第一次建议先试 30 分钟以内，确认模型配置没问题')}</p>
+        </div>
+      )}
       <div className="studio-actions studio-url-preview-actions">
         {needsTranscriptionInstall && (
           <Btn size="sm" variant="cta" loading={installing} disabled={installing} onClick={onInstallTranscription}>
             {t('安装转写')}
           </Btn>
         )}
-        {onConfirm && (
+        {showFirstWindow ? (
+          <>
+            <Btn size="sm" variant={needsTranscriptionInstall ? 'default' : 'cta'} disabled={needsTranscriptionInstall} onClick={onConfirmFirstWindow} data-testid="t2-window-partial">
+              {t('只处理前 30 分钟')}
+            </Btn>
+            <Btn size="sm" variant="default" disabled={needsTranscriptionInstall} onClick={onConfirmFull} data-testid="t2-window-full">
+              {t('处理全片')}
+            </Btn>
+          </>
+        ) : onConfirm ? (
           <Btn size="sm" variant={needsTranscriptionInstall ? 'default' : 'cta'} disabled={needsTranscriptionInstall} onClick={onConfirm}>
             {confirmLabel || t('确认并开始下载')}
           </Btn>
-        )}
+        ) : null}
         {onDismiss && (
           <Btn size="sm" variant="text" onClick={onDismiss}>{t('换一个链接')}</Btn>
         )}

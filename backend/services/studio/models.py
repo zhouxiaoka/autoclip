@@ -312,6 +312,19 @@ class OutputVariant(BaseModel):
     requested_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
 
 
+class SourceWindow(BaseModel):
+    """Optional absolute range on the original source (seconds). T2 first-30-min window."""
+    model_config = ConfigDict(extra='forbid')
+    start: float = Field(default=0, ge=0)
+    end: float = Field(gt=0)
+
+    @model_validator(mode='after')
+    def ordered(self):
+        if self.end <= self.start:
+            raise ValueError('source_window.end must be greater than start')
+        return self
+
+
 class ImportOptions(BaseModel):
     model_config = ConfigDict(extra='forbid')
     goal: Literal['auto', 'content', 'highlight', 'promo'] = 'auto'
@@ -325,6 +338,7 @@ class ImportOptions(BaseModel):
     html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
     recommended_template: Literal['editorial', 'street', 'classic'] | None = None
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
+    source_window: SourceWindow | None = None
 
     @model_validator(mode='after')
     def unique_platforms(self):

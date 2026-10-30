@@ -817,11 +817,29 @@ def _content_drafts(project_id, plan, video, platforms=()):
             picked.append((clip, start, end))
         bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
         source_duration = float(intelligence._probe(video).get('duration') or 0)
+        window = (plan.get('overrides') or {}).get('source_window')
+        win_start = win_end = None
+        if isinstance(window, dict) and window.get('end') is not None:
+            try:
+                win_start = float(window.get('start', 0) or 0)
+                win_end = float(window['end'])
+                if win_end <= win_start:
+                    win_start = win_end = None
+            except (TypeError, ValueError):
+                win_start = win_end = None
         drafts = []
         for clip, start, end in _distinct_ranges(picked, bounds):
             # Transcript timestamps can run past the final video frame. Keep valid content
             # from that clip, and never let one invalid range discard the whole batch.
             end = min(end, source_duration)
+            # T2: drop clips that fall entirely outside the requested source_window.
+            if win_start is not None and win_end is not None:
+                if end <= win_start or start >= win_end:
+                    continue
+                start = max(start, win_start)
+                end = min(end, win_end)
+                if end <= start:
+                    continue
             try:
                 scene = Scene(
                     id=uuid.uuid4().hex,
@@ -848,6 +866,31 @@ def _content_drafts(project_id, plan, video, platforms=()):
     try:
         events, coverage = analyze(video, prefs)
         drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
+        window = (plan.get('overrides') or {}).get('source_window')
+        if isinstance(window, dict) and window.get('end') is not None:
+            try:
+                win_start = float(window.get('start', 0) or 0)
+                win_end = float(window['end'])
+            except (TypeError, ValueError):
+                win_start = win_end = None
+            if win_start is not None and win_end is not None and win_end > win_start:
+                filtered = []
+                for draft in drafts:
+                    scenes = []
+                    for scene in draft.get('scenes') or []:
+                        try:
+                            s = float(scene.get('start', 0))
+                            e = float(scene.get('end', 0))
+                        except (TypeError, ValueError):
+                            continue
+                        if e <= win_start or s >= win_end:
+                            continue
+                        scene = {**scene, 'start': max(s, win_start), 'end': min(e, win_end)}
+                        if scene['end'] > scene['start']:
+                            scenes.append(scene)
+                    if scenes:
+                        filtered.append({**draft, 'scenes': scenes})
+                drafts = filtered
     except ValueError as error:
         # A silent source that the visual route could not cut (RC156 Win QA #19): explain the missing
         # sound and point to an SRT instead of a bare 「没有找到可用镜头」. Model/network errors
@@ -2004,19 +2047,19 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             if options.auto_start:
                 state['generation']['attempt_id'] = receipt['attempt_id']
                 if (retry or {}).get('fresh'):
-            try:
-                from backend.core.path_utils import get_project_directory
-                from backend.services.studio import pipeline_resume
-                root = get_project_directory(project_id)
-                video = None
-                try:
-                    video = source(project_id)
-                except Exception:
-                    video = None
-                pipeline_resume.clear_pipeline_cache(root / 'metadata', raw_dir=(video.parent if video is not None else root / 'raw'))
-            except Exception:  # noqa: BLE001
-                pass
-store.write(project_id, state)
+                    try:
+                        from backend.core.path_utils import get_project_directory
+                        from backend.services.studio import pipeline_resume
+                        root = get_project_directory(project_id)
+                        video = None
+                        try:
+                            video = source(project_id)
+                        except Exception:
+                            video = None
+                        pipeline_resume.clear_pipeline_cache(root / 'metadata', raw_dir=(video.parent if video is not None else root / 'raw'))
+                    except Exception:  # noqa: BLE001
+                        pass
+        store.write(project_id, state)
         try:
             from backend.core.llm_telemetry import emit_asr_readiness_checked
             emit_asr_readiness_checked(has_subtitle=_project_has_subtitle(project_id))

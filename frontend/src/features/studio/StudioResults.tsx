@@ -180,10 +180,13 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
   const genDone = workspace.generation?.status === 'completed' || workspace.generation?.status === 'partial'
   const [showMorePlatform, setShowMorePlatform] = useState(() => genDone && hasSuccessHistory() && !morePlatformBannerSeen())
+  const usedFirstWindow = Boolean(workspace.plan?.overrides?.source_window)
+  const [showFullImportTip, setShowFullImportTip] = useState(() => genDone && usedFirstWindow)
   useEffect(() => {
     if (!genDone) return
     if (hasSuccessHistory() && !morePlatformBannerSeen()) setShowMorePlatform(true)
-  }, [genDone, workspace.generation?.status])
+    if (usedFirstWindow) setShowFullImportTip(true)
+  }, [genDone, workspace.generation?.status, usedFirstWindow])
   const alreadyPlatforms = workspace.generation?.requested_platforms || []
   const morePlatformId = suggestAnotherPlatform(getLocale(), alreadyPlatforms)
   const morePlatformLabel = morePlatformId === 'xiaohongshu' ? t('小红书')
@@ -211,6 +214,13 @@ export default function StudioResults({ project, children, onCreateCollection, o
       <div className="studio-actions">
         <Btn size="sm" variant="cta" onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>
         <Btn size="sm" variant="text" onClick={() => { dismissMorePlatformBanner(); setShowMorePlatform(false) }}>{t('知道了')}</Btn>
+      </div>
+    </div>}
+    {showFullImportTip && genDone && usedFirstWindow && <div className="studio-more-platform" role="status" data-testid="t2-full-import-tip">
+      <p className="studio-muted">{t('配置没问题，可以重新导入全片')}</p>
+      <div className="studio-actions">
+        <Btn size="sm" variant="cta" onClick={() => { setShowFullImportTip(false); navigate('/') }}>{t('重新导入全片')}</Btn>
+        <Btn size="sm" variant="text" onClick={() => setShowFullImportTip(false)}>{t('知道了')}</Btn>
       </div>
     </div>}
     {managed && !automatic && !hideLegacy && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}

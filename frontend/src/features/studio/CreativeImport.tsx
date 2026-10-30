@@ -14,13 +14,13 @@ import TemplatePicker, { templateImportFields, type HtmlTemplateChoice } from '.
 import { OutputCaptionsSwitch } from '../settings/OutputCaptionsSetting'
 import StyleProbeLine from './StyleProbeLine'
 import { readStyle } from './editingStyleSession'
-import { defaultImportOptions, ImportOptions } from './types'
+import { defaultImportOptions, FIRST_WINDOW_END_SEC, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
 import { analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type PreviewRouteKind, type ReadinessIssue } from './importReadiness'
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
-import { readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
+import { hasSuccessHistory, readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldArmAutostart, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
@@ -28,7 +28,7 @@ import { isRecoveryCode, probeConfig, type RecoveryController } from './transcri
 import { browserCookieRecovery, cookieAssistFromLocation, stageBrowserCookieRecovery, stagedRecoveryUrl } from './browserCookieRecovery'
 import { SETTINGS_SAVED_EVENT } from './settingsReturn'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
-import UrlPreview, { type UrlInspectPreview } from './UrlPreview'
+import UrlPreview, { shouldSuggestFirstWindow, type UrlInspectPreview } from './UrlPreview'
 import './studio.css'
 import './quick-output.css'
 
@@ -162,6 +162,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
 
   const [dragging, setDragging] = useState(false)
   const [longGate, setLongGate] = useState<{ open: boolean; durationSec: number | null; trigger: 'paste' | 'drop' | 'button' }>({ open: false, durationSec: null, trigger: 'button' })
+  const [firstWindowGate, setFirstWindowGate] = useState<{ open: boolean; trigger: 'paste' | 'drop' | 'button' }>({ open: false, trigger: 'button' })
+  const firstWindowDecided = useRef(false)
+  /** Synchronous override so FormData sees the choice before setState flushes (T2). */
+  const sourceWindowOverride = useRef<ImportOptions['source_window'] | undefined>(undefined)
   useEffect(() => {
     if (source !== 'file' || !file) {
       setLongGate(prev => prev.durationSec == null ? prev : { ...prev, durationSec: null })
@@ -408,6 +412,19 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       setLongGate(prev => ({ ...prev, open: true, trigger }))
       return
     }
+    // T2: file import (or link without UrlPreview dual buttons) — ask before spending ASR on a long first source.
+    const durationForWindow = source === 'link'
+      ? (typeof urlPreview?.duration === 'number' ? urlPreview.duration : null)
+      : longGate.durationSec
+    if (
+      !confirmed
+      && !firstWindowDecided.current
+      && shouldSuggestFirstWindow(hasSuccessHistory(), durationForWindow)
+    ) {
+      if (!readyToStart(trigger, undefined, fresh ?? readiness)) return
+      setFirstWindowGate({ open: true, trigger })
+      return
+    }
     // one busy state from the click on. The re-probe below can wait, and the inputs stay locked
     // (busy disables them) so the request carries exactly what the user saw when they clicked.
     starting.current = true
@@ -436,6 +453,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       body.append('features', JSON.stringify(featureSnapshot()))
       if (options.aspect) body.append('aspect', options.aspect)
       if (options.duration) body.append('duration', String(options.duration))
+      const windowChoice = sourceWindowOverride.current !== undefined ? sourceWindowOverride.current : options.source_window
+      if (windowChoice && typeof windowChoice.end === 'number') {
+        body.append('source_window_start', String(windowChoice.start ?? 0))
+        body.append('source_window_end', String(windowChoice.end))
+      }
       if (subtitle) body.append('subtitle', subtitle)
       body.append('name', file && source === 'file' ? file.name.replace(/\.[^.]+$/, '') : t("智能剪辑"))
       if (source === 'file' && file) body.append('video', file)
@@ -516,6 +538,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         loading={previewLoading}
         needsTranscriptionInstall={needsPreviewTranscriptionInstall}
         installing={repairing}
+        suggestFirstWindow={shouldSuggestFirstWindow(hasSuccessHistory(), urlPreview?.duration ?? null)}
         onInstallTranscription={() => {
           const check = readiness?.checks?.transcription
           resumeSubmit.current = false
@@ -524,7 +547,21 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           void recover.install()
         }}
         onConfirm={() => { setPending(null); void submit('button') }}
-        onDismiss={() => { clearPreview(); setUrl(''); setPending(null) }}
+        onConfirmFirstWindow={() => {
+          firstWindowDecided.current = true
+          sourceWindowOverride.current = { start: 0, end: FIRST_WINDOW_END_SEC }
+          setOptions(prev => ({ ...prev, source_window: { start: 0, end: FIRST_WINDOW_END_SEC } }))
+          setPending(null)
+          void submit('button', undefined, true)
+        }}
+        onConfirmFull={() => {
+          firstWindowDecided.current = true
+          sourceWindowOverride.current = null
+          setOptions(prev => ({ ...prev, source_window: null }))
+          setPending(null)
+          void submit('button', undefined, true)
+        }}
+        onDismiss={() => { clearPreview(); setUrl(''); setPending(null); firstWindowDecided.current = false }}
       />}
       {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec, platforms)}</p>}
       {assist && <details className="studio-details" open><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl assist browser={browser} busy={busy} onChange={setBrowser} selectRef={browserRef} /></details>}
@@ -538,6 +575,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       <label className="studio-field">{t("已有字幕（选填）")}<input type="file" accept=".srt" aria-label={t("已有字幕")} onChange={e=>setSubtitle(e.target.files?.[0] || null)}/>{subtitle&&<small>{subtitle.name}<button className="studio-link" onClick={()=>setSubtitle(null)}>{t("移除")}</button></small>}</label>
       {source==='link'&&<details className="studio-details"><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl browser={browser} busy={busy} onChange={setBrowser} assist={false} /></details>}
     </Dialog>
-    <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec, platforms)} {t('请再选一个其他平台。')}</> : longFormNotice(longGate.durationSec, platforms)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />
+    <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec, platforms)} {t('请再选一个其他平台。')}</>
+    <Dialog open={firstWindowGate.open} onClose={() => setFirstWindowGate(prev => ({ ...prev, open: false }))} title={t('首次素材建议')} description={t('第一次建议先试 30 分钟以内，确认模型配置没问题')} footer={<div className="studio-actions" data-testid="t2-first-window-dialog"><Btn onClick={() => setFirstWindowGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn onClick={() => { firstWindowDecided.current = true; sourceWindowOverride.current = null; setOptions(prev => ({ ...prev, source_window: null })); setFirstWindowGate(prev => ({ ...prev, open: false })); void submit(firstWindowGate.trigger || 'button', undefined, true) }}>{t('处理全片')}</Btn><Btn variant="cta" onClick={() => { firstWindowDecided.current = true; sourceWindowOverride.current = { start: 0, end: FIRST_WINDOW_END_SEC }; setOptions(prev => ({ ...prev, source_window: { start: 0, end: FIRST_WINDOW_END_SEC } })); setFirstWindowGate(prev => ({ ...prev, open: false })); void submit(firstWindowGate.trigger || 'button', undefined, true) }}>{t('只处理前 30 分钟')}</Btn></div>} />
+ : longFormNotice(longGate.durationSec, platforms)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />
   </section>
 }

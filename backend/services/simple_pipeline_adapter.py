@@ -40,6 +40,74 @@ STUDIO_PRODUCTION_MESSAGE = '正在制作可发布成片'
 TRANSCRIBE_START_SUBPERCENT = 5
 TRANSCRIBE_DONE_SUBPERCENT = 100
 
+def _plan_source_window(project_id: str):
+    """Absolute (start, end) seconds from plan.overrides.source_window, or None (T2)."""
+    try:
+        from backend.services.studio import store
+        plan = (store.read(project_id) or {}).get('plan') or {}
+        window = (plan.get('overrides') or {}).get('source_window')
+        if not isinstance(window, dict):
+            return None
+        start = float(window.get('start', 0) or 0)
+        end = float(window['end'])
+        if end <= start or start < 0:
+            return None
+        return start, end
+    except Exception:  # noqa: BLE001 — never block transcription on a missing plan
+        logger.debug('source_window lookup failed', exc_info=True)
+        return None
+
+
+def _cut_audio_window(video: Path, start: float, end: float, out_wav: Path) -> Path:
+    """ffmpeg -ss/-t extract of [start, end) as 16 kHz mono PCM for ASR (T2)."""
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    import subprocess
+    out_wav.parent.mkdir(parents=True, exist_ok=True)
+    duration = max(0.1, end - start)
+    cmd = [
+        get_ffmpeg_path(), '-y',
+        '-ss', f'{start:.3f}',
+        '-t', f'{duration:.3f}',
+        '-i', str(video),
+        '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1',
+        str(out_wav),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if result.returncode != 0 or not out_wav.is_file():
+        raise PipelineFailure('SUBTITLE', f'按时间窗口提取音频失败: {(result.stderr or "")[-400:]}', code='source_window_cut_failed')
+    return out_wav
+
+
+def _apply_source_window_to_srt(srt_path: Path, start: float, end: float, *, shift: float = 0.0, dest: Path | None = None) -> Path:
+    """Keep cues overlapping [start, end] on the original timeline; optional shift from a cut (T2).
+
+    Clip timestamps stay absolute on the original source. ``shift`` maps ASR times from a
+    temp cut (relative to cut start) back onto the original timeline before filtering.
+    """
+    import pysrt
+    subs = pysrt.open(str(srt_path), encoding='utf-8')
+    kept = pysrt.SubRipFile()
+    for sub in subs:
+        if shift:
+            sub.shift(seconds=shift)
+        cue_start = sub.start.ordinal / 1000.0
+        cue_end = sub.end.ordinal / 1000.0
+        if cue_end <= start or cue_start >= end:
+            continue
+        # Clamp to the window without shifting the rest of the timeline.
+        if cue_start < start:
+            sub.start.ordinal = int(round(start * 1000))
+        if cue_end > end:
+            sub.end.ordinal = int(round(end * 1000))
+        if sub.end.ordinal <= sub.start.ordinal:
+            continue
+        sub.index = len(kept) + 1
+        kept.append(sub)
+    out = dest or srt_path
+    kept.save(str(out), encoding='utf-8')
+    return out
+
+
 
 def transcription_subpercent(fraction: float) -> float:
     """SUBTITLE sub-step for `fraction` of the audio transcribed."""
@@ -230,18 +298,34 @@ class SimplePipelineAdapter:
                 logger.info("尝试使用所选转写服务生成字幕")
                 output_path = metadata_dir / f"{video_file_path.stem}.srt"
                 from backend.utils.transcription_progress import reporting
+                window = _plan_source_window(self.project_id)
+                asr_input = video_file_path
+                temp_audio = None
+                shift = 0.0
+                if window:
+                    start, end = window
+                    temp_audio = metadata_dir / f"source_window_{int(start)}_{int(end)}.wav"
+                    logger.info('T2: cutting ASR audio window [%.1f, %.1f) from %s', start, end, video_file_path)
+                    _cut_audio_window(video_file_path, start, end, temp_audio)
+                    asr_input = temp_audio
+                    shift = start
                 try:
                     with reporting(TranscriptionProgress(self.project_id)):
                         srt_path = generate_subtitle_for_video(
-                            video_file_path,
+                            asr_input,
                             output_path=output_path,
                             method="auto",
                             language="auto"
                         )
                 finally:
                     TranscriptionProgress.finish_studio(self.project_id)
-                
+                    if temp_audio is not None:
+                        temp_audio.unlink(missing_ok=True)
+
                 if srt_path and srt_path.exists():
+                    if window:
+                        start, end = window
+                        _apply_source_window_to_srt(Path(srt_path), start, end, shift=shift)
                     logger.info(f"转写生成字幕成功: {srt_path}")
                     emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=TRANSCRIBE_DONE_SUBPERCENT)
                     return srt_path
@@ -408,6 +492,17 @@ class SimplePipelineAdapter:
                 logger.info(f"自动生成字幕成功: {srt_path}")
                 # Stamp source fingerprint as soon as transcription is accepted.
                 pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
+
+            # T2: existing / platform SRT still needs the source_window filter (ASR path already applied it).
+            window = _plan_source_window(self.project_id)
+            if window and srt_path and Path(srt_path).is_file():
+                start, end = window
+                filtered = metadata_dir / 'source_window.srt'
+                # Skip re-filter when ASR already wrote absolute cues into the generated file.
+                already = Path(srt_path).resolve() == filtered.resolve()
+                if not already:
+                    logger.info('T2: filtering SRT to source_window [%.1f, %.1f)', start, end)
+                    srt_path = _apply_source_window_to_srt(Path(srt_path), start, end, shift=0.0, dest=filtered)
 
             # 快速出片：一次挑片（整段字幕一次给模型）；不可用时回退旧的四步
             checkpoint(self.project_id)
