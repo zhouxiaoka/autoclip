@@ -8,8 +8,12 @@ from backend.core.local_presets import LOCAL_PRESETS
 from backend.services import ai_model_settings as ai_models
 
 
-def _check(ok: bool, code: str, repair: str = 'none') -> dict:
-    return {'ok': ok, 'code': code, 'repair': repair}
+def _check(ok: bool, code: str, repair: str = 'none', **extras) -> dict:
+    payload = {'ok': ok, 'code': code, 'repair': repair}
+    for key, value in extras.items():
+        if value is not None:
+            payload[key] = value
+    return payload
 
 
 def _connection_ready(connection) -> bool:
@@ -22,6 +26,16 @@ def _connection_ready(connection) -> bool:
     return bool(connection.api_key)
 
 
+def _trial_ok(connection) -> bool | None:
+    """F2 saved trial result for the F5 readiness line. None = never run."""
+    status = getattr(connection, 'trial_status', 'unchecked') if connection else 'unchecked'
+    if status == 'passed':
+        return True
+    if status == 'failed':
+        return False
+    return None
+
+
 def _analysis(settings: ai_models.ModelSettings) -> dict:
     """Distinguish why analysis cannot run.
 
@@ -30,24 +44,28 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
     present or referenced but cannot serve requests (missing key or endpoint).
     ``validation_failed`` stays separate: the user already saved a model and the
     check failed, so the import zone must not turn into the first-run card.
+
+    F5 adds ``label`` (model id) and ``trial_ok`` (F2 trial_status on the connection).
     """
     if getattr(settings, '_migration_warnings', None):
         return _check(False, 'settings_invalid', 'settings_ai')
     binding = settings.analysis
     connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
+    label = (binding.model or '').strip() if binding else ''
+    trial = _trial_ok(connection)
     if binding is None:
         if any(_connection_ready(item) for item in settings.connections):
-            return _check(False, 'no_model', 'settings_ai')
+            return _check(False, 'no_model', 'settings_ai', trial_ok=trial)
         if settings.connections:
-            return _check(False, 'invalid_connection', 'settings_ai')
+            return _check(False, 'invalid_connection', 'settings_ai', trial_ok=trial)
         return _check(False, 'not_configured', 'settings_ai')
     if connection is None or not _connection_ready(connection):
-        return _check(False, 'invalid_connection', 'settings_ai')
-    if not (binding.model or '').strip():
-        return _check(False, 'no_model', 'settings_ai')
+        return _check(False, 'invalid_connection', 'settings_ai', label=label or None, trial_ok=trial)
+    if not label:
+        return _check(False, 'no_model', 'settings_ai', trial_ok=trial)
     if getattr(connection, 'validation_status', 'unchecked') == 'failed':
-        return _check(False, 'validation_failed', 'settings_ai')
-    return _check(True, 'configured')
+        return _check(False, 'validation_failed', 'settings_ai', label=label, trial_ok=trial)
+    return _check(True, 'configured', label=label, trial_ok=trial)
 
 
 def ensure_analysis_usable() -> None:
@@ -77,23 +95,28 @@ def _transcription(settings: ai_models.ModelSettings) -> dict:
     choice = settings.transcription or ai_models.Transcription()
     if choice.provider == 'whisper_local':
         from backend.services import whisper_runtime
+        model = choice.model or 'base'
+        label = f'本地 {model}'
         status = whisper_runtime.get_status().get('status')
         if status == 'installed':
-            return _whisper_model(choice.model or 'base')
+            return {**_whisper_model(model), 'label': label}
         if status == 'installing':
-            return _check(False, 'whisper_installing')
+            return _check(False, 'whisper_installing', label=label)
         if status == 'error':
-            return _check(False, 'whisper_install_failed', 'install_whisper')
-        return _check(False, 'whisper_not_installed', 'install_whisper')
+            return _check(False, 'whisper_install_failed', 'install_whisper', label=label)
+        return _check(False, 'whisper_not_installed', 'install_whisper', label=label)
     if choice.provider == 'sensevoice_local':
         from backend.services import sensevoice_runtime
+        label = '本地 SenseVoice'
         if sensevoice_runtime.status().get('status') == 'ready':
-            return _check(True, 'sensevoice_ready')
-        return _check(False, 'sensevoice_not_ready', 'settings_transcription')
+            return _check(True, 'sensevoice_ready', label=label)
+        return _check(False, 'sensevoice_not_ready', 'settings_transcription', label=label)
     connection = next((item for item in settings.connections if item.id == choice.connection_id), None)
+    label = f'云端 {choice.model}'.strip() if choice.model else '云端转写'
+    trial = _trial_ok(connection)
     if choice.model and _connection_ready(connection):
-        return _check(True, 'cloud_configured')
-    return _check(False, 'cloud_not_configured', 'settings_transcription')
+        return _check(True, 'cloud_configured', label=label, trial_ok=trial)
+    return _check(False, 'cloud_not_configured', 'settings_transcription', label=label, trial_ok=trial)
 
 
 def _whisper_model(name: str) -> dict:
@@ -120,26 +143,27 @@ def _whisper_model(name: str) -> dict:
 
 def _visual(settings: ai_models.ModelSettings, mode: str | None = None) -> dict:
     mode = mode or settings.analysis_mode
-    if mode == 'subtitle':
-        return _check(True, 'not_required')
     binding = ai_models.vision_follow_binding(settings)
+    vision_label = (binding.model or '').strip() if binding else ''
+    if mode == 'subtitle':
+        return _check(True, 'not_required', label='未启用')
     connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
     if connection and connection.validation_status == 'failed':
         if mode == 'auto':
-            return _check(True, 'optional')
-        return _check(False, 'validation_failed', 'settings_vision')
+            return _check(True, 'optional', label='未启用')
+        return _check(False, 'validation_failed', 'settings_vision', label=vision_label or None)
     if ai_models.vision_follow_lacks_capability(settings):
-        return _check(False, 'vision_unsupported', 'settings_vision')
+        return _check(False, 'vision_unsupported', 'settings_vision', label=vision_label or None)
     if mode != 'visual':
-        return _check(True, 'optional')
+        return _check(True, 'optional', label='未启用')
     # Same answer as the pipeline (vision_endpoint): capability=auto resolves through
     # provider metadata and supports_vision, not only a literal 'multimodal'.
     try:
         if ai_models.vision_endpoint(settings) is not None:
-            return _check(True, 'configured')
+            return _check(True, 'configured', label=vision_label or None)
     except ValueError:
-        return _check(False, 'settings_invalid', 'settings_vision')
-    return _check(False, 'not_configured', 'settings_vision')
+        return _check(False, 'settings_invalid', 'settings_vision', label=vision_label or None)
+    return _check(False, 'not_configured', 'settings_vision', label=vision_label or None)
 
 
 def _ffmpeg() -> dict:
@@ -147,10 +171,10 @@ def _ffmpeg() -> dict:
         from backend.utils.ffmpeg_utils import get_ffmpeg_path
         path = get_ffmpeg_path()
         if path and Path(path).exists():
-            return _check(True, 'available')
+            return _check(True, 'available', label='FFmpeg')
     except Exception:
         pass
-    return _check(False, 'missing')
+    return _check(False, 'missing', label='FFmpeg')
 
 
 def report() -> dict:

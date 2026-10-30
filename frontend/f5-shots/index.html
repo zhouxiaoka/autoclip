@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<title>F5 readiness line shots</title>
+<style>
+  :root { --ac-ok:#15803d; --ac-danger:#b91c1c; --ac-sub:#6b7280; --ac-muted:#a8a29e; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif; background:#f5f5f4; margin:0; padding:24px; color:#1c1917; }
+  .card { background:#fff; border:1px solid #e7e5e4; border-radius:12px; padding:20px 24px; max-width:720px; margin:0 auto 28px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  h2 { font-size:14px; font-weight:600; margin:0 0 8px; color:#57534e; }
+  .drop { border:1.5px dashed #d6d3d1; border-radius:10px; padding:28px; text-align:center; color:#78716c; margin-bottom:12px; }
+  .line { display:flex; flex-wrap:wrap; align-items:center; gap:4px 2px; font-size:13px; line-height:1.6; color:var(--ac-sub); }
+  .item { appearance:none; border:none; background:transparent; padding:0; font:inherit; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+  .sep { margin:0 4px; color:var(--ac-muted); }
+  .ok { color:var(--ac-ok); }
+  .fail { color:var(--ac-danger); }
+  .dash { color:var(--ac-sub); }
+  .fix { display:inline-flex; align-items:center; gap:6px; margin-left:6px; }
+  .btn { font-size:12px; padding:2px 8px; border-radius:6px; border:1px solid #d6d3d1; background:#fafaf9; cursor:pointer; color:#1c1917; }
+</style>
+</head>
+<body>
+
+<section class="card" id="all-green">
+  <h2>F5 · 全绿就绪行</h2>
+  <div class="drop">拖入视频，或粘贴链接开始</div>
+  <div class="line" data-testid="readiness-line">
+    <button class="item ok" type="button">模型 ✓ deepseek-chat</button>
+    <span class="sep">·</span>
+    <button class="item ok" type="button">转写 ✓ 本地 small</button>
+    <span class="sep">·</span>
+    <button class="item dash" type="button">画面 — 未启用</button>
+    <span class="sep">·</span>
+    <button class="item ok" type="button">FFmpeg ✓</button>
+  </div>
+</section>
+
+<section class="card" id="trial-warn">
+  <h2>F5 · 试跑未通过（F2 黄标语言）</h2>
+  <div class="drop">拖入视频，或粘贴链接开始</div>
+  <div class="line" data-testid="readiness-line">
+    <button class="item ok" type="button">模型 ✓ deepseek-chat ⚠ 未通过试跑</button>
+    <span class="sep">·</span>
+    <button class="item ok" type="button">转写 ✓ 本地 small</button>
+    <span class="sep">·</span>
+    <button class="item dash" type="button">画面 — 未启用</button>
+    <span class="sep">·</span>
+    <button class="item ok" type="button">FFmpeg ✓</button>
+  </div>
+</section>
+
+<section class="card" id="missing-asr">
+  <h2>F5 · 转写 ✗ + 一键修复</h2>
+  <div class="drop">拖入视频，或粘贴链接开始</div>
+  <div class="line" data-testid="readiness-line">
+    <button class="item ok" type="button">模型 ✓ deepseek-chat</button>
+    <span class="sep">·</span>
+    <span class="fix">
+      <button class="item fail" type="button">转写 ✗ 本地 small</button>
+      <button class="btn" type="button">一键修复</button>
+    </span>
+    <span class="sep">·</span>
+    <button class="item dash" type="button">画面 — 未启用</button>
+    <span class="sep">·</span>
+    <button class="item ok" type="button">FFmpeg ✓</button>
+  </div>
+</section>
+
+</body>
+</html>
