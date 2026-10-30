@@ -21,6 +21,9 @@ T = TypeVar('T')
 CLOUD_WORKERS = 4
 # Gemini free tier is about 5–15 requests/minute. The cloud-wide pool of 4
 # (outline chunks plus later steps) trips that limit immediately.
+# Match both the native `gemini` provider and any OpenAI-compatible gateway
+# whose model id starts with `gemini-` (Charlie P2 #14: prefix cover, not
+# native-provider-only).
 GEMINI_WORKERS = 2
 
 _lock = threading.Condition()
@@ -42,7 +45,8 @@ def workers() -> int:
         provider = str(settings.get('llm_provider') or '').strip().lower()
         if settings.get('llm_provider_preset') or 'localhost' in base or '127.0.0.1' in base:
             return 1
-        if provider == 'gemini':
+        model = str(settings.get('model_name') or '').strip().lower()
+        if provider == 'gemini' or model.startswith('gemini-'):
             return GEMINI_WORKERS
     except Exception:  # noqa: BLE001 - unknown provider: stay conservative but parallel
         pass
