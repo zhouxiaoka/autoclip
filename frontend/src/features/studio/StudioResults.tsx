@@ -10,6 +10,10 @@ import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCook
 import { analysisFailureText, analysisPageFailure, receiptFailureInfo, failureAction, isTranscriptionInstall } from './failureAction'
 import { weakLocalTimelineFailure } from '../../utils/timelineFailure'
 import FailureActions, { FailureCopy } from './FailureActions'
+import { analysisProviderId, listSwitchModelOptions, usableConnectionCount } from './switchModelOptions'
+import { modelSettingsApi, type ModelSettings } from '../settings/modelSettingsApi'
+import { forSave } from '../settings/modelSettingsLogic'
+import { syncFollowingCover } from '../settings/modelDefaults'
 import { displayedProgress, studioRunProgress } from './studioProgress'
 import { recordSuccess } from './etaModel'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
@@ -42,6 +46,12 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const [actionError,setActionError] = useState('')
   const [preview,setPreview] = useState<Scene|null>(null)
   const [exporting,setExporting] = useState<Draft|null>(null)
+  const [aiSettings, setAiSettings] = useState<ModelSettings | null>(null)
+  useEffect(() => {
+    let live = true
+    modelSettingsApi.get().then(v => { if (live) setAiSettings(v) }).catch(() => { if (live) setAiSettings(null) })
+    return () => { live = false }
+  }, [])
   const goal = project.settings?.creative?.goal || project.processing_config?.creative?.goal || 'content'
   const visual = goal !== 'content'
   const sourceDuration=workspace.plan?.source_duration ?? workspace.analysis?.coverage?.duration
@@ -141,12 +151,32 @@ export default function StudioResults({ project, children, onCreateCollection, o
   }, [workspace.generation?.status, workspace.generation?.attempt_id, workspace.generation?.provider, workspace.generation?.created_at, workspace.analysis?.provider, workspace.analysis?.created_at, sourceDuration, project.id])
 
   const billable = Math.max(workspace.analysis?.billable_calls_before_failure || 0, workspace.generation?.billable_calls_before_failure || 0)
+  const switchOptions = listSwitchModelOptions(aiSettings, {
+    connectionId: aiSettings?.analysis?.connection_id,
+    model: aiSettings?.analysis?.model,
+  })
   const failureInfo = (extra?: { error?: string }) => ({
     error: extra?.error ?? workspace.analysis?.error,
     ...(receiptFailureInfo(workspace.attempts, workspace.analysis?.run_id) || analysisPageFailure(workspace.analysis, workspace.generation)),
     phase: workspace.analysis?.phase,
     billable_calls_before_failure: billable,
+    connection_count: usableConnectionCount(aiSettings),
+    provider: analysisProviderId(aiSettings),
   })
+  const switchModelAndRetry = async (choice: { connectionId: string; model: string }) => {
+    if (!aiSettings) return
+    const saved = await modelSettingsApi.save(forSave(syncFollowingCover(aiSettings, {
+      ...aiSettings,
+      analysis: {
+        connection_id: choice.connectionId,
+        model: choice.model,
+        capability: aiSettings.analysis?.capability || 'auto',
+        model_source: 'user',
+      },
+    })))
+    setAiSettings(saved)
+    await studioApi.retry(project.id, { retry_kind: 'switch_model' })
+  }
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
   const genDone = workspace.generation?.status === 'completed' || workspace.generation?.status === 'partial'
   const [showMorePlatform, setShowMorePlatform] = useState(() => genDone && hasSuccessHistory() && !morePlatformBannerSeen())
@@ -209,7 +239,9 @@ export default function StudioResults({ project, children, onCreateCollection, o
           canRetry={canRetryAnalysis}
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
           repeatFailure={workspace.generation?.repeat_failure}
-          onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}
+          switchOptions={switchOptions}
+          onSwitchModel={choice => act('retry-analysis', async () => { await switchModelAndRetry(choice) })}
+          onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id, { retry_kind: 'same' })})}
           onSettings={destination=>navigate(settingsReturnUrl(destination, project.id))}>
           {!weakLocalTimelineFailure(failureInfo().error, failureInfo().error_code) && <Btn disabled={!!busy} onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn>}{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}
         </FailureActions></div>}

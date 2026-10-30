@@ -278,7 +278,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_confirm_requested` / `_accepted` | `analysis_mode` | 仅确认制作路径 |
-| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error`；可选 `trigger`（`initial` / `retry` / `variant_retry`，取自后端回执）。枚举里仍有 `append_platform`，但 1.5.7 不产生该值：追加平台留到 1.5.9。**M1** 另发 `source_duration_sec`、`platform_count`、`is_first_success_device`（本机此前无 generation 成功，失败也发）、`attempt_index_on_device`（本机 1-based，按 attempt_id 幂等）。`eta_initial_min` / `resumed_from` / `retry_kind` 已在目录登记为可空，等 R1 / R3 / X2 再发 |
+| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error`；可选 `trigger`（`initial` / `retry` / `variant_retry`，取自后端回执）。枚举里仍有 `append_platform`，但 1.5.7 不产生该值：追加平台留到 1.5.9。**M1** 另发 `source_duration_sec`、`platform_count`、`is_first_success_device`（本机此前无 generation 成功，失败也发）、`attempt_index_on_device`（本机 1-based，按 attempt_id 幂等）。`eta_initial_min` / `resumed_from` / `retry_kind`（X2：`same`|`switch_model`|`after_install`）已在目录登记为可空；前端重试路径已发 `retry_kind` |
 | `studio_production_finished` | `outcome` | 确认制作终态 |
 
 失败两者都必须有 `error_code`、`failure_stage`；模型失败加 `provider`、`base_url_host`、`upstream_error_type`、`http_status`、`billable_calls_before_failure`。身份按 **本次 run 实际调用**，不用设置页最后保存值。
@@ -411,7 +411,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 
 **一次成功占比** = 窗口内有 `attempt_index_on_device = 1` 的设备中，该首次 attempt `outcome` 成功的比例。**从未成功占比** = 窗口内有出片终态的设备中，窗口内一次成功都没有的比例。按 provider 设备成功率见图 9 / F1 刷新脚本（产品口径剔除与图 1 的 `user_x` 一致）。
 
-`eta_initial_min`（R1）、`resumed_from`（R3）、`retry_kind`（X2）仅在目录登记为可空，本版不发、不实现对应产品行为。
+`eta_initial_min`（R1）、`resumed_from`（R3）已在目录登记；`retry_kind`（X2：`same` / `switch_model` / `after_install`）由前端 `studioApi.retry` / `retryOutputVariant` 随 `studio_rescreen` / `studio_variant_retry` 发出，并在 `studio_generation_finished` 可空登记。
 
 ### 6.2 按人首次出片成功率
 

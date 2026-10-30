@@ -12,7 +12,9 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
-import { failureAction, isTranscriptionInstall } from '../features/studio/failureAction'
+import { ADD_PROVIDER_HINT, failureAction, isTranscriptionInstall, SWITCH_MODEL_LABEL } from '../features/studio/failureAction'
+import SwitchModelDialog from '../features/studio/SwitchModelDialog'
+import type { SwitchModelOption } from '../features/studio/switchModelOptions'
 import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
@@ -46,7 +48,13 @@ interface ProjectCardProps {
   onClick?: () => void
   /** One already-connected replacement. Absent means the card offers model settings. */
   replacement?: { displayName: string } | null
-  onSwitchAndRetry?: (id: string) => void | Promise<void>
+  /** X2: usable connections for SwitchModelDialog (F2 try-run ok). */
+  switchOptions?: SwitchModelOption[]
+  /** Usable analysis connection count (includes current; drives switch_model vs settings). */
+  connectionCount?: number
+  /** Catalog provider of the failed analysis binding (sponsor → recharge). */
+  analysisProvider?: string | null
+  onSwitchAndRetry?: (id: string, choice?: { connectionId: string; model: string }) => void | Promise<void>
 }
 
 function suggestLine(name: string) {
@@ -56,7 +64,7 @@ function suggestLine(name: string) {
   return <>{text.slice(0, at)}<strong>{name}</strong>{text.slice(at + name.length)}</>
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick, replacement, onSwitchAndRetry }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick, replacement, switchOptions, connectionCount, analysisProvider, onSwitchAndRetry }) => {
   useTranslation()
   const navigate = useNavigate()
   const creative = project.settings?.creative || project.processing_config?.creative
@@ -66,6 +74,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
 
   // 获取分类信息
   const isExample = !!(project.settings?.example || project.processing_config?.example)
@@ -293,8 +302,17 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     ? null
     : classifySubtitleFailure(failureText, project.error_code)
   const upstream = project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type
-  const recoveryAction = failureAction(project.error_code, typeof upstream === 'string' ? upstream : null)
+  const recoveryAction = failureAction(
+    project.error_code,
+    typeof upstream === 'string' ? upstream : null,
+    null,
+    connectionCount,
+    analysisProvider,
+  )
   const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
+  const switchModelPrimary = recoveryAction.kind === 'switch_model'
+  const addProviderPrimary = recoveryAction.kind === 'settings' && recoveryAction.reason === ADD_PROVIDER_HINT
+  const rechargePrimary = recoveryAction.kind === 'recharge'
 
   const handleRetry = async (opts?: { silent?: boolean; stay?: boolean }) => {
     if (isRetrying) return
@@ -331,11 +349,25 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }
 
   const openSettings = () => navigate('/settings?section=analysis')
-  const switchAndRetry = async () => {
+  const openSwitchDialog = () => {
+    if (!onSwitchAndRetry) return
+    if (switchOptions && switchOptions.length) { setSwitchOpen(true); return }
+    // Weak-timeline card may only know the recommended display name (no full option list yet).
+    if (replacement?.displayName) {
+      void (async () => {
+        setIsRetrying(true)
+        try { await onSwitchAndRetry(project.id) }
+        finally { setIsRetrying(false) }
+      })()
+      return
+    }
+    openSettings()
+  }
+  const confirmSwitch = async (choice: { connectionId: string; model: string }) => {
     if (isRetrying || !onSwitchAndRetry) return
     setIsRetrying(true)
-    try { await onSwitchAndRetry(project.id) }
-    finally { setIsRetrying(false) }
+    try { await onSwitchAndRetry(project.id, choice) }
+    finally { setIsRetrying(false); setSwitchOpen(false) }
   }
 
   const openProject = () => {
@@ -398,7 +430,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               <div className="ac-project-weak-actions">
                 {replacement?.displayName ? (
                   <>
-                    <Btn variant="cta" loading={isRetrying} onClick={() => void switchAndRetry()}>{t("切换并重试")}</Btn>
+                    <Btn variant="cta" loading={isRetrying} onClick={openSwitchDialog}>{t("切换并重试")}</Btn>
                     <Btn variant="text" onClick={openSettings}>{t("其他模型")}</Btn>
                   </>
                 ) : (
@@ -418,9 +450,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           {!weakLocalTimeline && normalizedStatus === 'failed' && (
             <div className="ac-project-recovery">
               {installTranscription && <Btn variant="cta" size="sm" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
+              {switchModelPrimary && !installTranscription && <Btn variant="cta" size="sm" loading={isRetrying} onClick={openSwitchDialog}>{t(SWITCH_MODEL_LABEL)}</Btn>}
+              {addProviderPrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => navigate(recoveryAction.destination)}>{t(recoveryAction.label || '去设置')}</Btn>}
+              {rechargePrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => navigate(recoveryAction.destination)}>{t(recoveryAction.label || '去充值')}</Btn>}
               {subtitleFailure && !installTranscription && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
-              {llmKeyFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
-              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
+              {llmKeyFailure && !switchModelPrimary && !addProviderPrimary && !rechargePrimary && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
+              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>}
               <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
             </div>
           )}
@@ -436,6 +471,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t("确定要删除这个项目吗？")} description={t("删除后无法恢复")}
         footer={<div className="right"><Btn onClick={() => setDeleteOpen(false)}>{t("取消")}</Btn><Btn variant="danger" onClick={() => { setDeleteOpen(false); onDelete(project.id) }}>{t("确定")}</Btn></div>} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+      <SwitchModelDialog
+        open={switchOpen}
+        options={switchOptions || []}
+        busy={isRetrying}
+        onClose={() => setSwitchOpen(false)}
+        onConfirm={(choice) => void confirmSwitch(choice)}
+      />
     </>
   )
 }

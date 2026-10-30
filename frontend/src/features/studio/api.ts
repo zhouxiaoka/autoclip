@@ -64,7 +64,7 @@ signal); every HTTP answer (even a 500) is seen. */
       const link = result.attempt?.retry_of ? { retry_of: result.attempt.retry_of } : {}
       workflow.watch('studio-variant', variantId, pid, undefined, { ...props, ...link }, true, result.variant.render_job_id || result.variant.render_attempt_id || result.variant.preparation_run_id)
       workflow.watchAttempt(pid, result.attempt, props)
-    }, workflow.context(pid)).then(result => result.variant),
+    }, { ...workflow.context(pid), retry_kind: 'same' }).then(result => result.variant),
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
   updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post), undefined, workflow.context(pid)),
@@ -109,11 +109,11 @@ signal); every HTTP answer (even a 500) is seen. */
   }, workflow.context(pid)),
   /** The failed-state 「重试」/「继续制作」 (#419): one backend retry command; the receipt carries retry_of. A manual
    * project's production attempt is opened now and bound when the plan is confirmed. */
-  retry: (pid: string) => observeStudioOperation('studio_rescreen', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string }>(`/studio/${pid}/retry`, { scope: 'analysis', idempotency_key: retryKey() }), (result, props) => {
+  retry: (pid: string, opts?: { retry_kind?: 'same' | 'switch_model' | 'after_install' }) => observeStudioOperation('studio_rescreen', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string }>(`/studio/${pid}/retry`, { scope: 'analysis', idempotency_key: retryKey() }), (result, props) => {
     const link = result.attempt?.retry_of ? { retry_of: result.attempt.retry_of } : {}
     workflow.watch('studio-screen', pid, undefined, undefined, { ...props, ...link }, true, result.analysis_run_id)
     if (result.attempt?.kind === 'generation') workflow.watchAttempt(pid, result.attempt, props)
-  }, workflow.context(pid)),
+  }, { ...workflow.context(pid), retry_kind: opts?.retry_kind || 'same' }),
   create: (pid: string, clip_ids: string[], title: string, reuse_existing = false): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/drafts`, { clip_ids, title, reuse_existing }), undefined, {...workflow.context(pid), source_type: 'content_clip'}),
   eventDraft: (pid: string, id: string): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/events/${id}/draft`), undefined, {...workflow.context(pid), source_type: 'visual_event'}),
   save: (pid: string, draft: Draft): Promise<Draft> => observeStudioOperation('studio_draft_save', () => api.put(`/studio/${pid}/drafts/${draft.id}`, draft), undefined, { ...workflow.context(pid), ...draftProperties(draft) }),

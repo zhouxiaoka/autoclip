@@ -34,7 +34,29 @@ export const DIAGNOSE_ACTIONS = ['switch_model', 'install_transcription', 'chang
 export type DiagnoseSuggestionId = Exclude<(typeof DIAGNOSE_SUGGESTIONS)[number], 'none'>
 export type DiagnoseActionId = (typeof DIAGNOSE_ACTIONS)[number]
 
-export type FailureAction = { kind: 'retry' } | { kind: 'settings'; reason?: string; destination: string; label?: string }
+export type FailureAction =
+  | { kind: 'retry' }
+  | { kind: 'settings'; reason?: string; destination: string; label?: string }
+  | { kind: 'install_asr'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL }
+  | { kind: 'switch_model' }
+  | { kind: 'recharge'; provider: string; destination: string; label?: string }
+
+/** Upstream types that can recover by switching to another configured connection (X2). */
+export const SWITCHABLE_UPSTREAM = [
+  'rate_limited',
+  'timeout',
+  'upstream_unavailable',
+  'invalid_response',
+  'model_not_found',
+  'bad_endpoint',
+] as const
+
+/** Known sponsor catalog ids for insufficient_quota → recharge (X3 jump wired later). */
+export const SPONSOR_PROVIDERS = ['api88', 'infistar', 'apimart'] as const
+
+export const ADD_PROVIDER_HINT = '建议再加一个服务商'
+export const RECHARGE_LABEL = '去充值'
+export const SWITCH_MODEL_LABEL = '换模型重试'
 
 /** One next step after the same error_code fails again. Pure: code, upstream type, failure stage. */
 export type SuggestedAction = {
@@ -112,8 +134,8 @@ export function diagnoseInsteadOfRetry(repeat?: { count?: number | null; same_co
   return repeat?.same_code === true && Number.isFinite(count) && count >= 2
 }
 
-export function isTranscriptionInstall(action: FailureAction): action is { kind: 'settings'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL; reason?: string } {
-  return action.kind === 'settings' && action.label === INSTALL_TRANSCRIPTION_LABEL
+export function isTranscriptionInstall(action: FailureAction): action is { kind: 'install_asr'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL } {
+  return action.kind === 'install_asr'
 }
 
 /** Which settings row fixes a user-cause failure, keyed by failure_stage (one table):
@@ -131,9 +153,39 @@ export function settingsDestination(failureStage?: string | null): string {
  * transcription settings before any upstream type. Otherwise the controlled upstream type is
  * the most precise signal and wins; the coarse error_code is only used when upstream says
  * nothing user-attributable. */
-export function failureAction(errorCode?: string | null, upstreamType?: string | null, failureStage?: string | null): FailureAction {
+export function failureAction(
+  errorCode?: string | null,
+  upstreamType?: string | null,
+  failureStage?: string | null,
+  connectionCount?: number | null,
+  provider?: string | null,
+): FailureAction {
   if (isIn(WHISPER_GATE_CODES, errorCode)) {
-    return { kind: 'settings', destination: TRANSCRIPTION_SETTINGS_DESTINATION, label: INSTALL_TRANSCRIPTION_LABEL }
+    return { kind: 'install_asr', destination: TRANSCRIPTION_SETTINGS_DESTINATION, label: INSTALL_TRANSCRIPTION_LABEL }
+  }
+  const switchHit = isIn(SWITCHABLE_UPSTREAM, upstreamType) || isIn(SWITCHABLE_UPSTREAM, errorCode)
+  if (switchHit && connectionCount != null && connectionCount !== '') {
+    const n = Number(connectionCount)
+    if (Number.isFinite(n) && n >= 2) return { kind: 'switch_model' }
+    if (Number.isFinite(n) && n >= 0) {
+      return {
+        kind: 'settings',
+        reason: ADD_PROVIDER_HINT,
+        destination: settingsDestination(failureStage),
+        label: '去设置',
+      }
+    }
+    // non-numeric connectionCount: fall through
+  }
+  const quota = upstreamType === 'insufficient_quota' || errorCode === 'insufficient_quota'
+  const sponsor = (provider || '').trim().toLowerCase()
+  if (quota && isIn(SPONSOR_PROVIDERS, sponsor)) {
+    return {
+      kind: 'recharge',
+      provider: sponsor,
+      destination: settingsDestination(failureStage),
+      label: RECHARGE_LABEL,
+    }
   }
   const code = isIn(USER_CAUSE_UPSTREAM_TYPES, upstreamType) ? upstreamType
     : isIn(USER_CAUSE_ERROR_CODES, errorCode) || isIn(USER_CAUSE_UPSTREAM_TYPES, errorCode) ? errorCode : ''
@@ -145,6 +197,10 @@ export type PageFailureInfo = {
   phase?: string | null
   billable_calls_before_failure?: number | null
   secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
+  /** Usable analysis connections (≥2 → switch_model for SWITCHABLE_UPSTREAM). */
+  connection_count?: number | null
+  /** Catalog provider of the failed analysis binding (sponsor → recharge). */
+  provider?: string | null
 }
 
 /** Diagnose panel input. The only reader of this page's cause fields for the suggestion. */
@@ -229,12 +285,12 @@ export function analysisFailureText(
  * (backend failure_attribution); the page leads with the first cause the user can fix (e.g. auth),
  * because retrying cannot fix it. Primary first, then secondaries in recorded order. */
 export function pageFailureAction(info: PageFailureInfo): FailureAction {
-  const primary = failureAction(info.error_code, info.upstream_error_type, info.failure_stage)
-  if (primary.kind === 'settings') return primary
+  const primary = failureAction(info.error_code, info.upstream_error_type, info.failure_stage, info.connection_count, info.provider)
+  if (primary.kind !== 'retry') return primary
   const codes = info.secondary_error_codes || []
   for (let i = 0; i < codes.length; i++) {
-    const action = failureAction(codes[i], info.secondary_upstream_error_types?.[i], info.secondary_failure_stages?.[i])
-    if (action.kind === 'settings') return action
+    const action = failureAction(codes[i], info.secondary_upstream_error_types?.[i], info.secondary_failure_stages?.[i], info.connection_count, info.provider)
+    if (action.kind !== 'retry') return action
   }
   return primary
 }

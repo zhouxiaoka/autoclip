@@ -2047,5 +2047,9 @@
   "建议换用 {{model}} 后重试": "Tente de novo com {{model}}.",
   "切换并重试": "Trocar e tentar de novo",
   "去配置模型": "Configurar modelo",
-  "其他模型": "Outros modelos"
+  "其他模型": "Outros modelos",
+  "建议再加一个服务商": "Adicione outro provedor",
+  "去充值": "Recarregar",
+  "选择一个已通过测试的连接继续制作。默认选中成功率最高的。": "Escolha uma conexão testada para continuar. A de maior taxa de sucesso é selecionada por padrão.",
+  "还没有其他可用连接。请先在设置里添加并测试一个服务商。": "Ainda não há outras conexões utilizáveis. Adicione e teste um provedor em Configurações primeiro."
 }
