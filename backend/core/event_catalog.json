@@ -758,6 +758,10 @@
           "description": "Non-negative integer token count.",
           "format": "integer",
           "minimum": 0
+        },
+        "model_params_b": {
+          "type": "number",
+          "description": "T3: parameter size in billions when known (Ollama show or name inference)."
         }
       }
     },

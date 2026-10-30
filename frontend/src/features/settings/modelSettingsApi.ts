@@ -1,4 +1,5 @@
 import api from '../../services/api'
+import { buildApiUrl } from '../../utils/apiConfig'
 import type { ValidationResult } from './providerAccess'
 
 import type { CustomModelOffer } from './customProvider'
@@ -57,7 +58,7 @@ export interface ModelSettings {
   min_score_threshold: number
   max_clips_per_collection: number
 }
-export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other' }
+export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other'; /** T3: billions of params when known (Ollama show / name inference). */ params_b?: number | null; /** T3: context window tokens when known. */ context_tokens?: number | null }
 export interface ModelList { models: ModelEntry[]; source: 'live' | 'cache' | 'catalog'; preview?: boolean; updated_at: number | null; warning?: string }
 export interface FetchListResult {
   ok?: boolean
@@ -78,6 +79,14 @@ export const modelSettingsApi = {
   test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis', probeKind: 'quick' | 'trial' = 'quick', opts?: { signal?: AbortSignal; language?: 'zh' | 'en' }) =>
     api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose, probe_kind: probeKind, language: opts?.language || 'zh' }, opts?.signal ? { signal: opts.signal } : undefined),
   fetchList: (connection: Connection) => api.post<unknown, FetchListResult>('/settings/ai-models/fetch-list', { connection }),
+  /** T3: stream Ollama pull progress. Caller reads the Response body as SSE. */
+  ollamaPull: (model: string, baseUrl: string, signal?: AbortSignal) =>
+    fetch(buildApiUrl('/settings/ollama/pull'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, base_url: baseUrl }),
+      signal,
+    }),
 }
 
 export function bindingCapability(binding: Assignment | null, lists: Record<string, ModelList>): Capability {

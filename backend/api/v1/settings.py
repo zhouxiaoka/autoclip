@@ -85,6 +85,82 @@ class ConnectionTestRequest(BaseModel):
     language: Literal['zh', 'en'] = 'zh'
 
 
+
+class OllamaPullRequest(BaseModel):
+    """One-click pull for the T3 recommended local models."""
+    model: str = Field(min_length=1, max_length=200)
+    base_url: str = Field(default='http://127.0.0.1:11434/v1', max_length=500)
+
+
+@router.post('/ollama/pull')
+def ollama_pull_model(body: OllamaPullRequest):
+    """Proxy Ollama ``POST /api/pull`` as SSE progress events.
+
+    Never returns keys. Body lines are ``data: {json}\\n\\n`` with
+    ``status`` / ``completed`` / ``total`` / ``done`` / ``error`` only.
+    """
+    import json as _json
+    from urllib.parse import urlparse
+    import httpx
+    from fastapi.responses import StreamingResponse
+    from backend.core.llm_providers import is_local_url
+
+    model = body.model.strip()
+    if not model or any(ch in model for ch in ('\n', '\r', ' ')):
+        raise HTTPException(status_code=422, detail='Invalid model name')
+    raw_base = (body.base_url or '').strip() or 'http://127.0.0.1:11434/v1'
+    try:
+        parsed = urlparse(raw_base if '://' in raw_base else 'http://' + raw_base)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail='Invalid base_url') from exc
+    if not is_local_url(raw_base):
+        raise HTTPException(status_code=400, detail='Ollama pull only allowed for local addresses')
+    host = parsed.hostname or '127.0.0.1'
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    # Ollama native API lives on the root, not /v1.
+    root = f"{parsed.scheme or 'http'}://{host}:{port}"
+    if raw_base.rstrip('/').endswith('/v1'):
+        root = raw_base.rstrip('/')[:-3].rstrip('/') or root
+
+    def events():
+        url = root.rstrip('/') + '/api/pull'
+        try:
+            with httpx.stream('POST', url, json={'name': model, 'stream': True},
+                              timeout=None, trust_env=False) as response:
+                if response.status_code >= 400:
+                    yield f"data: {_json.dumps({'error': 'pull_failed', 'status': response.status_code}, ensure_ascii=False)}\n\n"
+                    return
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        payload = _json.loads(line)
+                    except ValueError:
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+                    out = {}
+                    if isinstance(payload.get('status'), str):
+                        out['status'] = payload['status'][:120]
+                    if isinstance(payload.get('completed'), int):
+                        out['completed'] = payload['completed']
+                    if isinstance(payload.get('total'), int):
+                        out['total'] = payload['total']
+                    if payload.get('done') is True or payload.get('status') == 'success':
+                        out['done'] = True
+                    if isinstance(payload.get('error'), str):
+                        out['error'] = payload['error'][:200]
+                    yield f"data: {_json.dumps(out, ensure_ascii=False)}\n\n"
+                    if out.get('done') or out.get('error'):
+                        return
+        except httpx.HTTPError as exc:
+            yield f"data: {_json.dumps({'error': 'unreachable', 'status': str(exc)[:120]}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(events(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+
 @router.post('/ai-models/fetch-list')
 def fetch_connection_model_list(body: Any = Body(default=None)):
     """Custom-provider and settings 'fetch list': GET /models, intersect, backfill.

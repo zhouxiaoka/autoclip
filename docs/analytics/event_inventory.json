@@ -243,7 +243,8 @@
     },
     "llm_request_finished": {
       "status": "core",
-      "domain": "llm"
+      "domain": "llm",
+      "notes": "T3 optional: model_params_b (billions)."
     },
     "studio_import_requested": {
       "status": "core",

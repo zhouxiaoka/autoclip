@@ -6,6 +6,7 @@ the actual endpoint; a community catalog supplements exact known IDs only.
 from __future__ import annotations
 
 import asyncio
+import re
 import hashlib
 import json
 import os
@@ -30,6 +31,106 @@ _VERIFIED = {('dashscope', name): 'multimodal' for name in ('qwen3.8-max', 'qwen
 # https://help.aliyun.com/zh/model-studio/qwen3-vl-flash
 _VERIFIED.update({('dashscope', name): 'multimodal'
                   for name in ('qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22')})
+
+
+# T3 local model gate: params < 7B or context < 8k → UI red warn (still selectable).
+LOCAL_MIN_PARAMS_B = 7.0
+LOCAL_MIN_CONTEXT_TOKENS = 8192
+_PARAM_SIZE_RE = re.compile(r'([0-9]+(?:\.[0-9]+)?)\s*([KkMmBbTt])\b')
+_NAME_PARAMS_RE = re.compile(r'\b([0-9]+(?:\.[0-9]+)?)[bB]\b')
+
+
+def parse_parameter_size(value) -> float | None:
+    """Ollama ``details.parameter_size`` → billions (e.g. ``7B`` → 7.0, ``3.8B`` → 3.8)."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        return number if number > 0 else None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    match = _PARAM_SIZE_RE.search(text.replace(',', ''))
+    if not match:
+        return None
+    number = float(match.group(1))
+    unit = match.group(2).upper()
+    if unit == 'B':
+        return number
+    if unit == 'M':
+        return number / 1000.0
+    if unit == 'K':
+        return number / 1_000_000.0
+    if unit == 'T':
+        return number * 1000.0
+    return None
+
+
+def infer_params_b_from_name(name: str | None) -> float | None:
+    """LM Studio / tag fallback: last ``\\b(\\d+)[bB]\\b`` in the model id."""
+    if not isinstance(name, str) or not name.strip():
+        return None
+    matches = _NAME_PARAMS_RE.findall(name)
+    if not matches:
+        return None
+    try:
+        value = float(matches[-1])
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def extract_context_tokens(model_info) -> int | None:
+    """Ollama ``model_info['*.context_length']`` → int tokens."""
+    if not isinstance(model_info, dict):
+        return None
+    for key, value in model_info.items():
+        if not isinstance(key, str) or not key.endswith('.context_length'):
+            continue
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            number = int(value)
+            return number if number > 0 else None
+        if isinstance(value, str) and value.strip().isdigit():
+            number = int(value.strip())
+            return number if number > 0 else None
+    return None
+
+
+def enrich_local_model_item(item: dict, *, provider: str) -> dict:
+    """Attach ``params_b`` / ``context_tokens`` from Ollama show payload or name inference."""
+    if not isinstance(item, dict):
+        return item
+    name = str(item.get('id') or item.get('name') or '')
+    params = parse_parameter_size((item.get('details') or {}).get('parameter_size') if isinstance(item.get('details'), dict) else item.get('parameter_size'))
+    if params is None:
+        params = parse_parameter_size(item.get('parameter_size'))
+    context = extract_context_tokens(item.get('model_info'))
+    if context is None and isinstance(item.get('context_length'), (int, float)) and not isinstance(item.get('context_length'), bool):
+        context = int(item['context_length']) if int(item['context_length']) > 0 else None
+    if params is None:
+        params = infer_params_b_from_name(name)
+    # LM Studio OpenAI /v1/models rarely has size; name inference is the only signal.
+    if provider == 'lmstudio' and params is None:
+        params = infer_params_b_from_name(name)
+    out = dict(item)
+    if params is not None:
+        out['params_b'] = round(float(params), 3)
+    if context is not None:
+        out['context_tokens'] = int(context)
+    return out
+
+
+def below_local_analysis_gate(params_b: float | None, context_tokens: int | None) -> bool:
+    """True when the model is under the T3 analysis floor (still selectable)."""
+    if params_b is not None and params_b < LOCAL_MIN_PARAMS_B:
+        return True
+    if context_tokens is not None and context_tokens < LOCAL_MIN_CONTEXT_TOKENS:
+        return True
+    return False
+
+
 
 
 def _path():
@@ -280,6 +381,13 @@ def _model_kind(item, name, *, analysis, image, asr):
 def _records(connection, raw, data):
     result = []
     seen = set()
+    try:
+        from backend.core.llm_providers import is_local_url
+        local_provider = connection.provider in {'ollama', 'lmstudio'} or bool(
+            getattr(connection, 'base_url', None) and is_local_url(connection.base_url)
+        )
+    except Exception:  # noqa: BLE001
+        local_provider = connection.provider in {'ollama', 'lmstudio'}
     for item in raw:
         if isinstance(item, str):
             item = {'id': item}
@@ -342,8 +450,18 @@ def _records(connection, raw, data):
         if asr['asr']:
             analysis = False
         kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'])
-        result.append({**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
-                       'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))})
+        record = {**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
+                       'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))}
+        # T3: surface size/context for the settings picker + D1 chunk_size later.
+        params_b = item.get('params_b')
+        if params_b is None:
+            params_b = infer_params_b_from_name(name) if connection.provider in {'ollama', 'lmstudio'} or local_provider else None
+        context_tokens = item.get('context_tokens')
+        if isinstance(params_b, (int, float)) and not isinstance(params_b, bool):
+            record['params_b'] = float(params_b)
+        if isinstance(context_tokens, (int, float)) and not isinstance(context_tokens, bool) and int(context_tokens) > 0:
+            record['context_tokens'] = int(context_tokens)
+        result.append(record)
     return result
 
 
@@ -407,10 +525,30 @@ async def _discover_from_provider(connection, refresh=False):
                         async with semaphore:
                             response = await client.post(root + '/api/show', json={'model': item['id']}, headers=headers)
                             response.raise_for_status()
-                            return {**item, 'capabilities': response.json().get('capabilities')}
+                            payload = response.json()
+                            shown = payload if isinstance(payload, dict) else {}
+                            # T3: keep capabilities and also params_b / context_tokens from show.
+                            merged = {
+                                **item,
+                                'capabilities': shown.get('capabilities', item.get('capabilities')),
+                                'details': shown.get('details') or item.get('details'),
+                                'model_info': shown.get('model_info') or item.get('model_info'),
+                            }
+                            return enrich_local_model_item(merged, provider='ollama')
                     except Exception:
-                        return item
+                        return enrich_local_model_item(item, provider='ollama')
                 raw = await asyncio.gather(*(details(item) for item in raw))
+        elif connection.provider == 'lmstudio':
+            raw = [
+                enrich_local_model_item(item if isinstance(item, dict) else {'id': item}, provider='lmstudio')
+                for item in raw
+            ]
+        elif local:
+            # Compatible / openai pointed at a local host: still infer size from the name.
+            raw = [
+                enrich_local_model_item(item if isinstance(item, dict) else {'id': item}, provider=connection.provider or 'compatible')
+                for item in raw
+            ]
         return raw
 
     results = await asyncio.gather(fetch(), _ensure_metadata(), return_exceptions=True)

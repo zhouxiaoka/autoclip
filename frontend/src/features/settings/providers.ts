@@ -143,11 +143,30 @@ export const isLocalAddress = (url?: string) => {
   return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
 }
 
-/** Local servers usually start with a small context; long transcripts need >= 16384 (RC156 Win QA #14b). */
-export const contextHintFor = (key: ProviderKey | undefined, baseUrl?: string) => {
+/** Local servers usually start with a small context; long transcripts need >= 16384 (RC156 Win QA #14b).
+ * T3: when params_b / context_tokens are known, prefer a concrete floor message.
+ */
+export const contextHintFor = (
+  key: ProviderKey | undefined,
+  baseUrl?: string,
+  size?: { params_b?: number | null; context_tokens?: number | null; id?: string } | null,
+) => {
   if (!key) return ''
   const local = PROVIDERS[key].local
-  if (local) return local.contextHint
-  if (key === 'compatible' && isLocalAddress(baseUrl)) return t(getCatalog().local_context_hint)
+  if (local || (key === 'compatible' && isLocalAddress(baseUrl))) {
+    const params = size?.params_b
+    const context = size?.context_tokens
+    if (typeof params === 'number' || typeof context === 'number') {
+      const bits: string[] = []
+      if (typeof params === 'number') bits.push(`${params}B`)
+      if (typeof context === 'number') bits.push(`${context >= 1024 ? Math.round(context / 1024) + 'k' : context} ctx`)
+      if ((typeof params === 'number' && params < 7) || (typeof context === 'number' && context < 8192)) {
+        return t('当前型号 {{size}}，大概率解析失败，不建议做分析。建议 ≥7B 且上下文 ≥8k。', { size: bits.join(' / ') })
+      }
+      return t('当前型号 {{size}}。分析建议 ≥7B 且上下文 ≥8k。', { size: bits.join(' / ') })
+    }
+    if (local) return local.contextHint
+    return t(getCatalog().local_context_hint)
+  }
   return ''
 }

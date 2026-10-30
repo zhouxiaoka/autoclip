@@ -56,7 +56,7 @@ export const LLM_REQUEST_FIELDS = [
   'success_rate_schema_version', 'provider', 'model', 'base_url_host', 'kind',
   'stage', 'http_status', 'upstream_error_type', 'prompt_tokens',
   'completion_tokens', 'reasoning_tokens', 'retry_count', 'degrade_count',
-  'duration_ms', 'outcome', 'finish_reason',
+  'duration_ms', 'model_params_b', 'outcome', 'finish_reason',
 ] as const
 
 export const UPSTREAM_HINT_KEYS: Record<UpstreamErrorType, string> = Object.fromEntries(
