@@ -51,8 +51,12 @@ export default function QuitGuard() {
       })
       // P2 #10: tell Rust the close-requested listener is live so prevent_close is safe.
       if (!cancelled) {
-        const { invoke } = await import('@tauri-apps/api/core')
-        await invoke('quit_guard_ready')
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('quit_guard_ready')
+        } catch (error) {
+          console.warn('quit_guard_ready failed', error)
+        }
       }
     })()
     return () => {

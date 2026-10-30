@@ -140,7 +140,9 @@ def test_model_mismatch_clears_stale_steps_so_retry_is_not_done(tmp_path, monkey
     monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
         'provider': 'new', 'model': 'B', 'prompt_hash': 'abc',
     })
-    first = pr.decide_resume(video=video, srt=srt, metadata_dir=meta, fresh=False)
+    first = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, fresh=False, invalidate=True,
+    )
     assert first['stamp_ok'] is False
     assert first['start_step'] == 'step1'
     assert first['skip_transcription'] is True
@@ -342,7 +344,7 @@ def test_clips_only_bad_stamp_clears_step4_not_done(tmp_path, monkeypatch):
         'provider': 'new', 'model': 'B', 'prompt_hash': 'abc',
     })
     decision = pr.decide_resume(
-        video=video, srt=srt, metadata_dir=meta, clips_only=True,
+        video=video, srt=srt, metadata_dir=meta, clips_only=True, invalidate=True,
     )
     assert decision['stamp_ok'] is False
     assert decision['start_step'] != 'done'
@@ -350,6 +352,81 @@ def test_clips_only_bad_stamp_clears_step4_not_done(tmp_path, monkeypatch):
     assert decision['resumed_from'] == 'subtitle'
     assert not (meta / 'step4_titles.json').exists()
     assert srt.exists()
+
+
+
+def test_read_path_model_mismatch_does_not_unlink_steps(tmp_path, monkeypatch):
+    """Polling/read decide_resume (invalidate=False default) must not delete step files.
+
+    resume_point_for_project → GET /studio/{id} used to call decide_resume which
+    cleared artifacts when stamp_ok was false — mid-run model switch or missing
+    stamp during a write window would wipe in-flight step products.
+    """
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'old', 'model': 'A', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'attached'})
+    for step, _ in pr.STEP_ARTIFACTS:
+        _write_step(meta, step, [{'model': 'A', 'step': step}])
+
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'new', 'model': 'B', 'prompt_hash': 'abc',
+    })
+    decision = pr.decide_resume(video=video, srt=srt, metadata_dir=meta, fresh=False)
+    assert decision['stamp_ok'] is False
+    assert decision['start_step'] == 'step1'
+    assert decision['resumed_from'] == 'subtitle'
+    # Pure read: step artifacts survive
+    assert (meta / 'step4_titles.json').exists()
+    assert (meta / 'step2_timeline.json').exists()
+    assert (meta / 'step1_outline.json').exists()
+    assert srt.exists()
+    assert (meta / pr.STAMP_NAME).exists()
+
+
+def test_read_path_no_stamp_does_not_unlink_steps(tmp_path, monkeypatch):
+    """No stamp yet (write window / mid-run) → stamp_ok false, polling must not unlink."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    # Steps present but no stamp written yet
+    for step, _ in pr.STEP_ARTIFACTS:
+        _write_step(meta, step, [{'ok': True}])
+    assert not (meta / pr.STAMP_NAME).exists()
+
+    decision = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, clips_only=True,
+    )
+    assert decision['stamp_ok'] is False
+    assert (meta / 'step4_titles.json').exists()
+    assert (meta / 'step1_outline.json').exists()
+
+
+def test_read_path_clips_only_bad_stamp_keeps_step4(tmp_path, monkeypatch):
+    """GET-path clips_only + model mismatch keeps step4; adapter invalidate clears it."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'old', 'model': 'A', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'attached'})
+    _write_step(meta, 'step4', [{'id': 'c1', 'generated_title': 'old'}])
+
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'new', 'model': 'B', 'prompt_hash': 'abc',
+    })
+    decision = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, clips_only=True,
+    )
+    assert decision['stamp_ok'] is False
+    assert (meta / 'step4_titles.json').exists(), 'read path must not unlink'
 
 
 def test_clips_only_false_with_only_step4_is_not_done(tmp_path, monkeypatch):
