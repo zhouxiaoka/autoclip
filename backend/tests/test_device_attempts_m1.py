@@ -30,6 +30,43 @@ def test_ledger_is_idempotent_and_tracks_first_success(tmp_path, monkeypatch):
     assert set(disk['attempts']) == {'t-aaaaaaaaaa', 't-bbbbbbbbbb', 't-cccccccccc'}
 
 
+def _reset_device_ledger():
+    from backend.services.studio.qa import telemetry
+    telemetry.set_runtime_analytics_off(False)
+    device_attempts._memory.clear()
+    device_attempts._memory.update({'attempts': {}})
+
+
+def test_ledger_opt_out_stays_in_memory_only(tmp_path, monkeypatch):
+    """privacy.json analytics:false → record must not create generation-device-attempts.json."""
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    _reset_device_ledger()
+    (tmp_path / 'privacy.json').write_text(
+        '{"analytics":false,"crash_reports":false}', encoding='utf-8')
+    first = device_attempts.record('t-privacy-off1', 'success')
+    assert first == {'attempt_index_on_device': 1, 'is_first_success_device': True}
+    again = device_attempts.record('t-privacy-off1', 'success')
+    assert again == first
+    second = device_attempts.record('t-privacy-off2', 'error')
+    assert second == {'attempt_index_on_device': 2, 'is_first_success_device': False}
+    assert not (tmp_path / 'generation-device-attempts.json').exists()
+    assert set(device_attempts._memory['attempts']) == {'t-privacy-off1', 't-privacy-off2'}
+
+
+def test_ledger_opt_in_persists_to_disk(tmp_path, monkeypatch):
+    """privacy.json analytics:true (or missing) keeps the on-disk ledger."""
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    _reset_device_ledger()
+    (tmp_path / 'privacy.json').write_text(
+        '{"analytics":true,"crash_reports":false}', encoding='utf-8')
+    first = device_attempts.record('t-privacy-on1', 'partial')
+    assert first == {'attempt_index_on_device': 1, 'is_first_success_device': True}
+    disk = json.loads((tmp_path / 'generation-device-attempts.json').read_text(encoding='utf-8'))
+    assert set(disk['attempts']) == {'t-privacy-on1'}
+    assert disk['attempts']['t-privacy-on1']['outcome'] == 'partial'
+
+
+
 def test_generation_summary_includes_source_duration_sec():
     state = {
         'generation': {'requested_platforms': ['douyin'], 'created_at': '2026-10-01T00:00:00Z',
