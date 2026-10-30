@@ -228,7 +228,25 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         raise UserFacingError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
     if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
+    # Fail a spent model budget before starting encode; ffmpeg/HTML capture are local work.
     project_cancellation.checkpoint(project_id)
+    from backend.core.job_budget import pause_clip_job_budget
+    with pause_clip_job_budget():
+        return _encode_draft(
+            project_id, video, draft, job_id, progress, info, w, h, warnings, keep_audio,
+            entries, hook, font, brand_outro=brand_outro, html_template=html_template,
+            html_fallback=html_fallback, features=features, safe_area=safe_area,
+            requested_template=requested_template,
+        )
+
+
+def _encode_draft(
+    project_id, video, draft, job_id, progress, info, w, h, warnings, keep_audio,
+    entries, hook, font, *, brand_outro, html_template, html_fallback, features, safe_area,
+    requested_template,
+):
+    """ffmpeg / HTML overlay wall clock. Paused from the clip-job model budget (P1 #8)."""
+    packaged = draft.packaging is not None
     overlay_path = None
     overlay_grade = ''
     overlay_job = None

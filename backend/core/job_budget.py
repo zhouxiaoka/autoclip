@@ -5,9 +5,10 @@ can retry that whole attempt again, and a job makes several calls. Without a
 cap the Studio screen stays on 「正在制作可发布成片」. One production tracked
 job and one render tracked job each get this budget, so boundaries, burned
 captions, post copy, packaging and render model calls share it with the content
-pipeline. Local Whisper is paused: it is CPU work, not a slow provider, and a
-long transcribe must not consume the cap. Whisper's own wall-clock cap
-lives in ``speech_recognizer`` (C2), not in a second ContextVar here.
+pipeline. Local Whisper and ffmpeg / HTML template encode are paused: they are
+CPU work, not a slow provider, and must not consume the cap. Whisper's
+own wall-clock cap lives in ``speech_recognizer`` (C2), not in a second
+ContextVar here.
 """
 from __future__ import annotations
 

@@ -200,3 +200,61 @@ def test_render_model_work_stops_at_the_clip_budget(isolated, monkeypatch):
     assert state['output_variants'][0]['status'] == 'failed'
     assert '时间上限' in state['output_variants'][0]['error']
     assert clip_job_active() is False
+
+
+def test_render_ffmpeg_wall_time_does_not_spend_clip_budget(isolated, monkeypatch):
+    """P1 #8: slow ffmpeg must not trip the model budget (AUTOCLIP_CLIP_JOB_BUDGET_SEC).
+
+    Progress updates go through store.change → checkpoint → ensure_clip_job_budget;
+    while pause_clip_job_budget is active those checks must not see wall time advance.
+    """
+    import subprocess
+    import time
+
+    from backend.core.job_budget import _current
+    from backend.services.studio import render as render_mod
+    from backend.services.studio.models import Draft, Scene
+
+    monkeypatch.setenv('AUTOCLIP_CLIP_JOB_BUDGET_SEC', '2')
+    root = _project('render-pause')
+    source = root / 'raw' / 'input.mp4'
+    subprocess.run(
+        ['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=64x64:r=30:d=1',
+         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', str(source)],
+        check=True, capture_output=True,
+    )
+    store.write('render-pause', {
+        'drafts': [], 'events': [],
+        'jobs': [{'job_id': 'active', 'status': 'queued', 'percent': 0, 'instance': store.INSTANCE}],
+        'output_variants': [{'id': 'v1', 'status': 'queued', 'render_job_id': 'active'}],
+        'generation': {'status': 'rendering'},
+        'analysis': _running('rendering', 'run-pause'),
+    })
+    monkeypatch.setattr(jobs, 'source', lambda _project_id: source)
+    monkeypatch.setattr(jobs, '_design_covers', lambda *_args, **_kwargs: None)
+
+    depths = []
+    slept = []
+    real_run = render_mod.project_cancellation.run
+
+    def slow_run(cmd, **kwargs):
+        budget = _current.get()
+        depths.append(None if budget is None else budget.pause_depth)
+        # One 5s stall exceeds the 2s model budget unless encode is paused.
+        if not slept:
+            slept.append(1)
+            time.sleep(5)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(render_mod.project_cancellation, 'run', slow_run)
+    draft = Draft(
+        id='d', title='pause', subtitles=False, original_audio=False,
+        aspect='original', scenes=[Scene(id='s', start=0, end=0.5)],
+    )
+    jobs._render('render-pause', draft, 'active')
+    state = store.read('render-pause')
+    job = next(item for item in state['jobs'] if item['job_id'] == 'active')
+    assert job['status'] == 'completed', job
+    assert slept == [1]
+    assert depths and all(depth and depth >= 1 for depth in depths), depths
+    assert clip_job_active() is False
