@@ -9,6 +9,10 @@ export interface ReadinessCheck {
   model?: string
   /** Transcription only: the backend says this setup may run without ASR (visual route); its import gate decides per file. */
   skippable?: boolean
+  /** F5: human label for the always-on readiness line (model id / ASR mode / 未启用). */
+  label?: string | null
+  /** F5: F2 trial result on the analysis connection. null/undefined = never run. */
+  trial_ok?: boolean | null
 }
 
 export interface ImportReadiness {
@@ -159,4 +163,86 @@ export async function probeReadiness(load: () => Promise<ImportReadiness | null>
     } catch { /* retry */ }
   }
   return null
+}
+
+
+export type ReadinessLineKey = 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
+
+export type ReadinessLineMark = 'ok' | 'fail' | 'dash' | 'warn'
+
+export interface ReadinessLineItem {
+  key: ReadinessLineKey
+  /** Chinese source prefix: 模型 / 转写 / 画面 / FFmpeg */
+  title: string
+  mark: ReadinessLineMark
+  /** Display name after the mark (model id, 本地 small, 未启用, …). */
+  detail: string
+  /** Extra badge after detail, e.g. 「⚠ 未通过试跑」. */
+  badge?: string
+  repair: RepairAction
+  /** When true, show a one-click fix control next to the item. */
+  needsFix: boolean
+}
+
+const LINE_TITLES: Record<ReadinessLineKey, string> = {
+  analysis: '模型',
+  transcription: '转写',
+  visual: '画面',
+  ffmpeg: 'FFmpeg',
+}
+
+/** Default settings jump for a line item when the check has no repair action (still clickable in F5). */
+const LINE_DEFAULT_REPAIR: Record<ReadinessLineKey, RepairAction> = {
+  analysis: 'settings_ai',
+  transcription: 'settings_transcription',
+  visual: 'settings_vision',
+  ffmpeg: 'none',
+}
+
+/** Build the four always-visible F5 readiness line items from a report. */
+export function readinessLineItems(report: ImportReadiness | null | undefined): ReadinessLineItem[] {
+  const checks = report?.checks
+  return (['analysis', 'transcription', 'visual', 'ffmpeg'] as const).map(key => {
+    const check = checks?.[key]
+    const title = LINE_TITLES[key]
+    const detail = (check?.label || '').trim() || defaultDetail(key, check)
+    const checkRepair = (check?.repair || 'none') as RepairAction
+    // Click always jumps to the matching settings section; needsFix only when the check itself is ✗.
+    const repair = checkRepair !== 'none' ? checkRepair : LINE_DEFAULT_REPAIR[key]
+    if (!check) {
+      return { key, title, mark: 'dash' as const, detail: '…', repair: LINE_DEFAULT_REPAIR[key], needsFix: false }
+    }
+    if (key === 'visual' && (check.code === 'not_required' || check.code === 'optional')) {
+      return { key, title, mark: 'dash', detail: detail || '未启用', repair, needsFix: false }
+    }
+    if (check.ok) {
+      const badge = key === 'analysis' && check.trial_ok === false ? '⚠ 未通过试跑' : undefined
+      return {
+        key, title,
+        mark: 'ok',
+        detail,
+        badge,
+        repair,
+        needsFix: false,
+      }
+    }
+    return {
+      key, title,
+      mark: 'fail',
+      detail,
+      badge: key === 'analysis' && check.trial_ok === false ? '⚠ 未通过试跑' : undefined,
+      repair,
+      needsFix: checkRepair !== 'none',
+    }
+  })
+}
+
+function defaultDetail(key: ReadinessLineKey, check: ReadinessCheck | null | undefined): string {
+  if (key === 'ffmpeg') return 'FFmpeg'
+  if (key === 'visual') return '未启用'
+  if (key === 'transcription') {
+    if (check?.model) return `本地 ${check.model}`
+    return '转写'
+  }
+  return check?.model || '—'
 }

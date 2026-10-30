@@ -17,7 +17,8 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, FIRST_WINDOW_END_SEC, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type PreviewRouteKind, type ReadinessIssue } from './importReadiness'
+import { analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type PreviewRouteKind, type ReadinessIssue, type ReadinessLineItem } from './importReadiness'
+import ReadinessLine from './ReadinessLine'
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
 import { hasSuccessHistory, readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
@@ -252,9 +253,17 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     return () => window.removeEventListener('paste', onPaste)
   }, [pasteFlag, dropZone, busy, settled, allowLink, source, analysisBlocked])
   const issues = visibleIssues(readiness, !!subtitle, blockOptions)
-  const repair = async (item: ReadinessIssue) => {
+  const repair = async (item: ReadinessIssue | ReadinessLineItem) => {
     // #353: the readiness list's install button goes through the one recovery controller (no second install flow).
-    if (item.repair === 'install_whisper') { resumeSubmit.current = false; setError(''); recover.open(item.code || 'whisper_not_installed', item.model); await recover.install(); return }
+    const code = 'code' in item ? item.code : undefined
+    const model = 'model' in item ? item.model : undefined
+    if (item.repair === 'install_whisper') {
+      resumeSubmit.current = false
+      setError('')
+      recover.open(code || readiness?.checks?.transcription?.code || 'whisper_not_installed', model || readiness?.checks?.transcription?.model)
+      await recover.install()
+      return
+    }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
     const destination = repairDestination(item.repair)
     if (destination) navigate(destination)
@@ -533,6 +542,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}
+      <ReadinessLine report={readiness} busy={busy} repairing={repairing} onFix={item => void repair(item)} />
       {(source === 'link' && (previewLoading || urlPreview)) && <UrlPreview
         preview={urlPreview}
         loading={previewLoading}
