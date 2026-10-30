@@ -48,6 +48,9 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [testingKind, setTestingKind] = useState<'quick' | 'trial' | null>(null)
+  const [lastTrialByConnection, setLastTrialByConnection] = useState<Record<string, ValidationResult>>({})
+  const trialAbortRef = useRef<AbortController | null>(null)
   const [error, setError] = useState('')
   const [testWarning, setTestWarning] = useState<{ id: string; text: string } | null>(null)
   const [keyHints, setKeyHints] = useState<Record<string, string>>({})
@@ -203,9 +206,17 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       provider,
       base_url_host: result.base_url_host || telemetryHost(connection.base_url),
       result: passed(result) ? 'success' : 'failed',
+      probe_kind: result.probe_kind || 'quick',
+      ...(typeof result.trial_context_ok === 'boolean' ? { trial_context_ok: result.trial_context_ok } : {}),
+      ...(typeof result.trial_rate_limited === 'boolean' ? { trial_rate_limited: result.trial_rate_limited } : {}),
+      ...(typeof result.trial_json_ok === 'boolean' ? { trial_json_ok: result.trial_json_ok } : {}),
+      ...(typeof result.trial_avg_ms === 'number' ? { trial_avg_ms: result.trial_avg_ms } : {}),
       ...(passed(result) ? {} : { upstream_error_type: result.error_type || 'unknown' }),
     })
     if (result.key_hint) setKeyHints(old => ({ ...old, [connection.id]: result.key_hint as string }))
+    if (result.probe_kind === 'trial') {
+      setLastTrialByConnection(old => ({ ...old, [connection.id]: result }))
+    }
   }
 
   /** Keep a non-blocking list warning on screen. Returns the copy when the test itself passed. */
@@ -277,10 +288,17 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     }
   }
 
-  const probe = async (connection: Connection, model: string, vision: boolean, role: Role): Promise<ValidationResult> => {
+  const probe = async (
+    connection: Connection,
+    model: string,
+    vision: boolean,
+    role: Role,
+    probeKind: 'quick' | 'trial' = 'quick',
+    signal?: AbortSignal,
+  ): Promise<ValidationResult> => {
     const payload = { ...connection, api_key: connection.api_key?.trim() ?? connection.api_key }
     try {
-      return await modelSettingsApi.test(payload, model, vision, role)
+      return await modelSettingsApi.test(payload, model, vision, role, probeKind, { signal })
     } catch (e) {
       const error = e as { code?: string; response?: { status?: number } } | null
       const status = error?.response?.status
@@ -365,6 +383,31 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
       // back to the failed project, if settings were opened from one (SETTINGS_SAVED_EVENT in studio/settingsReturn).
       if (!failed && !visionFailed) notifySettingsSaved()
+      // F2: after save, default-run trial on the analysis connection (cancellable).
+      if (!failed && !visionFailed) {
+        const analysis = logic.validationTargets(value || next).find(item => item.role === 'analysis')
+        if (analysis) {
+          void (async () => {
+            const controller = new AbortController()
+            trialAbortRef.current = controller
+            setTesting(true)
+            setTestingKind('trial')
+            try {
+              const trial = await probe(analysis.connection, analysis.model, false, 'analysis', 'trial', controller.signal)
+              if (!alive.current) return
+              emitValidation(analysis.connection, trial)
+              setSettings(old => old && logic.applyValidation(old, analysis.connection.id, trial))
+              if (trial.trial_passed === false) message.warning(t('未通过试跑'))
+            } catch (e) {
+              if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') return
+            } finally {
+              if (trialAbortRef.current === controller) trialAbortRef.current = null
+              setTesting(false)
+              setTestingKind(null)
+            }
+          })()
+        }
+      }
       return { ok: true, validationFailed: failed || visionFailed }
     } catch (e) { finish('failed', {}, e); setError(errorText(e)); return { ok: false } }
     finally { setSaving(false) }
@@ -389,16 +432,27 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     } finally { setTesting(false) }
   }
 
-  const test = async (role: Role = 'analysis') => {
+  const cancelTrial = () => {
+    trialAbortRef.current?.abort()
+    trialAbortRef.current = null
+    setTesting(false)
+    setTestingKind(null)
+  }
+
+  const test = async (role: Role = 'analysis', probeKind: 'quick' | 'trial' = 'quick') => {
     const connection = settings && logic.connectionOf(settings, role)
     const binding = settings?.[role]
     if (!settings || !binding?.model || !connection || (role === 'transcription' && settings.transcription?.provider !== 'cloud')) return
     const capability = role === 'analysis' || role === 'vision' ? bindingCapability(settings[role], lists) : 'auto'
     const finish = beginExperience('provider_connection_test', { placement, provider: telemetryProvider(connection.provider), capability })
+    trialAbortRef.current?.abort()
+    const controller = new AbortController()
+    trialAbortRef.current = controller
     setTesting(true)
+    setTestingKind(probeKind)
     try {
       const vision = role === 'vision' || (role === 'analysis' && settings.analysis_mode !== 'subtitle' && capability === 'multimodal')
-      const value = await probe(connection, binding.model, vision, role)
+      const value = await probe(connection, binding.model, vision, role, role === 'analysis' ? probeKind : 'quick', controller.signal)
       emitValidation(connection, value)
       replace(logic.applyValidation(settings, connection.id, value))
       finish(passed(value) ? 'completed' : 'failed', { config_source: value.config_source, ...(passed(value) ? {} : connectionTestFailure(value)) })
@@ -416,12 +470,26 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         setError(text)
         message.error(text)
       }
-    } catch (e) { finish('failed', {}, e); message.error(errorText(e)) }
-    finally { setTesting(false) }
+    } catch (e) {
+      if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') {
+        finish('failed', { reason: 'cancelled' })
+      } else {
+        finish('failed', {}, e); message.error(errorText(e))
+      }
+    }
+    finally {
+      if (trialAbortRef.current === controller) trialAbortRef.current = null
+      setTesting(false)
+      setTestingKind(null)
+    }
   }
 
 
-  const testCatalogProvider = async (presetId: string, draft?: Partial<Connection>) => {
+  const testCatalogProvider = async (
+    presetId: string,
+    draft?: Partial<Connection>,
+    probeKind: 'quick' | 'trial' = 'quick',
+  ) => {
     if (!settings) return
     const preset = catalogPreset(presetId)
     if (!preset) return
@@ -455,7 +523,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     const finish = beginExperience('provider_connection_test', {
       placement, provider: telemetryProvider(connection.provider), capability: 'auto',
     })
+    trialAbortRef.current?.abort()
+    const controller = new AbortController()
+    trialAbortRef.current = controller
     setTesting(true)
+    setTestingKind(probeKind)
     try {
       let model = (preset.candidates?.analysis || preset.candidates?.vision || [])[0] || ''
       try {
@@ -469,7 +541,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         setListErrors(old => ({ ...old, [connection!.id]: errorText(e) }))
       }
       if (!model) model = 'gpt-4o-mini'
-      const value = await probe(connection, model, false, 'analysis')
+      const value = await probe(connection, model, false, 'analysis', probeKind, controller.signal)
+      if (controller.signal.aborted) return
       emitValidation(connection, value)
       const applied = logic.applyValidation(settingsRef.current || next, connection.id, value)
       replace(applied)
@@ -478,7 +551,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
         backfillModels(normalized, value)
         void discover(normalized, true, 'manual')
-        message.success(t('连接正常'))
+        if (probeKind === 'trial' && value.trial_passed === false) {
+          message.warning(t('未通过试跑'))
+        } else {
+          message.success(t('连接正常'))
+        }
         const warn = acceptWarning(connection.id, value)
         if (warn) message.warning(warn)
         setError('')
@@ -489,10 +566,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         message.error(text)
       }
     } catch (e) {
+      if ((e as { name?: string })?.name === 'AbortError' || controller.signal.aborted) return
       finish('failed', {}, e)
       message.error(errorText(e))
     } finally {
+      if (trialAbortRef.current === controller) trialAbortRef.current = null
       setTesting(false)
+      setTestingKind(null)
     }
   }
 
@@ -589,6 +669,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     settings, lists, busy, listErrors, dirty, saving, testing, error, testWarning, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
-    setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
+    setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test, cancelTrial,
+    testingKind, lastTrialByConnection,
   }
 }

@@ -5,6 +5,7 @@ import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
 import api, { speechApi } from '../../services/api'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { mainConnection, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import TrialRunPanel from './TrialRunPanel'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
@@ -89,11 +90,20 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
               onChange={value => m.update({ analysis: { connection_id: connection.id, model: value, capability: 'auto', model_source: 'user' } })}
               onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
               onRefresh={() => void m.discover(connection, true)}
-              actions={<Btn variant="text" size="sm" disabled={!settings.analysis.model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>}
+              actions={(
+                <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  <Btn variant="text" size="sm" disabled={!settings.analysis.model} loading={m.testing && m.testingKind === 'quick'} onClick={() => void m.test('analysis', 'quick')}>{t('快速测试')}</Btn>
+                  <Btn variant="text" size="sm" disabled={!settings.analysis.model} loading={m.testing && m.testingKind === 'trial'} onClick={() => void m.test('analysis', 'trial')}>{t('试跑一段')}</Btn>
+                  {m.testing && m.testingKind === 'trial' && (
+                    <Btn variant="text" size="sm" onClick={() => m.cancelTrial()}>{t('取消试跑')}</Btn>
+                  )}
+                </span>
+              )}
             />
             {m.testWarning?.id === connection.id && (
               <p className="ac-note" role="status">{m.testWarning.text}</p>
             )}
+            <TrialRunPanel result={m.lastTrialByConnection[connection.id]} trialStatus={connection.trial_status} />
           </Row>
         : <Row label={t('settings.providers.use_for_analysis')} hint={t('settings.providers.use_for_analysis_hint')}>
             <Btn size="sm" onClick={() => m.assignAnalysisConnection(connection)}>{t('settings.providers.use_for_analysis')}</Btn>

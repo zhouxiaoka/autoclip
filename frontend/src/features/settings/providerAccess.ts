@@ -34,6 +34,15 @@ export interface ValidationResult {
   error_code?: string
   http_status?: number | null
   config_source?: 'preset' | 'customized'
+  /** F2: quick chat probe or full trial run. */
+  probe_kind?: 'quick' | 'trial'
+  trial_context_ok?: boolean | null
+  trial_rate_limited?: boolean | null
+  trial_json_ok?: boolean | null
+  trial_avg_ms?: number | null
+  trial_estimate_requests?: number | null
+  trial_estimate_minutes?: number | null
+  trial_passed?: boolean | null
 }
 
 const KEY_HINTS: Array<[RegExp, ProviderKey]> = [

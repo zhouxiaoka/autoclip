@@ -36,6 +36,7 @@ export const TELEMETRY_PROVIDERS = [
   'apimart', 'api88', 'infistar', 'deepseek', 'dashscope', 'siliconflow', 'seed', 'glm', 'kimi', 'minimax-cn', 'xiaomi', 'openai', 'gemini', 'whisper', 'sensevoice', 'ollama', 'lmstudio', 'openrouter', 'anthropic', 'grok', 'groq', 'mistral', 'together', 'fireworks', 'huggingface', 'nvidia', 'cerebras', 'baseten', 'azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway', 'vercel-ai-gateway', 'moonshotai', 'minimax', 'ant-ling', 'qianfan', 'hunyuan', 'byteplus-modelark', 'compatible', 'other',
 ] as const
 export const VALIDATION_RESULTS = ['success', 'failed', 'skipped'] as const
+export const PROBE_KINDS = ['quick', 'trial'] as const
 export const FAILURE_STAGES = [
   'screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze',
   'vision', 'render', 'outline', 'timeline', 'scoring', 'title', 'clustering',
@@ -133,6 +134,11 @@ function sanitize(value: Record<string, unknown> | null | undefined): SuccessRat
   if (errorType) out.upstream_error_type = errorType
   const result = raw.result === 'ok' ? 'success' : raw.result
   putEnum(out, { ...raw, result }, 'result', VALIDATION_RESULTS)
+  putEnum(out, raw, 'probe_kind', PROBE_KINDS)
+  putBool(out, raw, 'trial_context_ok')
+  putBool(out, raw, 'trial_rate_limited')
+  putBool(out, raw, 'trial_json_ok')
+  putCount(out, raw, 'trial_avg_ms')
   return out
 }
 
@@ -154,6 +160,18 @@ function isLocalHost(host: string): boolean {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+
+function putBool(out: SuccessRateProperties, raw: Record<string, unknown>, key: string): void {
+  const value = raw[key]
+  if (typeof value === 'boolean') out[key] = value
+}
+
+function putCount(out: SuccessRateProperties, raw: Record<string, unknown>, key: string): void {
+  const value = raw[key]
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) out[key] = Math.floor(value)
+  else if (typeof value === 'string' && /^\d+$/.test(value)) out[key] = Number(value)
 }
 
 function putEnum(out: SuccessRateProperties, raw: Record<string, unknown>, key: string, allowed: readonly string[]): void {

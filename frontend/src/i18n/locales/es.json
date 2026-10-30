@@ -2058,5 +2058,16 @@
   "从第 1 步继续": "Continuar desde el paso 1",
   "从第 2 步继续": "Continuar desde el paso 2",
   "从第 3 步继续": "Continuar desde el paso 3",
-  "从第 4 步继续": "Continuar desde el paso 4"
+  "从第 4 步继续": "Continuar desde el paso 4",
+  "快速测试": "Prueba rápida",
+  "试跑一段": "Prueba completa",
+  "取消试跑": "Cancelar prueba",
+  "未通过试跑": "Prueba no superada",
+  "上下文 ✓": "Contexto ✓",
+  "上下文 ✗": "Contexto ✗",
+  "速率 ✓": "Velocidad ✓",
+  "速率 ⚠（出现限流，长视频建议降并发）": "Velocidad ⚠ (límite de tasa — baje la concurrencia en videos largos)",
+  "输出格式 ✓": "Formato de salida ✓",
+  "输出格式 ✗": "Formato de salida ✗",
+  "预计 30 分钟素材约需 {{n}} 次请求、约 {{m}} 分钟": "Para ~30 min de material: ~{{n}} solicitudes, ~{{m}} min"
 }

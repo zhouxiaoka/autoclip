@@ -220,7 +220,14 @@
     },
     "provider_validation_finished": {
       "status": "core",
-      "domain": "provider"
+      "domain": "provider",
+      "optional_properties": {
+        "probe_kind": "quick|trial",
+        "trial_context_ok": "boolean",
+        "trial_rate_limited": "boolean",
+        "trial_json_ok": "boolean",
+        "trial_avg_ms": "integer"
+      }
     },
     "asr_readiness_checked": {
       "status": "core",

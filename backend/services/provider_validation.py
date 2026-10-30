@@ -22,6 +22,7 @@ failure when ``/models`` itself fails.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 from urllib.parse import urlparse
@@ -79,6 +80,15 @@ class ValidationResult:
     upstream_code: str = ''
     # Non-blocking. Empty when the test has nothing extra to say.
     warning: str = ''
+    # F2 trial-run probe (None when probe_kind=quick / not run).
+    probe_kind: str = 'quick'
+    trial_context_ok: Optional[bool] = None
+    trial_rate_limited: Optional[bool] = None
+    trial_json_ok: Optional[bool] = None
+    trial_avg_ms: Optional[int] = None
+    trial_estimate_requests: Optional[int] = None
+    trial_estimate_minutes: Optional[float] = None
+    trial_passed: Optional[bool] = None
 
     @property
     def error_code(self) -> str:
@@ -107,6 +117,14 @@ class ValidationResult:
             'truncated': self.truncated,
             'message_key': self.message_key,
             'warning': self.warning,
+            'probe_kind': self.probe_kind,
+            'trial_context_ok': self.trial_context_ok,
+            'trial_rate_limited': self.trial_rate_limited,
+            'trial_json_ok': self.trial_json_ok,
+            'trial_avg_ms': self.trial_avg_ms,
+            'trial_estimate_requests': self.trial_estimate_requests,
+            'trial_estimate_minutes': self.trial_estimate_minutes,
+            'trial_passed': self.trial_passed,
         }
 
 
@@ -442,3 +460,247 @@ def fetch_list_for_connection(connection: ai_models.Connection, *, http=None) ->
         provider=resolved.provider,
         http=http,
     )
+
+
+# ---------------------------------------------------------------------------
+# F2: trial run — real step1 outline prompt + sample SRT, 3× JSON checks
+# ---------------------------------------------------------------------------
+
+TRIAL_ATTEMPTS = 3
+TRIAL_GAP_SEC = 1.0
+TRIAL_TIMEOUT = 90.0
+TRIAL_MAX_TOKENS = 2048
+# ~30 min CN speech transcript size used for the estimate line.
+TRIAL_ESTIMATE_30MIN_CHARS = 10_000
+_TRIAL_JSON_SUFFIX = (
+    "\n\n【试跑输出约束】请只输出一个 JSON 对象，不要 Markdown 代码块，不要解释。"
+    "格式：{\"topics\":[{\"title\":\"话题名\",\"subtopics\":[\"子话题1\",\"子话题2\"]}]}。"
+)
+
+_PROMPTS_DIR = Path(__file__).resolve().parents[1] / 'prompts'
+_OUTLINE_PROMPT_PATH = Path(__file__).resolve().parents[1] / 'prompt' / '大纲.txt'
+
+
+def _load_trial_sample(*, language: str = 'zh') -> str:
+    name = 'trial_sample_zh.srt' if language != 'en' else 'trial_sample_en.srt'
+    path = _PROMPTS_DIR / name
+    if not path.is_file():
+        # Fallback: tiny inline stub so tests without fixtures still exercise the path.
+        return "1\n00:00:00,000 --> 00:00:03,000\n试跑样例字幕。\n"
+    return path.read_text(encoding='utf-8')
+
+
+def _load_outline_prompt() -> str:
+    if _OUTLINE_PROMPT_PATH.is_file():
+        return _OUTLINE_PROMPT_PATH.read_text(encoding='utf-8')
+    return (
+        "你是视频大纲分析师。根据输入字幕提取话题大纲。"
+        "输入为 JSON：{\"text\": \"...\"}。"
+    )
+
+
+def _srt_plain_text(srt: str) -> str:
+    """Strip indices and timestamps; keep dialogue lines for the outline input."""
+    lines: list[str] = []
+    for raw in srt.splitlines():
+        line = raw.strip()
+        if not line or line.isdigit():
+            continue
+        if '-->' in line:
+            continue
+        lines.append(line)
+    return '\n'.join(lines)
+
+
+def _parse_trial_json(text: str) -> bool:
+    """True when the body is parseable JSON with at least one topic title."""
+    import json
+    import re
+    raw = (text or '').strip()
+    if not raw:
+        return False
+    raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw, flags=re.IGNORECASE).strip()
+    try:
+        data = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        return False
+    if isinstance(data, list):
+        return any(isinstance(item, dict) and isinstance(item.get('title'), str) and item['title'].strip() for item in data)
+    if isinstance(data, dict):
+        topics = data.get('topics') or data.get('outline') or data.get('outlines')
+        if isinstance(topics, list):
+            return any(isinstance(item, dict) and isinstance(item.get('title'), str) and item['title'].strip() for item in topics)
+        if isinstance(data.get('title'), str) and data['title'].strip():
+            return True
+    return False
+
+
+def _is_context_error(status: int | None, body: str) -> bool:
+    blob = (body or '').lower()
+    if 'context_length' in blob or 'maximum context' in blob or 'context window' in blob:
+        return True
+    if 'too many tokens' in blob or 'token limit' in blob:
+        return True
+    return False
+
+
+def _trial_estimate(avg_ms: int) -> tuple[int, float]:
+    """N chunks for ~30 min material; M minutes = avg_ms × N / concurrency / 60000."""
+    import math
+    try:
+        from backend.pipeline.settings import effective_chunk_size
+        chunk = max(1000, int(effective_chunk_size()))
+    except Exception:  # noqa: BLE001
+        chunk = 5000
+    try:
+        from backend.pipeline.concurrency import workers
+        concurrency = max(1, int(workers()))
+    except Exception:  # noqa: BLE001
+        concurrency = 4
+    n = max(1, math.ceil(TRIAL_ESTIMATE_30MIN_CHARS / chunk))
+    minutes = round((avg_ms * n / concurrency) / 60_000, 1)
+    return n, minutes
+
+
+def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
+    """One chat completion for the trial. Returns timing + classification flags."""
+    import time
+    import httpx
+    from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
+
+    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+        'model': model,
+        'messages': [{'role': 'user', 'content': full_input}],
+        'max_tokens': TRIAL_MAX_TOKENS,
+    })))
+    payload['stream'] = False
+    # Prefer JSON object mode when the gateway understands it; ignore 400 and retry once without.
+    payload['response_format'] = {'type': 'json_object'}
+    url = base.rstrip('/') + '/chat/completions'
+    headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    started = time.monotonic()
+    try:
+        with httpx.Client(timeout=TRIAL_TIMEOUT, trust_env=not is_local_url(base)) as client:
+            response = client.post(url, json=payload, headers=headers)
+            if response.status_code == 400 and 'response_format' in (response.text or '').lower():
+                payload.pop('response_format', None)
+                response = client.post(url, json=payload, headers=headers)
+    except httpx.TimeoutException:
+        return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
+                'rate_limited': False, 'context_error': False, 'json_ok': False, 'status': None}
+    except httpx.RequestError:
+        return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
+                'rate_limited': False, 'context_error': False, 'json_ok': False, 'status': None}
+    ms = int((time.monotonic() - started) * 1000)
+    status = response.status_code
+    text = response.text or ''
+    rate_limited = status == 429
+    context_error = _is_context_error(status, text[:4000])
+    if status >= 400:
+        return {'ms': ms, 'ok_http': False, 'rate_limited': rate_limited,
+                'context_error': context_error, 'json_ok': False, 'status': status}
+    content = ''
+    try:
+        parsed = response.json()
+        choices = parsed.get('choices') if isinstance(parsed, dict) else None
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            content = _completion_text(choices[0].get('message'))
+    except Exception:  # noqa: BLE001
+        content = text
+    return {
+        'ms': ms,
+        'ok_http': True,
+        'rate_limited': rate_limited,
+        'context_error': context_error,
+        'json_ok': _parse_trial_json(content),
+        'status': status,
+    }
+
+
+def trial_run(
+    base: str,
+    api_key: str,
+    model: str,
+    *,
+    language: str = 'zh',
+    sleep=None,
+) -> dict:
+    """Send the sample SRT through the real outline prompt three times (1s apart).
+
+    Returns a dict of trial_* fields suitable for merging onto ``ValidationResult``.
+    Does not raise on upstream failure — callers map flags into the API payload.
+    """
+    import time
+    import json as _json
+    sleeper = sleep or time.sleep
+    srt = _load_trial_sample(language=language)
+    plain = _srt_plain_text(srt)
+    prompt = _load_outline_prompt() + _TRIAL_JSON_SUFFIX
+    # Match LLMProvider._build_full_input compact JSON shape used by step1.
+    full_input = f"{prompt}\n\n输入内容：\n{_json.dumps({'text': plain}, ensure_ascii=False)}"
+    attempts: list[dict] = []
+    for index in range(TRIAL_ATTEMPTS):
+        attempts.append(_trial_once(base, api_key, model, full_input))
+        if index + 1 < TRIAL_ATTEMPTS:
+            sleeper(TRIAL_GAP_SEC)
+    latencies = [a['ms'] for a in attempts]
+    avg_ms = int(round(sum(latencies) / max(1, len(latencies))))
+    context_ok = all(not a['context_error'] and a['ok_http'] for a in attempts)
+    rate_limited = any(a['rate_limited'] for a in attempts)
+    json_ok = all(a['json_ok'] for a in attempts)
+    n, minutes = _trial_estimate(avg_ms)
+    passed = bool(context_ok and json_ok and not rate_limited)
+    # Rate limit is a warning (⚠), not a hard fail for trial_passed yellow badge —
+    # spec: any ✗ shows yellow. Rate ⚠ counts as not fully passed.
+    trial_passed = bool(context_ok and json_ok and not rate_limited)
+    # If rate limited but JSON+context ok → still "not fully passed" (yellow).
+    if context_ok and json_ok and rate_limited:
+        trial_passed = False
+    if not context_ok or not json_ok:
+        trial_passed = False
+    return {
+        'probe_kind': 'trial',
+        'trial_context_ok': context_ok,
+        'trial_rate_limited': rate_limited,
+        'trial_json_ok': json_ok,
+        'trial_avg_ms': avg_ms,
+        'trial_estimate_requests': n,
+        'trial_estimate_minutes': minutes,
+        'trial_passed': trial_passed,
+        'attempts': attempts,
+    }
+
+
+def validate_connection_with_probe(
+    connection: ai_models.Connection,
+    model: str,
+    *,
+    purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
+    probe_kind: Literal['quick', 'trial'] = 'quick',
+    language: str = 'zh',
+) -> ValidationResult:
+    """Quick ``_probe`` (default) or F2 trial run after the same address/list checks."""
+    result = validate_connection(connection, model, purpose=purpose)
+    result.probe_kind = probe_kind
+    if probe_kind != 'trial' or purpose != 'analysis':
+        return result
+    if not result.ok:
+        # Address / key already failed — skip the expensive trial.
+        result.trial_passed = False
+        result.trial_context_ok = False
+        result.trial_json_ok = False
+        result.trial_rate_limited = False
+        return result
+    resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
+    base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']
+    trial = trial_run(base, resolved.api_key or '', model.strip(), language=language)
+    result.probe_kind = 'trial'
+    result.trial_context_ok = trial['trial_context_ok']
+    result.trial_rate_limited = trial['trial_rate_limited']
+    result.trial_json_ok = trial['trial_json_ok']
+    result.trial_avg_ms = trial['trial_avg_ms']
+    result.trial_estimate_requests = trial['trial_estimate_requests']
+    result.trial_estimate_minutes = trial['trial_estimate_minutes']
+    result.trial_passed = trial['trial_passed']
+    # Trial failures do not flip ok/result — save stays allowed (yellow badge only).
+    return result
