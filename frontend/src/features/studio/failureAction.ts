@@ -1,4 +1,5 @@
 import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from '../../analytics/failureCodes'
+import { getProvider } from '../settings/providerPresets'
 import { USER_CAUSE_REASONS, llmFailureText } from '../../utils/llmFailure'
 /**
  * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
@@ -51,12 +52,41 @@ export const SWITCHABLE_UPSTREAM = [
   'bad_endpoint',
 ] as const
 
-/** Known sponsor catalog ids for insufficient_quota → recharge (X3 jump wired later). */
+/** Known sponsor catalog ids for insufficient_quota → recharge (X3). */
 export const SPONSOR_PROVIDERS = ['api88', 'infistar', 'apimart'] as const
 
 export const ADD_PROVIDER_HINT = '建议再加一个服务商'
 export const RECHARGE_LABEL = '去充值'
+export const VIEW_BALANCE_LABEL = '查看余额'
+/** Fixed copy on the sponsor insufficient_quota failure card. */
+export const RECHARGE_HINT = '密钥没问题，是余额不足。充值后点重试即可。'
 export const SWITCH_MODEL_LABEL = '换模型重试'
+
+/** 「本次已消耗 N 次请求」 — no dollar amount (X3). */
+export function billableCallsLine(count: number): string {
+  return `本次已消耗 ${count} 次请求`
+}
+
+/** Resolve external recharge / balance URL for a catalog provider id. */
+export function rechargeTarget(provider?: string | null): {
+  provider: string
+  url: string
+  label: string
+  sponsor: boolean
+} | null {
+  const key = (provider || '').trim().toLowerCase()
+  if (!key) return null
+  const row = getProvider(key)
+  if (!row) return null
+  if (isIn(SPONSOR_PROVIDERS, key) && row.sponsor) {
+    const url = (row.sponsor.topup_url || row.sponsor.register_url || '').trim()
+    if (!url) return null
+    return { provider: key, url, label: `去 ${row.short_name} 充值`, sponsor: true }
+  }
+  const url = (row.docs_url || '').trim()
+  if (!url) return null
+  return { provider: key, url, label: VIEW_BALANCE_LABEL, sponsor: false }
+}
 
 /** One next step after the same error_code fails again. Pure: code, upstream type, failure stage. */
 export type SuggestedAction = {
@@ -178,13 +208,15 @@ export function failureAction(
     // non-numeric connectionCount: fall through
   }
   const quota = upstreamType === 'insufficient_quota' || errorCode === 'insufficient_quota'
-  const sponsor = (provider || '').trim().toLowerCase()
-  if (quota && isIn(SPONSOR_PROVIDERS, sponsor)) {
-    return {
-      kind: 'recharge',
-      provider: sponsor,
-      destination: settingsDestination(failureStage),
-      label: RECHARGE_LABEL,
+  if (quota) {
+    const target = rechargeTarget(provider)
+    if (target) {
+      return {
+        kind: 'recharge',
+        provider: target.provider,
+        destination: target.url,
+        label: target.label,
+      }
     }
   }
   const code = isIn(USER_CAUSE_UPSTREAM_TYPES, upstreamType) ? upstreamType
@@ -211,7 +243,7 @@ export function pageSuggestedAction(info: PageFailureInfo): { action: SuggestedA
   }
 }
 
-/** Fixed sentence. No amount, no invoice. Shown only after a billable call already happened. */
+/** Legacy fixed sentence. X3 prefers billableCallsLine(N); kept for callers that still read it. */
 export const BILLING_GUIDANCE = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
 
 const BARE_FAILURE = new Set(['', '错误', '失败', 'Error', 'error', '处理失败', '处理失败：错误'])
@@ -251,7 +283,7 @@ export function presentedFailure(info: PageFailureInfo & { error?: string | null
   return {
     step: failureStep(info.failure_stage, info.phase, info.error_code),
     reason: BARE_FAILURE.has(reason) ? USER_MESSAGES.unknown : reason,
-    billing: Number.isFinite(count) && count > 0 ? BILLING_GUIDANCE : null,
+    billing: Number.isFinite(count) && count > 0 ? billableCallsLine(count) : null,
   }
 }
 

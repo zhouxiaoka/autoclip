@@ -236,10 +236,13 @@ test('X2: FailureAction.kind covers retry | settings | install_asr | switch_mode
   const recharge = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'api88')
   assert.equal(recharge.kind, 'recharge')
   assert.equal(recharge.provider, 'api88')
-  assert.equal(recharge.label, '去充值')
-  // unknown sponsor stays settings
+  assert.equal(recharge.label, '去 88API 充值')
+  assert.match(recharge.destination, /^https?:\/\//)
+  // non-sponsor quota → 查看余额 (opens keyUrl / docs)
   const quota = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'openai')
-  assert.equal(quota.kind, 'settings')
+  assert.equal(quota.kind, 'recharge')
+  assert.equal(quota.label, '查看余额')
+  assert.match(quota.destination, /^https?:\/\//)
 })
 
 test('X2: pageFailureAction uses connection_count and provider', () => {
@@ -294,6 +297,7 @@ const stubs = {
   '../../i18n': { t: (k) => k },
   '../../ui': { Btn: () => null, Dialog: () => null },
   '../../utils/timelineFailure': { WEAK_LOCAL_TIMELINE_REASON: 'weak', weakLocalTimelineFailure: () => false },
+  '../../utils/externalLinks': { openExternalLink: async () => {} },
   './failureAction': loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')),
   './SwitchModelDialog': { __esModule: true, default: () => null },
   './switchModelOptions': {},
@@ -322,5 +326,55 @@ test('R3: api.retry accepts fresh', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/api.ts'), 'utf8')
   assert.match(src, /fresh\?: boolean/)
   assert.match(src, /fresh: !!opts\?\.fresh/)
+})
+})()
+
+
+// failure-action.test.cjs — X3 sponsor recharge / billable N
+;( () => {
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const fs = require('node:fs')
+const { loadTs } = require('./load-ts.cjs')
+const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
+
+test('X3: sponsor insufficient_quota → 去 XX 充值 with topup_url', () => {
+  for (const [id, short] of [['api88', '88API'], ['infistar', 'Infistar'], ['apimart', 'APIMart']]) {
+    const action = fa.failureAction('provider_error', 'insufficient_quota', null, null, id)
+    assert.equal(action.kind, 'recharge', id)
+    assert.equal(action.label, `去 ${short} 充值`, id)
+    const target = fa.rechargeTarget(id)
+    assert.equal(target.sponsor, true, id)
+    assert.equal(action.destination, target.url, id)
+    assert.ok(target.url.includes(id === 'api88' ? '88api.ai' : id === 'infistar' ? 'infistar' : 'apimart'), id)
+  }
+  assert.equal(fa.RECHARGE_HINT, '密钥没问题，是余额不足。充值后点重试即可。')
+})
+
+test('X3: non-sponsor insufficient_quota → 查看余额', () => {
+  const action = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'deepseek')
+  assert.equal(action.kind, 'recharge')
+  assert.equal(action.label, fa.VIEW_BALANCE_LABEL)
+  assert.match(action.destination, /^https?:\/\//)
+})
+
+test('X3: billableCallsLine has N requests, no dollar amount', () => {
+  assert.equal(fa.billableCallsLine(3), '本次已消耗 3 次请求')
+  assert.doesNotMatch(fa.billableCallsLine(3), /\$|￥|元/)
+  const card = fa.presentedFailure({
+    error_code: 'provider_error',
+    upstream_error_type: 'insufficient_quota',
+    billable_calls_before_failure: 5,
+  }, fa.RECHARGE_HINT)
+  assert.equal(card.billing, '本次已消耗 5 次请求')
+  assert.equal(card.reason, fa.RECHARGE_HINT)
+})
+
+test('X3: FailureActions opens http destination + uses RECHARGE_HINT', () => {
+  const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/FailureActions.tsx'), 'utf8')
+  assert.match(src, /RECHARGE_HINT/)
+  assert.match(src, /openExternalLink/)
+  assert.match(src, /https\?:/)
 })
 })()

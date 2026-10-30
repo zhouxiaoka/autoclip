@@ -8,12 +8,14 @@ const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
 function renderCard(status, error, progressMessage, extra = {}, navigate = () => {}, props = {}) {
+  const opened = []
   const stubs = {
     '../i18n': { t: (key, values) => values ? String(key).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name) => values[name] == null ? '' : String(values[name])) : key },
     'react-i18next': { useTranslation: () => ({}) },
     'react-router-dom': { useNavigate: () => navigate },
     '../services/api': { projectApi: {} },
     '../features/studio/api': { studioApi: {} },
+    '../utils/externalLinks': { openExternalLink: (url) => { opened.push(url); if (extra.onExternal) extra.onExternal(url) } },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
     '../features/studio/SwitchModelDialog': { __esModule: true, default: () => null },
@@ -31,8 +33,12 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
       module, exports: module.exports, console: { log() {} },
       require: (id) => {
         if (id in stubs) return stubs[id]
-        if (id === '@event-catalog' || id === '@failure-messages') {
-          const data = JSON.parse(fs.readFileSync(path.join(__dirname, id === '@event-catalog' ? '../../backend/core/event_catalog.json' : '../../backend/core/failure_messages.json'), 'utf8'))
+        if (id === '@event-catalog' || id === '@failure-messages' || id === '@provider-presets' || id === '@provider-quality') {
+          const file = id === '@event-catalog' ? '../../backend/core/event_catalog.json'
+            : id === '@failure-messages' ? '../../backend/core/failure_messages.json'
+            : id === '@provider-presets' ? '../../backend/presets/provider_presets.json'
+            : '../../backend/presets/provider_quality.json'
+          const data = JSON.parse(fs.readFileSync(path.join(__dirname, file), 'utf8'))
           return { default: data, __esModule: true }
         }
         if (id.startsWith('.')) {
@@ -47,6 +53,7 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     return module.exports
   }
   const Card = load(path.join(__dirname, '../src/components/ProjectCard.tsx')).default
+  if (extra) extra.opened = opened
   return renderToStaticMarkup(React.createElement(Card, {
     project: { id: 'test', name: 'Example', status, error_message: error, created_at: '2026-09-30', ...(extra.project || {}) },
     onDelete() {},
@@ -228,15 +235,17 @@ test('X2 home card: switchable upstream + 1 connection offers 去设置 (add pro
   assert.deepEqual(visited, ['/settings?section=analysis'])
 })
 
-test('X2 home card: insufficient_quota + sponsor offers 去充值', () => {
+test('X2/X3 home card: insufficient_quota + sponsor offers 去 88API 充值', () => {
   const visited = []
   const buttons = {}
-  renderCard('failed', '余额不足', null, {
+  const extra = {
     project: { error_code: 'provider_error', upstream_error_type: 'insufficient_quota' },
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
-  }, to => visited.push(to), { analysisProvider: 'api88' })
-  assert.equal(buttons['去充值'].variant, 'cta')
-  buttons['去充值'].onClick()
-  assert.deepEqual(visited, ['/settings?section=analysis'])
+  }
+  renderCard('failed', '余额不足', null, extra, to => visited.push(to), { analysisProvider: 'api88' })
+  assert.equal(buttons['去 88API 充值'].variant, 'cta')
+  buttons['去 88API 充值'].onClick()
+  assert.deepEqual(visited, [])
+  assert.ok(extra.opened.some(url => url.includes('88api.ai')))
 })
 

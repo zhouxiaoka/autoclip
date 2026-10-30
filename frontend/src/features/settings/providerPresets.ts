@@ -28,7 +28,7 @@ export type ProviderPreset = {
   hint: string
   context_hint: string
   local_app: string
-  sponsor?: { register_url: string; guide_url: string; offer: string; description: string }
+  sponsor?: { register_url: string; guide_url: string; offer: string; description: string; topup_url?: string }
   referral: string
   success_tier?: SuccessTier
   latency_tier?: LatencyTier
@@ -69,6 +69,9 @@ function parseProvider(id: string, rawProvider: unknown): ProviderPreset | undef
         guide_url: String(sponsorRaw.guide_url),
         offer: String(sponsorRaw.offer),
         description: String(sponsorRaw.description),
+        ...(typeof sponsorRaw.topup_url === 'string' && sponsorRaw.topup_url.trim()
+          ? { topup_url: String(sponsorRaw.topup_url).trim() }
+          : {}),
       }
     : undefined
   const display = row.display_name.trim()

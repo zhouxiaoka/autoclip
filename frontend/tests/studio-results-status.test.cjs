@@ -21,7 +21,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === './settingsReturn') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
     if (name === './studioProgress') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/studioProgress.ts'))
-    if (name === '../../i18n') return { t: value => value }
+    if (name === '../../i18n') return { t: value => value, getLocale: () => 'zh' }
     if (name === '../../ui') return { Btn: props => { buttons.push(props); return React.createElement('button', null, props.children) },
       Section: ({ children, description, right }) => React.createElement('section', null, description, right, children),
       Dialog: empty, fmtDuration: String }
@@ -36,6 +36,32 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === '../../analytics/studio') return { trackLegacyEntry() {} }
     if (name === './legacyEntrypoints') return { legacyEntrypointsHidden: () => false }
     if (name === './FailureActions') return loadTsx('../src/features/studio/FailureActions.tsx', moduleRequire)
+    if (name === './SwitchModelDialog') return { __esModule: true, default: empty }
+    if (name === './switchModelOptions') return {
+      listSwitchModelOptions: () => [],
+      usableConnectionCount: () => null,
+      analysisProviderId: () => null,
+    }
+    if (name === '../../utils/externalLinks') return { openExternalLink: async () => {} }
+    if (name === '../settings/modelSettingsApi') return { modelSettingsApi: { get: async () => null, save: async v => v }, forSave: x => x }
+    if (name === '../settings/modelSettingsLogic') return { forSave: x => x }
+    if (name === '../settings/modelDefaults') return { syncFollowingCover: (_a, b) => b }
+    if (name === './etaModel') return { recordSuccess: () => {}, estimate: () => ({}) }
+    if (name === './platformMemory') return {
+      dismissMorePlatformBanner: () => {},
+      hasSuccessHistory: () => false,
+      morePlatformBannerSeen: () => true,
+      stashReuseImport: () => {},
+      suggestAnotherPlatform: () => 'douyin',
+    }
+    if (name === './noticeRuntime') return { clearCompletionBadge: () => {}, subscribeCompletionNotice: () => () => {} }
+    if (name === './completionNotice') return { noticeCopy: s => s }
+    if (name === './overrides') return { followOutputLeave: () => {} }
+    if (name === '../../analytics/observer') return { workflow: { emit: () => {} } }
+    if (name === './ExportHistory') return { __esModule: true, default: empty }
+    if (name === './DraftResultCard') return { __esModule: true, default: empty }
+    if (name === './OutputVariantCard') return { __esModule: true, default: empty }
+    if (name === './studio.css' || name === './quick-output.css') return {}
     return { default: empty }
   }
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
@@ -94,7 +120,7 @@ test('failed automatic output exposes a retry that reuses the project and automa
   const retry = buttons.find(button => button.children === '重试')
   assert.ok(retry, 'failed automatic output must have a retry entry')
   await retry.onClick()
-  assert.deepEqual(calls, [['retry', 'test']])  // #419: the one backend retry command
+  assert.equal(JSON.stringify(calls), JSON.stringify([['retry', 'test', { retry_kind: 'same' }]]))  // #419: the one backend retry command
 })
 test('active automatic output never offers a second analysis submission', () => {
   const buttons = []
@@ -260,7 +286,7 @@ test('R20 #125 auth failure: 「继续制作」 sits beside 「去设置」 and 
   const cont = buttons.find(b => b.children === '继续制作')
   assert.ok(cont, 'auth failure must offer 继续制作')
   await cont.onClick()
-  assert.deepEqual(calls, [['retry', 'test']])  // #419: backend retry command -> receipt with retry_of + new attempt_id
+  assert.equal(JSON.stringify(calls), JSON.stringify([['retry', 'test', { retry_kind: 'same' }]]))  // #419: backend retry command -> receipt with retry_of + new attempt_id
 })
 test('R20 #125 back from a successful settings save (?continue=1): 「继续制作」 is the primary action', async () => {
   routeSearch.value = '?continue=1'
@@ -271,7 +297,7 @@ test('R20 #125 back from a successful settings save (?continue=1): 「继续制�
   assert.ok(buttons.some(b => b.children === '去设置'))
   assert.equal(buttons.some(b => b.children === '重试'), false)
   await buttons.find(b => b.children === '继续制作').onClick()
-  assert.deepEqual(calls, [['retry', 'test']])
+  assert.equal(JSON.stringify(calls), JSON.stringify([['retry', 'test', { retry_kind: 'same' }]]))
 })
 test('R20 #125 settings save returns to the project only when opened from one and the id is safe', () => {
   const r = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
@@ -304,27 +330,28 @@ test('R22 #173: the real listener returns to the project on the one save notific
   assert.ok(app.includes('<SettingsReturnListener />'))
 })
 test('R22 code health: failure state computed once, each button at most once', () => {
-  const fa = loadTsx('../src/features/studio/FailureActions.tsx', name => name === './failureAction' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')) : name === '../../utils/llmFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts')) : name === '../../utils/timelineFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/timelineFailure.ts')) : name === 'react/jsx-runtime' ? require(name) : {})
+  const fa = loadTsx('../src/features/studio/FailureActions.tsx', name => name === './failureAction' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')) : name === '../../utils/llmFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts')) : name === '../../utils/timelineFailure' ? require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/timelineFailure.ts')) : name === '../../utils/externalLinks' ? { openExternalLink: async () => {} } : name === 'react/jsx-runtime' ? require(name) : {})
   const keys = p => JSON.parse(JSON.stringify(p.buttons.map(b => `${b.key}${b.cta ? '*' : ''}`)))
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, false)), ['settings*', 'continue'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, true)), ['continue*', 'settings'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, false, true)), ['settings*'])
-  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false)), ['retry*'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false)), [])
   const repeat = { count: 2, same_code: true }
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false, repeat)), ['diagnose*', 'retry'])
   assert.equal(fa.failurePlan({ error_code: 'timeout' }, true, false, repeat).buttons[0].label, '看看哪里不对')
   assert.equal(fa.failurePlan({ error_code: 'timeout' }, true, false, repeat).buttons[1].cta, false)
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, false, false, repeat)), ['diagnose*'])
-  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false, { count: 2, same_code: false })), ['retry'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'timeout' }, true, false, { count: 2, same_code: false })), ['retry*'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'authentication' }, true, false, repeat)), ['settings*', 'continue'])
   const install = fa.failurePlan({ error_code: 'whisper_not_installed' }, true, false)
-  assert.deepEqual(keys(install), ['settings*', 'continue'])
+  assert.deepEqual(keys(install), ['install_asr*', 'retry'])
   assert.equal(install.buttons[0].label, '安装转写')
   assert.equal(install.destination, '/settings?section=speech')
-  assert.equal(install.buttons.some(button => button.key === 'retry'), false)
-  assert.deepEqual(keys(fa.failurePlan({ error_code: 'whisper_model_failed' }, true, true)), ['continue*', 'settings'])
-  assert.equal(fa.failurePlan({ error_code: 'whisper_model_failed' }, true, true).buttons.find(button => button.key === 'settings').label, '安装转写')
+  assert.equal(install.buttons.some(button => button.key === 'retry'), true)
+  const whisperBack = fa.failurePlan({ error_code: 'whisper_model_failed' }, true, true)
+  assert.deepEqual(keys(whisperBack), ['install_asr*', 'retry'])
+  assert.equal(whisperBack.buttons[0].label, '安装转写')
   assert.equal(fa.failurePlan({ error_code: 'provider_error', upstream_error_type: 'permission_denied' }, true, false).message, '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。')
   const weak = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
   const weakPlan = fa.failurePlan({ error_code: 'invalid_response', error: weak }, true, false)
@@ -334,7 +361,7 @@ test('R22 code health: failure state computed once, each button at most once', (
   assert.deepEqual(keys(weakPlan), ['retry'])
   assert.deepEqual(keys(fa.failurePlan({ error_code: 'invalid_response', error: weak }, true, true)), ['retry'])
   const generic = '时间线模型回复没有有效时间区间（1 个话题，1 个字幕块）。 请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。这一步尚未进入评分或最短时长筛选。'
-  assert.deepEqual(keys(fa.failurePlan({ error_code: 'invalid_response', error: generic }, true, false)), ['retry'])
+  assert.deepEqual(keys(fa.failurePlan({ error_code: 'invalid_response', error: generic }, true, false)), ['retry*'])
 })
 
 // the results-page line for "this re-run finished, N earlier failures" shows only when the round completed
@@ -384,7 +411,7 @@ test('download, transcription and export progress omit the 20-minute model cap',
 
 test('a bare 错误 names the step, and a billable call adds the billing sentence', () => {
   const sentence = '模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。'
-  const guidance = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
+  const guidance = '本次已消耗 2 次请求'
   generationOverride.value = { auto_start: true, status: 'failed', billable_calls_before_failure: 2 }
   try {
     const html = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
@@ -396,7 +423,7 @@ test('a bare 错误 names the step, and a billable call adds the billing sentenc
   }
   const quiet = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
   assert.match(quiet, new RegExp('分析：' + sentence))
-  assert.doesNotMatch(quiet, /可能已经由服务商计费/)
+  assert.doesNotMatch(quiet, /本次已消耗/)
 })
 
 test('1.5.7 results page has no control that appends platforms', () => {
