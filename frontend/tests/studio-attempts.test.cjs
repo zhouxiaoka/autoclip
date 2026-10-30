@@ -110,19 +110,21 @@ test('failed-page 「重试」 is the backend retry command (automatic: generati
   }
 })
 
-test('#264: auth + timeout - the statistics keep timeout, the page leads with auth and 「去设置」 (speech row)', () => {
+test('#264: auth + timeout - the statistics keep timeout; with 0 usable connections the page leads with 「建议再加一个服务商」+「去设置」', () => {
   const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
   const settled = { ...receipt(A, 1, 'failed'), run_id: 'run-x', error_code: 'timeout',
     causes: [{ stage: 'analyze', code: 'timeout', upstream: '' }, { stage: 'subtitle', code: 'authentication', upstream: 'invalid_key' }] }
   const info = fa.receiptFailureInfo([settled], 'run-x')
   assert.equal(info.error_code, 'timeout')
+  // Pure receipt (no connection_count): timeout retries, secondary auth still opens speech settings.
   assert.deepEqual({ ...fa.pageFailureAction(info) }.destination, '/settings?section=speech')
   assert.equal(fa.receiptFailureInfo([settled], 'another-run'), null)  // a failure outside this attempt: not its causes
   const h = setup()
   const html = renderResults({ drafts: [], events: [], jobs: [], output_variants: [], generation: { auto_start: true, status: 'failed' },
     analysis: { status: 'failed', phase: 'production', run_id: 'run-x', error_code: 'timeout' }, attempts: [settled] }, h.studioApi, [])
   assert.match(html, /去设置/)
-  assert.match(html, /API Key 无效或已过期/)
+  // StudioResults injects connection_count=0 → SWITCHABLE timeout prefers ADD_PROVIDER_HINT over auth copy.
+  assert.match(html, /建议再加一个服务商/)
 })
 
 test('first clip is reported once per real generation, also when a retry adds a watch', async () => {
@@ -345,10 +347,14 @@ async function mount(server, override = {}) {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     'react-i18next': { useTranslation: () => ({ t }) },
     'react-router-dom': { useNavigate: () => to => navigations.push(to), useLocation: () => ({ search: '' }) },
-    axios: { __esModule: true, default: { get: async url => { gets.observer.push(url); return { data: JSON.parse(JSON.stringify(server.state)) } } } },
+    axios: { __esModule: true, default: (() => {
+      const get = async url => { gets.observer.push(url); return { data: JSON.parse(JSON.stringify(server.state)) } }
+      const client = { get, post: async () => ({}), put: async () => ({}), interceptors: { request: { use() {} }, response: { use() {} } } }
+      return { get, create: () => client }
+    })() },
   }
   const stubs = {
-    'i18n': { t }, 'ui': { Btn, Section: ({ title, description, right, children }) => h('section', null, h('h2', null, title), h('p', { className: 'desc' }, description), right, children), Dialog: empty, fmtDuration: String },
+    'i18n': { t, getLocale: () => 'zh' }, 'ui': { Btn, Section: ({ title, description, right, children }) => h('section', null, h('h2', null, title), h('p', { className: 'desc' }, description), right, children), Dialog: empty, fmtDuration: String },
     'features/studio/api': { studioApi: { get: async () => { gets.page++; return JSON.parse(JSON.stringify(server.state)) }, source: () => '' }, errorText: String },
     'features/studio/ExportHistory': { __esModule: true, default: empty }, 'features/studio/DraftResultCard': { __esModule: true, default: empty },
     'features/studio/OutputVariantCard': { __esModule: true, default: empty }, 'features/studio/PlatformPicker': { __esModule: true, default: empty },
@@ -358,6 +364,9 @@ async function mount(server, override = {}) {
     'analytics/studio': { trackLegacyEntry() {} },
     'analytics/posthog': { captureBusinessEvent: (event, props) => { events.push({ event, props }); return true }, isAnalyticsEnabled: () => true, onAnalyticsPreferenceChange() {} },
     'utils/apiConfig': { apiConfigManager: { isReady: () => true, getBaseUrl: () => '', addListener: () => () => {} } },
+    'features/settings/modelSettingsApi': { modelSettingsApi: { get: async () => ({ connections: [], analysis: {} }), save: async x => x } },
+    'features/settings/modelSettingsLogic': { forSave: x => x, connectionReady: () => true },
+    'features/settings/modelDefaults': { syncFollowingCover: (s) => s },
   }
   const cache = new Map()
   const load = file => {
@@ -371,8 +380,12 @@ async function mount(server, override = {}) {
       require: id => {
         if (id in external) return external[id]
         if (/\.css$/.test(id)) return {}
-        if (id === '@event-catalog' || id === '@failure-messages') {
-          const data = JSON.parse(fs.readFileSync(path.join(__dirname, id === '@event-catalog' ? '../../backend/core/event_catalog.json' : '../../backend/core/failure_messages.json'), 'utf8'))
+        if (id === '@event-catalog' || id === '@failure-messages' || id === '@provider-presets' || id === '@provider-quality') {
+          const file = id === '@event-catalog' ? '../../backend/core/event_catalog.json'
+            : id === '@failure-messages' ? '../../backend/core/failure_messages.json'
+            : id === '@provider-presets' ? '../../backend/presets/provider_presets.json'
+            : '../../backend/presets/provider_quality.json'
+          const data = JSON.parse(fs.readFileSync(path.join(__dirname, file), 'utf8'))
           return { default: data, __esModule: true }
         }
         if (!id.startsWith('.')) throw new Error('Unexpected dependency: ' + id)
@@ -441,10 +454,11 @@ test('retry page (DOM): the mounted page adopts the open retry attempt, the obse
   assert.deepEqual(r.finished, [])
   assert.ok(!r.text.includes('追加平台'), 'no append-platform entry on the page')
   assert.ok(r.text.includes('这次制作未完成'), '(b) failure block rendered')
-  assert.ok(r.text.includes('API Key 无效或已过期，请到设置里更新后再试'), '(b) the cause from the receipt of run_id ' + RUN)
+  // rate_limited is SWITCHABLE; with 0 usable connections the page prefers ADD_PROVIDER_HINT over vision auth copy.
+  assert.ok(r.text.includes('建议再加一个服务商'), '(b) add-provider hint for run_id ' + RUN)
   assert.ok(!r.text.includes('secret-ish raw text'), '(b) never the raw upstream text')
   assert.ok(r.hasSettings, '(b) the page offers 「去设置」')
-  assert.deepEqual(r.navigations, ['/settings?section=vision&return_project=p1'])                       // (b) the vision key row, back to p1
+  assert.deepEqual(r.navigations, ['/settings?section=analysis&return_project=p1'])                    // (b) analysis settings, back to p1
 })
 
 test('R31 addition 2 (DOM): a settled receipt of another run is not shown for this failure (looked up by run_id)', async () => {
@@ -454,7 +468,9 @@ test('R31 addition 2 (DOM): a settled receipt of another run is not shown for th
     const text = page.container.textContent
     assert.ok(text.includes('这次制作未完成'))
     assert.ok(!text.includes('API Key 无效或已过期'), 'the receipt of another run must not supply the cause')
-    assert.equal(settingsButton(page.container), undefined, 'the analysis primary (rate_limited) is a retry, not a settings fix')
+    // Analysis primary is rate_limited (SWITCHABLE). With 0 connections that is 「去设置」+ add-provider, not the other run's vision auth.
+    assert.ok(text.includes('建议再加一个服务商'), 'analysis primary drives the hint when the receipt run_id mismatches')
+    assert.ok(settingsButton(page.container), 'rate_limited + 0 connections offers 「去设置」')
   } finally { await page.close() }
 })
 
