@@ -81,6 +81,8 @@ class ConnectionTestRequest(BaseModel):
     model: str = Field(min_length=1, max_length=200)
     vision: bool = False
     purpose: Literal['analysis', 'vision', 'cover', 'transcription'] = 'analysis'
+    probe_kind: Literal['quick', 'trial'] = 'quick'
+    language: Literal['zh', 'en'] = 'zh'
 
 
 @router.post('/ai-models/fetch-list')
@@ -109,7 +111,7 @@ def fetch_connection_model_list(body: Any = Body(default=None)):
 
 @router.post('/ai-models/test')
 def test_connection_assignment(body: ConnectionTestRequest):
-    from backend.services.provider_validation import validate_connection
+    from backend.services.provider_validation import validate_connection, validate_connection_with_probe
     source = None
     try:
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
@@ -121,7 +123,14 @@ def test_connection_assignment(body: ConnectionTestRequest):
                 # The normalised image endpoint must not replace the chat address.
                 result.normalized_base_url = connection.base_url
         else:
-            result = validate_connection(connection, body.model)
+            # F2: trial probe is analysis-only; vision path stays on quick then vision probe below.
+            probe = body.probe_kind if body.purpose == 'analysis' else 'quick'
+            result = validate_connection_with_probe(
+                connection, body.model,
+                purpose='analysis',
+                probe_kind=probe,
+                language=body.language,
+            )
         if (body.vision or body.purpose == 'vision') and body.purpose in ('analysis', 'vision') and result.ok:
             from backend.services.studio.vision_settings import test, VisionSettingsInput
             from backend.core.connection_test_codes import vision_error_code

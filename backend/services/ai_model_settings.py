@@ -95,6 +95,14 @@ class Connection(BaseModel):
     image_base_url: str = ''
     validation_status: Literal['ok', 'failed', 'unchecked', 'transient'] = 'unchecked'
     validation_error_type: str = ''
+    # F2 trial-run card state (F5 import area reads the same fields).
+    trial_status: Literal['passed', 'failed', 'unchecked'] = 'unchecked'
+    trial_context_ok: bool | None = None
+    trial_rate_limited: bool | None = None
+    trial_json_ok: bool | None = None
+    trial_avg_ms: int | None = None
+    trial_estimate_requests: int | None = None
+    trial_estimate_minutes: float | None = None
     # None = omitted (legacy file or old client). Inferred after validation.
     base_url_source: Source | None = None
     preset_version: int = Field(default=0, ge=0)

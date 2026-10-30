@@ -947,3 +947,140 @@ def test_http_test_endpoint_returns_the_model_list_warning(monkeypatch):
     assert body['ok'] is True
     assert body['warning'] == MODEL_NOT_LISTED_WARNING
     assert body['error_code'] == ''
+
+
+# --- F2 trial-run probe ----------------------------------------------------
+
+def _chat_ok(topics=None):
+    body = {
+        'choices': [{
+            'message': {
+                'content': json.dumps(
+                    {'topics': topics or [{'title': '开场', 'start': '00:00:01', 'end': '00:00:20'}]},
+                    ensure_ascii=False,
+                ),
+            },
+        }],
+    }
+    return _FakeResponse(200, body)
+
+
+def test_trial_run_passes_when_three_json_replies_ok(monkeypatch):
+    from backend.services import provider_validation as pv
+    sleeps = []
+    posts = []
+
+    def handler(method, url, headers, payload):
+        assert method == 'POST'
+        posts.append(payload)
+        return _chat_ok()
+
+    _patch_httpx(monkeypatch, handler)
+    result = pv.trial_run('https://gw.example/v1', 'sk-x', 'gpt-4o-mini', sleep=sleeps.append)
+    assert result['probe_kind'] == 'trial'
+    assert result['trial_context_ok'] is True
+    assert result['trial_json_ok'] is True
+    assert result['trial_rate_limited'] is False
+    assert result['trial_passed'] is True
+    assert isinstance(result['trial_avg_ms'], int)
+    assert result['trial_estimate_requests'] >= 1
+    assert isinstance(result['trial_estimate_minutes'], float)
+    assert len(posts) == 3
+    assert sleeps == [1.0, 1.0]
+    # Real outline prompt + sample SRT reach the model.
+    assert '输入内容' in posts[0]['messages'][0]['content']
+
+
+def test_trial_run_fails_json_when_any_reply_is_plain_text(monkeypatch):
+    from backend.services import provider_validation as pv
+    calls = {'n': 0}
+
+    def handler(method, url, headers, payload):
+        calls['n'] += 1
+        if calls['n'] == 2:
+            return _FakeResponse(200, {'choices': [{'message': {'content': 'not json at all'}}]})
+        return _chat_ok()
+
+    _patch_httpx(monkeypatch, handler)
+    result = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
+    assert result['trial_json_ok'] is False
+    assert result['trial_passed'] is False
+    assert result['trial_context_ok'] is True
+
+
+def test_trial_run_marks_rate_limit_and_fails_pass(monkeypatch):
+    from backend.services import provider_validation as pv
+    calls = {'n': 0}
+
+    def handler(method, url, headers, payload):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            return _FakeResponse(429, {'error': {'message': 'rate limit'}})
+        return _chat_ok()
+
+    _patch_httpx(monkeypatch, handler)
+    result = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
+    assert result['trial_rate_limited'] is True
+    assert result['trial_passed'] is False
+
+
+def test_trial_run_context_error_fails_context(monkeypatch):
+    from backend.services import provider_validation as pv
+
+    def handler(method, url, headers, payload):
+        return _FakeResponse(400, {'error': {'message': 'This model\'s maximum context length is 8192 tokens'}})
+
+    _patch_httpx(monkeypatch, handler)
+    result = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
+    assert result['trial_context_ok'] is False
+    assert result['trial_json_ok'] is False
+    assert result['trial_passed'] is False
+
+
+def test_validate_connection_with_probe_quick_skips_trial(monkeypatch):
+    from backend.services import provider_validation as pv
+
+    def handler(method, url, headers, payload):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    called = {'trial': False}
+    monkeypatch.setattr(pv, 'trial_run', lambda *a, **k: called.update(trial=True) or {})
+    result = pv.validate_connection_with_probe(_connection(), 'gpt-4o-mini', probe_kind='quick')
+    assert result.ok is True
+    assert result.probe_kind == 'quick'
+    assert called['trial'] is False
+    assert result.trial_passed is None or result.as_api().get('trial_passed') in (None, True, False)
+
+
+def test_validate_connection_with_probe_trial_merges_flags(monkeypatch):
+    from backend.services import provider_validation as pv
+
+    def handler(method, url, headers, payload):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    monkeypatch.setattr(pv, 'trial_run', lambda *a, **k: {
+        'probe_kind': 'trial',
+        'trial_context_ok': True,
+        'trial_rate_limited': False,
+        'trial_json_ok': True,
+        'trial_avg_ms': 1200,
+        'trial_estimate_requests': 2,
+        'trial_estimate_minutes': 0.5,
+        'trial_passed': True,
+        'attempts': [],
+    })
+    result = pv.validate_connection_with_probe(_connection(), 'gpt-4o-mini', probe_kind='trial')
+    assert result.ok is True  # trial never flips ok
+    assert result.probe_kind == 'trial'
+    assert result.trial_context_ok is True
+    assert result.trial_json_ok is True
+    assert result.trial_avg_ms == 1200
+    assert result.trial_passed is True
+    api = result.as_api()
+    assert api['trial_estimate_requests'] == 2

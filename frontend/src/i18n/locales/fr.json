@@ -2058,5 +2058,16 @@
   "从第 1 步继续": "Reprendre à l’étape 1",
   "从第 2 步继续": "Reprendre à l’étape 2",
   "从第 3 步继续": "Reprendre à l’étape 3",
-  "从第 4 步继续": "Reprendre à l’étape 4"
+  "从第 4 步继续": "Reprendre à l’étape 4",
+  "快速测试": "Test rapide",
+  "试跑一段": "Essai complet",
+  "取消试跑": "Annuler l'essai",
+  "未通过试跑": "Essai non réussi",
+  "上下文 ✓": "Contexte ✓",
+  "上下文 ✗": "Contexte ✗",
+  "速率 ✓": "Débit ✓",
+  "速率 ⚠（出现限流，长视频建议降并发）": "Débit ⚠ (limite de débit — réduisez la concurrence pour les longs vidéos)",
+  "输出格式 ✓": "Format de sortie ✓",
+  "输出格式 ✗": "Format de sortie ✗",
+  "预计 30 分钟素材约需 {{n}} 次请求、约 {{m}} 分钟": "Pour ~30 min de rush : ~{{n}} requêtes, ~{{m}} min"
 }

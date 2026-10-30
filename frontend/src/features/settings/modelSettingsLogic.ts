@@ -97,11 +97,22 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
     connections: s.connections.map(c => {
       if (c.id !== id) return c
       const url = result.normalized_base_url && presetKey(c) === 'compatible' ? result.normalized_base_url : c.base_url
+      const trialFailed = result.probe_kind === 'trial' && result.trial_passed === false
+      const trialPassed = result.probe_kind === 'trial' && result.trial_passed === true
       return {
         ...c,
         base_url: url,
         validation_status: ok ? 'ok' : result.result === 'transient' || isRetryableUpstreamError(result.error_type || '') ? 'transient' : 'failed',
         validation_error_type: ok ? '' : (result.error_type || 'unknown'),
+        ...(result.probe_kind === 'trial' ? {
+          trial_status: trialPassed ? 'passed' as const : trialFailed ? 'failed' as const : 'unchecked' as const,
+          trial_context_ok: result.trial_context_ok ?? null,
+          trial_rate_limited: result.trial_rate_limited ?? null,
+          trial_json_ok: result.trial_json_ok ?? null,
+          trial_avg_ms: result.trial_avg_ms ?? null,
+          trial_estimate_requests: result.trial_estimate_requests ?? null,
+          trial_estimate_minutes: result.trial_estimate_minutes ?? null,
+        } : {}),
       }
     }),
   }

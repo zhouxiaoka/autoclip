@@ -7,6 +7,7 @@ import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
+import TrialRunPanel from './TrialRunPanel'
 import {
   catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
   type LocalAsrReady,
@@ -95,7 +96,7 @@ export default function ProviderDetail({
       api_key: connection.api_key,
       base_url: connection.base_url,
       has_key: connection.has_key,
-    })
+    }, 'quick')
   }
 
   const showModels = kind !== 'local_asr' && kind !== 'guide'
@@ -186,9 +187,24 @@ export default function ProviderDetail({
 
             {canTest && connection && (
               <div className="ac-provider-test-row">
-                <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing || !!listing} onClick={onTest}>
-                  {t('测试连接')}
-                </Btn>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={(testing && m.testingKind === 'quick') || !!listing} onClick={onTest}>
+                    {t('快速测试')}
+                  </Btn>
+                  <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing && m.testingKind === 'trial'} onClick={() => {
+                    if (!connection) return
+                    void m.testCatalogProvider(preset.id, {
+                      api_key: connection.api_key,
+                      base_url: connection.base_url,
+                      has_key: connection.has_key,
+                    }, 'trial')
+                  }}>
+                    {t('试跑一段')}
+                  </Btn>
+                  {testing && m.testingKind === 'trial' && (
+                    <Btn size="sm" variant="text" onClick={() => m.cancelTrial()}>{t('取消试跑')}</Btn>
+                  )}
+                </div>
                 {status === 'failed' && (
                   <p className="ac-note ac-note--error" role="alert">{validationCopy(connection.validation_error_type)}</p>
                 )}
@@ -198,6 +214,10 @@ export default function ProviderDetail({
                 {m.testWarning?.id === connection.id && status !== 'failed' && (
                   <p className="ac-note" role="status">{m.testWarning.text}</p>
                 )}
+                <TrialRunPanel
+                  result={m.lastTrialByConnection[connection.id]}
+                  trialStatus={connection.trial_status}
+                />
               </div>
             )}
           </section>

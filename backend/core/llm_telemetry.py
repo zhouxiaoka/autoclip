@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES, UpstreamErrorType
 
+PROBE_KINDS = frozenset({"quick", "trial"})
 SUCCESS_RATE_SCHEMA_VERSION = 1
 
 EVENT_LLM_REQUEST_FINISHED = "llm_request_finished"
@@ -71,6 +72,7 @@ ASR_READINESS_FIELDS: frozenset[str] = frozenset({
 PROVIDER_VALIDATION_FIELDS: frozenset[str] = frozenset({
     "success_rate_schema_version", "provider", "base_url_host", "result",
     "upstream_error_type",
+    "probe_kind", "trial_context_ok", "trial_rate_limited", "trial_json_ok", "trial_avg_ms",
 })
 
 # HuggingFace-style ``org/name`` is allowed; ``api.openai.com/v1`` is not.
@@ -292,6 +294,11 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
         _put_bool(out, raw, "blocked")
     else:
         _put_enum(out, raw, "result", VALIDATION_RESULTS)
+        _put_enum(out, raw, "probe_kind", PROBE_KINDS)
+        _put_bool(out, raw, "trial_context_ok")
+        _put_bool(out, raw, "trial_rate_limited")
+        _put_bool(out, raw, "trial_json_ok")
+        _put_count(out, raw, "trial_avg_ms")
     return out
 
 

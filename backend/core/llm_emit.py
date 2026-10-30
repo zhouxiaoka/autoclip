@@ -474,6 +474,11 @@ def emit_provider_validation_finished(
     result: str = "failed",
     error_type: str | None = None,
     error: BaseException | None = None,
+    probe_kind: str | None = None,
+    trial_context_ok: bool | None = None,
+    trial_rate_limited: bool | None = None,
+    trial_json_ok: bool | None = None,
+    trial_avg_ms: int | None = None,
 ) -> dict[str, Any]:
     """Reserved hook for settings-page validation (line B). Line A only exposes the emitter."""
     try:
@@ -485,6 +490,11 @@ def emit_provider_validation_finished(
                 schema.sanitize_upstream_error_type(error_type)
                 or classify_run_upstream(error)
             ),
+            "probe_kind": probe_kind,
+            "trial_context_ok": trial_context_ok,
+            "trial_rate_limited": trial_rate_limited,
+            "trial_json_ok": trial_json_ok,
+            "trial_avg_ms": trial_avg_ms,
         }
         properties = schema.sanitize_provider_validation_properties(raw)
         _submit_event(schema.EVENT_PROVIDER_VALIDATION_FINISHED, properties)

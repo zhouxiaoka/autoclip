@@ -2058,5 +2058,16 @@
   "从第 1 步继续": "Continue from step 1",
   "从第 2 步继续": "Continue from step 2",
   "从第 3 步继续": "Continue from step 3",
-  "从第 4 步继续": "Continue from step 4"
+  "从第 4 步继续": "Continue from step 4",
+  "快速测试": "Quick test",
+  "试跑一段": "Trial run",
+  "取消试跑": "Cancel trial",
+  "未通过试跑": "Trial not passed",
+  "上下文 ✓": "Context ✓",
+  "上下文 ✗": "Context ✗",
+  "速率 ✓": "Rate ✓",
+  "速率 ⚠（出现限流，长视频建议降并发）": "Rate ⚠ (rate limited — lower concurrency for long videos)",
+  "输出格式 ✓": "Output format ✓",
+  "输出格式 ✗": "Output format ✗",
+  "预计 30 分钟素材约需 {{n}} 次请求、约 {{m}} 分钟": "For ~30 min of footage: about {{n}} requests, ~{{m}} min"
 }

@@ -19,6 +19,14 @@ export interface Connection {
   image_base_url: string
   validation_status?: 'ok' | 'failed' | 'unchecked' | 'transient'
   validation_error_type?: string
+  /** F2 trial-run card state — F5 import area reads the same fields. */
+  trial_status?: 'passed' | 'failed' | 'unchecked'
+  trial_context_ok?: boolean | null
+  trial_rate_limited?: boolean | null
+  trial_json_ok?: boolean | null
+  trial_avg_ms?: number | null
+  trial_estimate_requests?: number | null
+  trial_estimate_minutes?: number | null
   base_url_source?: Source
   preset_version?: number
   custom_models?: CustomModelOffer[]
@@ -67,7 +75,8 @@ export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
   save: (value: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', value),
   discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
-  test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis') => api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose }),
+  test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis', probeKind: 'quick' | 'trial' = 'quick', opts?: { signal?: AbortSignal; language?: 'zh' | 'en' }) =>
+    api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose, probe_kind: probeKind, language: opts?.language || 'zh' }, opts?.signal ? { signal: opts.signal } : undefined),
   fetchList: (connection: Connection) => api.post<unknown, FetchListResult>('/settings/ai-models/fetch-list', { connection }),
 }
 

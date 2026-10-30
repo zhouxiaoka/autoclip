@@ -316,6 +316,10 @@
       "step2",
       "step3",
       "step4"
+    ],
+    "probe_kind": [
+      "quick",
+      "trial"
     ]
   },
   "attribution": {
@@ -653,7 +657,33 @@
       ],
       "enums": {
         "provider": "provider",
-        "result": "validation_result"
+        "result": "validation_result",
+        "probe_kind": "probe_kind"
+      },
+      "optional_properties": {
+        "probe_kind": {
+          "description": "F2: quick chat probe or full trial run.",
+          "enum": [
+            "quick",
+            "trial"
+          ]
+        },
+        "trial_context_ok": {
+          "description": "F2 trial: all three attempts fitted the context window.",
+          "format": "boolean"
+        },
+        "trial_rate_limited": {
+          "description": "F2 trial: any attempt returned HTTP 429.",
+          "format": "boolean"
+        },
+        "trial_json_ok": {
+          "description": "F2 trial: all three attempts returned parseable outline JSON.",
+          "format": "boolean"
+        },
+        "trial_avg_ms": {
+          "description": "F2 trial: average latency of the three attempts in milliseconds.",
+          "format": "integer"
+        }
       }
     },
     "asr_readiness_checked": {
