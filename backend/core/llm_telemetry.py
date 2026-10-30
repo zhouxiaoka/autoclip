@@ -58,6 +58,8 @@ RUN_LEVEL_FIELDS: frozenset[str] = frozenset({
     "reasoning_tokens", "retry_count", "degrade_count", "billable_calls_before_failure",
     # M1 success-rate dims (emitted on studio_generation_finished; not produced by run_snapshot)
     "source_duration_sec", "platform_count", "is_first_success_device", "attempt_index_on_device",
+    # R1 ETA (client posts eta_initial_min; backend derives eta_error_ratio)
+    "eta_initial_min", "eta_error_ratio",
 })
 # 单次模型请求
 LLM_REQUEST_FIELDS: frozenset[str] = frozenset({

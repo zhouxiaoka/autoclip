@@ -460,7 +460,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               }}>{t(recoveryAction.label || '去充值')}</Btn>}
               {subtitleFailure && !installTranscription && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
               {llmKeyFailure && !switchModelPrimary && !addProviderPrimary && !rechargePrimary && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
-              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>}
+              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
               <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
             </div>
           )}

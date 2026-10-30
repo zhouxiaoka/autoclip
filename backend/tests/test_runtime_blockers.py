@@ -230,7 +230,7 @@ def test_d7_auto_text_readiness_is_optional_not_blocked(tmp_path, monkeypatch):
     assert ai.vision_follow_lacks_capability(settings) is False
     monkeypatch.setattr(ai, "for_editing", lambda: settings)
     report = readiness.report()
-    assert report["checks"]["visual"] == {"ok": True, "code": "optional", "repair": "none"}
+    assert report["checks"]["visual"] == {"ok": True, "code": "optional", "repair": "none", "label": "未启用"}
     assert report["ready"] is True
     readiness.ensure_analysis_usable()
 
