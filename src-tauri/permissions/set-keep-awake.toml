@@ -1,0 +1,6 @@
+# App ACL for R2 keep-awake (#531). Capability `default` references `allow-set-keep-awake`;
+# without this file, `tauri_build` fails with: Permission allow-set-keep-awake not found.
+[[permission]]
+identifier = "allow-set-keep-awake"
+description = "Enables the set_keep_awake command (hold/release system sleep prevention while projects are producing)."
+commands.allow = ["set_keep_awake"]
