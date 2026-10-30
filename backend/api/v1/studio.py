@@ -256,6 +256,10 @@ async def import_visual(
         raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
+            if not video:
+                # Upload carried an SRT but no local video yet (URL path); still stamp origin.
+                from backend.services.studio import pipeline_resume
+                pipeline_resume.record_srt_origin(store.directory(pid) / 'metadata', 'attached')
         if video:
             path = raw / ('input' + ext)
             if staged is not None:
@@ -268,6 +272,12 @@ async def import_visual(
                         target.write(chunk)
             project.video_path = str(path)
             db.commit()
+            if subtitle_bytes is not None:
+                # P1 #6: user-attached SRT must survive 「从头重做」.
+                from backend.services.studio import pipeline_resume
+                pipeline_resume.record_srt_origin(
+                    store.directory(pid) / 'metadata', 'attached', video=path,
+                )
         snapshot = None
         if features and len(features) <= 4000:
             try:

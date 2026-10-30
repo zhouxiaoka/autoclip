@@ -572,6 +572,15 @@ def _fetch_platform_subtitles(url, options, info, folder):
         if not fetched.exists() or fetched.read_text(encoding='utf-8', errors='ignore').count('-->') < MIN_PLATFORM_CUES:
             return False
         fetched.replace(target)
+        # P1 #6: platform captions must survive 「从头重做」.
+        try:
+            from backend.services.studio import pipeline_resume
+            video = next((p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in {
+                '.mp4', '.mkv', '.webm', '.mov', '.m4v',
+            } and p.name.startswith('input')), None)
+            pipeline_resume.record_srt_origin(folder.parent / 'metadata', 'platform', video=video)
+        except Exception:  # noqa: BLE001
+            logger.debug('record platform srt_origin skipped', exc_info=True)
         return True
     except Exception as error:  # noqa: BLE001 - speech recognition still works
         logger.warning('Platform subtitles unavailable: %s', type(error).__name__)

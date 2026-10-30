@@ -78,11 +78,35 @@ def write_stamp(metadata_dir: Path, *, video: Path, prompt_files: dict | None = 
                 extra: dict | None = None) -> dict[str, Any]:
     metadata_dir = Path(metadata_dir)
     metadata_dir.mkdir(parents=True, exist_ok=True)
+    prev = read_stamp(metadata_dir) or {}
     stamp = {
         'source': source_fingerprint(video),
         **current_model_stamp(prompt_files),
-        **(extra or {}),
     }
+    # P1 #6: keep srt_origin across step refreshes unless extra overrides it.
+    if 'srt_origin' in prev and not (extra and 'srt_origin' in extra):
+        stamp['srt_origin'] = prev['srt_origin']
+    if extra:
+        stamp.update(extra)
+    (metadata_dir / STAMP_NAME).write_text(json.dumps(stamp, ensure_ascii=False, indent=2), encoding='utf-8')
+    return stamp
+
+
+def record_srt_origin(metadata_dir: Path, origin: str, *, video: Path | None = None) -> dict[str, Any]:
+    """Mark where raw/input.srt came from (asr | attached | platform).
+
+    Called when the file is placed (upload / platform fetch) or right after ASR
+    succeeds. clear_pipeline_cache only deletes the srt when origin == 'asr'.
+    """
+    metadata_dir = Path(metadata_dir)
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    stamp = read_stamp(metadata_dir) or {}
+    stamp['srt_origin'] = origin
+    if video is not None:
+        try:
+            stamp['source'] = source_fingerprint(video)
+        except OSError:
+            pass
     (metadata_dir / STAMP_NAME).write_text(json.dumps(stamp, ensure_ascii=False, indent=2), encoding='utf-8')
     return stamp
 
@@ -231,8 +255,15 @@ def decide_resume(
 
 
 def clear_pipeline_cache(metadata_dir: Path, *, raw_dir: Path | None = None) -> None:
-    """「从头重做」: drop step artifacts, stamp, and optional input.srt."""
+    """「从头重做」: drop step artifacts and stamp; only delete ASR-generated input.srt.
+
+    P1 #6: user-attached / platform captions must survive a fresh restart. Read
+    srt_origin before unlinking the stamp; unlink raw/input.srt only when it is
+    ``asr``. Missing / attached / platform / anything else → keep the file.
+    """
     metadata_dir = Path(metadata_dir)
+    stamp = read_stamp(metadata_dir) if metadata_dir.is_dir() else None
+    srt_origin = str((stamp or {}).get('srt_origin') or '')
     if metadata_dir.is_dir():
         for _, filename in STEP_ARTIFACTS:
             path = metadata_dir / filename
@@ -242,7 +273,7 @@ def clear_pipeline_cache(metadata_dir: Path, *, raw_dir: Path | None = None) -> 
             path = metadata_dir / extra
             if path.is_file():
                 path.unlink()
-    if raw_dir is not None:
+    if raw_dir is not None and srt_origin == 'asr':
         srt = Path(raw_dir) / 'input.srt'
         if srt.is_file():
             srt.unlink()

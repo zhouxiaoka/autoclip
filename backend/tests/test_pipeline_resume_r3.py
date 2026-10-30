@@ -42,7 +42,8 @@ def test_fresh_forces_none_and_clear_removes_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
         'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
     })
-    pr.write_stamp(meta, video=video)
+    # ASR-generated SRT: fresh must still delete it (P1 #6).
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'asr'})
     for step, _ in pr.STEP_ARTIFACTS:
         _write_step(meta, step)
 
@@ -54,6 +55,49 @@ def test_fresh_forces_none_and_clear_removes_artifacts(tmp_path, monkeypatch):
     assert not (meta / pr.STAMP_NAME).exists()
     assert not (meta / 'step1_outline.json').exists()
     assert not srt.exists()
+
+
+def test_clear_keeps_attached_srt_on_fresh(tmp_path, monkeypatch):
+    """P1 #6: user-attached / platform SRT must survive 「从头重做」."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'attached'})
+    for step, _ in pr.STEP_ARTIFACTS:
+        _write_step(meta, step)
+
+    pr.clear_pipeline_cache(meta, raw_dir=video.parent)
+    assert not (meta / pr.STAMP_NAME).exists()
+    assert not (meta / 'step1_outline.json').exists()
+    assert srt.exists(), 'attached SRT must survive clear_pipeline_cache'
+
+
+def test_clear_keeps_srt_when_origin_missing(tmp_path, monkeypatch):
+    """P1 #6: missing srt_origin is treated as non-ASR → keep the file."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video)  # no srt_origin
+    pr.clear_pipeline_cache(meta, raw_dir=video.parent)
+    assert srt.exists()
+
+
+def test_write_stamp_preserves_srt_origin(tmp_path, monkeypatch):
+    video = _video(tmp_path)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'asr'})
+    pr.write_stamp(meta, video=video)  # step refresh without extra
+    stamp = pr.read_stamp(meta)
+    assert stamp['srt_origin'] == 'asr'
 
 
 def test_subtitle_reuse_when_source_matches_but_model_changed(tmp_path, monkeypatch):
