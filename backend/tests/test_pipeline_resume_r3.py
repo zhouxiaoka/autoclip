@@ -285,3 +285,87 @@ def test_adapter_skips_outline_when_step1_reusable(tmp_path, monkeypatch):
     assert result['resumed_from'] == 'step2'
     assert calls['step1'] == 0
     assert calls['step2'] == 1
+
+def test_clips_only_step4_and_stamp_marks_done(tmp_path, monkeypatch):
+    """P2 #11: Studio one-pass only writes step4; matching stamp → done."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video)
+    _write_step(meta, 'step4', [{'id': 'c1', 'generated_title': 't'}])
+
+    decision = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, clips_only=True,
+    )
+    assert decision['stamp_ok'] is True
+    assert decision['skip_transcription'] is True
+    assert decision['start_step'] == 'done'
+    assert decision['resumed_from'] == 'step4'
+    assert decision['reuse_steps'] == frozenset({'step4'})
+
+
+def test_clips_only_missing_step4_is_not_done(tmp_path, monkeypatch):
+    """P2 #11: without step4, clips_only still resumes from subtitle / step1."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video)
+
+    decision = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, clips_only=True,
+    )
+    assert decision['stamp_ok'] is True
+    assert decision['start_step'] != 'done'
+    assert decision['start_step'] == 'step1'
+    assert decision['resumed_from'] == 'subtitle'
+    assert decision['reuse_steps'] == frozenset()
+
+
+def test_clips_only_bad_stamp_clears_step4_not_done(tmp_path, monkeypatch):
+    """P2 #11 + P1 #7: model mismatch under clips_only must not reuse old step4."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'old', 'model': 'A', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video, extra={'srt_origin': 'attached'})
+    _write_step(meta, 'step4', [{'id': 'c1', 'generated_title': 'old'}])
+
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'new', 'model': 'B', 'prompt_hash': 'abc',
+    })
+    decision = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, clips_only=True,
+    )
+    assert decision['stamp_ok'] is False
+    assert decision['start_step'] != 'done'
+    assert decision['start_step'] == 'step1'
+    assert decision['resumed_from'] == 'subtitle'
+    assert not (meta / 'step4_titles.json').exists()
+    assert srt.exists()
+
+
+def test_clips_only_false_with_only_step4_is_not_done(tmp_path, monkeypatch):
+    """Without clips_only, lone step4 still means first_missing_step=step1."""
+    video = _video(tmp_path)
+    srt = _srt(video)
+    meta = _meta(tmp_path)
+    monkeypatch.setattr(pr, 'current_model_stamp', lambda prompt_files=None: {
+        'provider': 'api88', 'model': 'm1', 'prompt_hash': 'abc',
+    })
+    pr.write_stamp(meta, video=video)
+    _write_step(meta, 'step4', [{'id': 'c1', 'generated_title': 't'}])
+
+    decision = pr.decide_resume(
+        video=video, srt=srt, metadata_dir=meta, clips_only=False,
+    )
+    assert decision['start_step'] == 'step1'
+    assert decision['resumed_from'] == 'subtitle'
+

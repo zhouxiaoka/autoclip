@@ -186,6 +186,9 @@ def decide_resume(
       skip_transcription: bool
       start_step: step1|step2|step3|step4|done|None (None = run one-pass / from step1)
       reuse_steps: frozenset of step ids whose artifacts can be loaded as-is
+
+    When clips_only=True (Studio one-pass), a non-empty step4_titles.json plus a
+    matching stamp means start_step='done' even if step1–3 were never written.
     """
     metadata_dir = Path(metadata_dir)
     video = Path(video)
@@ -226,9 +229,31 @@ def decide_resume(
             'stamp_ok': False,
         }
 
+    # P2 #11: Studio clips_only one-pass only writes step4_titles.json. If that
+    # artifact is present and the stamp matches, model work is done — do not ask
+    # first_missing_step (which would report step1 missing and degrade resume to
+    # 「只从字幕继续」). Four-step fallback mid-run still falls through below.
+    if clips_only:
+        step4_path = metadata_dir / 'step4_titles.json'
+        step4_ok = False
+        if step4_path.is_file():
+            try:
+                data = load_json(step4_path)
+                step4_ok = data not in (None, [], {}, '')
+            except Exception:  # noqa: BLE001
+                step4_ok = False
+        if step4_ok:
+            return {
+                'resumed_from': 'step4',
+                'skip_transcription': True,
+                'start_step': 'done',
+                'reuse_steps': frozenset({'step4'}),
+                'stamp_ok': True,
+            }
+
     missing = first_missing_step(metadata_dir)
     if missing is None:
-        # All four steps present — clips_only one-pass may only have step4; treat as done for model.
+        # All four legacy steps present — model work complete.
         reuse = frozenset(name for name, _ in STEP_ARTIFACTS)
         return {
             'resumed_from': 'step4',
@@ -316,12 +341,15 @@ def resume_point_for_project(project_id: str) -> dict[str, Any] | None:
             prompt_files = get_prompt_files()
         except Exception:  # noqa: BLE001
             prompt_files = None
+        # Studio always runs clips_only; pass True so step4-only one-pass can
+        # surface as done / step resume rather than 「只从字幕继续」 (P2 #11).
         decision = decide_resume(
             video=Path(video),
             srt=srt if srt.is_file() else None,
             metadata_dir=metadata_dir,
             prompt_files=prompt_files,
             fresh=False,
+            clips_only=True,
         )
     except Exception as error:  # noqa: BLE001
         logger.debug('resume_point unavailable: %s', type(error).__name__)
