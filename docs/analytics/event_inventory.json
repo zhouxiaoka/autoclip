@@ -776,6 +776,10 @@
     "studio_first_clip_ready": {
       "status": "keep",
       "domain": "studio"
+    },
+    "quit_prompt": {
+      "status": "keep",
+      "domain": "desktop"
     }
   }
 }

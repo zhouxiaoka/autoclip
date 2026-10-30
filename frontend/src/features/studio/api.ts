@@ -88,6 +88,8 @@ signal); every HTTP answer (even a 500) is seen. */
   },
   confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions, analysisMode: AnalysisMode) => observeStudioOperation('studio_confirm', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/start`, {plan_id:planId, goals, analysis_mode:analysisMode, language:options.language, aspect:options.aspect, duration:options.duration}), (_result, props) => workflow.watch('studio-production', planId, pid, undefined, { ...props, ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals) }, false, _result.analysis_run_id), { ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals), aspect: options.aspect || 'auto' }),
   correctPlan: (pid: string, body: ImportOptions) => observeStudioOperation('studio_plan_update', () => api.put<unknown, { analysis_run_id?: string }>(`/studio/${pid}/plan`, body), (_result, props) => workflow.watch('studio-screen', pid, undefined, undefined, props, true, _result.analysis_run_id), {...workflow.context(pid), goal: body.goal, aspect: body.aspect || 'auto'}),
+  /** R1: persist the first ETA so studio_generation_finished can carry eta_initial_min / eta_error_ratio. */
+  reportEta: (pid: string, etaInitialMin: number) => api.put(`/studio/${pid}/eta`, { eta_initial_min: etaInitialMin }),
   analyze: (pid: string, automatic = false) => observeStudioOperation('studio_rescreen', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/analyze`), (_result, props) => {
     workflow.watch('studio-screen', pid, undefined, undefined, props, true, _result.analysis_run_id)
     if (automatic) workflow.watch('studio-generation', pid, undefined, undefined, props, false, _result.analysis_run_id)

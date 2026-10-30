@@ -288,6 +288,10 @@
       "install_transcription",
       "change_material",
       "example"
+    ],
+    "quit_choice": [
+      "background",
+      "quit"
     ]
   },
   "attribution": {
@@ -845,9 +849,14 @@
           "minimum": 1
         },
         "eta_initial_min": {
-          "description": "R1: initial ETA minutes shown when generation started. Registered nullable in M1 for catalog sync; not emitted until R1 ships.",
+          "description": "R1: first ETA shown under the progress bar, in whole minutes. Client-computed (local median or provider_quality.sec_per_source_min); posted once via PUT /studio/{id}/eta and copied onto the finished event.",
           "format": "number",
-          "nullable": true
+          "minimum": 0
+        },
+        "eta_error_ratio": {
+          "description": "R1: duration_ms / (eta_initial_min * 60000). Values near 1 mean the ETA was accurate; >2 means the overrun copy was shown.",
+          "format": "number",
+          "minimum": 0
         },
         "resumed_from": {
           "description": "R3: stage this attempt resumed from (e.g. subtitle/step1). Registered nullable in M1 for catalog sync; not emitted until R3 ships.",
@@ -1140,6 +1149,23 @@
         "outcome": "experience_outcome",
         "error_code": "connection_test_error_code",
         "config_source": "config_source"
+      }
+    },
+    "quit_prompt": {
+      "status": "keep",
+      "domain": "desktop",
+      "required": [
+        "choice"
+      ],
+      "enums": {
+        "choice": "quit_choice"
+      },
+      "optional_properties": {
+        "running_count": {
+          "description": "How many projects were status=processing when the quit prompt opened.",
+          "format": "integer",
+          "minimum": 0
+        }
       }
     }
   }

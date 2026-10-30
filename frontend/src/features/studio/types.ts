@@ -99,6 +99,8 @@ export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
+  /** Runtime attribution; present after the LLM call starts (R1 ETA history). */
+  provider?: string
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
   billable_calls_before_failure?: number
   /** Consecutive failed attempts after the last success, and whether the last two share an error_code. */
@@ -118,7 +120,7 @@ export interface Workspace {
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
   /** Backend attempt receipts (#419), oldest first. */
   attempts?: AttemptReceipt[]
-  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; progress_percent?: number; progress_stage?: string; progress_approximate?: boolean; progress_since?: number; progress_message?: string; created_at?: string; error?: string; error_code?: string; upstream_error_type?: string; failure_stage?: string; billable_calls_before_failure?: number; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
+  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; progress_percent?: number; progress_stage?: string; progress_approximate?: boolean; progress_since?: number; progress_message?: string; created_at?: string; error?: string; error_code?: string; upstream_error_type?: string; failure_stage?: string; billable_calls_before_failure?: number; provider?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }

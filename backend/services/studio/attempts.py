@@ -31,7 +31,8 @@ OUTPUT_FREE = ('platform_count', 'source_duration_sec', 'portrait_style', 'brand
 SUMMARY_KEYS = ('provider', 'config_source', 'attribution_source', 'model', 'base_url_host', 'shutdown_kind', 'restart_reason',
                 'billable_calls_before_failure', 'retry_count', 'degrade_count',
                 'llm_calls', 'prompt_tokens', 'completion_tokens', 'route', 'http_status', 'duration_ms',
-                'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'completed_variant_count')
+                'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'completed_variant_count',
+                'eta_initial_min', 'eta_error_ratio')
 
 
 class RetryRejected(ConflictError):
@@ -428,6 +429,10 @@ def _terminal_event(receipt):
             props.update(record_device_attempt(receipt.get('attempt_id'), props.get('outcome') or receipt.get('state')))
         except Exception:  # noqa: BLE001 - device dims must not block the terminal
             pass
+    eta = props.get('eta_initial_min')
+    duration = props.get('duration_ms')
+    if isinstance(eta, (int, float)) and not isinstance(eta, bool) and eta > 0 and isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration >= 0:
+        props['eta_error_ratio'] = round(float(duration) / (float(eta) * 60_000.0), 3)
     props['$insert_id'] = f"studio-v1:{receipt.get('attempt_id')}:finished"
     return {'event': 'studio_generation_finished' if generation else 'studio_production_finished', 'properties': {k: v for k, v in props.items() if v is not None and v != ''}}
 

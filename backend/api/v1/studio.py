@@ -443,6 +443,31 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
     run_id = call(jobs.confirm_project, project_id, body)
     return {'ok': True, 'analysis_run_id': run_id}
 
+class EtaReport(BaseModel):
+    """R1: first ETA from the desktop progress bar (minutes)."""
+    model_config = ConfigDict(extra='forbid')
+    eta_initial_min: float = Field(gt=0, le=24 * 60)
+
+
+@router.put('/{project_id}/eta')
+def report_eta(project_id: str, body: EtaReport, db: Session = Depends(get_db)):
+    """Persist eta_initial_min onto the open generation so the finished event can carry it."""
+    project_or_404(project_id, db)
+    minutes = round(float(body.eta_initial_min), 2)
+    with store.lock:
+        data = call(store.recover, project_id)
+        generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+        analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+        running = (generation and generation.get('status') in ('screening', 'production', 'rendering', 'awaiting_confirmation')) \
+            or (analysis and analysis.get('status') == 'running')
+        if not running or generation is None:
+            return {'ok': False, 'reason': 'not_running'}
+        if isinstance(generation.get('eta_initial_min'), (int, float)) and not isinstance(generation.get('eta_initial_min'), bool) and generation.get('eta_initial_min') > 0:
+            return {'ok': True, 'eta_initial_min': generation['eta_initial_min'], 'kept': True}
+        generation['eta_initial_min'] = minutes
+        call(store.write, project_id, data)
+    return {'ok': True, 'eta_initial_min': minutes, 'kept': False}
+
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
