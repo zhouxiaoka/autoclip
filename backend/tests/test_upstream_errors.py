@@ -125,7 +125,24 @@ _GEMINI_RPD = {
 def test_gemini_free_tier_per_minute_is_retryable_rate_limit():
     result = classify_upstream_error(429, _GEMINI_RPM)
     _assert_safe(result, UpstreamErrorType.RATE_LIMITED, True)
-    # PerDay with a RetryInfo delay is still a wait, not a dead balance.
+    # Delay alone (RetryInfo, no PerDay/PerMinute quotaId) stays rate-limited.
+    delay_only = {
+        "error": {
+            "code": 429,
+            "message": "You exceeded your current quota, please check your plan and billing details.",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"},
+            ],
+        }
+    }
+    _assert_safe(classify_upstream_error(429, delay_only), UpstreamErrorType.RATE_LIMITED, True)
+
+
+@pytest.mark.stdlib_only
+def test_gemini_free_tier_per_day_is_quota_even_with_retry_delay():
+    _assert_safe(classify_upstream_error(429, _GEMINI_RPD), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+    # Gemini RPD 429s often include a day-scale RetryInfo; still exhausted, not RPM.
     delayed = {
         "error": {
             **_GEMINI_RPD["error"],
@@ -135,12 +152,7 @@ def test_gemini_free_tier_per_minute_is_retryable_rate_limit():
             ],
         }
     }
-    _assert_safe(classify_upstream_error(429, delayed), UpstreamErrorType.RATE_LIMITED, True)
-
-
-@pytest.mark.stdlib_only
-def test_gemini_free_tier_per_day_without_delay_is_quota():
-    _assert_safe(classify_upstream_error(429, _GEMINI_RPD), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+    _assert_safe(classify_upstream_error(429, delayed), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
     # Prose "Please retry in 17s" is not RetryInfo.retryDelay.
     prose = {"error": {"code": 429, "message": "You exceeded your current quota. Please retry in 17s.", "status": "RESOURCE_EXHAUSTED"}}
     _assert_safe(classify_upstream_error(429, prose), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
