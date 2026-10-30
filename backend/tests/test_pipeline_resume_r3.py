@@ -369,3 +369,60 @@ def test_clips_only_false_with_only_step4_is_not_done(tmp_path, monkeypatch):
     assert decision['start_step'] == 'step1'
     assert decision['resumed_from'] == 'subtitle'
 
+
+
+def test_prompt_hash_cache_hit_skips_reread(tmp_path, monkeypatch):
+    """P2 #12: second prompt_hash with same path+mtime must not re-read files."""
+    outline = tmp_path / '大纲.txt'
+    title = tmp_path / '标题.txt'
+    outline.write_text('outline-v1', encoding='utf-8')
+    title.write_text('title-v1', encoding='utf-8')
+    files = {'outline': outline, 'title': title}
+
+    pr.clear_prompt_hash_cache()
+    reads: list[str] = []
+    real = pr._read_prompt_file_bytes
+
+    def counting(path: Path) -> bytes:
+        reads.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(pr, '_read_prompt_file_bytes', counting)
+
+    first = pr.prompt_hash(files)
+    assert len(reads) == 2
+    second = pr.prompt_hash(files)
+    assert second == first
+    assert len(reads) == 2  # cache hit: no extra reads
+
+
+def test_prompt_hash_cache_invalidates_on_mtime_change(tmp_path, monkeypatch):
+    """P2 #12: content+mtime change must recompute (model/prompt mismatch still works)."""
+    import os
+    import time
+
+    outline = tmp_path / '大纲.txt'
+    outline.write_text('outline-v1', encoding='utf-8')
+    files = {'outline': outline}
+
+    pr.clear_prompt_hash_cache()
+    reads: list[str] = []
+    real = pr._read_prompt_file_bytes
+
+    def counting(path: Path) -> bytes:
+        reads.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(pr, '_read_prompt_file_bytes', counting)
+
+    first = pr.prompt_hash(files)
+    assert len(reads) == 1
+
+    # Ensure mtime advances even on coarse FS; bump content too.
+    time.sleep(0.01)
+    outline.write_text('outline-v2', encoding='utf-8')
+    os.utime(outline, None)
+
+    second = pr.prompt_hash(files)
+    assert len(reads) == 2
+    assert second != first
