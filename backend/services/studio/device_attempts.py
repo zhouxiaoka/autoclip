@@ -4,7 +4,9 @@ Lives next to privacy.json / terminal-outbox.json (same app data dir). Keyed by
 attempt_id so a replay of the same receipt returns the same index. Counts only
 ``studio_generation_finished`` attempts. ``is_first_success_device`` is true when
 this device had no prior generation success before the attempt being recorded
-(emitted on failure as well as success).
+(emitted on failure as well as success). When ``privacy.json`` opts out of
+analytics (``analytics: false``), the ledger stays in ``_memory`` and is not
+written to disk — same gate as studio QA telemetry / terminal outbox.
 """
 from __future__ import annotations
 
@@ -35,14 +37,30 @@ def _path() -> Path | None:
     return privacy.with_name(_FILE)
 
 
+def _persist_to_disk() -> bool:
+    """Same opt-out as studio QA / terminal outbox: privacy.json analytics:false
+    (or unreadable) keeps the ledger in-process only."""
+    from backend.services.studio.qa import telemetry
+    return telemetry._analytics_allowed()
+
+
 def _empty() -> dict[str, Any]:
     return {'attempts': {}}
 
 
+def _memory_snapshot() -> dict[str, Any]:
+    attempts = _memory.get('attempts')
+    if not isinstance(attempts, dict):
+        return _empty()
+    return {'attempts': dict(attempts)}
+
+
 def _read() -> dict[str, Any]:
+    if not _persist_to_disk():
+        return _memory_snapshot()
     path = _path()
     if path is None:
-        return _memory
+        return _memory_snapshot()
     if not path.is_file():
         return _empty()
     try:
@@ -73,10 +91,12 @@ def _read() -> dict[str, Any]:
 
 
 def _write(data: dict[str, Any]) -> None:
-    path = _path()
+    path = _path() if _persist_to_disk() else None
     if path is None:
+        # Snapshot first: callers may pass the live _memory dict (or a view of it).
+        snapshot = {'attempts': dict(data.get('attempts') or {})}
         _memory.clear()
-        _memory.update(data)
+        _memory.update(snapshot)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f'.{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp')
