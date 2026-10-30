@@ -319,7 +319,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     setUrlPreview(null)
     setPreviewLoading(false)
   }
-  const runInspect = async (nextUrl: string, trigger: 'paste' | 'drop' | 'blur' = 'paste') => {
+  const runInspect = async (nextUrl: string, _trigger: 'paste' | 'drop' | 'blur' = 'paste') => {
     const trimmed = nextUrl.trim()
     if (!importUrlKind(trimmed)) { clearPreview(); return null }
     if (previewUrlRef.current === trimmed && urlPreview) return urlPreview
