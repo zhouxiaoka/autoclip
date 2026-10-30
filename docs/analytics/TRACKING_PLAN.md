@@ -278,7 +278,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_confirm_requested` / `_accepted` | `analysis_mode` | 仅确认制作路径 |
-| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error`；可选 `trigger`（`initial` / `retry` / `variant_retry`，取自后端回执）。枚举里仍有 `append_platform`，但 1.5.7 不产生该值：追加平台留到 1.5.9 |
+| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error`；可选 `trigger`（`initial` / `retry` / `variant_retry`，取自后端回执）。枚举里仍有 `append_platform`，但 1.5.7 不产生该值：追加平台留到 1.5.9。**M1** 另发 `source_duration_sec`、`platform_count`、`is_first_success_device`（本机此前无 generation 成功，失败也发）、`attempt_index_on_device`（本机 1-based，按 attempt_id 幂等）。`eta_initial_min` / `resumed_from` / `retry_kind` 已在目录登记为可空，等 R1 / R3 / X2 再发 |
 | `studio_production_finished` | `outcome` | 确认制作终态 |
 
 失败两者都必须有 `error_code`、`failure_stage`；模型失败加 `provider`、`base_url_host`、`upstream_error_type`、`http_status`、`billable_calls_before_failure`。身份按 **本次 run 实际调用**，不用设置页最后保存值。
@@ -398,6 +398,21 @@ person_id NOT IN COHORT {internal_cohort_id}
 
 按服务商拆分用事件上的 `provider`（本次 run 的目录 slug），**禁止**再用「最后保存的 provider」近似。
 
+### 6.1a M1 分析维度（一次成功 / 从未成功 / 按 provider）
+
+`studio_generation_finished`（M1 起）带本机维度，供图 7–9 与发版对照：
+
+| 字段 | 含义 |
+| --- | --- |
+| `source_duration_sec` | 结算时 `plan.source_duration` 取整秒 |
+| `platform_count` | 本次请求的平台数（原先摘要已有，目录补登记） |
+| `is_first_success_device` | 本机在此 attempt **之前**没有任何 generation 成功；失败/partial 也发 |
+| `attempt_index_on_device` | 本机 generation 终态的 1-based 序号；按 `attempt_id` 幂等（`generation-device-attempts.json`，与 `terminal-outbox.json` 同目录） |
+
+**一次成功占比** = 窗口内有 `attempt_index_on_device = 1` 的设备中，该首次 attempt `outcome` 成功的比例。**从未成功占比** = 窗口内有出片终态的设备中，窗口内一次成功都没有的比例。按 provider 设备成功率见图 9 / F1 刷新脚本（产品口径剔除与图 1 的 `user_x` 一致）。
+
+`eta_initial_min`（R1）、`resumed_from`（R3）、`retry_kind`（X2）仅在目录登记为可空，本版不发、不实现对应产品行为。
+
 ### 6.2 按人首次出片成功率
 
 按 `person_id` 取窗口内第一条 **合格** attempt（按对应口径：全量 / 产品），是 `success` 则分子 +1。没有合格 attempt 的人不进分母。
@@ -444,8 +459,11 @@ person_id NOT IN COHORT {internal_cohort_id}
 | 9 | D7 回访 | Retention | `app_opened` | 起始事件 `app_installed` 或首次出片成功 | 第一列 D1、第七列 D7 |
 | 10 | 收数健康 | Trends | 核心事件列表 | 按 event 分列 | 无收数先查同意/发布，不判产品失败 |
 | 11 | 按版本成功率 | SQL insight | 同图 1 | `success_rate.sql` 图 5 | 每个 `app_version` 一行；与图 1 同一口径 |
+| 12 | 一次成功占比 | SQL insight | 同上 | `success_rate.sql` 图 7（M1） | 窗口内有 `attempt_index_on_device = 1` 的设备中，该首次 attempt 成功的占比 |
+| 13 | 从未成功占比 | SQL insight | 同上 | `success_rate.sql` 图 8（M1） | 窗口内有出片终态、但窗口内无一次成功的设备占比 |
+| 14 | 按 provider 设备成功率 | SQL insight | 同上 | `success_rate.sql` 图 9（M1） | 与 F1 `provider_quality_report` 同形；不改 F1 JSON |
 
-图 1–4、11 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 沿 `retry_of` 取最后一次 attempt、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率、按版本）。该 SQL 在 CI 里用 DuckDB 对合成数据真实执行（`backend/tests/test_success_rate.py`）。本文件不再复制 SQL，避免两份漂移。
+图 1–4、11–14 的 HogQL 见 [`success_rate.sql`](success_rate.sql)（v4：attempt 去重、flow 沿 `retry_of` 取最后一次 attempt、`person_id`、固定 UTC 窗口、内部 cohort 参数、全量/产品双口径、partial-delivery 率、按版本）。该 SQL 在 CI 里用 DuckDB 对合成数据真实执行（`backend/tests/test_success_rate.py`）。本文件不再复制 SQL，避免两份漂移。
 
 可审查 SQL 副本放在 `docs/analytics/success_rate.sql`（与本规范一起落地）。线上看板建好后把 insight 链接回写本节，仿照 [`dashboards-20260930/README.md`](dashboards-20260930/README.md)。
 

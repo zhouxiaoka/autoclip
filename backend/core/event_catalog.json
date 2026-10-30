@@ -824,6 +824,40 @@
         "http_status": {
           "description": "Last provider HTTP status on a model failure, 400-599. Omitted for a local failure.",
           "format": "integer"
+        },
+        "source_duration_sec": {
+          "description": "M1: source material duration in whole seconds from plan.source_duration at settle. Non-negative integer; omitted when unknown.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "platform_count": {
+          "description": "M1: number of requested platforms on this generation attempt (len of requested_platforms). Non-negative integer.",
+          "format": "integer",
+          "minimum": 0
+        },
+        "is_first_success_device": {
+          "description": "M1: true when this device had no prior studio_generation_finished success before this attempt (still emitted on failure/partial). From the local generation-device-attempts ledger next to privacy.json.",
+          "format": "boolean"
+        },
+        "attempt_index_on_device": {
+          "description": "M1: 1-based count of studio_generation_finished attempts on this device. Idempotent by attempt_id via the local generation-device-attempts ledger. Integer >= 1.",
+          "format": "integer",
+          "minimum": 1
+        },
+        "eta_initial_min": {
+          "description": "R1: initial ETA minutes shown when generation started. Registered nullable in M1 for catalog sync; not emitted until R1 ships.",
+          "format": "number",
+          "nullable": true
+        },
+        "resumed_from": {
+          "description": "R3: stage this attempt resumed from (e.g. subtitle/step1). Registered nullable in M1 for catalog sync; not emitted until R3 ships.",
+          "format": "string",
+          "nullable": true
+        },
+        "retry_kind": {
+          "description": "X2: how the user chose to retry after failure. Registered nullable in M1 for catalog sync; not emitted until X2 ships.",
+          "format": "string",
+          "nullable": true
         }
       }
     },
