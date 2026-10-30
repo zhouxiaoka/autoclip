@@ -32,7 +32,7 @@ SUMMARY_KEYS = ('provider', 'config_source', 'attribution_source', 'model', 'bas
                 'billable_calls_before_failure', 'retry_count', 'degrade_count',
                 'llm_calls', 'prompt_tokens', 'completion_tokens', 'route', 'http_status', 'duration_ms',
                 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'completed_variant_count',
-                'eta_initial_min', 'eta_error_ratio')
+                'eta_initial_min', 'eta_error_ratio', 'resumed_from')
 
 
 class RetryRejected(ConflictError):

@@ -411,7 +411,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 
 **一次成功占比** = 窗口内有 `attempt_index_on_device = 1` 的设备中，该首次 attempt `outcome` 成功的比例。**从未成功占比** = 窗口内有出片终态的设备中，窗口内一次成功都没有的比例。按 provider 设备成功率见图 9 / F1 刷新脚本（产品口径剔除与图 1 的 `user_x` 一致）。
 
-`eta_initial_min`（R1）、`resumed_from`（R3）已在目录登记；`retry_kind`（X2：`same` / `switch_model` / `after_install`）由前端 `studioApi.retry` / `retryOutputVariant` 随 `studio_rescreen` / `studio_variant_retry` 发出，并在 `studio_generation_finished` 可空登记。
+`eta_initial_min`（R1）、`resumed_from`（R3：`none`|`subtitle`|`step1`…`step4`）由内容流水线断点续跑写入 generation 并随 `studio_generation_finished` 发出；`retry_kind`（X2：`same` / `switch_model` / `after_install`）由前端 `studioApi.retry` / `retryOutputVariant` 随 `studio_rescreen` / `studio_variant_retry` 发出，并在 `studio_generation_finished` 可空登记。
 
 ### 6.2 按人首次出片成功率
 

@@ -2051,5 +2051,12 @@
   "建议再加一个服务商": "Ajoutez un autre fournisseur",
   "去充值": "Recharger",
   "选择一个已通过测试的连接继续制作。默认选中成功率最高的。": "Choisissez une connexion testée pour continuer. Le taux de réussite le plus élevé est sélectionné par défaut.",
-  "还没有其他可用连接。请先在设置里添加并测试一个服务商。": "Aucune autre connexion utilisable. Ajoutez et testez d’abord un fournisseur dans les réglages."
+  "还没有其他可用连接。请先在设置里添加并测试一个服务商。": "Aucune autre connexion utilisable. Ajoutez et testez d’abord un fournisseur dans les réglages.",
+  "已有字幕，从分析开始": "Sous-titres prêts — reprendre à l’analyse",
+  "从头重做": "Recommencer",
+  "从第 {{n}} 步继续": "Reprendre à l’étape {{n}}",
+  "从第 1 步继续": "Reprendre à l’étape 1",
+  "从第 2 步继续": "Reprendre à l’étape 2",
+  "从第 3 步继续": "Reprendre à l’étape 3",
+  "从第 4 步继续": "Reprendre à l’étape 4"
 }

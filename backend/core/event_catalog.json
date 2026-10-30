@@ -308,6 +308,14 @@
       "same",
       "switch_model",
       "after_install"
+    ],
+    "resumed_from": [
+      "none",
+      "subtitle",
+      "step1",
+      "step2",
+      "step3",
+      "step4"
     ]
   },
   "attribution": {
@@ -894,9 +902,10 @@
           "minimum": 0
         },
         "resumed_from": {
-          "description": "R3: stage this attempt resumed from (e.g. subtitle/step1). Registered nullable in M1 for catalog sync; not emitted until R3 ships.",
+          "description": "R3: stage this attempt resumed from: none | subtitle | step1 | step2 | step3 | step4.",
           "format": "string",
-          "nullable": true
+          "nullable": true,
+          "enum": "resumed_from"
         },
         "retry_kind": {
           "description": "X2: how the user chose to retry after failure: same | switch_model | after_install.",
