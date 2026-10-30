@@ -10,6 +10,7 @@ import { Progress, Typography } from 'antd'
 import { useSimpleProgressStore, getStageDisplayName, getStageColor, isCompleted, isFailed } from '../stores/useSimpleProgressStore'
 import { apiConfigManager } from '../utils/apiConfig'
 import { displayedDownloadPercent, readDownloadProgress } from '../utils/downloadProgress'
+import { getKeepAwakeController } from '../features/studio/keepAwake'
 
 const { Text } = Typography
 
@@ -72,6 +73,14 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
       }
     }
   }, [status, projectId, isPolling, startPolling, stopPolling, progress])
+
+
+  // R2: report this card's running state to keep-awake (project store also covers Home).
+  useEffect(() => {
+    const producing = status === 'processing' || status === 'pending'
+    getKeepAwakeController().setSource(`statusbar:${projectId}`, producing)
+    return () => getKeepAwakeController().setSource(`statusbar:${projectId}`, false)
+  }, [status, projectId])
 
   // 下载进度轮询
   useEffect(() => {

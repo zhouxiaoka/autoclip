@@ -8,6 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import { UpdateToast, useAppUpdate } from '../desktop/UpdatePrompt'
 import { Icon } from '../ui'
+import { useKeepAwakeHeld } from '../features/studio/KeepAwakeGuard'
 
 const { Header: AntHeader } = Layout
 
@@ -20,6 +21,7 @@ const Header: React.FC = () => {
   const { theme, toggleTheme } = useTheme()
   const appUpdate = useAppUpdate()
   const updatePending = appUpdate.phase === 'downloading' || appUpdate.phase === 'ready' || appUpdate.phase === 'failed' || appUpdate.phase === 'restarting'
+  const keepAwakeHeld = useKeepAwakeHeld()
 
   return (
     <AntHeader
@@ -58,6 +60,25 @@ const Header: React.FC = () => {
 
       {/* Right side */}
       <div className="ac-header-actions">
+        {keepAwakeHeld && (
+          <span
+            className="ac-keep-awake-pill"
+            title={t('制作中，已阻止休眠')}
+            aria-label={t('制作中，已阻止休眠')}
+            style={{
+              fontSize: '12px',
+              color: 'var(--ac-sub)',
+              border: '1px solid var(--ac-line)',
+              borderRadius: '999px',
+              padding: '4px 10px',
+              background: 'var(--ac-card)',
+              whiteSpace: 'nowrap',
+              maxWidth: '42vw',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >{t('制作中，已阻止休眠')}</span>
+        )}
         {updatePending && (
           <div className="ac-update-anchor">
             <button

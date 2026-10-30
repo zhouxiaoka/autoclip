@@ -8,6 +8,7 @@ mod backend_manager;
 mod windows_job;
 mod commands;
 mod tray;
+mod power;
 mod telemetry_runtime;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,6 +54,7 @@ pub fn run() {
             enable_autostart,
             disable_autostart,
             is_autostart_enabled,
+            set_keep_awake,
             crate::tray::set_tray_language,
             save_local_download
         ])
