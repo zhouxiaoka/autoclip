@@ -109,6 +109,11 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
                     }
                 }
                 "quit" => {
+                    // P2 #10: exit immediately if QuitGuard has not registered yet.
+                    if !crate::quit_guard::is_ready(app) {
+                        app.exit(0);
+                        return;
+                    }
                     // R1: let the frontend decide (running projects → confirm dialog).
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.emit(

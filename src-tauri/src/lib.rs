@@ -7,6 +7,7 @@ mod backend_manager;
 #[cfg(windows)]
 mod windows_job;
 mod commands;
+mod quit_guard;
 mod tray;
 mod power;
 mod telemetry_runtime;
@@ -56,11 +57,18 @@ pub fn run() {
             is_autostart_enabled,
             set_keep_awake,
             crate::tray::set_tray_language,
+            crate::quit_guard::quit_guard_ready,
             save_local_download
         ])
         .manage(BackendManager::new())
+        .manage(crate::quit_guard::QuitGuardState::new())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // P2 #10: if QuitGuard never mounted, do not trap the user.
+                if !crate::quit_guard::is_ready(window.app_handle()) {
+                    window.app_handle().exit(0);
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.emit(
                     "close-requested",
