@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Layout, 
   Typography, 

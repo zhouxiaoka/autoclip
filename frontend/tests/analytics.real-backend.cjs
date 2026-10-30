@@ -863,7 +863,7 @@ function settingsHook(s, transport, initial) {
     './customProvider':custom,
     './keyGuide':loadTs('keyGuide.ts'),
     './keyGuideBus':loadTs('keyGuideBus.ts'),
-  },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
+  },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}, AbortController})
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }
 const modelFixture=()=>({version:1,saved:false,connections:[{id:'private-id',provider:'openai',api_key:'sk-secret',has_key:true,base_url:'https://gw.example/v1',name:'acct'}],analysis:{connection_id:'private-id',model:'private-model',capability:'text'},vision:null,cover:null,cover_enabled:false,allow_send_frame:false,analysis_mode:'subtitle',allow_visual_screening:false,transcription:{provider:'whisper_local',model:'base'},chunk_size:2000,min_score_threshold:.7,max_clips_per_collection:5})
@@ -1187,7 +1187,9 @@ test('save skips disabled/local connections and deduplicates shared access check
  },initial)
  await render().load();await Promise.resolve()
  const result=await render().save()
- assert.deepEqual(calls,['private-id'])
+ // F2 post-save analysis trial also probes once; drain it before asserting.
+ await Promise.resolve(); await Promise.resolve()
+ assert.deepEqual(calls,['private-id','private-id'])
  assert.equal(result.validationFailed,false)
 })
 
@@ -1202,7 +1204,9 @@ test('save rechecks only the changed optional binding on a validated connection'
  await render().load();await Promise.resolve()
  render().update({cover:{...initial.cover,model:'private-new-image'}})
  await render().save()
- assert.deepEqual(calls,[['cover','private-new-image']])
+ // F2 post-save analysis trial probes the analysis binding after the cover recheck.
+ await Promise.resolve(); await Promise.resolve()
+ assert.deepEqual(calls,[['cover','private-new-image'],['private-id','private-model']])
  assert.equal(render().lists.cover.preview,true,'non-chat ids must not be backfilled as live chat models')
 })
 

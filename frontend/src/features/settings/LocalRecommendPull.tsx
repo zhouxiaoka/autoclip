@@ -39,9 +39,10 @@ export default function LocalRecommendPull({
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      while (true) {
+      let reading = true
+      while (reading) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) { reading = false; break }
         buffer += decoder.decode(value, { stream: true })
         const chunks = buffer.split('\n\n')
         buffer = chunks.pop() || ''

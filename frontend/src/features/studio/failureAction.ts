@@ -190,14 +190,18 @@ export function failureAction(
   connectionCount?: number | null,
   provider?: string | null,
 ): FailureAction {
-  if (isIn(WHISPER_GATE_CODES, errorCode)) {
+  // Use includes (not isIn type-predicate): a false isIn would narrow errorCode to
+  // null|undefined and break later === 'insufficient_quota' (TS2367).
+  if (!!errorCode && (WHISPER_GATE_CODES as readonly string[]).includes(errorCode)) {
     return { kind: 'install_asr', destination: TRANSCRIPTION_SETTINGS_DESTINATION, label: INSTALL_TRANSCRIPTION_LABEL }
   }
-  const switchHit = isIn(SWITCHABLE_UPSTREAM, upstreamType) || isIn(SWITCHABLE_UPSTREAM, errorCode)
-  if (switchHit && connectionCount != null && connectionCount !== '') {
-    const n = Number(connectionCount)
-    if (Number.isFinite(n) && n >= 2) return { kind: 'switch_model' }
-    if (Number.isFinite(n) && n >= 0) {
+  // Avoid isIn type-predicate on the params here: a false hit would narrow them to
+  // null|undefined and poison later === 'insufficient_quota' checks (TS2367).
+  const switchHit = (!!upstreamType && (SWITCHABLE_UPSTREAM as readonly string[]).includes(upstreamType))
+    || (!!errorCode && (SWITCHABLE_UPSTREAM as readonly string[]).includes(errorCode))
+  if (switchHit && connectionCount != null && Number.isFinite(connectionCount)) {
+    if (connectionCount >= 2) return { kind: 'switch_model' }
+    if (connectionCount >= 0) {
       return {
         kind: 'settings',
         reason: ADD_PROVIDER_HINT,
@@ -205,7 +209,6 @@ export function failureAction(
         label: '去设置',
       }
     }
-    // non-numeric connectionCount: fall through
   }
   const quota = upstreamType === 'insufficient_quota' || errorCode === 'insufficient_quota'
   if (quota) {
