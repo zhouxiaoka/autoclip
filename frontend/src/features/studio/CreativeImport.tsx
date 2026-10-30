@@ -20,7 +20,7 @@ import { speechApi } from '../../services/api'
 import { analysisNeedsSetup, asrReadinessProperties, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
-import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
+import { readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
@@ -115,9 +115,17 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   useTranslation()
   const navigate = useNavigate()
   const remembered = flagEnabled('remember_platforms')
-  const initialPlatforms = useRef(resolvePlatforms(remembered, uiLocale(), readRememberedPlatforms()))
+  const reuse = useRef(takeReuseImport())
+  const initialPlatforms = useRef(
+    reuse.current?.platforms?.length
+      ? { platforms: reuse.current.platforms, source: 'user' as PlatformSource }
+      : resolvePlatforms(remembered, uiLocale(), readRememberedPlatforms()),
+  )
   const [source, setSource] = useState<'link' | 'file'>('link')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(() => {
+    const incoming = reuse.current?.sourceUrl || reuse.current?.sourceMeta?.source_url
+    return typeof incoming === 'string' ? incoming : ''
+  })
   const [file, setFile] = useState<File | null>(null)
   const [subtitle, setSubtitle] = useState<File | null>(null)
   const [options, setOptions] = useState<ImportOptions>({...defaultImportOptions})
@@ -143,7 +151,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const [readiness, setReadiness] = useState<ImportReadiness | null>(null)
   const currentReadiness = readiness
   const [settled, setSettled] = useState(false)
-  const [platformOpen, setPlatformOpen] = useState(false)
+  const [platformOpen, setPlatformOpen] = useState(!!reuse.current?.platforms?.length)
   const [pending, setPending] = useState<{ trigger: 'paste' | 'drop' } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [longGate, setLongGate] = useState<{ open: boolean; durationSec: number | null; trigger: 'paste' | 'drop' | 'button' }>({ open: false, durationSec: null, trigger: 'button' })

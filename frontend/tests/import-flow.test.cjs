@@ -34,10 +34,13 @@ function storage() {
 test('platforms stay on the current default until remembering is turned on', () => {
   const box = storage()
   memory.bindPlatformStorage(box)
-  assert.deepEqual(plain(memory.resolvePlatforms(false, 'zh-CN', null)), { platforms: ['douyin'], source: 'user' })
-  assert.deepEqual(plain(memory.resolvePlatforms(true, 'zh-CN', null).platforms), ['xiaohongshu', 'douyin'])
-  assert.equal(memory.resolvePlatforms(true, 'zh-CN', null).source, 'locale')
-  assert.deepEqual(plain(memory.resolvePlatforms(true, 'en', null).platforms), ['tiktok'])
+  assert.deepEqual(plain(memory.resolvePlatforms(false, 'zh-CN', null, false)), { platforms: ['douyin'], source: 'user' })
+  // T1: no success history → single locale platform
+  assert.deepEqual(plain(memory.resolvePlatforms(true, 'zh-CN', null, false).platforms), ['douyin'])
+  assert.equal(memory.resolvePlatforms(true, 'zh-CN', null, false).source, 'locale')
+  assert.deepEqual(plain(memory.resolvePlatforms(true, 'en', null, false).platforms), ['tiktok'])
+  // After first success, zh widens to 小红书 + 抖音
+  assert.deepEqual(plain(memory.resolvePlatforms(true, 'zh-CN', null, true).platforms), ['xiaohongshu', 'douyin'])
   memory.writeRememberedPlatforms(['bilibili', 'not-a-platform', 'bilibili'])
   assert.deepEqual(plain(memory.readRememberedPlatforms()), ['bilibili'])
   assert.equal(memory.resolvePlatforms(true, 'zh-CN').source, 'remembered')

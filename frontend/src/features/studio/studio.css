@@ -124,3 +124,5 @@
 .ac-import-setup-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ac-import-setup-side{display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0}
 .ac-import-setup-side .studio-link{font-size:12.5px}
+.studio-more-platform{margin:0 0 16px;padding:14px 16px;border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-card);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.studio-more-platform .studio-muted{margin:0}
