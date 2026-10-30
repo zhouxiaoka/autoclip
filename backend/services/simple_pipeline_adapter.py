@@ -24,6 +24,7 @@ from backend.pipeline.step4_title import run_step4_title
 from backend.core import llm_usage
 from backend.pipeline.step5_clustering import run_step5_clustering
 from backend.pipeline.step6_video import run_step6_video
+from backend.services.studio import pipeline_resume
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +298,8 @@ class SimplePipelineAdapter:
             return None
 
     async def process_project_sync(self, input_video_path: str, input_srt_path: str, clips_only: bool = False,
-                                   platform_min_sec: float | None = None, platform_min_label: str = '') -> Dict[str, Any]:
+                                   platform_min_sec: float | None = None, platform_min_label: str = '',
+                                   *, resume: bool = True, fresh: bool = False) -> Dict[str, Any]:
         """
         同步处理项目 - 使用简化的进度系统
         
@@ -351,10 +353,42 @@ class SimplePipelineAdapter:
             self._preflight_llm()
             checkpoint(self.project_id)
 
+            # R3: clear or decide resume before transcription / model steps
+            video_path = Path(input_video_path)
+            srt_candidate = Path(input_srt_path) if input_srt_path else (video_path.parent / 'input.srt')
+            if fresh:
+                pipeline_resume.clear_pipeline_cache(metadata_dir, raw_dir=video_path.parent)
+                input_srt_path = None
+                srt_candidate = video_path.parent / 'input.srt'
+            decision = pipeline_resume.decide_resume(
+                video=video_path,
+                srt=srt_candidate if srt_candidate.is_file() else None,
+                metadata_dir=metadata_dir,
+                prompt_files=prompt_files,
+                fresh=fresh,
+                clips_only=clips_only,
+            ) if resume else {
+                'resumed_from': 'none',
+                'skip_transcription': bool(input_srt_path and Path(input_srt_path).exists()),
+                'start_step': 'step1',
+                'reuse_steps': frozenset(),
+                'stamp_ok': False,
+            }
+            resumed_from = decision['resumed_from']
+            reuse_steps = decision['reuse_steps']
+            start_step = decision['start_step']
+            logger.info(
+                'R3 resume project=%s resumed_from=%s skip_transcription=%s start_step=%s fresh=%s',
+                self.project_id, resumed_from, decision['skip_transcription'], start_step, fresh,
+            )
+
             # 阶段2: 字幕处理
             emit_progress(self.project_id, "SUBTITLE", "开始字幕处理")
             
-            if input_srt_path and Path(input_srt_path).exists():
+            if decision['skip_transcription'] and srt_candidate.is_file():
+                logger.info(f"R3: 复用现有SRT文件: {srt_candidate}")
+                srt_path = srt_candidate
+            elif input_srt_path and Path(input_srt_path).exists() and not fresh:
                 logger.info(f"使用现有SRT文件: {input_srt_path}")
                 srt_path = Path(input_srt_path)
             else:
@@ -372,32 +406,63 @@ class SimplePipelineAdapter:
                     # 以前这里写一个空大纲然后一路「成功」到底，用户看到的是 Completed · 0 切片
                     raise missing_subtitle_failure()
                 logger.info(f"自动生成字幕成功: {srt_path}")
+                # Stamp source fingerprint as soon as transcription is accepted.
+                pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
 
             # 快速出片：一次挑片（整段字幕一次给模型）；不可用时回退旧的四步
             checkpoint(self.project_id)
-            titled_clips = self._find_clips_in_one_pass(
-                srt_path, metadata_dir, platform_min_sec, platform_min_label) if clips_only else None
-            if titled_clips is not None:
+            titled_clips = None
+            # When stamp matches and step4 exists, reuse titled clips (skip one-pass + steps).
+            if clips_only and start_step == 'done' and 'step4' in reuse_steps:
+                try:
+                    titled_clips = pipeline_resume.load_json(metadata_dir / 'step4_titles.json')
+                    if titled_clips:
+                        logger.info('R3: 复用 step4_titles.json（%d clips）', len(titled_clips))
+                        outlines, timeline_data, scored_clips = [], [], titled_clips
+                        emit_progress(self.project_id, "HIGHLIGHT", "片段挑选完成", subpercent=40)
+                except Exception as error:  # noqa: BLE001
+                    logger.warning('R3: failed to reuse step4: %s', error)
+                    titled_clips = None
+            if titled_clips is None and clips_only and start_step in ('step1', 'done', None):
+                # Model changed or no reusable steps: re-run one-pass (still skip transcription).
+                if start_step != 'done' or not reuse_steps:
+                    titled_clips = self._find_clips_in_one_pass(
+                        srt_path, metadata_dir, platform_min_sec, platform_min_label)
+            if titled_clips is not None and start_step == 'done':
+                pass  # already set outlines/timeline/scored above when reused
+            elif titled_clips is not None:
                 outlines, timeline_data, scored_clips = [], [], titled_clips
                 emit_progress(self.project_id, "HIGHLIGHT", "片段挑选完成", subpercent=40)
+                # one-pass wrote step4; refresh stamp so next retry can skip
+                pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
             else:
                 # Step 1: 大纲提取（字幕为空 / 模型全部失败 / 无法解析时由 step1 自己抛 PipelineFailure）
-                logger.info("执行Step 1: 大纲提取")
-                llm_usage.set_stage("outline")
-                outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
+                if 'step1' in reuse_steps:
+                    logger.info('R3: 复用 Step 1 outline')
+                    outlines = pipeline_resume.load_json(metadata_dir / 'step1_outline.json')
+                else:
+                    logger.info("执行Step 1: 大纲提取")
+                    llm_usage.set_stage("outline")
+                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
+                    pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
                 emit_progress(self.project_id, "SUBTITLE", "字幕处理完成", subpercent=100)  # never behind the transcription band
             
                 # 阶段3: 内容分析
                 emit_progress(self.project_id, "ANALYZE", "开始内容分析")
             
                 # Step 2: 时间线提取
-                logger.info("执行Step 2: 时间线提取")
-                llm_usage.set_stage("timeline")
-                timeline_data = run_step2_timeline(
-                    metadata_dir / "step1_outline.json",
-                    metadata_dir=metadata_dir,
-                    prompt_files=prompt_files,
-                )
+                if 'step2' in reuse_steps:
+                    logger.info('R3: 复用 Step 2 timeline')
+                    timeline_data = pipeline_resume.load_json(metadata_dir / 'step2_timeline.json')
+                else:
+                    logger.info("执行Step 2: 时间线提取")
+                    llm_usage.set_stage("timeline")
+                    timeline_data = run_step2_timeline(
+                        metadata_dir / "step1_outline.json",
+                        metadata_dir=metadata_dir,
+                        prompt_files=prompt_files,
+                    )
+                    pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
                 if not timeline_data:
                     # Step 2 normally raises its observed failure. Keep the legacy
                     # fallback for callers returning [] without diagnostic data.
@@ -405,13 +470,18 @@ class SimplePipelineAdapter:
                 emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
             
                 # Step 3: 内容评分
-                logger.info("执行Step 3: 内容评分")
-                llm_usage.set_stage("scoring")
-                scored_clips = run_step3_scoring(
-                    metadata_dir / "step2_timeline.json",
-                    metadata_dir=metadata_dir,
-                    prompt_files=prompt_files,
-                )
+                if 'step3' in reuse_steps:
+                    logger.info('R3: 复用 Step 3 scores')
+                    scored_clips = pipeline_resume.load_json(metadata_dir / 'step3_high_score_clips.json')
+                else:
+                    logger.info("执行Step 3: 内容评分")
+                    llm_usage.set_stage("scoring")
+                    scored_clips = run_step3_scoring(
+                        metadata_dir / "step2_timeline.json",
+                        metadata_dir=metadata_dir,
+                        prompt_files=prompt_files,
+                    )
+                    pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
                 if not scored_clips:
                     from backend.pipeline.step3_scoring import resolve_min_score_threshold
                     raise PipelineFailure(
@@ -425,13 +495,18 @@ class SimplePipelineAdapter:
                 emit_progress(self.project_id, "HIGHLIGHT", "开始片段定位")
             
                 # Step 4: 标题生成
-                logger.info("执行Step 4: 标题生成")
-                llm_usage.set_stage("titles")
-                titled_clips = run_step4_title(
-                    metadata_dir / "step3_high_score_clips.json",
-                    metadata_dir=str(metadata_dir),
-                    prompt_files=prompt_files,
-                )
+                if 'step4' in reuse_steps:
+                    logger.info('R3: 复用 Step 4 titles')
+                    titled_clips = pipeline_resume.load_json(metadata_dir / 'step4_titles.json')
+                else:
+                    logger.info("执行Step 4: 标题生成")
+                    llm_usage.set_stage("titles")
+                    titled_clips = run_step4_title(
+                        metadata_dir / "step3_high_score_clips.json",
+                        metadata_dir=str(metadata_dir),
+                        prompt_files=prompt_files,
+                    )
+                    pipeline_resume.write_stamp(metadata_dir, video=video_path, prompt_files=prompt_files)
                 emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
             
             if clips_only:
@@ -492,17 +567,24 @@ class SimplePipelineAdapter:
                 logger.error(f"数据同步失败: {e}")
             
             logger.info(f"项目处理完成: {self.project_id}")
+            # Final stamp so the next retry can skip matching steps.
+            try:
+                pipeline_resume.write_stamp(metadata_dir, video=Path(input_video_path), prompt_files=prompt_files)
+            except Exception as error:  # noqa: BLE001
+                logger.debug('R3 stamp write skipped: %s', type(error).__name__)
             return {
                 "status": "succeeded",
                 "project_id": self.project_id,
                 "task_id": self.task_id,
+                "resumed_from": resumed_from,
                 "result": {
                     "outlines": outlines,
                     "timeline": timeline_data,
                     "scored_clips": scored_clips,
                     "titled_clips": titled_clips,
                     "collections": collections,
-                    "video_result": video_result
+                    "video_result": video_result,
+                    "resumed_from": resumed_from,
                 }
             }
             
@@ -535,6 +617,8 @@ class SimplePipelineAdapter:
                 "error": error_msg,
                 "message": error_msg,
             }
+            if 'resumed_from' in locals():
+                failed['resumed_from'] = resumed_from
             if e.code:
                 failed["error_code"] = e.code
             # 结果是普通 dict（Studio 经 process_video_pipeline.apply().get() 拿到），异常链到这里就断了：

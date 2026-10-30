@@ -27,7 +27,7 @@ type DiagnosePanelProps = {
 export type FailureInfo = PageFailureInfo & { error?: string | null }
 export type RepeatFailure = { count?: number | null; same_code?: boolean | null }
 export type FailureButton = {
-  key: 'continue' | 'settings' | 'retry' | 'diagnose' | 'install_asr' | 'switch_model' | 'recharge'
+  key: 'continue' | 'settings' | 'retry' | 'fresh' | 'diagnose' | 'install_asr' | 'switch_model' | 'recharge'
   label: string
   cta: boolean
 }
@@ -50,15 +50,31 @@ function leadWithDiagnose(buttons: FailureButton[], repeat?: RepeatFailure | nul
   return next
 }
 
+export type ResumePoint = { point?: string | null; label?: string | null } | null
+
+function retryLabel(resumePoint?: ResumePoint): string {
+  const label = (resumePoint?.label || '').trim()
+  return label || '重试'
+}
+
+function withFresh(buttons: FailureButton[], canRetry: boolean, resumePoint?: ResumePoint): FailureButton[] {
+  if (!canRetry || !resumePoint?.point || resumePoint.point === 'none') return buttons
+  if (buttons.some(b => b.key === 'fresh')) return buttons
+  return [...buttons, { key: 'fresh', label: '从头重做', cta: false }]
+}
+
 /** The failed step's state, computed once: one message, each button at most once, explicit order. */
-export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSettings: boolean, repeatFailure?: RepeatFailure | null): FailurePlan {
+export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSettings: boolean, repeatFailure?: RepeatFailure | null, resumePoint?: ResumePoint): FailurePlan {
   const action = pageFailureAction(info)
-  const finish = (plan: FailurePlan): FailurePlan => ({ ...plan, buttons: leadWithDiagnose(plan.buttons, repeatFailure) })
+  const finish = (plan: FailurePlan): FailurePlan => ({
+    ...plan,
+    buttons: withFresh(leadWithDiagnose(plan.buttons, repeatFailure), canRetry, resumePoint),
+  })
   if (action.kind === 'retry' && weakLocalTimelineFailure(info.error, info.error_code)) {
     const card = presentedFailure(info, WEAK_LOCAL_TIMELINE_REASON)
     return finish({
       message: card.reason, step: card.step, billing: null, destination: null, actionKind: 'retry',
-      buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [],
+      buttons: canRetry ? [{ key: 'retry', label: retryLabel(resumePoint), cta: false }] : [],
     })
   }
   if (action.kind === 'install_asr') {
@@ -85,7 +101,7 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
   const reason = action.kind === 'settings' && action.reason ? action.reason : pageFailureText(info)
   const card = presentedFailure(info, reason)
   if (action.kind === 'retry') {
-    return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'retry', buttons: canRetry ? [{ key: 'retry', label: '重试', cta: false }] : [] })
+    return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'retry', buttons: canRetry ? [{ key: 'retry', label: retryLabel(resumePoint), cta: true }] : [] })
   }
   const resume = returnedFromSettings && canRetry
   const settingsLabel = action.reason === ADD_PROVIDER_HINT ? '去设置' : (action.label || '去设置')
@@ -96,15 +112,17 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
 
 export default function FailureActions({
   info, canRetry, returnedFromSettings, busy, retrying, onRetry, onSettings, repeatFailure, children,
-  switchOptions, onSwitchModel, onRecharge,
+  switchOptions, onSwitchModel, onRecharge, resumePoint, onFreshRetry,
 }: {
   info: FailureInfo; canRetry: boolean; returnedFromSettings: boolean; busy: boolean; retrying: boolean
   onRetry: () => void; onSettings: (destination: string) => void; repeatFailure?: RepeatFailure | null; children?: ReactNode
   switchOptions?: SwitchModelOption[]
   onSwitchModel?: (choice: { connectionId: string; model: string }) => void | Promise<void>
   onRecharge?: (provider: string) => void
+  resumePoint?: ResumePoint
+  onFreshRetry?: () => void
 }) {
-  const plan = failurePlan(info, canRetry, returnedFromSettings, repeatFailure)
+  const plan = failurePlan(info, canRetry, returnedFromSettings, repeatFailure, resumePoint)
   const [diagnose, setDiagnose] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [switchBusy, setSwitchBusy] = useState(false)
@@ -128,6 +146,7 @@ export default function FailureActions({
       if (plan.rechargeProvider && onRecharge) return onRecharge(plan.rechargeProvider)
       return onSettings(plan.destination || '/settings?section=analysis')
     }
+    if (key === 'fresh') return (onFreshRetry || onRetry)()
     return onRetry()
   }
   return <>
@@ -139,7 +158,7 @@ export default function FailureActions({
           key={b.key}
           variant={b.cta ? 'cta' : undefined}
           disabled={busy || switchBusy}
-          loading={b.key !== 'settings' && b.key !== 'diagnose' && b.key !== 'install_asr' && b.key !== 'switch_model' && b.key !== 'recharge' && retrying}
+          loading={b.key !== 'settings' && b.key !== 'diagnose' && b.key !== 'install_asr' && b.key !== 'switch_model' && b.key !== 'recharge' && b.key !== 'fresh' && retrying}
           onClick={() => click(b.key)}
         >{t(b.label)}</Btn>
       ))}

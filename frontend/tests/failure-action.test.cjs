@@ -274,3 +274,53 @@ test('X2: FailureActions routes the five kinds', () => {
   assert.deepEqual(catalog.enums.retry_kind, ['same', 'switch_model', 'after_install'])
 })
 })()
+
+// failure-action.test.cjs — R3 resume button copy
+;(() => {
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const fs = require('node:fs')
+const { loadTs } = require('./load-ts.cjs')
+// FailureActions is TSX — load via transpile like project-card does for plan helpers
+const ts = require('typescript')
+const React = require('react')
+const code = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src/features/studio/FailureActions.tsx'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true },
+}).outputText
+const { runInSandbox } = require('./vm-sandbox.cjs')
+const module = { exports: {} }
+const stubs = {
+  '../../i18n': { t: (k) => k },
+  '../../ui': { Btn: () => null, Dialog: () => null },
+  '../../utils/timelineFailure': { WEAK_LOCAL_TIMELINE_REASON: 'weak', weakLocalTimelineFailure: () => false },
+  './failureAction': loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')),
+  './SwitchModelDialog': { __esModule: true, default: () => null },
+  './switchModelOptions': {},
+}
+runInSandbox(code, {
+  module, exports: module.exports, console,
+  require: (id) => stubs[id] || require(id),
+})
+const fa = module.exports
+
+test('R3: retry label uses resume_point; fresh secondary when checkpoint exists', () => {
+  const none = fa.failurePlan({ error_code: 'timeout' }, true, false, null, null)
+  assert.equal(none.buttons.find(b => b.key === 'retry').label, '重试')
+  assert.equal(none.buttons.find(b => b.key === 'fresh'), undefined)
+
+  const sub = fa.failurePlan({ error_code: 'timeout' }, true, false, null, { point: 'subtitle', label: '已有字幕，从分析开始' })
+  assert.equal(sub.buttons.find(b => b.key === 'retry').label, '已有字幕，从分析开始')
+  assert.equal(sub.buttons.find(b => b.key === 'fresh').label, '从头重做')
+
+  const step = fa.failurePlan({ error_code: 'timeout' }, true, false, null, { point: 'step2', label: '从第 2 步继续' })
+  assert.equal(step.buttons.find(b => b.key === 'retry').label, '从第 2 步继续')
+  assert.equal(step.buttons.find(b => b.key === 'fresh').label, '从头重做')
+})
+
+test('R3: api.retry accepts fresh', () => {
+  const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/api.ts'), 'utf8')
+  assert.match(src, /fresh\?: boolean/)
+  assert.match(src, /fresh: !!opts\?\.fresh/)
+})
+})()

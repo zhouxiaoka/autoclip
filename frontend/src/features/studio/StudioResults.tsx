@@ -239,9 +239,11 @@ export default function StudioResults({ project, children, onCreateCollection, o
           canRetry={canRetryAnalysis}
           returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
           repeatFailure={workspace.generation?.repeat_failure}
+          resumePoint={workspace.resume_point}
           switchOptions={switchOptions}
           onSwitchModel={choice => act('retry-analysis', async () => { await switchModelAndRetry(choice) })}
           onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id, { retry_kind: 'same' })})}
+          onFreshRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id, { retry_kind: 'same', fresh: true })})}
           onSettings={destination=>navigate(settingsReturnUrl(destination, project.id))}>
           {!weakLocalTimelineFailure(failureInfo().error, failureInfo().error_code) && <Btn disabled={!!busy} onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn>}{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}
         </FailureActions></div>}

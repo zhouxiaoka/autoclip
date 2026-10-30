@@ -611,18 +611,29 @@ class ContentRunError(AttributedError, RuntimeError):
     """an uncoded content pipeline failure rebuilt across apply.get, with its snapshot."""
 
 
-def run_content(project_id, video, platform_min_sec=None, platform_min_label=''):
+def run_content(project_id, video, platform_min_sec=None, platform_min_label='', *, resume=True, fresh=False):
     """Run the existing content pipeline in this worker, without a second broker queue.
 
     `platform_min_sec` is forwarded only when a long-form platform was requested, so callers
     that mock the two-argument form keep working for every other platform.
+    R3: `resume`/`fresh` control checkpoint reuse (``pipeline_stamp.json`` + step artifacts).
     """
     from backend.tasks.processing import process_video_pipeline
     srt = video.parent / 'input.srt'
+    # Prefer flags stored on the open analysis (retry command), then explicit kwargs.
+    if not fresh:
+        try:
+            from backend.services.studio import store
+            analysis = (store.read(project_id) or {}).get('analysis') or {}
+            fresh = bool(analysis.get('fresh'))
+        except Exception:  # noqa: BLE001
+            pass
     kwargs = {
         'project_id': project_id, 'input_video_path': str(video),
         'input_srt_path': str(srt) if srt.exists() else None,
         'clips_only': True,  # studio renders from the source: no clustering, no per-clip re-encode
+        'resume': resume,
+        'fresh': fresh,
     }
     if platform_min_sec:
         kwargs['platform_min_sec'] = platform_min_sec
@@ -654,6 +665,22 @@ def run_content(project_id, video, platform_min_sec=None, platform_min_label='')
         raise error
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
+    resumed_from = (
+        result.get('resumed_from')
+        or (result.get('result') or {}).get('resumed_from')
+        or (result.get('result') or {}).get('result', {}).get('resumed_from')
+        or 'none'
+    )
+    try:
+        from backend.services.studio import store
+        def _note(data, value=resumed_from):
+            if isinstance(data.get('generation'), dict):
+                data['generation']['resumed_from'] = value
+            if isinstance(data.get('analysis'), dict):
+                data['analysis']['resumed_from'] = value
+        store.change(project_id, _note)
+    except Exception:  # noqa: BLE001 - telemetry must not fail the pipeline
+        pass
     if not clips:
         raise UserFacingError('没有提取到可用内容片段，请检查语音/字幕，或修改方案为精彩高光')
 
@@ -1965,7 +1992,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
         state.setdefault('output_variants', [])
         from backend.services.studio.failure_identity import SCREENING_KEY, frozen, phase_identity
         screening = phase_identity('screening')
-        state['analysis'] = {**screening, **({SCREENING_KEY: frozen(screening)} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['analysis'] = {**screening, **({SCREENING_KEY: frozen(screening)} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now(), **({'fresh': True} if (retry or {}).get('fresh') else {})}
         state['generation'].update(store.attempt_identity(state['analysis']), **({SCREENING_KEY: frozen(screening)} if screening else {}))
         # #419: automatic output is one generation attempt from this run; a manual retry opens the production
         # attempt now (bound at confirmation) so its retry_of survives the screening step.
@@ -1976,7 +2003,20 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
                 key=(retry or {}).get('key'), now=store.now())
             if options.auto_start:
                 state['generation']['attempt_id'] = receipt['attempt_id']
-        store.write(project_id, state)
+                if (retry or {}).get('fresh'):
+            try:
+                from backend.core.path_utils import get_project_directory
+                from backend.services.studio import pipeline_resume
+                root = get_project_directory(project_id)
+                video = None
+                try:
+                    video = source(project_id)
+                except Exception:
+                    video = None
+                pipeline_resume.clear_pipeline_cache(root / 'metadata', raw_dir=(video.parent if video is not None else root / 'raw'))
+            except Exception:  # noqa: BLE001
+                pass
+store.write(project_id, state)
         try:
             from backend.core.llm_telemetry import emit_asr_readiness_checked
             emit_asr_readiness_checked(has_subtitle=_project_has_subtitle(project_id))

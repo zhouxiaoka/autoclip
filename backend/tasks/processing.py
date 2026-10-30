@@ -71,6 +71,8 @@ def process_video_pipeline(
     clips_only: bool = False,
     platform_min_sec: Optional[float] = None,
     platform_min_label: str = '',
+    resume: bool = True,
+    fresh: bool = False,
 ) -> Dict[str, Any]:
     """
     处理视频流水线任务 - 使用Pipeline适配器
@@ -135,7 +137,7 @@ def process_video_pipeline(
         with bind(project_id):
             # Forward the long-form minimum only when one was requested. Adapters and test
             # stand-ins that predate the argument keep their original signature otherwise.
-            call = {'clips_only': clips_only}
+            call = {'clips_only': clips_only, 'resume': resume, 'fresh': fresh}
             if platform_min_sec:
                 call['platform_min_sec'] = platform_min_sec
                 call['platform_min_label'] = platform_min_label

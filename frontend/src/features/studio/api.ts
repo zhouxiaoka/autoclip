@@ -109,7 +109,7 @@ signal); every HTTP answer (even a 500) is seen. */
   }, workflow.context(pid)),
   /** The failed-state 「重试」/「继续制作」 (#419): one backend retry command; the receipt carries retry_of. A manual
    * project's production attempt is opened now and bound when the plan is confirmed. */
-  retry: (pid: string, opts?: { retry_kind?: 'same' | 'switch_model' | 'after_install' }) => observeStudioOperation('studio_rescreen', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string }>(`/studio/${pid}/retry`, { scope: 'analysis', idempotency_key: retryKey() }), (result, props) => {
+  retry: (pid: string, opts?: { retry_kind?: 'same' | 'switch_model' | 'after_install'; fresh?: boolean }) => observeStudioOperation('studio_rescreen', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string }>(`/studio/${pid}/retry`, { scope: 'analysis', idempotency_key: retryKey(), fresh: !!opts?.fresh }), (result, props) => {
     const link = result.attempt?.retry_of ? { retry_of: result.attempt.retry_of } : {}
     workflow.watch('studio-screen', pid, undefined, undefined, { ...props, ...link }, true, result.analysis_run_id)
     if (result.attempt?.kind === 'generation') workflow.watchAttempt(pid, result.attempt, props)
