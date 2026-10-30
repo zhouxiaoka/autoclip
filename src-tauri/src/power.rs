@@ -1,5 +1,12 @@
 //! Keep the system awake while AutoClip is producing (R2).
 //! Allows display sleep; prevents system idle sleep. Idempotent.
+//!
+//! # Windows thread binding (P2 #15)
+//! On Windows, `SetThreadExecutionState` applies to the **calling thread**.
+//! Acquire and release must run on the **same** thread that holds the ES flags;
+//! Tauri sync commands run on the main thread, so `commands::set_keep_awake`
+//! must stay a sync `fn` (never `async fn`). Making it async would move the
+//! call off the main thread and silently break keep-awake / leave ES stuck.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -31,6 +38,8 @@ fn acquire() -> Result<(), String> {
     use windows_sys::Win32::System::Power::{
         SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED,
     };
+    // Thread-bound: ES flags apply only to this thread. Callers (Tauri sync
+    // command on the main thread) must not move this onto a worker / async task.
     // ES_SYSTEM_REQUIRED resets the idle timer; omit ES_DISPLAY_REQUIRED so the screen may sleep.
     let prev = unsafe { SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) };
     if prev == 0 {
@@ -42,6 +51,7 @@ fn acquire() -> Result<(), String> {
 #[cfg(windows)]
 fn release() -> Result<(), String> {
     use windows_sys::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS};
+    // Must run on the same thread that called acquire() (see module docs / P2 #15).
     let prev = unsafe { SetThreadExecutionState(ES_CONTINUOUS) };
     if prev == 0 {
         return Err("SetThreadExecutionState(ES_CONTINUOUS) failed".into());
@@ -161,5 +171,20 @@ mod tests {
         assert_eq!(set_keep_awake(false).unwrap(), false);
         assert_eq!(set_keep_awake(false).unwrap(), false);
         assert!(!is_held());
+    }
+
+    /// P2 #15: Win ES is thread-bound; the Tauri command must stay sync so it
+    /// runs on the main thread with acquire/release.
+    #[test]
+    fn tauri_set_keep_awake_command_is_not_async() {
+        let src = include_str!("commands.rs");
+        assert!(
+            src.contains("pub fn set_keep_awake("),
+            "commands::set_keep_awake must remain a sync fn"
+        );
+        assert!(
+            !src.contains("pub async fn set_keep_awake("),
+            "commands::set_keep_awake must not be async (Win SetThreadExecutionState is thread-bound)"
+        );
     }
 }

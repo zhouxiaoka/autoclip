@@ -393,6 +393,11 @@ mod download_tests {
 
 
 /// R2: hold/release system keep-awake (idempotent). Updates tray tooltip when held.
+///
+/// **Must stay a sync `fn` (P2 #15).** On Windows, `SetThreadExecutionState` is
+/// thread-bound; Tauri sync commands run on the main thread, so acquire/release
+/// share that thread. Do **not** convert this to `async fn` — that would silently
+/// break keep-awake (or leave ES stuck on the wrong thread).
 #[tauri::command]
 pub fn set_keep_awake(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
     let held = crate::power::set_keep_awake(on)?;
