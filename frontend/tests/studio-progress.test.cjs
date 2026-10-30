@@ -137,3 +137,23 @@ test('failure copy names the step and adds billing guidance only after a billabl
   const quiet = failure.presentedFailure({ error: '错误', error_code: 'invalid_response', failure_stage: 'analyze', billable_calls_before_failure: 0 })
   assert.equal(quiet.billing, null)
 })
+
+
+test('R1 ETA fields appear when provider and source duration are known', () => {
+  const started = new Date(NOW - 60_000).toISOString()
+  const view = progress.studioRunProgress({
+    analysis: {
+      status: 'running', phase: 'production', message: '正在制作可发布成片',
+      progress_stage: 'SUBTITLE', progress_approximate: true, provider: 'ollama', run_id: 'run-eta',
+      created_at: started,
+    },
+    generation: { created_at: started, provider: 'ollama', attempt_id: 't-aaaaaaaaaaaaaaaa' },
+    source_duration_sec: 600,
+    concurrency: 1,
+  }, NOW)
+  assert.equal(view.canLeave, true)
+  assert.equal(typeof view.etaOverrun, 'boolean')
+  assert.ok('etaMin' in view)
+  assert.ok('etaInitialMin' in view)
+  assert.equal(view.etaMin != null || view.etaOverrun || view.etaInitialMin != null, true)
+})

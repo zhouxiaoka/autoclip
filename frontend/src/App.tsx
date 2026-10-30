@@ -11,6 +11,7 @@ import StudioEditor from './features/studio/StudioEditor'
 import SettingsPage from './pages/SettingsPage'
 import SettingsReturnListener from './features/studio/SettingsReturnListener'
 import KeyGuidePrompt from './features/settings/KeyGuidePrompt'
+import QuitGuard from './features/studio/quitGuard'
 import { startKeyGuideWatch } from './features/settings/keyGuideWatch'
 import Header from './components/Header'
 import { UpdateProvider } from './desktop/UpdatePrompt'
@@ -39,6 +40,7 @@ function App() {
         <Header />
         <SettingsReturnListener />
         <KeyGuidePrompt />
+        <QuitGuard />
         <Content>
           <Routes>
             <Route path="/" element={<HomePage />} />

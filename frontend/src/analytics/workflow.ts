@@ -118,6 +118,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     legacy_action: ['start_processing', 'collection', 'export_confirm', 'plan_adjust', 'preferences'],
     suggestion: ['switch_model', 'install_transcription', 'change_material', 'keep_window', 'none'],
     action: ['switch_model', 'install_transcription', 'change_material', 'example'],
+    choice: ['background', 'quit'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     let raw: unknown = input[key]
@@ -129,7 +130,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
   if (typeof input.downgraded === 'boolean') out.downgraded = input.downgraded
-  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'ttfc_ms', 'stage_ms_download', 'stage_ms_transcribe', 'stage_ms_analyze', 'stage_ms_render', 'latency_ms', 'first_frame_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'news_count', 'cinema_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'source_duration_sec', 'attempt_index_on_device', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count', 'retry_count', 'degrade_count', 'billable_calls_before_failure', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls']) {
+  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'ttfc_ms', 'stage_ms_download', 'stage_ms_transcribe', 'stage_ms_analyze', 'stage_ms_render', 'latency_ms', 'first_frame_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'news_count', 'cinema_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'source_duration_sec', 'attempt_index_on_device', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count', 'retry_count', 'degrade_count', 'billable_calls_before_failure', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls', 'eta_initial_min', 'eta_error_ratio', 'running_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {

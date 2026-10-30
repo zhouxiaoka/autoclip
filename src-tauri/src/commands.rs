@@ -99,6 +99,22 @@ pub struct SavedDownload {
 
 /// macOS 打包后的页面在 `tauri://localhost`。`<a download>` 会被 WKWebView 取消，
 /// 因为没有注册下载回调。这里只允许把本机后端的文件写到「下载」文件夹。
+
+#[tauri::command]
+pub async fn hide_to_tray(app_handle: AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("主窗口不存在".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn confirm_quit(app_handle: AppHandle) -> Result<(), String> {
+    quit_app(app_handle).await
+}
+
 #[tauri::command]
 pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDownload, String> {
     let parsed = local_http_url(&url)?;

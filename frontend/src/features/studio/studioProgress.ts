@@ -1,5 +1,7 @@
 /** Project-scale Studio bar. Weights match backend/services/simple_progress.py. */
 
+import { estimate as estimateEta } from './etaModel'
+
 const STAGES: readonly [string, number][] = [
   ['INGEST', 10],
   ['SUBTITLE', 15],
@@ -65,9 +67,14 @@ export interface StudioProgressInput {
     progress_since?: number
     progress_message?: string
     created_at?: string
+    provider?: string
+    run_id?: string
   } | null
-  generation?: { created_at?: string } | null
+  generation?: { created_at?: string; provider?: string; attempt_id?: string } | null
   jobs?: { status: string; percent?: number }[]
+  /** Source duration in seconds (plan.source_duration). */
+  source_duration_sec?: number | null
+  concurrency?: number
 }
 
 export interface StudioProgressView {
@@ -81,6 +88,14 @@ export interface StudioProgressView {
   /** True only for model stages. Download, local transcription and export sit outside the 20-minute model cap. */
   modelBudget: boolean
   detail: string
+  /** R1: remaining minutes, or null when unknown / overrun copy should show instead. */
+  etaMin: number | null
+  /** R1: elapsed exceeded 2× the initial ETA. */
+  etaOverrun: boolean
+  /** R1: show the leave-to-tray hint once SUBTITLE (or later) has started. */
+  canLeave: boolean
+  /** R1: initial total ETA minutes (for telemetry). */
+  etaInitialMin: number | null
 }
 
 /** Download percent must not slide backward. A merge stage keeps the last floor without displaying it. */
@@ -107,6 +122,42 @@ function minutesOf(seconds: number | null): number | null {
   return Math.floor(seconds / 60)
 }
 
+
+const STAGE_ORDER = ['INGEST', 'SUBTITLE', 'ANALYZE', 'HIGHLIGHT', 'EXPORT', 'DONE'] as const
+
+function stageReachedSubtitle(stage: string | undefined, phase: string): boolean {
+  if (phase === 'rendering') return true
+  if (!stage) return false
+  const index = STAGE_ORDER.indexOf(stage as typeof STAGE_ORDER[number])
+  const subtitle = STAGE_ORDER.indexOf('SUBTITLE')
+  return index >= subtitle
+}
+
+function withEta(
+  view: Omit<StudioProgressView, 'etaMin' | 'etaOverrun' | 'canLeave' | 'etaInitialMin'>,
+  input: StudioProgressInput,
+  nowMs: number,
+  stage: string,
+  phase: string,
+): StudioProgressView {
+  const provider = input.generation?.provider || input.analysis?.provider || null
+  const sourceSec = typeof input.source_duration_sec === 'number' && input.source_duration_sec > 0
+    ? input.source_duration_sec
+    : null
+  const started = elapsedSeconds(input.generation?.created_at || input.analysis?.created_at, nowMs) ?? 0
+  const runKey = input.generation?.attempt_id || input.analysis?.run_id || ''
+  const eta = sourceSec != null
+    ? estimateEta(provider, sourceSec / 60, input.concurrency ?? 1, started, { runKey: runKey || undefined })
+    : { etaMin: null, overrun: false, initialMin: null, errorRatio: null }
+  return {
+    ...view,
+    etaMin: eta.etaMin,
+    etaOverrun: eta.overrun,
+    canLeave: stageReachedSubtitle(stage, phase),
+    etaInitialMin: eta.initialMin,
+  }
+}
+
 export function studioRunProgress(input: StudioProgressInput, nowMs: number): StudioProgressView | null {
   const analysis = input.analysis
   const jobs = input.jobs || []
@@ -126,20 +177,20 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
     const base = Math.max(start, carried, measured ? mapped : start)
     const clock = easeClock(analysis.progress_since, nowMs)
     const percent = clampRunning(measured ? base : Math.max(base, easePercent('EXPORT', base, clock)))
-    return {
+    return withEta({
       label: STAGE_LABEL.EXPORT,
       percent,
       approximate: !measured,
       elapsedMinutes,
       modelBudget: false,
       detail: analysis.progress_message || analysis.message || '正在生成可发布成片',
-    }
+    }, input, nowMs, 'EXPORT', phase)
   }
 
   if (phase === 'screening') {
     // Postprocess does not advance yt-dlp's download percent. Do not keep painting that cap.
     if (analysis.message === '正在合并音视频') {
-      return {
+      return withEta({
         label: '正在合并音视频',
         percent: 0,
         approximate: false,
@@ -147,19 +198,19 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
         elapsedMinutes,
         modelBudget: false,
         detail: '',
-      }
+      }, input, nowMs, 'INGEST', phase)
     }
     const measured = typeof analysis.percent === 'number'
     const clock = easeClock(analysis.progress_since, nowMs)
     const percent = clampRunning(measured ? analysis.percent! : easePercent('INGEST', 0, clock))
-    return {
+    return withEta({
       label: measured ? '下载中' : STAGE_LABEL.INGEST,
       percent,
       approximate: !measured,
       elapsedMinutes,
       modelBudget: false,
       detail: analysis.message || '',
-    }
+    }, input, nowMs, 'INGEST', phase)
   }
 
   const transcribing = analysis.message === '正在生成字幕'
@@ -175,12 +226,12 @@ export function studioRunProgress(input: StudioProgressInput, nowMs: number): St
     || (explicit == null && !(transcribing && typeof analysis.percent === 'number') && typeof analysis.progress_percent !== 'number')
   const clock = easeClock(analysis.progress_since, nowMs)
   const eased = approximate ? easePercent(stage, band.start, clock) : reported
-  return {
+  return withEta({
     label: STAGE_LABEL[stage] || STAGE_LABEL.ANALYZE,
     percent: clampRunning(Math.max(reported, eased)),
     approximate,
     elapsedMinutes,
     modelBudget: MODEL_BUDGET_STAGES.has(stage),
     detail: analysis.progress_message || analysis.message || '',
-  }
+  }, input, nowMs, stage, phase)
 }

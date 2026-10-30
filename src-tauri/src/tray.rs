@@ -1,7 +1,7 @@
 use tauri::{
     menu::{MenuBuilder, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 struct TrayLabels([MenuItem<tauri::Wry>; 6]);
@@ -109,8 +109,15 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
                     }
                 }
                 "quit" => {
-                    // 退出应用
-                    app.exit(0);
+                    // R1: let the frontend decide (running projects → confirm dialog).
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.emit(
+                            "close-requested",
+                            serde_json::json!({ "from": "tray" }),
+                        );
+                    } else {
+                        app.exit(0);
+                    }
                 }
                 _ => {}
             }

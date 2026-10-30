@@ -11,6 +11,7 @@ import { analysisFailureText, analysisPageFailure, receiptFailureInfo, failureAc
 import { weakLocalTimelineFailure } from '../../utils/timelineFailure'
 import FailureActions, { FailureCopy } from './FailureActions'
 import { displayedProgress, studioRunProgress } from './studioProgress'
+import { recordSuccess } from './etaModel'
 import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
 import { Scene, Draft } from './types'
@@ -104,10 +105,40 @@ export default function StudioResults({ project, children, onCreateCollection, o
     progressKeySeen.current = progressKey
     progressFloor.current = 0
   }
-  const progressRaw = studioRunProgress(workspace, progressNow)
+  const progressRaw = studioRunProgress({
+    analysis: workspace.analysis,
+    generation: workspace.generation,
+    jobs: workspace.jobs,
+    source_duration_sec: typeof sourceDuration === 'number' ? sourceDuration : null,
+    concurrency: 1,
+  }, progressNow)
   const progressShown = progressRaw && displayedProgress(progressRaw, progressFloor.current)
   if (progressShown) progressFloor.current = progressShown.floor
   const progress = progressShown?.view ?? null
+  const etaPosted = useRef('')
+  useEffect(() => {
+    const initial = progress?.etaInitialMin
+    const attempt = workspace.generation?.attempt_id || workspace.analysis?.run_id || ''
+    if (!initial || !attempt || etaPosted.current === attempt) return
+    etaPosted.current = attempt
+    void studioApi.reportEta(project.id, initial).catch(() => undefined)
+  }, [progress?.etaInitialMin, workspace.generation?.attempt_id, workspace.analysis?.run_id, project.id])
+  useEffect(() => {
+    const status = workspace.generation?.status
+    if (status !== 'completed' && status !== 'partial') return
+    const provider = workspace.generation?.provider || workspace.analysis?.provider
+    const sourceMin = typeof sourceDuration === 'number' && sourceDuration > 0 ? sourceDuration / 60 : 0
+    const started = workspace.generation?.created_at || workspace.analysis?.created_at
+    const stamp = workspace.generation?.attempt_id || started || ''
+    if (!provider || !(sourceMin > 0) || !started || !stamp) return
+    const storageKey = `autoclip.eta.recorded.${project.id}`
+    try { if (sessionStorage.getItem(storageKey) === stamp) return } catch { /* ignore */ }
+    const elapsed = Math.max(0, (Date.now() - Date.parse(started)) / 1000)
+    if (!(elapsed > 0)) return
+    try { sessionStorage.setItem(storageKey, stamp) } catch { /* ignore */ }
+    recordSuccess({ provider, source_min: sourceMin, elapsed_sec: elapsed })
+  }, [workspace.generation?.status, workspace.generation?.attempt_id, workspace.generation?.provider, workspace.generation?.created_at, workspace.analysis?.provider, workspace.analysis?.created_at, sourceDuration, project.id])
+
   const billable = Math.max(workspace.analysis?.billable_calls_before_failure || 0, workspace.generation?.billable_calls_before_failure || 0)
   const failureInfo = (extra?: { error?: string }) => ({
     error: extra?.error ?? workspace.analysis?.error,
@@ -128,9 +159,11 @@ export default function StudioResults({ project, children, onCreateCollection, o
         </div>
         <p className="studio-muted">{[
           progress.elapsedMinutes == null ? '' : progress.elapsedMinutes < 1 ? t('已进行不到 1 分钟') : t('已进行约 {{minutes}} 分钟', { minutes: progress.elapsedMinutes }),
+          progress.etaOverrun ? t('比预期久，但仍在进行') : (progress.etaMin != null ? t('预计还需约 {{minutes}} 分钟', { minutes: progress.etaMin }) : ''),
           progress.modelBudget ? t('模型步骤最多约 20 分钟') : '',
           progress.approximate ? t('进度为估算，以阶段为准') : '',
         ].filter(Boolean).join(' · ')}</p>
+        {progress.canLeave && <p className="studio-muted">{t('可以最小化到托盘，完成后会通知你')}</p>}
         {progress.detail && progress.detail !== progress.label && <p className="studio-muted">{t(progress.detail)}</p>}
         {workspace.analysis?.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}
       </div>}

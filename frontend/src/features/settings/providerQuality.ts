@@ -15,6 +15,8 @@ export type ProviderQuality = {
   success_tier: SuccessTier
   latency_tier: LatencyTier
   caveat_key?: string
+  /** R1: wall seconds per minute of source (optional additive). */
+  sec_per_source_min?: number
 }
 
 type Thresholds = {
@@ -72,12 +74,14 @@ function parseQuality(document: unknown): { thresholds: Thresholds; providers: R
     const latency_tier = latencyTierOf(success_p50_minutes, thresholds)
     if (!success_tier || !latency_tier) continue
     const caveat = typeof row.caveat_key === 'string' ? row.caveat_key.trim() : ''
+    const sec = numberOf(row.sec_per_source_min)
     providers[id] = {
       success_rate,
       success_p50_minutes,
       success_tier,
       latency_tier,
       ...(caveat ? { caveat_key: caveat } : {}),
+      ...(sec !== undefined && sec > 0 ? { sec_per_source_min: sec } : {}),
     }
   }
   return { thresholds, providers }

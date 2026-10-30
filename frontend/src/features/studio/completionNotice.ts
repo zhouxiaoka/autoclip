@@ -118,16 +118,37 @@ export async function applyCompletion(input: {
   return kind
 }
 
-/** Web Notification inside the desktop webview. Dock badge only when Tauri is present. */
+function isDesktopShell(): boolean {
+  return typeof window !== 'undefined' && !!((window as unknown as { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown }).__TAURI_INTERNALS__ || (window as unknown as { __TAURI__?: unknown }).__TAURI__)
+}
+
+/** Desktop prefers the Tauri notification plugin so hidden-to-tray runs still ping. Web falls back to Notification. */
 export function browserTransport(): NoticeTransport {
   return {
-    permission() {
+    async permission() {
+      if (isDesktopShell()) {
+        try {
+          const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification')
+          let granted = await isPermissionGranted()
+          if (!granted) granted = (await requestPermission()) === 'granted'
+          return granted ? 'granted' : 'denied'
+        } catch { /* fall through to web Notification */ }
+      }
       try {
         const value = typeof Notification === 'undefined' ? 'default' : Notification.permission
         return asPermission(value)
       } catch { return 'default' }
     },
-    notify(copy) {
+    async notify(copy) {
+      if (isDesktopShell()) {
+        try {
+          const { sendNotification } = await import('@tauri-apps/plugin-notification')
+          sendNotification({ title: 'AutoClip', body: copy })
+          return {
+            onclick: handler => { handler() },
+          }
+        } catch { /* fall through */ }
+      }
       const note = new Notification(copy)
       return {
         onclick: handler => {
@@ -139,8 +160,7 @@ export function browserTransport(): NoticeTransport {
       }
     },
     async setBadge(count) {
-      const desktop = typeof window !== 'undefined' && !!((window as unknown as { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown }).__TAURI_INTERNALS__ || (window as unknown as { __TAURI__?: unknown }).__TAURI__)
-      if (!desktop) return
+      if (!isDesktopShell()) return
       const { getCurrentWindow } = await import('@tauri-apps/api/window')
       await getCurrentWindow().setBadgeCount(count)
     },

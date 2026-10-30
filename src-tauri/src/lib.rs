@@ -1,7 +1,7 @@
 use crate::backend_manager::BackendManager;
 use crate::commands::*;
 use crate::tray::setup_system_tray;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 mod backend_manager;
 #[cfg(windows)]
@@ -40,6 +40,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             start_backend_service,
             stop_backend_service,
@@ -47,6 +48,8 @@ pub fn run() {
             get_service_status,
             show_main_window,
             quit_app,
+            hide_to_tray,
+            confirm_quit,
             enable_autostart,
             disable_autostart,
             is_autostart_enabled,
@@ -54,6 +57,15 @@ pub fn run() {
             save_local_download
         ])
         .manage(BackendManager::new())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.emit(
+                    "close-requested",
+                    serde_json::json!({ "from": "window" }),
+                );
+            }
+        })
         .setup(|app| {
             // 设置环境变量
             std::env::set_var("AUTOCLIP_DESKTOP_MODE", "true");
