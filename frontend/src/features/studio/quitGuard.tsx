@@ -1,4 +1,4 @@
-/** R1: intercept window close / tray Quit while Studio projects are running. */
+/** Intercept window close / tray Quit while Studio projects are running. */
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'

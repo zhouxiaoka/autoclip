@@ -323,7 +323,9 @@ def _node(payload):
             pytest.fail('node + frontend deps are installed in CI; refusing to skip the v4 chain test')
         pytest.skip('node + frontend deps required')
     out = subprocess.run([node, 'tests/helpers/receipt-flow.cjs'], cwd=ROOT / 'frontend', input=json.dumps(payload),
-                         capture_output=True, text=True, timeout=120, check=True)
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode:
+        raise AssertionError(f'receipt-flow exit {out.returncode}\nSTDERR:\n{out.stderr}\nSTDOUT:\n{out.stdout[:2000]}')
     return json.loads(out.stdout)
 
 

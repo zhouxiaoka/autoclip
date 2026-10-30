@@ -1,4 +1,4 @@
-/** R1 ETA: local history + F1 provider_quality fallback. Pure functions; storage is injectable. */
+/** ETA: local history + provider_quality fallback. Pure functions; storage is injectable. */
 
 import qualityRaw from '@provider-quality'
 

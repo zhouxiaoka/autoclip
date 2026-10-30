@@ -99,7 +99,7 @@ export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
-  /** Runtime attribution; present after the LLM call starts (R1 ETA history). */
+  /** Runtime attribution; present after the LLM call starts (ETA history). */
   provider?: string
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
   billable_calls_before_failure?: number

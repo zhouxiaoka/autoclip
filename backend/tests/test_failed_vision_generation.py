@@ -125,10 +125,11 @@ def test_failed_vision_blocks_generation_api_and_repair_restores_start(tmp_path,
                 assert '未通过校验' in response.json()['detail']
                 assert 'fixture' not in response.text
             assert report['ready'] is (mode == 'subtitle')
-            assert report['checks']['visual'] == (
-                {'ok': True, 'code': 'not_required', 'repair': 'none'} if mode == 'subtitle'
-                else {'ok': False, 'code': 'validation_failed', 'repair': 'settings_vision'}
-            )
+            visual = report['checks']['visual']
+            if mode == 'subtitle':
+                assert visual['ok'] is True and visual['code'] == 'not_required' and visual['repair'] == 'none'
+            else:
+                assert visual['ok'] is False and visual['code'] == 'validation_failed' and visual['repair'] == 'settings_vision'
             assert store.read('project') == original_project
             assert ai.path().read_bytes() == original_settings
             assert dispatched == requests == []

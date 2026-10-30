@@ -109,6 +109,7 @@ test('SenseVoice detail reuses LocalModelPrepare instead of a new wizard', () =>
     './ProviderFields': { default: () => null },
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => React.createElement('div', { 'data-sensevoice': true }, React.createElement('div', { 'data-prepare': 'LocalModelPrepare' })) },
+    './TrialRunPanel': { default: () => null },
   }).default
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   const tree = Detail({
@@ -121,7 +122,7 @@ test('SenseVoice detail reuses LocalModelPrepare instead of a new wizard', () =>
         cover_enabled: false, allow_send_frame: true, analysis_mode: 'auto', allow_visual_screening: true,
         chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
       },
-      lists: {}, busy: {}, listErrors: {}, keyHints: {},
+      lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {},
       selectLocalAsrProvider: () => {},
       setTranscriptionLocal: () => {},
     },

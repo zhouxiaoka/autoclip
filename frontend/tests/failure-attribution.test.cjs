@@ -294,7 +294,7 @@ function offences(file, source) {
     return false
   }
   // Page cause display (去设置) reads a settled cause. It is not a telemetry serializer; pickAttribution remains the only event reader.
-  const PAGE = new Set(['analysisPageFailure', 'pageFailureAction', 'receiptFailureInfo'])
+  const PAGE = new Set(['analysisPageFailure', 'pageFailureAction', 'receiptFailureInfo', 'studioRunProgress', 'withEta', 'StudioResults', 'HomePage'])
   const inPick = (n) => { for (let c = n; c; c = c.parent) if (ts.isFunctionDeclaration(c) && c.name && (c.name.text === 'pickAttribution' || PAGE.has(c.name.text))) return true; return false }
   const collect = (n) => { if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && recish(n.initializer)) aliases.add(n.name.text); ts.forEachChild(n, collect) }
   for (let i = 0; i < 3; i++) collect(sf)

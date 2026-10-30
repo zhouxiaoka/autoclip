@@ -278,7 +278,7 @@ test('X2: FailureActions routes the five kinds', () => {
 })
 })()
 
-// failure-action.test.cjs — R3 resume button copy
+// failure-action.test.cjs — resume button copy
 ;(() => {
 const test = require('node:test')
 const assert = require('node:assert/strict')
@@ -300,7 +300,8 @@ const stubs = {
   '../../utils/externalLinks': { openExternalLink: async () => {} },
   './failureAction': loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts')),
   './SwitchModelDialog': { __esModule: true, default: () => null },
-  './switchModelOptions': {},
+  './switchModelOptions': { listSwitchModelOptions: () => [], usableConnectionCount: () => 0, analysisProviderId: () => null, defaultSwitchOption: () => null },
+    './SwitchModelDialog': { default: () => null },
 }
 runInSandbox(code, {
   module, exports: module.exports, console,

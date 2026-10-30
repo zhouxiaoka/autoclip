@@ -15,7 +15,7 @@ export type ProviderQuality = {
   success_tier: SuccessTier
   latency_tier: LatencyTier
   caveat_key?: string
-  /** R1: wall seconds per minute of source (optional additive). */
+  /** Wall seconds per minute of source (optional additive). */
   sec_per_source_min?: number
 }
 

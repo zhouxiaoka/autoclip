@@ -634,7 +634,7 @@ def run_content(project_id, video, platform_min_sec=None, platform_min_label='',
 
     `platform_min_sec` is forwarded only when a long-form platform was requested, so callers
     that mock the two-argument form keep working for every other platform.
-    R3: `resume`/`fresh` control checkpoint reuse (``pipeline_stamp.json`` + step artifacts).
+    `resume`/`fresh` control checkpoint reuse (``pipeline_stamp.json`` + step artifacts).
     """
     from backend.tasks.processing import process_video_pipeline
     srt = video.parent / 'input.srt'

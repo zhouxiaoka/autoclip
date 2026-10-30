@@ -1,4 +1,4 @@
-"""R3: resume from subtitle / step artifacts when pipeline_stamp matches."""
+"""Resume from subtitle / step artifacts when pipeline_stamp matches."""
 from __future__ import annotations
 
 import json

@@ -132,7 +132,7 @@ test('failure copy names the step and adds billing guidance only after a billabl
   assert.equal(billed.step, '分析')
   assert.notEqual(billed.reason, '错误')
   assert.equal(billed.reason, '模型返回的内容无法使用，请稍后重试。')
-  assert.match(billed.billing, /可能已经由服务商计费/)
+  assert.match(billed.billing, /本次已消耗 1 次请求/)
   assert.equal(billed.billing.includes('元'), false)
   const quiet = failure.presentedFailure({ error: '错误', error_code: 'invalid_response', failure_stage: 'analyze', billable_calls_before_failure: 0 })
   assert.equal(quiet.billing, null)

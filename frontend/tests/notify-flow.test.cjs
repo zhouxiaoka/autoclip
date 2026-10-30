@@ -21,7 +21,9 @@ function load(relative, extra = {}) {
   return exports
 }
 
-const notice = load('../src/features/studio/completionNotice.ts')
+const notice = load('../src/features/studio/completionNotice.ts', {
+  './platformMemory': { markFirstSuccess() {} },
+})
 const overrides = load('../src/features/studio/overrides.ts', {
   '../../analytics/flags': { flagAssigned: () => false },
   '../../analytics/studio': { trackAutoChoiceOverridden() {} },

@@ -437,7 +437,7 @@ class SimplePipelineAdapter:
             self._preflight_llm()
             checkpoint(self.project_id)
 
-            # R3: clear or decide resume before transcription / model steps
+            # Clear or decide resume before transcription / model steps
             video_path = Path(input_video_path)
             srt_candidate = Path(input_srt_path) if input_srt_path else (video_path.parent / 'input.srt')
             if fresh:

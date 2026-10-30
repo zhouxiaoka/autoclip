@@ -503,7 +503,7 @@ class RetryCommand(BaseModel):
     variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
     idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
-    fresh: bool = False  # R3: 「从头重做」clears pipeline cache before resume
+    fresh: bool = False  # 「从头重做」clears pipeline cache before resume
 
 
 @router.post('/{project_id}/retry')
@@ -570,7 +570,7 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
     return {'ok': True, 'analysis_run_id': run_id}
 
 class EtaReport(BaseModel):
-    """R1: first ETA from the desktop progress bar (minutes)."""
+    """First ETA from the desktop progress bar (minutes)."""
     model_config = ConfigDict(extra='forbid')
     eta_initial_min: float = Field(gt=0, le=24 * 60)
 

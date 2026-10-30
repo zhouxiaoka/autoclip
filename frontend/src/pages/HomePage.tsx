@@ -31,7 +31,7 @@ const { Content } = Layout
 const { Title, Text } = Typography
 const { Option } = Select
 
-const HomePage: React.FC = () => {
+export default function HomePage() {
   useTranslation()
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
@@ -315,4 +315,4 @@ const HomePage: React.FC = () => {
   )
 }
 
-export default HomePage
+

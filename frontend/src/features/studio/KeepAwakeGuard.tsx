@@ -3,7 +3,7 @@ import { useProjectStore } from '../../store/useProjectStore'
 import { getKeepAwakeController } from './keepAwake'
 
 /**
- * Watches the project list and drives R2 keep-awake.
+ * Watches the project list and drives keep-awake.
  * Workspace poll also reports via getKeepAwakeController().setSource('workspace:…').
  */
 export default function KeepAwakeGuard() {
