@@ -75,11 +75,19 @@ def file_access_backoff(n=0) -> float:
 
 
 def recovery_options(options: dict) -> dict:
-    """yt-dlp options for one download, including the Windows rename-lock budget."""
-    opts = {**options, 'socket_timeout': 30, 'retries': 2,
-            'fragment_retries': 2, 'extractor_retries': 2,
-            'concurrent_fragment_downloads': 1, 'skip_unavailable_fragments': False,
-            'continuedl': True}
+    """yt-dlp options for one download, including the Windows rename-lock budget.
+
+    Callers may override socket_timeout / retries (inspect_url uses a shorter
+    budget so a timed-out probe does not keep a threadpool worker forever).
+    """
+    opts = dict(options)
+    opts.setdefault('socket_timeout', 30)
+    opts.setdefault('retries', 2)
+    opts.setdefault('fragment_retries', 2)
+    opts.setdefault('extractor_retries', 2)
+    opts.setdefault('concurrent_fragment_downloads', 1)
+    opts.setdefault('skip_unavailable_fragments', False)
+    opts.setdefault('continuedl', True)
     opts.setdefault('file_access_retries', FILE_ACCESS_RETRIES)
     sleeps = dict(opts.get('retry_sleep_functions') or {})
     sleeps.setdefault('file_access', file_access_backoff)

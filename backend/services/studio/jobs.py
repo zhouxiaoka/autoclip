@@ -411,6 +411,10 @@ def _info_thumbnail(info) -> str:
     return ''
 
 
+# Info probe must finish soon after the API's 10s wait_for; download keeps 30s.
+INSPECT_SOCKET_TIMEOUT = 8
+
+
 def inspect_url(url, browser=None):
     """yt-dlp info-only probe before download (F4). Returns metadata for the import preview card."""
     from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
@@ -423,6 +427,11 @@ def inspect_url(url, browser=None):
         'writesubtitles': False,
         'writeautomaticsub': False,
         **ytdlp_js_runtimes(),
+        # Bound the worker so asyncio.wait_for(10) does not leave yt-dlp running for 30s+.
+        'socket_timeout': INSPECT_SOCKET_TIMEOUT,
+        'retries': 0,
+        'extractor_retries': 0,
+        'fragment_retries': 0,
     }
     if browser:
         options['cookiesfrombrowser'] = (browser,)
