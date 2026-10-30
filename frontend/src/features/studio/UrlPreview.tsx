@@ -40,11 +40,26 @@ function routeCopy(preview: UrlInspectPreview): string {
     : t('无字幕，需要本地转写')
 }
 
-function totalEtaLine(durationSec: number | null | undefined): string | null {
+/** Total preview ETA minutes. local_transcription includes ASR + R1 generation. */
+export function totalPreviewEtaMinutes(
+  durationSec: number | null | undefined,
+  route: PreviewRouteKind,
+): number | null {
   if (durationSec == null || !(durationSec > 0)) return null
-  const eta = estimate('dashscope', durationSec / 60, 1, 0)
-  if (eta.etaMin == null) return null
-  return t('预计总耗时约 {{minutes}} 分钟', { minutes: eta.etaMin })
+  const gen = estimate('dashscope', durationSec / 60, 1, 0).etaMin
+  if (route !== 'local_transcription') return gen ?? null
+  const asr = transcriptionEtaMinutes(durationSec)
+  if (asr == null && gen == null) return null
+  // Never show a total shorter than the transcription line when ASR ETA is known.
+  if (asr == null) return gen
+  if (gen == null) return asr
+  return asr + gen
+}
+
+function totalEtaLine(durationSec: number | null | undefined, route: PreviewRouteKind): string | null {
+  const minutes = totalPreviewEtaMinutes(durationSec, route)
+  if (minutes == null) return null
+  return t('预计总耗时约 {{minutes}} 分钟', { minutes })
 }
 
 export default function UrlPreview({
@@ -72,7 +87,7 @@ export default function UrlPreview({
     </div>
   }
   if (!preview) return null
-  const eta = totalEtaLine(preview.duration ?? null)
+  const eta = totalEtaLine(preview.duration ?? null, preview.preview_route)
   return (
     <div className="studio-url-preview" data-testid="url-preview" role="region" aria-label={t('视频预览')}>
       <div className="studio-url-preview-main">

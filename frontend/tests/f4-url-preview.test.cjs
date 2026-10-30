@@ -49,3 +49,58 @@ test('F4: autostart arms only after preview for paste', () => {
   assert.equal(paste.shouldArmAutostart('autostart', 'drop', false), true)
   assert.equal(paste.shouldArmAutostart('button', 'paste', true), false)
 })
+
+
+function loadUrlPreview() {
+  const file = path.join(__dirname, '../src/features/studio/UrlPreview.tsx')
+  const exports = {}
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText
+  runInSandbox(code, {
+    exports,
+    require: (name) => {
+      if (name === '../../i18n') return { t: (s, vars) => vars ? `${s}:${JSON.stringify(vars)}` : s }
+      if (name === '../../ui') return { Btn: 'button' }
+      if (name === 'react/jsx-runtime') return { jsx: (t, p) => ({ t, p }), jsxs: (t, p) => ({ t, p }), Fragment: 'fragment' }
+      if (name === './etaModel') return { estimate: (_p, sourceMin) => ({ etaMin: Math.max(1, Math.round(sourceMin / 15)), optimistic: false, initialMin: 1, errorRatio: null }) }
+      if (name === './planningCopy') return { VISUAL_SOURCE_TOO_LONG_MESSAGE: '画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。' }
+      if (name === './importReadiness') return readiness
+      return {}
+    },
+  })
+  return exports
+}
+
+const preview = loadUrlPreview()
+
+test('F4: totalPreviewEtaMinutes adds ASR for local_transcription', () => {
+  // 30 min source → transcriptionEtaMinutes=30; mock gen ≈ round(30/15)=2 → total 32
+  assert.equal(preview.totalPreviewEtaMinutes(1800, 'local_transcription'), 32)
+  assert.equal(preview.totalPreviewEtaMinutes(1800, 'platform_subtitle'), 2)
+  assert.equal(preview.totalPreviewEtaMinutes(1800, 'visual'), 2)
+  assert.equal(preview.totalPreviewEtaMinutes(null, 'local_transcription'), null)
+})
+
+test('F4: local_transcription total never shorter than transcription ETA alone', () => {
+  // Force gen missing: reload with estimate returning null
+  const file = path.join(__dirname, '../src/features/studio/UrlPreview.tsx')
+  const exports = {}
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText
+  runInSandbox(code, {
+    exports,
+    require: (name) => {
+      if (name === '../../i18n') return { t: s => s }
+      if (name === '../../ui') return { Btn: 'button' }
+      if (name === 'react/jsx-runtime') return { jsx: () => null, jsxs: () => null, Fragment: 'fragment' }
+      if (name === './etaModel') return { estimate: () => ({ etaMin: null, optimistic: false, initialMin: null, errorRatio: null }) }
+      if (name === './planningCopy') return { VISUAL_SOURCE_TOO_LONG_MESSAGE: 'x' }
+      if (name === './importReadiness') return readiness
+      return {}
+    },
+  })
+  assert.equal(exports.totalPreviewEtaMinutes(1800, 'local_transcription'), 30)
+  assert.equal(exports.totalPreviewEtaMinutes(1800, 'platform_subtitle'), null)
+})
