@@ -126,3 +126,13 @@
 .ac-import-setup-side .studio-link{font-size:12.5px}
 .studio-more-platform{margin:0 0 16px;padding:14px 16px;border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-card);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
 .studio-more-platform .studio-muted{margin:0}
+
+.studio-url-preview{margin:16px 0;padding:14px;border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-card)}
+.studio-url-preview-main{display:flex;gap:14px;align-items:flex-start}
+.studio-url-preview-thumb{width:120px;height:68px;object-fit:cover;border-radius:8px;background:var(--ac-line-2);flex:none}
+.studio-url-preview-thumb.is-empty{display:block}
+.studio-url-preview-meta{min-width:0;flex:1}
+.studio-url-preview-title{display:block;font-size:14px;font-weight:500;line-height:1.4;margin-bottom:4px;overflow-wrap:anywhere}
+.studio-url-preview-route{margin:6px 0 0;font-size:13px;color:var(--ac-ink)}
+.studio-url-preview-warn{margin:8px 0 0;font-size:12.5px;color:var(--ac-error)}
+.studio-url-preview-actions{margin-top:12px}

@@ -250,6 +250,10 @@
       "status": "core",
       "domain": "studio"
     },
+    "import_preview_shown": {
+      "status": "keep",
+      "domain": "studio"
+    },
     "studio_screen_finished": {
       "status": "core",
       "domain": "studio"

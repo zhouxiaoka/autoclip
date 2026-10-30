@@ -1,4 +1,5 @@
 """Unified creative workspace. Legacy projects are adapted, never overwritten."""
+import asyncio
 import json
 import uuid
 from pathlib import Path
@@ -82,6 +83,56 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
 def import_readiness():
     from backend.services.studio import readiness
     return readiness.report()
+
+
+class InspectUrlBody(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    url: str = Field(min_length=8, max_length=2000)
+    browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = None
+    analysis_mode: Optional[Literal['auto', 'subtitle', 'visual']] = None
+
+
+@router.post('/inspect-url')
+async def inspect_url(body: InspectUrlBody):
+    """F4: info-only probe before download. 10 s timeout; cookie/private failures reuse download recovery."""
+    from backend.core.failure_codes import user_visible_error
+    from backend.pipeline.failures import PipelineFailure
+    parsed = urlparse(body.url.strip())
+    host = (parsed.hostname or '').lower()
+    if parsed.scheme != 'https' or parsed.username or parsed.password or not any(
+        host == d or host.endswith('.' + d) for d in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')
+    ):
+        raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
+    from backend.services.studio import planning
+    mode = body.analysis_mode
+    if mode is None:
+        mode = planning.preferred_analysis_mode() or 'auto'
+    try:
+        meta = await asyncio.wait_for(
+            run_in_threadpool(jobs.inspect_url, body.url.strip(), body.browser),
+            timeout=10,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, '读取视频信息超时，请稍后重试') from None
+    except PipelineFailure as error:
+        raise HTTPException(
+            422,
+            {'error_code': error.code or 'source_blocked', 'message': error.user_message()},
+        ) from None
+    except Exception as error:
+        coded = getattr(error, 'error_code', None) or getattr(error, 'code', None)
+        message = user_visible_error(error)
+        if coded:
+            raise HTTPException(422, {'error_code': coded, 'message': message}) from None
+        raise HTTPException(422, message or '无法读取视频信息') from None
+    route = planning.preview_route(
+        meta.get('duration'),
+        bool(meta.get('has_manual_subtitle')),
+        meta.get('has_audio'),
+        mode,
+    )
+    return {**meta, **route}
+
 
 
 @router.get('/capabilities')

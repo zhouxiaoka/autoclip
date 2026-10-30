@@ -138,6 +138,42 @@ def download_with_recovery(url: str, options: dict):
             raise
 
 
+def extract_info_with_recovery(url: str, options: dict):
+    """Info-only extract (skip_download). Same cookie / access recovery as download_with_recovery."""
+    opts = recovery_options({**options, 'skip_download': True, 'quiet': True, 'noplaylist': True})
+    # Info probes never need rename retries or continuedl fragments.
+    opts.pop('continuedl', None)
+    youtube = urlparse(url).hostname in {'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'}
+    public_site = youtube or urlparse(url).hostname in {'bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'b23.tv'}
+    retried_cookies = False
+    while True:
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if not isinstance(info, dict):
+                raise RuntimeError('无法读取视频信息，请检查链接后重试。')
+            return info
+        except (yt_dlp.utils.DownloadError, CookieLoadError) as error:
+            if opts.get('cookiesfrombrowser') and _browser_cookie_permission_failure(error):
+                if public_site and not opts.get('cookiefile') and not retried_cookies:
+                    retried_cookies = True
+                    opts.pop('cookiesfrombrowser')
+                    continue
+                _raise_cookie_access()
+            text = str(error).lower()
+            if retried_cookies:
+                _raise_cookie_access()
+            blocked = _BLOCKED_HTTP_ERROR.search(text)
+            if blocked:
+                raise PipelineFailure('INGEST', SOURCE_BLOCKED_HINT, code=SOURCE_BLOCKED_CODE,
+                                      http_status=int(blocked[1])) from None
+            kind = _link_failure(text)
+            if kind:
+                code, hint = kind
+                raise PipelineFailure('INGEST', hint, code=code) from None
+            raise
+
+
 def _raise_cookie_access():
     """The browser cookie database could not be read.
 

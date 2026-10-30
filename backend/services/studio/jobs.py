@@ -368,6 +368,83 @@ def _classify_landed_source(video, options=None):
         raise failure
 
 
+def _platform_subtitle_code(info):
+    """Language-matched manual subtitle code from yt-dlp info (not auto-captions)."""
+    language = str((info or {}).get('language') or '').lower()
+    manual = (info or {}).get('subtitles') or {}
+    return next(
+        (c for c in manual if language and (c.lower() == language or c.lower().split('-')[0] == language)),
+        None,
+    )
+
+
+def _info_has_audio(info) -> bool | None:
+    """True/False when formats declare audio; None when unknown (treat as present)."""
+    formats = (info or {}).get('formats') or []
+    root = (info or {}).get('acodec')
+    if root not in (None, 'none') and root:
+        return True
+    if not formats:
+        return None
+    has_audio = any(f.get('acodec') not in (None, 'none') for f in formats)
+    has_video = any(f.get('vcodec') not in (None, 'none') for f in formats)
+    if has_audio:
+        return True
+    if has_video:
+        return False
+    return None
+
+
+def _info_max_height(info) -> int:
+    formats = (info or {}).get('formats') or []
+    return max((f.get('height') or 0 for f in formats if f.get('vcodec') not in (None, 'none')), default=0)
+
+
+def _info_thumbnail(info) -> str:
+    thumb = str((info or {}).get('thumbnail') or '')
+    if thumb.startswith('http'):
+        return thumb[:500]
+    for item in (info or {}).get('thumbnails') or []:
+        url = str((item or {}).get('url') or '')
+        if url.startswith('http'):
+            return url[:500]
+    return ''
+
+
+def inspect_url(url, browser=None):
+    """yt-dlp info-only probe before download (F4). Returns metadata for the import preview card."""
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
+    from backend.utils.download_recovery import extract_info_with_recovery
+    options = {
+        'skip_download': True,
+        'quiet': True,
+        'noplaylist': True,
+        'ffmpeg_location': get_ffmpeg_path(),
+        'writesubtitles': False,
+        'writeautomaticsub': False,
+        **ytdlp_js_runtimes(),
+    }
+    if browser:
+        options['cookiesfrombrowser'] = (browser,)
+    info = extract_info_with_recovery(url, options)
+    code = _platform_subtitle_code(info)
+    duration = info.get('duration')
+    try:
+        duration = float(duration) if duration is not None else None
+    except (TypeError, ValueError):
+        duration = None
+    return {
+        'title': str(info.get('title') or '')[:200],
+        'duration': duration,
+        'has_manual_subtitle': bool(code),
+        'language': str(info.get('language') or '')[:32] or None,
+        'max_height': _info_max_height(info) or None,
+        'thumbnail': _info_thumbnail(info) or None,
+        'has_audio': _info_has_audio(info),
+    }
+
+
+
 def download(project_id, url, browser, import_options=None):
     from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
     folder = store.directory(project_id) / 'raw'
@@ -480,9 +557,7 @@ def _fetch_platform_subtitles(url, options, info, folder):
     two hours of audio. Automatic captions are not used: they have no punctuation and repeat
     rolling lines, which breaks sentence-based cut points. Any problem keeps speech recognition.
     """
-    language = str(info.get('language') or '').lower()
-    manual = info.get('subtitles') or {}
-    code = next((c for c in manual if language and (c.lower() == language or c.lower().split('-')[0] == language)), None)
+    code = _platform_subtitle_code(info)
     target = folder / 'input.srt'
     if not code or target.exists():
         return False

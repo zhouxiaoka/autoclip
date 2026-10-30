@@ -292,6 +292,17 @@
     "quit_choice": [
       "background",
       "quit"
+    ],
+    "import_preview_route": [
+      "platform_subtitle",
+      "local_transcription",
+      "visual"
+    ],
+    "import_duration_bucket": [
+      "short",
+      "medium",
+      "long",
+      "unknown"
     ]
   },
   "attribution": {
@@ -729,6 +740,25 @@
       "required": [
         "error_code"
       ]
+    },
+    "import_preview_shown": {
+      "status": "keep",
+      "domain": "studio",
+      "required": [
+        "route",
+        "duration_bucket",
+        "has_platform_subtitle"
+      ],
+      "enums": {
+        "route": "import_preview_route",
+        "duration_bucket": "import_duration_bucket"
+      },
+      "optional_properties": {
+        "has_platform_subtitle": {
+          "description": "True when yt-dlp reported a language-matched manual subtitle track.",
+          "format": "boolean"
+        }
+      }
     },
     "studio_screen_finished": {
       "status": "core",

@@ -21,19 +21,20 @@ function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(va
 test('quick import submits platform targets, branding and auto-starts to results',async()=>{
  const calls=[],navigations=[];let index=0
  const ready={analysis_mode:'auto',ready:true,checks:{analysis:{ok:true,code:'configured',repair:'none'},transcription:{ok:true,code:'whisper_installed',repair:'none'},visual:{ok:true,code:'optional',repair:'none'},ffmpeg:{ok:true,code:'available',repair:'none'}}}
- const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[false,()=>{}],[null,()=>{}],[{open:false,durationSec:null},()=>{}]]
+ const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[false,()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[null,()=>{}],[null,()=>{}],[false,()=>{}],[false,()=>{}],[{open:false,durationSec:null,trigger:'button'},()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
   react:{useState:()=>states[index++],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog',StatusDot:'status'},'./PlatformPicker':{default:'platform-picker'},
-  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){},trackAsrReadiness(){},trackOneClickStarted(){},trackOneClickUndone(){},trackAutoChoiceOverridden(){}},'../../analytics/workflow':{telemetryId:()=>'t-importflow-aaaaaaaa'},'../../analytics/experience':{trackExperience(){}},
+    './UrlPreview': { default: 'url-preview' },
+  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},inspectUrl:async()=>({title:'t',duration:60,preview_route:'platform_subtitle',has_manual_subtitle:true}),readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){},trackAsrReadiness(){},trackOneClickStarted(){}, trackImportPreviewShown(){},trackOneClickUndone(){},trackAutoChoiceOverridden(){}},'../../analytics/workflow':{telemetryId:()=>'t-importflow-aaaaaaaa'},'../../analytics/experience':{trackExperience(){}},
   '../../analytics/flags':{useFlag:()=>false,flagEnabled:()=>false,flagValue:()=>'button',flagAssigned:()=>false,featureSnapshot:()=>({pkg_templates_v1:false})},
   './TemplatePicker':{default:'template-picker',templateImportFields:()=>({})},
   './StyleProbeLine':{default:'style-probe'},
   './editingStyleSession':{readStyle:()=>({key:'',status:'idle',result:null,latencyMs:0})},
-  './platformLabel':{platformLabel:id=>id},'./platformMemory':{readRememberedPlatforms:()=>null,resolvePlatforms:()=>({platforms:['douyin'],source:'user'}),samePlatforms:()=>true,writeRememberedPlatforms(){}},
-  './pasteStart':{claimBackgroundWhisperInstall:()=>false,importUrlKind:()=>null,isVideoFile:()=>false,shouldAutoStart:()=>false,shouldBackgroundInstallWhisper:()=>false,UNDO_MS:3000},
+  './platformLabel':{platformLabel:id=>id},'./platformMemory':{readRememberedPlatforms:()=>null,resolvePlatforms:()=>({platforms:['douyin'],source:'user'}),samePlatforms:()=>true,takeReuseImport:()=>null, writeRememberedPlatforms(){}},
+  './pasteStart':{claimBackgroundWhisperInstall:()=>false,importUrlKind: text => { try { const u = new URL(String(text||'').trim()); if (u.protocol!=='https:') return null; const h=u.hostname.toLowerCase(); if (h==='youtu.be'||h==='youtube.com'||h.endsWith('.youtube.com')) return 'youtube'; if (h==='b23.tv'||h==='bilibili.com'||h.endsWith('.bilibili.com')) return 'bilibili'; return null } catch { return null } },isVideoFile:()=>false,shouldArmAutostart: () => false, shouldAutoStart:()=>false,shouldBackgroundInstallWhisper:()=>false,UNDO_MS:3000},
   './importPreferencesStore':{readImportPreferences:()=>null},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
@@ -352,6 +353,7 @@ async function mountImport(window, React, h, calls, options = {}) {
     },
     './api': {
       studioApi: {
+        inspectUrl: async () => ({ title: 't', duration: 600, preview_route: 'platform_subtitle', has_manual_subtitle: true, has_audio: true }),
         readiness: async () => ready,
         readinessProbe: async () => ready,
         platformStrategies: async () => ({ strategies: [] }),
@@ -360,10 +362,12 @@ async function mountImport(window, React, h, calls, options = {}) {
       errorText: value => String(value),
       errorCode: () => undefined,
     },
-    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted(payload) { started.push(payload) }, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
+    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted(payload) { started.push(payload) }, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-long' },
     '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: key => options.flagValue?.(key) ?? 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
     '../../analytics/experience': { trackExperience() {} },
+    './UrlPreview': { default: () => null },
+    './ImportSetupCard': { default: () => null },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
     './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },

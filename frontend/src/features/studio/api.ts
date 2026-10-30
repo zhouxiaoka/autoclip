@@ -39,6 +39,19 @@ export const studioApi = {
     captureBusinessEvent('studio_auto_frame_finished', safeStudioProperties({ ...props, outcome: 'completed', framing_outcome: framed ? 'framed' : 'no_detection', framed_count: framed, scene_count: result.scenes.length, fit_count: result.scenes.reduce((n,s) => n + s.fit_shots, 0) }))
   }, { ...workflow.context(pid), trigger, ...draftProperties(draft) }),
   readiness: (): Promise<ImportReadiness> => api.get('/studio/readiness'),
+  /** F4: info-only URL probe before download (10s). */
+  inspectUrl: (body: { url: string; browser?: string; analysis_mode?: string }): Promise<{
+    title?: string | null
+    duration?: number | null
+    thumbnail?: string | null
+    has_manual_subtitle?: boolean
+    has_audio?: boolean | null
+    language?: string | null
+    max_height?: number | null
+    preview_route: 'platform_subtitle' | 'local_transcription' | 'visual'
+    recommended_analysis?: 'subtitle' | 'visual'
+    warn_visual_too_long?: boolean
+  }> => api.post('/studio/inspect-url', body, { timeout: 10000 }),
   /* the install-recovery probe (probeConfig: one attempt, READINESS_TIMEOUT_MS, the round's
 signal); every HTTP answer (even a 500) is seen. */
   readinessProbe: (signal: AbortSignal): Promise<ImportReadiness> => api.get('/studio/readiness', probeConfig(signal)),
