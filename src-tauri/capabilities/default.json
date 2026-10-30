@@ -73,7 +73,6 @@
     "process:default",
     "deep-link:default",
     "clipboard-manager:allow-read-text",
-    "notification:default",
-    "allow-set-keep-awake"
+    "notification:default"
   ]
 }

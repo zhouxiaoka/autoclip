@@ -217,6 +217,7 @@ def decide_resume(
     prompt_files: dict | None = None,
     fresh: bool = False,
     clips_only: bool = False,
+    invalidate: bool = False,
 ) -> dict[str, Any]:
     """Decide what to skip.
 
@@ -228,6 +229,10 @@ def decide_resume(
 
     When clips_only=True (Studio one-pass), a non-empty step4_titles.json plus a
     matching stamp means start_step='done' even if step1–3 were never written.
+
+    invalidate: when True and stamp_ok is False, clear stale step2/3/4 artifacts
+    (write/run path — simple_pipeline_adapter). Default False keeps this a pure
+    read so GET /studio polling via resume_point_for_project cannot unlink files.
     """
     metadata_dir = Path(metadata_dir)
     video = Path(video)
@@ -244,9 +249,10 @@ def decide_resume(
     skip_transcription = srt_reusable(video, srt, stamp)
     stamp_ok = model_matches(stamp, prompt_files)
 
-    if not stamp_ok:
+    if not stamp_ok and invalidate:
         # P1 #7: invalidate stale step2/3/4 from the previous model/prompt.
         # Keep SRT + stamp (stamp is rewritten after the next successful step).
+        # Only the adapter write path passes invalidate=True; read/polling must not.
         clear_step_artifacts(metadata_dir)
 
     if not skip_transcription:

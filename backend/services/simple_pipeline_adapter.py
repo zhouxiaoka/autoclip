@@ -451,6 +451,7 @@ class SimplePipelineAdapter:
                 prompt_files=prompt_files,
                 fresh=fresh,
                 clips_only=clips_only,
+                invalidate=True,
             ) if resume else {
                 'resumed_from': 'none',
                 'skip_transcription': bool(input_srt_path and Path(input_srt_path).exists()),
