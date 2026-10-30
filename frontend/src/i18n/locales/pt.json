@@ -2069,5 +2069,14 @@
   "速率 ⚠（出现限流，长视频建议降并发）": "Taxa ⚠ (limite de taxa — reduza a concorrência em vídeos longos)",
   "输出格式 ✓": "Formato de saída ✓",
   "输出格式 ✗": "Formato de saída ✗",
-  "预计 30 分钟素材约需 {{n}} 次请求、约 {{m}} 分钟": "Para ~30 min de material: ~{{n}} solicitações, ~{{m}} min"
+  "预计 30 分钟素材约需 {{n}} 次请求、约 {{m}} 分钟": "Para ~30 min de material: ~{{n}} solicitações, ~{{m}} min",
+  "大概率解析失败，不建议做分析": "Provável falha de análise — não recomendado",
+  "推荐 qwen2.5:7b / 14b（中文）或 llama3.1:8b": "Recomendado: qwen2.5:7b / 14b (chinês) ou llama3.1:8b",
+  "一键拉取": "Baixar",
+  "正在拉取…": "Baixando…",
+  "正在拉取 {{model}}… {{pct}}%": "Baixando {{model}}… {{pct}}%",
+  "已拉取 {{model}}": "{{model}} baixado",
+  "拉取失败，请确认本机 Ollama 已启动。": "Falha ao baixar. Confirme que o Ollama está em execução.",
+  "当前型号 {{size}}，大概率解析失败，不建议做分析。建议 ≥7B 且上下文 ≥8k。": "Modelo atual {{size}}: falha provável. Prefira ≥7B e contexto ≥8k.",
+  "当前型号 {{size}}。分析建议 ≥7B 且上下文 ≥8k。": "Modelo atual {{size}}. Para análise: ≥7B e contexto ≥8k."
 }

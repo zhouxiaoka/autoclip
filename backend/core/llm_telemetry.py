@@ -64,7 +64,7 @@ LLM_REQUEST_FIELDS: frozenset[str] = frozenset({
     "success_rate_schema_version", "provider", "model", "base_url_host", "kind",
     "stage", "http_status", "upstream_error_type", "prompt_tokens",
     "completion_tokens", "reasoning_tokens", "retry_count", "degrade_count",
-    "duration_ms", "outcome", "finish_reason",
+    "duration_ms", "outcome", "finish_reason", "model_params_b",
 })
 ASR_READINESS_FIELDS: frozenset[str] = frozenset({
     "success_rate_schema_version", "provider", "code", "has_subtitle", "blocked",
@@ -258,6 +258,17 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
     model = sanitize_model(_as_str(raw.get("model")))
     if model is not None and kind in {"request", "run"}:
         out["model"] = model
+    if kind in {"request", "run"}:
+        params = raw.get("model_params_b")
+        if not isinstance(params, (int, float)) or isinstance(params, bool):
+            try:
+                from backend.core.model_registry import infer_params_b_from_name
+                params = infer_params_b_from_name(out.get("model") or _as_str(raw.get("model")))
+            except Exception:  # noqa: BLE001
+                params = None
+        if isinstance(params, (int, float)) and not isinstance(params, bool) and float(params) > 0:
+            # Store as tenths so 3.8B survives the integer count helper.
+            out["model_params_b"] = round(float(params), 1)
     host = hostname_of_base_url(_as_str(raw.get("base_url")) or _as_str(raw.get("base_url_host")))
     if host is None and isinstance(raw.get("base_url_host"), str):
         candidate = raw["base_url_host"].strip().lower()

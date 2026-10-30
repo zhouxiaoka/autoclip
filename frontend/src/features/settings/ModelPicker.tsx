@@ -8,6 +8,8 @@ import { endpointProviderReady } from './endpointProvider'
 import { connectionReady, type Role } from './modelSettingsLogic'
 import { isKnownWeakLocalTimelineModel } from './weakLocalTimeline'
 import WeakLocalTimelineNote from './WeakLocalTimelineNote'
+import LocalRecommendPull from './LocalRecommendPull'
+import { belowLocalAnalysisGate, localAnalysisWarnCopy, localModelSizeLabel } from './localModelGate'
 
 export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSettings['analysis_mode']) {
   if (role === 'cover') return models.filter(m => m.image)
@@ -41,9 +43,28 @@ export default function ModelPicker({ role, model, capability, connection, list,
   const custom = search.trim()
   const allowCustom = endpointReady && (role !== 'transcription' || connection?.provider === 'compatible')
   const customOption = allowCustom && custom && !models.some(m => m.id === custom) ? [{ value: custom, label: `${t('使用自定义型号')}：${custom}` }] : []
-  const tag = (m: ModelEntry) => role === 'analysis' || role === 'vision'
-    ? (m.capability ? ` · ${m.capability === 'multimodal' ? t('多模态') : t('仅文字')}` : '')
-    : role === 'transcription' && m.asr_note ? ` · ${t(m.asr_note)}` : ''
+  const localProvider = connection?.provider === 'ollama' || connection?.provider === 'lmstudio'
+  const tag = (m: ModelEntry) => {
+    if (role === 'transcription') return m.asr_note ? ` · ${t(m.asr_note)}` : ''
+    const bits: string[] = []
+    if ((role === 'analysis' || role === 'vision') && m.capability) {
+      bits.push(m.capability === 'multimodal' ? t('多模态') : t('仅文字'))
+    }
+    if (localProvider && (role === 'analysis' || role === 'vision')) {
+      const size = localModelSizeLabel(m, connection?.provider)
+      if (size) bits.push(size)
+    }
+    return bits.length ? ` · ${bits.join(' · ')}` : ''
+  }
+  const optionLabel = (m: ModelEntry) => {
+    const base = `${m.id}${tag(m)}`
+    if (role === 'analysis' && localProvider && belowLocalAnalysisGate(m)) {
+      return `${base} ⚠`
+    }
+    return base
+  }
+  const selectedEntry = model ? models.find(m => m.id === model) || list?.models.find(m => m.id === model) : undefined
+  const gateWarn = role === 'analysis' && localProvider && belowLocalAnalysisGate(selectedEntry || (model ? { id: model } : null))
   const unknownCapability = (role === 'analysis' || role === 'vision') && !!model && !!connection && !list?.models.find(m => m.id === model)?.capability
   const weakTimeline = role === 'analysis' && isKnownWeakLocalTimelineModel(connection?.provider, model, connection?.base_url)
   const stale = !!connection && connectionReady(connection) && !busy && (!!listError || !list || list.source !== 'live')
@@ -55,7 +76,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
       placeholder={busy ? t('正在获取可用模型…') : t(role === 'transcription' && connection?.provider !== 'compatible' ? '选择转写模型' : '选择或搜索模型，也可手动输入模型名')}
       loading={busy} optionFilterProp="value"
       notFoundContent={t(role === 'cover' ? '该服务没有可用的生图模型。' : '暂无可用模型，请检查 API Key 后刷新。')}
-      options={[...customOption, ...models.map(m => ({ value: m.id, label: `${m.id}${tag(m)}`, disabled: role === 'transcription' && !m.asr_supported }))]}
+      options={[...customOption, ...models.map(m => ({ value: m.id, label: optionLabel(m), disabled: role === 'transcription' && !m.asr_supported }))]}
       onChange={(value: string) => { onChange(value); setOpen(false) }} />
     {(actions || stale) && <div className="ac-model-control-action">
       {actions}
@@ -64,6 +85,18 @@ export default function ModelPicker({ role, model, capability, connection, list,
     {(listError || warning) && <p className="ac-note ac-note--error">{listError || warning}</p>}
     {unknownCapability && onCapability && <Select aria-label={t('自定义模型类型')} style={{ width: '100%', marginTop: 8 }} value={capability || 'auto'}
       options={[{ value: 'auto', label: t('自动识别') }, { value: 'multimodal', label: t('多模态') }, { value: 'text', label: t('仅文字') }]} onChange={onCapability} />}
+    {gateWarn && (
+      <p className="ac-note ac-note--error" role="status" data-testid="local-model-gate-warn" style={{ color: '#b91c1c' }}>
+        {t(localAnalysisWarnCopy())}
+      </p>
+    )}
+    {role === 'analysis' && connection?.provider === 'ollama' && (
+      <LocalRecommendPull
+        provider={connection.provider}
+        baseUrl={connection.base_url}
+        onPulled={(id) => { onChange(id); onRefresh() }}
+      />
+    )}
     {weakTimeline && <WeakLocalTimelineNote />}
     {role === 'transcription' && models.length > 0 && !models.some(m => m.asr_supported) && <p className="ac-note">{t('该供应商的 ASR 尚未适配字幕时间戳，请选择阿里云、OpenAI 或本地 Whisper。')}</p>}
     {role === 'transcription' && (list?.preview || models.some(m => m.asr_preview)) && !model && !(warning || listError) && <small className="ac-note">{t('模型目录可预览；实际可用性以账号权限和服务商开通状态为准。')}</small>}
