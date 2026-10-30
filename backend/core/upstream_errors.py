@@ -466,7 +466,13 @@ def _with_quota_signals(text: str, signals: tuple[list[str], bool]) -> str:
 
 
 def _classify_gemini_quota(blob: str) -> UpstreamErrorType | None:
-    """PerMinute or a RetryInfo delay is RPM. Only an all-PerDay quota with no delay is exhausted."""
+    """Classify Gemini quota signals.
+
+    Order: PerMinute → rate limit; all-PerDay → exhausted (even with RetryInfo);
+    delay alone (no PerDay/PerMinute id) → rate limit. Gemini RPD 429s often
+    include a day-scale retryDelay; treating that as RPM burned ~10 minutes of
+    capped retries before surfacing insufficient_quota.
+    """
     ids = re.findall(r"ac_quota_id=([^\s]+)", blob)
     has_delay = "ac_retry_delay=" in blob
     if not ids and not has_delay:
@@ -474,10 +480,12 @@ def _classify_gemini_quota(blob: str) -> UpstreamErrorType | None:
         ids = [item.lower() for item in ids]
     if not ids and not has_delay:
         return None
-    if any(_per_minute(item) for item in ids) or has_delay:
+    if any(_per_minute(item) for item in ids):
         return UpstreamErrorType.RATE_LIMITED
     if ids and all(_per_day(item) for item in ids):
         return UpstreamErrorType.INSUFFICIENT_QUOTA
+    if has_delay:
+        return UpstreamErrorType.RATE_LIMITED
     return None
 
 
