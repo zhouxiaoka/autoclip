@@ -1,3 +1,4 @@
+import { markFirstSuccess } from './platformMemory'
 /** Completion notices for one generation. The first snapshot only records it,
  * so opening an already finished project stays quiet. Later changes notify once. */
 
@@ -24,6 +25,7 @@ export type NoticeTransport = {
 }
 
 const NOTICE_KEY = 'autoclip.notices.v1'
+
 
 export const NOTICE_COPY: Record<NoticeKind, string> = {
   first_clip: '第一条成片已经做好',
@@ -98,6 +100,10 @@ export async function applyCompletion(input: {
   onOpened?: (kind: NoticeKind, permission: NoticePermission) => void
 }): Promise<NoticeKind | null> {
   if (!input.enabled || !input.projectKey || !input.view) return null
+  // T1: stamp device first success in localStorage (independent of notice session storage).
+  if (input.view.status === 'completed' || input.view.status === 'partial') {
+    try { markFirstSuccess() } catch { /* optional */ }
+  }
   const next = nextNotices(readMemory(input.storage, input.projectKey), input.view)
   try { writeMemory(input.storage, input.projectKey, next.memory) } catch { /* the in-app line can still show */ }
   const kind = next.kinds[0] || null

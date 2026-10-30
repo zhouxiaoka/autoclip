@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { t } from '../../i18n'
+import { getLocale, t } from '../../i18n'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Project, Clip } from '../../store/useProjectStore'
@@ -25,6 +25,7 @@ import { workflow } from '../../analytics/observer'
 import { legacyEntrypointsHidden } from './legacyEntrypoints'
 import { clearCompletionBadge, subscribeCompletionNotice, type NoticeKind } from './noticeRuntime'
 import { noticeCopy } from './completionNotice'
+import { dismissMorePlatformBanner, hasSuccessHistory, morePlatformBannerSeen, stashReuseImport, suggestAnotherPlatform } from './platformMemory'
 import { followOutputLeave } from './overrides'
 
 import './studio.css'
@@ -147,8 +148,41 @@ export default function StudioResults({ project, children, onCreateCollection, o
     billable_calls_before_failure: billable,
   })
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
+  const genDone = workspace.generation?.status === 'completed' || workspace.generation?.status === 'partial'
+  const [showMorePlatform, setShowMorePlatform] = useState(() => genDone && hasSuccessHistory() && !morePlatformBannerSeen())
+  useEffect(() => {
+    if (!genDone) return
+    if (hasSuccessHistory() && !morePlatformBannerSeen()) setShowMorePlatform(true)
+  }, [genDone, workspace.generation?.status])
+  const alreadyPlatforms = workspace.generation?.requested_platforms || []
+  const morePlatformId = suggestAnotherPlatform(getLocale(), alreadyPlatforms)
+  const morePlatformLabel = morePlatformId === 'xiaohongshu' ? t('小红书')
+    : morePlatformId === 'youtube_shorts' ? 'Shorts'
+    : platformLabel(morePlatformId)
+  const startAnotherPlatform = () => {
+    dismissMorePlatformBanner()
+    setShowMorePlatform(false)
+    stashReuseImport({
+      platforms: [morePlatformId],
+      sourceUrl: project.source_url || undefined,
+      sourceMeta: {
+        source_url: project.source_url,
+        source_file: project.source_file,
+        video_path: project.video_path,
+        project_id: project.id,
+      },
+    })
+    navigate('/')
+  }
   return <div className="studio-results">
     {doneNote && <p className="studio-done-note" role="status">{t(noticeCopy(doneNote))}</p>}
+    {showMorePlatform && genDone && <div className="studio-more-platform" role="status" data-testid="t1-more-platform">
+      <p className="studio-muted">{morePlatformId === 'xiaohongshu' ? t('也可以再做一个小红书版本') : morePlatformId === 'youtube_shorts' ? t('也可以再做一个 Shorts 版本') : t('也可以再做一个{{platform}}版本', { platform: morePlatformLabel })}</p>
+      <div className="studio-actions">
+        <Btn size="sm" variant="cta" onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>
+        <Btn size="sm" variant="text" onClick={() => { dismissMorePlatformBanner(); setShowMorePlatform(false) }}>{t('知道了')}</Btn>
+      </div>
+    </div>}
     {managed && !automatic && !hideLegacy && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={automatic ? (workspace.output_variants?.length || 0) : workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={automatic ? generationDescription : visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
