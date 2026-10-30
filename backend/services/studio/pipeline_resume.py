@@ -32,19 +32,52 @@ def source_fingerprint(video: Path) -> dict[str, Any]:
     }
 
 
+# P2 #12: workspace() polls resume_point often; avoid re-reading prompt files
+# when path+mtime are unchanged. Keyed by frozenset of (key:path, mtime_ns).
+_PROMPT_HASH_CACHE: dict[frozenset[tuple[str, int]], str] = {}
+
+
+def clear_prompt_hash_cache() -> None:
+    """Test helper / explicit invalidation."""
+    _PROMPT_HASH_CACHE.clear()
+
+
+def _prompt_file_mtime_ns(path: Path) -> int:
+    try:
+        return int(path.stat().st_mtime_ns)
+    except OSError:
+        return -1
+
+
+def _read_prompt_file_bytes(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except Exception:  # noqa: BLE001
+        return str(path).encode('utf-8', errors='replace')
+
+
 def prompt_hash(prompt_files: dict | None) -> str:
+    files = prompt_files or {}
+    entries: list[tuple[str, int]] = []
+    ordered: list[tuple[str, Path]] = []
+    for key in sorted(files.keys()):
+        path = Path(files[key])
+        entries.append((f'{key}:{path}', _prompt_file_mtime_ns(path)))
+        ordered.append((key, path))
+    cache_key = frozenset(entries)
+    cached = _PROMPT_HASH_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     h = hashlib.sha256()
-    for key in sorted((prompt_files or {}).keys()):
-        path = prompt_files[key]
-        try:
-            data = Path(path).read_bytes()
-        except Exception:  # noqa: BLE001
-            data = str(path).encode('utf-8', errors='replace')
+    for key, path in ordered:
+        data = _read_prompt_file_bytes(path)
         h.update(key.encode('utf-8'))
         h.update(b'\0')
         h.update(data)
         h.update(b'\0')
-    return h.hexdigest()[:32]
+    digest = h.hexdigest()[:32]
+    _PROMPT_HASH_CACHE[cache_key] = digest
+    return digest
 
 
 def current_model_stamp(prompt_files: dict | None = None) -> dict[str, Any]:
