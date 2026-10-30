@@ -132,8 +132,8 @@ process.stdout.write(JSON.stringify(events))
         v4 = json.loads((ROOT / 'docs/analytics/event_catalog.json').read_text(encoding='utf-8'))['attribution']['success_rate_v4']
         hard = re.findall(r"OR ec IN \(([^)]*)\)\s*OR ue IN \(([^)]*)\)\) AS user_hard", body)
         extra = re.findall(r"user_hard OR ec IN \(([^)]*)\)\) AS user_x", body)
-        self.assertEqual(len(hard), 4)
-        self.assertEqual(len(extra), 4)
+        self.assertEqual(len(hard), 5)  # figures 1/2/3/5 + M1 figure 9
+        self.assertEqual(len(extra), 5)  # figures 1/2/3/5 + M1 figure 9
         names = lambda text: re.findall(r"'(\w+)'", text)
         for codes, upstream in hard:
             self.assertEqual(names(codes), v4['overall_excluded_error_codes'])
@@ -143,14 +143,14 @@ process.stdout.write(JSON.stringify(events))
         excluded = set(v4['overall_excluded_error_codes'] + v4['overall_excluded_upstream_types'] + v4['product_extra_excluded_error_codes'])
         self.assertFalse(excluded & set(v4['product_failure_codes']))
         # partial is never success; attempts dedupe on attempt_id; people are person_id; fixed window; internal cohort.
-        self.assertEqual(body.count("o_raw IN ('completed', 'success'), 'success', o_raw = 'partial', 'partial'"), 4)
-        self.assertEqual(body.count('toString(coalesce(properties.attempt_id, toString(uuid))) AS aid'), 5)  # figures 1/2/3/5 + figure 6 (degrade_reason)
+        self.assertEqual(body.count("o_raw IN ('completed', 'success'), 'success', o_raw = 'partial', 'partial'"), 5)  # + M1 figure 9
+        self.assertEqual(body.count('toString(coalesce(properties.attempt_id, toString(uuid))) AS aid'), 8)  # figures 1/2/3/5/6 + M1 7/8/9
         self.assertIn('argMax(person_id, timestamp) AS pid', body)
         self.assertNotIn('distinct_id', body)
         self.assertNotIn('now()', body)
-        self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 6)
-        self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 6)
-        self.assertEqual(body.count('{release_1_5_7}'), 6)
+        self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 9)  # + M1 figures 7/8/9
+        self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 9)
+        self.assertEqual(body.count('{release_1_5_7}'), 9)
         self.assertNotIn("SELECT '1.5.7' AS app_version, '20", body)
         self.assertIn('partial_delivery_rate', body)
         # per-flow = last attempt of the retry chain (retry_of -> root flow_id).

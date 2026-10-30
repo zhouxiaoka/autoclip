@@ -18,6 +18,7 @@ LATENCY_TIERS = ("under_5m", "mid_5_20m", "over_20m")
 _TIER_RANK = {"high": 0, "mid": 1, "low": 2}
 
 # Printed by scripts/provider_quality_report.py. Not executed by the app.
+# Same grain as docs/analytics/success_rate.sql figure 9 (M1); do not change the JSON schema here.
 REFRESH_HOGQL = """\
 -- Device-level product success by provider, last 14 days.
 -- One device (person_id) per provider. Success means that device's latest

@@ -46,6 +46,8 @@ export const RUN_LEVEL_FIELDS = [
   'provider', 'config_source', 'model', 'base_url_host', 'http_status', 'upstream_error_type',
   'failure_stage', 'llm_calls', 'prompt_tokens', 'completion_tokens',
   'reasoning_tokens', 'retry_count', 'degrade_count', 'billable_calls_before_failure',
+  // M1 success-rate dims on studio_generation_finished (not produced by run_snapshot)
+  'source_duration_sec', 'platform_count', 'is_first_success_device', 'attempt_index_on_device',
 ] as const
 export const LLM_REQUEST_FIELDS = [
   'success_rate_schema_version', 'provider', 'model', 'base_url_host', 'kind',

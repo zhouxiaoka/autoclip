@@ -27,7 +27,7 @@ TERMINAL = ('completed', 'partial', 'failed')
 RETRYABLE_PARENT = ('failed', 'partial')
 KEEP = 100
 PLAN_KEYS = ('recommendation_mode', 'analysis_mode', 'route')  # frozen from the attempt's own plan
-OUTPUT_FREE = ('platform_count', 'portrait_style', 'brand_outro_enabled', 'recommended_template', 'accepted_recommendation', 'burned_captions')
+OUTPUT_FREE = ('platform_count', 'source_duration_sec', 'portrait_style', 'brand_outro_enabled', 'recommended_template', 'accepted_recommendation', 'burned_captions')
 SUMMARY_KEYS = ('provider', 'config_source', 'attribution_source', 'model', 'base_url_host', 'shutdown_kind', 'restart_reason',
                 'billable_calls_before_failure', 'retry_count', 'degrade_count',
                 'llm_calls', 'prompt_tokens', 'completion_tokens', 'route', 'http_status', 'duration_ms',
@@ -346,6 +346,10 @@ def generation_summary(data, variants=None, started=None) -> dict:
         'burned_captions': bool(generation.get('source_has_burned_subtitles')),
         'duration_ms': max(0, finished - created) if created is not None and finished is not None else None,
     }
+    plan = data.get('plan') if isinstance(data.get('plan'), dict) else {}
+    duration = plan.get('source_duration')
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration >= 0:
+        out['source_duration_sec'] = int(round(duration))
     if generation.get('recommended_template'):
         out['recommended_template'] = generation['recommended_template']
     if isinstance(generation.get('accepted_recommendation'), bool):
@@ -418,6 +422,12 @@ def _terminal_event(receipt):
     props.pop('analysis_mode' if generation else 'recommendation_mode', None)
     props.pop('route', None) if not generation else props.update(trigger=receipt['trigger']) if receipt.get('trigger') else None
     props.update(outcome={'completed': 'success', 'failed': 'error'}.get(receipt.get('state'), receipt.get('state')), attempt_id=receipt.get('attempt_id'), flow_id=receipt.get('flow_id'), studio_schema_version=2, **({'attempt_sequence': receipt['sequence']} if isinstance(receipt.get('sequence'), int) else {}), **({'retry_of': receipt['retry_of']} if receipt.get('retry_of') else {}), **({'degrade_reason': receipt['degrade_reason']} if receipt.get('degrade_reason') else {}), **({'error_code': receipt['error_code']} if failed and receipt.get('error_code') else {}), **({'failure_stage': receipt['failure_stage']} if failed and receipt.get('failure_stage') else {}), **({'upstream_error_type': receipt['upstream_error_type']} if failed and not local and receipt.get('upstream_error_type') else {}), **{key: ','.join(str(item) for item in list(receipt[key])[:3]) for key in ('secondary_error_codes', 'secondary_upstream_error_types') if failed and receipt.get(key)})
+    if generation:
+        try:
+            from backend.services.studio.device_attempts import record as record_device_attempt
+            props.update(record_device_attempt(receipt.get('attempt_id'), props.get('outcome') or receipt.get('state')))
+        except Exception:  # noqa: BLE001 - device dims must not block the terminal
+            pass
     props['$insert_id'] = f"studio-v1:{receipt.get('attempt_id')}:finished"
     return {'event': 'studio_generation_finished' if generation else 'studio_production_finished', 'properties': {k: v for k, v in props.items() if v is not None and v != ''}}
 

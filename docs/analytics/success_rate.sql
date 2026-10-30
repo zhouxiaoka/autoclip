@@ -317,3 +317,118 @@ WHERE o_raw IN ('completed', 'success')
                          'frame_extract_subtitle_fallback', 'source_too_long_subtitle_route')
 GROUP BY degrade_reason
 ORDER BY attempts DESC;
+
+-- 图 7（M1）：一次成功占比
+-- 设备在窗口内至少有一次 attempt_index_on_device = 1 的终态；分子是该首次 attempt 成功的设备。
+-- 缺 attempt_index_on_device 的历史行不进本图（M1 发版前无法判定「第一次」）。
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
+  SELECT
+    toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
+    argMax(person_id, timestamp) AS pid,
+    argMax(toString(properties.outcome), timestamp) AS o_raw,
+    max(toInt(properties.attempt_index_on_device)) AS attempt_index
+  FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
+  WHERE event IN ('studio_generation_finished', 'studio_production_finished')
+    AND toString(properties.analytics_environment) = 'production'
+    AND toString(properties.runtime) = 'desktop'
+    AND timestamp >= toDateTime({date_from}, 'UTC')
+    AND timestamp < toDateTime({date_to}, 'UTC')
+    AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+  GROUP BY aid
+), firsts AS (
+  SELECT pid,
+    max(if(attempt_index = 1 AND o_raw IN ('completed', 'success'), 1, 0)) AS first_ok,
+    max(if(attempt_index = 1, 1, 0)) AS has_first
+  FROM base
+  WHERE attempt_index IS NOT NULL AND attempt_index >= 1
+  GROUP BY pid
+)
+SELECT
+  countIf(has_first = 1) AS devices_with_first_attempt,
+  countIf(first_ok = 1) AS first_try_success_devices,
+  round(countIf(first_ok = 1) / nullIf(countIf(has_first = 1), 0), 3) AS first_try_success_rate
+FROM firsts;
+
+-- 图 8（M1）：从未成功占比（窗口内有出片终态、但窗口内无一次成功的设备）
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
+  SELECT
+    toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
+    argMax(person_id, timestamp) AS pid,
+    argMax(toString(properties.outcome), timestamp) AS o_raw
+  FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
+  WHERE event IN ('studio_generation_finished', 'studio_production_finished')
+    AND toString(properties.analytics_environment) = 'production'
+    AND toString(properties.runtime) = 'desktop'
+    AND timestamp >= toDateTime({date_from}, 'UTC')
+    AND timestamp < toDateTime({date_to}, 'UTC')
+    AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+  GROUP BY aid
+), devices AS (
+  SELECT pid,
+    countIf(o_raw IN ('completed', 'success')) AS ok_n,
+    count() AS attempts
+  FROM base
+  GROUP BY pid
+)
+SELECT
+  count() AS active_devices,
+  countIf(ok_n = 0) AS never_succeeded_devices,
+  round(countIf(ok_n = 0) / nullIf(count(), 0), 3) AS never_succeeded_rate
+FROM devices
+WHERE attempts > 0;
+
+-- 图 9（M1）：按 provider 设备级成功率（与 F1 provider_quality_report 同形：每设备每 provider 取末次合格 attempt）
+-- 产品口径剔除与图 1 的 user_x 一致；不改 F1 JSON schema。
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+), base AS (
+  SELECT
+    toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
+    argMax(person_id, timestamp) AS pid,
+    max(timestamp) AS ts,
+    argMax(toString(properties.outcome), timestamp) AS o_raw,
+    argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
+    argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
+    argMax(toString(properties.provider), timestamp) AS provider
+  FROM events
+  LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
+  WHERE event IN ('studio_generation_finished', 'studio_production_finished')
+    AND toString(properties.analytics_environment) = 'production'
+    AND toString(properties.runtime) = 'desktop'
+    AND timestamp >= toDateTime({date_from}, 'UTC')
+    AND timestamp < toDateTime({date_to}, 'UTC')
+    AND person_id NOT IN COHORT {internal_cohort_id}
+    AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
+    AND toString(properties.provider) != ''
+  GROUP BY aid
+), c AS (
+  SELECT *,
+    multiIf(o_raw IN ('completed', 'success'), 'success', o_raw = 'partial', 'partial', o_raw IN ('cancelled', 'canceled'), 'cancelled', 'error') AS o,
+    (o = 'cancelled'
+      OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
+      OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x
+  FROM base
+), qualified AS (
+  SELECT * FROM c WHERE o = 'success' OR NOT user_x
+), per_device AS (
+  SELECT pid, provider, argMax(o, ts) AS latest_outcome
+  FROM qualified
+  GROUP BY pid, provider
+)
+SELECT
+  provider,
+  count() AS devices,
+  countIf(latest_outcome = 'success') AS success_devices,
+  round(countIf(latest_outcome = 'success') / nullIf(count(), 0), 3) AS success_rate
+FROM per_device
+GROUP BY provider
+ORDER BY success_rate DESC, devices DESC;
