@@ -15,6 +15,7 @@ import { openExternalLink } from '../utils/externalLinks'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
 import { getRuntimeInfo } from '../analytics/lifecycle'
 import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
+import { isKeepAwakeEnabled, getKeepAwakeController } from '../features/studio/keepAwake'
 import { getAppVersion } from '../desktop/updater'
 import { useAppUpdate } from '../desktop/UpdatePrompt'
 import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
@@ -125,6 +126,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   useTranslation()
   const { theme, setTheme } = useTheme()
   const [autostart, setAutostart] = useState(false)
+  const [keepAwake, setKeepAwake] = useState(() => isKeepAwakeEnabled())
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
@@ -175,6 +177,12 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
     }
   }
 
+
+  const toggleKeepAwake = (enabled: boolean) => {
+    setKeepAwake(enabled)
+    getKeepAwakeController().onEnabledChange(enabled)
+  }
+
   const toggleCrashReports = async (enabled: boolean) => {
     crashPreferenceChanged.current = true
     setCrashReportsEnabled(enabled)
@@ -220,6 +228,9 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
         <Row label={t("开机自动启动")} hint={t("启用后随系统启动，可从托盘打开。仅桌面应用可用。")}>
           <Switch checked={autostart} onChange={toggleAutostart} loading={busy} disabled={!desktop} />
+        </Row>
+        <Row label={t("制作时阻止电脑休眠")} hint={t("制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。")}>
+          <Switch checked={keepAwake} onChange={toggleKeepAwake} />
         </Row>
         <OutputBrandingSetting />
         <OutputCaptionsSetting />

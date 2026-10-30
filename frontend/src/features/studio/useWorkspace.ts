@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiConfigManager } from '../../utils/apiConfig'
 import { studioApi, errorText } from './api'
 import { Workspace, emptyWorkspace } from './types'
-import { observeWorkspace } from './pollWorkspace'
+import { observeWorkspace, workInProgress } from './pollWorkspace'
+import { getKeepAwakeController } from './keepAwake'
 
 export function useWorkspace(projectId: string | undefined) {
   const [state, setState] = useState<Workspace>(emptyWorkspace)
@@ -20,7 +21,10 @@ export function useWorkspace(projectId: string | undefined) {
     if (shown.current !== projectId) { shown.current = projectId; setLoaded(false); setState(emptyWorkspace) }
     void observeWorkspace(signal => studioApi.get(projectId, signal), {
       signal: controller.signal,
-      onData: data => { setState(data); setError(''); setLoaded(true) },
+      onData: data => {
+        setState(data); setError(''); setLoaded(true)
+        getKeepAwakeController().setSource(`workspace:${projectId}`, workInProgress(data))
+      },
       onError: error => setError(errorText(error)),
       onSettled: () => setLoading(false),
       // backend-started updates the API port and notifies listeners. Re-arm even
@@ -29,7 +33,10 @@ export function useWorkspace(projectId: string | undefined) {
         if (config.isReady) onRestart()
       }),
     })
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      getKeepAwakeController().setSource(`workspace:${projectId}`, false)
+    }
   }, [projectId, version])
   useEffect(() => {
     const resume = () => { if (document.visibilityState === 'visible') refresh() }

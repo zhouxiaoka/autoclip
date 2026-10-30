@@ -3,7 +3,7 @@ import type { Workspace } from './types'
 /** After the fast network budget, keep probing a still-producing snapshot at this pace. */
 export const OFFLINE_RETRY_MS = 10_000
 
-function workInProgress(data: Workspace): boolean {
+export function workInProgress(data: Workspace): boolean {
   // A backup being prepared has no render job yet, and a rendered one is still getting its cover.
   return data.analysis?.status === 'running' || data.jobs.some(j => j.status === 'queued' || j.status === 'running')
     || (data.output_variants || []).some(v => v.status === 'preparing' || v.status === 'queued' || v.status === 'running')

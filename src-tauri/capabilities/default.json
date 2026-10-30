@@ -73,6 +73,14 @@
     "process:default",
     "deep-link:default",
     "clipboard-manager:allow-read-text",
-    "notification:default"
+    "notification:default",
+    {
+      "identifier": "allow-set-keep-awake",
+      "allow": [
+        {
+          "cmd": "set_keep_awake"
+        }
+      ]
+    }
   ]
 }
