@@ -1528,7 +1528,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     './ImportPreferences': { default: () => null },
     '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}), getRuntimeStatus: async () => ({ status: 'installing', progress: 0 }), getModels: async () => [], ...speech } },
     './platformLabel': { platformLabel: id => id },
-    './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, takeReuseImport: () => null, writeRememberedPlatforms() {} },
+    './platformMemory': { hasSuccessHistory: () => false, readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, takeReuseImport: () => null, writeRememberedPlatforms() {} },
     './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldArmAutostart: () => false, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000, ...pasteStart },
     './importPreferencesStore': { readImportPreferences: () => null },
     './UrlPreview': { default: 'url-preview' },
