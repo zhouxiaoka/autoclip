@@ -1,5 +1,6 @@
 """Unified creative workspace. Legacy projects are adapted, never overwritten."""
 import asyncio
+import threading
 import json
 import uuid
 from pathlib import Path
@@ -92,6 +93,61 @@ class InspectUrlBody(BaseModel):
     analysis_mode: Optional[Literal['auto', 'subtitle', 'visual']] = None
 
 
+# Same-URL inspect shares one threadpool job so rapid paste does not stack workers.
+_INSPECT_INFLIGHT: dict[str, asyncio.Task] = {}
+_INSPECT_MAP_LOCK = threading.Lock()
+INSPECT_WAIT_SEC = 10
+
+
+def inspect_flight_key(url: str, browser: Optional[str] = None) -> str:
+    """Normalize URL + browser for the in-flight map (strip; host lower-cased)."""
+    raw = (url or '').strip()
+    parsed = urlparse(raw)
+    host = (parsed.hostname or '').lower()
+    if host:
+        netloc = host
+        if parsed.port:
+            netloc = f'{host}:{parsed.port}'
+        # Keep userinfo out (rejected by the handler anyway).
+        path = parsed.path or ''
+        query = f'?{parsed.query}' if parsed.query else ''
+        fragment = f'#{parsed.fragment}' if parsed.fragment else ''
+        raw = f'{parsed.scheme.lower()}://{netloc}{path}{query}{fragment}'
+    return f'{raw}|{browser or ""}'
+
+
+def clear_inspect_inflight() -> None:
+    """Test helper: drop in-flight map entries."""
+    with _INSPECT_MAP_LOCK:
+        _INSPECT_INFLIGHT.clear()
+
+
+async def await_inspect_url(url: str, browser: Optional[str] = None, *, timeout: float = INSPECT_WAIT_SEC):
+    """Run jobs.inspect_url once per in-flight key; waiters share the same Task.
+
+    wait_for uses shield so one client's timeout does not cancel the shared
+    worker (followers can still receive the result). The worker itself is
+    bounded by inspect socket_timeout.
+    """
+    key = inspect_flight_key(url, browser)
+    with _INSPECT_MAP_LOCK:
+        task = _INSPECT_INFLIGHT.get(key)
+        if task is None or task.done():
+            task = asyncio.create_task(
+                run_in_threadpool(jobs.inspect_url, url.strip(), browser),
+            )
+            _INSPECT_INFLIGHT[key] = task
+
+            def _clear(done: asyncio.Future, k: str = key) -> None:
+                with _INSPECT_MAP_LOCK:
+                    cur = _INSPECT_INFLIGHT.get(k)
+                    if cur is done:
+                        _INSPECT_INFLIGHT.pop(k, None)
+
+            task.add_done_callback(_clear)
+    return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+
+
 @router.post('/inspect-url')
 async def inspect_url(body: InspectUrlBody):
     """F4: info-only probe before download. 10 s timeout; cookie/private failures reuse download recovery."""
@@ -108,10 +164,7 @@ async def inspect_url(body: InspectUrlBody):
     if mode is None:
         mode = planning.preferred_analysis_mode() or 'auto'
     try:
-        meta = await asyncio.wait_for(
-            run_in_threadpool(jobs.inspect_url, body.url.strip(), body.browser),
-            timeout=10,
-        )
+        meta = await await_inspect_url(body.url.strip(), body.browser)
     except asyncio.TimeoutError:
         raise HTTPException(504, '读取视频信息超时，请稍后重试') from None
     except PipelineFailure as error:
