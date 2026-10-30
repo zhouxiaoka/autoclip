@@ -16,6 +16,8 @@ function loadPicker() {
     './modelSettingsLogic': { connectionReady: () => true, presetKey: c => c.provider },
     './weakLocalTimeline': loadTs('weakLocalTimeline.ts'),
     './WeakLocalTimelineNote': { default: 'weak-note' },
+    './LocalRecommendPull': { default: 'local-recommend' },
+    './localModelGate': { belowLocalAnalysisGate: () => false, localAnalysisWarnCopy: () => '', localModelSizeLabel: () => '' },
   }
   const code = ts.transpileModule(fs.readFileSync('src/features/settings/ModelPicker.tsx', 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText

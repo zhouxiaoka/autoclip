@@ -33,7 +33,7 @@ function renderResults(workspace, studioApi, cards) {
     if (name === 'react' || name === 'react/jsx-runtime') return require(name)
     if (name === 'react-i18next') return { useTranslation() {} }
     if (name === 'react-router-dom') return { useNavigate: () => () => {}, useLocation: () => ({ search: '' }) }
-    if (name === '../../i18n') return { t: v => v }
+    if (name === '../../i18n') return { t: v => v, getLocale: () => 'zh' }
     if (name === '../../ui') return { Btn: p => React.createElement('button', null, p.children), Section: ({ children }) => React.createElement('section', null, children), Dialog: empty, fmtDuration: String }
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi, errorText: String }
@@ -51,10 +51,47 @@ function renderResults(workspace, studioApi, cards) {
       runInSandbox(ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports: out, require: moduleRequire })
       return out
     }
+    if (name === './switchModelOptions') return {
+      listSwitchModelOptions: () => [],
+      usableConnectionCount: () => 0,
+      analysisProviderId: () => null,
+      defaultSwitchOption: () => null,
+    }
+    if (name === './SwitchModelDialog') return { default: () => null }
     if (name === './platformLabel') return { platformLabel: String }
     if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
     if (name === '../../analytics/studio') return { trackLegacyEntry() {} }
     if (name === './legacyEntrypoints') return { legacyEntrypointsHidden: () => false }
+    if (name === './platformMemory') return {
+      hasSuccessHistory: () => false,
+      morePlatformBannerSeen: () => true,
+      dismissMorePlatformBanner: () => {},
+      stashReuseImport: () => {},
+      suggestAnotherPlatform: () => '',
+      markFirstSuccess: () => false,
+      platformsForLocale: () => [],
+      resolvePlatforms: (_l, ids) => ids || [],
+      samePlatforms: () => true,
+    }
+    if (name === './overrides') return { followOutputLeave: () => {} }
+    if (name === './completionNotice') return { noticeCopy: () => ({ title: '', body: '' }) }
+    if (name === './etaModel') return { recordSuccess: () => {} }
+    if (name === './ExportHistory') return { default: empty }
+    if (name === './DraftResultCard') return { default: empty }
+    if (name === '../settings/modelSettingsApi') return {
+      modelSettingsApi: { get: async () => ({ connections: [], analysis: {} }) },
+    }
+    if (name === '../settings/modelSettingsLogic') return { forSave: x => x, connectionReady: () => true }
+    if (name === '../settings/modelDefaults') return { syncFollowingCover: () => {} }
+    if (name === '../../analytics/observer') return { workflow: { rememberProject() {}, watch() {}, list: () => [], observeStudio() {} } }
+    if (name === './noticeRuntime') return {
+      noteWorkspaceCompletion() {},
+      clearCompletionBadge() {},
+      subscribeCompletionNotice: () => () => {},
+    }
+    if (name === './types') return {}
+    if (name === '../../store/useProjectStore') return {}
+    if (name.endsWith('.css')) return {}
     return { default: empty }
   }
   const exportsObject = {}

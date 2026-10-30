@@ -135,14 +135,23 @@ def process_video_pipeline(
         import asyncio
         from backend.core.project_cancellation import bind, checkpoint
         with bind(project_id):
-            # Forward the long-form minimum only when one was requested. Adapters and test
-            # stand-ins that predate the argument keep their original signature otherwise.
+            # Forward optional kwargs only when the adapter accepts them. Test stand-ins
+            # that predate resume/fresh/platform_min keep their original signature.
+            import inspect
             call = {'clips_only': clips_only, 'resume': resume, 'fresh': fresh}
             if platform_min_sec:
                 call['platform_min_sec'] = platform_min_sec
                 call['platform_min_label'] = platform_min_label
+            try:
+                params = inspect.signature(pipeline_adapter.process_project_sync).parameters
+                if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+                    filtered = call
+                else:
+                    filtered = {k: v for k, v in call.items() if k in params}
+            except (TypeError, ValueError):
+                filtered = {'clips_only': clips_only}
             result = asyncio.run(pipeline_adapter.process_project_sync(
-                input_video_path, input_srt_path, **call))
+                input_video_path, input_srt_path, **filtered))
             # 运行中项目被删除（RC156 #12）：无论适配器把它收成了什么结果，都在这里停下，不再写库/写文件
             checkpoint(project_id)
 

@@ -129,6 +129,7 @@ test('#481 import expands the browser picker and keeps the chosen browser on sub
       '../../analytics/experience': { trackExperience() {} },
       './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
       './StyleProbeLine': { default: () => null },
+    './ReadinessLine': { default: 'readiness-line' },
       './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
       './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
       './ImportPreferences': { default: () => null },
@@ -142,7 +143,7 @@ test('#481 import expands the browser picker and keeps the chosen browser on sub
       './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
       './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
       '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
-      './UrlPreview': { default: 'url-preview' },
+      './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
     }
     const sandbox = {
@@ -201,6 +202,7 @@ test('#481 a normal import keeps the browser picker inside the closed preference
       '../../analytics/experience': { trackExperience() {} },
       './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
       './StyleProbeLine': { default: () => null },
+    './ReadinessLine': { default: 'readiness-line' },
       './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
       './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
       './ImportPreferences': { default: () => null },
@@ -214,7 +216,7 @@ test('#481 a normal import keeps the browser picker inside the closed preference
       './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
       './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
       '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
-      './UrlPreview': { default: 'url-preview' },
+      './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
     }
     const sandbox = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, FormData: window.FormData, URL: window.URL, sessionStorage: window.sessionStorage, Promise, setTimeout, clearTimeout }
@@ -245,7 +247,7 @@ test('#481 import review uses the same browser action for source_blocked', () =>
     './browserCookieRecovery': recovery,
     './failureAction': loadTs(path.join(studio, 'failureAction.ts')),
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
-    './UrlPreview': { default: 'url-preview' },
+    './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {},
   }
   const exports = loadStudio('ImportReview.tsx', mocks, { URLSearchParams })

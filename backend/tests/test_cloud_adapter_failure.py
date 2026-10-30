@@ -175,8 +175,11 @@ def test_cloud_failure_survives_auto_generation_terminal_store(cloud_adapter, mo
     monkeypatch.setattr(jobs, 'capture_studio_exception', lambda *args: None)
     def apply(*, kwargs, throw):
         assert throw is True
-        assert kwargs == {'project_id': 'cloud-project', 'input_video_path': str(case.video),
-                          'input_srt_path': None, 'clips_only': True}
+        expected = {'project_id': 'cloud-project', 'input_video_path': str(case.video),
+                    'input_srt_path': None, 'clips_only': True}
+        for key, value in expected.items():
+            assert kwargs.get(key) == value
+        # tip may also forward resume/fresh; ignore extras.
         result = asyncio.run(case.adapter.process_project_sync(str(case.video), '', clips_only=True))
         dispatched.append(result)
         return SimpleNamespace(get=lambda: {'success': False, 'error': result['error'], 'result': result})

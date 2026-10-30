@@ -2167,7 +2167,10 @@ NOT_SNAPSHOT_READERS = {
     ('backend/services/studio/vision_settings.py', '*'): 'vision settings',
     ('backend/api/v1/settings.py', 'get_settings'): 'model settings page',
     ('backend/api/v1/settings.py', 'get_current_provider'): 'model settings page',
+    ('backend/services/studio/pipeline_resume.py', 'current_model_stamp'): 'pipeline stamp model identity, not failure snapshot',
+    ('backend/services/studio/pipeline_resume.py', 'model_matches'): 'compares stamp provider/model to current settings',
 }
+
 
 
 def _py_reads(path):
@@ -2199,7 +2202,27 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function presentedFailure(',
              'export function pageSuggestedAction(',
              'export function readableFailure(',
-             'export function failureStep(')
+             'export function failureStep(',
+             'export function connectionUsableForSwitch(',
+             'export function usableConnectionCount(',
+             'export function analysisProviderId(',
+             'export function listSwitchModelOptions(',
+             'export function defaultSwitchOption(',
+             'export function studioRunProgress(',
+             'export function readHistory(',
+             'export function recordSuccess(',
+             'export function medianSecPerSourceMin(',
+             'export function builtinSecPerSourceMin(',
+             'export function rechargeTarget(',
+             'export function failureAction(',
+             'export function suggestedAction(',
+             'export function failurePlan(',
+             'export default function StudioResults(',
+             'export default function HomePage(',
+             'function withEta(',
+             'function isCloud(',
+             'function modelsOf(',
+             'function displayName(')
 _TS_READ = re.compile(r"""(\.\s*|\[\s*['"])(attribution_source|upstream_error_type|http_status|failure_stage|provider|config_source|base_url_host)\b(?!\s*[?]?:)""")
 
 

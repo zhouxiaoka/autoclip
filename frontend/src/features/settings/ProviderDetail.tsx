@@ -215,7 +215,7 @@ export default function ProviderDetail({
                   <p className="ac-note" role="status">{m.testWarning.text}</p>
                 )}
                 <TrialRunPanel
-                  result={m.lastTrialByConnection[connection.id]}
+                  result={(m.lastTrialByConnection || {})[connection.id]}
                   trialStatus={connection.trial_status}
                 />
               </div>

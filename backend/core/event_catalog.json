@@ -928,7 +928,8 @@
         "eta_initial_min": {
           "description": "R1: first ETA shown under the progress bar, in whole minutes. Client-computed (local median or provider_quality.sec_per_source_min); posted once via PUT /studio/{id}/eta and copied onto the finished event.",
           "format": "number",
-          "minimum": 0
+          "minimum": 0,
+          "nullable": true
         },
         "eta_error_ratio": {
           "description": "R1: duration_ms / (eta_initial_min * 60000). Values near 1 mean the ETA was accurate; >2 means the overrun copy was shown.",

@@ -66,7 +66,7 @@ test('1.5.7 failed-state action per code: user-cause codes get 「去设置」, 
   }
   for (const code of fa.WHISPER_GATE_CODES) {
     const action = fa.failureAction(code)
-    assert.equal(action.kind, 'settings', code)
+    assert.equal(action.kind, 'install_asr', code)
     assert.equal(action.destination, '/settings?section=speech', code)
   }
   assert.equal(fa.failureAction('timeout', 'rate_limited').kind, 'retry')

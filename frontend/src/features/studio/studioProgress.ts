@@ -88,13 +88,13 @@ export interface StudioProgressView {
   /** True only for model stages. Download, local transcription and export sit outside the 20-minute model cap. */
   modelBudget: boolean
   detail: string
-  /** R1: remaining minutes, or null when unknown / overrun copy should show instead. */
+  /** Remaining minutes, or null when unknown / overrun copy should show instead. */
   etaMin: number | null
-  /** R1: elapsed exceeded 2× the initial ETA. */
+  /** Elapsed exceeded 2× the initial ETA. */
   etaOverrun: boolean
-  /** R1: show the leave-to-tray hint once SUBTITLE (or later) has started. */
+  /** Show the leave-to-tray hint once SUBTITLE (or later) has started. */
   canLeave: boolean
-  /** R1: initial total ETA minutes (for telemetry). */
+  /** Initial total ETA minutes (for telemetry). */
   etaInitialMin: number | null
 }
 

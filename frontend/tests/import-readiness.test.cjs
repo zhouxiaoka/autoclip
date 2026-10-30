@@ -104,6 +104,7 @@ function render(options = {}) {
     [false, () => {}],
     [false, () => {}],
     [{ open: false, durationSec: null, trigger: 'button' }, () => {}],
+    [{ open: false, trigger: 'button' }, () => {}],
   ]
   const { exports, code } = transpile(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'))
   const mocks = {
@@ -115,7 +116,7 @@ function render(options = {}) {
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'fragment' },
     '../../ui': { Btn: 'button', Segmented: 'segmented', Dialog: 'dialog', StatusDot: 'status' },
     './PlatformPicker': { default: 'platform-picker' },
-    './UrlPreview': { default: 'url-preview' },
+    './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './api': {
       studioApi: {
         import: async body => { calls.push(body); if (options.importError) throw options.importError; return { project_id: 'project-1' } },
@@ -130,6 +131,7 @@ function render(options = {}) {
     '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({ pkg_templates_v1: false }) },
     './TemplatePicker': { default: 'template-picker', templateImportFields: () => ({}) },
     './StyleProbeLine': { default: 'style-probe' },
+    './ReadinessLine': { default: 'readiness-line' },
     './editingStyleSession': { readStyle: () => ({ key: '', status: 'idle', result: null, latencyMs: 0 }) },
     '../../analytics/experience': { trackExperience() {} },
     './platformLabel': { platformLabel: id => id },

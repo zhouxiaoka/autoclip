@@ -1,5 +1,5 @@
 /**
- * R2: system keep-awake while any project is producing.
+ * System keep-awake while any project is producing.
  * Hold immediately on running; release 10s after none remain.
  * Setting 「制作时阻止电脑休眠」 defaults on (localStorage).
  */
@@ -28,7 +28,7 @@ export function setKeepAwakeEnabled(
   (storage ?? localStorage).setItem(KEEP_AWAKE_SETTING_KEY, on ? '1' : '0')
 }
 
-/** Spec R2: screening / production / rendering, plus DB processing|pending. */
+/** Spec: screening / production / rendering, plus DB processing|pending. */
 export function projectIsProducing(project: KeepAwakeProjectLike): boolean {
   const status = String(project.status || '')
   if (status === 'processing' || status === 'pending') return true

@@ -148,6 +148,7 @@ test('detail only shows a successful status for verified connections or ready lo
     './ModelPicker': { default: () => null },
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
   }).default
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   for (const id of ['deepseek', 'ollama']) {
@@ -156,7 +157,7 @@ test('detail only shows a successful status for verified connections or ready lo
         preset: view.catalogPreset(id),
         m: {
           settings: { ...settings, connections: [{ ...view.catalogDraftConnection(view.catalogPreset(id)), has_key: true, validation_status }] },
-          lists: {}, busy: {}, listErrors: {}, keyHints: {},
+          lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {},
         },
         onBack: () => {},
       })
@@ -167,7 +168,7 @@ test('detail only shows a successful status for verified connections or ready lo
   }
   for (const id of ['whisper', 'sensevoice']) {
     const tree = Detail({
-      preset: view.catalogPreset(id), m: { settings, lists: {}, busy: {}, listErrors: {} },
+      preset: view.catalogPreset(id), m: { settings, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {} },
       asrReady: { [id]: true }, onBack: () => {},
     })
     assert.match(textOf(tree), /settings\.providers\.available/)
@@ -200,6 +201,7 @@ test('detail shows a configure form for an unconnected preset without writing a 
     './ModelPicker': { default: () => null },
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
   }).default
   const ensured = []
   const tree = Detail({
@@ -258,7 +260,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
     connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true, validation_status: 'ok' }],
     analysis: { connection_id: 'ds', model: 'deepseek-chat', capability: 'auto', model_source: 'user' },
   }
-  const m = { settings: value, lists: {}, busy: {}, listErrors: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
+  const m = { settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
   const Page = loadTs('AIModelSettings.tsx', {
     './AddCustomProviderDialog': { default: () => null },
     react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {}, useRef: initial => ({ current: initial }) },
@@ -274,6 +276,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
     './ModelPicker': { default: () => null },
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
     './ProviderCatalog': { default: props => React.createElement('div', { 'data-catalog': true, 'data-has-add': !!props.onAdd }) },
     './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
   }).default
@@ -318,7 +321,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
       analysis: { connection_id: 'ds', model: 'deepseek-flash', capability: 'auto', model_source: 'preset' },
     }
     const m = {
-      settings: value, lists: {}, busy: {}, listErrors: {}, keyHints: {},
+      settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {},
       update: () => {}, save: async () => ({}),
     }
     const Page = loadTs('AIModelSettings.tsx', {
@@ -343,6 +346,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
       './ModelPicker': { default: () => null },
       './EndpointProviderSetup': { default: () => null },
       './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
       './ProviderCatalog': { default: () => null },
       './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
       './ProviderDetail': { default: ({ preset }) => React.createElement('div', { 'data-detail': preset?.id, 'data-layout': 'v6' }) },
@@ -365,6 +369,7 @@ test('provider detail uses two-column connect/models layout without analysis Mod
     './ProviderFields': { default: () => React.createElement('div', { 'data-fields': true }) },
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
   }).default
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   const tree = Detail({
@@ -384,7 +389,7 @@ test('provider detail uses two-column connect/models layout without analysis Mod
           ],
         },
       },
-      busy: {}, listErrors: {}, keyHints: {},
+      busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {},
       ensureCatalogProvider: () => {}, editConnection: () => {},
     },
     onBack: () => {},
@@ -413,11 +418,12 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
     ) },
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
   }).default
   const detail = Detail({
     preset: openai,
     m: {
-      settings, lists: {}, busy: {}, listErrors: {}, testing: false, keyHints: {},
+      settings, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, testing: false, keyHints: {},
       ensureCatalogProvider: (id, patch) => edits.push({ id, patch }),
       editConnection: (c, patch) => edits.push({ id: c.id, patch }),
       testCatalogProvider: (id, draft) => tests.push({ id, draft }),
@@ -428,7 +434,7 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
   const address = nodes.find(node => node.props?.['aria-label'] === '接口地址')
   assert.ok(address)
   assert.equal(address.props.value, openai.base_url)
-  const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
+  const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('快速测试'))
   assert.ok(testBtn)
   testBtn.props.onClick()
   assert.equal(tests.length, 1)
@@ -451,6 +457,7 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     }) },
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
   }).default
   for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
     const opened = []
@@ -460,7 +467,7 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     assert.deepEqual(opened, [preset.id])
     const edits = []
     const tests = []
-    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {}, testing: false,
+    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, testing: false,
       ensureCatalogProvider: (id, patch) => edits.push({ id, patch }),
       testCatalogProvider: (id, draft) => tests.push({ id, draft }),
       editConnection: () => {} }, onBack: () => {} })
@@ -470,8 +477,8 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     assert.match(textOf(detail), /请先填写接口地址/)
     input.props.onChange({ target: { value: 'https://endpoint.example.test/v1' } })
     assert.deepEqual(edits, [{ id: preset.id, patch: { base_url: 'https://endpoint.example.test/v1' } }])
-    const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
-    assert.ok(testBtn, '测试连接 for ' + preset.id)
+    const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('快速测试'))
+    assert.ok(testBtn, '快速测试 for ' + preset.id)
     assert.equal(settings.analysis, null)
   }
 })
@@ -534,19 +541,20 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     ) },
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
   }).default
   for (const id of ['api88', 'infistar', 'apimart']) {
     const preset = view.catalogPreset(id)
     assert.ok(preset?.sponsor)
     const tree = Detail({
       preset,
-      m: { settings, lists: {}, busy: {}, listErrors: {}, testing: false, keyHints: {},
+      m: { settings, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, testing: false, keyHints: {},
         ensureCatalogProvider: () => {}, editConnection: () => {}, testCatalogProvider: () => {} },
       onBack: () => {},
     })
     const text = textOf(tree)
     assert.equal(/推广分成|项目维护|领取条件|注册并领取|接入说明|仅保存在本机|unconnected_guide|one_click_hint/.test(text), false)
-    assert.match(text, /测试连接/)
+    assert.match(text, /快速测试/)
     assert.match(text, /可用模型/)
     assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === '接口地址'))
     assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === 'API 密钥'))

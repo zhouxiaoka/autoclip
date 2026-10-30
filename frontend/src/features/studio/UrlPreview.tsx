@@ -41,7 +41,7 @@ function routeCopy(preview: UrlInspectPreview): string {
     : t('无字幕，需要本地转写')
 }
 
-/** Total preview ETA minutes. local_transcription includes ASR + R1 generation. */
+/** Total preview ETA minutes. local_transcription includes ASR + generation. */
 export function totalPreviewEtaMinutes(
   durationSec: number | null | undefined,
   route: PreviewRouteKind,

@@ -75,7 +75,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
   }, [status, projectId, isPolling, startPolling, stopPolling, progress])
 
 
-  // R2: report this card's running state to keep-awake (project store also covers Home).
+  // Report this card's running state to keep-awake (project store also covers Home).
   useEffect(() => {
     const producing = status === 'processing' || status === 'pending'
     getKeepAwakeController().setSource(`statusbar:${projectId}`, producing)

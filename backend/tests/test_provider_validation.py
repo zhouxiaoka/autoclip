@@ -306,7 +306,10 @@ def test_failed_validation_saves_but_blocks_readiness_and_generation(monkeypatch
     assert loaded.connections[0].validation_status == 'failed'
     monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
     report = readiness.report()
-    assert report['checks']['analysis'] == {'ok': False, 'code': 'validation_failed', 'repair': 'settings_ai'}
+    assert report['checks']['analysis']['ok'] is False
+    assert report['checks']['analysis']['code'] == 'validation_failed'
+    assert report['checks']['analysis']['repair'] == 'settings_ai'
+    assert report['checks']['analysis'].get('label') == 'gpt-4o-mini'
     with pytest.raises(ValueError, match='未通过校验'):
         readiness.ensure_analysis_usable()
 
@@ -394,7 +397,9 @@ def test_text_only_vision_follow_saves_but_blocks_generation(monkeypatch):
     assert loaded.connections[0].validation_status == 'unchecked'
     monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
     report = readiness.report()
-    assert report['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    assert report['checks']['visual']['ok'] is True
+    assert report['checks']['visual']['code'] == 'optional'
+    assert report['checks']['visual']['repair'] == 'none'
     assert report['ready'] is True
     readiness.ensure_analysis_usable()  # must not raise
     # Explicit visual mode still blocks:
@@ -429,7 +434,8 @@ def test_subtitle_mode_text_model_does_not_block(monkeypatch):
     assert ai.vision_follow_lacks_capability(settings) is False
     ai.save(settings)
     monkeypatch.setattr(ai, 'for_editing', lambda: ai.load())
-    assert readiness.report()['checks']['visual'] == {'ok': True, 'code': 'not_required', 'repair': 'none'}
+    visual = readiness.report()['checks']['visual']
+    assert visual['ok'] is True and visual['code'] == 'not_required' and visual['repair'] == 'none'
     readiness.ensure_analysis_usable()
 
 
@@ -597,7 +603,8 @@ def test_cover_access_uses_image_address_without_replacing_chat_address(monkeypa
 def test_explicit_vision_purpose_runs_vision_validation(monkeypatch):
     from backend.services import provider_validation
     from backend.services.studio import vision_settings
-    monkeypatch.setattr(provider_validation, 'validate_connection', lambda *args: provider_validation._ok('https://gw.example/v1', None, ['gpt-4o']))
+    monkeypatch.setattr(provider_validation, 'validate_connection', lambda *args, **kwargs: provider_validation._ok('https://gw.example/v1', None, ['gpt-4o']))
+    monkeypatch.setattr(provider_validation, 'validate_connection_with_probe', lambda *args, **kwargs: provider_validation._ok('https://gw.example/v1', None, ['gpt-4o']))
     probes = []
 
     def vision_probe(value):

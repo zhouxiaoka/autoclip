@@ -1,4 +1,4 @@
-"""R3: resume content pipeline from subtitle / step artifacts when stamps match."""
+"""Resume content pipeline from subtitle / step artifacts when stamps match."""
 from __future__ import annotations
 
 import hashlib
@@ -112,8 +112,14 @@ def write_stamp(metadata_dir: Path, *, video: Path, prompt_files: dict | None = 
     metadata_dir = Path(metadata_dir)
     metadata_dir.mkdir(parents=True, exist_ok=True)
     prev = read_stamp(metadata_dir) or {}
+    try:
+        source = source_fingerprint(video)
+    except OSError:
+        # Tests / early failure paths may call write_stamp before the video exists.
+        # Keep prior source fingerprint when present; otherwise omit source.
+        source = (prev.get('source') if isinstance(prev.get('source'), dict) else None)
     stamp = {
-        'source': source_fingerprint(video),
+        **({'source': source} if source is not None else {}),
         **current_model_stamp(prompt_files),
     }
     # P1 #6: keep srt_origin across step refreshes unless extra overrides it.
@@ -171,7 +177,7 @@ def srt_reusable(video: Path, srt: Path | None, stamp: dict | None) -> bool:
     if not srt or not Path(srt).is_file():
         return False
     if stamp is None:
-        # Pre-R3 projects: keep prior behavior (use existing srt).
+        # Legacy projects without a stamp: keep prior behavior (use existing srt).
         return True
     return source_matches(stamp, Path(video))
 
