@@ -303,6 +303,11 @@
       "medium",
       "long",
       "unknown"
+    ],
+    "retry_kind": [
+      "same",
+      "switch_model",
+      "after_install"
     ]
   },
   "attribution": {
@@ -894,9 +899,10 @@
           "nullable": true
         },
         "retry_kind": {
-          "description": "X2: how the user chose to retry after failure. Registered nullable in M1 for catalog sync; not emitted until X2 ships.",
+          "description": "X2: how the user chose to retry after failure: same | switch_model | after_install.",
           "format": "string",
-          "nullable": true
+          "nullable": true,
+          "enum": "retry_kind"
         }
       }
     },

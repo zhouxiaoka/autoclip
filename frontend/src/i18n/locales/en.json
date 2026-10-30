@@ -2047,5 +2047,9 @@
   "建议换用 {{model}} 后重试": "Try again with {{model}}.",
   "切换并重试": "Switch and retry",
   "去配置模型": "Configure model",
-  "其他模型": "Other models"
+  "其他模型": "Other models",
+  "建议再加一个服务商": "Add another provider",
+  "去充值": "Top up",
+  "选择一个已通过测试的连接继续制作。默认选中成功率最高的。": "Pick a tested connection to continue. The highest success rate is selected by default.",
+  "还没有其他可用连接。请先在设置里添加并测试一个服务商。": "No other usable connections yet. Add and test a provider in Settings first."
 }

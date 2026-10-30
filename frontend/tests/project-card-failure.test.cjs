@@ -16,6 +16,7 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     '../features/studio/api': { studioApi: {} },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
+    '../features/studio/SwitchModelDialog': { __esModule: true, default: () => null },
     '../stores/useSimpleProgressStore': {
       useSimpleProgressStore: (select) => select({ getProgress: () => ({ message: progressMessage }) }),
     },
@@ -34,7 +35,12 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
           const data = JSON.parse(fs.readFileSync(path.join(__dirname, id === '@event-catalog' ? '../../backend/core/event_catalog.json' : '../../backend/core/failure_messages.json'), 'utf8'))
           return { default: data, __esModule: true }
         }
-        if (id.startsWith('.')) return load(path.resolve(path.dirname(file), `${id}.ts`))
+        if (id.startsWith('.')) {
+          const base = path.resolve(path.dirname(file), id)
+          const candidate = [base, `${base}.ts`, `${base}.tsx`, `${base}.js`].find(p => fs.existsSync(p))
+          if (!candidate) throw new Error('cannot resolve ' + id + ' from ' + file)
+          return load(candidate)
+        }
         return require(id)
       },
     })
@@ -170,3 +176,67 @@ test('managed project without a finished generation still reopens import review'
   await buttons['重试']()
   assert.deepEqual(visited, ['/import/test'])
 })
+
+
+test('X2 home card: whisper gates lead with install_asr CTA 安装转写', () => {
+  for (const code of ['whisper_not_installed', 'whisper_install_failed', 'whisper_model_missing', 'whisper_model_failed']) {
+    const visited = []
+    const buttons = {}
+    renderCard('failed', '本地转写还没装好', null, {
+      project: { error_code: code },
+      onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
+    }, to => visited.push(to))
+    assert.equal(buttons['安装转写'].variant, 'cta', code)
+    assert.equal(buttons['换模型重试'], undefined, code)
+    buttons['安装转写'].onClick()
+    assert.deepEqual(visited, ['/settings?section=speech'])
+  }
+})
+
+test('X2 home card: switchable upstream + ≥2 connections offers 换模型重试', () => {
+  const switched = []
+  const buttons = {}
+  const options = [
+    { connectionId: 'c1', model: 'm1', displayName: 'A', providerId: 'api88', success_rate: 0.9 },
+    { connectionId: 'c2', model: 'm2', displayName: 'B', providerId: 'infistar', success_rate: 0.8 },
+  ]
+  renderCard('failed', '请求过多', null, {
+    project: { error_code: 'rate_limited', upstream_error_type: 'rate_limited' },
+    onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
+  }, () => {}, {
+    connectionCount: 2,
+    switchOptions: options,
+    onSwitchAndRetry: (id, choice) => { switched.push({ id, choice }) },
+  })
+  assert.equal(buttons['换模型重试'].variant, 'cta')
+  assert.equal(typeof buttons['重试'].onClick, 'function')
+  // Without a real dialog stub capturing open, openSwitchDialog sets switchOpen;
+  // SwitchModelDialog is stubbed null so confirm path is covered via onSwitchAndRetry with choice in HomePage.
+  buttons['换模型重试'].onClick()
+})
+
+test('X2 home card: switchable upstream + 1 connection offers 去设置 (add provider)', () => {
+  const visited = []
+  const buttons = {}
+  renderCard('failed', '上游超时', null, {
+    project: { error_code: 'timeout', upstream_error_type: 'timeout' },
+    onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
+  }, to => visited.push(to), { connectionCount: 1 })
+  assert.equal(buttons['去设置'].variant, 'cta')
+  assert.equal(buttons['换模型重试'], undefined)
+  buttons['去设置'].onClick()
+  assert.deepEqual(visited, ['/settings?section=analysis'])
+})
+
+test('X2 home card: insufficient_quota + sponsor offers 去充值', () => {
+  const visited = []
+  const buttons = {}
+  renderCard('failed', '余额不足', null, {
+    project: { error_code: 'provider_error', upstream_error_type: 'insufficient_quota' },
+    onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
+  }, to => visited.push(to), { analysisProvider: 'api88' })
+  assert.equal(buttons['去充值'].variant, 'cta')
+  buttons['去充值'].onClick()
+  assert.deepEqual(visited, ['/settings?section=analysis'])
+})
+

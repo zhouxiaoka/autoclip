@@ -40,12 +40,12 @@ test('B2: whisper gate codes open speech settings, a normal failure still retrie
   ])
   for (const code of fa.WHISPER_GATE_CODES) {
     const action = fa.failureAction(code)
-    assert.equal(action.kind, 'settings', code)
+    assert.equal(action.kind, 'install_asr', code)
     assert.equal(action.destination, '/settings?section=speech', code)
     assert.equal(action.label, '安装转写', code)
     assert.equal(readiness.gateKind(code), 'install', `${code} must stay the install half of readiness.GATE_CODES`)
     const page = fa.pageFailureAction({ error_code: code })
-    assert.equal(page.kind, 'settings', code)
+    assert.equal(page.kind, 'install_asr', code)
     assert.equal(page.destination, '/settings?section=speech', code)
     assert.equal(page.label, '安装转写', code)
   }
@@ -53,7 +53,7 @@ test('B2: whisper gate codes open speech settings, a normal failure still retrie
     assert.equal(fa.failureAction(code).kind, 'retry', code)
   }
   const led = fa.pageFailureAction({ error_code: 'timeout', secondary_error_codes: ['whisper_model_missing'] })
-  assert.equal(led.kind, 'settings')
+  assert.equal(led.kind, 'install_asr')
   assert.equal(led.destination, '/settings?section=speech')
   assert.equal(led.label, '安装转写')
   const auth = fa.failureAction('llm_auth_invalid')
@@ -198,5 +198,79 @@ test('R24 #2: a terminal carries no unregistered secondary_* field (page-only st
   const emitted = Object.keys(out).filter(k => k.startsWith('secondary_'))
   assert.deepEqual(emitted.sort(), [...SECONDARY].sort())
   for (const k of emitted) assert.ok(registered.includes(k), k)
+})
+})()
+
+// failure-action.test.cjs — X2 five kinds
+;(() => {
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const fs = require('node:fs')
+const { loadTs } = require('./load-ts.cjs')
+const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
+
+test('X2: FailureAction.kind covers retry | settings | install_asr | switch_model | recharge', () => {
+  assert.deepEqual([...fa.SWITCHABLE_UPSTREAM].sort(), [
+    'bad_endpoint', 'invalid_response', 'model_not_found', 'rate_limited', 'timeout', 'upstream_unavailable',
+  ].sort())
+  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['api88', 'apimart', 'infistar'].sort())
+
+  assert.equal(fa.failureAction('timeout').kind, 'retry')
+
+  const auth = fa.failureAction('llm_auth_invalid', 'invalid_key')
+  assert.equal(auth.kind, 'settings')
+
+  assert.equal(fa.failureAction('whisper_not_installed').kind, 'install_asr')
+
+  for (const upstream of fa.SWITCHABLE_UPSTREAM) {
+    assert.equal(fa.failureAction(null, upstream, null, 2).kind, 'switch_model', upstream)
+    const single = fa.failureAction(null, upstream, null, 1)
+    assert.equal(single.kind, 'settings', upstream)
+    assert.equal(single.reason, fa.ADD_PROVIDER_HINT, upstream)
+    assert.equal(single.label, '去设置', upstream)
+    // unknown count keeps prior behavior (retry for non-user-cause)
+    assert.equal(fa.failureAction(null, upstream, null, null).kind, 'retry', upstream)
+  }
+
+  const recharge = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'api88')
+  assert.equal(recharge.kind, 'recharge')
+  assert.equal(recharge.provider, 'api88')
+  assert.equal(recharge.label, '去充值')
+  // unknown sponsor stays settings
+  const quota = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'openai')
+  assert.equal(quota.kind, 'settings')
+})
+
+test('X2: pageFailureAction uses connection_count and provider', () => {
+  assert.equal(fa.pageFailureAction({
+    error_code: 'timeout', upstream_error_type: 'rate_limited', connection_count: 3,
+  }).kind, 'switch_model')
+  assert.equal(fa.pageFailureAction({
+    error_code: 'timeout', upstream_error_type: 'rate_limited', connection_count: 1,
+  }).kind, 'settings')
+  assert.equal(fa.pageFailureAction({
+    error_code: 'provider_error', upstream_error_type: 'insufficient_quota', provider: 'infistar',
+  }).kind, 'recharge')
+})
+
+test('X2: FailureActions routes the five kinds', () => {
+  const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/FailureActions.tsx'), 'utf8')
+  assert.match(src, /action\.kind === 'install_asr'/)
+  assert.match(src, /action\.kind === 'switch_model'/)
+  assert.match(src, /action\.kind === 'recharge'/)
+  assert.match(src, /SwitchModelDialog/)
+  assert.match(src, /SWITCH_MODEL_LABEL/)
+  const dialog = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/SwitchModelDialog.tsx'), 'utf8')
+  assert.match(dialog, /defaultSwitchOption/)
+  assert.match(dialog, /ProviderQualityMarks/)
+  const home = fs.readFileSync(path.resolve(__dirname, '../src/pages/HomePage.tsx'), 'utf8')
+  assert.match(home, /handleSwitchModelAndRetry/)
+  assert.match(home, /retry_kind: 'switch_model'/)
+  assert.match(home, /choice\?\.connectionId|choice \|\|/)
+  const api = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/api.ts'), 'utf8')
+  assert.match(api, /retry_kind/)
+  const catalog = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../docs/analytics/event_catalog.json'), 'utf8'))
+  assert.deepEqual(catalog.enums.retry_kind, ['same', 'switch_model', 'after_install'])
 })
 })()

@@ -20,6 +20,7 @@ import { modelSettingsApi, type ModelSettings } from '../features/settings/model
 import { forSave } from '../features/settings/modelSettingsLogic'
 import { syncFollowingCover } from '../features/settings/modelDefaults'
 import { recommendTimelineReplacement } from '../features/settings/timelineReplacement'
+import { analysisProviderId, listSwitchModelOptions, usableConnectionCount } from '../features/studio/switchModelOptions'
 import { studioApi } from '../features/studio/api'
 import { Btn } from '../ui'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
@@ -115,8 +116,17 @@ const HomePage: React.FC = () => {
 
   const replacement = recommendTimelineReplacement(aiSettings)
 
-  const switchAndRetry = async (projectId: string) => {
-    const nextModel = recommendTimelineReplacement(aiSettings)
+  const switchOptions = listSwitchModelOptions(aiSettings, {
+    connectionId: aiSettings?.analysis?.connection_id,
+    model: aiSettings?.analysis?.model,
+  })
+
+  /** X2: accept the dialog's connectionId/model; fall back to timeline replacement only when omitted. */
+  const handleSwitchModelAndRetry = async (
+    projectId: string,
+    choice?: { connectionId: string; model: string },
+  ) => {
+    const nextModel = choice || recommendTimelineReplacement(aiSettings)
     const project = projects.find(item => item.id === projectId)
     if (!aiSettings || !nextModel || !project) {
       message.error(t("重试失败，请稍后再试"))
@@ -135,7 +145,7 @@ const HomePage: React.FC = () => {
         },
       })))
       setAiSettings(saved)
-      if (managed) await studioApi.retry(projectId)
+      if (managed) await studioApi.retry(projectId, { retry_kind: 'switch_model' })
       else await projectApi.retryProcessing(projectId)
       message.success(t("已开始重试处理项目"))
       await loadProjects()
@@ -288,7 +298,10 @@ const HomePage: React.FC = () => {
                          onRetry={() => handleRetryProject()}
                          onClick={() => handleProjectCardClick(project)}
                          replacement={replacement}
-                         onSwitchAndRetry={switchAndRetry}
+                         switchOptions={switchOptions}
+                         connectionCount={usableConnectionCount(aiSettings)}
+                         analysisProvider={analysisProviderId(aiSettings)}
+                         onSwitchAndRetry={handleSwitchModelAndRetry}
                        />
                      </div>
                    ))}
