@@ -26,6 +26,7 @@ import { Btn } from '../ui'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
+import { apiConfigManager } from '../utils/apiConfig'
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -48,7 +49,11 @@ export default function HomePage() {
       setProjects(updatedProjects || [])
     },
     enabled: true,
-    interval: 30000 // 30秒轮询一次，减少频繁请求
+    interval: 30000, // 30秒轮询一次，减少频繁请求
+    // Mirror studio useWorkspace (#502): shell backend-started → refresh list now.
+    subscribeRestart: onRestart => apiConfigManager.addListener(config => {
+      if (config.isReady) onRestart()
+    }),
   })
 
   // 全局保险：当没有运行中的项目时，强制停止进度轮询并清空缓存
