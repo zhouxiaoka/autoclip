@@ -65,11 +65,12 @@ def sync_project_completion(project_id, db=None):
             # receipt must leave SQLite even when analysis or variant rows lag.
             completed = sum(item.get('status') == 'completed' for item in variants)
             failure = _failure(generation, analysis) if outcome != 'completed' else (None, None)
+            billable = _billable_before_failure(generation, analysis) if outcome != 'completed' else None
             if db is not None:
-                return _update_index(project_id, db, outcome, completed, len(drafts), failure)
+                return _update_index(project_id, db, outcome, completed, len(drafts), failure, billable)
             from backend.core.database import SessionLocal
             with SessionLocal() as session:
-                return _update_index(project_id, session, outcome, completed, len(drafts), failure)
+                return _update_index(project_id, session, outcome, completed, len(drafts), failure, billable)
         except (OSError, ValueError, SQLAlchemyError) as error:
             if db is not None and isinstance(error, SQLAlchemyError):
                 db.rollback()
@@ -85,20 +86,37 @@ def _failure(generation, analysis):
             code if isinstance(code, str) and code else None)
 
 
-def _update_index(project_id, db, outcome, completed, draft_count, failure=(None, None)):
+def _billable_before_failure(generation, analysis):
+    """Max positive billable_calls from analysis/generation so the home card can show 「本次已消耗」."""
+    counts = []
+    for record in (generation, analysis):
+        if not isinstance(record, dict):
+            continue
+        try:
+            count = int(record.get('billable_calls_before_failure'))
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            counts.append(count)
+    return max(counts) if counts else None
+
+
+def _update_index(project_id, db, outcome, completed, draft_count, failure=(None, None), billable=None):
     from backend.models.project import Project, ProjectStatus
     project = db.get(Project, project_id)
     if project is None or not (project.processing_config or {}).get('smart_import'):
         return False
     status = ProjectStatus.COMPLETED if outcome == 'completed' else ProjectStatus.FAILED
     config = {key: value for key, value in (project.processing_config or {}).items()
-              if key not in ('studio_generation_error', 'studio_generation_error_code')}
+              if key not in ('studio_generation_error', 'studio_generation_error_code', 'billable_calls_before_failure')}
     config.update(studio_completed_variant_count=completed, studio_draft_count=draft_count, studio_generation_status=outcome)
     message, code = failure
     if message:
         config['studio_generation_error'] = message
     if code:
         config['studio_generation_error_code'] = code
+    if isinstance(billable, int) and billable > 0:
+        config['billable_calls_before_failure'] = billable
     if project.status == status and project.processing_config == config:
         return False
     project.status = status

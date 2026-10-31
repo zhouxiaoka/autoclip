@@ -13,7 +13,7 @@ import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
-import { ADD_PROVIDER_HINT, failureAction, isTranscriptionInstall, SWITCH_MODEL_LABEL } from '../features/studio/failureAction'
+import { ADD_PROVIDER_HINT, failureAction, isTranscriptionInstall, presentedFailure, SWITCH_MODEL_LABEL } from '../features/studio/failureAction'
 import SwitchModelDialog from '../features/studio/SwitchModelDialog'
 import type { SwitchModelOption } from '../features/studio/switchModelOptions'
 import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
@@ -291,21 +291,33 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     error_message: project.error_message || failedProgress?.message || undefined,
     error_code: project.error_code || undefined,
   }
-  const failureText = llmFailureText(
-    project.error_message || failedProgress?.message,
-    project.error_code,
-    project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type,
-  )
-  const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)
-  const weakLocalTimeline = weakLocalTimelineFailure(failureText, project.error_code)
-  const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText, project.error_code)
+  const upstream = project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type
+  const upstreamType = typeof upstream === 'string' ? upstream : null
+  const rawFailure = project.error_message || failedProgress?.message
+  const failureText = llmFailureText(rawFailure, project.error_code, upstreamType)
+  // Home card must never show only 「处理失败」/bare 「错误」: promote empty/bare copy via
+  // the same step+reason helper the studio FailureActions use (#491/#500 tip soft).
+  const billableRaw = project.processing_config?.billable_calls_before_failure
+    ?? project.settings?.billable_calls_before_failure
+  const billableCount = Number(billableRaw)
+  const failureCard = presentedFailure({
+    error: rawFailure,
+    error_code: project.error_code,
+    upstream_error_type: upstreamType,
+    failure_stage: failedProgress?.stage || project.processing_config?.failure_stage || project.settings?.failure_stage,
+    phase: project.processing_config?.analysis_phase || project.settings?.analysis_phase,
+    // Same plum as studio FailureActions (#491 tip soft): home must pass billable, not only screenshots.
+    billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
+  }, failureText)
+  const timelineEmpty = classifyTimelineEmpty(failureText || failureCard.reason, project.error_code)
+  const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureCard.reason, project.error_code)
+  const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText || failureCard.reason, project.error_code)
   const subtitleFailure = timelineEmpty
     ? null
-    : classifySubtitleFailure(failureText, project.error_code)
-  const upstream = project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type
+    : classifySubtitleFailure(failureText || failureCard.reason, project.error_code)
   const recoveryAction = failureAction(
     project.error_code,
-    typeof upstream === 'string' ? upstream : null,
+    upstreamType,
     null,
     connectionCount,
     analysisProvider,
@@ -443,9 +455,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               </div>
             </div>
           )}
-          {!weakLocalTimeline && normalizedStatus === 'failed' && failureText && (
+          {!weakLocalTimeline && normalizedStatus === 'failed' && (
             <div className="ac-empty ac-project-error" role="alert">
-              <span className="ac-mono">{t(failureText)}</span>
+              <span className="ac-mono">{t(failureCard.step)}：{t(failureCard.reason)}</span>
+              {failureCard.billing ? <p className="ac-project-billing">{t(failureCard.billing)}</p> : null}
             </div>
           )}
           {!weakLocalTimeline && normalizedStatus === 'failed' && (

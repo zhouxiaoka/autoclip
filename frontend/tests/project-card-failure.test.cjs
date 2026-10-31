@@ -249,3 +249,44 @@ test('X2/X3 home card: insufficient_quota + sponsor offers 去 88API 充值', ()
   assert.ok(extra.opened.some(url => url.includes('88api.ai')))
 })
 
+
+test('failed card with empty/bare message still shows step-level human copy (#491 tip soft)', () => {
+  const messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8'))
+  for (const [error, code] of [[null, 'service_restarted'], ['', 'timeout'], ['错误', 'provider_error'], ['失败', null]]) {
+    const html = renderCard('failed', error, null, { project: { error_code: code } })
+    assert.match(html, /role="alert"/, String(error))
+    assert.match(html, /[下载转写分析制作]：/, String(error))
+    assert.doesNotMatch(html, /role="alert"[^>]*>\s*<span[^>]*>错误<\/span>/, String(error))
+    if (code === 'service_restarted') assert.ok(html.includes(messages.service_restarted))
+  }
+})
+
+test('failed card with catalog message keeps step prefix without rewriting the reason', () => {
+  const messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8'))
+  const html = renderCard('failed', messages.timeout, null, {
+    project: { error_code: 'timeout', processing_config: { failure_stage: 'highlight' } },
+  })
+  assert.match(html, /分析：/)
+  assert.ok(html.includes(messages.timeout))
+})
+
+
+test('failed card with billable_calls_before_failure shows 本次已消耗 (#491 tip soft)', () => {
+  const html = renderCard('failed', '错误', null, {
+    project: {
+      error_code: 'provider_error',
+      processing_config: { billable_calls_before_failure: 3, failure_stage: 'analyze' },
+    },
+  })
+  assert.match(html, /分析：/)
+  assert.match(html, /ac-project-billing/)
+  assert.match(html, /本次已消耗 3 次请求/)
+  const quiet = renderCard('failed', '错误', null, {
+    project: { error_code: 'provider_error', processing_config: { billable_calls_before_failure: 0 } },
+  })
+  assert.doesNotMatch(quiet, /本次已消耗/)
+  const viaSettings = renderCard('failed', '错误', null, {
+    project: { error_code: 'provider_error', settings: { billable_calls_before_failure: 2 } },
+  })
+  assert.match(viaSettings, /本次已消耗 2 次请求/)
+})
