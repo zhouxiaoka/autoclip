@@ -1,7 +1,7 @@
 use tauri::{
     menu::{MenuBuilder, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager,
+    AppHandle, Manager,
 };
 
 struct TrayLabels([MenuItem<tauri::Wry>; 6]);
@@ -115,14 +115,7 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
                         return;
                     }
                     // R1: let the frontend decide (running projects → confirm dialog).
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.emit(
-                            "close-requested",
-                            serde_json::json!({ "from": "tray" }),
-                        );
-                    } else {
-                        app.exit(0);
-                    }
+                    crate::quit_guard::emit_close_requested(app, "tray");
                 }
                 _ => {}
             }
