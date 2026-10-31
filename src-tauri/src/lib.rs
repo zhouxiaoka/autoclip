@@ -111,9 +111,21 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if matches!(event, tauri::RunEvent::Exit) {
+        .run(|app, event| match event {
+            // macOS Cmd+Q / app-menu 「退出」 arrive here (not CloseRequested).
+            // Programmatic confirm_quit → AppHandle::exit(0) carries Some(code) — allow it.
+            tauri::RunEvent::ExitRequested { api, code, .. } => {
+                if crate::quit_guard::should_intercept_exit(
+                    crate::quit_guard::is_ready(app),
+                    code,
+                ) {
+                    api.prevent_exit();
+                    crate::quit_guard::emit_close_requested(app, "menu");
+                }
+            }
+            tauri::RunEvent::Exit => {
                 let _ = app.state::<BackendManager>().stop();
             }
+            _ => {}
         });
 }

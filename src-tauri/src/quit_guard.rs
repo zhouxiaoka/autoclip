@@ -1,11 +1,12 @@
-//! P2 #10: QuitGuard handshake — allow quit before the frontend listener mounts.
+//! QuitGuard handshake — allow quit before the frontend listener mounts.
 //!
-//! Until `quit_guard_ready` is invoked, window close and tray Quit exit immediately
-//! instead of emitting `close-requested` (which nobody would hear on a white screen).
+//! Until `quit_guard_ready` is invoked, window close, tray Quit, and macOS
+//! Cmd+Q / app-menu Quit exit immediately instead of emitting `close-requested`
+//! (which nobody would hear on a white screen).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct QuitGuardState {
     ready: AtomicBool,
@@ -34,6 +35,32 @@ pub fn is_ready(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether user-driven app exit (Cmd+Q / menu Quit) should be intercepted.
+///
+/// `exit_code` is [`None`] for user interaction (macOS Cmd+Q / app menu Quit)
+/// and [`Some`] when exit was requested via [`AppHandle::exit`] / restart
+/// (e.g. FE chose 「仍然退出」 → `confirm_quit`). Only intercept the former,
+/// and only after the FE listener is live.
+pub fn should_intercept_exit(ready: bool, exit_code: Option<i32>) -> bool {
+    ready && exit_code.is_none()
+}
+
+/// Emit `close-requested` so QuitGuard can show the dialog (or quit immediately
+/// when nothing is running). Shows/focuses main if it was hidden to tray.
+pub fn emit_close_requested(app: &AppHandle, from: &str) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit(
+            "close-requested",
+            serde_json::json!({ "from": from }),
+        );
+    } else {
+        app.exit(0);
+    }
+}
+
 #[tauri::command]
 pub fn quit_guard_ready(state: State<'_, QuitGuardState>) {
     state.mark_ready();
@@ -41,7 +68,7 @@ pub fn quit_guard_ready(state: State<'_, QuitGuardState>) {
 
 #[cfg(test)]
 mod tests {
-    use super::QuitGuardState;
+    use super::{should_intercept_exit, QuitGuardState};
 
     #[test]
     fn starts_not_ready() {
@@ -61,5 +88,28 @@ mod tests {
         state.mark_ready();
         state.mark_ready();
         assert!(state.is_ready());
+    }
+
+    #[test]
+    fn intercepts_user_cmd_q_when_ready() {
+        assert!(should_intercept_exit(true, None));
+    }
+
+    #[test]
+    fn allows_cmd_q_before_fe_ready() {
+        assert!(!should_intercept_exit(false, None));
+    }
+
+    #[test]
+    fn allows_programmatic_exit_after_confirm() {
+        // confirm_quit / quit_app call AppHandle::exit(0) → Some(0)
+        assert!(!should_intercept_exit(true, Some(0)));
+        assert!(!should_intercept_exit(false, Some(0)));
+    }
+
+    #[test]
+    fn allows_programmatic_nonzero_exit_code() {
+        // AppHandle::restart and other programmatic exits carry Some(code)
+        assert!(!should_intercept_exit(true, Some(-1)));
     }
 }
