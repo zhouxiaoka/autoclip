@@ -168,18 +168,18 @@ def test_missing_subtitle_failure_roundtrips_with_exc_type(memory_backend, proje
     assert type(meta["result"]) is ImportSubtitleUnavailable
     message = str(raised)
     assert "没有字幕可分析" in message
-    assert "设置 → 转写" in message
+    assert "设置 → 默认模型 → 语音转字幕" in message
     assert meta["status"] == "FAILURE"
     assert isinstance(meta["result"], BaseException)
     assert "没有字幕可分析" in str(meta["result"])
     # 再读一次：worker 写结果时会解码当前 meta，这里不能再抛 ValueError
     again = memory_backend._get_task_meta_for("task-missing-srt")
     assert again["status"] == "FAILURE"
-    assert "设置 → 转写" in str(again["result"])
+    assert "设置 → 默认模型 → 语音转字幕" in str(again["result"])
 
     assert project_service.project.status == "failed"
     assert project_service.project.project_metadata["last_error_code"] == "whisper_not_installed"
-    assert "设置 → 转写" in project_service.project.project_metadata["last_error"]
+    assert "设置 → 默认模型 → 语音转字幕" in project_service.project.project_metadata["last_error"]
 
 
 def test_speech_error_roundtrips_as_structured_subtitle_failure(memory_backend, project_service, tmp_path, monkeypatch):
@@ -204,11 +204,11 @@ def test_speech_error_roundtrips_as_structured_subtitle_failure(memory_backend, 
     assert type(raised) is ImportSubtitleUnavailable
     assert type(meta["result"]) is ImportSubtitleUnavailable
     assert "还没安装" in str(raised)
-    assert "设置 → 转写" in str(raised)
+    assert "设置 → 默认模型 → 语音转字幕" in str(raised)
     assert meta["status"] == "FAILURE"
     assert project_service.project.status == "failed"
     assert project_service.project.project_metadata["last_error_code"] == "whisper_not_installed"
-    assert "设置 → 转写" in project_service.project.project_metadata["last_error"]
+    assert "设置 → 默认模型 → 语音转字幕" in project_service.project.project_metadata["last_error"]
 
 
 def test_pipeline_submit_error_is_kept_on_the_project(memory_backend, project_service, tmp_path, monkeypatch):
@@ -340,7 +340,7 @@ def test_import_whisper_options_reach_the_recognizer(tmp_path, monkeypatch):
     assert speech_error is not None
     assert "unexpected keyword" not in speech_error
     assert "未安装" in speech_error
-    assert "设置 → 转写" in speech_error
+    assert "设置 → 默认模型 → 语音转字幕" in speech_error
     failure = mod.import_subtitle_failure(speech_error)
     assert failure.code == "whisper_not_installed"
 
@@ -400,7 +400,7 @@ def test_import_task_source_does_not_set_failure_state_by_hand():
 def test_speech_api_key_is_missing_credential_without_changing_guidance(
     memory_backend, project_service, tmp_path, monkeypatch, caplog
 ):
-    """转写密钥没配时，Sentry 类型分开，但失败码和「设置 → 转写」提示保持原样。"""
+    """转写密钥没配时，Sentry 类型分开，但失败码和「设置 → 默认模型 → 语音转字幕」提示保持原样。"""
     video = tmp_path / "input.mp4"
     video.write_bytes(b"not-a-real-video")
     monkeypatch.setattr(
@@ -421,9 +421,9 @@ def test_speech_api_key_is_missing_credential_without_changing_guidance(
     assert type(raised) is ImportMissingCredential
     assert type(meta["result"]) is ImportMissingCredential
     assert "请配置API Key" in str(raised)
-    assert "设置 → 转写" in str(raised)
+    assert "设置 → 默认模型 → 语音转字幕" in str(raised)
     assert project_service.project.project_metadata["last_error_code"] == "subtitle_setup"
-    assert "设置 → 转写" in project_service.project.project_metadata["last_error"]
+    assert "设置 → 默认模型 → 语音转字幕" in project_service.project.project_metadata["last_error"]
     assert "kind=missing-key" in caplog.text
     assert "exc=ImportMissingCredential" in caplog.text
 
@@ -451,7 +451,7 @@ def test_llm_not_configured_keeps_message_and_code(project_service, caplog):
     ["whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup"],
 )
 def test_subtitle_codes_classify_as_subtitle(code):
-    exc_cls = classify_import_failure("没有字幕可分析。到「设置 → 转写」重试。", code)
+    exc_cls = classify_import_failure("没有字幕可分析。到「设置 → 默认模型 → 语音转字幕」重试。", code)
     assert exc_cls is ImportSubtitleUnavailable
     assert exc_cls.kind == "missing-subtitle"
 
@@ -475,6 +475,7 @@ def test_unexpected_and_key_messages_do_not_share_a_type():
     assert key.kind == "missing-key"
 
 
+@pytest.mark.real_media_probe
 def test_silent_or_short_source_fails_before_transcription_and_is_not_a_crash(memory_backend, project_service, tmp_path, monkeypatch):
     """RC156 Win QA #10/#11 on the legacy import task: no transcription, no pipeline, own exception kind."""
     import shutil

@@ -75,7 +75,7 @@ def test_observer_respects_state_transaction_lock(state_path):
     started, completed = threading.Event(), threading.Event()
     def observe():
         started.set()
-        store.read('p1', recover=False)
+        store.read('p1')
         completed.set()
     with store.lock:
         reader = threading.Thread(target=observe)

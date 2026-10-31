@@ -15,7 +15,7 @@
 | `version` | 当前安装的包版本 |
 | `duration_ms` | `mcp_tool_called` 是这次调用的毫秒数。`mcp_job_finished` 是任务从开始到结束的毫秒数。最大 3600000 |
 | `ok` | 成败 |
-| `error_code` | `none` / `unknown` / `interrupted` / `failed` / `cancelled` / `invalid_input` / `disabled` / `timeout` |
+| `error_code` | `none` / `unknown` / `interrupted` / `failed` / `cancelled` / `invalid_input` / `disabled` / `timeout` / `source_unreadable` / `source_too_short` / `source_no_audio`（素材原因，归用户） |
 | `$feature/mcp_v2_tools` | 这次进程读到的开关，默认 false |
 
 `completed` 和 `partial` 记 `ok=true`、`error_code=none`。查不到任务是 `unknown`，不发 `mcp_job_finished`。

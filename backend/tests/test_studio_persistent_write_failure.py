@@ -39,13 +39,13 @@ def test_worker_does_not_remain_queued_and_can_retry_after_permission_returns(pr
         blocked.setattr(jobs, 'render_draft', lambda *a, **k: pytest.fail('Denied initial state must not render'))
         with pytest.raises(PermissionError):
             jobs._render('p1', object(), 'active')
-        live = store.read('p1')
+        live = store.recover('p1')
         assert live['jobs'][0]['status'] == 'failed'
         assert live['jobs'][0]['error'] == store.IO_FAILURE_MESSAGE
         assert live['jobs'][1]['result'] == {'path': 'existing.mp4'}
         assert project.read_bytes() == original
         assert not list(project.parent.glob('*.tmp'))
-    assert store.read('p1')['jobs'][0]['status'] == 'failed'
+    assert store.recover('p1')['jobs'][0]['status'] == 'failed'
     store.change('p1', lambda data: data['jobs'].append(
         {'job_id': 'retry', 'status': 'queued', 'percent': 0, 'instance': store.INSTANCE}))
     monkeypatch.setattr(jobs, 'render_draft', lambda *a, **k: {'path': 'retried.mp4'})
@@ -71,13 +71,13 @@ def test_render_failure_settles_only_linked_variant_and_keeps_ready_output(proje
     deny_state(monkeypatch)
     with pytest.raises(PermissionError):
         store.change('p1', lambda data: data['jobs'][0].update(status='running'))
-    live = store.read('p1')
+    live = store.recover('p1')
     assert live['output_variants'][1]['status'] == 'failed'
     assert live['output_variants'][0] == {'id': 'ready', 'status': 'completed', 'render_job_id': 'ready', 'cover': 'keep.jpg'}
     assert live['generation']['status'] == 'partial'
     assert live['generation']['completed_variant_count'] == 1
     assert live['analysis']['run_id'] == 'flow-a'
-    assert store.read('p1')['generation']['finished_at'] == live['generation']['finished_at']
+    assert store.recover('p1')['generation']['finished_at'] == live['generation']['finished_at']
     assert project.read_bytes() == original
 
 
@@ -91,7 +91,7 @@ def test_analysis_failure_is_terminal_without_destroying_source_or_plan(project,
     deny_state(monkeypatch)
     with pytest.raises(PermissionError):
         store.change('p1', lambda data: data['analysis'].update(message='controlled progress'))
-    live = store.read('p1')
+    live = store.recover('p1')
     assert live['analysis']['status'] == live['generation']['status'] == 'failed'
     assert live['analysis']['run_id'] == 'flow-a'
     assert live['plan'] == {'id': 'existing-plan'}
@@ -105,7 +105,7 @@ def test_failed_preparation_is_retryable_with_packaging_still_required(project, 
     deny_state(monkeypatch)
     with pytest.raises(PermissionError):
         store.change('p1', lambda data: data['output_variants'][0].update(status='queued'))
-    live = store.read('p1')
+    live = store.recover('p1')
     assert live['output_variants'][0]['status'] == 'failed'
     assert live['output_variants'][0]['needs_prepare']
     assert live['generation']['status'] == 'failed'
@@ -119,7 +119,7 @@ def test_cover_state_failure_preserves_completed_video_and_original_cover(projec
     deny_state(monkeypatch)
     with pytest.raises(PermissionError):
         store.change('p1', lambda data: data['output_variants'][0]['cover_job'].update(status='running'))
-    live = store.read('p1')['output_variants'][0]
+    live = store.recover('p1')['output_variants'][0]
     assert live['status'] == 'completed' and live['cover'] == 'existing.jpg'
     assert live['cover_job']['status'] == 'failed'
 
@@ -158,7 +158,7 @@ def test_one_failed_render_does_not_finish_generation_with_another_worker_pendin
     deny_state(monkeypatch)
     with pytest.raises(PermissionError):
         store.change('p1', lambda data: data['jobs'][0].update(status='running'))
-    live = store.read('p1')
+    live = store.recover('p1')
     assert live['output_variants'][0]['status'] == 'failed'
     assert live['output_variants'][1]['status'] == 'queued'
     assert live['jobs'][-1]['status'] == 'queued'

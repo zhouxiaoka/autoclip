@@ -124,23 +124,25 @@ class ApiConfigManager {
   /**
    * 等待 API 就绪
    */
-  async waitForReady(timeout: number = 30000): Promise<boolean> {
+  async waitForReady(timeout: number = 30000, signal?: AbortSignal): Promise<boolean> {
     if (this.isReady()) {
       return true;
     }
+    if (signal?.aborted) return false;
 
     return new Promise((resolve) => {
-      const timeoutId = setTimeout(() => {
-        resolve(false);
-      }, timeout);
-
+      const done = (ready: boolean) => {
+        clearTimeout(timeoutId);
+        removeListener();
+        signal?.removeEventListener('abort', onAbort);
+        resolve(ready);
+      };
+      const onAbort = () => done(false);
+      const timeoutId = setTimeout(() => done(false), timeout);
       const removeListener = this.addListener((config) => {
-        if (config.isReady) {
-          clearTimeout(timeoutId);
-          removeListener();
-          resolve(true);
-        }
+        if (config.isReady) done(true);
       });
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 
@@ -151,30 +153,12 @@ class ApiConfigManager {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${this.config.baseUrl}${normalizedPath}`;
   }
-
-  /**
-   * 健康检查
-   */
-  async healthCheck(): Promise<boolean> {
-    try {
-      const response = await fetch(this.buildUrl('/health'), {
-        method: 'GET',
-        timeout: 5000
-      } as any);
-      return response.ok;
-    } catch (error) {
-      console.warn('API 健康检查失败:', error);
-      return false;
-    }
-  }
 }
 
 // 导出单例实例
 export const apiConfigManager = ApiConfigManager.getInstance();
 
 // 导出便捷函数
-export const getApiBaseUrl = () => apiConfigManager.getBaseUrl();
 export const isApiReady = () => apiConfigManager.isReady();
 export const waitForApiReady = (timeout?: number) => apiConfigManager.waitForReady(timeout);
 export const buildApiUrl = (path: string) => apiConfigManager.buildUrl(path);
-export const checkApiHealth = () => apiConfigManager.healthCheck();

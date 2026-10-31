@@ -53,6 +53,7 @@ def test_vad_failure_is_classified_without_treating_encode_as_vad():
     assert vad_backend_failed(exc.value)
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_install_error_is_not_reported_as_not_installed(monkeypatch):
     """设置页靠 status=error 显示「重试安装」。轮询不能把它盖成 not_installed。"""
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)
@@ -65,6 +66,7 @@ def test_install_error_is_not_reported_as_not_installed(monkeypatch):
         whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state (#165)
 def test_installed_runtime_still_reports_installed_after_a_previous_error(monkeypatch):
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: True)
     whisper_runtime._set_state(status="error", progress=12, message="安装失败", log_tail="")
@@ -74,6 +76,7 @@ def test_installed_runtime_still_reports_installed_after_a_previous_error(monkey
         whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_install_error_is_remembered_after_the_process_forgets(tmp_path, monkeypatch):
     monkeypatch.setattr(whisper_runtime, "_data_dir", lambda: tmp_path)
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)
@@ -95,7 +98,7 @@ def test_missing_runtime_points_at_transcription_settings(tmp_path, monkeypatch)
     video.write_bytes(b"x")
     with pytest.raises(SpeechRecognitionError) as exc:
         recognizer._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
-    assert "设置 → 转写" in str(exc.value)
+    assert "设置 → 默认模型 → 语音转字幕" in str(exc.value)
     assert "语音识别" not in str(exc.value)
     assert ".srt" in str(exc.value)
 
@@ -104,7 +107,7 @@ def test_failure_text_has_no_local_path():
     message = describe_whisper_failure(RuntimeError(r"failed to open C:\Users\secret\clip.mp4"))
     assert "secret" not in message
     assert "clip.mp4" not in message
-    assert "设置 → 转写" in message
+    assert "设置 → 默认模型 → 语音转字幕" in message
 
 
 @pytest.mark.parametrize("error,expected", [
@@ -194,7 +197,7 @@ def test_failed_model_download_is_a_readable_settings_error(tmp_path, monkeypatc
     video.write_bytes(b"video")
     with pytest.raises(SpeechRecognitionError) as caught:
         _recognizer()._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
-    assert "设置 → 转写" in str(caught.value)
+    assert "设置 → 默认模型 → 语音转字幕" in str(caught.value)
     assert "未安装" not in str(caught.value)
 
 

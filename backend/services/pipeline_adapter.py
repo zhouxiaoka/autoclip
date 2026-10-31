@@ -351,9 +351,13 @@ class PipelineAdapter:
         finally:
             self.close()
     
-    def process_project_sync(self, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
+    def process_project_sync(self, input_video_path: str, input_srt_path: str,
+                             platform_min_sec: Optional[float] = None, platform_min_label: str = '') -> Dict[str, Any]:
         """
-        处理项目 - 同步版本
+        处理项目 - 同步版本。
+
+        长视频的最短时长由 SimplePipelineAdapter 写进一次挑片。这条旧的六步路径接受同样的参数，
+        调用方传了也不会类型错误；分步提示词本身不使用它。
         
         Args:
             input_video_path: 输入视频路径
@@ -362,6 +366,7 @@ class PipelineAdapter:
         Returns:
             处理结果
         """
+        del platform_min_sec, platform_min_label
         try:
             # 尝试获取现有的事件循环
             loop = asyncio.get_event_loop()

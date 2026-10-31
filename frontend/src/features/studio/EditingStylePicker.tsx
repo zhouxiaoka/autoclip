@@ -17,6 +17,8 @@ type Trigger = 'hover' | 'focus' | 'keyboard' | 'button' | 'select'
 const COPY: Record<EditingStyle, { name: string; desc: string }> = {
   editorial: { name: 'editing_style.editorial.name', desc: 'editing_style.editorial.desc' },
   street: { name: 'editing_style.street.name', desc: 'editing_style.street.desc' },
+  news: { name: 'editing_style.news.name', desc: 'editing_style.news.desc' },
+  cinema: { name: 'editing_style.cinema.name', desc: 'editing_style.cinema.desc' },
   classic: { name: 'editing_style.classic.name', desc: 'editing_style.classic.desc' },
 }
 

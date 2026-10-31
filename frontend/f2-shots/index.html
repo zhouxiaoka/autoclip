@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>F2 trial-run shots</title>
+<style>
+  :root { --ac-sub:#6b7280; --ac-danger:#b45309; --warn:#a16207; --bg:#f7f6f3; --card:#fff; --line:#e7e5e0; --ok:#15803d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; background: var(--bg); color: #1c1917; }
+  .frame { max-width: 520px; margin: 32px auto; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 28px 28px; box-shadow: 0 8px 24px rgba(28,25,23,.06); }
+  h2 { margin: 0 0 4px; font-size: 18px; }
+  .sub { color: var(--ac-sub); font-size: 13px; margin: 0 0 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .btn { appearance: none; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 13px; cursor: default; }
+  .btn.primary { background: #1c1917; color: #fff; border-color: #1c1917; }
+  .btn.text { border: none; background: transparent; color: #2563eb; padding: 7px 8px; }
+  .note { font-size: 13px; color: var(--ac-sub); margin: 6px 0; }
+  .note.warn { color: var(--warn); background: #fef9c3; border-radius: 8px; padding: 8px 10px; display: inline-block; }
+  ul.lines { list-style: none; padding: 0; margin: 8px 0; }
+  ul.lines li { font-size: 13px; line-height: 1.7; color: var(--ac-sub); }
+  ul.lines li[data-tone="ok"] { color: var(--ok); }
+  ul.lines li[data-tone="warn"] { color: var(--warn); }
+  ul.lines li[data-tone="fail"] { color: var(--ac-danger); }
+  .field { margin: 12px 0 16px; }
+  .field label { display: block; font-size: 12px; color: var(--ac-sub); margin-bottom: 4px; }
+  .field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+</style>
+</head>
+<body>
+<script>
+const scene = new URLSearchParams(location.search).get('scene') || 'buttons';
+const root = document.createElement('div');
+root.className = 'frame';
+root.setAttribute('data-scene', scene);
+
+function buttonsOnly() {
+  root.innerHTML = `
+    <h2>模型连接</h2>
+    <p class="sub">DeepSeek · deepseek-chat</p>
+    <div class="field"><label>API 密钥</label><input value="sk-••••••••••••" readonly /></div>
+    <div class="row">
+      <button class="btn">快速测试</button>
+      <button class="btn primary">试跑一段</button>
+    </div>
+    <p class="note">保存后会自动试跑一段；可随时取消。</p>
+  `;
+}
+
+function pass() {
+  root.innerHTML = `
+    <h2>模型连接</h2>
+    <p class="sub">DeepSeek · deepseek-chat</p>
+    <div class="row">
+      <button class="btn">快速测试</button>
+      <button class="btn">试跑一段</button>
+    </div>
+    <ul class="lines">
+      <li data-tone="ok">上下文 ✓</li>
+      <li data-tone="ok">速率 ✓</li>
+      <li data-tone="ok">输出格式 ✓</li>
+    </ul>
+    <p class="note">预计 30 分钟素材约需 2 次请求、约 0.4 分钟</p>
+  `;
+}
+
+function fail() {
+  root.innerHTML = `
+    <h2>模型连接</h2>
+    <p class="sub">自定义 OpenAI 兼容 · gpt-4o-mini</p>
+    <div class="row">
+      <button class="btn">快速测试</button>
+      <button class="btn">试跑一段</button>
+    </div>
+    <p class="note warn" data-testid="trial-failed-badge">未通过试跑</p>
+    <ul class="lines">
+      <li data-tone="ok">上下文 ✓</li>
+      <li data-tone="warn">速率 ⚠（出现限流，长视频建议降并发）</li>
+      <li data-tone="fail">输出格式 ✗</li>
+    </ul>
+    <p class="note">预计 30 分钟素材约需 4 次请求、约 1.2 分钟</p>
+    <p class="note">仍可保存；导入页稍后会显示「未通过试跑」。</p>
+  `;
+}
+
+if (scene === 'pass') pass();
+else if (scene === 'fail') fail();
+else buttonsOnly();
+document.body.appendChild(root);
+</script>
+</body>
+</html>

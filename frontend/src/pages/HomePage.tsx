@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Layout, 
   Typography, 
@@ -14,19 +14,25 @@ import CreativeImport from '../features/studio/CreativeImport'
 import FirstRunSetup from '../features/settings/FirstRunSetup'
 
 
-import { exampleProjectApi, projectApi } from '../services/api'
-import { beginExperience } from '../analytics/experience'
-import { workflow } from '../analytics/observer'
+import { projectApi } from '../services/api'
+import { openExample as startExampleProject } from '../features/studio/openExample'
+import { modelSettingsApi, type ModelSettings } from '../features/settings/modelSettingsApi'
+import { forSave } from '../features/settings/modelSettingsLogic'
+import { syncFollowingCover } from '../features/settings/modelDefaults'
+import { recommendTimelineReplacement } from '../features/settings/timelineReplacement'
+import { analysisProviderId, listSwitchModelOptions, usableConnectionCount } from '../features/studio/switchModelOptions'
+import { studioApi } from '../features/studio/api'
 import { Btn } from '../ui'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
+import { apiConfigManager } from '../utils/apiConfig'
 
 const { Content } = Layout
 const { Title, Text } = Typography
 const { Option } = Select
 
-const HomePage: React.FC = () => {
+export default function HomePage() {
   useTranslation()
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
@@ -35,6 +41,7 @@ const HomePage: React.FC = () => {
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null)
   const [setupRequest, setSetupRequest] = useState(0)
   const [exampleBusy, setExampleBusy] = useState(false)
+  const [aiSettings, setAiSettings] = useState<ModelSettings | null>(null)
 
   // 使用项目轮询Hook
   useProjectPolling({
@@ -42,7 +49,11 @@ const HomePage: React.FC = () => {
       setProjects(updatedProjects || [])
     },
     enabled: true,
-    interval: 30000 // 30秒轮询一次，减少频繁请求
+    interval: 30000, // 30秒轮询一次，减少频繁请求
+    // Mirror studio useWorkspace (#502): shell backend-started → refresh list now.
+    subscribeRestart: onRestart => apiConfigManager.addListener(config => {
+      if (config.isReady) onRestart()
+    }),
   })
 
   // 全局保险：当没有运行中的项目时，强制停止进度轮询并清空缓存
@@ -102,6 +113,53 @@ const HomePage: React.FC = () => {
   // ProjectCard.handleRetry 已经发过 start/retryProcessing 请求，这里只负责
   // 提示 + 刷新列表，绝不能再发一次重试请求（会和卡片自身的请求叠加，并制造
   // loadProjects→重挂载→自动启动 的循环）。
+  useEffect(() => {
+    let live = true
+    modelSettingsApi.get().then(value => { if (live) setAiSettings(value) }).catch(() => { if (live) setAiSettings(null) })
+    return () => { live = false }
+  }, [])
+
+  const replacement = recommendTimelineReplacement(aiSettings)
+
+  const switchOptions = listSwitchModelOptions(aiSettings, {
+    connectionId: aiSettings?.analysis?.connection_id,
+    model: aiSettings?.analysis?.model,
+  })
+
+  /** X2: accept the dialog's connectionId/model; fall back to timeline replacement only when omitted. */
+  const handleSwitchModelAndRetry = async (
+    projectId: string,
+    choice?: { connectionId: string; model: string },
+  ) => {
+    const nextModel = choice || recommendTimelineReplacement(aiSettings)
+    const project = projects.find(item => item.id === projectId)
+    if (!aiSettings || !nextModel || !project) {
+      message.error(t("重试失败，请稍后再试"))
+      return
+    }
+    const managed = !!(project.settings?.smart_import || project.processing_config?.smart_import)
+      || ['highlight', 'promo'].includes(project.settings?.creative?.goal || project.processing_config?.creative?.goal)
+    try {
+      const saved = await modelSettingsApi.save(forSave(syncFollowingCover(aiSettings, {
+        ...aiSettings,
+        analysis: {
+          connection_id: nextModel.connectionId,
+          model: nextModel.model,
+          capability: aiSettings.analysis?.capability || 'auto',
+          model_source: 'user',
+        },
+      })))
+      setAiSettings(saved)
+      if (managed) await studioApi.retry(projectId, { retry_kind: 'switch_model' })
+      else await projectApi.retryProcessing(projectId)
+      message.success(t("已开始重试处理项目"))
+      await loadProjects()
+    } catch (error) {
+      message.error(t("重试失败，请稍后再试"))
+      console.error('Switch model and retry error:', error)
+    }
+  }
+
   const handleRetryProject = async () => {
     message.success(t("已开始重试处理项目"))
     try {
@@ -112,16 +170,11 @@ const HomePage: React.FC = () => {
   }
 
   const openExample = async () => {
-    const finish = beginExperience('example_project_open', { material_origin: 'sample' })
     setExampleBusy(true)
     try {
-      const { project_id, resolution, example_version } = await exampleProjectApi.create()
-      workflow.rememberProject(project_id, { material_origin: 'sample', example_version })
-      finish('completed', { resolution, example_version, ...workflow.context(project_id) })
+      await startExampleProject(navigate)
       void loadProjects().catch(() => undefined)
-      navigate(`/project/${project_id}`)
     } catch (error) {
-      finish('failed', {}, error)
       message.error(t("示例项目暂时不可用"))
       console.error('Example project error:', error)
     } finally {
@@ -160,7 +213,7 @@ const HomePage: React.FC = () => {
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
-          <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} />
+          <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} />
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
           {/* 项目管理区域 */}
@@ -249,6 +302,11 @@ const HomePage: React.FC = () => {
                          onDelete={handleDeleteProject}
                          onRetry={() => handleRetryProject()}
                          onClick={() => handleProjectCardClick(project)}
+                         replacement={replacement}
+                         switchOptions={switchOptions}
+                         connectionCount={usableConnectionCount(aiSettings)}
+                         analysisProvider={analysisProviderId(aiSettings)}
+                         onSwitchAndRetry={handleSwitchModelAndRetry}
                        />
                      </div>
                    ))}
@@ -262,4 +320,4 @@ const HomePage: React.FC = () => {
   )
 }
 
-export default HomePage
+

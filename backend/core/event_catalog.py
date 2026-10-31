@@ -1,6 +1,6 @@
 """Machine-readable tracking-plan catalog and payload validator.
 
-``docs/analytics/event_catalog.json`` is the only registry. Unregistered
+The packaged ``event_catalog.json`` mirrors the docs tracking plan. Unregistered
 business events and missing required fields fail validation. Telemetry
 callers must still catch errors — this module never raises on emit.
 """
@@ -15,6 +15,12 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 _EVENT_NAME = re.compile(r"^[a-z$][a-z0-9_ ]*$")
+# Runtime facts must work without optional package data. A contract test keeps
+# these canonical values aligned with the tracking plan's single source.
+CANONICAL_OS = ('macos', 'windows', 'linux', 'unknown')
+OS_ALIASES = {'darwin': 'macos', 'win32': 'windows'}
+CANONICAL_ARCH = ('aarch64', 'x86_64', 'unknown')
+ANALYTICS_ENVIRONMENTS = ('production', 'development', 'validation')
 _URL_WITH_PATH = re.compile(r"https?://\S+/\S+")
 _PRODUCER_CALLS = (
     re.compile(r"captureBusinessEvent\(\s*['\"]([a-z$][a-z0-9_]*)['\"]"),
@@ -52,12 +58,19 @@ def catalog_path() -> Path:
     override = os.environ.get("AUTOCLIP_EVENT_CATALOG")
     if override:
         return Path(override)
+    packaged = Path(__file__).resolve().with_name("event_catalog.json")
+    if packaged.is_file():
+        return packaged
     return Path(__file__).resolve().parents[2] / "docs" / "analytics" / "event_catalog.json"
 
 
 @lru_cache(maxsize=1)
 def load_catalog() -> dict[str, Any]:
-    return json.loads(catalog_path().read_text(encoding="utf-8"))
+    try:
+        data = json.loads(catalog_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, UnicodeError):
+        return {}
 
 
 def reload_catalog() -> dict[str, Any]:
@@ -66,19 +79,31 @@ def reload_catalog() -> dict[str, Any]:
 
 
 def normalize_os(value: str | None) -> str | None:
-    catalog = load_catalog()
     if not isinstance(value, str):
         return None
     key = value.strip().lower()
-    aliases = catalog["common"].get("os_aliases") or {}
-    key = aliases.get(key, key)
-    if key in catalog["common"]["os"]:
+    key = OS_ALIASES.get(key, key)
+    if key in CANONICAL_OS:
         return key
     return None
 
 
 def detect_os() -> str:
-    return normalize_os(sys.platform) or "unknown"
+    return normalize_os(os.getenv('AUTOCLIP_NATIVE_OS') or sys.platform) or "unknown"
+
+
+def normalize_arch(value: str | None) -> str:
+    key = value.strip().lower() if isinstance(value, str) else ''
+    if key in {'arm64', 'aarch64'}:
+        return 'aarch64'
+    if key in {'x86_64', 'amd64', 'x64'}:
+        return 'x86_64'
+    return 'unknown'
+
+
+def detect_arch() -> str:
+    import platform
+    return normalize_arch(os.getenv('AUTOCLIP_NATIVE_ARCH') or platform.machine())
 
 
 def app_version() -> str:
@@ -96,8 +121,7 @@ def app_version() -> str:
 
 def analytics_environment() -> str:
     value = (os.environ.get("AUTOCLIP_BUILD_ENVIRONMENT") or "").strip().lower()
-    allowed = set(load_catalog()["common"]["analytics_environment"])
-    if value in allowed:
+    if value in ANALYTICS_ENVIRONMENTS:
         return value
     return "development"
 
@@ -108,6 +132,7 @@ def envelope_properties() -> dict[str, Any]:
         "runtime": "python",
         "app_version": app_version(),
         "os": detect_os(),
+        "arch": detect_arch(),
         "analytics_environment": analytics_environment(),
     }
 
@@ -157,6 +182,8 @@ def validate_event(
 ) -> list[str]:
     """Return human-readable errors. Empty list means the payload is allowed."""
     data = catalog or load_catalog()
+    if not data:
+        return []  # Optional registry absent: producers still enforce privacy allowlists.
     errors: list[str] = []
     if name in ignore_events(data):
         return errors
@@ -187,6 +214,9 @@ def validate_event(
         os_value = props.get("os")
         if os_value is not None and os_value not in data["common"]["os"]:
             errors.append(f"{name}.os={os_value!r} is not a canonical os")
+        arch = props.get('arch')
+        if arch is not None and arch not in data['common']['arch']:
+            errors.append(f"{name}.arch={arch!r} is not a canonical arch")
     errors.extend(_privacy_errors(name, props, data))
     return errors
 
@@ -200,9 +230,12 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
     spec = event_spec(name, catalog) or {}
     if spec.get("kind") == "user_submitted":
         submitted.add(name)
+    count_keys = {str(key).lower() for key in privacy.get("count_keys") or []}
     errors: list[str] = []
     for key, value in props.items():
         lowered_key = str(key).lower()
+        if lowered_key in count_keys and isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            continue
         if lowered_key in forbidden_keys:
             errors.append(f"{name} has forbidden property {key}")
         if lowered_key in user_content and name not in submitted:
@@ -218,7 +251,7 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
 
 def collect_producer_events(root: Path | None = None) -> set[str]:
     """Event names referenced by frontend/backend producers."""
-    repo = root or catalog_path().parents[1]
+    repo = root if root is not None else Path(__file__).resolve().parents[2]
     names: set[str] = set()
     frontend = repo / "frontend" / "src"
     if frontend.is_dir():

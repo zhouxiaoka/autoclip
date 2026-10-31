@@ -48,7 +48,7 @@ class ImportSourceUnusable(ImportProcessingError):
     kind = "source-input"
 
 
-# 这些码已经带了「设置 → 转写」去向，归到缺字幕，即使用户原文里提过密钥。
+# 这些码已经带了「设置 → 默认模型 → 语音转字幕」去向，归到缺字幕，即使用户原文里提过密钥。
 _WHISPER_STATE_CODES = frozenset({
     "whisper_not_installed",
     "whisper_install_failed",
@@ -177,7 +177,7 @@ def _fail_import(
 
 
 def import_subtitle_failure(speech_error: Optional[str | CloudTranscriptionError] = None):
-    """导入关卡没有可用字幕时，沿用流水线同一套失败码和「设置 → 转写」提示。
+    """导入关卡没有可用字幕时，沿用流水线同一套失败码和「设置 → 默认模型 → 语音转字幕」提示。
 
     这只说明下一步该去哪，不表示 Whisper 一定能转写成功。
     """
@@ -191,7 +191,7 @@ def import_subtitle_failure(speech_error: Optional[str | CloudTranscriptionError
 
     try:
         if isinstance(speech_error, CloudTranscriptionError):
-            return cloud_transcription_failure(str(speech_error))
+            return cloud_transcription_failure(speech_error)  # snapshot + status ride on the error
         if speech_error:
             return failure_from_speech_error(speech_error)
         return missing_subtitle_failure()
@@ -377,8 +377,9 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
         speech_error = None
         srt_path = srt_file_path
         # 比最短片段还短、或没有音轨又没带字幕：转写和分析注定白跑，先拦下（RC156 #10/#11）
-        from backend.pipeline.media_precheck import subtitle_route_failure
-        blocked = subtitle_route_failure(video_path, srt_available=bool(srt_path and Path(srt_path).exists()))
+        from backend.services.studio import preflight  # the one preflight (#418 rewrite)
+        blocked = preflight.preflight(preflight.ResolvedInputs(
+            Path(video_path), Path(srt_path) if srt_path else None, entry='content')).source_failure
         if blocked:
             with session_scope() as db:
                 _fail_import(ProjectService(db), project_id, blocked.user_message(), error_code=blocked.code)

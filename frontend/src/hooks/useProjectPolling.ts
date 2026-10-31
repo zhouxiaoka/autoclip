@@ -2,16 +2,29 @@ import { useEffect, useRef, useState } from 'react'
 import { projectApi } from '../services/api'
 import { Project, useProjectStore } from '../store/useProjectStore'
 
+/** Wire a backend-ready signal to an immediate project-list refresh (#487/#502). */
+export function bindRestartRefresh(
+  subscribeRestart: (onRestart: () => void) => () => void,
+  refresh: () => void | Promise<void>,
+): () => void {
+  return subscribeRestart(() => {
+    void Promise.resolve(refresh()).catch(() => undefined)
+  })
+}
+
 interface UseProjectPollingOptions {
   interval?: number // 轮询间隔，默认10秒
   onProjectsUpdate?: (projects: Project[]) => void
   enabled?: boolean // 是否启用轮询
+  /** Same shape as studio observeWorkspace: fire when the shell has a ready backend again. */
+  subscribeRestart?: (onRestart: () => void) => () => void
 }
 
 export const useProjectPolling = ({
   interval = 30000, // 默认30秒，减少频繁请求
   onProjectsUpdate,
-  enabled = true
+  enabled = true,
+  subscribeRestart,
 }: UseProjectPollingOptions = {}) => {
   const [isPolling, setIsPolling] = useState(false)
   const intervalRef = useRef<number | null>(null)
@@ -100,6 +113,14 @@ export const useProjectPolling = ({
       stopPolling()
     }
   }, [enabled, interval])
+
+  // #487/#502: after autoclip-backend respawns, do not wait for the 30s poll —
+  // refresh so home cards pick up service_restarted / catalog copy immediately.
+  useEffect(() => {
+    if (!enabled || !subscribeRestart) return
+    // refreshNow returns Promise<Project[]>; bindRestartRefresh only needs void/Promise<void>.
+    return bindRestartRefresh(subscribeRestart, () => { void refreshNow() })
+  }, [enabled, subscribeRestart])
 
   return {
     isPolling,

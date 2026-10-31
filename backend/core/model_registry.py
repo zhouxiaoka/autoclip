@@ -6,6 +6,7 @@ the actual endpoint; a community catalog supplements exact known IDs only.
 from __future__ import annotations
 
 import asyncio
+import re
 import hashlib
 import json
 import os
@@ -30,6 +31,106 @@ _VERIFIED = {('dashscope', name): 'multimodal' for name in ('qwen3.8-max', 'qwen
 # https://help.aliyun.com/zh/model-studio/qwen3-vl-flash
 _VERIFIED.update({('dashscope', name): 'multimodal'
                   for name in ('qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22')})
+
+
+# T3 local model gate: params < 7B or context < 8k → UI red warn (still selectable).
+LOCAL_MIN_PARAMS_B = 7.0
+LOCAL_MIN_CONTEXT_TOKENS = 8192
+_PARAM_SIZE_RE = re.compile(r'([0-9]+(?:\.[0-9]+)?)\s*([KkMmBbTt])\b')
+_NAME_PARAMS_RE = re.compile(r'\b([0-9]+(?:\.[0-9]+)?)[bB]\b')
+
+
+def parse_parameter_size(value) -> float | None:
+    """Ollama ``details.parameter_size`` → billions (e.g. ``7B`` → 7.0, ``3.8B`` → 3.8)."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        return number if number > 0 else None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    match = _PARAM_SIZE_RE.search(text.replace(',', ''))
+    if not match:
+        return None
+    number = float(match.group(1))
+    unit = match.group(2).upper()
+    if unit == 'B':
+        return number
+    if unit == 'M':
+        return number / 1000.0
+    if unit == 'K':
+        return number / 1_000_000.0
+    if unit == 'T':
+        return number * 1000.0
+    return None
+
+
+def infer_params_b_from_name(name: str | None) -> float | None:
+    """LM Studio / tag fallback: last ``\\b(\\d+)[bB]\\b`` in the model id."""
+    if not isinstance(name, str) or not name.strip():
+        return None
+    matches = _NAME_PARAMS_RE.findall(name)
+    if not matches:
+        return None
+    try:
+        value = float(matches[-1])
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def extract_context_tokens(model_info) -> int | None:
+    """Ollama ``model_info['*.context_length']`` → int tokens."""
+    if not isinstance(model_info, dict):
+        return None
+    for key, value in model_info.items():
+        if not isinstance(key, str) or not key.endswith('.context_length'):
+            continue
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            number = int(value)
+            return number if number > 0 else None
+        if isinstance(value, str) and value.strip().isdigit():
+            number = int(value.strip())
+            return number if number > 0 else None
+    return None
+
+
+def enrich_local_model_item(item: dict, *, provider: str) -> dict:
+    """Attach ``params_b`` / ``context_tokens`` from Ollama show payload or name inference."""
+    if not isinstance(item, dict):
+        return item
+    name = str(item.get('id') or item.get('name') or '')
+    params = parse_parameter_size((item.get('details') or {}).get('parameter_size') if isinstance(item.get('details'), dict) else item.get('parameter_size'))
+    if params is None:
+        params = parse_parameter_size(item.get('parameter_size'))
+    context = extract_context_tokens(item.get('model_info'))
+    if context is None and isinstance(item.get('context_length'), (int, float)) and not isinstance(item.get('context_length'), bool):
+        context = int(item['context_length']) if int(item['context_length']) > 0 else None
+    if params is None:
+        params = infer_params_b_from_name(name)
+    # LM Studio OpenAI /v1/models rarely has size; name inference is the only signal.
+    if provider == 'lmstudio' and params is None:
+        params = infer_params_b_from_name(name)
+    out = dict(item)
+    if params is not None:
+        out['params_b'] = round(float(params), 3)
+    if context is not None:
+        out['context_tokens'] = int(context)
+    return out
+
+
+def below_local_analysis_gate(params_b: float | None, context_tokens: int | None) -> bool:
+    """True when the model is under the T3 analysis floor (still selectable)."""
+    if params_b is not None and params_b < LOCAL_MIN_PARAMS_B:
+        return True
+    if context_tokens is not None and context_tokens < LOCAL_MIN_CONTEXT_TOKENS:
+        return True
+    return False
+
+
 
 
 def _path():
@@ -136,7 +237,68 @@ def _cap(inputs):
     return None
 
 
+def _custom_offers(connection):
+    offers = list(getattr(connection, 'custom_models', None) or [])
+    if offers:
+        return offers
+    try:
+        from backend.services import ai_model_settings as ai_models
+        previous = ai_models.load()
+    except Exception:
+        return []
+    ident = getattr(connection, 'id', None)
+    old = next((item for item in previous.connections if item.id == ident), None) if previous and ident else None
+    return list(old.custom_models) if old else []
+
+
+def _record_from_offer(connection, offer):
+    name = str(getattr(offer, 'id', '') or '').strip()
+    if not name:
+        return None
+    types = set(getattr(offer, 'types', None) or ['language'])
+    scenarios = set(getattr(offer, 'scenarios', None) or [])
+    vision = bool(getattr(offer, 'vision', False) and 'language' in types)
+    asr_metadata = asr_catalog.metadata(connection.provider, name)
+    asr = 'asr' in types or 'transcription' in scenarios or asr_metadata['asr']
+    return {
+        'id': name,
+        'capability': 'multimodal' if vision else ('text' if 'language' in types else None),
+        'capability_source': 'custom',
+        'analysis': 'analysis' in scenarios or 'language' in types,
+        'image': 'image' in types or 'cover' in scenarios,
+        'asr': asr,
+        'asr_supported': asr_metadata['asr_supported'],
+        'asr_preview': False,
+        'asr_note': asr_metadata['asr_note'],
+    }
+
+
+def _merge_custom_models(connection, value):
+    """Keep user-authored custom_models in the picker. Live IDs are additive."""
+    models = [item for item in (value.get('models') or []) if isinstance(item, dict)]
+    by_id = {item.get('id'): index for index, item in enumerate(models)}
+    for offer in _custom_offers(connection):
+        if getattr(offer, 'enabled', True) is False:
+            continue
+        record = _record_from_offer(connection, offer)
+        if not record:
+            continue
+        existing = by_id.get(record['id'])
+        if existing is None:
+            by_id[record['id']] = len(models)
+            models.append(record)
+        else:
+            models[existing] = {**models[existing], **record}
+    return {**value, 'models': models}
+
+
 def lookup_capability(connection, model):
+    for offer in _custom_offers(connection):
+        if getattr(offer, 'id', None) != model or getattr(offer, 'enabled', True) is False:
+            continue
+        record = _record_from_offer(connection, offer)
+        if record:
+            return record.get('capability')
     data = _read()
     entry = next((m for m in data.get(_scope(connection), {}).get('models', []) if m['id'] == model), None)
     if entry and entry.get('capability_source') == 'provider' and entry.get('capability'):
@@ -198,9 +360,34 @@ async def _ensure_metadata():
     await asyncio.shield(_remote_task)
 
 
+def _model_kind(item, name, *, analysis, image, asr):
+    """One display group per model: provider type metadata first, then capability flags."""
+    endpoints = [str(e) for e in (item.get('supported_endpoint_types') or [])]
+    outputs = item.get('output_modalities') or (item.get('architecture') or {}).get('output_modalities') or []
+    lowered = name.lower()
+    if any('video' in e for e in endpoints) or 'video' in outputs:
+        return 'video'
+    if asr:
+        return 'asr'
+    if any('audio' in e or 'speech' in e for e in endpoints) or 'audio' in outputs or any(t in lowered for t in ('tts', '-stt', 'speech', 'audio')):
+        return 'audio'
+    if image:
+        return 'image'
+    if analysis:
+        return 'language'
+    return 'other'
+
+
 def _records(connection, raw, data):
     result = []
     seen = set()
+    try:
+        from backend.core.llm_providers import is_local_url
+        local_provider = connection.provider in {'ollama', 'lmstudio'} or bool(
+            getattr(connection, 'base_url', None) and is_local_url(connection.base_url)
+        )
+    except Exception:  # noqa: BLE001
+        local_provider = connection.provider in {'ollama', 'lmstudio'}
     for item in raw:
         if isinstance(item, str):
             item = {'id': item}
@@ -221,6 +408,21 @@ def _records(connection, raw, data):
             # Same name rules the pipeline uses for capability=auto. Only ever "multimodal":
             # an unfamiliar ID is never labelled text-only.
             capability, source = 'multimodal', 'name'
+        if getattr(connection, 'provider', None) == 'apimart':
+            # Vision/Omni tags add multimodal. A Text tag leaves the name heuristic
+            # in place. Non-chat families are dropped even when tagged Vision.
+            from backend.core.provider_model_fetch import capability_from_tags
+            category = str(item.get('category') or '').strip().lower()
+            if category in {'image', 'video', 'audio'} or model_catalog.is_non_chat_family(name):
+                continue
+            tags = item.get('capability_tags')
+            if isinstance(tags, list) and tags:
+                lowered = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+                if lowered and not (lowered & {'text', 'vision', 'omni'}):
+                    continue
+            tagged = capability_from_tags(tags)
+            if tagged:
+                capability, source = tagged, 'provider'
         catalog = _catalog_record(connection.provider, name, data)
         image = ('image' in outputs if outputs is not None else
                  catalog.get('image_output', False) or name in image_catalog.MODELS.get(connection.provider, []) or name in model_catalog.IMAGE_MODELS.get(connection.provider, []))
@@ -236,18 +438,38 @@ def _records(connection, raw, data):
             analysis = image = False
         if 'supported_endpoint_types' in item:
             # Provider routing metadata distinguishes generation from editing.
-            endpoints = item['supported_endpoint_types']
+            endpoints = item['supported_endpoint_types'] or []
             image = 'image-generation' in endpoints or '/v1/images/generations' in endpoints
-            analysis = 'openai' in endpoints or '/v1/chat/completions' in endpoints
+            # new-api style gateways: video routes and async "task plugin" models are not chat models,
+            # even when they also list the generic "openai" endpoint. The name guard drops TTS/STT/embedding.
+            video = any('video' in str(e) for e in endpoints)
+            task = str(item.get('owned_by') or '').lower() == 'task plugin'
+            analysis = (('openai' in endpoints or '/v1/chat/completions' in endpoints) and not image and not video and not task
+                        and model_catalog.is_chat_model(name, '', official=False))
         asr = asr_catalog.metadata(connection.provider, name, item.get('supported_endpoint_types', []))
         if asr['asr']:
             analysis = False
-        result.append({**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
-                       'analysis': analysis, 'image': image, 'asr_preview': bool(item.get('asr_preview'))})
+        kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'])
+        record = {**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
+                       'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))}
+        # T3: surface size/context for the settings picker + D1 chunk_size later.
+        params_b = item.get('params_b')
+        if params_b is None:
+            params_b = infer_params_b_from_name(name) if connection.provider in {'ollama', 'lmstudio'} or local_provider else None
+        context_tokens = item.get('context_tokens')
+        if isinstance(params_b, (int, float)) and not isinstance(params_b, bool):
+            record['params_b'] = float(params_b)
+        if isinstance(context_tokens, (int, float)) and not isinstance(context_tokens, bool) and int(context_tokens) > 0:
+            record['context_tokens'] = int(context_tokens)
+        result.append(record)
     return result
 
 
 async def discover(connection, refresh=False):
+    return _merge_custom_models(connection, await _discover_from_provider(connection, refresh))
+
+
+async def _discover_from_provider(connection, refresh=False):
     from backend.services.ai_model_settings import chat_endpoint
     from backend.core.llm_providers import is_local_url
     endpoint = chat_endpoint(connection, '')
@@ -284,7 +506,9 @@ async def discover(connection, refresh=False):
                 if not token:
                     return raw
         headers = {'Authorization': 'Bearer ' + endpoint['api_key']} if endpoint['api_key'] else {}
+        params = {'expand': 'category'} if connection.provider == 'apimart' else None
         payload = await model_catalog._http_get_json(endpoint['base_url'] + '/models', headers=headers,
+                                                      params=params,
                                                       trust_env=not is_local_url(endpoint['base_url']))
         raw = payload.get('data', []) if isinstance(payload, dict) else payload
         if not isinstance(raw, list):
@@ -301,10 +525,30 @@ async def discover(connection, refresh=False):
                         async with semaphore:
                             response = await client.post(root + '/api/show', json={'model': item['id']}, headers=headers)
                             response.raise_for_status()
-                            return {**item, 'capabilities': response.json().get('capabilities')}
+                            payload = response.json()
+                            shown = payload if isinstance(payload, dict) else {}
+                            # T3: keep capabilities and also params_b / context_tokens from show.
+                            merged = {
+                                **item,
+                                'capabilities': shown.get('capabilities', item.get('capabilities')),
+                                'details': shown.get('details') or item.get('details'),
+                                'model_info': shown.get('model_info') or item.get('model_info'),
+                            }
+                            return enrich_local_model_item(merged, provider='ollama')
                     except Exception:
-                        return item
+                        return enrich_local_model_item(item, provider='ollama')
                 raw = await asyncio.gather(*(details(item) for item in raw))
+        elif connection.provider == 'lmstudio':
+            raw = [
+                enrich_local_model_item(item if isinstance(item, dict) else {'id': item}, provider='lmstudio')
+                for item in raw
+            ]
+        elif local:
+            # Compatible / openai pointed at a local host: still infer size from the name.
+            raw = [
+                enrich_local_model_item(item if isinstance(item, dict) else {'id': item}, provider=connection.provider or 'compatible')
+                for item in raw
+            ]
         return raw
 
     results = await asyncio.gather(fetch(), _ensure_metadata(), return_exceptions=True)
@@ -316,10 +560,13 @@ async def discover(connection, refresh=False):
         return {'models': _records(connection, fallback, _read()), 'source': 'catalog', 'updated_at': None,
                 'preview': True, 'warning': '账号模型列表获取失败，当前为参考目录；请检查密钥后刷新。'}
     if connection.provider == 'dashscope':
-        # The OpenAI-compatible /models endpoint does not enumerate all native ASR APIs.
-        # Keep native ASR references visibly unverified, rather than calling them account-entitled.
+        # The OpenAI-compatible /models endpoint omits native ASR. The three adapted
+        # sync models still transcribe, so they stay selectable. Unadapted ASR stays a preview.
         ids = {item if isinstance(item, str) else item.get('id') for item in raw}
-        raw = [*raw, *({'id': name, 'asr_preview': True} for name in asr_catalog.MODELS['dashscope'] if name not in ids)]
+        raw = [*raw, *(
+            {'id': name, 'asr_preview': name not in asr_catalog.DASHSCOPE_SYNC}
+            for name in asr_catalog.MODELS['dashscope'] if name not in ids
+        )]
     value = {'models': _records(connection, _with_public_metadata(connection, raw, public), _read()), 'source': 'live', 'updated_at': time.time()}
     _update(scope, value)
     return value

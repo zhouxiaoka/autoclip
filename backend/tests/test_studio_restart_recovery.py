@@ -10,6 +10,7 @@ from backend.models.base import Base
 from backend.models.project import Project, ProjectStatus
 from backend.schemas.base import PaginationParams
 from backend.services.project_service import ProjectService
+from backend.core.failure_codes import sentence
 from backend.services.studio import store
 from backend.services.studio.restart_recovery import reconcile_interrupted_projects
 
@@ -58,7 +59,7 @@ def test_startup_closes_a_run_killed_during_the_llm_stage(sessions, stage):
     assert reconcile_interrupted_projects(sessions) == ['p']
     disk = _disk()
     assert disk['generation']['status'] == 'failed'
-    assert disk['generation']['error'] == store.RESTART_MESSAGE == '服务已重启，请重新生成'
+    assert disk['generation']['error'] == store.RESTART_MESSAGE == sentence('service_restarted')
     assert disk['generation']['error_code'] == 'service_restarted'
     assert disk['generation']['failure_stage'] == stage
     assert disk['analysis']['status'] == 'failed' and disk['analysis']['error'] == store.RESTART_MESSAGE
@@ -69,6 +70,38 @@ def test_startup_closes_a_run_killed_during_the_llm_stage(sessions, stage):
     assert row.error_message == store.RESTART_MESSAGE and row.error_code == 'service_restarted'
     # Idempotent: a second restart changes nothing.
     assert reconcile_interrupted_projects(sessions) == []
+
+
+@pytest.mark.parametrize('marker,reason', [
+    ('user_quit', 'user_quit'),
+    ('update', 'update'),
+    (None, 'crash'),
+    ('unacked', 'unknown'),
+    ('parent_lost', 'crash'),
+])
+def test_reconcile_writes_restart_reason(sessions, marker, reason):
+    from backend.services.studio import shutdown_marker
+    instance = 'ab' * 16
+    shutdown_marker._consumed.clear()
+    shutdown_marker._restart_cached.clear()
+    if marker == 'unacked':
+        root = shutdown_marker._root()
+        root.mkdir(parents=True, exist_ok=True)
+        (root / instance).write_text('unacked', encoding='ascii')
+    elif marker:
+        assert shutdown_marker.mark(marker, instance)
+    _project(sessions, _production(instance=instance, stage='production'))
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    generation = _disk()['generation']
+    assert generation['error_code'] == 'service_restarted'
+    assert generation['failure_stage'] == 'production'
+    assert generation['restart_reason'] == reason
+
+
+def test_reconcile_unknown_instance_keeps_restart_reason_unknown(sessions):
+    _project(sessions, _production(instance='previous-process', stage='screening'))
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    assert _disk()['generation']['restart_reason'] == 'unknown'
 
 
 def test_previous_release_shape_completed_with_zero_clips_is_failed(sessions):
@@ -96,6 +129,43 @@ def test_run_owned_by_this_process_is_left_running(sessions):
     assert _row(sessions).status.value == 'processing'
 
 
+def test_idle_producer_stays_in_production_until_the_process_exits(sessions):
+    """A live, idle producer (~0% CPU, blocked in sleep) is not service_restarted.
+
+    Killing that process is what closes the run. This is the desktop-backend
+    distinction the health loop also uses: exit relaunches, an alive process does not.
+    """
+    import subprocess
+    import sys
+
+    import psutil
+
+    proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    try:
+        owner = psutil.Process(proc.pid)
+        data = _production()
+        data['generation']['producer'] = {'pid': proc.pid, 'created_at': owner.create_time()}
+        _project(sessions, data)
+        assert owner.is_running()
+        assert reconcile_interrupted_projects(sessions) == []
+        disk = _disk()
+        assert disk['generation']['status'] == 'production'
+        assert disk['analysis']['status'] == 'running'
+        assert disk['analysis']['message'] == '正在制作可发布成片'
+        assert _row(sessions).status.value == 'processing'
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    disk = _disk()
+    assert disk['generation']['status'] == 'failed'
+    assert disk['generation']['error_code'] == 'service_restarted'
+    assert disk['generation']['error'] == store.RESTART_MESSAGE
+    assert 'message' not in disk['analysis']
+    row = _row(sessions)
+    assert row.status.value == 'failed' and row.error_code == 'service_restarted'
+
+
 def test_live_cli_producer_is_not_failed_by_the_desktop(sessions):
     import psutil
     data = _production()
@@ -112,6 +182,26 @@ def test_dead_cli_producer_is_recovered(sessions):
     _project(sessions, data)
     assert reconcile_interrupted_projects(sessions) == ['p']
     assert _row(sessions).status.value == 'failed'
+
+
+def test_recover_uses_the_catalog_sentence_for_every_interrupted_piece(sessions):
+    catalog = sentence('service_restarted')
+    _project(sessions, {
+        'generation': {'status': 'rendering', 'auto_start': True},
+        'analysis': {'status': 'running', 'phase': 'rendering', 'run_id': 'r', 'instance': OLD},
+        'drafts': [{'id': 'd1'}, {'id': 'd2'}],
+        'jobs': [{'job_id': 'j1', 'status': 'running', 'instance': OLD}],
+        'output_variants': [
+            {'id': 'v1', 'render_job_id': 'j1', 'status': 'running', 'instance': OLD},
+            {'id': 'v2', 'status': 'completed', 'cover_job': {'status': 'running', 'instance': OLD}},
+        ]})
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    disk = _disk()
+    assert disk['jobs'][0]['error'] == catalog
+    assert disk['output_variants'][0]['error'] == catalog
+    assert disk['output_variants'][1]['cover_job']['error'] == catalog
+    assert disk['generation']['error'] == catalog
+    assert _row(sessions).error_message == catalog
 
 
 def test_killed_during_render_has_a_reason_on_the_project(sessions):
@@ -147,6 +237,25 @@ def test_render_killed_after_one_saved_video_is_partial_and_keeps_it(sessions):
     disk = _disk()
     assert disk['generation']['status'] == 'partial' and disk['generation']['completed_variant_count'] == 1
     assert disk['output_variants'][0]['status'] == 'completed'
+
+
+def test_restart_ignores_orphan_and_partial_files_without_completed_receipts(sessions):
+    done_job, done = _linked(1, 'completed')
+    cut_job, cut = _linked(2, 'running')
+    _project(sessions, _render_run([done_job, cut_job], [done, cut]))
+    folder = store.directory('p') / 'output/studio'
+    folder.mkdir(parents=True)
+    for name in ('j2.mp4', 'j2.part.mp4', 'j2.ready.part.mp4'):
+        (folder / name).write_bytes(b'orphan output without a durable completed receipt')
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    data = _disk()
+    assert data['generation']['status'] == 'partial'
+    assert data['generation']['completed_variant_count'] == 1
+    assert data['output_variants'][1]['status'] == 'failed'
+    row = _row(sessions)
+    assert row.status.value == 'failed'
+    assert row.total_clips == 1
+    assert row.error_code == 'service_restarted'
 
 
 def _render_run(jobs, variants):
@@ -217,10 +326,10 @@ def test_manual_confirmation_run_is_failed_and_keeps_its_wording(sessions):
     _project(sessions, data, auto=False)
     assert reconcile_interrupted_projects(sessions) == ['p']
     disk = _disk()
-    assert disk['analysis']['status'] == 'failed' and disk['analysis']['error'] == '服务已重启，请重试分析'
+    assert disk['analysis']['status'] == 'failed' and disk['analysis']['error'] == store.RESTART_MESSAGE == sentence('service_restarted')
     assert disk['analysis']['error_code'] == 'service_restarted' and 'message' not in disk['analysis']
     row = _row(sessions)
-    assert row.status.value == 'failed' and row.error_message == '服务已重启，请重试分析'
+    assert row.status.value == 'failed' and row.error_message == sentence('service_restarted')
 
 
 def test_one_unreadable_project_does_not_stop_the_others(sessions):

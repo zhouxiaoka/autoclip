@@ -1,7 +1,9 @@
 {
   "identifier": "default",
   "description": "Default capabilities for AutoClip Desktop",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     {
       "identifier": "core:default",
@@ -68,6 +70,9 @@
       ]
     },
     "updater:default",
-    "process:default"
+    "process:default",
+    "deep-link:default",
+    "clipboard-manager:allow-read-text",
+    "notification:default"
   ]
 }

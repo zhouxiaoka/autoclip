@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import ipaddress
 import logging
 import re
@@ -23,6 +24,7 @@ from urllib.parse import quote, urljoin, urlparse
 import requests
 
 from backend.core.llm_providers import is_local_url, normalize_base_url
+from backend.core.llm_telemetry import sanitize_model
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,35 @@ SEEDREAM_MODEL_MARKERS = ("seedream", "doubao-seedream")
 SEEDREAM_HOST_MARKERS = ("volces.com", "bytepluses.com", "byteplus.com", "volcengine")
 
 
-class ImageError(RuntimeError):
+from backend.core.failure_attribution import (  # noqa: E402
+    AttributedError, ModelResponseInvalid, ProviderTransportError, attributed, build_attribution)
+
+# the identity of the image config the CURRENT call sent, frozen once by
+# ``_image_transport_errors`` so every redaction point inside the call (transport and HTTP status) builds
+# its snapshot with it, once.
+_call_identity_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar("image_call_identity", default=None)
+
+# Errors requests raises BEFORE anything was sent (a malformed address or header, a body that cannot be
+# serialized, no URL): decisively local (X10). ``JSONDecodeError`` subclasses InvalidJSONError
+# but is a RESPONSE that failed to parse: the model's side.
+_LOCAL_REQUEST_ERRORS = (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
+                         requests.exceptions.MissingSchema, requests.exceptions.InvalidHeader,
+                         requests.exceptions.InvalidJSONError, requests.exceptions.URLRequired)
+
+
+def _cover_failure(message: str, original: BaseException, **kwargs) -> "ImageError":
+    """THE cover redaction point: ``original`` is content-free (a ``ProviderTransportError`` with type name
+    and status, or a ``ModelResponseInvalid``); THE factory builds the snapshot with this call's identity,
+    and the status and controlled code are frozen by the same ``attributed`` call."""
+    from backend.core.llm_emit import attribution_snapshot
+    snap = attribution_snapshot(original, failure_stage='cover', phase_identity=_call_identity_var.get())
+    return attributed(ImageError(message, **kwargs), snap, http_status=getattr(original, 'http_status', None),
+                      error_code=getattr(original, 'error_code', None))
+
+
+class ImageError(AttributedError, RuntimeError):
+    """Safe text only. a provider transport failure carries the snapshot built from the original
+    request exception (``.attribution``) before ``from None``; other ImageErrors carry none."""
     def __init__(self, message: str, *, unsupported_edit: bool = False):
         super().__init__(message)
         self.unsupported_edit = unsupported_edit
@@ -47,19 +77,58 @@ def _image_transport_errors(function):
     """Keep provider transport failures inside the local-cover recovery boundary."""
     @wraps(function)
     def call(*args, **kwargs):
+        token = _call_identity_var.set(_call_identity(kwargs))
         try:
             return function(*args, **kwargs)
         except requests.exceptions.RequestException as error:
-            if isinstance(error, (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
-                                  requests.exceptions.MissingSchema)):
+            invalid = (isinstance(error, _LOCAL_REQUEST_ERRORS)
+                       and not isinstance(error, requests.exceptions.JSONDecodeError))
+            if invalid:
                 message = '封面服务接口地址无效，请检查模型设置中的 HTTP(S) 地址'
             elif isinstance(error, requests.exceptions.Timeout):
                 message = '封面服务请求超时，请检查服务和网络后重试'
             else:
                 message = '封面服务连接失败，请检查接口地址与网络后重试'
-            # Request exceptions can include credentials, URLs and response bodies.
-            raise ImageError(message) from None
+            # Request exceptions can include credentials, URLs and response bodies: the one snapshot is
+            # built here, inside the boundary (a malformed address never left this machine = local; anything
+            # else was sent toward the provider: a content-free ProviderTransportError that THE classifier
+            # judges, ), the HTTP status is frozen with it, and the safe error goes out
+            # without the chain.
+            # the identity is the image config THIS call sent; the controlled error code is
+            # frozen with the status.
+            if invalid:
+                snap = build_attribution(error, local=True, phase_identity=_call_identity_var.get(),
+                                         failure_stage='cover')
+                raise attributed(ImageError(message), snap) from None
+            if isinstance(error, requests.exceptions.JSONDecodeError):
+                raise _cover_failure('封面服务返回格式无效，请检查模型设置后重试',
+                                     ModelResponseInvalid(type(error).__name__)) from None
+            status = getattr(getattr(error, 'response', None), 'status_code', None)
+            transport = ProviderTransportError(type(error).__name__, http_status=status,
+                                               timed_out=isinstance(error, requests.exceptions.Timeout))
+            raise _cover_failure(message, transport) from None
+        finally:
+            _call_identity_var.reset(token)
     return call
+
+
+def _call_identity(kwargs: dict) -> dict:
+    """provider/config_source/model/host of the image config a call sent (no settings read)."""
+    from backend.services.studio.failure_identity import sent_identity
+    from backend.core.llm_telemetry import hostname_of_base_url
+    request = kwargs.get('request')
+    model = kwargs.get('model') or getattr(request, 'model', '') or ''
+    base_url = kwargs.get('base_url') if isinstance(kwargs.get('base_url'), str) else ''
+    identity = sent_identity(kwargs.get('provider'), base_url, model)
+    try:
+        host = hostname_of_base_url(base_url) if base_url else None
+    except ValueError:
+        host = None
+    if host:
+        identity['base_url_host'] = host
+    if isinstance(model, str) and model.strip():
+        identity['model'] = model.strip()
+    return identity
 
 
 @dataclass
@@ -158,13 +227,20 @@ def _raise_for_status(resp: Any, *, edit: bool = False) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         data = {}
     if status >= 400 or not isinstance(data, dict):
-        message = _error_message(resp)
-        lowered = message.lower()
+        # the provider's body only decides "this endpoint cannot edit"; it never becomes
+        # the message (fixed text, chosen by status) nor leaves this function. An HTTP error is a
+        # content-free ProviderTransportError with the frozen status; a 2xx that is not an object is the
+        # model's invalid response. Both get THE snapshot (``_cover_failure``) instead of none (= LOCAL).
+        lowered = _error_message(resp).lower()
         unsupported = edit and (
             status in (404, 405)
             or any(word in lowered for word in ("not support", "unsupported", "unknown url", "not found", "invalid endpoint"))
         )
-        raise ImageError(message or "生图失败", unsupported_edit=unsupported)
+        if status >= 400:
+            raise _cover_failure(f'封面服务请求失败（HTTP {status}），请检查密钥、额度和模型权限',
+                                 ProviderTransportError('HTTPStatus', http_status=status), unsupported_edit=unsupported)
+        raise _cover_failure('封面服务返回格式无效，请检查模型设置后重试', ModelResponseInvalid('NotAnObject'),
+                             unsupported_edit=unsupported)
     return data
 
 
@@ -367,10 +443,14 @@ def _dashscope_bytes(data: dict[str, Any], session: requests.Session) -> bytes |
     output = data.get("output") if isinstance(data.get("output"), dict) else {}
     status = str(output.get("task_status") or "")
     if status in ("FAILED", "CANCELED", "UNKNOWN"):
-        message = str(output.get("message") or data.get("message") or "生图失败")
+        message = str(output.get("message") or data.get("message") or "")
         lowered = message.lower()
         unsupported = any(word in lowered for word in ("ref_img", "not support", "unsupported", "invalidparameter"))
-        raise ImageError(message[:300], unsupported_edit=unsupported)
+        if message:
+            logger.warning("DashScope image task %s omitted from UI: %s", status, message[:300])
+            from backend.core.failure_codes import sentence
+            raise ImageError(sentence("unexpected"), unsupported_edit=unsupported)
+        raise ImageError("生图失败", unsupported_edit=unsupported)
     results = output.get("results") if isinstance(output.get("results"), list) else []
     if results and isinstance(results[0], dict):
         item = results[0]
@@ -548,7 +628,7 @@ def generate_image(
     poll_interval: float = 1.5,
 ) -> bytes:
     kind = (provider or "openai").strip().lower()
-    logger.info("封面生图 provider=%s model=%s reference=%s", kind, request.model or "-", bool(request.reference))
+    logger.info("封面生图 provider=%s model=%s reference=%s", kind, sanitize_model(request.model) or "-", bool(request.reference))
     if kind == 'gemini':
         return generate_gemini(api_key=api_key, base_url=base_url, request=request, session=session)
     if kind == 'fal':
@@ -573,13 +653,142 @@ def generate_image(
     )
 
 
-def default_ocr_model(provider: str, model: str = "", base_url: str = "") -> str:
+_OCR_SKIP = "未选择可用于封面校对的多模态模型，跳过校对"
+
+
+def _ocr_catalog_endpoint(provider: str, base_url: str) -> tuple[str, str]:
+    """Catalog slug and base for ``GET /models``.
+
+    Bailian image calls stay on ``/api/v1``. The account list is the OpenAI-compatible
+    catalog on the same official host. A relay or proxy is left exactly as entered.
+    """
+    from urllib.parse import urlparse
+
+    from backend.core.llm_providers import (
+        DASHSCOPE_CN_COMPATIBLE_BASE_URL,
+        is_dashscope_endpoint,
+    )
+
     kind = (provider or "").strip().lower()
-    if kind == "dashscope":
-        return "qwen-vl-plus"
+    raw = (base_url or "").strip()
+    if kind != "dashscope" and not is_dashscope_endpoint(raw):
+        return kind or "compatible", raw
+    if not raw:
+        return "dashscope", DASHSCOPE_CN_COMPATIBLE_BASE_URL
+    parsed = urlparse(raw if "://" in raw else "https://" + raw)
+    host = (parsed.hostname or "").lower()
+    if host.endswith(".aliyuncs.com"):
+        root = raw.rstrip("/")
+        if "://" not in root:
+            root = "https://" + root
+        root = root.removesuffix("/compatible-mode/v1").removesuffix("/api/v1")
+        return "dashscope", root + "/compatible-mode/v1"
+    return "dashscope", raw.rstrip("/")
+
+
+def default_ocr_model(
+    provider: str,
+    model: str = "",
+    base_url: str = "",
+    *,
+    api_key: str = "",
+    http=None,
+) -> str:
+    """OCR model when the caller did not choose one.
+
+    Bailian asks the account list. Preset vision ids only order that list.
+    An unreadable list returns ``""`` so the caller skips proofreading instead of
+    sending a retired id. Seedream and other providers keep their existing defaults.
+    """
+    kind = (provider or "").strip().lower()
+    from backend.core.llm_providers import is_dashscope_endpoint
+    if kind == "dashscope" or is_dashscope_endpoint(base_url):
+        from backend.core.model_recovery import (
+            remembered_model,
+            resolve_available_model,
+        )
+        catalog, models_base = _ocr_catalog_endpoint(kind or "dashscope", base_url)
+        alt = resolve_available_model(
+            base_url=models_base,
+            api_key=api_key,
+            provider=catalog,
+            failed_model="",
+            http=http,
+        )
+        if not alt:
+            return ""
+        cached = remembered_model(catalog, models_base, api_key, alt)
+        return cached or alt
     if is_seedream(provider=kind, model=model, base_url=base_url):
         return SEEDREAM_DEFAULT_OCR
     return "gpt-4o-mini"
+
+
+def _response_is_model_not_found(resp: Any) -> bool:
+    status = int(getattr(resp, "status_code", 200) or 200)
+    if status < 400:
+        return False
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001 — classify from the text when JSON is unavailable
+        body = getattr(resp, "text", "") or ""
+    from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
+    return classify_upstream_error(status, body).error_type is UpstreamErrorType.MODEL_NOT_FOUND
+
+
+def _dashscope_ocr_body(model: str, root: str, data_uri: str, instruction: str) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": model,
+        "input": {"messages": [{"role": "user", "content": [
+            {"image": data_uri},
+            {"text": instruction},
+        ]}]},
+    }
+    if _qwen_thinking_off(model, root):
+        body["parameters"] = {"enable_thinking": False}
+    return body
+
+
+def _compatible_ocr_body(model: str, root: str, data_uri: str, instruction: str) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": instruction},
+            {"type": "image_url", "image_url": {"url": data_uri}},
+        ]}],
+        # Cover OCR is a short read and stays one JSON body. Analysis chat streams.
+        "stream": False,
+    }
+    if _qwen_thinking_off(model, root):
+        body["enable_thinking"] = False
+    return body
+
+
+def _text_from_dashscope_ocr(data: dict[str, Any]) -> str:
+    output = data.get("output") if isinstance(data.get("output"), dict) else {}
+    choices = output.get("choices") if isinstance(output.get("choices"), list) else []
+    if choices and isinstance(choices[0], dict):
+        message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("text"):
+                    parts.append(str(item["text"]))
+                elif isinstance(item, str):
+                    parts.append(item)
+            return "\n".join(parts).strip()
+    return str(output.get("text") or "").strip()
+
+
+def _text_from_chat_ocr(data: dict[str, Any]) -> str:
+    choices = data.get("choices") if isinstance(data.get("choices"), list) else []
+    if not choices or not isinstance(choices[0], dict):
+        raise ImageError("没有读出画面上的字")
+    message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+    return str(message.get("content") or "").strip()
 
 
 def _qwen_thinking_off(model: str, root: str) -> bool:
@@ -597,60 +806,74 @@ def read_image_text(
     model: str,
     image: bytes,
     session: requests.Session | None = None,
+    http=None,
 ) -> str:
-    """让多模态模型只读图上的字。失败抛 ImageError，调用方视为跳过校对。"""
+    """让多模态模型只读图上的字。失败抛 ImageError，调用方视为跳过校对。
+
+    A saved id the provider no longer offers is replaced once from the account
+    list, in memory only. ``http`` is the optional ``GET /models`` transport.
+    """
     kind = (provider or "openai").strip().lower()
     data_uri = _reference_data_uri(image)
     instruction = "只输出画面上的文字，保持原有换行。不要解释，不要补充画面里没有的字。"
-    if kind == "dashscope":
-        root = dashscope_root(base_url)
-        http = _session_for(root, session)
-        resp = http.post(
-            f"{root}/services/aigc/multimodal-generation/generation",
-            headers={**_bearer(api_key, base_url), "Content-Type": "application/json"},
-            json={
-                "model": model.strip() or "qwen-vl-plus",
-                "input": {"messages": [{"role": "user", "content": [
-                    {"image": data_uri},
-                    {"text": instruction},
-                ]}]},
-                **({"parameters": {"enable_thinking": False}} if _qwen_thinking_off(model, root) else {}),
-            },
-            timeout=60,
-        )
-        data = _raise_for_status(resp)
-        output = data.get("output") if isinstance(data.get("output"), dict) else {}
-        choices = output.get("choices") if isinstance(output.get("choices"), list) else []
-        if choices and isinstance(choices[0], dict):
-            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
-            content = message.get("content")
-            if isinstance(content, str):
-                return content.strip()
-            if isinstance(content, list):
-                parts = []
-                for item in content:
-                    if isinstance(item, dict) and item.get("text"):
-                        parts.append(str(item["text"]))
-                    elif isinstance(item, str):
-                        parts.append(item)
-                return "\n".join(parts).strip()
-        text = str(output.get("text") or "")
-        return text.strip()
-    seedream = is_seedream(provider=kind, model=model, base_url=base_url)
-    root = seedream_root(base_url) if seedream or kind == "seedream" else openai_root(base_url)
-    http = _session_for(root, session)
-    vision = model.strip() or default_ocr_model(kind, model=model, base_url=base_url)
-    resp = _post_json(http, f"{root}/chat/completions", _bearer(api_key, base_url), {
-        "model": vision,
-        "messages": [{"role": "user", "content": [
-            {"type": "text", "text": instruction},
-            {"type": "image_url", "image_url": {"url": data_uri}},
-        ]}],
-        **({"enable_thinking": False} if _qwen_thinking_off(vision, root) else {}),
-    }, seedream=seedream or kind == "seedream")
+    saved = (model or "").strip()
+    catalog, models_base = _ocr_catalog_endpoint(kind, base_url)
+    from backend.core.model_recovery import (
+        remember_model,
+        remembered_model,
+        resolve_available_model,
+    )
+    if saved:
+        current = remembered_model(catalog, models_base, api_key, saved) or saved
+    else:
+        current = default_ocr_model(kind, model=model, base_url=base_url, api_key=api_key, http=http)
+    if not current:
+        raise ImageError(_OCR_SKIP)
+    tried_substitute = False
+    replaced = ""
+    resp: Any = None
+    while True:
+        if kind == "dashscope":
+            root = dashscope_root(base_url)
+            client = _session_for(root, session)
+            resp = client.post(
+                f"{root}/services/aigc/multimodal-generation/generation",
+                headers={**_bearer(api_key, base_url), "Content-Type": "application/json"},
+                json=_dashscope_ocr_body(current, root, data_uri, instruction),
+                timeout=60,
+            )
+        else:
+            seedream = is_seedream(provider=kind, model=model, base_url=base_url)
+            root = seedream_root(base_url) if seedream or kind == "seedream" else openai_root(base_url)
+            client = _session_for(root, session)
+            resp = _post_json(
+                client,
+                f"{root}/chat/completions",
+                _bearer(api_key, base_url),
+                _compatible_ocr_body(current, root, data_uri, instruction),
+                seedream=seedream or kind == "seedream",
+            )
+        if not tried_substitute and _response_is_model_not_found(resp):
+            tried_substitute = True
+            alt = resolve_available_model(
+                base_url=models_base,
+                api_key=api_key,
+                provider=catalog,
+                failed_model=current,
+                exclude=(saved, current),
+                http=http,
+            )
+            if alt and alt != current:
+                replaced = current
+                current = alt
+                continue
+        break
     data = _raise_for_status(resp)
-    choices = data.get("choices") if isinstance(data.get("choices"), list) else []
-    if not choices or not isinstance(choices[0], dict):
-        raise ImageError("没有读出画面上的字")
-    message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
-    return str(message.get("content") or "").strip()
+    # Remember only an id that answered, so the next cover does not repeat the 404.
+    if saved and current != saved:
+        remember_model(catalog, models_base, api_key, saved, current)
+    if replaced and replaced != current:
+        remember_model(catalog, models_base, api_key, replaced, current)
+    if kind == "dashscope":
+        return _text_from_dashscope_ocr(data)
+    return _text_from_chat_ocr(data)

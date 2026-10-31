@@ -10,6 +10,7 @@ from backend.pipeline import concurrency
 
 def _manager(calls):
     manager = LLMManager.__new__(LLMManager)
+    manager._reload_if_settings_changed = lambda: None
     manager.call = lambda *a, **k: calls['fn']()
     return manager
 
@@ -124,6 +125,73 @@ def test_caller_can_request_fewer_attempts(monkeypatch):
     assert sleeps == []
 
 
+def test_quota_on_401_or_403_is_not_an_invalid_key():
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
+
+    for status in (401, 403, 402, 429, None):
+        assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, status) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INVALID_KEY, 401) == 'llm_auth_invalid'
+    assert studio_code_for(UpstreamErrorType.PERMISSION_DENIED, 403) == 'llm_auth_invalid'
+    body = {'error': {'message': '用户余额不足', 'type': 'new_api_error', 'code': 'insufficient_user_quota'}}
+    info = classify_upstream_error(403, body)
+    assert info.error_type is UpstreamErrorType.INSUFFICIENT_QUOTA
+    assert studio_code_for(info.error_type, 403) == 'provider_error'
+
+
+def test_gemini_retry_delay_seconds_are_retry_after():
+    from backend.core.llm_retry import parse_retry_after, retry_after_from_error
+
+    assert parse_retry_after("17s") == 17.0
+    assert parse_retry_after("17.234s") == 17.234
+    assert parse_retry_after("86400s") == 120.0
+    assert parse_retry_after({"seconds": 17, "nanos": 500_000_000}) == 17.5
+    error = Exception("429 RESOURCE_EXHAUSTED")
+    error.code = 429
+    error.details = {
+        "error": {
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "You exceeded your current quota",
+            "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"}],
+        }
+    }
+    assert retry_after_from_error(error) == 17.0
+    # An explicit header still wins over the body delay.
+    error.response = SimpleNamespace(headers={"Retry-After": "3"}, status_code=429)
+    assert retry_after_from_error(error) == 3.0
+
+
+def test_gemini_per_minute_429_is_retried(monkeypatch):
+    concurrency.reset_limiter()
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    n = {"i": 0}
+
+    def flaky():
+        n["i"] += 1
+        if n["i"] < 2:
+            error = Exception("429 RESOURCE_EXHAUSTED")
+            error.code = 429
+            error.details = {
+                "error": {
+                    "code": 429,
+                    "status": "RESOURCE_EXHAUSTED",
+                    "message": "You exceeded your current quota, please check your plan and billing details.",
+                    "details": [
+                        {"violations": [{"quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]},
+                        {"retryDelay": "17s"},
+                    ],
+                }
+            }
+            raise error
+        return "ok"
+
+    assert _manager({"fn": flaky}).call_with_retry("p") == "ok"
+    assert n["i"] == 2
+    assert sleeps == [17.0]
+    concurrency.reset_limiter()
+
+
 def test_retry_policy_uses_shared_classifier_and_retry_after():
     from backend.core.llm_retry import (
         MAX_RETRIES,
@@ -166,3 +234,22 @@ def test_retry_policy_uses_shared_classifier_and_retry_after():
         UpstreamErrorType.TIMEOUT,
         UpstreamErrorType.CONNECTION,
     }
+
+
+def test_x3_insufficient_quota_is_not_llm_auth_invalid():
+    """A2/X3: quota must stay provider_error so the frontend can offer recharge."""
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.upstream_errors import UpstreamErrorType
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, 403) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, 402) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA, 429) == 'provider_error'
+    assert studio_code_for(UpstreamErrorType.INSUFFICIENT_QUOTA) != 'llm_auth_invalid'
+
+
+def test_x3_sponsor_topup_url_prefers_topup_over_register():
+    from backend.core import cloud_presets
+    for key in ('api88', 'infistar', 'apimart'):
+        url = cloud_presets.sponsor_topup_url(key)
+        assert url and url.startswith('http'), key
+    assert cloud_presets.sponsor_topup_url('openai') is None
+    assert cloud_presets.sponsor_topup_url(None) is None

@@ -1,3 +1,4 @@
+import type { AttemptReceipt } from '../../analytics/workflow'
 export type Goal = 'content' | 'highlight' | 'promo'
 export type Language = 'source' | 'zh' | 'en' | 'ja'
 export type SubtitleStyle = 'clean' | 'bold' | 'box' | 'accent'
@@ -6,8 +7,8 @@ export interface SubtitleCue { start: number; end: number; text: string }
 export interface FramingStatus { status: 'installed' | 'not_installed' | 'installing' | 'error'; progress: number; message: string; size_mb: number; cooldown_seconds?: number }
 export interface AutoFrameResult { window_fraction: number; scenes: { id: string; crop_x: number | null; crop_track: CropPoint[] | null; faces: number; samples: number; shots: number; fit_shots: number; switches: number }[] }
 export type FrameMode = 'crop' | 'fit'
-/** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. */
-export interface CropPoint { start: number; crop_x: number; mode?: FrameMode }
+/** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. `ease` is how long the pan into this crop takes; 0 is a cut. */
+export interface CropPoint { start: number; crop_x: number; mode?: FrameMode; ease?: number }
 export interface Scene { framing_source?: 'auto' | 'manual' | null; framing_adjusted?: boolean; id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
 /** Index of the track point covering `time` (absolute seconds), or -1 without a track. */
 export function shotIndexAt(scene: Scene | undefined, time: number): number {
@@ -18,12 +19,20 @@ export function shotIndexAt(scene: Scene | undefined, time: number): number {
   track.forEach((p, i) => { if (p.start <= rel) index = i })
   return index
 }
-/** Crop window position for a scene at `time` (absolute seconds): speaker track first, then static values. */
+/** Crop window position for a scene at `time` (absolute seconds): speaker track first, then static values. An eased point lerps in from the previous crop. */
 export function cropAt(scene: Scene | undefined, time: number, fallback = .5): number {
   if (!scene) return fallback
   const index = shotIndexAt(scene, time)
-  if (index >= 0) return scene.crop_track![index].crop_x
-  return scene.crop_x ?? fallback
+  if (index < 0) return scene.crop_x ?? fallback
+  const point = scene.crop_track![index]
+  const ease = point.ease || 0
+  const rel = time - scene.start
+  if (ease > 0 && index > 0 && point.mode !== 'fit') {
+    const prev = scene.crop_track![index - 1]
+    const t = Math.min(1, Math.max(0, (rel - point.start) / ease))
+    return prev.crop_x + (point.crop_x - prev.crop_x) * t
+  }
+  return point.crop_x
 }
 /** How the current shot is shown in a cropped layout. */
 export function frameModeAt(scene: Scene | undefined, time: number): FrameMode {
@@ -34,7 +43,12 @@ export function frameModeAt(scene: Scene | undefined, time: number): FrameMode {
 export function patchShot(scene: Scene, time: number, changes: Partial<CropPoint>, fallback = .5): Scene {
   const track = scene.crop_track?.length ? scene.crop_track : [{ start: 0, crop_x: scene.crop_x ?? fallback, mode: 'crop' as FrameMode }]
   const index = Math.max(0, shotIndexAt({ ...scene, crop_track: track }, time))
-  return { ...scene, crop_track: track.map((p, i) => i === index ? { ...p, ...changes } : p) }
+  return { ...scene, crop_track: track.map((p, i) => {
+    if (i !== index) return p
+    const next = { ...p, ...changes }
+    if ('crop_x' in changes && changes.crop_x !== p.crop_x) next.ease = 0
+    return next
+  }) }
 }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
@@ -43,7 +57,7 @@ export interface Packaging {
   title_lines: string[]; title_accent_line: number
   cues: { start: number; end: number; text: string; original: string }[]
   speakers: { at: number; name: string; role: string }[]
-  tags: { at: number; text: string }[]; tags_enabled: boolean
+  tags: { at: number; text: string }[]; tags_enabled: boolean; captions_enabled?: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
@@ -72,7 +86,7 @@ export interface RenderJob {
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
   branding: { outro_enabled: boolean; outro_version: string }
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; created_at: string; error?: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; render_attempt_id?: string; preparation_run_id?: string; created_at: string; error?: string; error_code?: string
   trimmed_to_sec?: number
   framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
   /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
@@ -84,9 +98,14 @@ export interface OutputVariant {
 export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
-  auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
-  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
-  html_template?: 'editorial' | 'street' | 'classic'
+  auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'; not_redone_failed_count?: number; attempt_id?: string
+  /** Runtime attribution; present after the LLM call starts (ETA history). */
+  provider?: string
+  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
+  billable_calls_before_failure?: number
+  /** Consecutive failed attempts after the last success, and whether the last two share an error_code. */
+  repeat_failure?: { count: number; same_code: boolean }
+  html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean
 }
@@ -99,7 +118,11 @@ export interface PlatformStrategySummary {
 export interface Workspace {
   schema_version?: number; plan?: ImportPlan
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
+  /** Backend attempt receipts (#419), oldest first. */
+  attempts?: AttemptReceipt[]
+  /** Live pipeline resume hint from workspace(); FailureActions retry copy. */
+  resume_point?: { point: string; label: string } | null
+  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; progress_percent?: number; progress_stage?: string; progress_approximate?: boolean; progress_since?: number; progress_message?: string; created_at?: string; error?: string; error_code?: string; upstream_error_type?: string; failure_stage?: string; billable_calls_before_failure?: number; provider?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
@@ -137,15 +160,23 @@ export function portraitDesign(draft: Draft): Draft {
   return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, subtitle_style: 'bold', ...withTitle}
 }
 
+/** Absolute range on the original source (seconds). T2 first-30-min window. */
+export interface SourceWindow { start: number; end: number }
+
 export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
-  html_template?: 'editorial' | 'street' | 'classic'
+  html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
+  source_window?: SourceWindow | null
 }
+
+/** T2: first-success devices are nudged to process only the first 30 minutes. */
+export const FIRST_WINDOW_END_SEC = 1800
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
 export interface ImportPlan {
+  degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback' | 'frame_extract_subtitle_fallback' | 'source_too_long_subtitle_route'
   aspect?: Draft['aspect']
   recommended_analysis?: AnalysisMode; confirmed_analysis?: AnalysisMode
 

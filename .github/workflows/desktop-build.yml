@@ -148,7 +148,7 @@ jobs:
           path: |
             build/pbs-cache
             build/ffmpeg-cache
-          key: desktop-downloads-macos-${{ hashFiles('scripts/build_macos_arm.sh', 'scripts/lib/desktop_build_common.sh') }}
+          key: desktop-downloads-macos-${{ hashFiles('scripts/build_macos_arm.sh', 'scripts/lib/desktop_build_common.sh', 'scripts/lib/ffmpeg_pin.sh', 'scripts/ffmpeg-macos-arm64.env') }}
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0"
@@ -158,8 +158,9 @@ jobs:
           # PostHog analytics. The phc_ key is a public client key (it ships in
           # the frontend bundle anyway), but we keep it in repo Secrets so it's
           # easy to rotate and not hard-coded. Set this secret in
-          # Settings -> Secrets and variables -> Actions. If unset, the build
-          # still succeeds and analytics is a no-op at runtime.
+          # Settings -> Secrets and variables -> Actions. cargo inherits this
+          # environment, so Rust option_env! can pass the same key to the backend.
+          # If unset, the build still succeeds and analytics is a no-op at runtime.
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
           VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
@@ -172,6 +173,8 @@ jobs:
 
       - name: Verify shipped macOS runtime before publishing
         shell: bash
+        env:
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
         run: |
           set -euo pipefail
           APP="src-tauri/target/release/bundle/macos/AutoClip Desktop.app"
@@ -248,13 +251,14 @@ jobs:
           path: |
             build/pbs-cache
             build/ffmpeg-cache
-          key: desktop-downloads-windows-${{ hashFiles('scripts/build_windows_x64.sh', 'scripts/lib/desktop_build_common.sh') }}
+          key: desktop-downloads-windows-${{ hashFiles('scripts/build_windows_x64.sh', 'scripts/lib/desktop_build_common.sh', 'scripts/lib/ffmpeg_pin.sh', 'scripts/ffmpeg-win64.env') }}
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0"
 
       - name: Build desktop app (PBS route)
         env:
+          # cargo inherits this. Rust option_env! passes the same key the frontend build uses.
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
           VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
@@ -274,6 +278,50 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sig
           retention-days: 30
 
+      # E9: per-run exe sha256 so the Windows acceptance machine can verify what it installs,
+      # on every Windows build (the full internal-desktop-provenance needs macOS + dispatch).
+      # Inline pwsh, no dependency on scripts/winqa (#414). For ASCII installer names it writes the same bytes
+      # exe_provenance.py wrote on the Windows runner: json.dumps(indent=2, sort_keys=True) + newline, CRLF,
+      # UTF-8 without BOM. Non-ASCII names, duplicate names, a count that differs from the nsis targets in
+      # src-tauri/tauri.windows.conf.json, no installer or a missing run id / sha fail the step.
+      # Checked byte-for-byte by backend/tests/test_windows_exe_provenance_step.py.
+      - name: Record Windows installer sha256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folder = 'src-tauri/target/release/bundle/nsis'
+          if ("$env:GITHUB_RUN_ID" -notmatch '^[0-9]+$') { throw 'GITHUB_RUN_ID missing or not an integer' }
+          if (-not "$env:GITHUB_SHA") { throw 'GITHUB_SHA missing' }
+          # One <product>_<version>_x64-setup.exe per nsis bundle target of the single x86_64 build.
+          $targets = @((Get-Content -Raw -LiteralPath 'src-tauri/tauri.windows.conf.json' | ConvertFrom-Json).bundle.targets)
+          $expected = @($targets | Where-Object { $_ -ceq 'nsis' }).Count
+          if ($expected -lt 1) { throw 'tauri.windows.conf.json bundle.targets has no nsis target' }
+          # -Force: include hidden files and directories, as Python rglob does.
+          $exes = @(Get-ChildItem -LiteralPath $folder -Recurse -Force -File -Filter '*-setup.exe' | Where-Object { $_.Name -like '*-setup.exe' })
+          if ($exes.Count -eq 0) { throw ('no *-setup.exe under {0}' -f (Split-Path -Leaf $folder)) }
+          # Ordinal: e.g. NFC and NFD spellings of a name are different names, as in Python.
+          $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+          foreach ($exe in $exes) { if (-not $seen.Add($exe.Name)) { throw ('duplicate installer name: {0}' -f $exe.Name) } }
+          $bad = @($exes | Where-Object { $_.Name -cmatch '[^\x20-\x7e]' })
+          if ($bad.Count -gt 0) { throw 'non-ASCII installer name (only ASCII names are supported)' }
+          if ($exes.Count -ne $expected) { throw ('expected {0} installer(s) from nsis targets, found {1}' -f $expected, $exes.Count) }
+          $names = [string[]]@($exes | ForEach-Object Name)
+          $items = [IO.FileInfo[]]$exes
+          [Array]::Sort($names, $items, [StringComparer]::Ordinal)  # ASCII only, so Ordinal == Python code point order
+          $assets = [Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)  # [ordered] ignores case
+          foreach ($exe in $items) { $assets[$exe.Name] = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+          $doc = [ordered]@{ assets = $assets; build_run_id = [long]$env:GITHUB_RUN_ID; commit = "$env:GITHUB_SHA"; schema_version = 1; stage = 'windows-build' }
+          $json = ((ConvertTo-Json -InputObject $doc -Depth 3) -replace "`r`n", "`n") + "`n"
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'windows-exe-provenance.json'), ($json -replace "`n", "`r`n"), [Text.UTF8Encoding]::new($false))
+
+      - name: Upload Windows installer provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-desktop-provenance-windows-x64
+          path: windows-exe-provenance.json
+          if-no-files-found: error
+          retention-days: 30
+
   # 没有 Windows 真机时的替代冒烟：在干净的 windows-latest 上装上一个正式版，
   # 模拟旧版后端残留锁住 _asyncio.pyd，再静默覆盖安装本次构建，然后用安装目录里的 Python
   # 跑后端 / ffmpeg / 来源守卫。界面和真实链接下载仍需人工或用户验证，见 RELEASE_CHECKLIST.md。
@@ -286,6 +334,7 @@ jobs:
         shell: pwsh
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

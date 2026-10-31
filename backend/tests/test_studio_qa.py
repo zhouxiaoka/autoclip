@@ -94,13 +94,25 @@ def test_jitter_track_and_sampled_motion(monkeypatch):
     steady = report.SceneSpan(0, 30, [(0.0, 0.40), (10.0, 0.55), (20.0, 0.70)])
     assert jitter.check(_ctx(width=width, scenes=[steady]), 1) == ('pass', 'calm')
 
-    def shaky(_path, _at, _timeout):
+    def noisy(_path, _at, _timeout):
+        # Under the 96px sample's noise floor. Scaling these used to fail RMS.
         return [(0.05, 0.0), (0.04, 0.0), (0.06, 0.0)]
 
-    monkeypatch.setattr(jitter, '_sample_shifts', shaky)
+    def wobble(_path, _at, _timeout):
+        # ~0.5 sample px is about 6 output px: visible, and not a pan.
+        return [(0.50, 0.0), (-0.45, 0.0), (0.55, 0.0)]
+
+    def pan(_path, _at, _timeout):
+        return [(2.0, 0.0), (2.1, 0.0), (1.9, 0.0)]
+
     ctx = _ctx(width=1080, scenes=[report.SceneSpan(0, 2)])
     ctx.output = type('File', (), {'is_file': lambda self: True})()
+    monkeypatch.setattr(jitter, '_sample_shifts', noisy)
+    assert jitter.check(ctx, 1) == ('pass', 'calm')
+    monkeypatch.setattr(jitter, '_sample_shifts', wobble)
     assert jitter.check(ctx, 1) == ('fail', 'rms')
+    monkeypatch.setattr(jitter, '_sample_shifts', pan)
+    assert jitter.check(ctx, 1) == ('pass', 'calm')
 
 
 def test_shift_estimator_sees_a_two_pixel_move():
@@ -199,6 +211,19 @@ def test_face_overlap_buckets_and_detected_boxes(monkeypatch, tmp_path):
     assert face.check(_ctx(captions=False, title=False), 1) == ('pass', 'none')
     monkeypatch.setattr('backend.services.studio.framing.is_installed', lambda: False)
     assert face.check(covered, 1) == ('skip', 'no_detector')
+
+
+def test_caption_check_still_runs_when_presence_skips(monkeypatch, tmp_path):
+    output = tmp_path / 'frame.mp4'
+    output.write_bytes(b'not-decoded-here')
+    ctx = _ctx(
+        captions=True, output=output, source=output,
+        scenes=[report.SceneSpan(0.0, 2.0, [(0.0, 0.2)])],
+    )
+    monkeypatch.setattr(face, '_presence_check', lambda *_args, **_kwargs: ('skip', 'timeout'))
+    monkeypatch.setattr('backend.services.studio.framing.is_installed', lambda: True)
+    monkeypatch.setattr(face, 'detect_faces', lambda *_args: [(100.0, 1800.0, 80.0, 80.0)])
+    assert face.check(ctx, 2.0) == ('fail', 'gt40')
 
 
 def test_budget_skips_a_slow_checker_and_keeps_going():
@@ -549,6 +574,42 @@ def test_analytics_identity_rejects_paths_and_stores_anonymous_ids(tmp_path, mon
     stored = json.loads((tmp_path / 'analytics.json').read_text(encoding='utf-8'))
     assert stored == {'distinct_id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
     assert not list(tmp_path.glob('analytics.json.*.tmp'))
+
+
+def test_analytics_identity_change_is_used_by_later_events(tmp_path, monkeypatch):
+    import os
+    from backend.services.studio.qa import telemetry
+    old = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+    new = '018f6b2a-7c3d-7b2a-8c11-222222222222'
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', old)
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    (tmp_path / 'analytics.json').write_text(json.dumps({'distinct_id': old}), encoding='utf-8')
+    assert telemetry.remember_distinct_id(new)
+    assert telemetry.anonymous_distinct_id() == new
+    # The launch env is only a fallback. The file wins for events in this process.
+    assert os.environ['AUTOCLIP_ANONYMOUS_DEVICE_ID'] == old
+    assert telemetry.remember_distinct_id(new)
+    assert telemetry.anonymous_distinct_id() == new
+    captured = {}
+
+    def urlopen(request, timeout=1.5):
+        captured['body'] = json.loads(request.data.decode())
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        return _Resp()
+
+    monkeypatch.setattr(telemetry.urllib.request, 'urlopen', urlopen)
+    telemetry.emit_checked({'duration_ms': 1, 'checks': []}, 'loudness_target')
+    assert captured['body']['distinct_id'] == new
+    assert telemetry.stored_distinct_id() == new
+    assert telemetry._analytics_allowed() is True
 
 
 def test_identity_temp_file_includes_the_pid(tmp_path, monkeypatch):

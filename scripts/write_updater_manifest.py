@@ -52,11 +52,7 @@ def collect_platforms(
     return platforms
 
 
-def changelog_notes(version: str, changelog: Path, limit: int = 1200) -> str:
-    """CHANGELOG 里 `## [version]` 到下一节之间的正文。没有则空字符串。"""
-    if not changelog.is_file():
-        return ""
-    text = changelog.read_text(encoding="utf-8")
+def _version_section(text: str, version: str) -> str | None:
     ver = version.lstrip("v")
     match = re.search(
         rf"^## \[{re.escape(ver)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
@@ -64,11 +60,39 @@ def changelog_notes(version: str, changelog: Path, limit: int = 1200) -> str:
         re.MULTILINE | re.DOTALL,
     )
     if not match:
-        return ""
-    body = match.group(1).strip()
+        return None
+    return match.group(1).strip()
+
+
+def _highlights(section: str) -> str | None:
+    """`### 要点` 到下一个 `##` / `###` 标题之间的正文，不含标题行。"""
+    match = re.search(
+        r"^### 要点[^\n]*\n(.*?)(?=^#{2,3} |\Z)",
+        section,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _cap(body: str, limit: int) -> str:
     if len(body) <= limit:
         return body
     return body[:limit].rstrip() + "…"
+
+
+def changelog_notes(version: str, changelog: Path, limit: int = 1200) -> str:
+    """有 `### 要点` 时只用这段正文；否则用版本段前 limit 个字符。没有该版本则空字符串。"""
+    if not changelog.is_file():
+        return ""
+    section = _version_section(changelog.read_text(encoding="utf-8"), version)
+    if section is None:
+        return ""
+    highlights = _highlights(section)
+    if highlights is not None:
+        return _cap(highlights, limit)
+    return _cap(section, limit)
 
 
 def build_manifest(

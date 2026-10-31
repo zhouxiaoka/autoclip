@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load(relativePath) {
@@ -11,12 +11,12 @@ function load(relativePath) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports })
+  runInSandbox(code, { module, exports: module.exports })
   return module.exports
 }
 
-const { classifyTimelineEmpty } = load('../src/utils/timelineFailure.ts')
-const { classifyLlmKeyFailure } = load('../src/utils/llmFailure.ts')
+const { classifyTimelineEmpty, weakLocalTimelineFailure } = load('../src/utils/timelineFailure.ts')
+const { classifyLlmKeyFailure } = require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/utils/llmFailure.ts'))
 const { classifySubtitleFailure } = load('../src/utils/subtitleFailure.ts')
 
 // 与 backend empty_timeline_failure().user_message() 一致；CLI 会把它写进 last_error。
@@ -31,9 +31,9 @@ test('classifies the stable code and a last_error that has no code', () => {
 })
 
 test('does not treat model, scoring, or subtitle failures as an empty timeline', () => {
-  assert.equal(classifyTimelineEmpty('没有可用的 LLM 提供商，缺少 API Key。请到「设置 → 模型」点「测试连接」。'), false)
-  assert.equal(classifyTimelineEmpty('没有片段通过评分筛选。到「设置 → 模型 → 最低评分阈值」调低后重试。'), false)
-  assert.equal(classifyTimelineEmpty('没有字幕可分析：视频不带字幕。到「设置 → 转写」安装。'), false)
+  assert.equal(classifyTimelineEmpty('没有可用的 LLM 提供商，缺少 API Key。请到「设置 → 服务商与模型」点「测试连接」。'), false)
+  assert.equal(classifyTimelineEmpty('没有片段通过评分筛选。到「设置 → 服务商与模型 → 最低评分阈值」调低后重试。'), false)
+  assert.equal(classifyTimelineEmpty('没有字幕可分析：视频不带字幕。到「设置 → 默认模型 → 语音转字幕」安装。'), false)
   assert.equal(classifyTimelineEmpty(''), false)
   assert.equal(classifyTimelineEmpty(null, 'llm_not_configured'), false)
   assert.equal(classifyTimelineEmpty(null, 'whisper_not_installed'), false)
@@ -46,9 +46,31 @@ test('an empty timeline last_error does not open model or transcription settings
   assert.equal(classifySubtitleFailure(LAST_ERROR), null)
   assert.equal(classifySubtitleFailure(LAST_ERROR, 'timeline_empty'), null)
   assert.equal(classifySubtitleFailure(PROGRESS), null)
-  assert.equal(LAST_ERROR.includes('设置 → 模型'), false)
+  assert.equal(LAST_ERROR.includes('设置 → 服务商与模型'), false)
   assert.equal(LAST_ERROR.includes('API Key'), false)
   assert.equal(LAST_ERROR.includes('测试连接'), false)
+})
+
+const WEAK = '当前本地模型无法返回可用时间线'
+const LEGACY = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
+const GENERIC = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。这一步尚未进入评分或最短时长筛选。'
+
+test('#428 weak-local empty intervals are not an empty timeline and keep the short sentence', () => {
+  assert.equal(weakLocalTimelineFailure(WEAK, 'invalid_response'), true)
+  assert.equal(weakLocalTimelineFailure(LEGACY, 'invalid_response'), true)
+  assert.equal(weakLocalTimelineFailure(WEAK), true)
+  assert.equal(weakLocalTimelineFailure(GENERIC, 'invalid_response'), false)
+  assert.equal(weakLocalTimelineFailure(WEAK, 'timeline_empty'), false)
+  assert.equal(classifyTimelineEmpty(WEAK, 'invalid_response'), false)
+  assert.equal(classifyLlmKeyFailure(WEAK, 'invalid_response'), false)
+  const backend = fs.readFileSync(path.join(__dirname, '../../backend/core/weak_local_timeline.py'), 'utf8')
+  assert.match(backend, /当前本地模型无法返回可用时间线/)
+  assert.doesNotMatch(backend, /自动重试已经用完/)
+  const detail = fs.readFileSync(path.join(__dirname, '../src/pages/ProjectDetailPage.tsx'), 'utf8')
+  const card = fs.readFileSync(path.join(__dirname, '../src/components/ProjectCard.tsx'), 'utf8')
+  assert.doesNotMatch(detail, /weakLocalTimelineFailure/)
+  assert.match(card, /去配置模型/)
+  assert.match(card, /切换并重试/)
 })
 
 test('failure screens do not route an empty timeline to Settings → Model', () => {

@@ -18,26 +18,21 @@ AutoClip 本身仍然免费、开源（MIT）。云端模型调用由你选择�
 
 ### 哪些视频比较适合？
 
-默认路线是字幕分析，对白清楚的访谈、播客、课程、口播和直播回放比较合适。自 **v1.4.0** 起，游戏录屏可另行启用视觉分析：需要多模态模型，并显式启用付费视觉初筛。单一样本不代表所有游戏；输出仍需人工检查边界、裁切和文案，不承诺广告投放效果。音乐或其他主要依赖画面、又未启用视觉分析的内容，单靠字幕可能无法识别精彩点。没有固定出片数量或效果保证。
+默认路线是字幕分析，对白清楚的访谈、播客、课程、口播和直播回放比较合适。游戏录屏可以按画面剪辑：在「设置 → 服务商与模型」换一个能看图的模型。抽样画面会发给该模型，按服务商计费。单一样本不代表所有游戏；输出仍需人工检查边界、裁切和文案，不承诺广告投放效果。音乐或其他主要依赖画面、又没有换成能看图模型的内容，单靠字幕可能无法识别精彩点。没有固定出片数量或效果保证。
 
-第一次出片请自备 3–5 分钟、对白清楚的短样片，最好带时间轴准确的 `.srt`。来源可以是本地文件、B 站或 YouTube，请确认你有权使用。AutoClip 不托管官方样片，Release 里也没有样片压缩包或成片下载。
+第一次想先看效果：首页还没有项目时，点「用示例项目看看效果」。示例随安装包附带（`source.mp4` 与 `source.srt`），不需要 API Key，也不是单独的样片压缩包。
 
-第一次出片先试这条：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（Stanford ENERGY）。示例·非托管·自担使用权。
+之后再用自己有权使用的短片：3–5 分钟、对白清楚，最好带时间轴准确的 `.srt`。来源用本地文件或 B 站。
 
-其他示例不必都试。多为英语对白，可开官方字幕或自备 SRT/Whisper。
-
-- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator）。示例·非托管·自担使用权。
-- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）。示例·非托管·自担使用权。
-
-准备步骤见 [安装指南 · 自备短样片](USER_INSTALLATION_GUIDE.md#自备短样片)，卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
+准备步骤见 [安装指南 · 先看示例，再用自己的短片](USER_INSTALLATION_GUIDE.md#先看示例再用自己的短片)，卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 
 ## 安装与启动
 
 ### 应该下载哪个文件？
 
-[Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 中，Apple Silicon Mac 选 `aarch64.dmg`，Windows x64 选 `x64-setup.exe`。Intel Mac / Linux 使用 Docker 或 CLI。以每次 Release 的实际资产为准，`Source code` 不是桌面安装包。Release 不提供官方样片或成片下载。
+[Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 中，Apple Silicon Mac 选 `aarch64.dmg`，Windows x64 选 `x64-setup.exe`。Intel Mac 目前没有桌面安装包，与 Linux 一样使用 Docker 或 CLI。以每次 Release 的实际资产为准，`Source code` 不是桌面安装包。第一次出片用应用里的「用示例项目看看效果」，示例在安装包内。
 
-首次启动的系统提示请参考 [安装指南](USER_INSTALLATION_GUIDE.md) 和对应 Release。Windows 日常运行不需要管理员权限。
+macOS 15 及以上首次打开：双击一次，若被拦截则到「系统设置 → 隐私与安全性 → 仍要打开」（[Apple 说明](https://developer.apple.com/news/?id=saqachfa)）。较旧的 macOS 可右键应用 →「打开」。Windows 若出现 SmartScreen，点「更多信息 → 仍要运行」。日常运行不需要管理员权限。详见 [安装指南](USER_INSTALLATION_GUIDE.md)。
 
 ### 空白页、后端未启动或连接失败怎么办？
 
@@ -57,7 +52,7 @@ Docker 中的 `localhost` 是容器自己。宿主机模型服务的访问方式
 
 ### 字幕分析和游戏视觉分析怎么选？
 
-自 **v1.4.0** 起有两条路线。字幕分析仍是默认，旧配置也默认字幕模式。游戏视觉分析可选：自行配置多模态模型，并显式启用付费视觉初筛。配好模型不等于已经允许每次视觉调用。确认后，视觉路线识别录屏中的独立事件，生成可编辑高光与推广草稿，再在共用编辑器里修改。未确认的导入可恢复；确认后才正式理解和剪辑。
+自 **v1.4.0** 起有两条路线。字幕分析仍是默认，旧配置也默认字幕模式。按画面剪辑时，在「设置 → 服务商与模型」选用能看图的模型。确认后，视觉路线识别录屏中的独立事件，生成可编辑高光与推广草稿，再在共用编辑器里修改。未确认的导入可恢复；确认后才正式理解和剪辑。
 
 单一样本不代表所有游戏质量。输出仍需人工检查边界、裁切和文案，不承诺广告投放效果。v1.4.0 不含 CTA 动效、生成式品牌尾卡、卡拉 OK / 逐词字幕。
 
@@ -67,11 +62,20 @@ Docker 中的 `localhost` 是容器自己。宿主机模型服务的访问方式
 
 ### 没有字幕怎么办？支持什么字幕格式？
 
-首页的本地上传入口支持可选 `.srt`。没有可用字幕时需要本地语音转写；先在设置中安装 Whisper 组件与模型。CLI 环境可安装 `faster-whisper`。其他字幕格式建议先转换为带正确时间轴的 SRT，不假设上传入口支持所有格式。
+首页的本地上传入口支持可选 `.srt`。没有可用字幕、本地 Whisper 装不上或太慢时，可以改用百炼云端转写（`qwen-audio-3.1-asr-flash`，大约 0.1 元/小时音频，具体以阿里云账单为准）。音频会上传到云端。
+
+打开「设置 → 默认模型 → 语音转字幕」，选择这个云端模型。导入被拦住时，点「改用云端转写」。
+
+百炼 API Key 分两步：
+
+1. 先用作者推荐链接注册或领优惠：<https://www.aliyun.com/benefit?userCode=qmyj6jch>
+2. 再到 <https://bailian.console.aliyun.com/> 创建 API Key，回到设置里填写。
+
+也可以继续用本机 Whisper。没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。CLI 环境可安装 `faster-whisper`。其他字幕格式建议先转换为带正确时间轴的 SRT，不假设上传入口支持所有格式。
 
 ### 在 Windows 上安装 Whisper 仍提示 mlx-whisper 仅支持 Apple Silicon？
 
-「设置 → 转写」里安装 Whisper 时，若 Windows 或其他非 Mac 仍出现红色错误「mlx-whisper 仅支持 Apple Silicon (macOS)」，请更新到 **v1.3.3** 或更新（含 [#145](https://github.com/zhouxiaoka/autoclip/pull/145)）。桌面版用「设置 → 应用 → 检查更新」，或到 [Releases](https://github.com/zhouxiaoka/autoclip/releases) 下载。旧版会误报并拦住安装；更新后点原来的「安装」即可。见 [#141](https://github.com/zhouxiaoka/autoclip/issues/141)。
+在「设置 → 默认模型 → 语音转字幕」安装本机 Whisper 时，若 Windows 或其他非 Mac 仍出现红色错误「mlx-whisper 仅支持 Apple Silicon (macOS)」，请更新到 **v1.3.3** 或更新（含 [#145](https://github.com/zhouxiaoka/autoclip/pull/145)）。桌面版用「设置 → 应用 → 检查更新」，或到 [Releases](https://github.com/zhouxiaoka/autoclip/releases) 下载。旧版会误报并拦住安装；更新后再安装即可。见 [#141](https://github.com/zhouxiaoka/autoclip/issues/141)。
 
 ### 为什么没有生成片段？
 
@@ -91,7 +95,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证用自备短片，或先试上文的 [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)。不必把示例都跑一遍。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
+把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证用首页的「用示例项目看看效果」，或用自己的短片。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
 
 ### 处理慢、内存不足怎么办？
 

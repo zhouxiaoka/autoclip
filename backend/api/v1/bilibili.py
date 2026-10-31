@@ -341,7 +341,7 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
             except Exception as e:
                 logger.warning("生成字幕过程中发生未知错误: %s", type(e).__name__)
                 subtitle_path = None
-                subtitle_error = "本地 Whisper 生成字幕失败。请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨。"
+                subtitle_error = "本地 Whisper 生成字幕失败。请到「设置 → 默认模型 → 语音转字幕」确认模型已下载，并检查视频有可播放的音轨。"
         
         download_tasks[task_id].progress = 80.0
         

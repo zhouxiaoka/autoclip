@@ -1,4 +1,6 @@
 """Unified creative workspace. Legacy projects are adapted, never overwritten."""
+import asyncio
+import threading
 import json
 import uuid
 from pathlib import Path
@@ -7,7 +9,10 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
+from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
@@ -28,19 +33,47 @@ def project_or_404(project_id: str, db: Session):
         raise HTTPException(404, '项目不存在')
     return project
 
+from backend.core.failure_attribution import ModelResponseInvalid  
+
 def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except store.ConflictError as error:
+        if getattr(error, 'error_code', None):  # a coded refusal (frontend errorText maps the code)
+            raise HTTPException(error.status, {'error_code': error.error_code, 'message': str(error)}) from None
         raise HTTPException(409, str(error)) from None
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from None
     except ValueError as error:
+        from backend.services.studio.readiness import TranscriptionNotReady
+        from backend.services.studio.preflight import SourceRejected
+        if isinstance(error, (TranscriptionNotReady, SourceRejected)):
+            raise gate_refusal(error) from None
         raise HTTPException(422, str(error)) from None
 
 def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
+
+async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
+    """Stage the upload outside any project and run the one preflight on it, in the threadpool.
+    Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
+    from backend.services.studio import preflight
+    from backend.api.v1 import transcription_gate
+    staged = await stage_upload(video, first_chunk, ext)
+    try:
+        subtitle = staged.with_suffix('.srt') if srt_available else None
+        if subtitle is not None:
+            subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
+        try:
+            await transcription_gate.run(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
+        finally:
+            if subtitle is not None:
+                subtitle.unlink(missing_ok=True)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    return staged
 
 @router.get('/title-presets/{style}/thumbnail')
 def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=6)):
@@ -51,6 +84,108 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
 def import_readiness():
     from backend.services.studio import readiness
     return readiness.report()
+
+
+class InspectUrlBody(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    url: str = Field(min_length=8, max_length=2000)
+    browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = None
+    analysis_mode: Optional[Literal['auto', 'subtitle', 'visual']] = None
+
+
+# Same-URL inspect shares one threadpool job so rapid paste does not stack workers.
+_INSPECT_INFLIGHT: dict[str, asyncio.Task] = {}
+_INSPECT_MAP_LOCK = threading.Lock()
+INSPECT_WAIT_SEC = 10
+
+
+def inspect_flight_key(url: str, browser: Optional[str] = None) -> str:
+    """Normalize URL + browser for the in-flight map (strip; host lower-cased)."""
+    raw = (url or '').strip()
+    parsed = urlparse(raw)
+    host = (parsed.hostname or '').lower()
+    if host:
+        netloc = host
+        if parsed.port:
+            netloc = f'{host}:{parsed.port}'
+        # Keep userinfo out (rejected by the handler anyway).
+        path = parsed.path or ''
+        query = f'?{parsed.query}' if parsed.query else ''
+        fragment = f'#{parsed.fragment}' if parsed.fragment else ''
+        raw = f'{parsed.scheme.lower()}://{netloc}{path}{query}{fragment}'
+    return f'{raw}|{browser or ""}'
+
+
+def clear_inspect_inflight() -> None:
+    """Test helper: drop in-flight map entries."""
+    with _INSPECT_MAP_LOCK:
+        _INSPECT_INFLIGHT.clear()
+
+
+async def await_inspect_url(url: str, browser: Optional[str] = None, *, timeout: float = INSPECT_WAIT_SEC):
+    """Run jobs.inspect_url once per in-flight key; waiters share the same Task.
+
+    wait_for uses shield so one client's timeout does not cancel the shared
+    worker (followers can still receive the result). The worker itself is
+    bounded by inspect socket_timeout.
+    """
+    key = inspect_flight_key(url, browser)
+    with _INSPECT_MAP_LOCK:
+        task = _INSPECT_INFLIGHT.get(key)
+        if task is None or task.done():
+            task = asyncio.create_task(
+                run_in_threadpool(jobs.inspect_url, url.strip(), browser),
+            )
+            _INSPECT_INFLIGHT[key] = task
+
+            def _clear(done: asyncio.Future, k: str = key) -> None:
+                with _INSPECT_MAP_LOCK:
+                    cur = _INSPECT_INFLIGHT.get(k)
+                    if cur is done:
+                        _INSPECT_INFLIGHT.pop(k, None)
+
+            task.add_done_callback(_clear)
+    return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+
+
+@router.post('/inspect-url')
+async def inspect_url(body: InspectUrlBody):
+    """F4: info-only probe before download. 10 s timeout; cookie/private failures reuse download recovery."""
+    from backend.core.failure_codes import user_visible_error
+    from backend.pipeline.failures import PipelineFailure
+    parsed = urlparse(body.url.strip())
+    host = (parsed.hostname or '').lower()
+    if parsed.scheme != 'https' or parsed.username or parsed.password or not any(
+        host == d or host.endswith('.' + d) for d in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')
+    ):
+        raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
+    from backend.services.studio import planning
+    mode = body.analysis_mode
+    if mode is None:
+        mode = planning.preferred_analysis_mode() or 'auto'
+    try:
+        meta = await await_inspect_url(body.url.strip(), body.browser)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, '读取视频信息超时，请稍后重试') from None
+    except PipelineFailure as error:
+        raise HTTPException(
+            422,
+            {'error_code': error.code or 'source_blocked', 'message': error.user_message()},
+        ) from None
+    except Exception as error:
+        coded = getattr(error, 'error_code', None) or getattr(error, 'code', None)
+        message = user_visible_error(error)
+        if coded:
+            raise HTTPException(422, {'error_code': coded, 'message': message}) from None
+        raise HTTPException(422, message or '无法读取视频信息') from None
+    route = planning.preview_route(
+        meta.get('duration'),
+        bool(meta.get('has_manual_subtitle')),
+        meta.get('has_audio'),
+        mode,
+    )
+    return {**meta, **route}
+
 
 
 @router.get('/capabilities')
@@ -101,7 +236,7 @@ async def import_visual(
     platforms: list[str] = Form(['douyin']),
     auto_start: bool = Form(False),
     portrait_style: Literal['auto', 'interview', 'podcast'] = Form('auto'),
-    html_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
+    html_template: Optional[Literal['editorial', 'street', 'news', 'cinema', 'classic']] = Form(None),
     recommended_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
     brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),
@@ -109,6 +244,8 @@ async def import_visual(
     url: Optional[str] = Form(None),
     browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = Form(None),
     video: Optional[UploadFile] = File(None),
+    source_window_start: Optional[float] = Form(None, ge=0),
+    source_window_end: Optional[float] = Form(None, gt=0),
     features: str = Form(''),
     db: Session = Depends(get_db),
 ):
@@ -138,27 +275,62 @@ async def import_visual(
                 raise HTTPException(422, '字幕文件为空或超过 2 MB')
         finally:
             await subtitle.close()
-    prefs = ImportOptions(
-        goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
-        platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
-        recommended_template=recommended_template,
-        branding={'outro_enabled': brand_outro_enabled},
-    )
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
-    pid = str(project.id)
-    raw = store.directory(pid) / 'raw'
-    raw.mkdir(parents=True, exist_ok=True)
+    staged = None
+    if video:
+        # 1.5.7: block before creating a project when local Whisper is required but missing.
+        try:
+            staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
+        except HTTPException:
+            await video.close()
+            raise
     try:
+        source_window = None
+        if source_window_end is not None:
+            source_window = {
+                'start': float(source_window_start or 0),
+                'end': float(source_window_end),
+            }
+        prefs = ImportOptions(
+            goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+            platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
+            recommended_template=recommended_template,
+            branding={'outro_enabled': brand_outro_enabled},
+            source_window=source_window,
+        )
+        project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+    except BaseException:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+        raise
+    pid = str(project.id)
+    try:
+        # mkdir inside the try: a failure here still runs the staging cleanup below.
+        raw = store.directory(pid) / 'raw'
+        raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
+            if not video:
+                # Upload carried an SRT but no local video yet (URL path); still stamp origin.
+                from backend.services.studio import pipeline_resume
+                pipeline_resume.record_srt_origin(store.directory(pid) / 'metadata', 'attached')
         if video:
             path = raw / ('input' + ext)
-            with path.open('wb') as target:
-                target.write(first_chunk)
-                while chunk := await video.read(1024 * 1024):
-                    target.write(chunk)
+            if staged is not None:
+                import shutil
+                shutil.move(str(staged), str(path))
+            else:
+                with path.open('wb') as target:
+                    target.write(first_chunk)
+                    while chunk := await video.read(1024 * 1024):
+                        target.write(chunk)
             project.video_path = str(path)
             db.commit()
+            if subtitle_bytes is not None:
+                # P1 #6: user-attached SRT must survive 「从头重做」.
+                from backend.services.studio import pipeline_resume
+                pipeline_resume.record_srt_origin(
+                    store.directory(pid) / 'metadata', 'attached', video=path,
+                )
         snapshot = None
         if features and len(features) <= 4000:
             try:
@@ -173,9 +345,28 @@ async def import_visual(
         db.commit()
         raise
     finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)  # no-op once moved into the project
         if video:
             await video.close()
     return {'project_id': pid, 'analysis_run_id': run_id}
+
+
+
+async def stage_upload(video: UploadFile, first_chunk: bytes, ext: str) -> Path:
+    """Write the upload outside any project so a refused import leaves no project behind."""
+    staging = store.get_projects_directory().parent / 'import-staging'
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / (uuid.uuid4().hex + ext)
+    try:
+        with path.open('wb') as target:
+            target.write(first_chunk)
+            while chunk := await video.read(1024 * 1024):
+                target.write(chunk)
+    except BaseException:  # includes client disconnect / cancellation mid-upload
+        path.unlink(missing_ok=True)
+        raise
+    return path
 
 
 @router.post('/template-recommend')
@@ -204,8 +395,11 @@ async def template_recommend(
 @router.get('/{project_id}')
 def workspace(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
-    data = call(store.read, project_id)
-    return {**data, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+    from backend.services.studio import attempts
+    from backend.services.studio import pipeline_resume
+    data = attempts.public_workspace(call(store.recover, project_id))
+    resume_point = pipeline_resume.resume_point_for_project(project_id)
+    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):
@@ -295,15 +489,55 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
+    if not url:
+        from backend.services.studio import preflight
+        video = jobs.source(project_id)
+        call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=prefs.goal))
     run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True, 'analysis_run_id': run_id}
+
+class RetryCommand(BaseModel):
+    """The one retry command (#419): the backend validates the parent and creates the attempt."""
+    model_config = ConfigDict(extra='forbid')
+    scope: Literal['analysis', 'variant']
+    variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
+    idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
+    fresh: bool = False  # 「从头重做」clears pipeline cache before resume
+
+
+@router.post('/{project_id}/retry')
+def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get_db)):
+    """Returns the attempt receipt. Same idempotency_key -> same receipt, dispatched once."""
+    from backend.services.studio import attempts
+    project = project_or_404(project_id, db)
+    retry = {'parent_attempt_id': body.parent_attempt_id, 'key': body.idempotency_key, 'fresh': bool(body.fresh)}
+    if body.scope == 'variant':
+        if not body.variant_id:
+            raise HTTPException(422, '缺少成片版本')
+        variant = call(jobs.retry_variant, project_id, body.variant_id, retry)
+        receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+        return {'attempt': attempts.public(receipt) if receipt else None, 'variant': variant}
+    config = project.processing_config or {}
+    prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else ImportOptions.model_validate(Preferences.model_validate(config.get('creative', {})).model_dump())
+    url = None
+    try:
+        jobs.source(project_id)
+    except FileNotFoundError:
+        url = (project.project_metadata or {}).get('source_url')
+        if not url:
+            raise HTTPException(404, '原素材不存在，请重新导入')
+    run_id = call(jobs.inspect_project, project_id, prefs, url, config.get('creative_browser'), retry=retry)
+    receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key)
+    return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None}
+
 
 @router.put('/{project_id}/plan')
 def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
     # Keep the check, requested preferences and job reservation atomic with other submissions.
     with store.lock:
-        if (store.read(project_id).get('analysis') or {}).get('status') == 'running':
+        if (store.recover(project_id).get('analysis') or {}).get('status') == 'running':
             raise HTTPException(409, '当前分析尚未结束，完成后可修改方案；已有草稿会保留')
         url = None
         try:
@@ -312,6 +546,10 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             url = (project.project_metadata or {}).get('source_url')
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
+        if not url:
+            from backend.services.studio import preflight
+            video = jobs.source(project_id)
+            call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
@@ -331,11 +569,35 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
     run_id = call(jobs.confirm_project, project_id, body)
     return {'ok': True, 'analysis_run_id': run_id}
 
+class EtaReport(BaseModel):
+    """First ETA from the desktop progress bar (minutes)."""
+    model_config = ConfigDict(extra='forbid')
+    eta_initial_min: float = Field(gt=0, le=24 * 60)
+
+
+@router.put('/{project_id}/eta')
+def report_eta(project_id: str, body: EtaReport, db: Session = Depends(get_db)):
+    """Persist eta_initial_min onto the open generation so the finished event can carry it."""
+    project_or_404(project_id, db)
+    minutes = round(float(body.eta_initial_min), 2)
+    with store.lock:
+        data = call(store.recover, project_id)
+        generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+        analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+        running = (generation and generation.get('status') in ('screening', 'production', 'rendering', 'awaiting_confirmation')) \
+            or (analysis and analysis.get('status') == 'running')
+        if not running or generation is None:
+            return {'ok': False, 'reason': 'not_running'}
+        if isinstance(generation.get('eta_initial_min'), (int, float)) and not isinstance(generation.get('eta_initial_min'), bool) and generation.get('eta_initial_min') > 0:
+            return {'ok': True, 'eta_initial_min': generation['eta_initial_min'], 'kept': True}
+        generation['eta_initial_min'] = minutes
+        call(store.write, project_id, data)
+    return {'ok': True, 'eta_initial_min': minutes, 'kept': False}
+
 @router.post('/{project_id}/platforms')
 def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
-    return {'variants': variants}
+    return call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())  # 1.5.7: always refused, no attempt
 
 
 def _variant_job(project_id: str, variant_id: str):
@@ -474,7 +736,15 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         raise HTTPException(404, '草稿不存在')
     try:
         result = intelligence.text_json('你是剪辑文案编辑。按用户要求优化 title 和 hook，保持事实；依据仅限原文与镜头证据。不能声称已修改镜头、声音或视频，也不能承诺投放效果。返回 {"title":"...","hook":"..."}。', {'instruction': body.instruction, 'language': body.draft.language, 'title': body.draft.title, 'hook': body.draft.hook, 'scenes': [s.model_dump() for s in body.draft.scenes]})
-        candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
+        # (11:09): the model's own reply failed our checks -> MODEL / invalid_response, no raw text.
+        # only the reply's own shape is judged (not a dict, a missing key, a field the schema
+        # rejects); a TypeError from our own code is not caught here and stays local/unexpected.
+        if not isinstance(result, dict):
+            raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试')
+        try:
+            candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
+        except (KeyError, ValueError):  # pydantic's ValidationError is a ValueError
+            raise ModelResponseInvalid('模型返回的改写文案格式无效，请重试') from None
     except Exception as error:
         capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
@@ -528,9 +798,13 @@ def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = Non
         raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
     draft = Draft.model_validate(raw)
     call(validate_draft, project_id, draft)
-    variant = next((v for v in state.get('output_variants', []) if v['draft_id'] == draft_id), None)
+    variant = jobs.export_variant(
+        state.get('output_variants', []), draft_id,
+        variant_id=body.variant_id if body else None,
+        revision=draft.revision, aspect=draft.aspect,
+    )
     if variant:
-        return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)))
+        return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)), **jobs.template_export_kwargs(variant))
     return call(jobs.export, project_id, draft)
 
 @router.get('/{project_id}/exports/{job_id}/video')

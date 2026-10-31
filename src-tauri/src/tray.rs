@@ -109,8 +109,13 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
                     }
                 }
                 "quit" => {
-                    // 退出应用
-                    app.exit(0);
+                    // P2 #10: exit immediately if QuitGuard has not registered yet.
+                    if !crate::quit_guard::is_ready(app) {
+                        app.exit(0);
+                        return;
+                    }
+                    // R1: let the frontend decide (running projects → confirm dialog).
+                    crate::quit_guard::emit_close_requested(app, "tray");
                 }
                 _ => {}
             }

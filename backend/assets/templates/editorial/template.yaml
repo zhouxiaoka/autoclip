@@ -4,7 +4,7 @@ name: {zh: 杂志风, en: Editorial}
 fit:
   formats: {sit_down_interview: 1.0, keynote_stage: 0.7, podcast_studio: 0.6, street_interview: 0.2}
   needs_face: true
-canvas: {aspects: [portrait], overlay_px: [720, 1280], fps: 30}
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
   framing: full_face
   face_y: 0.38
@@ -16,13 +16,15 @@ base:
     intro: {from: 1.18, dur: 0.9}
     end_push: 0.035
   transitions: {broll: zoomblur, max: 2}
-  grade: "curves=all='0/0.02 0.5/0.52 1/0.97',eq=saturation=1.0:contrast=1.04,noise=alls=4:allf=u"
+  # The warm grade is one per-channel curves LUT. It matches curves+colorbalance within 2 levels on a gray ramp;
+  # colorbalance does float math on every pixel and doubled the editorial composite time.
+  grade: "curves=r='0/0.043 0.125/0.160 0.25/0.274 0.375/0.414 0.5/0.535 0.625/0.652 0.75/0.766 0.875/0.875 1/0.984':g='0/0.027 0.125/0.149 0.25/0.274 0.375/0.399 0.5/0.520 0.625/0.637 0.75/0.750 0.875/0.859 1/0.969':b='0/0.000 0.125/0.129 0.25/0.274 0.375/0.383 0.5/0.504 0.625/0.621 0.75/0.734 0.875/0.844 1/0.953',eq=saturation=1.0:contrast=1.04,noise=alls=4:allf=u"
 overlay:
   entry: index.html
   slots:
-    hook: {top: 96, alt_top: 980}
-    subtitle: {top: 1040, max_rows: 2}
-    gloss: [{top: 860, left: 48, width: 420}]
+    hook: {top: 1110, alt_top: 1110}
+    subtitle: {top: 1560, max_rows: 2}
+    gloss: [{top: 800, left: 48, width: 420}]
   safe_area: xiaohongshu
   limits: {effect_text_max: 6, emphasis_gap_s: 3.0}
 fields:

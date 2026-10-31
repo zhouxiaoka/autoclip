@@ -1,11 +1,15 @@
 import editorialPoster from '../../assets/editing-style/editorial.poster.webp'
 import streetPoster from '../../assets/editing-style/street.poster.webp'
+import newsPoster from '../../assets/editing-style/news.poster.webp'
+import cinemaPoster from '../../assets/editing-style/cinema.poster.webp'
 import classicPoster from '../../assets/editing-style/classic.poster.webp'
 import type { EditingStyle } from './editingStyle'
 
 export const STYLE_POSTERS: Record<EditingStyle, string> = {
   editorial: editorialPoster,
   street: streetPoster,
+  news: newsPoster,
+  cinema: cinemaPoster,
   classic: classicPoster,
 }
 
@@ -19,6 +23,14 @@ const loaders: Record<EditingStyle, () => Promise<PreviewUrls>> = {
   street: async () => ({
     webm: (await import('../../assets/editing-style/street.preview.webm?url')).default,
     mp4: (await import('../../assets/editing-style/street.preview.mp4?url')).default,
+  }),
+  news: async () => ({
+    webm: (await import('../../assets/editing-style/news.preview.webm?url')).default,
+    mp4: (await import('../../assets/editing-style/news.preview.mp4?url')).default,
+  }),
+  cinema: async () => ({
+    webm: (await import('../../assets/editing-style/cinema.preview.webm?url')).default,
+    mp4: (await import('../../assets/editing-style/cinema.preview.mp4?url')).default,
   }),
   classic: async () => ({
     webm: (await import('../../assets/editing-style/classic.preview.webm?url')).default,

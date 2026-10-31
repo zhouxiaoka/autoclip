@@ -1,91 +1,143 @@
+@import url("../../fonts/preview/faces.css");
+
+@font-face {
+  font-family: "Noto Sans CJK SC";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../fonts/NotoSansSC.ttf") format("truetype");
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-  margin: 0;
-  width: 720px;
-  height: 1280px;
+  width: 1080px;
+  height: 1920px;
   background: transparent;
   overflow: hidden;
-  color: #1a1a19;
-  font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-family: "Noto Sans CJK SC", sans-serif;
 }
-#frame { position: absolute; inset: 0; }
-/* Captions sit on a dark gradient with a thin stroke and a short offset shadow, so they read
-   over bright or busy footage. No glow. The scrim only appears while a caption is on screen. */
-#frame::after {
-  content: "";
+#field {
   position: absolute;
   left: 0;
   right: 0;
+  top: 1290px;
   bottom: 0;
-  height: 460px;
-  background: linear-gradient(to top, rgba(10,10,9,.8) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%);
-  pointer-events: none;
-  opacity: 0;
+  background: #000;
 }
-#frame:has(#sub:not(:empty))::after { opacity: 1; }
-#titlebar, #num, #stickers, #sub { z-index: 1; }
-#titlebar b { box-shadow: 0 3px 10px rgba(0,0,0,.35); }
-#titlebar {
+#cap {
   position: absolute;
-  left: 36px;
-  right: 36px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  left: 30px;
+  right: 30px;
+  top: 1318px;
+  text-align: center;
 }
-#titlebar b {
+#zh {
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 700;
+  font-variation-settings: "wght" 700;
+  /* Interview Street size. fitZh writes an inline font-size after the line wraps. */
+  font-size: 64px;
+  line-height: 84px;
+  color: #fff;
+  -webkit-text-stroke: 10px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 #000;
+  white-space: normal;
+  overflow-wrap: break-word;
   display: block;
-  padding: 8px 14px;
-  background: #1a1a19;
-  color: #f6f5f3;
-  font-weight: 600;
-  font-size: 34px;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  width: 100%;
 }
-#line-b { align-self: flex-start; background: #f6f5f3; color: #1a1a19; border: 1px solid #1a1a19; }
+#en {
+  margin-top: 16px;
+  font-family: "Anton", "Noto Sans CJK SC", sans-serif;
+  font-weight: 400;
+  font-size: 36px;
+  line-height: 1.25;
+  letter-spacing: 1.5px;
+  color: #fff;
+  -webkit-text-stroke: 9px #000;
+  paint-order: stroke fill;
+  text-transform: uppercase;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+#en .w { opacity: .95; }
+#en .w.k.past, #en .w.k.now { color: #D7FF3A; }
+#topic {
+  position: absolute;
+  left: 40px;
+  top: 1812px;
+  max-width: 1000px;
+  background: #000;
+  color: #fff;
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 700;
+  font-variation-settings: "wght" 700;
+  font-size: 34px;
+  line-height: 1;
+  padding: 14px 22px;
+  border-radius: 12px;
+  border-left: 10px solid #D7FF3A;
+  white-space: nowrap;
+}
+#prog {
+  /* ffmpeg paints this. A bar in the overlay changes every frame and blows the capture budget. */
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 12px;
+  background: #D7FF3A;
+  width: 0;
+  display: none;
+}
+#title-hook {
+  position: absolute;
+  top: 1360px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #000;
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 700;
+  font-variation-settings: "wght" 700;
+  font-size: 62px;
+  line-height: 1.15;
+  padding: 20px 36px;
+  border-radius: 20px;
+  white-space: pre;
+  text-align: center;
+  box-shadow: 0 9px 0 #000;
+  display: none;
+}
+#brand {
+  position: absolute;
+  left: 40px;
+  bottom: 30px;
+  font-family: "Noto Sans CJK SC", sans-serif;
+  font-weight: 500;
+  font-variation-settings: "wght" 500;
+  font-size: 18px;
+  line-height: 1;
+  color: #fff;
+  opacity: .45;
+  text-shadow: 0 1px 4px #000;
+}
 #num {
   position: absolute;
-  left: 48px;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  color: #f6f5f3;
-  paint-order: stroke fill;
-  -webkit-text-stroke: 2px rgba(10,10,9,.6);
-  text-shadow: 0 2px 4px rgba(0,0,0,.6);
+  left: 40px;
+  top: 80px;
+  color: #D7FF3A;
+  font-family: "Anton", sans-serif;
   font-size: 72px;
-  font-weight: 600;
   line-height: 1;
+  -webkit-text-stroke: 6px #000;
+  paint-order: stroke fill;
 }
-#num small { font-size: 18px; font-weight: 500; margin-left: 8px; }
 #stickers { position: absolute; inset: 0; pointer-events: none; }
 .sticker {
   position: absolute;
-  width: 120px;
-  height: 72px;
-  border: 2px solid #f6f5f3;
-  border-radius: 999px;
-  color: #f6f5f3;
-  background: rgba(10,10,9,.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 600;
-}
-#sub {
-  position: absolute;
-  left: 36px;
-  right: 36px;
-  margin: 0;
-  font-size: 40px;
+  color: #fff;
   font-weight: 700;
-  line-height: 1.2;
-  color: #f6f5f3;
-  paint-order: stroke fill;
-  -webkit-text-stroke: 2px rgba(10,10,9,.6);
-  text-shadow: 0 2px 4px rgba(0,0,0,.6);
-  max-height: 2.4em;
-  overflow: hidden;
+  font-size: 28px;
+  text-shadow: 0 2px 0 #000;
 }
-#sub em { font-style: normal; box-shadow: inset 0 -0.35em 0 #5a8bff; }
-#sub .w { opacity: .82; }

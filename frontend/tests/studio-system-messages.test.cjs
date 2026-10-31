@@ -1,6 +1,7 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
+const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{createInstance}=require('i18next')
 const langs=['zh','en','ja','ko','es','pt','ru','fr']
 const catalogs=Object.fromEntries(langs.map(l=>[l,require('../src/i18n/locales/'+l+'.json')]))
@@ -15,20 +16,22 @@ function history(i18n){
   'react-router-dom':{Link:p=>React.createElement('a',null,p.children)},
   './StudioDownloadLink':{default:()=>null},
  }
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
+ runInSandbox(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
  return exports.default
 }
 test('export history renders localized server warnings/restart errors in all eight languages, retaining source titles and unknown errors',async()=>{
  const i=createInstance();await i.init({resources:Object.fromEntries(langs.map(l=>[l,{translation:catalogs[l]}])),lng:'en',fallbackLng:'en',keySeparator:false,nsSeparator:false,interpolation:{escapeValue:false}})
  const History=history(i),title='原素材没有音轨，本次导出无声',unknown='decoder failed at frame 42'
  const base={title,revision:2,created_at:'2026-09-25T00:00:00Z'}
- const jobs=[{...base,job_id:'ok',status:'completed',result:{warnings:[title]}},{...base,job_id:'restart',status:'failed',error:'服务已重启，请重新导出'},{...base,job_id:'unknown',status:'failed',error:unknown}]
+ const table=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../backend/core/failure_messages.json'),'utf8'))
+ const restart=table.service_restarted
+ const jobs=[{...base,job_id:'ok',status:'completed',result:{warnings:[title]}},{...base,job_id:'restart',status:'failed',error:restart},{...base,job_id:'unknown',status:'failed',error:unknown}]
  for(const lang of langs){
   await i.changeLanguage(lang)
   const html=renderToStaticMarkup(React.createElement(History,{open:true,onClose(){},projectId:'p',jobs}))
   assert.ok(html.includes('<b>'+title+'</b>'),lang+' source title preserved')
   assert.ok(html.includes(catalogs[lang][title]),lang+' warning')
-  assert.ok(html.includes(catalogs[lang]['服务已重启，请重新导出']),lang+' restart')
+  assert.ok(html.includes(catalogs[lang][restart].replaceAll("'", '&#x27;')),lang+' restart')
   assert.ok(html.includes(unknown),lang+' diagnostics preserved')
  }
 })
@@ -40,7 +43,8 @@ test('source_blocked download hint matches the backend constant and is translate
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/utils/download_recovery.py'),'utf8')
  const hint=src.match(/^SOURCE_BLOCKED_HINT = '([^']+)'$/m)[1]
  for(const lang of langs){assert.ok(catalogs[lang][hint],lang);if(lang!=='zh')assert.notEqual(catalogs[lang][hint],hint,lang)}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_blocked|'),file)
+ const codes = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+ assert.equal(codes.ERROR_CODE.test('source_blocked'), true)
 })
 test('source_too_short / source_no_audio messages match the backend constants and are translated in eight catalogs',()=>{
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/media_precheck.py'),'utf8')
@@ -48,29 +52,39 @@ test('source_too_short / source_no_audio messages match the backend constants an
  const messages=['TOO_SHORT_MESSAGE','NO_AUDIO_MESSAGE','NO_AUDIO_AFTER_SCREENING_MESSAGE','NO_AUDIO_VISUAL_MESSAGE'].map(literal)
  assert.equal(messages.length,4)
  for(const message of messages){assert.ok(message.length>20,message);for(const lang of langs){assert.ok(catalogs[lang][message],lang+message);if(lang!=='zh')assert.notEqual(catalogs[lang][message],message,lang)}}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_too_short|source_no_audio|'),file)
+ const codes = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+ assert.equal(codes.ERROR_CODE.test('source_too_short') && codes.ERROR_CODE.test('source_no_audio'), true)
 })
-test('restart recovery messages match the backend constants and are translated in eight catalogs (RC156 #13)',()=>{
+test('restart recovery uses the catalog sentence and every locale still translates it',()=>{
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/store.py'),'utf8')
- const restart=src.match(/^RESTART_MESSAGE = '([^']+)'$/m)[1]
- const keys=[restart,'服务已重启，请重试这条','服务已重启，请重新生成封面','服务已重启，请重新导出','服务已重启，请重试分析','重新生成']
- for(const key of keys)assert.ok(src.includes(key)||key==='重新生成',key)
- for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts','../../scripts/ingest_app_feedback.py'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|service_restarted)'),file)
+ const table=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../backend/core/failure_messages.json'),'utf8'))
+ const restart=table.service_restarted
+ assert.match(src,/RESTART_MESSAGE = sentence\('service_restarted'\)/)
+ const retired=['服务已重启，请重试这条','服务已重启，请重新生成封面','服务已重启，请重新导出','服务已重启，请重试分析','服务已重启，请重新生成']
+ for(const key of retired)assert.equal(src.includes(`'${key}'`),false,key)
+ for(const lang of langs){
+  assert.ok(catalogs[lang][restart],lang+restart)
+  if(lang!=='zh')assert.notEqual(catalogs[lang][restart],restart,lang)
+  for(const key of retired)assert.ok(catalogs[lang][key],lang+key)
+ }
+ assert.ok(catalogs.zh['重新生成'])
+ const codes = require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/analytics/failureCodes.ts'))
+ assert.equal(codes.ERROR_CODE.test('service_restarted'), true)
+ assert.ok(fs.readFileSync(path.resolve(__dirname, '../../scripts/ingest_app_feedback.py'), 'utf8').includes('error_code_pattern'))
 })
 test('Studio progress messages, including transcription progress, are translated in eight catalogs (RC156 #14)',()=>{
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/services/simple_pipeline_adapter.py'),'utf8')
  const transcribing=src.match(/^STUDIO_TRANSCRIBING_MESSAGE = '([^']+)'$/m)[1]
  const production=src.match(/^STUDIO_PRODUCTION_MESSAGE = '([^']+)'$/m)[1]
  const jobs=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/jobs.py'),'utf8')
- const keys=[transcribing,production,'正在生成可发布成片','正在追加平台版本','正在重试成片版本']
+ const keys=[transcribing,production,'正在生成可发布成片','正在重试成片版本','正在合并音视频']
  for(const key of keys.slice(1))assert.ok(jobs.includes(`'${key}'`),key)
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
 })
 test('model-call environment failures are one fixed sentence translated in eight catalogs (RC156 c5)',()=>{
- const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/failures.py'),'utf8')
- const block=src.match(/MODEL_CALL_MESSAGES = \{([\s\S]*?)\n\}/)[1]
- const messages=[...block.matchAll(/"[a-z_]+": "([^"]+)"/g)].map(m=>m[1])
- assert.equal(messages.length,3)
+ const table=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../backend/core/failure_messages.json'),'utf8'))
+ const messages=['llm_auth_invalid','connection','timeout','rate_limited'].map(code=>table[code])
+ assert.equal(messages.length, 4)
+ assert.equal(table.llm_auth_invalid, table.invalid_key)
  for(const lang of langs)for(const key of messages){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key);assert.ok(!/Connection error|timed out/i.test(catalogs[lang][key]),lang)}
 })

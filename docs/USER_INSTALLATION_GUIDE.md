@@ -8,7 +8,7 @@
 | --- | --- |
 | macOS · Apple Silicon（M 系列） | [下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)，选择名称含 `aarch64` 的 `.dmg` |
 | Windows 10 / 11 · x64 | [下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)，选择名称含 `x64-setup.exe` 的安装包 |
-| Intel Mac / Linux / 自建服务 | [Docker](../DOCKER.md) 或 [CLI](CLI_AND_MCP.md) |
+| Intel Mac / Linux / 自建服务 | 目前没有桌面安装包。用 [Docker](../DOCKER.md) 或 [CLI](CLI_AND_MCP.md) |
 
 以 Release 页面实际提供的安装包和系统要求为准。不要把源码压缩包 `Source code` 当作安装包。桌面版内置 Python 和 FFmpeg；本地语言模型、语音转写组件和模型文件需要另外准备。
 
@@ -18,38 +18,31 @@
 
 ### macOS
 
-打开 `.dmg`，将 AutoClip Desktop 拖到“应用程序”，再从“应用程序”打开。若系统阻止未公证版本，先确认安装包来自本仓库的 Releases，再按该 Release 的首次启动说明操作。不要为此关闭系统全局安全检查。
+打开 `.dmg`，将 AutoClip Desktop 拖到“应用程序”，再从“应用程序”打开。macOS 15 及以上：双击一次；若系统拦截，打开「系统设置 → 隐私与安全性 → 仍要打开」（[Apple 说明](https://developer.apple.com/news/?id=saqachfa)）。较旧的系统仍可右键应用 →「打开」。先确认安装包来自本仓库的 Releases。不要为此关闭系统全局安全检查。
 
 ### Windows
 
-运行 `x64-setup.exe` 并按向导安装。安装包按用户安装，无需常规使用管理员权限；缺少 WebView2 时，安装器可能需要联网下载。若系统拦截未签名版本，先确认下载来源，再参考 Release 中的提示。v1.4.0 提供 Windows 安装包；实际安装、导入与保存尚待实机验收，以该版本 Release 为准。
+运行 `x64-setup.exe` 并按向导安装。安装包按用户安装，无需常规使用管理员权限；缺少 WebView2 时，安装器可能需要联网下载。若 SmartScreen 拦截，点「更多信息 → 仍要运行」。先确认安装包来自本仓库的 Releases。
 
 ## 第一次使用
 
 1. **先配置模型。** 打开“设置”，选择 Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM、Grok 或本地模型。云端服务填写自己的 API Key 和模型名，点击测试连接，再保存；兼容接口可配置 Base URL。本地模型先在 Ollama / LM Studio 启动服务并加载模型。默认路线是字幕分析。游戏视觉分析自 **v1.4.0** 起可选：需要多模态模型，并显式启用付费视觉初筛。配好模型不等于已经允许每次视觉调用。
-2. **准备字幕（默认路线）。** 有时间轴准确的 `.srt` 就与视频一起导入。没有字幕时，在设置中的语音识别区域完成本地 Whisper 组件与模型准备；首次安装和下载需要网络。
-3. **导入并确认。** 准备一段你有权使用的短视频。在首页用「文件导入」导入视频及可选 SRT，或用「链接导入」粘贴 B 站 / YouTube 链接。先确认制作类型，也可手动校正。未确认的导入可恢复；确认后才正式理解和剪辑。素材要求与示例见下方「自备短样片」。
+2. **准备字幕（默认路线）。** 有时间轴准确的 `.srt` 就与视频一起导入。没有字幕、本地 Whisper 装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写（`qwen-audio-3.1-asr-flash`，大约 0.1 元/小时音频，具体以阿里云账单为准）。音频会上传到云端。导入被拦住时，点「改用云端转写」。API Key 分两步：先用作者推荐链接注册或领优惠（<https://www.aliyun.com/benefit?userCode=qmyj6jch>），再到 <https://bailian.console.aliyun.com/> 创建。若仍用本机 Whisper：没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。
+3. **导入并确认。** 准备一段你有权使用的短视频。在首页用「文件导入」导入视频及可选 SRT，或用「链接导入」粘贴 B 站 / YouTube 链接。先确认制作类型，也可手动校正。未确认的导入可恢复；确认后才正式理解和剪辑。素材要求与示例见下方「先看示例，再用自己的短片」。
 4. **在共用编辑器里检查。** 查看片段起止、标题和文案。输出仍需人工检查边界、裁切和文案。若失败，按页面提示定位字幕、分析或导出阶段，参见 [FAQ](FAQ.md)。
 5. **导出成片。** 使用导出入口，按发布平台选择预设。竖屏导出可加入字幕和标题卡；导出后先播放检查，再自行发布。
 
 默认路线是字幕分析，适合访谈、播客、课程等以语言为主的视频。自 **v1.4.0** 起，游戏录屏可另行启用视觉分析，需要多模态模型并显式启用付费视觉初筛。单一样本不代表所有游戏；输出仍需人工检查，不承诺广告投放效果。v1.4.0 不含 CTA 动效、生成式品牌尾卡、卡拉 OK / 逐词字幕。
 
-## 自备短样片
+## 先看示例，再用自己的短片
 
-AutoClip 不托管官方样片。Release 里没有样片压缩包，也不提供成片下载。请使用自己的短视频，或你有权使用的公开平台链接。
+安装后，首页还没有项目时，点「用示例项目看看效果」。示例在安装包里（`source.mp4` 和 `source.srt`），不需要 API Key。
+
+之后再用你自己有权使用的短视频：
 
 - 时长约 3–5 分钟，对白清楚。
-- 尽量带上时间轴准确的 `.srt`。没有字幕时，先在设置中准备本地 Whisper，或换一条已有字幕的视频。
-- 来源可以是本地文件、B 站或 YouTube。请确认你有权使用该媒体。
-
-第一次出片先试这条：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（Stanford ENERGY）。示例·非托管·自担使用权。
-
-下面是另外两条普通示例，不必都试。多为英语对白，可开官方字幕或自备 SRT/Whisper。我们不提供成片下载。
-
-- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator）。示例·非托管·自担使用权。
-- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）。示例·非托管·自担使用权。
-
-也可改用你自己的短片。
+- 尽量带上时间轴准确的 `.srt`。没有字幕、本地 Whisper 装不上或太慢时，按上面的步骤改用百炼云端转写；音频会上传到云端。
+- 来源用本地文件或 B 站。请确认你有权使用该媒体。
 
 第一次出片的常见卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 

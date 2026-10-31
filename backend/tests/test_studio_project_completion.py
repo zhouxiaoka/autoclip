@@ -162,3 +162,18 @@ def test_malformed_receipt_never_breaks_the_project_list(project, bad):
     with project() as db:
         assert ProjectService(db).get_projects_paginated(PaginationParams()).items[0].status is ResponseStatus.PROCESSING
     assert path.read_text() == bad
+
+
+def test_failed_generation_mirrors_billable_calls_onto_home_settings(project):
+    """Home ProjectCard reads processing_config.billable_calls_before_failure for 「本次已消耗」."""
+    data = state(['failed'])
+    data['generation'].update(status='failed', error='错误', error_code='provider_error',
+                               billable_calls_before_failure=4)
+    data['analysis'].update(status='failed', billable_calls_before_failure=2)
+    path = store.directory('visual') / 'metadata' / 'studio.json'
+    path.write_text(json.dumps(data), encoding='utf-8')
+    with project() as db:
+        detail = ProjectService(db).get_project_with_stats('visual')
+        assert detail.status is ResponseStatus.FAILED
+        assert detail.settings.get('billable_calls_before_failure') == 4
+        assert db.get(Project, 'visual').processing_config.get('billable_calls_before_failure') == 4

@@ -43,12 +43,44 @@ def valid_words(segment):
         return False
 
 
+MIN_WORD = 0.001
+
+
+def monotonic_words(segment):
+    """E7: make ASR word times usable instead of discarding the whole file.
+
+    Whisper often emits a word that starts a few ms before the previous one ends, or just
+    outside its sentence. Clamp every word into the sentence and push it after the previous
+    word. Text, NaNs and missing fields are left alone, so valid_words still rejects those.
+    """
+    try:
+        start, end, words = segment['start'], segment['end'], segment['words']
+        if not (_number(start) and _number(end) and start < end and isinstance(words, list)):
+            return segment
+        fixed, last = [], start
+        for word in words:
+            a, b = word['start'], word['end']
+            if not (_number(a) and _number(b)) or b < a:  # a reversed word is garbage, not jitter
+                return segment
+            a = min(max(a, last), end)
+            b = min(max(b, a), end)
+            if b - a < MIN_WORD:
+                b = min(a + MIN_WORD, end)
+            if b <= a:  # no room left at the sentence end: leave it for valid_words to reject
+                return segment
+            fixed.append({**word, 'start': a, 'end': b})
+            last = fixed[-1]['end']
+        return {**segment, 'words': fixed}
+    except (KeyError, TypeError, AttributeError):
+        return segment
+
+
 def write_word_timing(srt: Path, segments, language=None, source='faster-whisper'):
     if source not in {'faster-whisper', 'sensevoice'}:
         raise ValueError('Unsupported ASR word timing source')
     payload = {'schema_version': 1, 'source': source, 'language': language,
                'srt_sha256': hashlib.sha256(srt.read_bytes()).hexdigest(),
-               'segments': [s for s in segments if s.get('text', '').strip()]}
+               'segments': [monotonic_words(s) for s in segments if s.get('text', '').strip()]}
     # A bad segment keeps sentence captions usable, but must not become karaoke.
     for segment in payload['segments']:
         if not valid_words(segment):

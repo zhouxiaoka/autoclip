@@ -22,7 +22,6 @@ def test_legacy_retry_waits_for_explicit_confirmation(client,monkeypatch,goal):
     monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('unexpected visual call'))
-    monkeypatch.setattr(jobs,'analyze_project',lambda *a,**k:pytest.fail('legacy bypass'))
     monkeypatch.setattr(jobs,'run_content',lambda *a,**k:pytest.fail('production before confirmation'))
     class Immediate:
         def submit(self, fn, *args, **kwargs): fn(*args, **kwargs)

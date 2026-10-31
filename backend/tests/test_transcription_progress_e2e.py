@@ -75,7 +75,7 @@ def app_path(tmp_path, monkeypatch):
                       'analysis': {'status': 'running', 'phase': 'production', 'message': adapter.STUDIO_PRODUCTION_MESSAGE,
                                    'instance': store.INSTANCE}})
 
-    monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    from backend.services.studio import preflight as _pf; monkeypatch.setattr(_pf, 'probe_material', lambda v: _pf.MaterialProbe(_pf.ProbeState.READABLE, v, 60.0, True))
     monkeypatch.setattr(adapter.SimplePipelineAdapter, '_prompt_files', lambda self, project_dir: {})
     info = {'provider': 'dashscope', 'model': 'qwen-plus', 'available': True, 'display_name': '通义千问'}
     monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: SimpleNamespace(get_current_provider_info=lambda: info))
@@ -124,10 +124,16 @@ def test_transcription_progress_reaches_the_project_bar_and_studio_through_run_c
     # Studio shows 「正在生成字幕 · N%」 with N = share of the audio transcribed.
     assert [(message, percent) for _, _, message, percent in seen] == [
         ('正在生成字幕', 0), ('正在生成字幕', 25), ('正在生成字幕', 50), ('正在生成字幕', 75), ('正在生成字幕', 100)]
-    # Afterwards Studio goes back to the production wording without a stale percentage.
+    # Afterwards Studio keeps the production wording and a project-scale percent.
+    # clips_only stops at HIGHLIGHT; DONE is not shown as 100% while rendering is still ahead.
+    from backend.services.simple_progress import compute_percent
     from backend.services.studio import store
     analysis = store.read('p')['analysis']
-    assert analysis['message'] == '正在制作可发布成片' and 'percent' not in analysis
+    kept = compute_percent('HIGHLIGHT', 100)
+    assert analysis['message'] == '正在制作可发布成片'
+    assert analysis['percent'] == kept and analysis['progress_percent'] == kept
+    assert analysis['progress_stage'] == 'HIGHLIGHT'
+    assert kept < 100
 
 
 def test_progress_bar_never_moves_backwards_across_the_subtitle_steps():

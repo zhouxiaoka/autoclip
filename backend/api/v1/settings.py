@@ -8,13 +8,14 @@ import json
 import shutil
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
-from pydantic import BaseModel, Field, validator
+from typing import Dict, Any, Optional, List, Literal
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Body
+from pydantic import BaseModel, ConfigDict, Field, validator
 
 logger = logging.getLogger(__name__)
 
 from backend import __version__
+from backend.core.llm_telemetry import sanitize_exception_text
 from backend.core.desktop_config import get_desktop_config, is_desktop_mode, DesktopConfig, save_desktop_config
 from backend.services.config_sync_service import config_sync_service
 from pathlib import Path
@@ -22,7 +23,7 @@ from pathlib import Path
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 from backend.services import ai_model_settings as ai_models
-from backend.services import output_branding
+from backend.services import output_branding, output_captions
 
 
 @router.get('/output-branding')
@@ -35,6 +36,16 @@ def set_output_branding(body: output_branding.BrandingSettings):
     return output_branding.save_settings(body)
 
 
+@router.get('/output-captions')
+def get_output_captions():
+    return output_captions.load_settings()
+
+
+@router.put('/output-captions')
+def set_output_captions(body: output_captions.CaptionSettings):
+    return output_captions.save_settings(body)
+
+
 @router.get('/ai-models')
 def get_ai_models():
     return ai_models.public(ai_models.for_editing())
@@ -45,7 +56,8 @@ def put_ai_models(body: ai_models.ModelSettings):
     try:
         return ai_models.save(body)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from backend.core.log_redaction import redact_text
+        raise HTTPException(status_code=422, detail=redact_text(str(exc))) from exc
 
 
 class ConnectionModelsRequest(BaseModel):
@@ -60,41 +72,174 @@ async def discover_connection_models(body: ConnectionModelsRequest):
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
         return await discover(connection, body.refresh)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from backend.core.log_redaction import redact_text
+        raise HTTPException(status_code=422, detail=redact_text(str(exc))) from exc
 
 
 class ConnectionTestRequest(BaseModel):
     connection: ai_models.Connection
     model: str = Field(min_length=1, max_length=200)
     vision: bool = False
+    purpose: Literal['analysis', 'vision', 'cover', 'transcription'] = 'analysis'
+    probe_kind: Literal['quick', 'trial'] = 'quick'
+    language: Literal['zh', 'en'] = 'zh'
+
+
+
+class OllamaPullRequest(BaseModel):
+    """One-click pull for the T3 recommended local models."""
+    model: str = Field(min_length=1, max_length=200)
+    base_url: str = Field(default='http://127.0.0.1:11434/v1', max_length=500)
+
+
+@router.post('/ollama/pull')
+def ollama_pull_model(body: OllamaPullRequest):
+    """Proxy Ollama ``POST /api/pull`` as SSE progress events.
+
+    Never returns keys. Body lines are ``data: {json}\\n\\n`` with
+    ``status`` / ``completed`` / ``total`` / ``done`` / ``error`` only.
+    """
+    import json as _json
+    from urllib.parse import urlparse
+    import httpx
+    from fastapi.responses import StreamingResponse
+    from backend.core.llm_providers import is_local_url
+
+    model = body.model.strip()
+    if not model or any(ch in model for ch in ('\n', '\r', ' ')):
+        raise HTTPException(status_code=422, detail='Invalid model name')
+    raw_base = (body.base_url or '').strip() or 'http://127.0.0.1:11434/v1'
+    try:
+        parsed = urlparse(raw_base if '://' in raw_base else 'http://' + raw_base)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail='Invalid base_url') from exc
+    if not is_local_url(raw_base):
+        raise HTTPException(status_code=400, detail='Ollama pull only allowed for local addresses')
+    host = parsed.hostname or '127.0.0.1'
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    # Ollama native API lives on the root, not /v1.
+    root = f"{parsed.scheme or 'http'}://{host}:{port}"
+    if raw_base.rstrip('/').endswith('/v1'):
+        root = raw_base.rstrip('/')[:-3].rstrip('/') or root
+
+    def events():
+        url = root.rstrip('/') + '/api/pull'
+        try:
+            with httpx.stream('POST', url, json={'name': model, 'stream': True},
+                              timeout=None, trust_env=False) as response:
+                if response.status_code >= 400:
+                    yield f"data: {_json.dumps({'error': 'pull_failed', 'status': response.status_code}, ensure_ascii=False)}\n\n"
+                    return
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        payload = _json.loads(line)
+                    except ValueError:
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+                    out = {}
+                    if isinstance(payload.get('status'), str):
+                        out['status'] = payload['status'][:120]
+                    if isinstance(payload.get('completed'), int):
+                        out['completed'] = payload['completed']
+                    if isinstance(payload.get('total'), int):
+                        out['total'] = payload['total']
+                    if payload.get('done') is True or payload.get('status') == 'success':
+                        out['done'] = True
+                    if isinstance(payload.get('error'), str):
+                        out['error'] = payload['error'][:200]
+                    yield f"data: {_json.dumps(out, ensure_ascii=False)}\n\n"
+                    if out.get('done') or out.get('error'):
+                        return
+        except httpx.HTTPError as exc:
+            yield f"data: {_json.dumps({'error': 'unreachable', 'status': str(exc)[:120]}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(events(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+
+@router.post('/ai-models/fetch-list')
+def fetch_connection_model_list(body: Any = Body(default=None)):
+    """Custom-provider and settings 'fetch list': GET /models, intersect, backfill.
+
+    Never returns keys, full URLs, or upstream response text.
+    """
+    from backend.services.provider_validation import fetch_list_for_connection
+    try:
+        request = ConnectionModelsRequest.model_validate(body)
+        connection = ai_models.resolve_secret(request.connection, ai_models.for_editing())
+        return fetch_list_for_connection(connection).as_api()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid provider connection") from exc
+    except Exception:
+        from backend.core.provider_model_fetch import FETCH_LIST_FAILED
+        from backend.core.upstream_errors import hint_key_for
+        return {
+            'ok': False, 'success': False, 'models': [], 'recommended': {},
+            'truncated': False, 'source': 'empty', 'error_type': 'unknown',
+            'hint_key': hint_key_for('unknown'), 'message_key': FETCH_LIST_FAILED,
+            'base_url_host': 'unknown',
+        }
 
 
 @router.post('/ai-models/test')
 def test_connection_assignment(body: ConnectionTestRequest):
-    from backend.services.provider_validation import validate_connection
+    from backend.services.provider_validation import validate_connection, validate_connection_with_probe
+    source = None
     try:
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
-        result = validate_connection(connection, body.model)
-        if body.vision and result.ok:
+        from backend.services.studio.failure_identity import config_source as _config_source
+        source = _config_source(connection.provider, connection.base_url, body.model)
+        if body.purpose in ('cover', 'transcription'):
+            result = validate_connection(connection, body.model, purpose=body.purpose)
+            if body.purpose == 'cover' and connection.image_base_url:
+                # The normalised image endpoint must not replace the chat address.
+                result.normalized_base_url = connection.base_url
+        else:
+            # F2: trial probe is analysis-only; vision path stays on quick then vision probe below.
+            probe = body.probe_kind if body.purpose == 'analysis' else 'quick'
+            result = validate_connection_with_probe(
+                connection, body.model,
+                purpose='analysis',
+                probe_kind=probe,
+                language=body.language,
+            )
+        if (body.vision or body.purpose == 'vision') and body.purpose in ('analysis', 'vision') and result.ok:
             from backend.services.studio.vision_settings import test, VisionSettingsInput
+            from backend.core.connection_test_codes import vision_error_code
             endpoint = ai_models.chat_endpoint(connection, body.model)
-            vision = test(VisionSettingsInput(mode='custom', **endpoint))
+            from backend.services.studio.failure_identity import connection_identity
+            from backend.services.studio.vision_settings import testing_identity
+            # the tested connection's own identity, never inferred from its hostname.
+            with testing_identity(connection_identity(connection, body.model)):
+                vision = test(VisionSettingsInput(mode='custom', **endpoint))
             if not (vision.get('success') or vision.get('ok')):
                 from backend.core.upstream_errors import hint_key_for
                 payload = result.as_api()
                 payload.update(
                     success=False, ok=False, result='failed',
                     error_type='unknown', hint_key=hint_key_for('unknown'),
+                    error_code=vision_error_code(vision), http_status=None, config_source=source,
                 )
                 return payload
-        return result.as_api()
+        return {**result.as_api(), 'config_source': source}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception:
-        from backend.core.upstream_errors import hint_key_for
+    except Exception as exc:
+        from backend.core.upstream_errors import classify_exception
+        from backend.core.connection_test_codes import connection_test_error_code
+        from backend.core.upstream_errors import network_kind_of, http_error_parts
+        from backend.core.connection_test_codes import safe_http_status
+        classified = classify_exception(exc)
+        status = http_error_parts(exc)[0]  # e.g. the visual probe's 401/429/503 (VisionRequestError.http_status)
         return {
-            'success': False, 'ok': False, 'result': 'failed',
-            'error_type': 'unknown', 'hint_key': hint_key_for('unknown'), 'models': [],
+            'success': False, 'ok': False, 'result': 'transient' if classified.retryable else 'failed',
+            'error_type': classified.error_type.value, 'hint_key': classified.hint_key, 'models': [],
+            'error_code': connection_test_error_code(classified.error_type.value, http_status=status, network_kind=network_kind_of(exc)),
+            'http_status': safe_http_status(status), **({'config_source': source} if source else {}),
         }
 
 
@@ -127,6 +272,7 @@ class ServiceSettings(BaseModel):
 
 class ApiKeys(BaseModel):
     """API密钥设置"""
+    model_config = ConfigDict(hide_input_in_errors=True)
     dashscope: str = Field(default="", description="通义千问API密钥")
     openai: str = Field(default="", description="OpenAI API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
@@ -137,6 +283,7 @@ class ApiKeys(BaseModel):
     grok: str = Field(default="", description="xAI Grok API密钥")
     infistar: str = Field(default="", description="Infistar 无限星河 API密钥")
     api88: str = Field(default="", description="88API API密钥")
+    apimart: str = Field(default="", description="APIMart API密钥")
     seed: str = Field(default="", description="火山方舟 Seed / 豆包 API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
@@ -145,7 +292,7 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
-    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio）")
+    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / apimart，或本地预设 ollama / lmstudio）")
     api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；provider=openai 时空为官方地址，本地预设为空时用预设默认地址")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
@@ -240,9 +387,19 @@ class PrivacySettings(BaseModel):
 
 @router.get("/privacy")
 async def get_privacy():
-    """崩溃报告等隐私开关（桌面数据目录 privacy.json）。"""
+    """崩溃报告与统计开关（桌面数据目录 privacy.json）。
+
+    ``analytics`` is the backend opt-out. The UI must not rewrite it from an
+    implicit local default. ``distinct_id`` is the anonymous id already stored,
+    so a launch-frozen SDK id cannot clobber a newer one.
+    """
     from backend.core.sentry_setup import crash_reports_enabled
-    return PrivacySettings(crash_reports=crash_reports_enabled())
+    from backend.services.studio.qa.telemetry import _analytics_allowed, stored_distinct_id
+    return {
+        "crash_reports": crash_reports_enabled(),
+        "analytics": _analytics_allowed(),
+        "distinct_id": stored_distinct_id(),
+    }
 
 
 class AnalyticsIdentity(BaseModel):
@@ -256,6 +413,36 @@ async def put_analytics_identity(body: AnalyticsIdentity):
     if not remember_distinct_id(body.distinct_id):
         raise HTTPException(status_code=422, detail="invalid distinct_id")
     return {"ok": True}
+
+
+class AnalyticsConsent(BaseModel):
+    enabled: bool
+
+
+@router.put("/analytics-consent")
+async def put_analytics_consent(body: AnalyticsConsent):
+    """The UI analytics switch. Off: backend Sentry stops attaching user.id in every process
+    (before_send rereads privacy.json); this process's scope user is cleared now."""
+    from backend.core.sentry_setup import clear_anonymous_user, sync_anonymous_user, write_privacy
+    from backend.services.studio.qa.telemetry import set_runtime_analytics_off
+    if not body.enabled:
+        # stop collection in this process (API + worker threads) and drop the Sentry
+        # identity BEFORE touching disk; a failed write leaves it off.
+        # (known limit): the runtime flag is in-process only. Standalone worker
+        # processes (e.g. a separate Celery/CLI worker) learn the preference solely by
+        # re-reading privacy.json, so if the disk write below fails they cannot be reached
+        # and keep the last persisted value until the write succeeds (the UI keeps retrying OFF).
+        set_runtime_analytics_off(True)
+        clear_anonymous_user()
+    try:
+        write_privacy(analytics=body.enabled)
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=500 if isinstance(exc, OSError) else 400,
+                            detail="隐私设置保存失败" if isinstance(exc, OSError) else str(exc)) from exc
+    if body.enabled:
+        set_runtime_analytics_off(False)
+    sync_anonymous_user()
+    return {"enabled": body.enabled}
 
 
 @router.put("/privacy")
@@ -290,7 +477,7 @@ def _effective_llm_settings() -> Dict[str, Any]:
         from backend.core.llm_manager import get_llm_manager
         return get_llm_manager().get_current_provider_info()
     except Exception as e:  # noqa: BLE001
-        logger.debug(f"读取 LLM 管理器状态失败，设置页使用默认值: {e}")
+        logger.debug("读取 LLM 管理器状态失败，设置页使用默认值: %s", sanitize_exception_text(type(e).__name__))
         return {}
 
 
@@ -302,7 +489,7 @@ async def get_settings():
         
         # 尝试从保存的设置文件中读取
         settings_file = config.paths.data_dir / "settings.json"
-        logger.debug(f"设置文件路径: {settings_file} (存在: {settings_file.exists()})")
+        logger.debug("设置文件存在: %s", settings_file.exists())
         
         if settings_file.exists():
             try:
@@ -314,7 +501,7 @@ async def get_settings():
                 return settings
             except Exception as e:
                 # 如果读取失败，回退到默认配置
-                logger.warning(f"读取设置文件失败，回退到默认配置: {e}")
+                logger.warning("读取设置文件失败，回退到默认配置: %s", sanitize_exception_text(type(e).__name__))
 
         # 还没保存过 settings.json：Docker / 脚本模式的提供商、模型、base_url 来自环境变量
         # （LLM_PROVIDER / API_MODEL_NAME / OPENAI_BASE_URL），设置页首屏应如实反映，而不是固定显示通义千问
@@ -352,6 +539,7 @@ async def get_settings():
                     grok="",
                     infistar="",
                     api88="",
+                    apimart="",
                     seed="",
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
@@ -532,7 +720,7 @@ async def test_api_connection(request: TestApiRequest):
             }
             
     except Exception as e:
-        logger.error(f"API连接测试异常: {str(e)}")
+        logger.error("API连接测试异常: %s", sanitize_exception_text(type(e).__name__))
         return {
             "success": False,
             "error": f"API连接测试失败: {str(e)}",
@@ -579,7 +767,7 @@ async def update_settings(settings: DesktopSettings):
             from backend.core.llm_manager import get_llm_manager
             get_llm_manager()._reload_if_settings_changed()
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"刷新 LLM 管理器失败（下次调用时会自动重载）: {e}")
+            logger.warning("刷新 LLM 管理器失败（下次调用时会自动重载）: %s", sanitize_exception_text(type(e).__name__))
         
         # 重要：保存主配置文件，确保API key等关键配置被持久化
         from backend.core.desktop_config import save_desktop_config
@@ -788,6 +976,7 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "grok": keys.grok,
         "infistar": keys.infistar,
         "api88": keys.api88,
+        "apimart": keys.apimart,
         "seed": keys.seed,
     }.get((provider or "").strip().lower(), "") or ""
 
@@ -830,7 +1019,7 @@ async def get_available_models(
         payload["models_by_provider"] = legacy
         return payload
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {sanitize_exception_text(e)}")
 
 
 @router.get("/local-presets")
@@ -840,6 +1029,13 @@ async def get_local_presets():
     return {"presets": presets_as_dicts()}
 
 
+@router.get("/provider-quality")
+def get_provider_quality():
+    """Static success and latency tiers. No live provider or PostHog request."""
+    from backend.core.provider_quality import public_payload
+    return public_payload()
+
+
 @router.get("/compatible-models")
 async def list_compatible_models(base_url: str = "", provider: str = "openai", api_key: str = ""):
     """
@@ -847,25 +1043,41 @@ async def list_compatible_models(base_url: str = "", provider: str = "openai", a
     设置页选本地预设时用它填模型下拉，免得用户手敲 `qwen2.5:7b` 这种名字。
     """
     from backend.core.local_presets import resolve_provider
-    from backend.core.llm_providers import normalize_base_url, is_local_url, OPENAI_COMPATIBLE_PLACEHOLDER_KEY
+    from backend.core.llm_providers import normalize_base_url, is_local_url
     _provider, resolved_base_url, _preset = resolve_provider(provider, base_url)
     url = normalize_base_url(resolved_base_url)
     if not url:
         raise HTTPException(status_code=400, detail="缺少 base_url")
     try:
-        import httpx
-        headers = {"Authorization": f"Bearer {api_key or OPENAI_COMPATIBLE_PLACEHOLDER_KEY}"}
-        # 本地地址不走系统代理（否则 macOS 上开着 Clash 之类会 502）
-        async with httpx.AsyncClient(timeout=5.0, trust_env=not is_local_url(url)) as client:
-            resp = await client.get(f"{url}/models", headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", data) if isinstance(data, dict) else data
-        models = sorted({str(m.get("id") or m.get("name")) for m in items if isinstance(m, dict) and (m.get("id") or m.get("name"))})
-        return {"reachable": True, "base_url": url, "models": models}
-    except Exception as e:  # noqa: BLE001
-        # 服务没起 / 地址不对：不算服务端错误，前端据此提示「服务未启动」
-        return {"reachable": False, "base_url": url, "models": [], "error": str(e)[:200]}
+        from starlette.concurrency import run_in_threadpool
+        from backend.core.provider_model_fetch import list_account_models
+        key = (api_key or "").strip()
+        result = await run_in_threadpool(
+            list_account_models,
+            base_url=url,
+            api_key=key,
+            provider=provider or "openai",
+            auth="none" if is_local_url(url) and not key else "api_key",
+        )
+        return {
+            "reachable": result.ok,
+            "base_url": url,
+            "models": result.models,
+            "error": result.hint_key if not result.ok else None,
+            "hint_key": result.hint_key,
+            "error_type": result.error_type,
+            "message_key": result.message_key,
+            "recommended": result.recommended,
+            "truncated": result.truncated,
+            "base_url_host": result.base_url_host,
+        }
+    except Exception:  # noqa: BLE001
+        from backend.core.upstream_errors import hint_key_for
+        return {
+            "reachable": False, "base_url": url, "models": [],
+            "error": hint_key_for("connection"), "hint_key": hint_key_for("connection"),
+            "error_type": "connection",
+        }
 
 
 @router.get("/current-provider")

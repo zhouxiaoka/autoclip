@@ -15,9 +15,15 @@ pub async fn start_backend_service(app_handle: AppHandle) -> Result<String, Stri
 }
 
 #[tauri::command]
-pub async fn stop_backend_service(app_handle: AppHandle) -> Result<String, String> {
+pub async fn stop_backend_service(app_handle: AppHandle, reason: Option<String>) -> Result<String, String> {
     let backend_manager = app_handle.state::<crate::BackendManager>();
-    match backend_manager.stop() {
+    // R16 #42: the updater passes reason="update"; everything else is a user quit/stop.
+    let intent = if reason.as_deref() == Some("update") {
+        crate::backend_manager::ShutdownIntent::Update
+    } else {
+        crate::backend_manager::ShutdownIntent::UserQuit
+    };
+    match backend_manager.stop_with_intent(intent) {
         Ok(_) => Ok("后端服务停止成功".to_string()),
         Err(e) => Err(e),
     }
@@ -93,14 +99,26 @@ pub struct SavedDownload {
 
 /// macOS 打包后的页面在 `tauri://localhost`。`<a download>` 会被 WKWebView 取消，
 /// 因为没有注册下载回调。这里只允许把本机后端的文件写到「下载」文件夹。
+
+#[tauri::command]
+pub async fn hide_to_tray(app_handle: AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("主窗口不存在".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn confirm_quit(app_handle: AppHandle) -> Result<(), String> {
+    quit_app(app_handle).await
+}
+
 #[tauri::command]
 pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDownload, String> {
     let parsed = local_http_url(&url)?;
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| e.to_string())?;
-    let response = client
+    let response = local_client()?
         .get(parsed)
         .send()
         .await
@@ -146,6 +164,17 @@ async fn save_response(mut response: reqwest::Response, dir: &Path, filename: &s
         let _ = tokio::fs::remove_file(&path).await;
     }
     result
+}
+
+/// Client for the bundled backend on 127.0.0.1 only (#388). reqwest honours the system proxy
+/// (Windows registry / HTTP_PROXY) and 0.11 ignores its local bypass, so with Clash or a company
+/// proxy on, "下载成片" went to the proxy and failed. Local downloads never need one.
+fn local_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 fn local_http_url(url: &str) -> Result<reqwest::Url, String> {
@@ -255,7 +284,7 @@ fn unique_download_path(dir: &Path, filename: &str) -> PathBuf {
 
 #[cfg(test)]
 mod download_tests {
-    use super::{filename_from_disposition, local_http_url, safe_filename, save_response, unique_download_path};
+    use super::{filename_from_disposition, local_client, local_http_url, safe_filename, save_response, unique_download_path};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     async fn response_from_fixture(length: usize) -> reqwest::Response {
@@ -272,6 +301,45 @@ mod download_tests {
         });
         reqwest::Client::builder().no_proxy().build().unwrap()
             .get(format!("http://{address}/kit.zip")).send().await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn local_download_ignores_a_system_proxy() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            // Keep serving so a false-green proxied hit cannot starve the no_proxy request.
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else { break };
+                let mut request = [0; 4096];
+                let _ = socket.read(&mut request).await;
+                let _ = socket
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                    .await;
+            }
+        });
+        // A proxy that refuses every connection, like a stopped Clash left as the system proxy.
+        std::env::set_var("HTTP_PROXY", "http://127.0.0.1:9");
+        std::env::set_var("http_proxy", "http://127.0.0.1:9");
+        // Without .no_proxy() the dead proxy swallows the local request — proves the positive path is real.
+        let proxied = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/clip.mp4"))
+            .send()
+            .await;
+        assert!(proxied.is_err(), "default client must fail through the dead proxy");
+        let client = local_client();
+        std::env::remove_var("HTTP_PROXY");
+        std::env::remove_var("http_proxy");
+        let response = client
+            .unwrap()
+            .get(format!("http://{address}/clip.mp4"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.text().await.unwrap(), "ok");
     }
 
     #[tokio::test]
@@ -321,4 +389,25 @@ mod download_tests {
         assert_eq!(path.file_name().unwrap(), "clip (1).mp4");
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+
+/// R2: hold/release system keep-awake (idempotent). Updates tray tooltip when held.
+///
+/// **Must stay a sync `fn` (P2 #15).** On Windows, `SetThreadExecutionState` is
+/// thread-bound; Tauri sync commands run on the main thread, so acquire/release
+/// share that thread. Do **not** convert this to `async fn` — that would silently
+/// break keep-awake (or leave ES stuck on the wrong thread).
+#[tauri::command]
+pub fn set_keep_awake(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
+    let held = crate::power::set_keep_awake(on)?;
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let tip = if held {
+            "AutoClip — 制作中，已阻止休眠"
+        } else {
+            "AutoClip"
+        };
+        let _ = tray.set_tooltip(Some(tip));
+    }
+    Ok(held)
 }

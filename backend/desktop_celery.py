@@ -10,6 +10,10 @@ if os.getenv("AUTOCLIP_DESKTOP_MODE", "").lower() not in {"1", "true", "yes"}:
 from celery import Celery
 from pathlib import Path
 
+from backend.core.log_redaction import install_celery_log_redaction
+
+install_celery_log_redaction()
+
 # 文件系统 broker + sqlite backend（示例）
 app_dir = Path(os.getenv("AUTOCLIP_APP_DIR", "~/Library/Application Support/AutoClip")).expanduser()
 app_dir.mkdir(parents=True, exist_ok=True)

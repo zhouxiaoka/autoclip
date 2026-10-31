@@ -1,6 +1,6 @@
 [package]
 name = "autoclip-desktop"
-version = "1.5.7"
+version = "1.5.8"
 description = "AutoClip Desktop Application"
 authors = ["AutoClip Team"]
 license = "MIT"
@@ -18,10 +18,16 @@ tauri-plugin-autostart = "2.0.0-rc"
 tauri-plugin-shell = "2.0.0-rc"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-notification = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+dirs = "6"
 tokio = { version = "1.0", features = ["full"] }
 reqwest = { version = "0.11", features = ["json"] }
+# R16 #42: OS CSPRNG for the per-launch shutdown-intent token.
+getrandom = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 
 [features]
@@ -29,5 +35,10 @@ chrono = { version = "0.4", features = ["serde"] }
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
 
+# Windows and Linux deep links need single-instance (registered before other plugins).
+# macOS uses the same plugin so a second open focuses the running app.
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.0", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+windows-sys = { version = "0.61.0", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_System_Power"] }

@@ -99,6 +99,7 @@ def run_mock(out: Path, python: str, timeout: float, extras: list[str]) -> dict:
                 python=python,
                 timeout=timeout,
                 extras=extras,
+                mock_server=server,  # #353: the request observer counts paid calls, also when no project exists
             ))
         for fault in faults():
             data_dir = out / 'runs' / f"mock-fault-{fault['id']}"

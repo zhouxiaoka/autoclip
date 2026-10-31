@@ -15,6 +15,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+from backend.core.event_catalog import envelope_properties
 from backend.services.studio.features import DEFAULTS, VARIANTS
 from backend.services.studio.qa.loudness import TARGETS
 from backend.services.studio.qa.report import BUCKETS, CHECKERS
@@ -25,7 +26,7 @@ _HOST = os.environ.get('AUTOCLIP_POSTHOG_HOST', 'https://us.i.posthog.com').rstr
 _OUTCOMES = frozenset({'pass', 'fail', 'skip'})
 _QA_VARIANTS = VARIANTS['qa_gate_blocking']
 # Anonymous device ids only. Paths, emails and free text never qualify.
-_ANONYMOUS_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$')
+_ANONYMOUS_ID = re.compile(r'^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$')
 
 
 def _key() -> str:
@@ -36,17 +37,30 @@ def _key() -> str:
     return ''
 
 
+_runtime_off = False
+
+
+def set_runtime_analytics_off(off: bool) -> None:
+    """in-process kill switch, flipped before privacy.json is written so API and
+    worker threads in this process stop at once — and stay off if the disk write fails."""
+    global _runtime_off
+    _runtime_off = bool(off)
+
+
 def _analytics_allowed() -> bool:
-    """Product default is on. privacy.json analytics:false is the opt-out the tests write."""
+    """Product default is on (no privacy.json). privacy.json analytics:false is the opt-out.
+    a file that exists but cannot be read/parsed never allows collection."""
+    if _runtime_off:
+        return False
     try:
         from backend.core.sentry_setup import _privacy_path
         path = _privacy_path()
-        if path is None or not path.is_file():
+        if path is None or not path.exists():
             return True
         data = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, TypeError, ValueError):
-        return True
-    if isinstance(data, dict) and data.get('analytics') is False:
+    except Exception:  # noqa: BLE001 - fail closed
+        return False
+    if not isinstance(data, dict) or data.get('analytics') is False:
         return False
     return True
 
@@ -77,6 +91,15 @@ def _read_id(path: Path | None) -> str | None:
     return None
 
 
+def stored_distinct_id() -> str | None:
+    """UI persistence wins after a reset; the launch env is a startup fallback."""
+    stored = _read_id(_identity_path())
+    if stored:
+        return stored
+    value = os.getenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', '')
+    return value if _ANONYMOUS_ID.fullmatch(value) else None
+
+
 def remember_distinct_id(value: str) -> bool:
     """Store the UI's anonymous id so later backend events join the same person."""
     if not isinstance(value, str) or _ANONYMOUS_ID.fullmatch(value) is None:
@@ -86,11 +109,7 @@ def remember_distinct_id(value: str) -> bool:
         return False
     try:
         if _read_id(path) == value:
-            try:
-                from backend.core.sentry_setup import sync_anonymous_user
-                sync_anonymous_user(value)
-            except Exception:  # noqa: BLE001
-                logger.debug("Sentry user was not aligned with PostHog distinct_id")
+            _adopt_distinct_id(value)
             return True
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f'{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp')
@@ -104,18 +123,27 @@ def remember_distinct_id(value: str) -> bool:
         return False
     ok = _read_id(path) == value
     if ok:
-        try:
-            from backend.core.sentry_setup import sync_anonymous_user
-            sync_anonymous_user(value)
-        except Exception:  # noqa: BLE001 - Sentry identity is optional
-            logger.debug("Sentry user was not aligned with PostHog distinct_id")
+        _adopt_distinct_id(value)
     return ok
+
+
+def _adopt_distinct_id(value: str) -> None:
+    """File already has ``value``. Align this process's Sentry user.
+
+    Same-process events read the file first (``stored_distinct_id``). The launch
+    env stays the fallback for a missing file, including after the file is removed.
+    """
+    try:
+        from backend.core.sentry_setup import sync_anonymous_user
+        sync_anonymous_user(value)
+    except Exception:  # noqa: BLE001 - Sentry identity is optional
+        logger.debug("Sentry user was not aligned with PostHog distinct_id")
 
 
 def anonymous_distinct_id() -> str:
     """The id already on this machine. A fresh uuid is written only when none exists."""
     path = _identity_path()
-    found = _read_id(path)
+    found = stored_distinct_id()
     if found:
         return found
     minted = uuid.uuid4().hex
@@ -139,10 +167,10 @@ def emit_checked(report: dict, strategy_id: str, *, variant: str | None = None) 
         return
     try:
         properties = {
+            **envelope_properties(),
             'qa_mode': 'shadow',
             'duration_ms': max(0, min(60_000, int(report.get('duration_ms') or 0))),
             'studio_schema_version': 2,
-            'runtime': 'python',
             '$feature/qa_gate_blocking': _qa_variant(variant),
         }
         if strategy_id in TARGETS:

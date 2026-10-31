@@ -69,7 +69,7 @@ def test_status_in_another_process_reports_live_jobs_without_restart_recovery(da
     assert running['progress'] == 0 and running['stage'] == 'rendering'
     assert running['eta'] is None and running['poll_after_sec'] == 10
     assert path.read_bytes() == before
-    assert store.read('p1')['jobs'][0]['status'] == 'failed'  # server recovery still works
+    assert store.recover('p1')['jobs'][0]['status'] == 'failed'  # server recovery still works
 
 
 def test_completed_status_exports_video_cover_and_copy_without_model_calls(data_dir, monkeypatch):
@@ -155,7 +155,7 @@ def test_stopped_producer_is_reported_without_erasing_completed_outputs(data_dir
     assert result['status']=='failed' and result['phase']=='interrupted'
     assert result['stage']=='interrupted' and result['poll_after_sec']==0 and result['eta']==0
     assert result['outputs'][0]['status']=='failed'
-    assert store.read('p1',recover=False)['generation']['status']=='rendering'
+    assert store.read('p1')['generation']['status']=='rendering'
 
 
 def test_template_is_stored_and_unknown_styles_are_rejected(imported, monkeypatch):

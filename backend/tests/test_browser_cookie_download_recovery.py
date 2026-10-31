@@ -41,8 +41,14 @@ def test_anonymous_auth_failure_is_actionable_and_bounded(monkeypatch):
     with pytest.raises(RuntimeError) as caught:
         module.download_with_recovery('https://youtube.com/watch?v=synthetic', {'cookiesfrombrowser': ('chrome',), 'quiet': True})
     assert len(calls) == 2
-    assert '关闭浏览器' in str(caught.value)
+    assert caught.value.code == 'source_blocked'
+    assert '完全退出' in str(caught.value) and '换一个已登录的浏览器' in str(caught.value)
     assert 'synthetic' not in str(caught.value)
+    from backend.core.failure_codes import user_visible_error
+    from backend.core.sentry_setup import studio_error_code, UNREPORTED_STUDIO_ERROR_CODES
+    assert user_visible_error(caught.value) == module.COOKIE_ACCESS_HINT
+    assert studio_error_code(caught.value) == 'source_blocked'
+    assert 'source_blocked' in UNREPORTED_STUDIO_ERROR_CODES
 
 
 @pytest.mark.parametrize('url,extra', [('https://private.invalid/video', {}), ('https://youtube.com/watch?v=synthetic', {'cookiefile': 'synthetic-cookie-file'})])
@@ -51,7 +57,8 @@ def test_custom_sites_and_explicit_cookie_files_are_not_anonymously_retried(monk
     with pytest.raises(RuntimeError) as caught:
         module.download_with_recovery(url, {'cookiesfrombrowser': ('chrome',), 'quiet': True, **extra})
     assert len(calls) == 1
-    assert '关闭浏览器' in str(caught.value)
+    assert caught.value.code == 'source_blocked'
+    assert '完全退出' in str(caught.value) and '换一个已登录的浏览器' in str(caught.value)
 
 
 def test_other_cookie_errors_are_not_hidden_or_retried(monkeypatch):
@@ -124,7 +131,7 @@ def test_site_refusal_is_source_blocked_with_translated_hint(monkeypatch, url, m
     for leaked in ('BiliBili', 'HTTP Error', 'Precondition', 'Forbidden', 'invalid', 'b23'):
         assert leaked not in str(error)
     assert studio_error_code(error) == 'source_blocked'
-    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest', 'http_status': status}
+    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest'}  # local, no status
 
 
 def test_youtube_403_still_retries_format_once_before_source_blocked(monkeypatch):
@@ -141,9 +148,63 @@ def test_youtube_403_still_retries_format_once_before_source_blocked(monkeypatch
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize('message', ['HTTP Error 404: Not Found', 'Video unavailable', 'HTTP Error 4120: synthetic'])
-def test_other_download_errors_are_not_source_blocked(monkeypatch, message):
+@pytest.mark.parametrize('message', [
+    'HTTP Error 404: Not Found',
+    'Video unavailable',
+    'ERROR: [youtube] abc: This video has been removed by the uploader',
+])
+def test_missing_link_is_source_not_found(monkeypatch, message):
+    from backend.pipeline.failures import PipelineFailure
+    from backend.core.sentry_setup import studio_error_code, studio_failure_context, UNREPORTED_STUDIO_ERROR_CODES
     calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError(message)])
+    with pytest.raises(PipelineFailure) as caught:
+        module.download_with_recovery('https://www.youtube.com/watch?v=missing', {'quiet': True})
+    error = caught.value
+    assert len(calls) == 1
+    assert error.code == 'source_not_found' and error.stage == 'INGEST' and error.http_status is None
+    assert str(error) == module.SOURCE_NOT_FOUND_HINT
+    assert error.__cause__ is None
+    for leaked in ('HTTP Error', 'Not Found', 'unavailable', 'removed', 'youtube', 'missing'):
+        assert leaked not in str(error)
+    assert studio_error_code(error) == 'source_not_found'
+    assert 'source_not_found' in UNREPORTED_STUDIO_ERROR_CODES
+    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest'}
+
+
+# #481, v1.5.6 recorded this as unexpected. The apostrophe is U+2019, not ASCII.
+ISSUE_481_BOT_MESSAGE = (
+    'ERROR: [youtube] XuoqKYxDHVc: Sign in to confirm you\u2019re not a bot. '
+    'Use --cookies-from-browser or --cookies for the authentication. See  '
+    'https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  '
+    'for how to manually pass cookies. Also see  '
+    'https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  '
+    'for tips on effectively exporting YouTube cookies'
+)
+
+
+@pytest.mark.parametrize('message', [
+    "ERROR: [youtube] abc: Sign in to confirm you're not a bot",
+    ISSUE_481_BOT_MESSAGE,
+    'ERROR: Private video. Sign in if you\'ve been granted access',
+    'ERROR: Video unavailable. This video is not available in your country',
+    'ERROR: This video is age-restricted',
+])
+def test_gated_link_is_source_blocked_without_status_hint(monkeypatch, message):
+    from backend.pipeline.failures import PipelineFailure
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError(message)])
+    with pytest.raises(PipelineFailure) as caught:
+        module.download_with_recovery('https://www.youtube.com/watch?v=gated', {'quiet': True})
+    error = caught.value
+    assert error.code == 'source_blocked' and error.http_status is None
+    assert str(error) == module.SOURCE_ACCESS_HINT
+    assert '403' not in str(error) and 'bot' not in str(error).lower() and 'country' not in str(error).lower()
+    for leaked in ('XuoqKYxDHVc', 'yt-dlp', 'cookies-from-browser', 'youtube'):
+        assert leaked not in str(error).lower()
+    assert len(calls) == 1
+
+
+def test_synthetic_4120_stays_an_unexpected_download_error(monkeypatch):
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError('HTTP Error 4120: synthetic')])
     with pytest.raises(yt_dlp.utils.DownloadError):
         module.download_with_recovery('https://www.bilibili.com/video/synthetic', {'quiet': True})
     assert len(calls) == 1
