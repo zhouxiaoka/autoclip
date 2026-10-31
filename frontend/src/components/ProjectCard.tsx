@@ -297,12 +297,17 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const failureText = llmFailureText(rawFailure, project.error_code, upstreamType)
   // Home card must never show only 「处理失败」/bare 「错误」: promote empty/bare copy via
   // the same step+reason helper the studio FailureActions use (#491/#500 tip soft).
+  const billableRaw = project.processing_config?.billable_calls_before_failure
+    ?? project.settings?.billable_calls_before_failure
+  const billableCount = Number(billableRaw)
   const failureCard = presentedFailure({
     error: rawFailure,
     error_code: project.error_code,
     upstream_error_type: upstreamType,
     failure_stage: failedProgress?.stage || project.processing_config?.failure_stage || project.settings?.failure_stage,
     phase: project.processing_config?.analysis_phase || project.settings?.analysis_phase,
+    // Same plum as studio FailureActions (#491 tip soft): home must pass billable, not only screenshots.
+    billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
   }, failureText)
   const timelineEmpty = classifyTimelineEmpty(failureText || failureCard.reason, project.error_code)
   const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureCard.reason, project.error_code)

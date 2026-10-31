@@ -269,3 +269,24 @@ test('failed card with catalog message keeps step prefix without rewriting the r
   assert.match(html, /分析：/)
   assert.ok(html.includes(messages.timeout))
 })
+
+
+test('failed card with billable_calls_before_failure shows 本次已消耗 (#491 tip soft)', () => {
+  const html = renderCard('failed', '错误', null, {
+    project: {
+      error_code: 'provider_error',
+      processing_config: { billable_calls_before_failure: 3, failure_stage: 'analyze' },
+    },
+  })
+  assert.match(html, /分析：/)
+  assert.match(html, /ac-project-billing/)
+  assert.match(html, /本次已消耗 3 次请求/)
+  const quiet = renderCard('failed', '错误', null, {
+    project: { error_code: 'provider_error', processing_config: { billable_calls_before_failure: 0 } },
+  })
+  assert.doesNotMatch(quiet, /本次已消耗/)
+  const viaSettings = renderCard('failed', '错误', null, {
+    project: { error_code: 'provider_error', settings: { billable_calls_before_failure: 2 } },
+  })
+  assert.match(viaSettings, /本次已消耗 2 次请求/)
+})
