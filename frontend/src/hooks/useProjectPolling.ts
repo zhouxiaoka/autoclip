@@ -118,7 +118,8 @@ export const useProjectPolling = ({
   // refresh so home cards pick up service_restarted / catalog copy immediately.
   useEffect(() => {
     if (!enabled || !subscribeRestart) return
-    return bindRestartRefresh(subscribeRestart, refreshNow)
+    // refreshNow returns Promise<Project[]>; bindRestartRefresh only needs void/Promise<void>.
+    return bindRestartRefresh(subscribeRestart, () => { void refreshNow() })
   }, [enabled, subscribeRestart])
 
   return {
