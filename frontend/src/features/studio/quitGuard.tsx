@@ -8,11 +8,13 @@ import { isDesktopMode } from '../../utils/desktopMode'
 import { useProjectStore } from '../../store/useProjectStore'
 import { Btn, Dialog } from '../../ui'
 import { t } from '../../i18n'
+import { projectIsProducing, type KeepAwakeProjectLike } from './keepAwake'
 
 type ClosePayload = { from?: 'window' | 'tray' | string }
 
-function runningCount(projects: { status?: string }[]): number {
-  return projects.filter(project => project.status === 'processing').length
+/** Same producing signal as keep-awake — not only DB status===processing. */
+export function runningCount(projects: KeepAwakeProjectLike[]): number {
+  return projects.filter(projectIsProducing).length
 }
 
 async function invokeQuit(choice: 'background' | 'quit') {

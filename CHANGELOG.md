@@ -27,6 +27,8 @@
 
 ### 修复
 
+- Windows / 桌面关主窗与托盘退出的「正在制作」判定与状态栏 keep-awake 对齐：除 `status=processing` 外，也认 `pending` 以及 `studio_generation_status∈{screening,production,rendering}`。制作中（含「制作中，已阻止休眠」/「制作中 · 查看进度」）关窗必弹「正在制作 / 后台继续 / 仍然退出」，不再在状态滞后窗口直接 `confirm_quit`。（Win e2e tip 25970f2c M3）
+
 - macOS 应用菜单「退出 AutoClip」与 Cmd+Q 走与关窗 / 托盘退出相同的制作中确认：制作中会弹出「正在制作 / 后台继续 / 仍然退出」；选后台继续则进程继续跑。此前这两条路径不经 `close-requested`，会直接退出。（Mac tip 25970f2c）
 
 - 桌面后端被重新拉起后，首页项目列表也会立刻刷新（不再最多等 30 秒轮询），制作中被中断的项目能尽快显示「应用刚重启，这次制作已中断，请重试。」与重试入口。工作室侧此前已由 #502 覆盖。（#487）
