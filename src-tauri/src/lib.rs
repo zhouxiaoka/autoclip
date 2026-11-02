@@ -86,6 +86,25 @@ pub fn run() {
                 eprintln!("设置系统托盘失败: {}", e);
             }
 
+            // macOS: replace muda Predefined Quit (terminate:) with MenuItem id "quit"
+            // so Cmd+Q / app-menu 退出 can emit close-requested. ExitRequested alone
+            // cannot prevent_exit after terminate: on tao/muda locked stack.
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = crate::quit_guard::install_interceptable_quit_menu(app.handle()) {
+                    eprintln!("install interceptable Quit menu failed: {}", e);
+                }
+            }
+
+            // Tray Quit and (macOS) app-menu Quit share MenuItem id "quit".
+            // Single handler — tray's on_menu_event is also global, so tray.rs
+            // leaves "quit" to this callback to avoid double close-requested.
+            app.handle().on_menu_event(|app, event| {
+                if event.id().as_ref() == "quit" {
+                    crate::quit_guard::handle_quit_click(app, "menu");
+                }
+            });
+
             // macOS registers the scheme from the bundled Info.plist only.
             // Windows and Linux also register at runtime so dev and portable builds work.
             #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -112,7 +131,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| match event {
-            // macOS Cmd+Q / app-menu 「退出」 arrive here (not CloseRequested).
+            // Backstop: user-driven exits that still surface as ExitRequested
+            // with code=None (e.g. some window-destroy paths). macOS Cmd+Q /
+            // app-menu Quit are handled via the custom MenuItem + on_menu_event
+            // above — muda's predefined Quit used terminate: with no prevent_exit.
             // Programmatic confirm_quit → AppHandle::exit(0) carries Some(code) — allow it.
             tauri::RunEvent::ExitRequested { api, code, .. } => {
                 if crate::quit_guard::should_intercept_exit(

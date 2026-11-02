@@ -432,6 +432,7 @@
 .ac-project-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ac-project-counts { color: var(--ac-muted); font-size: 12.5px; }
 .ac-project-error { margin: 0; padding: 10px; text-align: left; font-size: 12.5px; overflow-wrap: anywhere; user-select: text; color: var(--ac-sub); }
+.ac-project-billing { margin: 8px 0 0; color: var(--ac-sub); font-size: 12.5px; line-height: 1.6; }
 .ac-project-recovery { display: flex; gap: 2px; flex-wrap: wrap; }
 .ac-project-card:focus-within .ac-card-actions { opacity: 1; }
 

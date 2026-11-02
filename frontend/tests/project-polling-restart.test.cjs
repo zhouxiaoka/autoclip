@@ -25,6 +25,8 @@ test('#487 bindRestartRefresh pulls the list as soon as the shell signals ready'
 test('HomePage wires apiConfigManager isReady into project polling restart', () => {
   const fs = require('node:fs')
   const src = fs.readFileSync(path.resolve(__dirname, '../src/pages/HomePage.tsx'), 'utf8')
-  assert.match(src, /subscribeRestart:\s*onRestart\s*=>\s*apiConfigManager\.addListener/)
+  assert.match(src, /function\s+subscribeBackendRestart\s*\(\s*onRestart/)
+  assert.match(src, /subscribeRestart:\s*subscribeBackendRestart/)
+  assert.match(src, /apiConfigManager\.addListener/)
   assert.match(src, /if\s*\(\s*config\.isReady\s*\)\s*onRestart\(\)/)
 })
