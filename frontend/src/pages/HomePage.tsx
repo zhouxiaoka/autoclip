@@ -32,6 +32,13 @@ const { Content } = Layout
 const { Title, Text } = Typography
 const { Option } = Select
 
+/** Stable identity for useProjectPolling restart binding (avoids resubscribe churn). */
+function subscribeBackendRestart(onRestart: () => void) {
+  return apiConfigManager.addListener(config => {
+    if (config.isReady) onRestart()
+  })
+}
+
 export default function HomePage() {
   useTranslation()
   const navigate = useNavigate()
@@ -51,9 +58,8 @@ export default function HomePage() {
     enabled: true,
     interval: 30000, // 30秒轮询一次，减少频繁请求
     // Mirror studio useWorkspace (#502): shell backend-started → refresh list now.
-    subscribeRestart: onRestart => apiConfigManager.addListener(config => {
-      if (config.isReady) onRestart()
-    }),
+    // Module fn keeps the subscribe identity stable across HomePage re-renders.
+    subscribeRestart: subscribeBackendRestart,
   })
 
   // 全局保险：当没有运行中的项目时，强制停止进度轮询并清空缓存
