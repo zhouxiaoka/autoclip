@@ -118,20 +118,21 @@
         "windows-x64",
         "macos-arm64"
       ],
-      "status": "waived",
-      "waiver_reason": "#558 Cmd+Q / QuitGuard wave: tip b706c76d replaces the predefined Quit item so macOS Cmd+Q can be intercepted. Windows e2e M3 quitGuard PASS on artifact 13120011234 is in the matrix summary, and an earlier same-tip Mac Cmd+Q smoke was reported ALIVE. This regression is waived, not passed, because that Mac result was not re-executed as a formal checklist row with evidence attached to this bundle. No failed regression was observed."
+      "status": "passed",
+      "completed_at": "2026-11-02T12:00:00Z",
+      "evidence": "evidence/mac-558-cmd-q-quitguard.json"
     }
   ],
   "blockers": [],
   "approval": {
     "name": "Charlie Zhou (product owner)",
-    "approved_at": "2026-11-02T09:20:00Z"
+    "approved_at": "2026-11-02T12:05:00Z"
   },
   "stage": "internal",
   "version": "1.5.8",
   "owner_waiver": {
     "name": "Charlie Zhou (product owner)",
-    "approved_at": "2026-11-02T09:15:00Z",
-    "reason": "Owner decision 2026-11-02 ~17:12 Asia/Shanghai: Charlie Zhou (product owner) explicit chat「打 IA」after tip b706c76d231c801884405b663183cb75ae867004 Windows x64 full e2e PASS (hard M1–M5 + soft N1–N4) on artifact 13120011234 / Desktop Build 41394663920, finished 2026-11-02T17:09:53+08:00. macOS arm64 artifact 13119484020 from the same build is bound for dual-platform assets. Mac Cmd+Q smoke was already ALIVE earlier on this same tip. Unexecuted formal checklist rows are waived, not passed. No git tag and no public Release until Charlie says「发」."
+    "approved_at": "2026-11-02T12:02:00Z",
+    "reason": "Owner decision 2026-11-02 Asia/Singapore: Charlie Zhou (product owner) authorized Internal Acceptance for tip b706c76d231c801884405b663183cb75ae867004 / Desktop Build 41394663920 (Win ART 13120011234, Mac ART 13119484020). Windows x64 full e2e PASS (hard M1–M5 + soft N1–N4) finished 2026-11-02T17:09:53+08:00. macOS arm64 #558 Cmd+Q / QuitGuard re-verified the same evening on macOS 26.6.2 arm64 DMG sha256 b51aafcedd1bd9044e0b4393e5f5f01712e176ece254bb140e6bb93bccb206bd (five paths: menu Quit, ⌘Q, 后台继续, tray Quit re-prompt, 仍然退出); regression 558-cmd-q-quitguard is passed, not waived. Unexecuted formal Mac checklist rows (including clean_install) remain waived for observation this round, not passed. Charlie separately authorized annotated tag v1.5.8 + GitHub Pre-release after this re-run; no promote and no community broadcast."
   }
 }

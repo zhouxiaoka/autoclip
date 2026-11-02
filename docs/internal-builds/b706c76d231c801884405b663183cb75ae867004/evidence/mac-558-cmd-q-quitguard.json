@@ -1,0 +1,38 @@
+{
+  "case": "regression/558-cmd-q-quitguard",
+  "status": "passed",
+  "completed_at": "2026-11-02T12:00:00Z",
+  "source": "b706c76d231c801884405b663183cb75ae867004",
+  "build_run_id": 41394663920,
+  "platforms": [
+    "windows-x64",
+    "macos-arm64"
+  ],
+  "macos": {
+    "os": "macOS 26.6.2",
+    "machine": "arm64",
+    "artifact_id": "13119484020",
+    "dmg": "AutoClip Desktop_1.5.8_aarch64.dmg",
+    "dmg_sha256": "b51aafcedd1bd9044e0b4393e5f5f01712e176ece254bb140e6bb93bccb206bd",
+    "tester": "Charlie Zhou (product owner)",
+    "tested_at_local": "2026-11-02 evening Asia/Singapore",
+    "paths_passed": [
+      "App menu Quit → confirm dialog while generating",
+      "Cmd+Q → confirm dialog while generating",
+      "后台继续 → process stays alive",
+      "Tray Quit → confirm dialog reappears",
+      "仍然退出 → app + backend both exit"
+    ],
+    "observed": [
+      "Real Cmd+Q while generating showed「正在制作 1 个项目」confirm; process did not quit",
+      "Choosing「仍然退出」exited app and backend together",
+      "Test instance cleaned up after verification"
+    ]
+  },
+  "windows": {
+    "artifact_id": "13120011234",
+    "installer_sha256": "5ea61eba21de5055584ac7294507dadbb14416c5b85083d75ed8cbc7b3a81649",
+    "matrix": "M3 quitGuard PASS in tip-b706c76d full e2e finished 2026-11-02T17:09:53+08:00"
+  },
+  "notes": "Formal macOS arm64 quit-guard verification on the IA-bound DMG. Windows M3 already covered QuitGuard on the same tip. Do not cite #556."
+}
