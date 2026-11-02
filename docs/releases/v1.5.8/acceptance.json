@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "tag": "v1.5.8",
+  "commit": "b706c76d231c801884405b663183cb75ae867004",
+  "release_type": "routine",
+  "build_run_id": 41443161765,
+  "assets": {
+    "AutoClip.Desktop_1.5.8_aarch64.app.tar.gz": "acfe55e5c3c8df87717d1acd4b08725735c0f4d88f1452da6575b8c49b4f8eb7",
+    "AutoClip.Desktop_1.5.8_aarch64.app.tar.gz.sig": "a2ec9f96cbb6f30163019b5a985bef7daebec35aeaa478da7245b9a93edbd39e",
+    "AutoClip.Desktop_1.5.8_aarch64.dmg": "041877fdcf29578fe618d0f679cd4e44ef75f049363a84b3ecc38a470c59bdbc",
+    "AutoClip.Desktop_1.5.8_x64-setup.exe": "d35c52aa9142e0c71f9fe7b29b9c86cad6c95a5e7d4ffbee8121b1d43bed9889",
+    "AutoClip.Desktop_1.5.8_x64-setup.exe.sig": "4818bf8e4473f23b7361c58fd4239f4969eb8852696cf599e1e5dc5fb05c2057",
+    "autoclip-1.5.8-cli-mcp.zip": "26e5e6cb7bb0019fac63c1a3e898a99028b5f103cc61d08c0d3bc5d6e950b28a",
+    "autoclip_mcp-1.5.8-py3-none-any.whl": "1d5ce2c7768a7f5b80b5af1f9d6a8b56ee971fb36625db183915e6a16ac94f5c",
+    "build-provenance.json": "7ec6d151eb424a72ab4b75486a43d925d216429fd1a93369fd8bac9606f9ebd7",
+    "latest.json": "538b9c5faace27a697968d4424dfc8561f4434c46190ea8f13b7b4f8a6fc6d97",
+    "python-release-sha256.txt": "29d04673effdb92cc656835fb0de8575aa30cc1f1173cd4eb50b452af2d7ee83"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "",
+      "machine": "",
+      "runtime": "",
+      "checks": {
+        "clean_install": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "upgrade_legacy": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "model_settings": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "local_with_subtitles": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "local_without_subtitles": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "link_import": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "visual_generation": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "failure_recovery": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "output_delivery": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "privacy_telemetry": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "",
+      "machine": "",
+      "runtime": "",
+      "checks": {
+        "clean_install": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "upgrade_legacy": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "model_settings": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "local_with_subtitles": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "local_without_subtitles": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "link_import": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "visual_generation": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "failure_recovery": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "output_delivery": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        },
+        "privacy_telemetry": {
+          "status": "pending",
+          "completed_at": null,
+          "evidence": ""
+        }
+      }
+    }
+  },
+  "regressions": [],
+  "blockers": [],
+  "observation": {
+    "status": "pending",
+    "started_at": null,
+    "ended_at": null,
+    "devices": {
+      "windows-x64": 0,
+      "macos-arm64": 0
+    },
+    "completed_flows": {
+      "windows-x64": 0,
+      "macos-arm64": 0
+    },
+    "evidence": ""
+  },
+  "approval": {
+    "name": "",
+    "approved_at": null
+  }
+}
