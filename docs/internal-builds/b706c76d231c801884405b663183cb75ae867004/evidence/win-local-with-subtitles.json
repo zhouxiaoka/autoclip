@@ -1,0 +1,14 @@
+{
+  "case": "windows-x64/local_with_subtitles",
+  "status": "passed",
+  "completed_at": "2026-11-02T09:09:53Z",
+  "source": "b706c76d231c801884405b663183cb75ae867004",
+  "build_run_id": 41394663920,
+  "artifact_id": "13120011234",
+  "installer_sha256": "5ea61eba21de5055584ac7294507dadbb14416c5b85083d75ed8cbc7b3a81649",
+  "observed": [
+    "D2.1 local video plus SRT PASS, generation status=completed",
+    "T2 #434 captions PASS, exports=1"
+  ],
+  "matrix_finished_at": "2026-11-02T17:09:53+08:00"
+}

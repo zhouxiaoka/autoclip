@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "commit": "b706c76d231c801884405b663183cb75ae867004",
+  "build_run_id": 41394663920,
+  "assets": {
+    "AutoClip Desktop_1.5.8_aarch64.dmg": "b51aafcedd1bd9044e0b4393e5f5f01712e176ece254bb140e6bb93bccb206bd",
+    "AutoClip Desktop_1.5.8_x64-setup.exe": "5ea61eba21de5055584ac7294507dadbb14416c5b85083d75ed8cbc7b3a81649",
+    "AutoClip Desktop_1.5.8_x64-setup.exe.sig": "79ca61124a763d5f2d07b9c93d7e02db2df06ebbf7eab4960a46d60b2062ce2c",
+    "AutoClip.Desktop_1.5.8_aarch64.app.tar.gz": "f1472c9a1cc0688f7443af574c219f9138cbaa885e6d929225cf1069efbab27d",
+    "AutoClip.Desktop_1.5.8_aarch64.app.tar.gz.sig": "5ee4b805a0f305933983729c13744243d61f4ebcc81159b6d9e881ee015099a9",
+    "internal-build-provenance.json": "c0bb05dd5bc2b93872061e9152cfb50f2966a2f717b65287d19ee927597dcf5b"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows x64",
+      "machine": "Windows x64 QA host for tip b706c76d full e2e on artifact 13120011234. The sanitized matrix summary does not name the OS build or whether the host was a physical PC or a VM.",
+      "runtime": "Installed AutoClip Desktop 1.5.8 x64-setup.exe sha256 5ea61eba21de5055584ac7294507dadbb14416c5b85083d75ed8cbc7b3a81649 from Desktop Build 41394663920. Same-build CI smoke-windows-x64 recorded portable Python 3.13.13 in this installer; that CI smoke is not the product e2e.",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-02T09:09:53Z",
+          "evidence": "evidence/win-clean-install.json"
+        },
+        "upgrade_legacy": {
+          "status": "waived",
+          "waiver_reason": "Win full e2e on artifact 13120011234 did not run the formal upgrade_legacy case (overlay from the last stable and the affected build, old projects and keys kept, invalid cover not blocking model settings, SQLite lock recovery). Same-build CI smoke-windows-x64 is not this checklist case. Waived, not passed."
+        },
+        "model_settings": {
+          "status": "waived",
+          "waiver_reason": "Win full e2e did not record independent analysis/vision/ASR/cover save, survival across cold restart, or correction of an invalid key or address. The N4 harness setup dismiss is not model_settings. Waived, not passed."
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-02T09:09:53Z",
+          "evidence": "evidence/win-local-with-subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "waived",
+          "waiver_reason": "The matrix recorded D2.1 local+SRT completed. It did not run a no-subtitle Whisper, SenseVoice, or cloud ASR route, nor install/download interrupt recovery, on artifact 13120011234. CI SenseVoice/Whisper smoke is not this installed-UI case. Waived, not passed."
+        },
+        "link_import": {
+          "status": "passed",
+          "completed_at": "2026-11-02T09:09:53Z",
+          "evidence": "evidence/win-link-import.json"
+        },
+        "visual_generation": {
+          "status": "waived",
+          "waiver_reason": "No game or no-talking-head real vision run, frame-send consent, or cancel-authorization result was executed on artifact 13120011234. Waived, not passed."
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-02T09:09:53Z",
+          "evidence": "evidence/win-failure-recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-02T09:09:53Z",
+          "evidence": "evidence/win-output-delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "waived",
+          "waiver_reason": "Production privacy-off capture and validation-build studio_generation_finished ingest (flow, controlled error codes, dedupe) were not executed on artifact 13120011234. Waived, not passed."
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS arm64",
+      "machine": "macOS arm64 package bound as artifact 13119484020 from the same Desktop Build 41394663920. No named Mac ran the formal checklist for this Internal Acceptance. An earlier same-tip Cmd+Q smoke was reported ALIVE.",
+      "runtime": "AutoClip Desktop 1.5.8 aarch64 DMG sha256 b51aafcedd1bd9044e0b4393e5f5f01712e176ece254bb140e6bb93bccb206bd and app.tar.gz sha256 f1472c9a1cc0688f7443af574c219f9138cbaa885e6d929225cf1069efbab27d. Installed portable runtime was not re-recorded because the formal macOS rows were not executed.",
+      "checks": {
+        "clean_install": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS clean install (first-run onboarding, model settings, quit/relaunch, packaged Python/ffmpeg) was not executed on artifact 13119484020. Earlier same-tip Cmd+Q smoke reported ALIVE is not this case. Waived, not passed."
+        },
+        "upgrade_legacy": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS overlay upgrade from the last stable and the affected build was not executed on artifact 13119484020. Waived, not passed."
+        },
+        "model_settings": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS four-role model settings, restart persistence, and invalid key/address recovery were not executed on artifact 13119484020. Waived, not passed."
+        },
+        "local_with_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS local video plus SRT one-click output was not executed on artifact 13119484020. Windows D2.1 does not cover this platform. Waived, not passed."
+        },
+        "local_without_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS no-subtitle ASR route was not executed on artifact 13119484020. Waived, not passed."
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS YouTube or Bilibili link import was not executed on artifact 13119484020. Windows N1–N4 do not cover this platform. Waived, not passed."
+        },
+        "visual_generation": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS visual generation was not executed on artifact 13119484020. Waived, not passed."
+        },
+        "failure_recovery": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS injected 500/429/timeout/offline recovery was not executed on artifact 13119484020. Windows M4/M5 do not cover this platform. Waived, not passed."
+        },
+        "output_delivery": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS preview, native save, ffprobe, and playback delivery was not executed on artifact 13119484020. Waived, not passed."
+        },
+        "privacy_telemetry": {
+          "status": "waived",
+          "waiver_reason": "Formal macOS privacy-off and validation telemetry ingest was not executed on artifact 13119484020. Waived, not passed."
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "558-cmd-q-quitguard",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "#558 Cmd+Q / QuitGuard wave: tip b706c76d replaces the predefined Quit item so macOS Cmd+Q can be intercepted. Windows e2e M3 quitGuard PASS on artifact 13120011234 is in the matrix summary, and an earlier same-tip Mac Cmd+Q smoke was reported ALIVE. This regression is waived, not passed, because that Mac result was not re-executed as a formal checklist row with evidence attached to this bundle. No failed regression was observed."
+    }
+  ],
+  "blockers": [],
+  "approval": {
+    "name": "Charlie Zhou (product owner)",
+    "approved_at": "2026-11-02T09:20:00Z"
+  },
+  "stage": "internal",
+  "version": "1.5.8",
+  "owner_waiver": {
+    "name": "Charlie Zhou (product owner)",
+    "approved_at": "2026-11-02T09:15:00Z",
+    "reason": "Owner decision 2026-11-02 ~17:12 Asia/Shanghai: Charlie Zhou (product owner) explicit chat「打 IA」after tip b706c76d231c801884405b663183cb75ae867004 Windows x64 full e2e PASS (hard M1–M5 + soft N1–N4) on artifact 13120011234 / Desktop Build 41394663920, finished 2026-11-02T17:09:53+08:00. macOS arm64 artifact 13119484020 from the same build is bound for dual-platform assets. Mac Cmd+Q smoke was already ALIVE earlier on this same tip. Unexecuted formal checklist rows are waived, not passed. No git tag and no public Release until Charlie says「发」."
+  }
+}

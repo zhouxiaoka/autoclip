@@ -1,0 +1,17 @@
+{
+  "case": "windows-x64/link_import",
+  "status": "passed",
+  "completed_at": "2026-11-02T09:09:53Z",
+  "source": "b706c76d231c801884405b663183cb75ae867004",
+  "build_run_id": 41394663920,
+  "artifact_id": "13120011234",
+  "installer_sha256": "5ea61eba21de5055584ac7294507dadbb14416c5b85083d75ed8cbc7b3a81649",
+  "observed": [
+    "N1 EN45 Bilibili PASS, status=completed",
+    "N2 EN531 Bilibili PASS, status=completed",
+    "N3 YouTube long PASS, at least one 1920x1080 output with duration >= 180 seconds",
+    "N4 YouTube long under 3 minutes PASS on Creative Import: UI showed only 知道了, with no import and no generation. An API status=failed was not counted as PASS.",
+    "Point N4 on the same tip and artifact also PASS at 2026-11-02 15:23:47 Asia/Shanghai, same 知道了-only rule"
+  ],
+  "matrix_finished_at": "2026-11-02T17:09:53+08:00"
+}

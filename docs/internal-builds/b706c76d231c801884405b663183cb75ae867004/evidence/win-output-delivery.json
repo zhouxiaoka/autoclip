@@ -1,0 +1,15 @@
+{
+  "case": "windows-x64/output_delivery",
+  "status": "passed",
+  "completed_at": "2026-11-02T09:09:53Z",
+  "source": "b706c76d231c801884405b663183cb75ae867004",
+  "build_run_id": 41394663920,
+  "artifact_id": "13120011234",
+  "installer_sha256": "5ea61eba21de5055584ac7294507dadbb14416c5b85083d75ed8cbc7b3a81649",
+  "observed": [
+    "T2 #434 captions PASS, exports=1",
+    "D2.1 local plus SRT generation status=completed",
+    "N3 YouTube long delivery PASS: at least one 1920x1080 output with duration >= 180 seconds"
+  ],
+  "matrix_finished_at": "2026-11-02T17:09:53+08:00"
+}
