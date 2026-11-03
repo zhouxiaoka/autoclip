@@ -156,7 +156,9 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
     fields = export_attribution(snap)  # THE serializer
     out = {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
     # 1.5.9 2A: name unexpected failures without leaking messages.
-    if studio_error_code(error) == "unexpected":
+    # Skip when the snapshot already carries upstream/http attribution — those are known
+    # buckets (A2 other≤1%); do not also stamp unexpected_type='other'.
+    if studio_error_code(error) == "unexpected" and "upstream_error_type" not in out and "http_status" not in out:
         from backend.core.failure_attribution import unexpected_type_of
         ut = unexpected_type_of(error)
         if ut:

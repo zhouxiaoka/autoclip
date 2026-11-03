@@ -57,10 +57,19 @@ def unexpected_type_of(error: BaseException | None) -> str | None:
     """Whitelist exception class name for error_code=unexpected. Anything else → other."""
     if error is None:
         return None
-    name = type(error).__name__
-    # pydantic.ValidationError → ValidationError; json.JSONDecodeError → JSONDecodeError
-    if name in UNEXPECTED_TYPES:
-        return name
+
+    def _named(exc: BaseException) -> str | None:
+        # Exact class first (ValidationError / JSONDecodeError / DownloadError…), then MRO
+        # so ContentRunError / AttributedPipelineFailure resolve to RuntimeError instead of other.
+        for cls in type(exc).__mro__:
+            n = cls.__name__
+            if n in UNEXPECTED_TYPES and n != 'other':
+                return n
+        return None
+
+    hit = _named(error)
+    if hit:
+        return hit
     # Walk the cause chain for a whitelisted name (wrappers often hide DownloadError).
     seen = set()
     pending = [error]
@@ -69,9 +78,9 @@ def unexpected_type_of(error: BaseException | None) -> str | None:
         if id(cur) in seen:
             continue
         seen.add(id(cur))
-        n = type(cur).__name__
-        if n in UNEXPECTED_TYPES and n != 'other':
-            return n
+        hit = _named(cur)
+        if hit:
+            return hit
         for attr in ('__cause__', '__context__'):
             nxt = getattr(cur, attr, None)
             if isinstance(nxt, BaseException):

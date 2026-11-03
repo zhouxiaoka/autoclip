@@ -247,7 +247,7 @@ _FRAME = (
     'ffmpeg', 'postprocess',
     'merging formats', 'error merging', 'merge the formats', 'ffmpeg merge', 'unable to merge',
 )
-_NOT_FOUND = (
+_NOT_FOUND_PHRASES = (
     'video unavailable', 'has been removed', 'does not exist',
     'http error 404', '404: not found', '404 not found', 'status code 404',
 )
@@ -260,7 +260,7 @@ def classify_download_error_text(text: str):
     # N5: FRAME before CONNECTION/TIMEOUT so "ffmpeg … timed out" → frame_extract_failed.
     if any(p in lowered for p in _LOGIN_REQUIRED):
         return SOURCE_BLOCKED_CODE, SOURCE_ACCESS_HINT
-    if any(p in lowered for p in _NOT_FOUND):
+    if any(p in lowered for p in _NOT_FOUND_PHRASES):
         return SOURCE_NOT_FOUND_CODE, SOURCE_NOT_FOUND_HINT
     if any(p in lowered for p in _FRAME):
         from backend.core.failure_codes import sentence
