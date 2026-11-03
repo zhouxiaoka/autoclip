@@ -60,6 +60,8 @@ export interface Project {
   error_message?: string
   error_code?: string
   upstream_error_type?: string
+  /** 1.5.9 2A: named unexpected failure class (enum only). */
+  unexpected_type?: string
 }
 
 interface ProjectStore {

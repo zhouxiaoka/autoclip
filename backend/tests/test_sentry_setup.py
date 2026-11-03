@@ -157,7 +157,7 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
         'failure_stage': 'vision', 'http_status': 429, 'upstream_error_type': 'rate_limited'}
 
     timeout = sentry_setup.studio_failure_context(TimeoutError('private'), 'render')
-    assert timeout == {'failure_stage': 'render'}
+    assert timeout == {'failure_stage': 'render', 'unexpected_type': 'TimeoutError'}
     assert 'private' not in json.dumps(timeout)
 
 
@@ -242,7 +242,7 @@ def test_studio_failure_context_without_status_in_chain_and_with_cycles():
     # A cyclic chain must terminate.
     a, b = RuntimeError('a'), RuntimeError('b')
     a.__cause__, b.__cause__ = b, a
-    assert sentry_setup.studio_failure_context(a, 'render') == {'failure_stage': 'render'}
+    assert sentry_setup.studio_failure_context(a, 'render') == {'failure_stage': 'render', 'unexpected_type': 'RuntimeError'}
 
 
 def test_studio_expected_pipeline_failure_keeps_code_and_warning(monkeypatch, tmp_path):
@@ -428,3 +428,55 @@ def test_source_blocked_is_classified_and_never_sent(monkeypatch, tmp_path):
     event = {'exception': {'values': [{'type': 'PipelineFailure', 'value': 'hint'}]},
              'tags': {'area': 'studio', 'phase': 'screening', 'error_code': 'source_blocked'}}
     assert sentry_setup.before_send(event) is None
+
+
+# --- 1.5.9 A1-3 ---------------------------------------------------------------------------------
+
+def test_a1_3_capture_crash_recovery_once_per_instance(monkeypatch, tmp_path):
+    from backend.core import sentry_setup as ss
+    monkeypatch.setenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', str(tmp_path))
+    ss._crash_reported.clear()
+    monkeypatch.setattr(ss, '_initialized', True)
+    monkeypatch.setattr(ss, 'crash_reports_enabled', lambda: True)
+    captured = []
+
+    class Scope:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def set_tag(self, *a, **k): pass
+        fingerprint = None
+
+    class FakeSentry:
+        @staticmethod
+        def new_scope():
+            return Scope()
+        @staticmethod
+        def capture_event(payload):
+            captured.append(payload)
+            return 'evt-1'
+
+    import sys
+    monkeypatch.setitem(sys.modules, 'sentry_sdk', FakeSentry)
+    fields = {'restart_reason': 'crash', 'crash_exit': 'sigkill', 'crash_stage': 'analyze'}
+    assert ss.capture_crash_recovery('d' * 32, fields) == 'evt-1'
+    assert ss.capture_crash_recovery('d' * 32, fields) is None  # once per instance
+    assert len(captured) == 1
+    assert captured[0]['fingerprint'] == ['studio', 'service_restarted', 'sigkill', 'analyze']
+    assert ss.capture_crash_recovery('e' * 32, {**fields, 'restart_reason': 'user_quit'}) is None
+    assert ss.capture_crash_recovery('f' * 32, {**fields, 'restart_reason': 'update'}) is None
+    assert len(captured) == 1
+
+
+def test_a1_3_fault_frames_scrub_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', str(tmp_path))
+    from backend.services.studio import run_heartbeat
+    instance = 'g' * 32
+    (tmp_path / f'{instance}.fault').write_text(
+        'File "/Users/charlie/app/backend/foo.py", line 12 in boom\n'
+        'File "/home/box/workspace/bar.py", line 3 in run\n',
+        encoding='utf-8',
+    )
+    frames = run_heartbeat.read_fault_frames(tmp_path / instance)
+    joined = str(frames)
+    assert 'Users' not in joined and 'home/' not in joined and '\\' not in joined
+    assert 'foo.py' in joined or any(f.get('filename') == 'foo.py' for f in frames)

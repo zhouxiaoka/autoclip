@@ -60,6 +60,10 @@ RUN_LEVEL_FIELDS: frozenset[str] = frozenset({
     "source_duration_sec", "platform_count", "is_first_success_device", "attempt_index_on_device",
     # ETA (client posts eta_initial_min; backend derives eta_error_ratio)
     "eta_initial_min", "eta_error_ratio",
+    # 1.5.9 A1/A2/2A dims — keep in sync with frontend successRateContract RUN_LEVEL_FIELDS
+    # crash_has_fault is boolean tag/property (event_catalog), not a contract enum dim; omit here.
+    "crash_exit", "crash_stage", "crash_uptime_bucket", "crash_rss_bucket", "crash_disk_bucket",
+    "unexpected_type", "quota_precheck",
 })
 # 单次模型请求
 LLM_REQUEST_FIELDS: frozenset[str] = frozenset({
@@ -305,6 +309,8 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
         _put_enum(out, raw, "code", None, pattern=re.compile(r"^[a-z][a-z0-9_]{1,64}$"))
         _put_bool(out, raw, "has_subtitle")
         _put_bool(out, raw, "blocked")
+        # 1.5.9 N2: New API billing probe result (enum only).
+        _put_enum(out, raw, "quota_precheck", frozenset({"skipped", "ok", "exhausted", "unavailable"}))
     else:
         _put_enum(out, raw, "result", VALIDATION_RESULTS)
         _put_enum(out, raw, "probe_kind", PROBE_KINDS)

@@ -57,6 +57,15 @@ test('1.5.7 failed-state action per code: user-cause codes get 「去设置」, 
   const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
   const settings = { authentication: 'API Key 无效或已过期，请到设置里更新后再试', llm_auth_invalid: 'API Key 无效或已过期，请到设置里更新后再试', invalid_key: 'API Key 无效或已过期，请到设置里更新后再试', insufficient_quota: '余额或令牌额度不足，请充值或更换令牌后再试。', llm_not_configured: '还没有配置可用的模型，请先到设置里添加' }
   for (const [code, reason] of Object.entries(settings)) {
+    // 1.5.9 3B: insufficient_quota locks bare retry → settings CTA labelled 核对余额并测试连接
+    if (code === 'insufficient_quota') {
+      assert.deepEqual(
+        { ...fa.failureAction(code) },
+        { kind: 'settings', reason, destination: '/settings?section=analysis', label: '核对余额并测试连接' },
+        code,
+      )
+      continue
+    }
     assert.deepEqual({ ...fa.failureAction(code) }, { kind: 'settings', reason, destination: '/settings?section=analysis' }, code)
   }
   assert.equal(fa.failureAction('provider_error', 'permission_denied').kind, 'settings')

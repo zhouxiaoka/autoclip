@@ -368,3 +368,127 @@ def test_long_video_stuck_in_processing_across_restarts_is_failed(sessions):
     assert disk['analysis']['error'] == store.RESTART_MESSAGE and 'message' not in disk['analysis']
     # Home card reads studio_generation_status=failed → 「重新生成」 entry.
     assert (row.settings or {}).get('studio_generation_status') == 'failed'
+
+
+# --- 1.5.9 A1-2 ---------------------------------------------------------------------------------
+
+def test_a1_2_crash_fields_from_heartbeat_exit_and_fault(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    from backend.services.studio import shutdown_marker as sm, run_heartbeat
+    sm._consumed.clear(); sm._restart_cached.clear()
+    sm._crash_exit_cached.clear(); sm._crash_scene_cached.clear()
+    instance = 'b' * 32
+    (tmp_path / instance).write_text('exit:137', encoding='ascii')
+    hb = {
+        'ts': 1, 'uptime_s': 120, 'rss_mb': 1500, 'free_disk_mb': 8000,
+        'stage': 'render', 'ffmpeg_children': 1,
+    }
+    (tmp_path / f'{instance}.hb').write_text(json.dumps(hb), encoding='utf-8')
+    (tmp_path / f'{instance}.fault').write_text(
+        'Fatal Python error: Segmentation fault\nFile "/Users/x/app/backend/services/studio/jobs.py", line 10 in _tracked\n',
+        encoding='utf-8',
+    )
+    fields = sm.crash_fields(instance)
+    assert fields['crash_exit'] == 'oom'
+    assert fields['crash_stage'] == 'render'
+    assert fields['crash_uptime_bucket'] in sm.CRASH_UPTIME_BUCKETS
+    assert fields['crash_rss_bucket'] in sm.CRASH_RSS_BUCKETS
+    assert fields['crash_disk_bucket'] in sm.CRASH_DISK_BUCKETS
+    assert fields['crash_has_fault'] is True
+    # Missing sidecars → unknown, no throw
+    instance2 = 'c' * 32
+    (tmp_path / instance2).write_text('exit:1', encoding='ascii')
+    sm._consumed.clear(); sm._restart_cached.clear()
+    sm._crash_exit_cached.clear(); sm._crash_scene_cached.clear()
+    sparse = sm.crash_fields(instance2)
+    assert sparse['crash_exit'] == 'nonzero_other'
+    assert sparse['crash_stage'] == 'unknown'
+    assert sparse['crash_has_fault'] is False
+
+
+# --- 1.5.9 N4 ------------------------------------------------------------------------------------
+
+def _fake_sentry(monkeypatch):
+    """Enable real capture_crash_recovery with a fake SDK so once-per-instance dedupe holds."""
+    from backend.core import sentry_setup as ss
+    captured = []
+    monkeypatch.setattr(ss, '_initialized', True)
+    monkeypatch.setattr(ss, 'crash_reports_enabled', lambda: True)
+    ss._crash_reported.clear()
+
+    class Scope:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def set_tag(self, *a, **k): pass
+        fingerprint = None
+
+    class FakeSentry:
+        @staticmethod
+        def new_scope():
+            return Scope()
+        @staticmethod
+        def capture_event(payload):
+            captured.append(payload)
+            return f'evt-{len(captured)}'
+
+    import sys
+    monkeypatch.setitem(sys.modules, 'sentry_sdk', FakeSentry)
+    return captured
+
+
+def test_n4_manual_confirmation_crash_reports_sentry_once(sessions, monkeypatch):
+    """Manual (awaiting_confirmation) recover stamps analysis only — must still report Sentry."""
+    from backend.services.studio import shutdown_marker
+    captured = _fake_sentry(monkeypatch)
+    instance = 'd' * 32
+    shutdown_marker._consumed.clear(); shutdown_marker._restart_cached.clear()
+    shutdown_marker._crash_exit_cached.clear(); shutdown_marker._crash_scene_cached.clear()
+    data = _production(instance=instance)
+    data['generation'] = {'status': 'awaiting_confirmation', 'auto_start': False}
+    _project(sessions, data, auto=False)
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    assert len(captured) == 1
+    assert captured[0]['fingerprint'][:2] == ['studio', 'service_restarted']
+    assert captured[0]['tags']['restart_reason'] == 'crash'
+    # Idempotent: second reconcile must not re-fire.
+    assert reconcile_interrupted_projects(sessions) == []
+    assert len(captured) == 1
+
+
+def test_n4_home_list_heal_reports_crash_via_recover(sessions, monkeypatch):
+    """List-first heal calls store.recover without relying on reconcile's Sentry loop."""
+    from backend.services.studio import shutdown_marker
+    captured = _fake_sentry(monkeypatch)
+    instance = 'e' * 32
+    shutdown_marker._consumed.clear(); shutdown_marker._restart_cached.clear()
+    shutdown_marker._crash_exit_cached.clear(); shutdown_marker._crash_scene_cached.clear()
+    _project(sessions, _production(instance=instance))
+    with sessions() as db:
+        listing = ProjectService(db).get_projects_paginated(PaginationParams())
+    assert listing.items[0].status.value == 'failed'
+    assert len(captured) == 1
+    assert captured[0]['tags']['restart_reason'] == 'crash'
+    assert captured[0]['fingerprint'][:2] == ['studio', 'service_restarted']
+
+
+# --- 1.5.9 N1 nested stage stack ---------------------------------------------------------------
+
+def test_n1_nested_set_stage_stack_keeps_outer_production():
+    """Nested render finishing must not report idle while outer production is still active."""
+    from backend.services.studio import run_heartbeat
+
+    run_heartbeat.set_stage('idle')  # clear any prior stack on this thread
+    # Drain leftover frames if a previous test left the thread dirty.
+    while run_heartbeat.current_stage() != 'idle':
+        run_heartbeat.set_stage('idle')
+
+    run_heartbeat.set_stage('analyze')  # outer production
+    assert run_heartbeat.current_stage() == 'analyze'
+    run_heartbeat.set_stage('render')  # nested
+    assert run_heartbeat.current_stage() == 'render'
+    run_heartbeat.set_stage('idle')  # nested done — outer must remain
+    assert run_heartbeat.current_stage() == 'analyze'
+    run_heartbeat.set_stage('idle')  # outer done
+    assert run_heartbeat.current_stage() == 'idle'

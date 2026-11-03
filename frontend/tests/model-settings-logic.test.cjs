@@ -305,9 +305,13 @@ test('save strips key spaces, normalizes a compatible URL, and records a failed 
   const failed = logic.applyValidation(ok, 'a', { success: false, error_type: 'insufficient_quota', normalized_base_url: 'https://gw.example/v1' })
   assert.equal(failed.connections[0].validation_status, 'failed')
   assert.equal(failed.connections[0].validation_error_type, 'insufficient_quota')
-  const passed = logic.applyValidation(ok, 'a', { success: true, result: 'ok' })
+  // 1.5.9 N3: real insufficient_quota stamps quota_exhausted_at; successful test clears it.
+  assert.equal(typeof failed.connections[0].quota_exhausted_at, 'string')
+  assert.match(failed.connections[0].quota_exhausted_at, /Z$/)
+  const passed = logic.applyValidation(failed, 'a', { success: true, result: 'ok' })
   assert.equal(passed.connections[0].validation_status, 'ok')
   assert.equal(passed.connections[0].validation_error_type, '')
+  assert.equal(passed.connections[0].quota_exhausted_at, null)
 })
 
 test('save validation reports the first blocking field in page order and prunes blank custom connections', () => {

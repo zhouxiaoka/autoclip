@@ -89,7 +89,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found', 'source_unsupported')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
     , (ifNull(seq, 0), leaf, ts) AS ord
@@ -144,7 +144,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found', 'source_unsupported')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
   FROM base
@@ -186,7 +186,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found', 'source_unsupported')) AS user_x
   FROM base
 )
 SELECT stage, if(ec = '', '(空)', ec) AS error_code, o AS outcome,
@@ -264,7 +264,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x,
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found', 'source_unsupported')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
     , (ifNull(seq, 0), leaf, ts) AS ord
@@ -415,7 +415,7 @@ WITH version_releases AS (
     (o = 'cancelled'
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
-    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found')) AS user_x
+    (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked', 'source_not_found', 'source_unsupported')) AS user_x
   FROM base
 ), qualified AS (
   SELECT * FROM c WHERE o = 'success' OR NOT user_x
@@ -432,3 +432,26 @@ SELECT
 FROM per_device
 GROUP BY provider
 ORDER BY success_rate DESC, devices DESC;
+
+
+-- ---------------------------------------------------------------------------
+-- 图 10：service_restarted 按 crash_exit × crash_stage（1.5.9）
+-- ---------------------------------------------------------------------------
+-- 口径：与上图相同的 production / desktop / cohort / {date_from}/{date_to}。
+-- studio_generation_finished 且 error_code = service_restarted 且 restart_reason = crash。
+-- 属性均为枚举/分桶，无原始退出码。按事件计数（不再用 distinct_id）。
+SELECT
+  toString(properties.crash_exit) AS crash_exit,
+  toString(properties.crash_stage) AS crash_stage,
+  count() AS restarts
+FROM events
+WHERE event = 'studio_generation_finished'
+  AND toString(properties.analytics_environment) = 'production'
+  AND toString(properties.runtime) = 'desktop'
+  AND timestamp >= toDateTime({date_from}, 'UTC')
+  AND timestamp < toDateTime({date_to}, 'UTC')
+  AND person_id NOT IN COHORT {internal_cohort_id}
+  AND toString(properties.error_code) = 'service_restarted'
+  AND toString(properties.restart_reason) = 'crash'
+GROUP BY 1, 2
+ORDER BY restarts DESC;

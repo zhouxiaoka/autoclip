@@ -13,6 +13,8 @@ import {
   RECHARGE_LABEL,
   SPONSOR_PROVIDERS,
   SWITCH_MODEL_LABEL,
+  QUOTA_RETRY_CHECK_BALANCE,
+  SETTINGS_DESTINATION,
   PageFailureInfo,
 } from './failureAction'
 import { WEAK_LOCAL_TIMELINE_REASON, weakLocalTimelineFailure } from '../../utils/timelineFailure'
@@ -92,14 +94,23 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
     if (canRetry) buttons.push({ key: 'retry', label: '重试', cta: false })
     return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'switch_model', buttons })
   }
+  // N3: unlock quota retry when back from settings OR stamp explicitly cleared (null after 测试连接).
+  // undefined = not plumbed → returnedFromSettings only (same as 3B before the stamp).
+  const quotaRetryUnlocked = returnedFromSettings || info.quota_exhausted_at === null
   if (action.kind === 'recharge') {
     const sponsor = (SPONSOR_PROVIDERS as readonly string[]).includes(action.provider)
     const reason = sponsor ? RECHARGE_HINT : pageFailureText(info)
     const card = presentedFailure(info, reason)
     const buttons: FailureButton[] = [{ key: 'recharge', label: action.label || RECHARGE_LABEL, cta: true }]
-    if (canRetry) buttons.push({ key: 'retry', label: '重试', cta: false })
+    // 3B/N3: lock bare retry until test-connection clears quota_exhausted_at or user returns from settings.
+    if (canRetry && quotaRetryUnlocked) {
+      buttons.push({ key: 'retry', label: '重试', cta: false })
+    } else if (canRetry) {
+      buttons.push({ key: 'settings', label: QUOTA_RETRY_CHECK_BALANCE, cta: false })
+    }
     return finish({
-      message: card.reason, step: card.step, billing: card.billing, destination: action.destination,
+      message: card.reason, step: card.step, billing: card.billing,
+      destination: action.destination || SETTINGS_DESTINATION,
       actionKind: 'recharge', rechargeProvider: action.provider, buttons,
     })
   }
@@ -108,7 +119,8 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
   if (action.kind === 'retry') {
     return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'retry', buttons: canRetry ? [{ key: 'retry', label: retryLabel(resumePoint), cta: true }] : [] })
   }
-  const resume = returnedFromSettings && canRetry
+  const quotaSettings = action.label === QUOTA_RETRY_CHECK_BALANCE
+  const resume = (returnedFromSettings || (quotaSettings && info.quota_exhausted_at === null)) && canRetry
   const settingsLabel = action.reason === ADD_PROVIDER_HINT ? '去设置' : (action.label || '去设置')
   const buttons: FailureButton[] = [{ key: 'settings', label: settingsLabel, cta: !resume }]
   if (canRetry) buttons[resume ? 'unshift' : 'push']({ key: 'continue', label: '继续制作', cta: resume })
@@ -140,7 +152,10 @@ export default function FailureActions({
     })
   }
   const click = (key: FailureButton['key']) => {
-    if (key === 'settings') return onSettings(plan.destination as string)
+    if (key === 'settings') {
+      const dest = (plan.actionKind === 'recharge' ? SETTINGS_DESTINATION : plan.destination) as string
+      return onSettings(dest || SETTINGS_DESTINATION)
+    }
     if (key === 'install_asr') return onSettings(plan.destination as string)
     if (key === 'diagnose') return showDiagnose()
     if (key === 'switch_model') {

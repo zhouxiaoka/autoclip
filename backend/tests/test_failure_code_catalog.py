@@ -29,7 +29,7 @@ HISTORICAL_SENTRY = {
     "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed",
     "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "file_locked", "source_not_found", "source_too_short",
     "no_complete_version",
-    "source_no_audio", "source_unreadable", "service_restarted", "frame_extract_failed",
+    "source_no_audio", "source_unreadable", "source_unsupported", "service_restarted", "frame_extract_failed",
     "store_lock_timeout", "network", "disk", "corrupt",
 }
 def _catalogs():
@@ -43,7 +43,7 @@ def test_codes_come_from_both_catalogs():
     assert failure_codes.studio_codes() == set(packaged["enums"]["studio_error_code"]) == set(load_catalog()["enums"]["studio_error_code"])
     from backend.core.connection_test_codes import CONNECTION_TEST_ERROR_CODES
     assert set(CONNECTION_TEST_ERROR_CODES) == set(packaged["enums"]["connection_test_error_code"])
-    assert failure_codes.download_codes() == set(packaged["enums"]["download_error_code"]) == {"disk", "corrupt"}
+    assert failure_codes.download_codes() == set(packaged["enums"]["download_error_code"]) == {"disk", "corrupt", "source_unsupported"}
     assert failure_codes.sentry_codes() == HISTORICAL_SENTRY == set(STUDIO_ERROR_CODES)
     assert failure_codes.stored_codes() == HISTORICAL_SENTRY | {"multiple"}
     assert "unknown" not in failure_codes.sentry_codes()
@@ -61,7 +61,7 @@ def test_missing_catalog_override_keeps_packaged_codes(monkeypatch, tmp_path):
     reload_catalog()
     try:
         assert "unexpected" in failure_codes.sentry_codes()
-        assert failure_codes.download_codes() == {"disk", "corrupt"}
+        assert failure_codes.download_codes() == {"disk", "corrupt", "source_unsupported"}
     finally:
         monkeypatch.delenv("AUTOCLIP_EVENT_CATALOG", raising=False)
         reload_catalog()
@@ -186,7 +186,8 @@ def test_model_dumps_and_internal_value_errors_stay_out_of_the_ui():
     else:
         raise AssertionError("expected a validation error")
     visible = failure_codes.user_visible_error(dump)
-    assert visible == failure_codes.sentence("validation")
+    # 1.5.9 2B: pydantic.ValidationError → invalid_response (model shape), not user validation.
+    assert visible == failure_codes.sentence("invalid_response")
     assert "nope" not in visible and "画面说明" not in visible and str(dump) not in visible
     try:
         json.loads("{")

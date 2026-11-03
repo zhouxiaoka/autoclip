@@ -14,6 +14,7 @@ export interface FeedbackDraftInput {
   stage?: string
   errorMessage?: string
   errorCode?: string
+  unexpectedType?: string
   transcriptionProvider?: string
   transcriptionModel?: string
   version: string
@@ -32,6 +33,7 @@ export interface FeedbackDraft {
   stage?: string
   errorMessage?: string
   errorCode?: string
+  unexpectedType?: string
   transcriptionProvider?: string
   transcriptionModel?: string
   version: string
@@ -77,6 +79,7 @@ export function buildFeedbackDraft(input: FeedbackDraftInput): FeedbackDraft {
     stage: scrubText(input.stage, 80) || undefined,
     errorMessage: scrubText(input.errorMessage, 500) || undefined,
     errorCode: safeFeedbackErrorCode(input.errorCode),
+    unexpectedType: scrubText(input.unexpectedType, 40) || undefined,
     transcriptionProvider: ['whisper_local', 'sensevoice_local', 'cloud'].includes(input.transcriptionProvider || '') ? input.transcriptionProvider : undefined,
     transcriptionModel: scrubText(input.transcriptionModel, 80) || undefined,
     version: scrubText(input.version, 40),
@@ -107,6 +110,7 @@ export function captureProperties(draft: FeedbackDraft): Record<string, string |
   if (draft.stage) props.stage = draft.stage
   if (draft.errorMessage) props.error_message = draft.errorMessage
   if (draft.errorCode) props.error_code = draft.errorCode
+  if (draft.unexpectedType) props.unexpected_type = draft.unexpectedType
   if (draft.transcriptionProvider) props.transcription_provider = draft.transcriptionProvider
   if (draft.transcriptionModel) props.transcription_model = draft.transcriptionModel
   if (draft.llmProvider) props.llm_provider = draft.llmProvider
@@ -134,6 +138,7 @@ function publicLines(draft: FeedbackDraft): string {
   ]
   if (draft.stage) lines.push(`阶段：${draft.stage}`)
   if (draft.errorCode) lines.push(`错误码：${draft.errorCode}`)
+  if (draft.unexpectedType) lines.push(`异常类型：${draft.unexpectedType}`)
   if (draft.transcriptionProvider) lines.push(`转写模型：${draft.transcriptionProvider}${draft.transcriptionModel ? ` / ${draft.transcriptionModel}` : ''}`)
   if (draft.llmProvider) lines.push(`模型：${draft.llmProvider}${draft.llmModel ? ` / ${draft.llmModel}` : ''}`)
   if (draft.errorMessage) lines.push('', '错误', draft.errorMessage)

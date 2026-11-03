@@ -148,8 +148,8 @@ process.stdout.write(JSON.stringify(events))
         self.assertIn('argMax(person_id, timestamp) AS pid', body)
         self.assertNotIn('distinct_id', body)
         self.assertNotIn('now()', body)
-        self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 9)  # + M1 figures 7/8/9
-        self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 9)
+        self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 10)  # + M1 7/8/9 + 1.5.9 figure 10
+        self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 10)
         self.assertEqual(body.count('{release_1_5_7}'), 9)
         self.assertNotIn("SELECT '1.5.7' AS app_version, '20", body)
         self.assertIn('partial_delivery_rate', body)

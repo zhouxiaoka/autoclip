@@ -155,11 +155,15 @@ export default function StudioResults({ project, children, onCreateCollection, o
     connectionId: aiSettings?.analysis?.connection_id,
     model: aiSettings?.analysis?.model,
   })
+  const analysisConnection = aiSettings?.connections?.find(c => c.id === aiSettings.analysis?.connection_id)
   const failureInfo = (extra?: { error?: string }) => ({
     error: extra?.error ?? workspace.analysis?.error,
     ...(receiptFailureInfo(workspace.attempts, workspace.analysis?.run_id) || analysisPageFailure(workspace.analysis, workspace.generation)),
     phase: workspace.analysis?.phase,
     billable_calls_before_failure: billable,
+    quota_precheck: workspace.generation?.quota_precheck || workspace.analysis?.quota_precheck,
+    // N3: pass through so FailureActions can unlock after 测试连接 clears the stamp.
+    quota_exhausted_at: analysisConnection?.quota_exhausted_at,
     connection_count: usableConnectionCount(aiSettings),
     provider: analysisProviderId(aiSettings),
   })

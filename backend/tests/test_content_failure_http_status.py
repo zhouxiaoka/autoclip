@@ -98,7 +98,10 @@ def test_http_500_reaches_the_generation_failure_context_through_apply_get(pipel
         jobs.run_content('p', video)
 
     assert raised.value.http_status == 500
-    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'analyze', 'http_status': 500, 'upstream_error_type': 'upstream_unavailable'}
+    ctx = studio_failure_context(raised.value, 'production')
+    # Known upstream attribution must not also stamp unexpected_type (A2 other≤1%).
+    assert ctx == {'failure_stage': 'analyze', 'http_status': 500, 'upstream_error_type': 'upstream_unavailable'}
+    assert 'unexpected_type' not in ctx
     assert 'private body' not in str(raised.value)
 
 
@@ -127,7 +130,9 @@ def test_unexpected_provider_error_keeps_its_status(pipeline, monkeypatch):
     with pytest.raises(RuntimeError) as raised:
         jobs.run_content('p', video)
 
-    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'production', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}
+    ctx = studio_failure_context(raised.value, 'production')
+    assert ctx == {'failure_stage': 'production', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}
+    assert 'unexpected_type' not in ctx
 
 
 def test_failure_without_status_and_out_of_range_values_add_nothing(pipeline, monkeypatch):
@@ -154,6 +159,8 @@ def test_failure_without_status_and_out_of_range_values_add_nothing(pipeline, mo
 
 def test_r28_i450_a_status_on_a_non_provider_error_is_not_a_model_failure(pipeline, monkeypatch):
     # only a request that was sent and answered is "model"; a bare status is not.
+    # apply().get() rebuilds ContentRunError (MRO → RuntimeError); no upstream/http on context,
+    # so 2A names it RuntimeError rather than dumping into unexpected_type=other.
     from backend.core.sentry_setup import studio_failure_context
     from backend.services.studio import jobs
     mod, video = pipeline
@@ -164,7 +171,11 @@ def test_r28_i450_a_status_on_a_non_provider_error_is_not_a_model_failure(pipeli
     with pytest.raises(RuntimeError) as raised:
         jobs.run_content('p', video)
 
-    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'production'}
+    assert studio_failure_context(raised.value, 'production') == {
+        'failure_stage': 'production', 'unexpected_type': 'RuntimeError',
+    }
+    assert 'upstream_error_type' not in studio_failure_context(raised.value, 'production')
+    assert 'http_status' not in studio_failure_context(raised.value, 'production')
 
 
 def test_r28_i450_an_uncoded_wrapper_over_a_bare_status_is_not_a_model_failure(pipeline, monkeypatch):

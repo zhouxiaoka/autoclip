@@ -212,12 +212,15 @@ test('R24 #231: an unreadable source is shown at once as a source problem: no sp
 })
 
 for (const [code, automatic] of [['llm_auth_invalid', true], ['insufficient_quota', true], ['llm_not_configured', false], ['invalid_key', true]]) {
-  test(`1.5.7 user-cause failure ${code} shows 「去设置」 with reason, no direct retry`, () => {
+  test(`1.5.7 user-cause failure ${code} shows settings CTA with reason, no direct retry`, () => {
     const buttons = []
     const html = render(automatic, 'production', 'failed', buttons, [], code)
     assert.equal(buttons.some(b => b.children === '重试'), false)
-    const go = buttons.find(b => b.children === '去设置')
-    assert.ok(go)
+    // 1.5.9 3B: insufficient_quota uses 核对余额并测试连接; other user-cause codes keep 「去设置」.
+    // Navigation target stays /settings?section=analysis&return_project=test either way.
+    const label = code === 'insufficient_quota' ? '核对余额并测试连接' : '去设置'
+    const go = buttons.find(b => b.children === label)
+    assert.ok(go, `expected button ${label} for ${code}`)
     assert.match(html, /请|余额|模型/)
     navigations.length = 0
     go.onClick()

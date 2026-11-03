@@ -399,3 +399,41 @@ def test_child_processes_never_inherit_the_token(tmp_path):
     assert 'CHILD=<absent>' in done.stdout
     assert 'PARENT_ENV=<absent>' in done.stdout
     assert TOKEN not in done.stdout
+
+
+# --- 1.5.9 A1-1 ---------------------------------------------------------------------------------
+
+def test_a1_1_crash_exit_from_exit_and_signal_markers():
+    from backend.services.studio.shutdown_marker import (
+        _restart_from_text, crash_exit_from_text,
+    )
+    assert (_restart_from_text('exit:3221225477'), crash_exit_from_text('exit:3221225477')) == ('crash', 'access_violation')
+    assert (_restart_from_text('signal:9'), crash_exit_from_text('signal:9')) == ('crash', 'sigkill')
+    assert (_restart_from_text('exit:0'), crash_exit_from_text('exit:0')) == ('crash', 'zero')
+    assert crash_exit_from_text('user_quit') == 'unknown'
+    assert _restart_from_text('user_quit') == 'user_quit'
+
+
+def test_a1_1_existing_user_quit_marker_is_not_overwritten_by_exit(tmp_path, monkeypatch):
+    """Shell must not overwrite an intentional quit with exit:* (create_new semantics)."""
+    monkeypatch.setenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', str(tmp_path))
+    from backend.services.studio import shutdown_marker as sm
+    instance = 'a' * 32
+    assert sm.mark('user_quit', instance)
+    path = tmp_path / instance
+    assert path.read_text(encoding='ascii') == 'user_quit'
+    # Simulate Rust record_crash_exit create_new: refuse if exists
+    try:
+        path.open('x').write('exit:1')
+        raise AssertionError('create_new should fail when marker exists')
+    except FileExistsError:
+        pass
+    assert path.read_text(encoding='ascii') == 'user_quit'
+
+
+def test_n5_exit_code_3_is_nonzero_other_not_abort():
+    """N5: bare exit:3 must not be classified as abort (SIGABRT is signal:6 / exit:134)."""
+    from backend.services.studio.shutdown_marker import crash_exit_from_text
+    assert crash_exit_from_text('exit:3') == 'nonzero_other'
+    assert crash_exit_from_text('signal:6') == 'abort'
+    assert crash_exit_from_text('exit:134') == 'abort'

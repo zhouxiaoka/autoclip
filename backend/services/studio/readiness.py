@@ -89,6 +89,12 @@ def ensure_analysis_usable() -> None:
     if ai_models.vision_follow_lacks_capability(settings):
         from backend.services.provider_validation import VISION_BLOCK_MESSAGE
         raise UserFacingError(VISION_BLOCK_MESSAGE)
+    # 1.5.9 3A: New API billing probe (fail-open). Exhausted blocks before any model call.
+    from backend.core.quota_precheck import QuotaExhausted, check_for_analysis_settings
+    quota, _extras = check_for_analysis_settings()
+    if quota == 'exhausted':
+        _mark_quota_exhausted(settings)
+        raise QuotaExhausted(quota_precheck='exhausted')
 
 
 def _transcription(settings: ai_models.ModelSettings) -> dict:
@@ -275,3 +281,40 @@ def transcription_gate_code() -> str | None:
     """The gate code when ASR is not ready in a way the install prompt handles, else None."""
     code = transcription_check().get('code')
     return code if code in GATE_CODES else None
+
+
+def _mark_quota_exhausted(settings) -> None:
+    """Stamp quota_exhausted_at on the analysis connection (best effort)."""
+    try:
+        from datetime import datetime, timezone
+        binding = settings.analysis
+        if binding is None:
+            return
+        for connection in settings.connections:
+            if connection.id == binding.connection_id:
+                connection.quota_exhausted_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+                ai_models.save(settings)
+                return
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def mark_analysis_quota_exhausted() -> None:
+    """1.5.9 3B/N3: stamp on precheck OR real insufficient_quota (closed loop with connection-test clear)."""
+    try:
+        settings = ai_models.load()
+    except Exception:  # noqa: BLE001
+        return
+    _mark_quota_exhausted(settings)
+
+
+def maybe_mark_quota_from_failure(error=None, *, upstream_error_type: str | None = None) -> None:
+    """Stamp when this failure is insufficient_quota (precheck or live provider)."""
+    upstream = upstream_error_type
+    if upstream is None and error is not None:
+        upstream = getattr(error, 'upstream_error_type', None)
+        if not upstream and type(error).__name__ == 'QuotaExhausted':
+            upstream = 'insufficient_quota'
+    if upstream == 'insufficient_quota' or getattr(error, 'code', None) == 'insufficient_quota':
+        mark_analysis_quota_exhausted()
+

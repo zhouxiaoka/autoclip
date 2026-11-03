@@ -318,7 +318,18 @@ def recommend(video: Path, options: ImportOptions):
             config['quick_screening'] = True
             with tempfile.TemporaryDirectory(prefix='ac-plan-') as tmp:
                 response = intelligence.vision_call([{'type':'text', 'text':prompt}] + intelligence.sample(video, times, Path(tmp), width=384), config=config)
-            result = Recommendation.model_validate(response)
+            try:
+                result = Recommendation.model_validate(response)
+            except Exception as ve:
+                # pydantic.ValidationError is a ValueError subclass; promote to invalid_response.
+                try:
+                    from pydantic import ValidationError as _PydVE
+                except ImportError:
+                    _PydVE = ()
+                if _PydVE and isinstance(ve, _PydVE):
+                    from backend.core.failure_attribution import ModelResponseInvalid
+                    raise ModelResponseInvalid('推荐结果结构不合规，请重试') from None
+                raise
         except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
             # Only an explicit visual choice fails the run; the default automatic
             # screening is optional and falls back to the subtitle route.

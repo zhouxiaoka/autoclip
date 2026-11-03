@@ -2110,5 +2110,13 @@
   "正在制作 {{count}} 个项目": "Making {{count}} project(s)",
   "退出会中断正在进行的制作。可以选择后台继续，完成后会通知你。": "Quitting will interrupt in-progress work. You can keep it running in the background and we will notify you when done.",
   "制作时阻止电脑休眠": "Prevent sleep while producing",
-  "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Keep the system awake while producing (screen may still turn off). When off, the computer may sleep on its schedule."
+  "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Keep the system awake while producing (screen may still turn off). When off, the computer may sleep on its schedule.",
+  "服务商回复余额不足。": "The provider reported insufficient balance.",
+  "这次制作没有向服务商发出计费请求。": "This run sent no billable requests to the provider.",
+  "这次制作向服务商发出了 {{count}} 次可能计费的请求。": "This run sent {{count}} possibly billable request(s) to the provider.",
+  "核对余额并测试连接": "Check balance and test connection",
+  "余额在开始前已核对。": "Balance was checked before starting.",
+  "充值后点测试连接再重试。": "After topping up, test the connection, then retry.",
+  "处理没有完成。请重试一次；再失败请在失败卡上点「反馈」，我们会收到失败阶段和错误类型（不含视频内容）。": "This step did not finish. Please retry once; if it fails again, tap Feedback on the failure card — we receive the stage and error type (never the video).",
+  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "This link is not a downloadable video page. Use another video link, or download the file and import it."
 }

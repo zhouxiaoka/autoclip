@@ -90,6 +90,7 @@
       "source_blocked",
       "file_locked",
       "source_not_found",
+      "source_unsupported",
       "source_too_short",
       "no_complete_version",
       "source_no_audio",
@@ -100,7 +101,8 @@
     ],
     "download_error_code": [
       "disk",
-      "corrupt"
+      "corrupt",
+      "source_unsupported"
     ],
     "provider": [
       "apimart",
@@ -320,6 +322,72 @@
     "probe_kind": [
       "quick",
       "trial"
+    ],
+    "crash_exit": [
+      "access_violation",
+      "stack_overflow",
+      "heap_corruption",
+      "abort",
+      "sigsegv",
+      "sigkill",
+      "oom",
+      "nonzero_other",
+      "zero",
+      "unknown"
+    ],
+    "crash_stage": [
+      "screening",
+      "download",
+      "subtitle",
+      "analyze",
+      "render",
+      "idle",
+      "unknown"
+    ],
+    "crash_uptime_bucket": [
+      "lt_1m",
+      "lt_10m",
+      "lt_1h",
+      "ge_1h",
+      "unknown"
+    ],
+    "crash_rss_bucket": [
+      "lt_1g",
+      "lt_2g",
+      "lt_4g",
+      "ge_4g",
+      "unknown"
+    ],
+    "crash_disk_bucket": [
+      "lt_1g",
+      "lt_5g",
+      "ge_5g",
+      "unknown"
+    ],
+    "unexpected_type": [
+      "DownloadError",
+      "ExtractorError",
+      "ValidationError",
+      "KeyError",
+      "TypeError",
+      "AttributeError",
+      "IndexError",
+      "OperationalError",
+      "RuntimeError",
+      "OSError",
+      "PermissionError",
+      "MemoryError",
+      "TimeoutError",
+      "JSONDecodeError",
+      "UnicodeDecodeError",
+      "CalledProcessError",
+      "other"
+    ],
+    "quota_precheck": [
+      "skipped",
+      "ok",
+      "exhausted",
+      "unavailable"
     ]
   },
   "attribution": {
@@ -347,6 +415,7 @@
       "source_blocked",
       "file_locked",
       "source_not_found",
+      "source_unsupported",
       "service_restarted"
     ],
     "success_rate_v4": {
@@ -374,7 +443,8 @@
         "source_no_audio",
         "source_unreadable",
         "source_blocked",
-        "source_not_found"
+        "source_not_found",
+        "source_unsupported"
       ],
       "product_failure_codes": [
         "whisper_not_installed",
@@ -695,7 +765,14 @@
         "has_subtitle"
       ],
       "enums": {
-        "provider": "asr_provider"
+        "provider": "asr_provider",
+        "quota_precheck": "quota_precheck"
+      },
+      "properties": {
+        "quota_precheck": {
+          "description": "Result of the New API billing probe before a paid call.",
+          "values": "quota_precheck"
+        }
       }
     },
     "diagnose_opened": {
@@ -828,7 +905,48 @@
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
         "failure_stage": "failure_stage",
-        "shutdown_kind": "shutdown_kind"
+        "shutdown_kind": "shutdown_kind",
+        "crash_exit": "crash_exit",
+        "crash_stage": "crash_stage",
+        "crash_uptime_bucket": "crash_uptime_bucket",
+        "crash_rss_bucket": "crash_rss_bucket",
+        "crash_disk_bucket": "crash_disk_bucket",
+        "unexpected_type": "unexpected_type",
+        "quota_precheck": "quota_precheck"
+      },
+      "properties": {
+        "crash_exit": {
+          "description": "Enum exit classification when restart_reason=crash. Never a raw code.",
+          "values": "crash_exit"
+        },
+        "crash_stage": {
+          "description": "Heartbeat stage at crash. Enum only.",
+          "values": "crash_stage"
+        },
+        "crash_uptime_bucket": {
+          "description": "Uptime bucket at crash.",
+          "values": "crash_uptime_bucket"
+        },
+        "crash_rss_bucket": {
+          "description": "RSS bucket at crash.",
+          "values": "crash_rss_bucket"
+        },
+        "crash_disk_bucket": {
+          "description": "Free-disk bucket at crash.",
+          "values": "crash_disk_bucket"
+        },
+        "crash_has_fault": {
+          "description": "True when a faulthandler .fault file was non-empty.",
+          "type": "boolean"
+        },
+        "unexpected_type": {
+          "description": "Whitelisted exception class when error_code=unexpected.",
+          "values": "unexpected_type"
+        },
+        "quota_precheck": {
+          "description": "Result of the New API billing probe before a paid call.",
+          "values": "quota_precheck"
+        }
       }
     },
     "studio_generation_finished": {
@@ -856,7 +974,14 @@
         "upstream_error_type": "upstream_error_type",
         "failure_stage": "failure_stage",
         "shutdown_kind": "shutdown_kind",
-        "restart_reason": "restart_reason"
+        "restart_reason": "restart_reason",
+        "crash_exit": "crash_exit",
+        "crash_stage": "crash_stage",
+        "crash_uptime_bucket": "crash_uptime_bucket",
+        "crash_rss_bucket": "crash_rss_bucket",
+        "crash_disk_bucket": "crash_disk_bucket",
+        "unexpected_type": "unexpected_type",
+        "quota_precheck": "quota_precheck"
       },
       "optional_ids": {
         "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
@@ -948,6 +1073,40 @@
           "nullable": true,
           "enum": "retry_kind"
         }
+      },
+      "properties": {
+        "crash_exit": {
+          "description": "Enum exit classification when restart_reason=crash. Never a raw code.",
+          "values": "crash_exit"
+        },
+        "crash_stage": {
+          "description": "Heartbeat stage at crash. Enum only.",
+          "values": "crash_stage"
+        },
+        "crash_uptime_bucket": {
+          "description": "Uptime bucket at crash.",
+          "values": "crash_uptime_bucket"
+        },
+        "crash_rss_bucket": {
+          "description": "RSS bucket at crash.",
+          "values": "crash_rss_bucket"
+        },
+        "crash_disk_bucket": {
+          "description": "Free-disk bucket at crash.",
+          "values": "crash_disk_bucket"
+        },
+        "crash_has_fault": {
+          "description": "True when a faulthandler .fault file was non-empty.",
+          "type": "boolean"
+        },
+        "unexpected_type": {
+          "description": "Whitelisted exception class when error_code=unexpected.",
+          "values": "unexpected_type"
+        },
+        "quota_precheck": {
+          "description": "Result of the New API billing probe before a paid call.",
+          "values": "quota_precheck"
+        }
       }
     },
     "studio_production_finished": {
@@ -969,7 +1128,14 @@
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
         "failure_stage": "failure_stage",
-        "shutdown_kind": "shutdown_kind"
+        "shutdown_kind": "shutdown_kind",
+        "crash_exit": "crash_exit",
+        "crash_stage": "crash_stage",
+        "crash_uptime_bucket": "crash_uptime_bucket",
+        "crash_rss_bucket": "crash_rss_bucket",
+        "crash_disk_bucket": "crash_disk_bucket",
+        "unexpected_type": "unexpected_type",
+        "quota_precheck": "quota_precheck"
       },
       "optional_ids": {
         "retry_of": "attempt_id of the failed/partial attempt this one retries (t- id). Owned by the backend AttemptReceipt (POST /studio/{id}/retry validates the parent); the frontend only copies it from the receipt"
@@ -1010,6 +1176,40 @@
         "http_status": {
           "description": "Last provider HTTP status on a model failure, 400-599. Omitted for a local failure.",
           "format": "integer"
+        }
+      },
+      "properties": {
+        "crash_exit": {
+          "description": "Enum exit classification when restart_reason=crash. Never a raw code.",
+          "values": "crash_exit"
+        },
+        "crash_stage": {
+          "description": "Heartbeat stage at crash. Enum only.",
+          "values": "crash_stage"
+        },
+        "crash_uptime_bucket": {
+          "description": "Uptime bucket at crash.",
+          "values": "crash_uptime_bucket"
+        },
+        "crash_rss_bucket": {
+          "description": "RSS bucket at crash.",
+          "values": "crash_rss_bucket"
+        },
+        "crash_disk_bucket": {
+          "description": "Free-disk bucket at crash.",
+          "values": "crash_disk_bucket"
+        },
+        "crash_has_fault": {
+          "description": "True when a faulthandler .fault file was non-empty.",
+          "type": "boolean"
+        },
+        "unexpected_type": {
+          "description": "Whitelisted exception class when error_code=unexpected.",
+          "values": "unexpected_type"
+        },
+        "quota_precheck": {
+          "description": "Result of the New API billing probe before a paid call.",
+          "values": "quota_precheck"
         }
       }
     },

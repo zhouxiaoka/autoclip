@@ -2110,5 +2110,13 @@
   "正在制作 {{count}} 个项目": "Produzindo {{count}} projeto(s)",
   "退出会中断正在进行的制作。可以选择后台继续，完成后会通知你。": "Sair interrompe o trabalho em andamento. Pode continuar em segundo plano; avisamos quando terminar.",
   "制作时阻止电脑休眠": "Impedir suspensão ao produzir",
-  "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Mantém o sistema acordado ao produzir (o ecrã pode desligar). Desligado, o PC pode dormir conforme o plano do sistema."
+  "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Mantém o sistema acordado ao produzir (o ecrã pode desligar). Desligado, o PC pode dormir conforme o plano do sistema.",
+  "服务商回复余额不足。": "O provedor respondeu que o saldo é insuficiente.",
+  "这次制作没有向服务商发出计费请求。": "Esta execução não enviou pedidos faturáveis ao provedor.",
+  "这次制作向服务商发出了 {{count}} 次可能计费的请求。": "Esta execução enviou {{count}} pedido(s) possivelmente faturável(is) ao provedor.",
+  "核对余额并测试连接": "Conferir saldo e testar conexão",
+  "余额在开始前已核对。": "O saldo foi verificado antes de começar.",
+  "充值后点测试连接再重试。": "Após recarregar, teste a conexão e tente de novo.",
+  "处理没有完成。请重试一次；再失败请在失败卡上点「反馈」，我们会收到失败阶段和错误类型（不含视频内容）。": "Esta etapa não terminou. Tente de novo; se falhar outra vez, toque em Comentários no cartão — recebemos o estágio e o tipo de erro (nunca o vídeo).",
+  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "Este link não é uma página de vídeo baixável. Use outro link ou baixe o arquivo e importe."
 }

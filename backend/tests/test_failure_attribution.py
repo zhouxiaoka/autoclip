@@ -2200,6 +2200,7 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function analysisPageFailure(',
              'export function pageFailureText(',
              'export function presentedFailure(',
+             'export function quotaBillingCopy(',
              'export function pageSuggestedAction(',
              'export function readableFailure(',
              'export function failureStep(',
@@ -2652,8 +2653,17 @@ def test_i501_restored_non_model_code_wrapping_a_503_is_model(pipeline, monkeypa
         jobs.run_content('p', video)
     assert (raised.value.code, raised.value.http_status) == ('llm_connection', 503)
     assert classify_failure(raised.value).kind is FailureKind.MODEL
-    assert studio_failure_context(raised.value, 'production') == {
-        'failure_stage': 'analyze', 'http_status': 503, 'upstream_error_type': 'upstream_unavailable'}
+    ctx = studio_failure_context(raised.value, 'production')
+    assert ctx['failure_stage'] == 'analyze' and ctx['http_status'] == 503
+    assert ctx['upstream_error_type'] == 'upstream_unavailable'
+    # 1.5.9: llm_connection is not a studio_error_code → unexpected + unexpected_type enum
+    if 'unexpected_type' in ctx:
+        assert ctx['unexpected_type'] in {
+            'DownloadError', 'ExtractorError', 'ValidationError', 'KeyError', 'TypeError',
+            'AttributeError', 'IndexError', 'OperationalError', 'RuntimeError', 'OSError',
+            'PermissionError', 'MemoryError', 'TimeoutError', 'JSONDecodeError',
+            'UnicodeDecodeError', 'CalledProcessError', 'other',
+        }
 
 
 @pytest.mark.usefixtures('isolated__r22_415')
@@ -3968,7 +3978,7 @@ def test_i565_llm_emit_exits_carry_only_whitelisted_valid_fields():
 def test_i565_sentry_failure_context_and_envelope_carry_only_whitelisted_valid_fields():
     error = _dirty_error()
     context = sentry_setup.studio_failure_context(error, 'analyze')
-    assert set(context) <= {'failure_stage', 'http_status', 'upstream_error_type'}
+    assert set(context) <= {'failure_stage', 'http_status', 'upstream_error_type', 'unexpected_type', 'quota_precheck', 'billable_calls_before_failure'}
     assert 'http_status' not in context
     events = _envelope_events(error, with_product_filter=True)
     for event in events:

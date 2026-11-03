@@ -338,6 +338,14 @@ def main():
     orphan_reaper.reap_orphans()
     orphan_reaper.mark_environment()
 
+    # 1.5.9: faulthandler + run heartbeat for crash-scene recovery (A1-C/D).
+    try:
+        from backend.services.studio import run_heartbeat
+        run_heartbeat.enable_faulthandler()
+        run_heartbeat.start()
+    except Exception:  # noqa: BLE001 - monitoring helpers must not block launch
+        pass
+
     try:
         # 启动服务
         manager.start()
