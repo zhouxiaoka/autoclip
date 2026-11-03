@@ -3,7 +3,7 @@
   "name": "io.github.zhouxiaoka/autoclip-mcp",
   "title": "AutoClip",
   "description": "Clip long videos into short clips with covers and captions. Local CLI and MCP.",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "websiteUrl": "https://zhouxiaoka.github.io/autoclip_intro/",
   "repository": {
     "url": "https://github.com/zhouxiaoka/autoclip",
@@ -15,7 +15,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "autoclip-mcp",
-      "version": "1.5.8",
+      "version": "1.5.9",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

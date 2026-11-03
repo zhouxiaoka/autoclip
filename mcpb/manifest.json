@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "autoclip-mcp",
   "display_name": "AutoClip",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "Clip long videos into short clips with covers and captions. Local stdio MCP.",
   "long_description": "Thin MCP Bundle for the published PyPI package autoclip-mcp. UV installs that package from the bundle pyproject; the AutoClip backend is not vendored.\n\nThe host needs uv, ffmpeg, and ffprobe on PATH. UV installs Python 3.10+ for the server. AUTOCLIP_API_KEY is optional when the AutoClip desktop app already has a model key.\n\nserver.type is python so current Smithery CLI can classify the bundle. The launch command is still uv run. The manifest omits tools because Smithery rejects MCPB tool entries that have no inputSchema.",
   "author": {

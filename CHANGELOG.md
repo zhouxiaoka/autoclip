@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.5.9] - 2026-11-03
+
 ### 要点
 
 1.5.9：拉回从未成功的设备（进行中）
@@ -652,7 +656,9 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.9...HEAD
+- [1.5.9]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.8...v1.5.9
+- [1.5.8]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...v1.5.8
 - [1.5.7]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.6...v1.5.7
 - [1.5.6]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.6
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
