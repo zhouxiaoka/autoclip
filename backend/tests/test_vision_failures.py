@@ -43,7 +43,7 @@ def test_network_failures_have_stable_safe_codes(monkeypatch,error,code):
     assert invoke(monkeypatch,error=error).code==code
 
 
-@pytest.mark.parametrize('status,code,kind',[(401,'authentication','invalid_key'),(403,'authentication','permission_denied'),(429,'rate_limited',None),(500,'provider_error',None)])
+@pytest.mark.parametrize('status,code,kind',[(401,'llm_auth_invalid','invalid_key'),(403,'llm_auth_invalid','permission_denied'),(429,'rate_limited',None),(500,'provider_error',None)])
 def test_http_body_and_request_details_are_never_exposed(monkeypatch,status,code,kind):
     body=io.BytesIO(b'private-key and private-provider-body')
     error=urllib.error.HTTPError(CONFIG['base_url'],status,'private-message',{},body)

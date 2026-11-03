@@ -15,5 +15,3 @@ export function getVideoType(value: string): 'bilibili' | 'youtube' | null {
   }
   return null
 }
-
-export const validateVideoUrl = (value: string): boolean => getVideoType(value) !== null

@@ -1,3 +1,4 @@
+import { flagAssigned } from './flags'
 import { captureBusinessEvent } from './posthog'
 import { workflow } from './observer'
 import { errorCode, safeStudioProperties, telemetryId, type Properties, type StudioSnapshot } from './workflow'
@@ -31,6 +32,22 @@ export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** X1: the diagnose panel opened after two failures with the same error_code. */
+export function trackDiagnoseOpened(errorCode?: string | null, suggestion?: string | null) {
+  const safe = safeStudioProperties({ error_code: errorCode || 'unknown', suggestion: suggestion || 'none' })
+  captureBusinessEvent('diagnose_opened', {
+    ...safe,
+    error_code: typeof safe.error_code === 'string' ? safe.error_code : 'unknown',
+    suggestion: typeof safe.suggestion === 'string' ? safe.suggestion : 'none',
+  })
+}
+
+/** X1: the user took the suggested step, or tried the sample video. */
+export function trackDiagnoseAction(action: 'switch_model' | 'install_transcription' | 'change_material' | 'example') {
+  const safe = safeStudioProperties({ action })
+  if (typeof safe.action === 'string') captureBusinessEvent('diagnose_action', safe)
+}
+
 /** ASR readiness at import probe and submit. Enums and booleans only. */
 export function trackAsrReadiness(properties: Record<string, unknown>) {
   const props = safeStudioProperties(properties)
@@ -61,11 +78,33 @@ export function trackTemplateRestore(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_template_restore_recommended', safeStudioProperties(properties))
 }
 
+/** New import events stay quiet until the caller confirms a real flag assignment. */
+function trackAssigned(name: string, properties: Record<string, unknown>, assigned: boolean) {
+  if (!assigned) return
+  captureBusinessEvent(name, safeStudioProperties(properties))
+}
+
+export function trackOneClickStarted(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_one_click_started', properties, assigned)
+}
+
+export function trackOneClickUndone(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_one_click_undone', properties, assigned)
+}
+
+export function trackAutoChoiceOverridden(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_auto_choice_overridden', properties, assigned)
+}
+
+export function trackLegacyEntry(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_legacy_entry_used', properties, assigned)
+}
+
 /** Enum/boolean summary of one output variant for delivery events; never titles, captions or names. */
-export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit'; outro_applied?: boolean; recommended_template?: string; accepted_recommendation?: boolean }
+export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit' | 'combined' | 'cover_3x4'; outro_applied?: boolean; recommended_template?: string; accepted_recommendation?: boolean }
 
 /** Share intent only: which enum target, never the caption, title or link text. */
-export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' } & VariantProperties) {
+export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' | 'copy_and_save' } & VariantProperties) {
   captureBusinessEvent('studio_output_shared', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
@@ -108,11 +147,13 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
+  const supplied = body.get?.('flow_id')
+  const flow_id = typeof supplied === 'string' && /^t-[a-z0-9-]{10,100}$/.test(supplied) ? supplied : telemetryId()
   const chosen = body.get?.('html_template')
-  const template = chosen === 'editorial' || chosen === 'street' || chosen === 'classic' ? chosen : undefined
+  const template = chosen === 'editorial' || chosen === 'street' || chosen === 'news' || chosen === 'cinema' || chosen === 'classic' ? chosen : undefined
   const recommendedRaw = body.get?.('recommended_template')
   const recommended_template = recommendedRaw === 'editorial' || recommendedRaw === 'street' || recommendedRaw === 'classic' ? recommendedRaw : undefined
-  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
+  return { material_origin: 'user', flow_id, source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
     // Omitted means the backend's saved preference: do not claim it is enabled.
     brand_outro_enabled: body.get?.('brand_outro_enabled') === 'true' ? true : body.get?.('brand_outro_enabled') === 'false' ? false : undefined }
 }
@@ -127,14 +168,14 @@ export function socialPublishObserved(generation: number, properties: Record<str
 }
 
 export function socialPublishOutcome(status: string, scheduled: boolean, results: {success: boolean; skipped?: boolean; fallback_to_inbox?: boolean}[]): string {
-  if (status === 'failed') return 'failed'
+  if (status === 'failed') return 'error'
   const failed = results.some(r => !r.success && !r.skipped)
   const success = results.some(r => r.success && !r.skipped)
-  if (failed) return success ? 'partial' : 'failed'
+  if (failed) return success ? 'partial' : 'error'
   if (scheduled) return 'scheduled'
   if (results.some(r => r.fallback_to_inbox)) return 'inbox'
   // A completed gateway with no platform evidence is not proof of publishing.
-  return success ? 'completed' : 'unknown'
+  return success ? 'success' : 'unknown'
 }
 
 /** Reuse the snapshot already shown by the UI; quick confirmations must not
@@ -146,8 +187,20 @@ export async function observeStudioWorkspace<T extends StudioSnapshot>(projectId
   if (enabled && workflow.active(generation)) workflow.rememberProject(projectId, snapshot as Record<string, unknown>)
   if (enabled && workflow.active(generation)) {
     try {
-      for (const watch of watches) workflow.observeStudio(watch, snapshot)
+      for (const watch of watches) {
+        workflow.noteFirstClip(watch, snapshot, flagAssigned('render_top_first'))
+        workflow.observeStudio(watch, snapshot)
+      }
     } catch { /* telemetry cannot prevent the editor from opening */ }
   }
   return snapshot
+}
+
+/** F4: URL preview card shown after inspect-url. */
+export function trackImportPreviewShown(properties: {
+  route: 'platform_subtitle' | 'local_transcription' | 'visual'
+  duration_bucket: 'short' | 'medium' | 'long' | 'unknown'
+  has_platform_subtitle: boolean
+}) {
+  captureBusinessEvent('import_preview_shown', safeStudioProperties(properties))
 }

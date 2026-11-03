@@ -17,7 +17,7 @@ WITH sample_cohort AS (
       AND properties.studio_schema_version = 2
       AND properties.analytics_environment = 'production'
       AND properties.material_origin = 'user'
-      AND properties.outcome = 'completed'
+      AND properties.outcome IN ('completed', 'success')
       AND timestamp >= now() - INTERVAL 14 DAY
 )
 SELECT uniq(s.distinct_id) AS observed_sample_devices,

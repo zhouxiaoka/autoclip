@@ -1,0 +1,56 @@
+@font-face {
+  font-family: "Noto Sans CJK SC";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../fonts/NotoSansSC.ttf") format("truetype");
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 1080px;
+  height: 1920px;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Noto Sans CJK SC", sans-serif;
+  color: #ECEAE6;
+}
+#bar-top, #bar-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #19181A;
+}
+#bar-top { top: 0; height: 160px; }
+#bar-bottom { bottom: 0; height: 280px; }
+#hook { display: none; }
+#cap {
+  position: absolute;
+  left: 80px;
+  right: 80px;
+  top: 1668px;
+  text-align: center;
+}
+#zh {
+  font-weight: 500;
+  font-size: 40px;
+  line-height: 52px;
+}
+#en {
+  margin-top: 8px;
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 32px;
+  color: #A6A29B;
+}
+#brand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 36px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 1px;
+  color: #76726C;
+}

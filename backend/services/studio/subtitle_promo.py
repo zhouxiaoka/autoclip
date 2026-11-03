@@ -1,4 +1,6 @@
 """Text-only promotional drafts grounded in existing subtitle selections."""
+from backend.core.failure_codes import UserFacingError
+from backend.core.failure_attribution import ModelResponseInvalid  
 import uuid
 from pydantic import BaseModel, ConfigDict, Field
 from backend.services.studio import intelligence
@@ -34,17 +36,21 @@ def make_promos(project_id, clips, preferences, source_duration, instruction='')
         if transcript:
             evidence.append({'candidate': i, 'transcript': transcript})
     if not evidence:
-        raise ValueError('推广草稿需要可用字幕证据，请检查字幕后重试；原素材已保留')
-    response = PromoResponse.model_validate(intelligence.text_json(
+        raise UserFacingError('推广草稿需要可用字幕证据，请检查字幕后重试；原素材已保留')
+    answer = intelligence.text_json(
         '根据字幕证据选择适合分享推广的完整片段，输出1至3条草稿。'
         '返回 {"drafts":[{"candidate":0,"title":"标题","hook":"简短开头文字"}]}。'
         'candidate只能选择输入编号；尽量选择不同主题，不为数量重复同一片段。'
         '标题和开头必须有字幕事实依据，不虚构玩法、价格、承诺、胜负或投放效果。'
         '这些是待人工复核的推广草稿，不是已验证广告。不得改变镜头起止范围。',
-        {'candidates': evidence, 'language': preferences.language, 'instruction': instruction[:1000]}))
+        {'candidates': evidence, 'language': preferences.language, 'instruction': instruction[:1000]})
+    try:
+        response = PromoResponse.model_validate(answer)
+    except ValueError:  # the model's answer failed the schema
+        raise ModelResponseInvalid('推广方案格式无效，请重试；原稿已保留') from None
     valid = {e['candidate'] for e in evidence}
     if any(choice.candidate not in valid for choice in response.drafts):
-        raise ValueError('推广方案引用了无效片段，请重试；原稿已保留')
+        raise ModelResponseInvalid('推广方案引用了无效片段，请重试；原稿已保留')
     output = []
     seen = set()
     for choice in response.drafts:
@@ -52,7 +58,7 @@ def make_promos(project_id, clips, preferences, source_duration, instruction='')
             continue
         seen.add(choice.candidate)
         if not choice.title.strip() or not choice.hook.strip():
-            raise ValueError('推广文案为空，请重试；原稿已保留')
+            raise ModelResponseInvalid('推广文案为空，请重试；原稿已保留')
         output.append(Draft.model_validate({**candidates[choice.candidate],
             'id': uuid.uuid4().hex, 'title': choice.title.strip(), 'hook': choice.hook.strip(),
             'origin': 'subtitle-promo', 'title_style': 'comic', 'title_template_version': 6}).model_dump())

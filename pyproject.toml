@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoclip-mcp"
-version = "1.5.7"
+version = "1.5.8"
 description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,6 +53,7 @@ Issues = "https://github.com/zhouxiaoka/autoclip/issues"
 
 [tool.setuptools.packages.find]
 include = ["backend", "backend.*"]
+exclude = ["backend.tests", "backend.tests.*"]
 
 [tool.setuptools.package-data]
-backend = ["prompt/*.txt", "prompt/**/*.txt", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.json", "assets/models/*.onnx", "assets/models/*-LICENSE.txt", "assets/outro/*.mp4", "core/infistar_models.json"]
+backend = ["prompt/*.txt", "prompt/**/*.txt", "prompts/*.srt", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.json", "assets/models/*.onnx", "assets/models/*-LICENSE.txt", "assets/lexicon/*.txt.gz", "assets/lexicon/*-LICENSE.txt", "assets/outro/*.mp4", "assets/templates/*/*", "core/infistar_models.json", "core/event_catalog.json", "core/failure_messages.json", "presets/*.json"]

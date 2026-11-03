@@ -7,6 +7,7 @@ missing or malformed falls back to the clip title, so a post is never blocked on
 """
 from __future__ import annotations
 
+from backend.core.failure_codes import UserFacingError
 import logging
 import re
 import unicodedata
@@ -196,7 +197,7 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
                 if post_title:
                     posts[platform] = {'title': post_title, 'description': description, 'tags': tags}
             if mixed and attempt == 0:
-                raise ValueError(f'{"、".join(mixed)} 的标题必须是英文，不能有中文')
+                raise UserFacingError(f'{"、".join(mixed)} 的标题必须是英文，不能有中文')
             return posts
         except Exception as error:  # noqa: BLE001 - copy falls back to the clip title
             logger.warning('Post copy rejected (attempt %d): %s', attempt + 1, type(error).__name__)

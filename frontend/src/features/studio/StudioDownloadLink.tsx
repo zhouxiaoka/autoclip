@@ -5,6 +5,7 @@ import { studioDownloadRequested, observeStudioDownload, type VariantProperties 
 import { captureStudioException } from '../../desktop/sentry'
 import { studioApi } from './api'
 import { isDesktopDownload, saveStudioExport } from './nativeDownload'
+import { markOutputTaken } from './overrides'
 
 export default function StudioDownloadLink({ projectId, jobId, className = 'studio-link', onSaved, variant }: {
   projectId: string; jobId: string; className?: string; onSaved?: () => void
@@ -17,13 +18,14 @@ export default function StudioDownloadLink({ projectId, jobId, className = 'stud
   return <a className={className} href={studioApi.video(projectId, jobId, true)} download
     aria-busy={busy} aria-disabled={busy}
     onClick={async event => {
-      if (!isDesktopDownload()) { studioDownloadRequested(projectId, jobId, variant); onSaved?.(); return }
+      if (!isDesktopDownload()) { markOutputTaken(projectId); studioDownloadRequested(projectId, jobId, variant); onSaved?.(); return }
       event.preventDefault()
       if (pending.current) return
       pending.current = true
       setBusy(true)
       try {
         await observeStudioDownload(() => saveStudioExport(projectId, jobId), projectId, jobId, variant)
+        markOutputTaken(projectId)
         message.success(t('已保存到下载文件夹'))
         onSaved?.()
       } catch (error) {

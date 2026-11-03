@@ -52,7 +52,7 @@ MCP 使用 `start_quick_output`（立即返回 ID）和 `get_quick_output_status
 独立目录需要自己的模型配置，不会读取另一个数据目录的密钥；新入口不使用旧 `run --provider` 的临时覆盖。
 旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。这几个 MCP 工具在工具列表里标为 deprecated。
 
-`produce` 的 `--template` 和 `start_quick_output` 的 `template` 都在 `mcp_v2_tools` 打开后才接受：`editorial`（杂志风）、`street`（街头快剪）、`classic`（经典）。不支持的值返回 `invalid_input`。开关关闭时传了风格返回 `disabled`，不传则仍按经典制作。返回结果里的 `template` 是实际用的风格，`requested_template` 是请求值。`pkg_templates_v1` 关闭时，即使请求了杂志风或街头快剪，`template` 也是 `classic`。以返回结果里的风格为准。MCP 在 `mcp_v2_tools` 打开时额外提供 `list_styles` 和 `cancel_job`。该开关默认打开，`AUTOCLIP_FLAGS=mcp_v2_tools=off` 可以关掉，关掉后工具列表里看不到这两个工具。
+`produce` 的 `--template` 和 `start_quick_output` 的 `template` 都在 `mcp_v2_tools` 打开后才接受：`editorial`（杂志风）、`street`（街头快剪）、`news`（新闻）、`cinema`（电影）、`classic`（经典）。不支持的值返回 `invalid_input`。开关关闭时传了风格返回 `disabled`，不传则仍按经典制作。返回结果里的 `template` 是实际用的风格，`requested_template` 是请求值。`pkg_templates_v1` 关闭时，即使请求了杂志风、街头快剪、新闻或电影，`template` 也是 `classic`。以返回结果里的风格为准。MCP 在 `mcp_v2_tools` 打开时额外提供 `list_styles` 和 `cancel_job`。该开关默认打开，`AUTOCLIP_FLAGS=mcp_v2_tools=off` 可以关掉，关掉后工具列表里看不到这两个工具。
 
 **默认风格：桌面导入页和 CLI / MCP 不一样，这是有意的。**
 
@@ -92,7 +92,7 @@ autoclip --version
 不装包也能用：`python -m backend.cli ...`（在仓库根目录）。
 
 需要 ffmpeg 在 PATH（`brew install ffmpeg`）。没有字幕的视频要本地 Whisper：`pip install faster-whisper`，
-或在桌面应用「设置 → 转写」一键安装（两者共用模型目录）。
+或在桌面应用「设置 → 默认模型 → 语音转字幕」一键安装（两者共用模型目录）。
 
 先体检：
 
@@ -258,6 +258,43 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 
 **Agent skill**：`skills/autoclip/SKILL.md` 教 agent 何时用哪个工具、参数怎么选、结果怎么呈现、切片为 0 怎么办。
 复制到 `~/.cursor/skills/autoclip/`、`~/.claude/skills/autoclip/` 或 `~/.config/opencode/skills/autoclip/` 即生效。
+
+### MCPB（Smithery 本地 stdio）
+
+MCPB（MCP Bundle）是带 `manifest.json` 的 ZIP，扩展名 `.mcpb`。Official MCP Registry 上的 `io.github.zhouxiaoka/autoclip-mcp` 仍走 PyPI 和 `uvx autoclip-mcp`。Smithery 的本地 stdio 列表要另外上传一个 `.mcpb`。
+
+`mcpb/` 是薄封装，不把 `backend/` 打进包。`mcpb/pyproject.toml` 依赖已发布的 `autoclip-mcp`（当前 pin 与仓库根 `pyproject.toml` 的版本一致），`mcpb/src/server.py` 只转调 `backend.mcp_server:main`。宿主用 UV 安装这个 PyPI 包。安装后的 server 需要 PATH 里有 `uv`、`ffmpeg`、`ffprobe`。Python 3.10+ 由 UV 准备。
+
+可选的模型密钥在清单 `user_config.api_key` 里，类型是敏感字符串，不是必填，映射到环境变量 `AUTOCLIP_API_KEY`。桌面应用已经保存过密钥时留空。空白或尚未替换的 `${user_config...}` 会在入口丢掉，不会覆盖桌面设置。
+
+清单里 `server.type` 写成 `python`，是因为当前 Smithery CLI 认不出 MCPB 0.4 的 `uv` 类型，发布时会报 `Could not determine bundle runtime from manifest`。启动命令仍然是 `uv run --directory <包目录> src/server.py`，依赖从 PyPI 安装。清单不写 `tools`：Smithery 会把 MCPB 那种只有名字和说明的工具条目当成完整工具列表，而那种条目没有 `inputSchema`，发布会被拒绝。工具以 server 运行时列出的为准。
+
+在仓库根目录打包（需要 Node.js 自带的 `npx`；产物在 `dist/`，已被 gitignore，不提交）：
+
+```bash
+python scripts/pack_mcpb.py
+```
+
+只校验、不打包：
+
+```bash
+python scripts/pack_mcpb.py --validate-only
+```
+
+等价的 CLI：
+
+```bash
+npx --yes @anthropic-ai/mcpb@2.1.2 validate mcpb
+npx --yes @anthropic-ai/mcpb@2.1.2 pack mcpb dist/autoclip-mcp.mcpb
+```
+
+发布到 Smithery 要维护者自己的登录。仓库脚本不会执行这一步，也不保存 API key。`-n` 用 Smithery 上实际的 namespace/server；与 Official MCP Registry 同名时是：
+
+```bash
+smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp
+```
+
+Smithery 日后若接受 `server.type: uv`，只改清单里的类型即可，启动命令和 PyPI 依赖不用改。不要为此去抬 PyPI 版本。
 
 ---
 

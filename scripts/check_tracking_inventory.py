@@ -5,10 +5,10 @@ The tracking plan inventory is the source of truth. The emit-PR catalog must
 list the same business events (status may be more specific). Missing catalog
 is allowed on the docs-only branch.
 
-Transition close is the 1.5.8 milestone (not a calendar date). This script
+Transition close is the 1.5.7 milestone (not a calendar date). This script
 always checks that the plan and inventory say so. Producer scans (single os,
 single outcome, app_version only, QA/MCP/feedback envelope, legacy stop-or-tag)
-run only when backend.__version__ is 1.5.8 or newer, so 1.5.7 CI stays green.
+run when backend.__version__ is 1.5.7 or newer. 1.5.6 and earlier do not scan.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ CATALOG = ROOT / "docs" / "analytics" / "event_catalog.json"
 PLAN = ROOT / "docs" / "analytics" / "TRACKING_PLAN.md"
 ALLOWED_STATUS = {"core", "keep", "legacy", "deprecated", "reserved"}
 REQUIRED_DATES = ("plan_effective", "close_transition", "stop_legacy_emit", "delete_wrappers")
-MILESTONE = "1.5.8"
+MILESTONE = "1.5.7"
 FORBIDDEN_CALENDAR = ("2027-01-12", "2027-02-09")
 REQUIRED_TASKS = (
     "single_os_enum",
@@ -33,7 +33,7 @@ REQUIRED_TASKS = (
     "legacy_stopped_or_tagged",
 )
 PLAN_NEEDLES = (
-    "1.5.8",
+    "1.5.7",
     "publish_export",
     "legacy=true",
     "outcome_canon",
@@ -166,11 +166,11 @@ def _producer_texts(root: Path) -> dict[str, str]:
 
 
 def producer_transition_errors(root: Path) -> list[str]:
-    """1.5.8 producer acceptance. Empty list means the milestone work is done."""
+    """1.5.7 producer acceptance. Empty list means the milestone work is done."""
     errors: list[str] = []
     texts = _producer_texts(root)
     if not texts:
-        return ["1.5.8 producer scan found no analytics producer files"]
+        return ["1.5.7 producer scan found no analytics producer files"]
 
     for relative, text in texts.items():
         for block in _OS_ALLOWLIST.findall(text):

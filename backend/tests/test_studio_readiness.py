@@ -44,16 +44,26 @@ def report_for(monkeypatch, settings):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness
     monkeypatch.setattr(ai, 'for_editing', lambda: settings)
+    # the report's analysis mode is the one planning reads; with a saved document that is its own mode.
+    from backend.services.studio import analysis_preferences
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode=settings.analysis_mode))
     return readiness.report()
 
+def assert_check(actual, **expected):
+    """Equality on named fields; F5 may add label / trial_ok beyond the legacy three."""
+    for key, value in expected.items():
+        assert actual.get(key) == value, (key, actual, expected)
 
+
+
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_saved_document_is_ready_without_a_provider_call(monkeypatch):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness
     connection = Connection(id='local', name='Ollama', provider='ollama')
     settings = document(
         connections=[connection],
-        analysis=Assignment(connection_id='local', model='qwen2.5:7b', capability='text'),
+        analysis=Assignment(connection_id='local', model='qwen2.5:7b', capability='auto'),
     )
     ai.path().write_text(settings.model_dump_json(), encoding='utf-8')
     monkeypatch.setattr(ai, 'migrate_legacy', lambda: (_ for _ in ()).throw(AssertionError('legacy migration')))
@@ -61,11 +71,35 @@ def test_saved_document_is_ready_without_a_provider_call(monkeypatch):
     result = readiness.report()
     assert result['analysis_mode'] == 'auto'
     assert result['ready'] is True
-    assert result['checks']['analysis'] == {'ok': True, 'code': 'configured', 'repair': 'none'}
-    assert result['checks']['transcription'] == {'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
-    assert result['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
-    assert result['checks']['ffmpeg'] == {'ok': True, 'code': 'available', 'repair': 'none'}
+    assert_check(result['checks']['analysis'], ok=True, code='configured', repair='none', label='qwen2.5:7b', trial_ok=None)
+    assert_check(result['checks']['transcription'], ok=True, code='whisper_installed', repair='none', label='本地 base')
+    assert_check(result['checks']['visual'], ok=True, code='optional', repair='none', label='未启用')
+    assert_check(result['checks']['ffmpeg'], ok=True, code='available', repair='none', label='FFmpeg')
     assert 'sk-test-key' not in json.dumps(result)
+
+
+def test_analysis_codes_separate_a_missing_model_from_a_failed_check(monkeypatch):
+    empty_key = Connection(id='ai', name='OpenAI', provider='openai', api_key='')
+    missing_key = report_for(monkeypatch, document(
+        connections=[empty_key],
+        analysis=Assignment(connection_id='ai', model='gpt-4o', capability='text'),
+    ))
+    assert_check(missing_key['checks']['analysis'], ok=False, code='invalid_connection', repair='settings_ai', label='gpt-4o', trial_ok=None)
+    untouched = report_for(monkeypatch, document(connections=[empty_key], analysis=None))
+    assert_check(untouched['checks']['analysis'], ok=False, code='invalid_connection', repair='settings_ai', trial_ok=None)
+
+    ready = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key')
+    no_model = report_for(monkeypatch, document(connections=[ready], analysis=None))
+    assert_check(no_model['checks']['analysis'], ok=False, code='no_model', repair='settings_ai', trial_ok=None)
+    local = Connection(id='local', name='Ollama', provider='ollama')
+    assert report_for(monkeypatch, document(connections=[local], analysis=None))['checks']['analysis']['code'] == 'no_model'
+
+    failed = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key', validation_status='failed')
+    checked = report_for(monkeypatch, document(
+        connections=[failed],
+        analysis=Assignment(connection_id='ai', model='gpt-4o', capability='text'),
+    ))
+    assert_check(checked['checks']['analysis'], ok=False, code='validation_failed', repair='settings_ai', label='gpt-4o', trial_ok=None)
 
 
 def test_nothing_saved_asks_for_an_ai_connection(monkeypatch):
@@ -73,7 +107,7 @@ def test_nothing_saved_asks_for_an_ai_connection(monkeypatch):
     from backend.services.studio import readiness
     monkeypatch.setattr(ai, 'migrate_legacy', lambda: ModelSettings())
     result = readiness.report()
-    assert result['checks']['analysis'] == {'ok': False, 'code': 'not_configured', 'repair': 'settings_ai'}
+    assert_check(result['checks']['analysis'], ok=False, code='not_configured', repair='settings_ai')
 
 
 def test_invalid_document_is_repairable_in_ai_settings(monkeypatch):
@@ -81,7 +115,7 @@ def test_invalid_document_is_repairable_in_ai_settings(monkeypatch):
     from backend.services.studio import readiness
     ai.path().write_text('{', encoding='utf-8')
     result = readiness.report()
-    assert result['checks']['analysis'] == {'ok': False, 'code': 'settings_invalid', 'repair': 'settings_ai'}
+    assert_check(result['checks']['analysis'], ok=False, code='settings_invalid', repair='settings_ai')
 
 
 def test_cloud_connection_without_a_key_is_not_ready(monkeypatch):
@@ -92,7 +126,7 @@ def test_cloud_connection_without_a_key_is_not_ready(monkeypatch):
         transcription=Transcription(provider='cloud', model='whisper-1', connection_id='asr'),
     ))
     assert result['checks']['analysis']['ok'] is True
-    assert result['checks']['transcription'] == {'ok': False, 'code': 'cloud_not_configured', 'repair': 'settings_transcription'}
+    assert_check(result['checks']['transcription'], ok=False, code='cloud_not_configured', repair='settings_transcription', label='云端 whisper-1')
 
 
 def test_configured_cloud_asr_skips_local_whisper(monkeypatch):
@@ -103,7 +137,7 @@ def test_configured_cloud_asr_skips_local_whisper(monkeypatch):
         connections=[analysis, speech],
         transcription=Transcription(provider='cloud', model='whisper-1', connection_id='asr'),
     ))
-    assert result['checks']['transcription'] == {'ok': True, 'code': 'cloud_configured', 'repair': 'none'}
+    assert_check(result['checks']['transcription'], ok=True, code='cloud_configured', repair='none', label='云端 whisper-1')
 
 
 def test_sensevoice_ready_skips_whisper_install(monkeypatch):
@@ -112,34 +146,37 @@ def test_sensevoice_ready_skips_whisper_install(monkeypatch):
     result = report_for(monkeypatch, document(
         transcription=Transcription(provider='sensevoice_local', model='SenseVoiceSmall'),
     ))
-    assert result['checks']['transcription'] == {'ok': True, 'code': 'sensevoice_ready', 'repair': 'none'}
+    assert_check(result['checks']['transcription'], ok=True, code='sensevoice_ready', repair='none', label='本地 SenseVoice')
 
 
 def test_missing_whisper_offers_install(monkeypatch):
     monkeypatch.setattr('backend.services.whisper_runtime.get_status', lambda: {'status': 'not_installed'})
     result = report_for(monkeypatch, document())
-    assert result['checks']['transcription'] == {'ok': False, 'code': 'whisper_not_installed', 'repair': 'install_whisper'}
+    assert_check(result['checks']['transcription'], ok=False, code='whisper_not_installed', repair='install_whisper', label='本地 base')
     monkeypatch.setattr('backend.services.whisper_runtime.get_status', lambda: {'status': 'installing'})
-    assert report_for(monkeypatch, document())['checks']['transcription'] == {'ok': False, 'code': 'whisper_installing', 'repair': 'none'}
+    assert_check(report_for(monkeypatch, document())['checks']['transcription'], ok=False, code='whisper_installing', repair='none', label='本地 base')
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_runtime_without_the_selected_model_is_not_ready(monkeypatch, isolated):
     # RC156 Win QA #5: an installed runtime alone cannot transcribe.
     from backend.services.whisper_model_manager import get_model_manager
     small = document(transcription=Transcription(model='small'))
-    assert report_for(monkeypatch, small)['checks']['transcription'] == {
-        'ok': False, 'code': 'whisper_model_missing', 'repair': 'install_whisper', 'model': 'small'}
+    assert_check(report_for(monkeypatch, small)['checks']['transcription'],
+                 ok=False, code='whisper_model_missing', repair='install_whisper', model='small', label='本地 small')
     manager = get_model_manager()
     manager._download_state['small'] = {'status': 'downloading', 'progress': 0, 'error': None}
-    assert report_for(monkeypatch, small)['checks']['transcription'] == {
-        'ok': False, 'code': 'whisper_model_downloading', 'repair': 'none', 'model': 'small'}
+    assert_check(report_for(monkeypatch, small)['checks']['transcription'],
+                 ok=False, code='whisper_model_downloading', repair='none', model='small', label='本地 small')
     manager._download_state['small'] = {'status': 'error', 'progress': 0, 'error': 'timeout'}
-    assert report_for(monkeypatch, small)['checks']['transcription'] == {
-        'ok': False, 'code': 'whisper_model_failed', 'repair': 'install_whisper', 'model': 'small'}
+    assert_check(report_for(monkeypatch, small)['checks']['transcription'],
+                 ok=False, code='whisper_model_failed', repair='install_whisper', model='small', label='本地 small')
     model_snapshot(isolated, 'small')
-    assert report_for(monkeypatch, small)['checks']['transcription'] == {'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
+    assert_check(report_for(monkeypatch, small)['checks']['transcription'],
+                 ok=True, code='whisper_installed', repair='none', label='本地 small')
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
     large = document(transcription=Transcription(model='large'))
     assert report_for(monkeypatch, large)['checks']['transcription']['model'] == 'large-v3'
@@ -150,25 +187,33 @@ def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
 def test_visual_mode_requires_a_multimodal_model_and_auto_does_not(monkeypatch):
     text = document(analysis_mode='visual')
     blocked = report_for(monkeypatch, text)
-    assert blocked['checks']['visual'] == {'ok': False, 'code': 'not_configured', 'repair': 'settings_vision'}
+    assert_check(blocked['checks']['visual'], ok=False, code='vision_unsupported', repair='settings_vision', label='gpt-4o')
     assert blocked['ready'] is False
     allowed = report_for(monkeypatch, document(
         analysis=Assignment(connection_id='ai', model='gpt-4o', capability='multimodal'),
         analysis_mode='visual',
     ))
-    assert allowed['checks']['visual'] == {'ok': True, 'code': 'configured', 'repair': 'none'}
-    auto = report_for(monkeypatch, document(analysis_mode='auto'))
-    assert auto['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    assert_check(allowed['checks']['visual'], ok=True, code='configured', repair='none', label='gpt-4o')
+    auto_text = report_for(monkeypatch, document(analysis_mode='auto'))
+    # D7: auto + known text must stay optional so S5 can fall back to subtitles
+    assert_check(auto_text['checks']['visual'], ok=True, code='optional', repair='none', label='未启用')
+    assert auto_text['ready'] is True
+    auto_unresolved = report_for(monkeypatch, document(
+        analysis=Assignment(connection_id='ai', model='o3-mini', capability='auto'),
+        analysis_mode='auto',
+    ))
+    assert_check(auto_unresolved['checks']['visual'], ok=True, code='optional', repair='none', label='未启用')
     subtitles = report_for(monkeypatch, document(analysis_mode='subtitle', allow_visual_screening=False))
-    assert subtitles['checks']['visual'] == {'ok': True, 'code': 'not_required', 'repair': 'none'}
+    assert_check(subtitles['checks']['visual'], ok=True, code='not_required', repair='none', label='未启用')
 
 
 def test_missing_ffmpeg_has_no_repair_action(monkeypatch):
     monkeypatch.setattr('backend.utils.ffmpeg_utils.get_ffmpeg_path', lambda: 'ffmpeg')
     result = report_for(monkeypatch, document())
-    assert result['checks']['ffmpeg'] == {'ok': False, 'code': 'missing', 'repair': 'none'}
+    assert_check(result['checks']['ffmpeg'], ok=False, code='missing', repair='none', label='FFmpeg')
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_http_readiness_is_registered_before_project_routes(isolated, monkeypatch):
     from backend.services import ai_model_settings as ai
     ai.path().write_text(document().model_dump_json(), encoding='utf-8')
@@ -185,7 +230,8 @@ def test_http_readiness_is_registered_before_project_routes(isolated, monkeypatc
     assert set(body) == {'analysis_mode', 'ready', 'checks'}
     assert set(body['checks']) == {'analysis', 'transcription', 'visual', 'ffmpeg'}
     for check in body['checks'].values():
-        assert set(check) == {'ok', 'code', 'repair'}
+        assert {'ok', 'code', 'repair'} <= set(check)
+        assert 'label' in check
         assert check['repair'] in {'settings_ai', 'install_whisper', 'settings_transcription', 'settings_vision', 'none'}
     assert 'sk-test-key' not in response.text
 
@@ -205,7 +251,7 @@ def test_visual_check_uses_the_pipeline_capability(monkeypatch, model, capabilit
                         analysis=Assignment(connection_id='ai', model=model, capability=capability))
     visual = report_for(monkeypatch, settings)['checks']['visual']
     assert visual['ok'] is ok
-    assert visual['code'] == ('configured' if ok else 'not_configured')
+    assert visual['code'] == ('configured' if ok else 'vision_unsupported')
     # The pipeline gives the same answer: a vision endpoint exists exactly when readiness is ok.
     assert (ai.vision_endpoint(settings) is not None) is ok
     assert ai.sees_images(settings, settings.analysis) is ok
@@ -221,11 +267,40 @@ def test_auto_capability_resolution(monkeypatch):
     assert pick('gpt-6.1-sol', 'text') == 'text'
 
 
+def test_catalog_image_flag_cannot_make_a_text_only_model_ready_for_visual(monkeypatch):
+    """models.dev lists deepseek-flash as image input. Visual mode must still say it cannot see images."""
+    from backend.core import model_registry as registry
+    from backend.services import ai_model_settings as ai
+    connection = Connection(id='ai', name='DeepSeek', provider='deepseek', api_key='sk-test-key', base_url='https://api.deepseek.com')
+    registry._update('metadata', {'updated_at': 10**10, 'providers': {
+        'deepseek': {'deepseek-flash': {'capability': 'multimodal', 'source': 'https://models.dev/api.json'}},
+    }})
+    registry._update(registry._scope(connection), {
+        'models': [{'id': 'deepseek-flash', 'capability': 'multimodal', 'capability_source': 'provider'}],
+        'source': 'live',
+    })
+    settings = document(
+        connections=[connection], analysis_mode='visual',
+        analysis=Assignment(connection_id='ai', model='deepseek-flash', capability='auto'),
+    )
+    assert registry.lookup_capability(connection, 'deepseek-flash') == 'multimodal'
+    assert ai.capability(settings, settings.analysis) == 'text'
+    assert ai.vision_endpoint(settings) is None
+    visual = report_for(monkeypatch, settings)['checks']['visual']
+    assert_check(visual, ok=False, code='vision_unsupported', repair='settings_vision', label='deepseek-flash')
+    # An explicit multimodal flag on this name does not override the text-only classification.
+    forced = document(
+        connections=[connection], analysis_mode='visual',
+        analysis=Assignment(connection_id='ai', model='deepseek-flash', capability='multimodal'),
+    )
+    assert report_for(monkeypatch, forced)['checks']['visual']['code'] == 'vision_unsupported'
+
+
 def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
     gateway = Connection(id='ai', name='Gateway', provider='compatible', api_key='k', base_url='https://gateway.example/v1')
     settings = document(connections=[gateway], analysis_mode='visual',
                         analysis=Assignment(connection_id='ai', model='gpt-6.1-sol', capability='auto'))
-    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'not_configured'
+    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'vision_unsupported'
 
 
 def test_require_transcription_raises_before_caller_spends(monkeypatch):
@@ -239,6 +314,7 @@ def test_require_transcription_raises_before_caller_spends(monkeypatch):
     readiness.require_transcription(srt_available=False, analysis_mode='visual')
 
 
+@pytest.mark.own_whisper_status  # simulates its own Whisper runtime / model state
 def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
     # W157 IA: right after the download thread reports "downloaded", readiness must say installed.
     from backend.services.whisper_model_manager import get_model_manager
@@ -246,7 +322,65 @@ def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
     manager = get_model_manager()
     manager._download_state['small'] = {'status': 'downloaded', 'progress': 100, 'error': None}
     try:
-        assert report_for(monkeypatch, small)['checks']['transcription'] == {
-            'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
+        assert_check(report_for(monkeypatch, small)['checks']['transcription'],
+                     ok=True, code='whisper_installed', repair='none', label='本地 small')
     finally:
         manager._download_state.pop('small', None)
+
+
+@pytest.mark.parametrize('mode', ['auto', 'visual', 'subtitle'])
+@pytest.mark.parametrize('status', ['failed', 'unchecked', 'ok'])
+def test_separate_vision_validation_gates_readiness_and_runtime(mode, status):
+    from backend.services import ai_model_settings as ai
+    from backend.services.studio import readiness, vision_settings
+    settings = document(
+        connections=[
+            Connection(id='ai', name='Analysis', provider='openai', api_key='fixture', validation_status='ok'),
+            Connection(id='vision', name='Vision', provider='openai', api_key='fixture', validation_status=status),
+        ],
+        vision=Assignment(connection_id='vision', model='gpt-4o', capability='multimodal'),
+        analysis_mode=mode,
+    )
+    ai.save(settings)
+    original = ai.path().read_bytes()
+    result = readiness.report()
+    blocked = status == 'failed' and mode == 'visual'  # S5: auto falls back to subtitles
+    assert result['ready'] is not blocked
+    if blocked:
+        assert_check(result['checks']['visual'], ok=False, code='validation_failed', repair='settings_vision', label='gpt-4o')
+        for read in (readiness.ensure_analysis_usable, lambda: ai.require_analysis(ai.load()), vision_settings.effective):
+            with pytest.raises(ValueError, match='未通过校验'):
+                read()
+    else:
+        readiness.ensure_analysis_usable()
+    if status == 'failed':
+        # A confirmation can explicitly request vision even when the saved mode is subtitle.
+        with pytest.raises(ValueError, match='未通过校验'):
+            vision_settings.effective()
+    assert ai.path().read_bytes() == original
+
+
+def test_f5_labels_and_trial_ok_on_analysis(monkeypatch):
+    """F5: analysis carries model label + F2 trial_ok; transcription carries ASR label."""
+    passed = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key', trial_status='passed')
+    result = report_for(monkeypatch, document(
+        connections=[passed],
+        analysis=Assignment(connection_id='ai', model='deepseek-chat', capability='text'),
+        transcription=Transcription(model='small'),
+    ))
+    assert_check(result['checks']['analysis'], ok=True, code='configured', label='deepseek-chat', trial_ok=True)
+    assert result['checks']['transcription']['label'] == '本地 small'
+
+    failed = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key', trial_status='failed')
+    failed_report = report_for(monkeypatch, document(
+        connections=[failed],
+        analysis=Assignment(connection_id='ai', model='deepseek-chat', capability='text'),
+    ))
+    assert_check(failed_report['checks']['analysis'], ok=True, code='configured', label='deepseek-chat', trial_ok=False)
+
+    unchecked = Connection(id='ai', name='OpenAI', provider='openai', api_key='sk-test-key', trial_status='unchecked')
+    unchecked_report = report_for(monkeypatch, document(
+        connections=[unchecked],
+        analysis=Assignment(connection_id='ai', model='deepseek-chat', capability='text'),
+    ))
+    assert_check(unchecked_report['checks']['analysis'], ok=True, code='configured', label='deepseek-chat', trial_ok=None)

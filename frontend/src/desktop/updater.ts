@@ -50,7 +50,7 @@ export async function checkForUpdate(): Promise<AppUpdate | null> {
       // 停不掉也继续：安装器的 PREINSTALL 钩子还会按安装目录再清一次。
       const { invoke } = await import('@tauri-apps/api/core')
       try {
-        await invoke('stop_backend_service')
+        await invoke('stop_backend_service', { reason: 'update' })
       } catch (error) {
         console.warn('更新前停止后端失败，交给安装器处理', error)
       }

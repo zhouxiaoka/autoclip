@@ -20,6 +20,8 @@ PORTABLE_PY_REL="bin/python3"
 source "$PROJECT_ROOT/scripts/lib/desktop_build_common.sh"
 # shellcheck source=lib/sign_updater.sh
 source "$PROJECT_ROOT/scripts/lib/sign_updater.sh"
+# shellcheck source=lib/ffmpeg_pin.sh
+source "$PROJECT_ROOT/scripts/lib/ffmpeg_pin.sh"
 
 check_build_tools
 prepare_portable_python
@@ -34,19 +36,21 @@ verify_playwright_bundled
 # homebrew binary from PATH: it is dynamically linked against ~57 dylibs under
 # /opt/homebrew and is unusable on any machine without homebrew installed.
 echo "==> Bundling static ffmpeg + ffprobe (arm64)"
+# Pinned static arm64 release builds from ffmpeg.martin-riedl.de; version,
+# URLs and sha256 live only in scripts/ffmpeg-macos-arm64.env. Each zip holds
+# one static binary. One URL per file, no mirrors: a download or sha256
+# failure stops the build.
+read_ffmpeg_pin "$PROJECT_ROOT/scripts/ffmpeg-macos-arm64.env" \
+    FFMPEG_VERSION FFMPEG_URL FFMPEG_SHA256 FFPROBE_URL FFPROBE_SHA256
 mkdir -p "$RESOURCES_DIR/ffmpeg"
 FFMPEG_CACHE="build/ffmpeg-cache"
-# Static arm64 builds from osxexperts.net (zero non-system dylib deps).
-FFMPEG_MIN_BYTES=15000000  # static binaries are ~48MB; zips ~20MB
 declare -a FF_NAMES=("ffmpeg" "ffprobe")
-declare -a FF_URLS=(
-    "https://www.osxexperts.net/ffmpeg711arm.zip"
-    "https://www.osxexperts.net/ffprobe711arm.zip"
-)
+declare -a FF_URLS=("$FFMPEG_URL" "$FFPROBE_URL")
+declare -a FF_SHAS=("$FFMPEG_SHA256" "$FFPROBE_SHA256")
 for i in 0 1; do
     name="${FF_NAMES[$i]}"
-    zip_cache="$FFMPEG_CACHE/${name}.zip"
-    download_with_mirrors "$zip_cache" "$FFMPEG_MIN_BYTES" "${FF_URLS[$i]}"
+    zip_cache="$FFMPEG_CACHE/${name}-${FFMPEG_VERSION}-macos-arm64.zip"
+    fetch_pinned "$zip_cache" "${FF_URLS[$i]}" "${FF_SHAS[$i]}"
     # Extract just the binary, then ditto it into place (ditto strips xattrs that trip Tauri's scanner)
     tmp_bin="$FFMPEG_CACHE/extract-$name/$name"
     rm -rf "$FFMPEG_CACHE/extract-$name"

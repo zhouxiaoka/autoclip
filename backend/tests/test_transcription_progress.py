@@ -87,7 +87,12 @@ def test_studio_shows_percent_of_audio_processed_and_restores_the_stage_message(
     assert subs == sorted(subs) and subs[0] == 5 and subs[-1] == 95 and len(set(subs)) == 5
     adapter.TranscriptionProgress.finish_studio('p')
     analysis = store.read('p')['analysis']
-    assert analysis['message'] == adapter.STUDIO_PRODUCTION_MESSAGE and 'percent' not in analysis
+    from backend.services.simple_progress import compute_percent
+    kept = compute_percent('SUBTITLE', adapter.TRANSCRIBE_DONE_SUBPERCENT)
+    assert analysis['message'] == adapter.STUDIO_PRODUCTION_MESSAGE
+    assert analysis['percent'] == kept and analysis['progress_percent'] == kept
+    assert analysis['progress_stage'] == 'SUBTITLE' and analysis['progress_approximate'] is False
+    assert kept < 100
 
 
 def test_updates_are_throttled_to_whole_percent_steps(studio_project, monkeypatch):
@@ -112,6 +117,67 @@ def test_legacy_project_without_studio_state_is_never_given_one(tmp_path, monkey
     adapter.TranscriptionProgress('legacy')(0.5)
     adapter.TranscriptionProgress.finish_studio('legacy')
     assert not (store.directory('legacy') / 'metadata' / 'studio.json').exists()
+
+
+def test_unmeasured_stage_eases_forward_and_never_claims_done(tmp_path, monkeypatch):
+    from backend.services import simple_progress as progress
+
+    clock = [1_000.0]
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(progress.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(progress, 'store', progress.SqliteProgressStore(str(tmp_path / 'progress.db')))
+    monkeypatch.setattr(progress, '_listeners', [])
+    progress._measured.pop('ease', None)
+    progress._ease_anchor.pop('ease', None)
+    progress.emit_progress('ease', 'ANALYZE', '思考')
+    start = progress.store.get('ease')['percent']
+    assert start == progress.compute_percent('ANALYZE')
+    clock[0] += 90
+    progress.note_activity('ease', '模型思考中')
+    mid = progress.store.get('ease')['percent']
+    assert mid > start
+    clock[0] += 10_000
+    progress.note_activity('ease', '模型持续返回中')
+    cap = progress.store.get('ease')['percent']
+    band_start, band_end = progress.stage_band('ANALYZE')
+    assert band_start < cap < band_end
+    assert cap <= progress.EASE_CAP and cap < 99
+    clock[0] -= 50
+    progress.note_activity('ease', '模型思考中')
+    assert progress.store.get('ease')['percent'] == cap
+
+
+def test_measured_subpercent_does_not_ease_and_done_is_not_one_hundred(tmp_path, monkeypatch):
+    from backend.services import simple_progress as progress
+
+    clock = [2_000.0]
+    monkeypatch.setattr(progress.time, 'time', lambda: clock[0])
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(progress, 'store', progress.SqliteProgressStore(str(tmp_path / 'progress.db')))
+    monkeypatch.setattr(progress, '_listeners', [])
+    for key in ('measured', 'done-p'):
+        progress._measured.pop(key, None)
+        progress._ease_anchor.pop(key, None)
+    progress.emit_progress('measured', 'SUBTITLE', '字幕', subpercent=50)
+    held = progress.store.get('measured')['percent']
+    clock[0] += 10_000
+    progress.note_activity('measured', '模型思考中')
+    assert progress.store.get('measured')['percent'] == held
+
+    (store.directory('done-p') / 'metadata').mkdir(parents=True)
+    store.write('done-p', {'generation': {'status': 'production'}, 'drafts': [], 'jobs': [], 'output_variants': [],
+                            'analysis': {'status': 'running', 'phase': 'production', 'message': adapter.STUDIO_PRODUCTION_MESSAGE, 'instance': store.INSTANCE}})
+    progress.emit_progress('done-p', 'HIGHLIGHT', '片段定位完成', subpercent=100)
+    progress.emit_progress('done-p', 'DONE', '处理完成')
+    analysis = store.read('done-p')['analysis']
+    kept = progress.compute_percent('HIGHLIGHT', 100)
+    assert analysis['message'] == adapter.STUDIO_PRODUCTION_MESSAGE
+    assert analysis['percent'] == kept and analysis['progress_percent'] == kept
+    assert analysis['progress_stage'] == 'HIGHLIGHT'
+    assert kept < 100
+    assert progress.store.get('done-p')['percent'] == 100  # the home snapshot may finish; Studio does not
 
 
 def test_delete_during_transcription_stops_it(studio_project):

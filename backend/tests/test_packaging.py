@@ -307,6 +307,51 @@ def test_name_translation_can_recover_with_one_bounded_packaging_retry():
     assert result['cues'][0]['text'] == 'Fiji 和 Greg 在这里共事。'
 
 
+def test_an_omitted_speaker_comes_from_the_listing_title_not_the_cover_line():
+    """Street nameplate: the public title names the guest when the model leaves speakers empty."""
+    lines = [
+        {'start': 0.0, 'end': 4.0, 'text': 'You said we did not have our best last 12 months'},
+        {'start': 9.0, 'end': 14.0, 'text': 'Best 12 months yet'},
+    ]
+
+    def call(_prompt, _data):
+        return {
+            'title_lines': ['未来十二个月将是最佳'], 'accent_line': 0,
+            'segments': [
+                {'from': 0, 'to': 0, 'text': '你说我们过去没有最好的那12个月'},
+                {'from': 1, 'to': 1, 'text': '未来十二个月将是最佳'},
+            ],
+            'speakers': [], 'tags': [], 'highlights': [], 'marks': [],
+        }
+
+    listed = packaging.build_packaging(
+        {'title': '', 'hook': ''}, lines, platform_strategy('douyin'),
+        known_names='Sam Altman on Astra, AGI, and the future of OpenAI Sources Podcast', call=call,
+    )
+    assert [item['name'] for item in listed['speakers']] == ['Sam Altman']
+    assert listed['speakers'][0]['role'] == ''
+    assert '未来十二个月' not in listed['speakers'][0]['name']
+
+    colon = packaging.build_packaging(
+        {'title': '', 'hook': ''}, lines, platform_strategy('douyin'),
+        known_names='Sam Altman: Never a Better Time YC', call=call,
+    )
+    assert [item['name'] for item in colon['speakers']] == ['Sam Altman']
+
+    chinese = packaging.build_packaging(
+        {'title': '', 'hook': ''}, lines, platform_strategy('douyin'),
+        known_names='黄仁勋：五层蛋糕', call=call,
+    )
+    assert [item['name'] for item in chinese['speakers']] == ['黄仁勋']
+
+    topic = packaging.build_packaging(
+        {'title': '未来十二个月将是最佳', 'hook': ''}, lines, platform_strategy('douyin'),
+        known_names='Sources Podcast', call=call,
+    )
+    assert topic['speakers'] == []
+    assert topic['title_lines'] == ['未来十二个月将是最佳']
+
+
 def test_title_term_is_not_inferred_from_an_unrelated_source_word():
     result = packaging.build_packaging({'title': 'Greg谈合作', 'hook': ''},
         [{'start': 0., 'end': 2., 'text': 'We are gregarious and cooperative.'}], platform_strategy('douyin'),

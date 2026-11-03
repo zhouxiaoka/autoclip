@@ -169,7 +169,13 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<Feedback
         event: 'feedback_submitted',
         distinct_id: feedbackDistinctId(draft),
         timestamp: new Date().toISOString(),
-        properties: captureProperties(draft),
+        properties: {
+          ...captureProperties(draft),
+          analytics_environment: import.meta.env.VITE_TELEMETRY_VALIDATION === 'true'
+            ? 'validation'
+            : import.meta.env.DEV ? 'development' : 'production',
+          runtime: '__TAURI_INTERNALS__' in window ? 'desktop' : 'web',
+        },
       }),
       signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
     })

@@ -8,8 +8,17 @@ app = create_app(mode="web")
 
 logger = logging.getLogger(__name__)
 
-if __name__ == "__main__":
+def build_server(host: str, port: int):
+    """E5: uvicorn.Config rebuilds the uvicorn handlers (propagate=False, no filters), so the
+    unified redacting filter must be attached *after* it — same rule as desktop_main."""
     import uvicorn
+    from backend.core.log_redaction import install_log_redaction
+    config = uvicorn.Config(app, host=host, port=port)
+    install_log_redaction()
+    return uvicorn.Server(config)
+
+
+if __name__ == "__main__":
     import sys
     
     # 默认端口
@@ -29,4 +38,4 @@ if __name__ == "__main__":
     import os
     host = os.getenv("AUTOCLIP_HOST", "127.0.0.1")
     logger.info(f"启动服务器，地址: {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    build_server(host, port).run()

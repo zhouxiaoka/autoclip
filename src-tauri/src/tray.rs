@@ -25,6 +25,8 @@ pub fn set_tray_language(app: AppHandle, language: String) -> Result<(), String>
     for (item, text) in state.0.iter().zip(labels(&language)) {
         item.set_text(text).map_err(|e| e.to_string())?;
     }
+    // macOS app-menu Quit title tracks the same language switch.
+    crate::quit_guard::set_app_quit_language(&app, &language)?;
     Ok(())
 }
 
@@ -107,10 +109,6 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
                             eprintln!("后端服务重启失败: {}", e);
                         }
                     }
-                }
-                "quit" => {
-                    // 退出应用
-                    app.exit(0);
                 }
                 _ => {}
             }

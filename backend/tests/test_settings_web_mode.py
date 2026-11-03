@@ -124,3 +124,19 @@ def test_test_api_endpoint_no_longer_requires_desktop_mode(web_mode):
 
     assert result["success"] is False
     assert "过短" in result["error"]
+
+
+def test_manager_error_log_omits_exception_payload(web_mode, monkeypatch, caplog):
+    settings_api, _, manager = web_mode
+    payload = 'fixture-private-content https://upstream.test/v1?key=fixture-private-key /private/fixture-user/file'
+
+    def fail():
+        raise RuntimeError(payload)
+
+    monkeypatch.setattr(manager, 'get_current_provider_info', fail)
+    with caplog.at_level('DEBUG', logger=settings_api.__name__):
+        assert settings_api._effective_llm_settings() == {}
+    assert 'RuntimeError' in caplog.text
+    assert all(value not in caplog.text for value in (
+        'fixture-private-content', 'https://', 'fixture-private-key', '/private/fixture-user/file',
+    ))

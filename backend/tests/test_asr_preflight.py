@@ -86,7 +86,7 @@ def test_adapter_makes_zero_paid_calls_when_asr_missing(tmp_path, monkeypatch):
         pytest.fail('transcription must not start')
 
     monkeypatch.setattr(adapter, '_generate_subtitle_automatically', transcribe)
-    monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    from backend.services.studio import preflight as _pf; monkeypatch.setattr(_pf, 'probe_material', lambda v: _pf.MaterialProbe(_pf.ProbeState.READABLE, v, 60.0, True))
     _asr(monkeypatch, False)
     video = tmp_path / 'talk.mp4'
     video.write_bytes(b'fixture')
@@ -94,6 +94,106 @@ def test_adapter_makes_zero_paid_calls_when_asr_missing(tmp_path, monkeypatch):
     assert result['status'] == 'failed'
     assert result['error_code'] == 'whisper_not_installed'
     assert paid == []
+
+
+def _local_preferences(monkeypatch, mode, *, configured, screening):
+    """Subtitle mode, or auto without a vision screen: recommend() takes the local branch."""
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(
+        analysis_mode=mode, allow_visual_screening=screening))
+    monkeypatch.setattr(intelligence, 'ready', lambda: configured)
+    monkeypatch.setattr(intelligence, '_probe', lambda _: {'duration': 120.0, 'width': 64, 'height': 36})
+    monkeypatch.setattr(intelligence, 'vision_call', lambda *a, **k: pytest.fail('vision must not run'))
+    monkeypatch.setattr(intelligence, 'sample', lambda *a, **k: pytest.fail('sample must not run'))
+
+
+def _video(tmp_path):
+    video = tmp_path / 'raw' / 'input.mp4'
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b'fixture')
+    return video
+
+
+@pytest.mark.parametrize('mode,configured,screening', [
+    ('subtitle', False, False),
+    ('auto', False, True),
+    ('auto', True, False),
+])
+def test_local_recommendation_blocks_when_whisper_is_missing(monkeypatch, tmp_path, mode, configured, screening):
+    """B1: a local subtitle plan must not be returned when ASR is required and not ready."""
+    _local_preferences(monkeypatch, mode, configured=configured, screening=screening)
+    _asr(monkeypatch, False)
+    with pytest.raises(PipelineFailure) as caught:
+        planning.recommend(_video(tmp_path), ImportOptions(auto_start=True))
+    assert caught.value.code == 'whisper_not_installed'
+    assert caught.value.stage == 'SUBTITLE'
+
+
+@pytest.mark.parametrize('mode,configured,screening', [
+    ('subtitle', False, False),
+    ('auto', False, True),
+    ('auto', True, False),
+])
+def test_local_recommendation_proceeds_when_whisper_is_ready(monkeypatch, tmp_path, mode, configured, screening):
+    _local_preferences(monkeypatch, mode, configured=configured, screening=screening)
+    _asr(monkeypatch, True)
+    plan = planning.recommend(_video(tmp_path), ImportOptions(auto_start=True))
+    assert plan['mode'] == 'local'
+    assert plan['recommended_analysis'] == 'subtitle'
+    assert plan['local_evidence']['subtitle_status'] == 'missing'
+
+
+@pytest.mark.parametrize('mode', ['subtitle', 'auto'])
+def test_local_recommendation_keeps_attached_srt_when_whisper_is_missing(monkeypatch, tmp_path, mode):
+    """Platform or user subtitles are a viable route and do not need a local Whisper install."""
+    video = _video(tmp_path)
+    (video.parent / 'input.srt').write_text(
+        '1\n00:00:00,000 --> 00:00:04,000\nHello\n\n'
+        '2\n00:00:04,000 --> 00:00:08,000\nWorld\n\n'
+        '3\n00:00:08,000 --> 00:00:12,000\nAgain\n',
+        encoding='utf-8')
+    _local_preferences(monkeypatch, mode, configured=False, screening=mode != 'subtitle')
+    _asr(monkeypatch, False)
+    plan = planning.recommend(video, ImportOptions(auto_start=True))
+    assert plan['mode'] == 'local'
+    assert plan['recommended_analysis'] == 'subtitle'
+    assert plan['local_evidence']['subtitle_status'] == 'available'
+
+
+def test_visual_without_screening_stays_visual_when_whisper_is_missing(monkeypatch, tmp_path):
+    """A visual plan must not be blocked by a missing Whisper install."""
+    _local_preferences(monkeypatch, 'visual', configured=True, screening=False)
+    _asr(monkeypatch, False)
+    plan = planning.recommend(_video(tmp_path), ImportOptions(auto_start=True))
+    assert plan['mode'] == 'local'
+    assert plan['recommended_analysis'] == 'visual'
+
+
+def test_screening_does_not_start_production_when_local_whisper_is_missing(tmp_path, monkeypatch):
+    """URL-style screening (file already on disk, no upload gate) must fail before production."""
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    from backend.services.studio import jobs, store
+
+    _local_preferences(monkeypatch, 'subtitle', configured=False, screening=False)
+    _asr(monkeypatch, False)
+    monkeypatch.setattr(jobs, 'mark_project', lambda *a, **k: None)
+    produced = []
+    monkeypatch.setattr(jobs, '_submit_production', lambda *a, **k: produced.append('production'))
+    pid = 'p-b1'
+    raw = store.directory(pid) / 'raw'
+    raw.mkdir(parents=True)
+    (raw / 'input.mp4').write_bytes(b'fixture')
+    store.write(pid, {
+        'analysis': {'status': 'running', 'phase': 'screening', 'run_id': 'r1', 'instance': store.INSTANCE},
+        'generation': {'auto_start': True, 'status': 'screening', 'instance': store.INSTANCE},
+        'drafts': [], 'events': [], 'jobs': [],
+    })
+    jobs._inspect(pid, ImportOptions(auto_start=True), None, None)
+    assert produced == []
+    state = store.read(pid)
+    assert state['analysis']['status'] == 'failed'
+    assert state['analysis']['phase'] == 'screening'
+    assert state['analysis']['error_code'] == 'whisper_not_installed'
+    assert (state.get('generation') or {}).get('status') == 'failed'
 
 
 def test_needs_transcription_respects_srt_and_visual_mode():
@@ -111,7 +211,7 @@ def test_confirm_subtitle_route_makes_zero_paid_calls_when_asr_missing(tmp_path,
     from backend.services.studio.models import ConfirmPlan, Preferences
 
     _asr(monkeypatch, False)
-    monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    from backend.services.studio import preflight as _pf; monkeypatch.setattr(_pf, 'probe_material', lambda v: _pf.MaterialProbe(_pf.ProbeState.READABLE, v, 60.0, True))
     root = store.directory('p1')
     (root / 'raw').mkdir(parents=True)
     (root / 'raw' / 'input.mp4').write_bytes(b'fixture')
@@ -149,7 +249,7 @@ def test_cli_mcp_path_makes_zero_paid_calls_when_asr_missing(tmp_path, monkeypat
     from backend.services.simple_pipeline_adapter import SimplePipelineAdapter
 
     paid = []
-    monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    from backend.services.studio import preflight as _pf; monkeypatch.setattr(_pf, 'probe_material', lambda v: _pf.MaterialProbe(_pf.ProbeState.READABLE, v, 60.0, True))
     monkeypatch.setattr(
         SimplePipelineAdapter, '_preflight_llm',
         staticmethod(lambda: paid.append('llm') or pytest.fail('paid llm')),

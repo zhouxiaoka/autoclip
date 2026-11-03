@@ -2,12 +2,12 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const helper = path.join(__dirname, '../src/utils/videoUrl.ts')
 const source = fs.readFileSync(helper, 'utf8')
 const moduleValue = { exports: {} }
-vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: moduleValue, exports: moduleValue.exports, URL })
+runInSandbox(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: moduleValue, exports: moduleValue.exports, URL })
 const { getVideoType } = moduleValue.exports
 for (const url of [
   'https://www.youtube.com/watch?v=dQw4w9WgXcQ',

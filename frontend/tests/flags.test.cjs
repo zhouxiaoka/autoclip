@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/analytics/flags.defaults.json'), 'utf8'))
@@ -24,7 +24,7 @@ function load(options = {}) {
   const remote = { ...(options.remote || {}) }
   const storage = options.storage || memory()
   const module = { exports: {} }
-  vm.runInNewContext(js, {
+  runInSandbox(js, {
     exports: module.exports, module, console,
     __env: { DEV: options.dev === true, VITE_FLAGS: options.vite || '', VITE_APP_VERSION: options.version ?? '1.5.7' },
     require: (id) => {
@@ -218,6 +218,6 @@ test('W157-N3: cache is stamped with the app version and a remote false still wi
   assert.equal(cache.values.pkg_templates_v1, false)
   const again = load({ analytics: true, now: () => t + 1000, version: '1.5.7', storage })
   assert.equal(again.flags.flagEnabled('pkg_templates_v1'), false)
-  const upgraded = load({ analytics: true, now: () => t + 1000, version: '1.5.8', storage })
+  const upgraded = load({ analytics: true, now: () => t + 1000, version: '9.9.9', storage })
   assert.equal(upgraded.flags.flagEnabled('pkg_templates_v1'), true)
 })

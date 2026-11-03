@@ -1,7 +1,9 @@
 import axios from 'axios'
 import { apiConfigManager } from '../utils/apiConfig'
+import { flagAssigned } from './flags'
+import { noteWorkspaceCompletion } from '../features/studio/noticeRuntime'
 import { captureBusinessEvent, isAnalyticsEnabled, onAnalyticsPreferenceChange } from './posthog'
-import { WorkflowTracker, type TaskSnapshot } from './workflow'
+import { WorkflowTracker, canonOutcome, type TaskSnapshot } from './workflow'
 
 const storage = {
   getItem: (key: string) => localStorage.getItem(key),
@@ -30,12 +32,16 @@ export function startWorkflowObserver(): () => void {
           if (w.kind === 'framing-runtime') {
             const { data } = await axios.get('/studio/framing/status', { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation) && ['installed', 'error'].includes(data.status)) {
-              workflow.emitOnce(w, 'finished', 'studio_framing_install_finished', { ...w.properties, outcome: data.status === 'installed' ? 'completed' : 'failed', framing_status: data.status })
+              workflow.emitOnce(w, 'finished', 'studio_framing_install_finished', { ...w.properties, outcome: data.status === 'installed' ? 'success' : 'error', framing_status: data.status })
               if (w.seen.includes('finished')) w.settled = true
             }
           } else if (w.kind.startsWith('studio-')) {
             const { data } = await axios.get(`/studio/${encodeURIComponent(w.projectId || w.id)}`, { baseURL, timeout: 5000 })
-            if (!stopped && workflow.active(generation)) workflow.observeStudio(w, data)
+            if (!stopped && workflow.active(generation)) {
+              workflow.noteFirstClip(w, data, flagAssigned('render_top_first'))
+              workflow.observeStudio(w, data)
+              noteWorkspaceCompletion(w.projectId || w.id, data)
+            }
           } else if (w.kind === 'project') {
             const { data } = await axios.get<TaskSnapshot[]>(`/tasks/project/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation) && Array.isArray(data)) workflow.observeTasks(w, data)
@@ -44,8 +50,8 @@ export function startWorkflowObserver(): () => void {
             const { data } = await axios.get(`/projects/${encodeURIComponent(w.projectId!)}/exports/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation) && ['completed', 'failed'].includes(data.status)) {
               workflow.emitOnce(w, 'finished', 'publish_export_finished', {
-                project_id: w.projectId, export_id: w.id, outcome: data.status,
-                telemetry_source: 'backend_export_observed',
+                project_id: w.projectId, export_id: w.id, outcome: canonOutcome(data.status) || data.status,
+                telemetry_source: 'backend_export_observed', legacy: true,
               })
             }
           } else {
@@ -53,8 +59,8 @@ export function startWorkflowObserver(): () => void {
             const { data } = await axios.get(`/${w.kind}/tasks/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation) && ['completed', 'failed'].includes(data.status)) {
               workflow.emitOnce(w, 'finished', 'import_finished', {
-                import_id: w.id, source_type: w.kind, outcome: data.status,
-                project_id: data.project_id || undefined,
+                import_id: w.id, source_type: w.kind, outcome: canonOutcome(data.status) || data.status,
+                project_id: data.project_id || undefined, legacy: true,
               })
               if (data.status === 'completed' && data.project_id) workflow.watch('project', data.project_id, undefined, w.since)
             }

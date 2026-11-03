@@ -1,0 +1,30 @@
+id: news
+version: 1
+name: {zh: 新闻, en: News}
+fit:
+  formats: {sit_down_interview: 0.85, keynote_stage: 0.7, podcast_studio: 0.45, street_interview: 0.25}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.38
+  head_zone: [240, 900]
+  zoom:
+    mode: creep
+    creep: 0.04
+    intro: {from: 1.06, dur: 0.8}
+  transitions: {broll: cut, max: 1}
+  grade: "eq=contrast=1.04:saturation=0.88"
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 220, alt_top: 220}
+    subtitle: {top: 1556, max_rows: 2}
+  safe_area: douyin
+  limits: {emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: news_3x4, from_overlay: true}
+qa: {}

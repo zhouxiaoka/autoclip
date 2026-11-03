@@ -208,12 +208,12 @@ Cutting and rendering run on your computer. Cloud analysis sends relevant captio
 
 ### Desktop
 
-1. **Install.** Download from [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). macOS Apple Silicon: `.dmg`. Windows 10 / 11 x64: `-setup.exe`. Python and FFmpeg are bundled.
+1. **Install.** Download from [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). macOS Apple Silicon: `.dmg`. Windows 10 / 11 x64: `-setup.exe`. Python and FFmpeg are bundled. On macOS 15 and later, double-click once; if blocked, open System Settings → Privacy & Security → Open Anyway ([Apple’s note](https://developer.apple.com/news/?id=saqachfa)). On older macOS, right-click the app and choose Open. If Windows SmartScreen appears, choose More info → Run anyway.
 2. **Configure a model.** Choose a provider and enter its API key, select an available analysis model, test the connection, and save. For local models, start Ollama / LM Studio and load a model first.
-3. **Paste a link, pick a platform.** Start with a captioned interview or podcast and choose a vertical layout. Without captions, prepare Whisper / SenseVoice in Settings or configure cloud transcription.
+3. **See the example, then use your own video.** When the home screen has no projects, click “用示例项目看看效果” (See an example project). It needs no API key; the example is inside the installer. Then use your own interview or podcast and choose a vertical layout. When the source has no subtitles, or local Whisper will not install or is too slow, open Settings → Default models → “Speech to subtitles” and switch to Bailian cloud transcription (`qwen-audio-3.1-asr-flash`, about 0.1 yuan per hour of audio; the Alibaba Cloud bill is the actual charge). The audio is uploaded to the cloud. If import is blocked, click “Use cloud transcription instead”. A first local install downloads about 220 MB, about 15 minutes on a slow network.
 4. **Review and download.** Check captions, framing, and content completeness, then save the publish kit or connect an account to publish. Generate on-demand alternatives when you need more clips.
 
-Intel Macs / Linux can use Docker or CLI. See the [installation guide](docs/USER_INSTALLATION_GUIDE.en.md) and [latest Release](https://github.com/zhouxiaoka/autoclip/releases/latest) for requirements, first-launch guidance, and acceptance scope.
+There is no Intel Mac desktop build. Intel Macs and Linux use Docker or the CLI. See the [installation guide](docs/USER_INSTALLATION_GUIDE.en.md) and the [latest Release](https://github.com/zhouxiaoka/autoclip/releases/latest).
 
 [Full installation guide](docs/USER_INSTALLATION_GUIDE.en.md) · [Troubleshooting](docs/FAQ.en.md)
 
@@ -280,6 +280,8 @@ The MCP client starts the server. For standalone debugging, run `autoclip mcp` i
 
 Replace `PROJECT_ID` with the project ID returned by production. MCP uses `start_quick_output` / `get_quick_output_status`; set the client’s `command` to the virtualenv’s absolute `autoclip` path and `args` to `["mcp"]`. Legacy `run` / `export` and clipping tools remain available. See [CLI / MCP](docs/CLI_AND_MCP.md) (Chinese), [OpenCode](docs/OPENCODE.en.md), and [Agent skill](skills/autoclip/SKILL.md) (Chinese).
 
+Smithery’s local stdio listing uses an MCPB bundle. From the repo root, run `python scripts/pack_mcpb.py`. The artifact is `dist/autoclip-mcp.mcpb` and is not committed. Publish with `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp` using the maintainer’s own login. The repository does not store an API key. Steps are in [CLI / MCP](docs/CLI_AND_MCP.md) (Chinese).
+
 ## Model setup
 
 | Option | Setup |
@@ -320,7 +322,25 @@ Inside Docker, `localhost` is the container. Point at a host address the contain
       🎁 <strong>AutoClip offer</strong>: New users can receive <strong>$5 in trial credit</strong> through our <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">referral registration link</a>, subject to the promotion terms. <a href="docs/INFISTAR_SETUP.en.md">Setup guide</a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      Thanks to <strong>APIMart</strong> for sponsoring this project! <strong>APIMart</strong> is a low-cost API platform for AI image &amp; video generation — GPT-Image-2 from <strong>$0.006/image</strong>, <strong>160+</strong> images per dollar. One async API covers both image and video: submit a task, get an ID, fetch results via polling or callback. Batch tens of thousands of images without timeouts, switch models without changing code. Pay-as-you-go with no monthly fee — <a href="https://go.apimart.ai/tw-autoclip">sign up here</a> to get started.
+    </td>
+  </tr>
 </table>
+
+## Recommended link
+
+This is the author’s recommendation link. It is separate from the sponsors above.
+
+Use it to register on Alibaba Cloud or claim the offer, then create an API key in the Bailian console. In AutoClip, open Settings → Default models → “Speech to subtitles” to use Bailian cloud transcription. The audio is uploaded to the cloud.
+
+1. [Author’s recommendation link](https://www.aliyun.com/benefit?userCode=qmyj6jch): register or claim the offer.
+2. [Bailian console](https://bailian.console.aliyun.com/): create an API key.
 
 ## FAQ
 

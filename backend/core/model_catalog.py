@@ -13,100 +13,22 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from backend.core.llm_telemetry import sanitize_exception_text
+from backend.core.provider_presets import (
+    curated_models_map,
+    default_models_map,
+    get_provider,
+    image_catalog_map,
+    provider_labels_map,
+)
+
 logger = logging.getLogger(__name__)
 
 # 各家仍在维护的稳定别名 / 旗舰型号。实时列表失败时用这份，也作为下拉靠前的常用项。
-# 日期以 2026-09 公开文档为准；具体可用性以账号权限为准。
-CURATED_MODELS: Dict[str, List[str]] = {
-    "dashscope": [
-        "qwen3.8-max",
-        "qwen3.8-flash",
-        "qwen3.7-plus",
-        "qwen-plus",
-        "qwen-plus-latest",
-        "qwen-max",
-        "qwen-max-latest",
-        "qwen-flash",
-        # 多模态：能看画面，视觉分析 / 封面校对用
-        "qwen-vl-max",
-        "qwen-vl-plus",
-    ],
-    "openai": [
-        "gpt-5.6-sol",
-        "gpt-5.6-terra",
-        "gpt-5.6-luna",
-        "gpt-5.4",
-        "gpt-5.4-mini",
-        "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
-    ],
-    "gemini": [
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-pro-preview",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash",
-    ],
-    "deepseek": [
-        "deepseek-flash",
-        "deepseek-v4-pro",
-    ],
-    "seed": [
-        "doubao-seed-2-1-lite-260915",
-        "doubao-seed-2-1-pro-260915",
-        "doubao-seed-2-1-turbo-260628",
-        "doubao-seed-evolving",
-    ],
-    "kimi": [
-        "kimi-k3",
-        "kimi-k2.6",
-        "kimi-k2.5",
-        "kimi-k2.7-code",
-    ],
-    "glm": [
-        "glm-5.3",
-        "glm-5.2",
-        "glm-4.7",
-    ],
-    "grok": [
-        "grok-4.6",
-        "grok-4.5",
-        "grok-4.3",
-    ],
-    # 多模型网关，型号随账号而定：不内置名单，填好 key 后实时拉取
-    "infistar": [],
-    "api88": [],
-}
-
-DEFAULT_MODELS: Dict[str, str] = {
-    "dashscope": "qwen-plus",
-    "openai": "gpt-5-mini",
-    "gemini": "gemini-3.8-flash",
-    "deepseek": "deepseek-flash",
-    "seed": "doubao-seed-2-1-lite-260915",
-    "kimi": "kimi-k2.6",
-    "glm": "glm-5.3",
-    "grok": "grok-4.6",
-    "infistar": "",
-    "api88": "",
-}
-
-PROVIDER_LABELS: Dict[str, str] = {
-    "dashscope": "通义千问",
-    "openai": "OpenAI",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "seed": "Seed",
-    "kimi": "Kimi",
-    "glm": "GLM",
-    "grok": "Grok",
-    "infistar": "Infistar",
-    "api88": "88API",
-}
+# 内容来自 backend/presets/provider_presets.json，禁止再手写第二份。
+CURATED_MODELS: Dict[str, List[str]] = curated_models_map()
+DEFAULT_MODELS: Dict[str, str] = default_models_map()
+PROVIDER_LABELS: Dict[str, str] = provider_labels_map()
 
 CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
 
@@ -148,12 +70,25 @@ def _openai_vision(name: str) -> bool | None:
     return True
 
 
+def known_text_only(model: str) -> bool:
+    """A name this catalog has classified as text-only.
+
+    Provider and models.dev lists sometimes mark the same id as accepting images.
+    That metadata must not override this classification: a visual run would look
+    configured and then fail as a truncated answer.
+    """
+    name = (model or "").strip().lower()
+    if not name or name in {'qwen3.8-max', 'qwen3.8-flash'}:
+        return False
+    return any(marker in name for marker in _TEXT_ONLY_MARKERS)
+
+
 def supports_vision(model: str) -> bool:
     name = (model or "").strip().lower()
     # Explicitly verified official model IDs; these no longer carry a -vl suffix.
     if name in {'qwen3.8-max', 'qwen3.8-flash'}:
         return True
-    if not name or any(m in name for m in _TEXT_ONLY_MARKERS):
+    if not name or known_text_only(name):
         return False
     openai = _openai_vision(name)
     if openai is not None:
@@ -164,14 +99,7 @@ def supports_vision(model: str) -> bool:
 # ---- 封面生图：跟着文本模型的服务商走，同一个 key ----
 # 这里只是下拉的常用项；填好 key 后再合并账号 /models 里实时拉到的生图型号，用户也可以直接输入模型 ID。
 # 不在表里的服务商（DeepSeek / Kimi / GLM / Grok / 本地）目前没有接入生图接口，封面用视频截帧。
-IMAGE_MODELS: Dict[str, List[str]] = {
-    "dashscope": ["wanx2.1-t2i-turbo", "wanx2.1-t2i-plus"],
-    "seed": ["doubao-seedream-5-0-260128"],
-    "openai": ["gpt-image-1"],
-    "api88": ["gpt-image-1", "dall-e-3", "dall-e-2"],
-    # Infistar 是多模型网关，主流生图模型都能调，具体以账号可用型号为准
-    "infistar": ["gpt-image-1", "dall-e-3", "doubao-seedream-5-0-260128", "flux-1.1-pro", "imagen-4", "wanx2.1-t2i-turbo"],
-}
+IMAGE_MODELS: Dict[str, List[str]] = image_catalog_map()
 _IMAGE_MARKERS = ("gpt-image", "dall-e", "seedream", "wanx", "flux", "imagen", "t2i", "midjourney", "ideogram",
                   "recraft", "stable-diffusion", "sdxl", "sd3", "kolors", "cogview", "hunyuan-image", "qwen-image")
 
@@ -191,6 +119,7 @@ _SKIP_SUBSTR = (
     "whisper",
     "transcribe",
     "tts",
+    "-stt",
     "asr",
     "dall-e",
     "dalle",
@@ -222,8 +151,10 @@ _OPENAI_CHAT_PREFIXES = (
 
 _DATED_SNAPSHOT = re.compile(r"^(.+)-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
 
-SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
-GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+_siliconflow = get_provider("siliconflow")
+SILICONFLOW_BASE_URL = _siliconflow.base_url if _siliconflow else ""
+_gemini = get_provider("gemini")
+GEMINI_MODELS_URL = f"{_gemini.base_url.rstrip('/')}/models" if _gemini and _gemini.base_url else ""
 
 _CACHE_TTL_SECONDS = 300.0
 _cache: Dict[Tuple[str, str, str], Tuple[float, List[str]]] = {}
@@ -268,13 +199,36 @@ def default_model_for(provider: str) -> str:
     return DEFAULT_MODELS.get(provider, "qwen-plus")
 
 
+# 对话补全以外的家族。search / tts 按词切，避免误伤 research、attestation 这类名字。
+_NON_CHAT_FAMILY = re.compile(
+    r"(?:^|[-_/])(?:realtime|transcribe|tts|moderation|embedding|embed|search)(?:$|[-_/])"
+    r"|deep[-_]research"
+    r"|(?:^|[-_/])(?:babbage|davinci)(?:$|[-_/]|\d)"
+    r"|(?:^|[-_/])text-[a-z0-9][a-z0-9._-]*-001$"
+)
+_NON_CHAT_SUBSTRINGS = ("embedding", "whisper", "moderation", "transcribe", "realtime", "deep-research", "deep_research")
+
+
+def is_non_chat_family(name: str) -> bool:
+    """Realtime, speech, moderation, search, embeddings, and legacy completion models.
+
+    A Vision tag must not make these selectable chat or vision models.
+    """
+    lowered = (name or "").strip().lower()
+    if not lowered:
+        return False
+    if any(token in lowered for token in _NON_CHAT_SUBSTRINGS):
+        return True
+    return _NON_CHAT_FAMILY.search(lowered) is not None
+
+
 def is_chat_model(name: str, provider: str = "", official: bool = True) -> bool:
     """过滤掉嵌入 / 语音 / 生图等非对话型号。自建兼容接口不过滤前缀，只去掉明显非文本项。"""
     raw = (name or "").strip()
     if not raw:
         return False
     lowered = raw.lower()
-    if any(token in lowered for token in _SKIP_SUBSTR):
+    if is_non_chat_family(lowered) or any(token in lowered for token in _SKIP_SUBSTR):
         return False
     if provider == "openai" and official:
         return lowered.startswith(_OPENAI_CHAT_PREFIXES)
@@ -501,6 +455,6 @@ async def list_available_models(
         _cache_set(cache_key, live)
         return apply(live)
     except Exception as exc:  # noqa: BLE001
-        logger.info("拉取 %s 模型列表失败: %s", key, exc)
-        result.error = str(exc)[:200]
+        result.error = sanitize_exception_text(exc)
+        logger.info("拉取 %s 模型列表失败: %s", key, result.error)
         return result

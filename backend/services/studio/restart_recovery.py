@@ -4,8 +4,9 @@ Studio workers run in this process's thread pools. When the app is killed during
 screening, the content (LLM) pipeline or a render, nothing ever finishes that run:
 the generation stayed in production and the project index showed processing (or
 completed, before #8) with no reason. At startup every such project is read with
-recovery, which persists a failed terminal with 「服务已重启，请重新生成」, and the
-project index is synced so the home card shows failed and a way back in.
+recovery, which persists a failed terminal with the catalog sentence for
+service_restarted, and the project index is synced so the home card shows
+failed and a way back in.
 """
 import json
 import logging
@@ -30,7 +31,7 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             data = json.loads(path.read_text(encoding='utf-8'))
             if not isinstance(data, dict) or not store.interrupted_run(data):
                 continue
-            data = store.read(project_id)  # owned recovery: persists the failed terminal
+            data = store.recover(project_id)  # explicit repair: persists the failed terminal
             generation = data.get('generation') or {}
             if generation.get('auto_start'):
                 sync_project_completion(project_id)
@@ -41,6 +42,10 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             logger.warning('Studio restart recovery skipped a project: %s', type(error).__name__)
     if recovered:
         logger.info('Studio restart recovery closed %d interrupted run(s): %s', len(recovered), ', '.join(recovered))
+    # /#202: bound the shutdown-record dir once per start, after recovery released what it
+    # could, in the background (never on the quit path, never blocking startup).
+    from backend.services.studio.shutdown_marker import prune_in_background
+    prune_in_background()
     return recovered
 
 

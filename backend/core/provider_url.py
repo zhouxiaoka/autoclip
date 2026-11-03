@@ -9,16 +9,18 @@ Rules (applied in order):
 3. Scheme: lowercase ``http`` / ``https``; a host-like value without a scheme
    gets ``http://`` when the host is loopback / private / ``*.local``, otherwise
    ``https://``. Protocol-relative ``//host`` is treated the same way.
-4. ``/v1`` add or dedupe, per provider convention (see
+4. Strip pasted chat suffixes and normalize chat roots (Gemini uses
+   ``/v1beta/openai``); ``/v1`` add or dedupe, per provider convention (see
    ``normalize_provider_base_url``). Empty input stays empty.
 
-This module does not flag console hosts, strip ``/chat/completions``, or
-block save. Existing Connection validation still refuses credentials, query
+This module does not flag console hosts or block save.
+Existing Connection validation still refuses credentials, query
 strings, and fragments in the URL.
 """
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -39,6 +41,13 @@ _VERSIONED_PATH = re.compile(
 _SCHEME = re.compile(r'^([a-zA-Z][a-zA-Z+\-.]*)://')
 _IPV4 = re.compile(r'^(\d+)\.(\d+)\.(\d+)\.(\d+)$')
 _LOCAL_NAMES = frozenset({'localhost', '0.0.0.0', 'host.docker.internal', '::1'})
+_CHAT_SUFFIXES = ('/chat/completions', '/completions')
+
+
+@dataclass(frozen=True)
+class NormalizeResult:
+    url: str
+    warnings: tuple[str, ...]
 
 
 def collapse_spaces(url: Optional[str]) -> str:
@@ -68,23 +77,40 @@ def cleanup_base_url(url: Optional[str]) -> str:
 
 
 def normalize_provider_base_url(url: Optional[str], provider: Optional[str] = 'compatible') -> str:
-    """Cleanup plus provider ``/v1`` convention. Never raises."""
+    """Shared chat-root normalization for settings, frozen URLs, and validation."""
+    return normalize_provider_url(url, provider).url
+
+
+def normalize_provider_url(url: Optional[str], provider: Optional[str] = 'compatible') -> NormalizeResult:
+    """One implementation, with stable warning codes for endpoint validation."""
     cleaned = cleanup_base_url(url)
     if not cleaned:
-        return ''
+        return NormalizeResult('', ())
     parsed = urlparse(cleaned)
     if parsed.scheme not in ('http', 'https') or not parsed.hostname:
-        return cleaned
-    path = _dedupe_repeated_v1((parsed.path or '').rstrip('/'))
-    host = (parsed.hostname or '').lower()
+        return NormalizeResult(cleaned, ())
+    warnings: list[str] = []
+    path = (parsed.path or '').rstrip('/')
     key = (provider or '').strip().lower()
-    path = _apply_convention(key, host, path)
-    return urlunparse((parsed.scheme, parsed.netloc, path, '', '', ''))
+    if key != 'image':
+        for suffix in _CHAT_SUFFIXES:
+            if path.lower().endswith(suffix):
+                path = path[:-len(suffix)].rstrip('/')
+                warnings.append('chat_completions')
+                break
+    path = _dedupe_repeated_v1(path)
+    host = (parsed.hostname or '').lower()
+    normalized_path = _apply_convention(key, host, path)
+    if not path and normalized_path == '/v1':
+        warnings.append('missing_v1')
+    return NormalizeResult(urlunparse((parsed.scheme, parsed.netloc, normalized_path, '', '', '')), tuple(warnings))
 
 
 def _apply_convention(provider: str, host: str, path: str) -> str:
     if host == 'fal.run' or host.endswith('.fal.run'):
         return path
+    if provider != 'image' and (provider == 'gemini' or host == 'generativelanguage.googleapis.com') and path.lower() == '/v1beta':
+        return '/v1beta/openai'
     if _VERSIONED_PATH.match(path or '/'):
         return path
     if path and path != '/':

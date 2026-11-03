@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.zhouxiaoka/autoclip-mcp -->
+
 <div align="center">
 
 <img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
@@ -206,12 +208,12 @@
 
 ### 桌面版
 
-1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。
+1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。macOS 15 及以上首次打开：双击一次，若被拦截则到「系统设置 → 隐私与安全性 → 仍要打开」（[Apple 说明](https://developer.apple.com/news/?id=saqachfa)）。较旧的 macOS 可右键应用 →「打开」。Windows 若出现 SmartScreen，点「更多信息 → 仍要运行」。
 2. **配置模型**：在设置里选择服务商、填写 API Key，选择可用的分析模型，测试连接并保存；本地模型先在 Ollama / LM Studio 启动服务并加载模型。
-3. **贴链接，选平台**：先试一条有字幕的访谈或播客，可选择竖版版式；无字幕时在设置中准备 Whisper / SenseVoice，或配置云端转写。
+3. **先看示例，再贴自己的视频**：首页还没有项目时，点「用示例项目看看效果」，不需要 API Key，示例在安装包内。之后用自己的访谈或播客，可选择竖版版式。没有字幕、本地 Whisper 装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写（`qwen-audio-3.1-asr-flash`，大约 0.1 元/小时音频，具体以阿里云账单为准）。音频会上传到云端。导入被拦住时，点「改用云端转写」。若安装本地转写，第一次要下载约 220 MB，国内网络约 15 分钟。
 4. **检查并下载**：预览自动成片，检查字幕、取景与内容完整性，再下载发布包或连接账号投稿；需要更多片段时生成备选。
 
-Intel Mac / Linux 可使用 Docker 或 CLI。安装要求、系统首次启动提示和本次发布的验收范围见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
+Intel Mac 目前没有桌面安装包，与 Linux 一样使用 Docker 或 CLI。安装要求见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
 
 [完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
 
@@ -278,6 +280,8 @@ MCP 服务由客户端启动。需要单独调试时，在另一个终端运行 
 
 把 `PROJECT_ID` 换成制作结果中的项目 ID。MCP 新入口为 `start_quick_output` / `get_quick_output_status`；客户端 `command` 指向虚拟环境中的 `autoclip` 绝对路径，`args` 为 `["mcp"]`。旧 `run` / `export` 和旧切片工具继续兼容。详见 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 与 [Agent skill](skills/autoclip/SKILL.md)。
 
+Smithery 本地 stdio 用 MCPB：在仓库根目录执行 `python scripts/pack_mcpb.py`，产物是 `dist/autoclip-mcp.mcpb`（不提交）。发布命令是 `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp`，需要维护者自己的登录，仓库不保存 API key。步骤见 [CLI / MCP](docs/CLI_AND_MCP.md)。
+
 ## 模型配置
 
 | 方式        | 配置                                                             |
@@ -318,7 +322,25 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       🎁 <strong>AutoClip 专属福利</strong>：通过 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">专属推广链接注册</a>可领取 <strong>$5 体验额度</strong>，领取条件以活动页面为准。 <a href="docs/INFISTAR_SETUP.md">接入说明</a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      感谢 <strong>APIMart</strong> 赞助了本项目！<strong>APIMart</strong> 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 <strong>$0.006/张</strong>，1 美元可出图 <strong>160+</strong> 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过此<a href="https://go.apimart.ai/tw-autoclip">注册链接</a>注册即可开用。
+    </td>
+  </tr>
 </table>
+
+## 推荐链接
+
+这是作者推荐链接，不是上面的赞助。
+
+用它注册阿里云或领取优惠，再到百炼控制台创建 API Key，即可在「设置 → 默认模型 → 语音转字幕」使用百炼云端转写。音频会上传到云端。
+
+1. [作者推荐链接](https://www.aliyun.com/benefit?userCode=qmyj6jch)：注册或领优惠。
+2. [百炼控制台](https://bailian.console.aliyun.com/)：创建 API Key。
 
 ## 常见问题
 

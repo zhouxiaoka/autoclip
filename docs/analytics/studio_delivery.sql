@@ -14,6 +14,6 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.artifact_id IS NOT NULL
   AND (event = 'studio_download_saved'
        OR (event IN ('studio_export_finished', 'social_publish_finished')
-           AND properties.outcome = 'completed'))
+           AND properties.outcome IN ('completed', 'success')))
 GROUP BY material_origin, event, runtime
 ORDER BY devices DESC

@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 from backend.services.studio import intelligence as vision
 from backend.services.studio.models import Preferences, Scene
 
@@ -39,7 +38,9 @@ def test_legacy_endpoints_without_annotations_remain_usable_in_source_order():
 
 @pytest.mark.parametrize('score',[-1,101,True,60.5,'80'])
 def test_invalid_model_scores_are_rejected(score):
-    with pytest.raises(ValidationError):
+    # the schema failure of the model's answer is raised as ModelResponseInvalid (model side).
+    from backend.core.failure_attribution import ModelResponseInvalid
+    with pytest.raises(ModelResponseInvalid):
         vision.select_highlights([candidate(0,score=score)],20)
 
 

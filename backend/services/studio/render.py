@@ -1,5 +1,8 @@
 """Render immutable draft snapshots using the existing ffmpeg layout/subtitle code."""
+from backend.core.failure_codes import UserFacingError
+import logging
 import os
+import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -10,9 +13,17 @@ from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
 from backend.services.studio import audio
 from backend.services.studio.store import directory
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, STYLE_IDS
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 from backend.core import project_cancellation
+
+logger = logging.getLogger(__name__)
+_SUBTITLE_TRANSLATION_PROMPT = (
+    '将 title 和 cues 翻译成指定语言。cues 是带编号 n 的字幕，按编号逐条翻译，'
+    '不要合并、拆分或增删条目，不添加事实。'
+    '只返回 {"title":"...","cues":[{"n":1,"text":"..."}]}。'
+)
 
 
 def _mask_captions(graph, band):
@@ -46,9 +57,80 @@ def _needs_translation(language, hook, entries):
     return False
 
 
+def _cue_number(value, fallback):
+    if type(value) is int:
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return fallback
+
+
+def _parse_translated_cues(translated, count):
+    """Map cue number to text. A list of strings is numbered by position."""
+    if not isinstance(translated, dict):
+        return None, {}, 0
+    title = translated.get('title')
+    title = title if isinstance(title, str) and len(title) <= 500 else None
+    raw = translated.get('cues')
+    if not isinstance(raw, list):
+        raw = translated.get('subtitles')
+    if not isinstance(raw, list):
+        return title, {}, 0
+    aligned = {}
+    returned = 0
+    for index, item in enumerate(raw, start=1):
+        if isinstance(item, str):
+            number, text = index, item
+        elif isinstance(item, dict):
+            number = _cue_number(item.get('n', item.get('id', item.get('index'))), index)
+            text = item.get('text')
+        else:
+            continue
+        if not isinstance(text, str):
+            continue
+        returned += 1
+        if 1 <= number <= count and number not in aligned:
+            aligned[number] = text
+    return title, aligned, returned
+
+
+def _apply_cue_translation(hook, entries, title, aligned):
+    if title is not None:
+        hook = title
+    for index, entry in enumerate(entries, start=1):
+        text = aligned.get(index)
+        if isinstance(text, str):
+            entry['text'] = text
+    return hook
+
+
+def _translate_hook_and_cues(language, hook, entries, warnings):
+    """Translate by cue number. One retry, then source text fills any gap."""
+    payload = [{'n': index, 'text': entry.get('text', '')} for index, entry in enumerate(entries, start=1)]
+    source_count = len(entries)
+    best = None
+    for _ in range(2):
+        title, aligned, returned = _parse_translated_cues(text_json(
+            _SUBTITLE_TRANSLATION_PROMPT, {'language': language, 'title': hook, 'cues': payload},
+        ), source_count)
+        if len(aligned) == source_count and returned == source_count:
+            return _apply_cue_translation(hook, entries, title, aligned)
+        if best is None or len(aligned) >= len(best[1]):
+            best = (title, aligned, returned)
+    title, aligned, returned = best
+    missing = source_count - len(aligned)
+    logger.warning(
+        'subtitle translation mismatch source_count=%s returned_count=%s missing_count=%s',
+        source_count, returned, missing,
+    )
+    if missing > 0:
+        warnings.append('部分字幕未能翻译，已保留原文')
+    return _apply_cue_translation(hook, entries, title, aligned)
+
+
 def recover_empty_packaging(project_id, draft: Draft, warnings: list[str]) -> Draft:
     pack = draft.packaging
-    if not (draft.subtitles and pack and pack.fallback and not pack.cues and not pack.burned_captions):
+    if not (draft.subtitles and pack and pack.captions_enabled and pack.fallback and not pack.cues and not pack.burned_captions):
         return draft
     # Previously saved fallbacks have no cues. Re-rendering them must recover the source
     # track too; changing only new packaging would leave upgraded projects captionless.
@@ -80,12 +162,52 @@ def _template_report(job, encoder: str) -> dict | None:
     }
 
 
+def _decoded_extent(progress_output) -> tuple:
+    """(seconds, frames) from ``ffmpeg -progress pipe:1``; end time = last pts + one frame."""
+    text = progress_output.decode('utf-8', 'ignore') if isinstance(progress_output, bytes) else str(progress_output or '')
+    out_us, frames = None, 0
+    for line in text.splitlines():
+        key, _, value = line.partition('=')
+        try:
+            if key == 'out_time_us' and value.strip().lstrip('-').isdigit():
+                out_us = int(value)
+            elif key == 'frame':
+                frames = int(value)
+        except ValueError:
+            continue
+    return (None if out_us is None else max(0, out_us) / 1_000_000), frames
+
+
+def _tolerance(fps) -> float:
+    return max(0.5, 2 / fps if fps and fps > 0 else 0.5)
+
+
+def _decoded_video_seconds(path, fps, expected) -> float:
+    """Fully decode every default stream (video AND audio, ) and return the decoded video
+    duration (frames / fps), measured separately from the audio-inclusive progress clock.
+    Any decoder error (including a corrupt audio tail) rejects the output. A timeout stays a
+    typed TimeoutExpired (error_code=timeout)."""
+    try:
+        decoded = project_cancellation.run(
+            [get_ffmpeg_path(), '-v', 'error', '-xerror', '-nostats', '-progress', 'pipe:1',
+             '-i', str(path), '-f', 'null', '-'],
+            check=True, capture_output=True, timeout=max(120, (expected or 0) * 2))
+    except (subprocess.CalledProcessError, OSError):
+        raise UserFacingError('渲染输出无效，请重新导出') from None
+    if (decoded.stderr or b'').strip():
+        raise UserFacingError('渲染输出无效，请重新导出')
+    _seconds, frames = _decoded_extent(decoded.stdout)
+    if frames <= 0:
+        raise UserFacingError('渲染输出无效，请重新导出')
+    return frames / (fps if fps and fps > 0 else 30)
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
     w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
     if not w or not h:
-        raise ValueError('无法读取原视频尺寸')
+        raise UserFacingError('无法读取原视频尺寸')
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
     warnings = []
     draft = recover_empty_packaging(project_id, draft, warnings)
@@ -100,25 +222,35 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     entries = [e.copy() for e in entries if any(to_seconds(e['start_time']) < s.end and to_seconds(e['end_time']) > s.start for s in draft.scenes)]
     hook = '' if packaged else draft.hook
     if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
-        translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
-        rows = translated.get('subtitles', [])
-        if len(rows) != len(entries) or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str):
-            raise ValueError('字幕翻译格式不完整，请重试')
-        hook = translated['title']
-        if len(hook) > 500:
-            raise ValueError('翻译后的开头文字过长')
-        for e, t in zip(entries, rows):
-            e['text'] = t
+        hook = _translate_hook_and_cues(draft.language, hook, entries, warnings)
     font = resolve_cjk_font()
     if hook and draft.title_style not in title_art.STYLES and not font:
-        raise ValueError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
+        raise UserFacingError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
     if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
+    # Fail a spent model budget before starting encode; ffmpeg/HTML capture are local work.
     project_cancellation.checkpoint(project_id)
+    from backend.core.job_budget import pause_clip_job_budget
+    with pause_clip_job_budget():
+        return _encode_draft(
+            project_id, video, draft, job_id, progress, info, w, h, warnings, keep_audio,
+            entries, hook, font, brand_outro=brand_outro, html_template=html_template,
+            html_fallback=html_fallback, features=features, safe_area=safe_area,
+            requested_template=requested_template,
+        )
+
+
+def _encode_draft(
+    project_id, video, draft, job_id, progress, info, w, h, warnings, keep_audio,
+    entries, hook, font, *, brand_outro, html_template, html_fallback, features, safe_area,
+    requested_template,
+):
+    """ffmpeg / HTML overlay wall clock. Paused from the clip-job model budget (P1 #8)."""
+    packaged = draft.packaging is not None
     overlay_path = None
     overlay_grade = ''
     overlay_job = None
-    if html_template in ('editorial', 'street'):
+    if html_template in HTML_TEMPLATE_IDS:
         from backend.services.studio import packaging_html
         from backend.services.studio.templates.registry import TemplateRegistryError, get
         try:
@@ -126,7 +258,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             overlay_job = packaging_html.prepare_overlay(
                 project_id, html_template, draft.packaging,
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
-                features=features, safe_area=safe_area,
+                features=features, safe_area=safe_area, scenes=draft.scenes,
             )
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
@@ -136,7 +268,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         overlay_path = overlay_job.path if overlay_job else None
     elif html_fallback == 'rank':
         from backend.services.studio.packaging_html import OverlayJob
-        requested = requested_template if requested_template in ('editorial', 'street') else 'classic'
+        requested = requested_template if requested_template in HTML_TEMPLATE_IDS else 'classic'
         overlay_job = OverlayJob(None, 'classic', False, 'rank', 'none', 'skipped', requested_template=requested)
     out_dir = directory(project_id) / 'output' / 'studio'
     if not directory(project_id).is_dir():
@@ -144,10 +276,12 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f'{job_id}.mp4'
     partial = out_dir / f'{job_id}.part.mp4'
+    ready = out_dir / f'{job_id}.ready.part.mp4'
     try:
         with tempfile.TemporaryDirectory(prefix='ac-studio-render-') as temp:
             folder = Path(temp)
             offsets = _output_offsets(draft)
+            clip_total = (offsets[-1] + audio.scene_duration(draft.scenes[-1])) if draft.scenes else 0.0
             overlay_retried = False
             from backend.services.studio.packaging_html import HtmlRetry
             while True:
@@ -168,8 +302,18 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                         scene_overlay = overlay_path
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
-                            picture, label = packaging_render.picture_only(draft, scene, w, h)
-                            tail, label = packaging_html.composite_tail(label, 1, w, h, overlay_grade)
+                            if html_template == 'street' and draft.layout == 'crop':
+                                picture, label = packaging_render.street_picture(
+                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                                )
+                            else:
+                                picture, label = packaging_render.picture_only(draft, scene, w, h)
+                            # Street and editorial paint captions in the template safe zone.
+                            # The cover owns the title; this overlay does not burn a headline.
+                            tail, label = packaging_html.composite_tail(
+                                label, 1, w, h, overlay_grade,
+                                template=html_template or '', offset=offsets[i], total=clip_total,
+                            )
                             built = (picture + ';' + tail, label)
                         elif packaged:
                             from backend.services.studio import packaging_render
@@ -239,8 +383,14 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                             cmd += ['-filter_complex', graph]
                         from backend.services import video_encoder
 
-                        def build(name, base=cmd, clip_path=clip_path):
-                            return [*base, *video_encoder.h264_args(w, h, name), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
+                        pack_name = draft.packaging.template if draft.packaging is not None else None
+
+                        def build(name, base=cmd, clip_path=clip_path, pack_name=pack_name, visual=html_template):
+                            # Street vertical and classic interview stay 1080×1920 at ~2 Mbps.
+                            # Editorial, news, cinema and podcast keep the shared encoder rate.
+                            return [*base, *video_encoder.packaging_h264_args(
+                                w, h, visual=visual, packaging=pack_name, name=name,
+                            ), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
 
                         def run(full, length=scene.end - scene.start):
                             full, priority = render_limits.low_priority(full)
@@ -283,30 +433,76 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             # leave mismatched stream layouts when a selected interval is silent.
             cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
             if keep_audio:
-                cmd += ['-map', '0:a:0', '-af', 'aresample=48000:async=1:first_pts=0', '-c:a', 'aac', '-b:a', '160k']
+                # Preview and QA both expect -14 LUFS / -1 dBTP. Classic mixes measured
+                # around -22 LUFS when this pass was HTML-only. A failed measurement
+                # keeps the plain resample.
+                audio_filter = 'aresample=48000:async=1:first_pts=0'
+                measured = audio.measure_loudnorm(['-f', 'concat', '-safe', '0', '-i', str(concat)], project_cancellation.run, max(120, sum(durations)))
+                audio_filter = audio.loudnorm_filter(measured)
+                cmd += ['-map', '0:a:0', '-af', audio_filter, '-c:a', 'aac', '-b:a', '160k']
             else:
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             project_cancellation.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             from backend.services.output_branding import append_outro
-            outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
+            body_seconds = None
+            if brand_outro:
+                # the outro must not mask a short main body; validate the body alone
+                # (<= tolerance) before it is concatenated with the end card.
+                body_probe = _probe(partial)
+                body_fps = body_probe.get('fps') or 30
+                body_seconds = _decoded_video_seconds(partial, body_fps, sum(durations))
+                if body_seconds < sum(durations) - _tolerance(body_fps):
+                    raise UserFacingError('渲染输出无效，请重新导出')
+            outro_report = {}
+            outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
-        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in ('editorial', 'street'):
+        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in HTML_TEMPLATE_IDS:
             from backend.services.packaging_runtime import downgrade_warning
             hint = downgrade_warning(overlay_job.downgrade_reason)
             if hint and hint not in warnings:
                 warnings.append(hint)
-        result = {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
+        validated = _probe(ready)
+        duration = validated.get('duration') or 0
+        if (not ready.is_file() or ready.stat().st_size == 0 or
+                not math.isfinite(duration) or duration <= 0 or
+                not validated.get('width') or not validated.get('height')):
+            raise UserFacingError('渲染输出无效，请重新导出')
+        # probe metadata survives a truncated mp4 (faststart moov up front); only a
+        # full decode proves every frame is readable before the file replaces the saved video.
+        # a clean cut at a packet boundary decodes without errors but short, so the
+        # decoded extent must also match the container and the drafted content.
+        # a decode timeout stays a typed TimeoutExpired (error_code=timeout).
+        fps = validated.get('fps') or 30
+        tolerance = _tolerance(fps)
+        decoded_seconds = _decoded_video_seconds(ready, fps, duration)
+        if (decoded_seconds < duration - tolerance
+                or decoded_seconds < sum(durations) - tolerance
+                or (outro_applied and body_seconds is not None and decoded_seconds <= body_seconds)):
+            raise UserFacingError('渲染输出无效，请重新导出')
+        # with the outro, the total must match body + the outro actually used
+        # (|decoded - (body + outro)| <= 0.5 s); container metadata alone can look normal.
+        # an applied outro always carries a positive duration; never skip the check.
+        outro_seconds = outro_report.get('outro_seconds') if outro_applied else None
+        if outro_applied and (not isinstance(outro_seconds, (int, float)) or not math.isfinite(outro_seconds) or outro_seconds <= 0):
+            raise UserFacingError('渲染输出无效，请重新导出')
+        if (outro_applied and body_seconds is not None
+                and abs(decoded_seconds - (body_seconds + outro_seconds)) > 0.5):
+            raise UserFacingError('渲染输出无效，请重新导出')
+        project_cancellation.checkpoint(project_id)
+        os.replace(ready, output)
+        result = {'title': draft.title, 'duration': duration, 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
         if overlay_job is not None:
             from backend.services import video_encoder
             result['template_render'] = _template_report(overlay_job, video_encoder.encoder())
             result['template'] = overlay_job.template
             result['requested_template'] = overlay_job.requested_template
         else:
-            requested = requested_template if requested_template in ('editorial', 'street', 'classic') else 'classic'
+            requested = requested_template if requested_template in STYLE_IDS else 'classic'
             result['template'] = 'classic'
             result['requested_template'] = requested
         return result
     finally:
         partial.unlink(missing_ok=True)
+        ready.unlink(missing_ok=True)

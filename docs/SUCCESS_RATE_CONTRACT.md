@@ -1,4 +1,4 @@
-# 1.5.8 成功率共享契约
+# 1.5.7 成功率共享契约
 
 本文件是成功率版第 0 步的引用说明。实现只提供分类与字段白名单，**不改现有调用链、不发新事件、不重试**。并行线请直接 import，不要再各自发明一套码。
 
@@ -39,13 +39,13 @@ new-api 令牌额度用尽与 key 写错都可能是 401「无效的令牌」。
 
 `success_rate_schema_version = 1`。新事件：
 
-- `llm_request_finished`：provider、model、base_url_host、kind（text/vision）、stage、http_status（100–599）、upstream_error_type、prompt/completion/reasoning_tokens、retry_count、duration_ms、outcome（success/error）、finish_reason
+- `llm_request_finished`：provider、model、base_url_host、kind（text/vision）、stage、http_status（100–599）、upstream_error_type、prompt/completion/reasoning_tokens、retry_count、degrade_count、duration_ms、outcome（success/error）、finish_reason
 - `asr_readiness_checked`：provider（whisper_local / sensevoice_local / cloud）、code、has_subtitle、blocked
 - `provider_validation_finished`：provider、base_url_host、result（success/failed/skipped）、upstream_error_type
 
 run 级（后续挂到现有 `studio_generation_finished` / `studio_production_finished` 与 Sentry tag，**不改事件名**）：
 
-provider、model、base_url_host、http_status（400–599）、upstream_error_type、failure_stage、llm_calls、tokens、retry_count、billable_calls_before_failure
+provider、model、base_url_host、http_status（400–599）、upstream_error_type、failure_stage、llm_calls、tokens、retry_count、degrade_count、billable_calls_before_failure
 
 脱敏：`hostname_of_base_url` 只留域名，本机/局域网为 `local`；`sanitize_model` 拒绝空格与超长名。sanitize 结果不得含 key、完整 URL、用户正文。
 

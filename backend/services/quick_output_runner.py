@@ -21,7 +21,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
     from backend.core.database import SessionLocal, create_tables
     from backend.schemas.project import ProjectCreate
     from backend.services.project_service import ProjectService
-    from backend.services.local_runner import RunRequest, prepare_project
+    from backend.services.local_runner import RunRequest, place_video
     from backend.services.studio import jobs, store
     from backend.services.studio.features import flag_enabled, resolve_features
     from backend.services.studio.models import ImportOptions
@@ -52,6 +52,10 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
     if browser not in (None, 'chrome', 'edge', 'firefox', 'safari'):
         raise ValueError('不支持的浏览器')
     create_tables()
+    if not url:
+        from backend.services.studio import preflight
+        # One decision for the route quick output really runs (Studio jobs honour analysis_mode).
+        preflight.check(preflight.ResolvedInputs(video, subtitle, entry='studio', goal=options.goal))
     with SessionLocal() as db:
         project = ProjectService(db).create_project(ProjectCreate(
             name=name or (video.stem if not url else 'Quick output'), project_type='default', source_url=url,
@@ -64,7 +68,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
                 import shutil
                 shutil.copy2(subtitle, raw / 'input.srt')
         else:
-            target = prepare_project(RunRequest(video=video, srt=subtitle, name=project.name,
+            target = place_video(RunRequest(video=video, srt=subtitle, name=project.name,
                                                 project_id=project_id, register_db=False))
             project.video_path = str(target)
             db.commit()
@@ -77,7 +81,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
 def status(project_id: str, *, export_kits: bool = False) -> dict:
     from backend.services.studio import store, publish_kit
     from backend.services.platform_strategy import platform_strategy
-    state = store.read(project_id, recover=False)
+    state = store.read(project_id)
     generation = state.get('generation')
     if not generation:
         raise FileNotFoundError('一键出片项目不存在')

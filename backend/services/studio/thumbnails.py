@@ -1,4 +1,5 @@
 """Small, bounded, project-scoped still previews; never invoke a model or mutate a draft."""
+from backend.core.failure_codes import UserFacingError
 from functools import lru_cache
 from pathlib import Path
 import json
@@ -17,7 +18,7 @@ _slots = threading.BoundedSemaphore(2)
 def _frame(path: str, modified_ns: int, size: int, timestamp: float) -> bytes:
     # Stat fields invalidate cached frames if a source is replaced in place.
     if not _slots.acquire(timeout=10):
-        raise ValueError('缩略图生成繁忙，请稍后重试')
+        raise UserFacingError('缩略图生成繁忙，请稍后重试')
     try:
         result = subprocess.run([
             get_ffmpeg_path(), '-v', 'error', '-nostdin', '-ss', str(timestamp),
@@ -26,10 +27,10 @@ def _frame(path: str, modified_ns: int, size: int, timestamp: float) -> bytes:
             '-threads', '1', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1',
         ], capture_output=True, check=True, timeout=15)
         if not result.stdout.startswith(b'\xff\xd8'):
-            raise ValueError('无法生成缩略图，请打开编辑器查看原片')
+            raise UserFacingError('无法生成缩略图，请打开编辑器查看原片')
         return result.stdout
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        raise ValueError('无法生成缩略图，请打开编辑器查看原片') from None
+        raise UserFacingError('无法生成缩略图，请打开编辑器查看原片') from None
     finally:
         _slots.release()
 
@@ -37,7 +38,7 @@ def _frame(path: str, modified_ns: int, size: int, timestamp: float) -> bytes:
 @lru_cache(maxsize=128)
 def _duration(path: str, modified_ns: int, size: int) -> float:
     if not _slots.acquire(timeout=10):
-        raise ValueError('缩略图生成繁忙，请稍后重试')
+        raise UserFacingError('缩略图生成繁忙，请稍后重试')
     try:
         result = subprocess.run([get_ffprobe_path(), '-v', 'error', '-show_entries',
                                  'format=duration', '-of', 'json', path],
@@ -47,7 +48,7 @@ def _duration(path: str, modified_ns: int, size: int) -> float:
             raise ValueError
         return duration
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
-        raise ValueError('无法读取视频画面') from None
+        raise UserFacingError('无法读取视频画面') from None
     finally:
         _slots.release()
 
@@ -68,7 +69,7 @@ def draft_frame(project_id: str, draft_id: str, revision: int, job_id: str | Non
         # Resolve the expected project-owned output, never a saved result.path.
         import re
         if not re.fullmatch(r'[a-f0-9]{32}', job_id):
-            raise ValueError('无效导出 ID')
+            raise UserFacingError('无效导出 ID')
         video = store.directory(project_id) / 'output' / 'studio' / f'{job_id}.mp4'
 
     else:
@@ -77,7 +78,7 @@ def draft_frame(project_id: str, draft_id: str, revision: int, job_id: str | Non
     video = Path(video)
     stat = video.stat()
     if not stat.st_size:
-        raise ValueError('无法读取视频画面')
+        raise UserFacingError('无法读取视频画面')
     duration = _duration(str(video.resolve()), stat.st_mtime_ns, stat.st_size)
     if job_id:
         timestamp = min(.6, duration / 2)

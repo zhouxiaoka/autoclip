@@ -6,13 +6,15 @@ The downgrade reason is ``intel_mac_unverified``.
 """
 from __future__ import annotations
 
+from backend.core.failure_codes import UserFacingError
 import platform
 import sys
 
 from backend.services.studio.features import flag_enabled, resolve_features
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, STYLE_IDS
 
 HTML_CLIP_LIMIT = 3
-HTML_TEMPLATES = ('editorial', 'street')
+HTML_TEMPLATES = HTML_TEMPLATE_IDS
 _INTEL = {'x86_64', 'amd64', 'i386'}
 
 
@@ -40,8 +42,8 @@ def selected_template(generation: dict | None) -> str | None:
 
 def style_for_request(template: str | None, features: dict | None = None) -> dict[str, str]:
     """The style a request will actually use. Unsupported names raise ValueError."""
-    if template not in (None, 'editorial', 'street', 'classic'):
-        raise ValueError('不支持的剪辑风格')
+    if template not in (None, *STYLE_IDS):
+        raise UserFacingError('不支持的剪辑风格')
     requested = template or 'classic'
     applied = requested if requested in HTML_TEMPLATES and flag_enabled(_resolved(features), 'pkg_templates_v1') else 'classic'
     return {'template': applied, 'requested_template': requested}
@@ -49,8 +51,8 @@ def style_for_request(template: str | None, features: dict | None = None) -> dic
 
 def recorded_style(html_template: str | None, requested_template: str | None = None, features: dict | None = None) -> dict[str, str]:
     """What an export job should say it used. The flag-off path stays classic."""
-    requested = requested_template if requested_template in ('editorial', 'street', 'classic') else None
-    if requested is None and html_template in ('editorial', 'street', 'classic'):
+    requested = requested_template if requested_template in STYLE_IDS else None
+    if requested is None and html_template in STYLE_IDS:
         requested = html_template
     return style_for_request(requested, features)
 
@@ -60,12 +62,12 @@ def style_from_generation(generation: dict | None) -> dict[str, str]:
     if isinstance(generation, dict):
         stored = generation.get('template')
         requested = generation.get('requested_template')
-        if stored in ('editorial', 'street', 'classic') and requested in ('editorial', 'street', 'classic'):
+        if stored in STYLE_IDS and requested in STYLE_IDS:
             return {'template': stored, 'requested_template': requested}
     requested = None
     if isinstance(generation, dict):
         raw = generation.get('requested_template') or generation.get('html_template')
-        if raw in ('editorial', 'street', 'classic'):
+        if raw in STYLE_IDS:
             requested = raw
     applied = selected_template(generation) or 'classic'
     return {'template': applied, 'requested_template': requested or 'classic'}

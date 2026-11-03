@@ -1,4 +1,5 @@
 """Expose a completed immutable Studio export to the shared publishing workflow."""
+from backend.core.failure_codes import UserFacingError
 import re
 import math
 from backend.pipeline.quality import to_srt_time
@@ -31,7 +32,7 @@ def export_meta(project_id: str, source_id: str):
     info = _probe(path)
     duration = float(info.get('duration') or 0)
     if not math.isfinite(duration) or duration <= 0:
-        raise ValueError('无法读取成片时长')
+        raise UserFacingError('无法读取成片时长')
     return {'id': source_id, 'title': job['title'], 'generated_title': job['title'],
             'start_time': to_srt_time(0), 'end_time': to_srt_time(duration), 'duration_sec': duration, 'source_type': 'studio',
             'studio_job_id': job_id, 'draft_id': job['draft_id'], 'revision': job['revision'],

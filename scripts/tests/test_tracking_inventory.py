@@ -1,4 +1,4 @@
-"""The tracking-plan inventory is well-formed and mentions the 1.5.8 close."""
+"""The tracking-plan inventory is well-formed and mentions the 1.5.7 close."""
 from __future__ import annotations
 
 import sys
@@ -64,14 +64,14 @@ class TrackingInventoryTests(unittest.TestCase):
         row = data["events"]["publish_export_finished"]
         self.assertEqual(row["status"], "legacy")
         self.assertEqual(row["merge"], "studio_export_finished")
-        self.assertEqual(row["stop"], "1.5.8")
+        self.assertEqual(row["stop"], "1.5.7")
 
-    def test_transition_milestone_is_1_5_8(self) -> None:
+    def test_transition_milestone_is_1_5_7(self) -> None:
         data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
-        self.assertEqual(data["dates"]["close_transition"], "1.5.8")
-        self.assertEqual(data["dates"]["stop_legacy_emit"], "1.5.8")
-        self.assertEqual(data["dates"]["delete_wrappers"], "1.5.8")
-        self.assertEqual(data["transition"]["milestone"], "1.5.8")
+        self.assertEqual(data["dates"]["close_transition"], "1.5.7")
+        self.assertEqual(data["dates"]["stop_legacy_emit"], "1.5.7")
+        self.assertEqual(data["dates"]["delete_wrappers"], "1.5.7")
+        self.assertEqual(data["transition"]["milestone"], "1.5.7")
         self.assertEqual(set(data["transition"]["tasks"]), set(check.REQUIRED_TASKS))
         self.assertTrue(data["transition"]["keep_query_maps"])
 
@@ -82,26 +82,15 @@ class TrackingInventoryTests(unittest.TestCase):
         self.assertIn("§12.1", plan)
         self.assertIn("single_os_enum", plan)
 
-    def test_current_version_defers_producer_gates(self) -> None:
+    def test_current_version_enables_producer_gates(self) -> None:
         version = check.app_version(ROOT)
-        self.assertEqual(version, "1.5.7")
-        self.assertFalse(check.transition_due(version))
-        gaps = check.producer_transition_errors(ROOT)
-        self.assertTrue(gaps)
-        self.assertTrue(any(item.startswith("T1 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T2 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T3 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T4 ") for item in gaps))
-        self.assertTrue(any(item.startswith("T5 ") for item in gaps))
+        self.assertEqual(version, "1.5.8")
+        self.assertTrue(check.transition_due(version))
+        self.assertFalse(check.transition_due("1.5.6"))
+        self.assertEqual(check.producer_transition_errors(ROOT), [])
 
-    def test_1_5_8_enforces_producer_acceptance(self) -> None:
-        errors = check.check(ROOT, version="1.5.8")
-        joined = "\n".join(errors)
-        self.assertTrue(errors)
-        for prefix in ("T1 ", "T2 ", "T3 ", "T4 ", "T5 "):
-            self.assertIn(prefix, joined)
-        self.assertIn("feedback path missing envelope fields", joined)
-        self.assertIn("publish_export_*", joined)
+    def test_1_5_7_enforces_producer_acceptance(self) -> None:
+        self.assertEqual(check.check(ROOT, version="1.5.7"), [])
 
 
 if __name__ == "__main__":

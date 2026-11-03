@@ -2,13 +2,28 @@
 
 Videos are generated at runtime (lavfi + SRT). Specs stay in-repo so CI does not
 store large binaries; sha256 is recorded after generation.
+
+``LIVE_PROVIDERS`` is the live e2e default source (chat URL, fallback model,
+secret env, tier). The product catalog is not that source: Gemini's product
+row is ``gemini-3.8-flash`` at ``/v1beta`` (native models), while live chat
+needs ``/v1beta/openai``. DashScope live default is ``qwen-plus``. When
+``backend/presets/provider_presets.json`` exists, this module reads labels and
+chat URL inputs only, preserving live default models. It never writes the
+product JSON. ``*_MODEL`` still overrides at run time. Do not print secrets.
 """
 from __future__ import annotations
 
 import datetime as dt
 from typing import Any
 
+from backend.core.provider_endpoint import locked_chat_url
 from backend.core.upstream_errors import UpstreamErrorType
+
+from .presets import load_catalog_providers, reset_catalog_cache
+
+
+def reset_live_catalog() -> None:
+    reset_catalog_cache()
 
 # Success clips must be >= short-tier min_clip_sec (20s). Live material stays 1–2 min.
 SUCCESS_DURATION_SEC = 70
@@ -238,7 +253,7 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'provider': 'dashscope',
         'secret': 'DASHSCOPE_API_KEY',
         'model_env': 'DASHSCOPE_MODEL',
-        'default_model': 'qwen-flash',
+        'default_model': 'qwen-plus',
         'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         'vision_model_env': 'DASHSCOPE_VISION_MODEL',
         'tier': 'paid',
@@ -305,8 +320,35 @@ def assets(*, expect: str | None = None) -> list[dict[str, Any]]:
     return [item for item in rows if item['expect'] == expect]
 
 
+def live_chat_url(provider_id: str, catalog_url: str = '', fallback: str = '') -> str:
+    """Live chat root. Product Gemini is ``/v1beta``; e2e needs ``/openai``."""
+    fallback = (fallback or '').strip()
+    catalog_url = (catalog_url or '').strip()
+    if provider_id == 'gemini':
+        locked = locked_chat_url('gemini', catalog_url or fallback)
+        return (locked or fallback or catalog_url).rstrip('/')
+    return (fallback or catalog_url).rstrip('/')
+
+
 def live_providers() -> list[dict[str, Any]]:
-    return [dict(item) for item in LIVE_PROVIDERS]
+    catalog = load_catalog_providers()
+    if catalog:
+        missing = [item['id'] for item in LIVE_PROVIDERS if item['id'] not in catalog]
+        if missing:
+            raise KeyError(f'provider presets missing live e2e entries: {", ".join(missing)}')
+    rows = []
+    for item in LIVE_PROVIDERS:
+        row = dict(item)
+        preset = catalog.get(item['id'])
+        catalog_url = ''
+        if preset:
+            row['label'] = preset['label'] or row['label']
+            catalog_url = preset['base_url']
+        row['base_url'] = live_chat_url(item['id'], catalog_url, item['base_url'])
+        if not row['base_url']:
+            raise ValueError(f'provider e2e {item["id"]} missing live chat url')
+        rows.append(row)
+    return rows
 
 
 def faults() -> list[dict[str, Any]]:

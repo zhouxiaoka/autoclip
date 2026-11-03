@@ -19,6 +19,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from backend.core.failure_codes import messages, user_visible_error
+
+COVER_IMAGE_FALLBACK = "生图失败，已改成本地排版或截帧"
+COVER_TITLE_FALLBACK = "生图标题校对未通过，已改成本地排版"
+COVER_FRAME_FALLBACK = "已用视频截帧作为封面"
+
+
+def _image_fallback(exc):
+    """Prefix is a stable translation key. The detail is attached only when it is one too."""
+    detail = user_visible_error(exc)
+    return COVER_IMAGE_FALLBACK, detail if detail in set(messages().values()) else None
 from backend.core.image_providers import (
     ImageError,
     ImageRequest,
@@ -166,8 +177,10 @@ def verify_endpoint(cfg: "CoverConfig") -> dict[str, str]:
         return {"provider": "openai", "api_key": vision.get("api_key", ""), "base_url": vision["base_url"], "model": vision["model"]}
     if cfg.source == 'connections':
         raise ImageError('未选择可用于封面校对的多模态模型，跳过校对')
-    return {"provider": cfg.provider, "api_key": cfg.api_key, "base_url": cfg.base_url,
-            "model": default_ocr_model(cfg.provider, cfg.model, cfg.base_url)}
+    chosen = default_ocr_model(cfg.provider, cfg.model, cfg.base_url, api_key=cfg.api_key)
+    if not chosen:
+        raise ImageError('未选择可用于封面校对的多模态模型，跳过校对')
+    return {"provider": cfg.provider, "api_key": cfg.api_key, "base_url": cfg.base_url, "model": chosen}
 
 
 def load_config() -> CoverConfig:
@@ -544,6 +557,7 @@ def get_cover(project_id: str, clip_id: str, platform: str = "bilibili") -> dict
         "badge": meta.get("badge") or "",
         "content_type": meta.get("content_type") or "general",
         "warning": meta.get("warning"),
+        "warning_detail": meta.get("warning_detail"),
     }
 
 
@@ -603,6 +617,7 @@ def generate_cover(
     lines = split_title(title_text)
     cfg = load_config()
     warning = None
+    warning_detail = None
     method = "frame"
     jpeg: bytes | None = None
     video, at = resolve_clip_frame(project_id, clip_id)
@@ -685,7 +700,8 @@ def generate_cover(
                 jpeg = fitted
                 method = "model" if send_frame else "model_bg"
             else:
-                warning = "生图标题校对未通过，已改成本地排版"
+                warning = COVER_TITLE_FALLBACK
+                warning_detail = None
                 if frame is not None:
                     jpeg = overlay_title(
                         frame, title_lines=lines, subtitle=sub_text, badge=badge_text,
@@ -693,7 +709,7 @@ def generate_cover(
                     )
                     method = "local_overlay"
         except ImageError as exc:
-            warning = f"生图失败，已改成本地排版或截帧：{exc}"
+            warning, warning_detail = _image_fallback(exc)
             logger.warning("封面生图失败: %s", exc)
             if getattr(exc, "unsupported_edit", False) and frame is not None:
                 # 不能图生图：背景用截帧，本地写字
@@ -725,7 +741,7 @@ def generate_cover(
         if frame is not None:
             jpeg = fit_jpeg(frame, spec["width"], spec["height"])
             method = "frame"
-            warning = warning or "已用视频截帧作为封面"
+            warning = warning or COVER_FRAME_FALLBACK
         else:
             raise CoverError("封面生成失败，也截不到帧")
 
@@ -744,6 +760,7 @@ def generate_cover(
         "width": spec["width"],
         "height": spec["height"],
         "warning": warning,
+        "warning_detail": warning_detail,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     write_cover_meta(project_id, clip_id, platform, meta)
@@ -758,6 +775,7 @@ def generate_cover(
         "badge": badge_text,
         "content_type": kind,
         "warning": warning,
+        "warning_detail": warning_detail,
     }
 
 
@@ -870,14 +888,14 @@ def _run_job(job_id: str, params: dict[str, Any]) -> None:
                     force_local=True,
                     cancel=_cancel.get(job_id),
                 )
-                fallback["warning"] = str(exc)
+                fallback["warning"] = user_visible_error(exc)
                 job.update(status="completed", result=fallback)
             except Exception as fallback_exc:  # noqa: BLE001
-                job.update(status="failed", error=str(exc) or str(fallback_exc))
+                job.update(status="failed", error=user_visible_error(exc) or user_visible_error(fallback_exc))
         _remember_job(job)
     except Exception as exc:  # noqa: BLE001
         logger.exception("封面任务失败")
-        job.update(status="failed", error=str(exc))
+        job.update(status="failed", error=user_visible_error(exc))
         _remember_job(job)
     finally:
         _cancel.pop(job_id, None)

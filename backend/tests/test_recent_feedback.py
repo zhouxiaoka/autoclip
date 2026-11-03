@@ -208,7 +208,7 @@ def run_prepared_step2(obj, monkeypatch):
     (TimeoutError('private-url secret-key'), 'timeout'),
     (ConnectionError('private-url secret-key'), 'connection'),
     (RuntimeError('API调用失败 - Status: 429, Message: secret-key'), 'rate_limited'),
-    (RuntimeError('API调用失败 - Status: 401, Message: secret-key'), 'authentication'),
+    (RuntimeError('API调用失败 - Status: 401, Message: secret-key'), 'llm_auth_invalid'),
     (RuntimeError('API调用失败 - Status: 503, Message: secret-key'), 'provider_error'),
 ])
 def test_step2_call_failure_is_not_reported_as_short_content(tmp_path, monkeypatch, error, code):
@@ -330,3 +330,34 @@ def test_step2_refinement_error_never_exports_unvalidated_ranges(tmp_path, monke
     assert exc.value.code == 'unexpected'
     assert 'private' not in exc.value.user_message()
     assert obj.extraction_report['refinement_failed']
+
+
+# #428 without a known-weak local model: the generic invalid_response sentence.
+# Ollama qwen2.5:7b uses the guidance in test_weak_local_timeline.py.
+ISSUE_428 = (
+    '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 '
+    '请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。'
+    '这一步尚未进入评分或最短时长筛选。'
+)
+
+
+def test_issue_428_empty_intervals_are_invalid_response_after_the_chunk_budget():
+    """82 topics / 14 chunks with no valid range is invalid_response, not timeline_empty.
+
+    The per-chunk loop already spent MAX_ATTEMPTS (see
+    test_all_live_invalid_replies_stop_after_three_repair_attempts). The outer
+    step retries only timeline_empty, so this sentence is the terminal copy.
+    """
+    from backend.core.result_retry import MAX_ATTEMPTS, classify_for_retry
+    from backend.pipeline.failures import timeline_failure_from_report
+
+    chunks = [
+        {'index': index, 'topics': 1, 'attempts': MAX_ATTEMPTS,
+         'outcome': 'invalid_response', 'rejected': {'malformed_json': 1}, 'source': 'model'}
+        for index in range(14)
+    ]
+    failure = timeline_failure_from_report(82, {'chunks': chunks, 'parsed': 0, 'output': 0})
+    assert failure.code == 'invalid_response'
+    assert failure.user_message() == ISSUE_428
+    kind, retryable = classify_for_retry(failure)
+    assert (kind, retryable, MAX_ATTEMPTS) == ('invalid_response', True, 3)

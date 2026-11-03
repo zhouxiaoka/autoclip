@@ -14,11 +14,13 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -27,7 +29,11 @@ REPO = os.environ.get("AUTOCLIP_REPO", "zhouxiaoka/autoclip")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.posthog.com").rstrip("/")
 DEFAULT_PROJECT_ID = "450605"
 MAX_PER_RUN = 20
-ERROR_CODE_RE = re.compile(r"^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|service_restarted)$")
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+from backend.core.failure_codes import error_code_pattern
+ERROR_CODE_RE = error_code_pattern()
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.I,
@@ -152,16 +158,42 @@ def known_ids_in(texts: list[str]) -> set[str]:
     return found
 
 
+_RETRY_STATUS = frozenset({429, 503})
+_RETRY_DELAYS = (0.4, 0.8, 1.6)
+
+
+def _retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float:
+    raw = exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
+    try:
+        value = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return _RETRY_DELAYS[attempt]
+    if 0 < value <= 8:
+        return value
+    return _RETRY_DELAYS[attempt]
+
+
 def _http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None = None, body: Any = None) -> Any:
     data = None
     hdrs = {"Accept": "application/json", **(headers or {})}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         hdrs.setdefault("Content-Type", "application/json")
-    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read().decode("utf-8")
-    return json.loads(raw) if raw else {}
+    attempt = 0
+    while True:
+        req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as exc:
+            payload = exc.read()
+            if exc.code not in _RETRY_STATUS or attempt >= len(_RETRY_DELAYS):
+                raise urllib.error.HTTPError(
+                    exc.url, exc.code, exc.reason, exc.headers, io.BytesIO(payload),
+                ) from None
+            time.sleep(_retry_delay(exc, attempt))
+            attempt += 1
 
 
 def fetch_events(days: int) -> dict[str, Any]:

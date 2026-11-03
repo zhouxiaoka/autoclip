@@ -137,6 +137,29 @@ def list_platform_strategies() -> list[dict[str, object]]:
 VERTICAL_ONLY_TRANSPORTS = frozenset({"tiktok", "instagram"})
 
 
+def long_form_minimum(strategy_ids: Iterable[str]) -> tuple[int | None, str]:
+    """Strictest hard minimum among selected long-form platforms, plus their labels.
+
+    Adaptive guidance (Bilibili's 180s) is not a minimum the selector must hit.
+    """
+    seen: set[str] = set()
+    labels: list[str] = []
+    seconds: list[int] = []
+    for raw in strategy_ids or ():
+        try:
+            strategy = platform_strategy(str(raw))
+        except ValueError:
+            continue
+        if strategy.id in seen or strategy.duration_policy != "long" or not strategy.min_recommended_duration_sec:
+            continue
+        seen.add(strategy.id)
+        labels.append(strategy.label)
+        seconds.append(int(strategy.min_recommended_duration_sec))
+    if not seconds:
+        return None, ""
+    return max(seconds), "、".join(labels)
+
+
 def incompatible_transport_platforms(strategy_id: str, platforms: Iterable[str]) -> list[str]:
     """Return upload targets that cannot receive a completed variant of this strategy."""
     if platform_strategy(strategy_id).aspect == "portrait":

@@ -59,7 +59,7 @@ def test_openai_envelopes(status, body, expected, retryable):
         (403, {"error": {"message": "用户余额不足", "type": "new_api_error", "code": "insufficient_user_quota"}}, UpstreamErrorType.INSUFFICIENT_QUOTA),
         (403, {"error": {"message": "无权访问 default 分组", "type": "new_api_error"}}, UpstreamErrorType.PERMISSION_DENIED),
         (403, {"error": {"message": "该令牌无权访问模型 gpt-4o", "type": "new_api_error"}}, UpstreamErrorType.PERMISSION_DENIED),
-        (503, {"error": {"message": "No available channel for model gpt-4o (under group default)", "type": "new_api_error", "code": "model_not_found"}}, UpstreamErrorType.MODEL_NOT_FOUND),
+        (503, {"error": {"message": "No available channel for model gpt-4o (under group default)", "type": "new_api_error", "code": "model_not_found"}}, UpstreamErrorType.UPSTREAM_UNAVAILABLE),
     ],
     ids=["newapi-401-token", "newapi-401-quota", "newapi-403-quota", "newapi-403-group", "newapi-403-model", "newapi-503-model"],
 )
@@ -86,6 +86,99 @@ def test_gemini_envelopes(status, body, expected):
     _assert_safe(result, expected, expected in RETRYABLE_TYPES)
 
 
+# Real free-tier GenerateContent 429s. RPM and RPD share the same status, code and
+# "exceeded your current quota" sentence; only quotaId / retryDelay separate them.
+_GEMINI_RPM = {
+    "error": {
+        "code": 429,
+        "message": "You exceeded your current quota, please check your plan and billing details. Please retry in 17.048s.",
+        "status": "RESOURCE_EXHAUSTED",
+        "details": [
+            {"@type": "type.googleapis.com/google.rpc.Help", "links": [{"description": "Learn more", "url": "https://ai.google.dev/gemini-api/docs/rate-limits"}]},
+            {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{
+                "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                "quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                "quotaDimensions": {"location": "global", "model": "gemini-2.5-flash"},
+                "quotaValue": "15",
+            }]},
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"},
+        ],
+    }
+}
+_GEMINI_RPD = {
+    "error": {
+        "code": 429,
+        "message": "You exceeded your current quota, please check your plan and billing details.",
+        "status": "RESOURCE_EXHAUSTED",
+        "details": [
+            {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{
+                "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                "quotaDimensions": {"model": "gemini-2.0-flash", "location": "global"},
+            }]},
+        ],
+    }
+}
+
+
+@pytest.mark.stdlib_only
+def test_gemini_free_tier_per_minute_is_retryable_rate_limit():
+    result = classify_upstream_error(429, _GEMINI_RPM)
+    _assert_safe(result, UpstreamErrorType.RATE_LIMITED, True)
+    # Delay alone (RetryInfo, no PerDay/PerMinute quotaId) stays rate-limited.
+    delay_only = {
+        "error": {
+            "code": 429,
+            "message": "You exceeded your current quota, please check your plan and billing details.",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"},
+            ],
+        }
+    }
+    _assert_safe(classify_upstream_error(429, delay_only), UpstreamErrorType.RATE_LIMITED, True)
+
+
+@pytest.mark.stdlib_only
+def test_gemini_free_tier_per_day_is_quota_even_with_retry_delay():
+    _assert_safe(classify_upstream_error(429, _GEMINI_RPD), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+    # Gemini RPD 429s often include a day-scale RetryInfo; still exhausted, not RPM.
+    delayed = {
+        "error": {
+            **_GEMINI_RPD["error"],
+            "details": [
+                *_GEMINI_RPD["error"]["details"],
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "86399s"},
+            ],
+        }
+    }
+    _assert_safe(classify_upstream_error(429, delayed), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+    # Prose "Please retry in 17s" is not RetryInfo.retryDelay.
+    prose = {"error": {"code": 429, "message": "You exceeded your current quota. Please retry in 17s.", "status": "RESOURCE_EXHAUSTED"}}
+    _assert_safe(classify_upstream_error(429, prose), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+
+
+@pytest.mark.stdlib_only
+def test_gemini_sdk_details_reach_the_classifier_without_a_body_attr():
+    """google-genai puts the JSON on ``details`` and the HTTP code on ``code``."""
+    error = Exception("429 RESOURCE_EXHAUSTED")
+    error.code = 429
+    error.status = "RESOURCE_EXHAUSTED"
+    error.details = _GEMINI_RPM
+    result = classify_exception(error)
+    _assert_safe(result, UpstreamErrorType.RATE_LIMITED, True)
+    status, body = http_error_parts(error)
+    assert status == 429
+    assert body["error"]["details"][1]["violations"][0]["quotaId"].endswith("PerMinutePerProjectPerModel-FreeTier")
+
+    daily = Exception("429 RESOURCE_EXHAUSTED")
+    daily.code = 429
+    daily.details = _GEMINI_RPD["error"]["details"]
+    daily.status = "RESOURCE_EXHAUSTED"
+    daily.message = _GEMINI_RPD["error"]["message"]
+    _assert_safe(classify_exception(daily), UpstreamErrorType.INSUFFICIENT_QUOTA, False)
+
+
 @pytest.mark.stdlib_only
 @pytest.mark.parametrize(
     "status,body,expected",
@@ -110,8 +203,10 @@ def test_deepseek_envelopes(status, body, expected):
         (401, {"code": "InvalidApiKey", "message": "Invalid API-key provided.", "request_id": "private-id"}, UpstreamErrorType.INVALID_KEY),
         (429, {"code": "Throttling.RateQuota", "message": "Request rate exceeded"}, UpstreamErrorType.RATE_LIMITED),
         (403, {"code": "AllocationQuota.FreeTierOnly", "message": "Free tier allocation quota exceeded"}, UpstreamErrorType.INSUFFICIENT_QUOTA),
+        (404, {"error": {"message": "Model not exist.", "type": "invalid_request_error", "code": "model_not_found"}}, UpstreamErrorType.MODEL_NOT_FOUND),
+        (400, {"code": "InvalidParameter", "message": "Model not exist."}, UpstreamErrorType.MODEL_NOT_FOUND),
     ],
-    ids=["dashscope-key", "dashscope-rate", "dashscope-quota"],
+    ids=["dashscope-key", "dashscope-rate", "dashscope-quota", "dashscope-404-model", "dashscope-400-model-not-exist"],
 )
 def test_dashscope_native_envelopes(status, body, expected):
     result = classify_upstream_error(status, body)
@@ -132,6 +227,38 @@ def test_dashscope_native_envelopes(status, body, expected):
 )
 def test_bad_endpoint_from_html_or_bare_404(status, body):
     _assert_safe(classify_upstream_error(status, body), UpstreamErrorType.BAD_ENDPOINT, False)
+
+
+@pytest.mark.stdlib_only
+@pytest.mark.parametrize(
+    "status,body",
+    [
+        (504, "<html><head><title>504 Gateway Time-out</title></head><body>nginx</body></html>"),
+        (502, b"<html><body>502 Bad Gateway</body></html>"),
+        (503, {"error": {"message": "没有可用渠道", "type": "new_api_error", "code": "model_not_found"}}),
+        (504, {"error": {"message": "No available channel for model gpt-4o", "code": "model_not_found"}}),
+        (504, {"error": {"message": "gateway timeout"}}),
+    ],
+    ids=["html-504", "html-502", "channel-zh", "channel-504", "json-504"],
+)
+def test_gateway_and_channel_outage_are_retryable(status, body):
+    _assert_safe(classify_upstream_error(status, body), UpstreamErrorType.UPSTREAM_UNAVAILABLE, True)
+
+
+@pytest.mark.stdlib_only
+def test_channel_phrase_on_404_stays_a_missing_model():
+    body = {"error": {"message": "No available channel for model gpt-4o", "code": "model_not_found"}}
+    _assert_safe(classify_upstream_error(404, body), UpstreamErrorType.MODEL_NOT_FOUND, False)
+
+
+@pytest.mark.stdlib_only
+@pytest.mark.parametrize("body", [
+    {"error": {"code": "DeploymentNotFound", "message": "DeploymentNotFound"}},
+    {"error": {"code": "DeploymentNotFound", "message": "The API deployment for this resource does not exist."}},
+    "DeploymentNotFound",
+])
+def test_deployment_not_found_is_a_missing_model(body):
+    _assert_safe(classify_upstream_error(404, body), UpstreamErrorType.MODEL_NOT_FOUND, False)
 
 
 @pytest.mark.stdlib_only
@@ -190,8 +317,8 @@ def test_every_type_has_hint_and_closed_set():
 
 
 @pytest.mark.stdlib_only
-def test_existing_model_call_error_code_behavior_is_unchanged():
-    """本契约不得改写旧分类：401/403 仍是 authentication，402 仍是 provider_error。"""
+def test_model_call_error_code_separates_auth_from_missing_configuration():
+    """401/403 使用独立鉴权失败码；402 仍是 provider_error。"""
     from backend.pipeline.failures import model_call_error_code
 
     def _err(status: int) -> Exception:
@@ -199,8 +326,8 @@ def test_existing_model_call_error_code_behavior_is_unchanged():
         error.status_code = status  # type: ignore[attr-defined]
         return error
 
-    assert model_call_error_code(_err(401)) == "authentication"
-    assert model_call_error_code(_err(403)) == "authentication"
+    assert model_call_error_code(_err(401)) == "llm_auth_invalid"
+    assert model_call_error_code(_err(403)) == "llm_auth_invalid"
     assert model_call_error_code(_err(402)) == "provider_error"
     assert model_call_error_code(_err(429)) == "rate_limited"
     assert model_call_error_code(_err(503)) == "provider_error"
@@ -232,7 +359,7 @@ def test_frontend_contract_lists_stay_aligned():
     def const_list(name: str) -> list[str]:
         match = __import__("re").search(rf"export const {name} = \[((?:.|\n)*?)\] as const", text)
         assert match, name
-        return __import__("re").findall(r"'([a-z0-9_]+)'", match.group(1))
+        return __import__("re").findall(r"'([a-z0-9_-]+)'", match.group(1))
 
     assert set(const_list("UPSTREAM_ERROR_TYPES")) == UPSTREAM_ERROR_TYPES
     assert set(const_list("RETRYABLE_UPSTREAM_ERROR_TYPES")) == {item.value for item in RETRYABLE_TYPES}
@@ -241,6 +368,7 @@ def test_frontend_contract_lists_stay_aligned():
     assert set(const_list("FAILURE_STAGES")) == telemetry.FAILURE_STAGES
     assert set(const_list("RUN_LEVEL_FIELDS")) == telemetry.RUN_LEVEL_FIELDS
     assert set(const_list("LLM_REQUEST_FIELDS")) == telemetry.LLM_REQUEST_FIELDS
+    messages = json.loads((Path(__file__).resolve().parents[1] / "core" / "failure_messages.json").read_text(encoding="utf-8"))
     for error_type, hint in HINT_KEYS.items():
-        assert f"{error_type.value}:" in text
-        assert hint in text
+        assert messages[error_type.value] == hint
+        assert hint not in text

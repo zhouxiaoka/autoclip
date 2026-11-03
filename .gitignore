@@ -79,6 +79,7 @@ data/temp/
 data/output/
 data/backups/
 data/cache/
+data/shutdown_markers/
 backend/data/
 
 # 前端依赖与构建产物
@@ -97,6 +98,7 @@ src-tauri/.updater-public-key
 # Python / 打包产物
 build/
 dist/
+*.mcpb
 releases/
 *.toc
 *.pkg

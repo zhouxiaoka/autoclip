@@ -25,13 +25,15 @@ STATED_VERSION = re.compile(r'(?:核对为|统一为|都为)\s*\d+\.\d+\.\d+')
 
 
 def _product_version() -> str:
+    from scripts.bump_version import pypi_version_matches_product
+
     pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
     match = re.search(r'^\[project\][^\[]*?^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE | re.DOTALL)
     assert match, 'pyproject.toml has no project version'
     init = (ROOT / 'backend/__init__.py').read_text(encoding='utf-8')
     package = re.search(r'^__version__\s*=\s*"([^"]+)"', init, re.MULTILINE)
-    assert package and package.group(1) == match.group(1)
-    return match.group(1)
+    assert package and pypi_version_matches_product(package.group(1), match.group(1))
+    return package.group(1)
 
 
 @pytest.mark.stdlib_only

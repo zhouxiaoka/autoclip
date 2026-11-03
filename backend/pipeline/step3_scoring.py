@@ -2,7 +2,6 @@
 Step 3: 内容评分 - 对每个话题进行质量评分，筛选出高质量内容
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -13,8 +12,9 @@ from .scoring_backend import ScoringBackend, LLMScoringBackend
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
+from backend.core.failure_logging import failure_logger, chunk_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 # CLI `--min-score` 之类的显式覆盖：优先级最高。None = 用设置页保存的值，再退到 MIN_SCORE_THRESHOLD
 MIN_SCORE_OVERRIDE: Optional[float] = None
@@ -34,7 +34,7 @@ def resolve_min_score_threshold() -> float:
                 return value
             logger.warning(f"设置页的最低评分阈值 {value} 不在 (0, 1]，使用默认 {MIN_SCORE_THRESHOLD}")
     except Exception as e:  # noqa: BLE001
-        logger.debug(f"读取设置页评分阈值失败，使用默认值: {e}")
+        logger.debug("读取设置页评分阈值失败，使用默认值: %s message_length=%s", type(e).__name__, len(str(e)))
     return float(MIN_SCORE_THRESHOLD)
 
 class ClipScorer:
@@ -72,10 +72,11 @@ class ClipScorer:
             if chunk_index is not None:
                 timeline_by_chunk[chunk_index].append(item)
             else:
-                logger.warning(f"  > 话题 '{item.get('outline', '未知')}' 缺少 chunk_index，将被跳过。")
+                logger.warning("  > 话题缺少 chunk_index，将被跳过 outline_length=%s", len(str(item.get('outline', ''))))
         
         all_scored_clips = []
         # 2. 每个块独立评分（并行，结果按块顺序）
+        @chunk_failure_context("step3_scoring")
         def score_chunk(item):
             chunk_index, chunk_items = item
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_items)} 个话题...")
@@ -85,7 +86,7 @@ class ClipScorer:
                     logger.warning(f"块 {chunk_index} 的LLM评估返回为空，跳过。")
                 return scored_chunk_items or []
             except Exception as e:
-                logger.error(f"  > 处理块 {chunk_index} 进行评分时出错: {str(e)}")
+                logger.error("评分块处理失败: %s message_length=%s", type(e).__name__, len(str(e)))
                 return []
 
         from .concurrency import map_chunks
@@ -140,7 +141,7 @@ class ClipScorer:
             return scored
 
         except Exception as e:
-            logger.error(f"LLM批量评估失败: {e}")
+            logger.error("LLM批量评估失败: %s message_length=%s", type(e).__name__, len(str(e)))
             scored, _ = align_scores(clips, [])
             return scored
 
@@ -148,7 +149,7 @@ class ClipScorer:
         """保存评分结果"""
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(scored_clips, f, ensure_ascii=False, indent=2)
-        logger.info(f"评分结果已保存到: {output_path}")
+        logger.info("评分结果已保存 count=%s", len(scored_clips))
 
 def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None,
                       scoring_backend: Optional[ScoringBackend] = None) -> List[Dict]:

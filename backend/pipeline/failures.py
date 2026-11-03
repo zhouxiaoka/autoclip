@@ -31,9 +31,10 @@ class PipelineFailure(RuntimeError):
         # 上游 HTTP 状态码（仅 400–599 的整数）；没有链上原始异常时（如时间线汇总失败）用它带出状态码。
         self.http_status = http_status
         # 稳定机器码。前端用来打开对应设置页，或避免打开错误的设置页。
-        # llm_not_configured：没有可用提供商 / 缺少 API Key / 连接测试没通过
+        # llm_not_configured：没有可用提供商 / 缺少 API Key
+        # llm_auth_invalid：上游拒绝密钥或权限（401/403）
         # whisper_not_installed | whisper_install_failed | transcription_empty | subtitle_setup
-        # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 模型」）
+        # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 服务商与模型」）
         # source_too_short | source_no_audio：源视频本身不能走字幕路线（media_precheck），用户输入，不上报
         self.code = code
         # Fine-grained upstream kind (insufficient_quota / invalid_key / …). Not a studio
@@ -48,22 +49,18 @@ class PipelineFailure(RuntimeError):
         return f"{self.message} {self.hint}".strip()
 
 
-HINT_CHECK_LLM = "请到「设置 → 模型」检查提供商、API Key 与模型名，点「测试连接」确认后重试。"
+HINT_CHECK_LLM = "请到「设置 → 服务商与模型」检查提供商、API Key 与模型名，点「测试连接」确认后重试。"
 # 缺密钥 / 提供商不可用 / 连接测试失败：明确要自备 key，并指到设置里的「模型」。
 HINT_BRING_OWN_KEY = (
     "需要自备 API Key（本机 Ollama / LM Studio 则先启动服务）。"
-    "到「设置 → 模型」填写提供商、密钥和模型名，点「测试连接」后再试。"
+    "到「设置 → 服务商与模型」填写提供商、密钥和模型名，点「测试连接」后再试。"
     "密钥在该提供商的控制台申请，只保存在这台机器上。"
 )
 CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
-# Environment failures of a model call: one fixed, translatable sentence for the user
-# (catalog key in all 8 locales). The provider's own text ("Connection error.",
-# "Request timed out.") stays in the log only (RC156 Win QA c5).
-MODEL_CALL_MESSAGES = {
-    "connection": "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
-    "timeout": "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
-    "rate_limited": "提供商限制了请求频率或额度，请检查配额并稍后重试。",
-}
+def _model_call_messages() -> dict[str, str]:
+    from backend.core.failure_codes import sentence
+    return {code: sentence(code) for code in ("llm_auth_invalid", "connection", "timeout", "rate_limited")}
+MODEL_CALL_MESSAGES = _model_call_messages()
 
 
 def looks_like_llm_setup_error(text: str) -> bool:
@@ -92,8 +89,8 @@ def llm_key_failure(stage: str, message: str) -> PipelineFailure:
     return PipelineFailure(stage, message, HINT_BRING_OWN_KEY, code=CODE_LLM_NOT_CONFIGURED)
 
 
-HINT_SUBTITLE = "到「设置 → 转写」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。"
-HINT_LOWER_THRESHOLD = "到「设置 → 模型 → 最低评分阈值」调低后重试，或换一个更强的模型。"
+HINT_SUBTITLE = "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。"
+HINT_LOWER_THRESHOLD = "到「设置 → 服务商与模型 → 最低评分阈值」调低后重试，或换一个更强的模型。"
 HINT_CHECK_FFMPEG = "确认 ffmpeg 可用（桌面版内置；Docker / 脚本模式请检查 PATH），以及原视频文件完整可播放。"
 # Legacy fallback when a caller returns [] without Step 2 diagnostics.
 # The extractor itself distinguishes request, response and duration failures.
@@ -116,9 +113,13 @@ def empty_timeline_failure(topic_count: int) -> PipelineFailure:
 
 def model_call_error_code(error: Exception) -> str:
     """Coarse studio code only. Fine type lives on ClassifiedUpstreamError / PipelineFailure.upstream_error_type."""
+    from backend.core.failure_attribution import frozen_error_code
     from backend.core.llm_retry import studio_code_for
     from backend.core.upstream_errors import classify_exception, http_error_parts
 
+    frozen = frozen_error_code(error)  # the redaction boundary already decided it
+    if frozen:
+        return frozen
     info = classify_exception(error)
     status, _body = http_error_parts(error)
     code = studio_code_for(info.error_type, status)
@@ -128,26 +129,14 @@ def model_call_error_code(error: Exception) -> str:
 
 
 def http_status_of(error: BaseException | None) -> int | None:
-    """沿异常链找第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
+    """第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
 
-    流水线把提供商异常包成 PipelineFailure(...) from error，状态码在 __cause__ 上；
-    隐式链（处理异常时又抛异常）走 __context__，与 traceback 的展示规则一致。
+    （ ，和 同一套遍历规则）：只有 failure_attribution.http_status_of 一处实现。
+    只走显式 __cause__；脱敏边界冻结在安全异常上的 http_status 优先；不再走 __context__
+    （处理旧 503 时又发生的新错误，不能把旧状态码带进新请求）。
     """
-    seen: set[int] = set()
-    current = error
-    while current is not None and id(current) not in seen and len(seen) < 32:
-        seen.add(id(current))
-        for attr in ("http_status", "status_code"):
-            status = getattr(current, attr, None)
-            if type(status) is int and 400 <= status <= 599:
-                return status
-        if current.__cause__ is not None:
-            current = current.__cause__
-        elif not current.__suppress_context__:
-            current = current.__context__
-        else:
-            current = None
-    return None
+    from backend.core.failure_attribution import http_status_of as _one_rule
+    return _one_rule(error)
 
 
 def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFailure:
@@ -171,7 +160,7 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
         code = last["error_code"]
         kind = last.get("upstream_error_type") or ""
         hints = {
-            "authentication": "请检查「设置 → 模型」中的密钥、模型权限和提供商配置，再测试连接。",
+            "authentication": "请检查「设置 → 服务商与模型」中的密钥、模型权限和提供商配置，再测试连接。",
             "rate_limited": MODEL_CALL_MESSAGES["rate_limited"],
             "timeout": MODEL_CALL_MESSAGES["timeout"],
             "connection": MODEL_CALL_MESSAGES["connection"],
@@ -196,23 +185,53 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
                 rejected[reason] = rejected.get(reason, 0) + count
         invalid_ranges = rejected.get("invalid_time", 0) + rejected.get("outside_chunk_or_reversed", 0)
         detail = (f"其中 {invalid_ranges} 个候选的时间戳无效、倒序或不在当前字幕块内。" if invalid_ranges else "")
-        cache_hint = "本次回放了项目中的模型缓存，未重新请求模型；请重新导入素材创建新项目再试。" if any(
-            chunk.get("source") == "cache" for chunk in chunks
-        ) else "请换用能稳定返回结构化时间线的模型后重试；本地模型需支持当前字幕长度。"
+        from backend.core.weak_local_timeline import WEAK_LOCAL_TIMELINE_REASON, empty_interval_hint
+
+        cached = any(isinstance(chunk, dict) and chunk.get("source") == "cache" for chunk in chunks)
+        if report.get("weak_local_timeline") and not cached:
+            return PipelineFailure("ANALYZE", WEAK_LOCAL_TIMELINE_REASON, "", code="invalid_response")
         return PipelineFailure(
             "ANALYZE", f"时间线模型回复没有有效时间区间（{topic_count} 个话题，{len(chunks)} 个字幕块）。{detail}",
-            cache_hint + "这一步尚未进入评分或最短时长筛选。", code="invalid_response",
+            empty_interval_hint(report, chunks) + "这一步尚未进入评分或最短时长筛选。", code="invalid_response",
         )
     return empty_timeline_failure(topic_count)
 
 
-def cloud_transcription_failure(message: str) -> PipelineFailure:
-    """CloudTranscriptionError carries only our safe public text, never a provider body."""
-    return PipelineFailure(
+from backend.core.failure_attribution import AttributedError  # noqa: E402 - no cycle
+
+
+class AttributedPipelineFailure(AttributedError, PipelineFailure):
+    """a PipelineFailure carrying the snapshot built where the chain was intact (``.attribution``)."""
+
+
+def cloud_transcription_failure(message, error: BaseException | None = None, http_status: int | None = None,
+                                upstream_error_type: str = "") -> PipelineFailure:
+    """CloudTranscriptionError carries only our safe public text, never a provider body.
+
+    the transcription boundary already built the snapshot (``error.attribution``); it is carried
+    here as is and wins over this wrapper's code (which only picks the user hint), never re-judged.
+    the code is the one the boundary froze (timeout / connection / llm_auth_invalid /...),
+    else ``provider_error``. The fine user cause (``invalid_key`` / ``insufficient_quota``) stays on
+    ``upstream_error_type``. The user text depends ONLY on the code and the frozen HTTP status.
+    A non-str ``message`` is the safe error itself (callers pass the exception)."""
+    from backend.core.failure_attribution import attributed, frozen_error_code
+    if not isinstance(message, str):
+        error = error or message
+        message = str(message)
+    if error is not None:
+        http_status = http_status or getattr(error, "http_status", None)
+        upstream_error_type = upstream_error_type or getattr(error, "upstream_error_type", "") or ""
+    if upstream_error_type == "unknown":
+        upstream_error_type = ""
+    code = frozen_error_code(error) or "provider_error"
+    failure = AttributedPipelineFailure(
         "SUBTITLE", f"云端转写失败：{message}",
-        "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
-        code="provider_error",
+        "到「设置 → 默认模型 → 语音转字幕」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
+        code=code, http_status=http_status if isinstance(http_status, int) else None,
+        upstream_error_type=upstream_error_type,
     )
+    return attributed(failure, getattr(error, "attribution", None), http_status=http_status,
+                      error_code=code if code != "provider_error" else frozen_error_code(error))
 
 
 def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> PipelineFailure:
@@ -222,27 +241,27 @@ def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> Pip
         return PipelineFailure(
             stage,
             "没有字幕可分析：视频不带字幕，且 Whisper 上次安装没有成功。",
-            "到「设置 → 转写」重试安装，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」重试安装，或重新导入时带上 .srt 字幕。",
             code="whisper_install_failed",
         )
     if code == "sensevoice_not_ready":
         return PipelineFailure(
             stage,
             "没有字幕可分析：SenseVoice 本次没有生成可用字幕。",
-            "到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
+            "到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
             code="subtitle_setup",
         )
     if code == "cloud_not_configured":
         return PipelineFailure(
             stage,
             "云端转写失败：本次未获得可用转写结果。",
-            "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
             code="provider_error",
         )
     return PipelineFailure(
         stage,
         "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
-        "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+        "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
         code="whisper_not_installed",
     )
 
@@ -256,7 +275,7 @@ def missing_subtitle_failure() -> PipelineFailure:
         return cloud_transcription_failure("本次未获得可用转写结果。")
     if settings and settings.transcription and settings.transcription.provider == 'sensevoice_local':
         return PipelineFailure('SUBTITLE', '没有字幕可分析：SenseVoice 本次没有生成可用字幕。',
-                               '到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。',
+                               '到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。',
                                code='subtitle_setup')
 
     status = whisper_runtime.get_status()
@@ -265,14 +284,14 @@ def missing_subtitle_failure() -> PipelineFailure:
         return PipelineFailure(
             "SUBTITLE",
             "没有字幕可分析：视频不带字幕，且 Whisper 上次安装没有成功。",
-            "到「设置 → 转写」重试安装，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」重试安装，或重新导入时带上 .srt 字幕。",
             code="whisper_install_failed",
         )
     if state != "installed":
         return PipelineFailure(
             "SUBTITLE",
             "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
-            "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
             code="whisper_not_installed",
         )
     return PipelineFailure(
@@ -284,16 +303,19 @@ def missing_subtitle_failure() -> PipelineFailure:
 
 
 def failure_from_speech_error(message: str) -> PipelineFailure:
-    """转写异常收成同一套失败码，不再把「设置 → 语音识别」和「设置 → 转写」叠在一起。"""
-    text = (message or "").strip().replace("设置 → 语音识别", "设置 → 转写")
+    """转写异常收成同一套失败码，不再把「设置 → 语音识别」和「设置 → 默认模型 → 语音转字幕」叠在一起。"""
+    text = (message or "").strip().replace("设置 → 语音识别", "设置 → 默认模型 → 语音转字幕").replace("设置 → 转写", "设置 → 默认模型 → 语音转字幕")
     from backend.pipeline import media_precheck
 
     if media_precheck.is_no_audio_text(text):
-        # 视频本身没有音轨：不是转写设置的问题，不要指到「设置 → 转写」。
+        # 视频本身没有音轨：不是转写设置的问题，不要指到「设置 → 默认模型 → 语音转字幕」。
         return media_precheck.no_audio_failure("SUBTITLE")
+    if "已超过时间上限" in text:
+        # Local Whisper wall clock (C2), same studio code as the clip-job cap.
+        return PipelineFailure("SUBTITLE", text, code="timeout")
     if 'SenseVoice' in text:
         return PipelineFailure('SUBTITLE', text,
-                               '' if '设置 → 转写' in text else '到「设置 → 转写」检查 SenseVoiceSmall，或导入 .srt 字幕。',
+                               '' if '设置 → 默认模型 → 语音转字幕' in text else '到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall，或导入 .srt 字幕。',
                                code='subtitle_setup')
     from backend.services import whisper_runtime
 
@@ -305,7 +327,7 @@ def failure_from_speech_error(message: str) -> PipelineFailure:
         return PipelineFailure(
             "SUBTITLE",
             "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
-            "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+            "到「设置 → 默认模型 → 语音转字幕」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
             code="whisper_not_installed",
         )
     if any(token in text for token in ("未识别出任何语音", "没有从这段视频", "可用语音")):
@@ -315,5 +337,5 @@ def failure_from_speech_error(message: str) -> PipelineFailure:
             "确认视频里有清晰人声后重试，或重新导入时带上 .srt 字幕。",
             code="transcription_empty",
         )
-    hint = "" if "设置 → 转写" in text else HINT_SUBTITLE
+    hint = "" if "设置 → 默认模型 → 语音转字幕" in text else HINT_SUBTITLE
     return PipelineFailure("SUBTITLE", text, hint, code="subtitle_setup")

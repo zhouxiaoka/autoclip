@@ -54,12 +54,16 @@ def _scenes(draft) -> list[SceneSpan]:
         else:
             start, end, points = getattr(scene, 'start', 0), getattr(scene, 'end', 0), getattr(scene, 'crop_track', None) or []
         parsed = []
+        modes = []
         for point in points:
             if isinstance(point, dict):
                 parsed.append((_num(point.get('start')), _num(point.get('crop_x'), 0.5)))
+                mode = point.get('mode') or 'crop'
             else:
                 parsed.append((_num(getattr(point, 'start', 0)), _num(getattr(point, 'crop_x', 0.5), 0.5)))
-        spans.append(SceneSpan(_num(start), _num(end), parsed))
+                mode = getattr(point, 'mode', 'crop') or 'crop'
+            modes.append(mode if mode in ('crop', 'fit') else 'crop')
+        spans.append(SceneSpan(_num(start), _num(end), parsed, modes))
     return spans
 
 
@@ -67,6 +71,18 @@ def _flag(draft, name: str, default=False):
     if isinstance(draft, dict):
         return draft.get(name, default)
     return getattr(draft, name, default)
+
+
+def _captions_drawn(draft, packaging) -> bool:
+    """Template captions follow packaging.captions_enabled. A bare draft follows draft.subtitles.
+
+    Packaging used to count as captions whenever it existed, so a clip with the switch off
+    still ran the captions-over-face check.
+    """
+    if packaging is None:
+        return bool(_flag(draft, 'subtitles', False))
+    enabled = packaging.get('captions_enabled', True) if isinstance(packaging, dict) else getattr(packaging, 'captions_enabled', True)
+    return enabled is not False
 
 
 def _words(source: Path | None) -> list[dict] | None:
@@ -111,10 +127,11 @@ def _context(project_id: str, draft, result, strategy_id: str) -> Context:
         height=int(_num(result.get('height'), 0)),
         strategy_id=strategy_id or 'original',
         words=_words(source),
-        captions=bool(_flag(draft, 'subtitles', False) or (packaging is not None)),
+        captions=_captions_drawn(draft, packaging),
         title=bool(hook or title_lines),
         packaged=packaging is not None,
         title_y=_num(_flag(draft, 'title_y', 0.12), 0.12),
+        layout=str(_flag(draft, 'layout', '') or ''),
     )
 
 
@@ -145,7 +162,12 @@ def prepare(project_id: str, draft, job_id: str, result) -> dict | None:
         'output': str(output) if output.is_file() else None,
         'source': str(ctx.source) if ctx.source is not None else None,
         'scenes': [
-            {'start': scene.start, 'end': scene.end, 'points': [list(point) for point in scene.points]}
+            {
+                'start': scene.start,
+                'end': scene.end,
+                'points': [list(point) for point in scene.points],
+                'modes': list(scene.modes),
+            }
             for scene in ctx.scenes
         ],
         'width': ctx.width,
@@ -156,6 +178,7 @@ def prepare(project_id: str, draft, job_id: str, result) -> dict | None:
         'title': ctx.title,
         'packaged': ctx.packaged,
         'title_y': ctx.title_y,
+        'layout': ctx.layout,
         'limits': checker_limits(span),
         'strategy_for_event': strategy,
     }
@@ -170,7 +193,8 @@ def context_from_payload(payload: dict) -> Context:
         for point in row.get('points') or []:
             if isinstance(point, (list, tuple)) and len(point) >= 2:
                 points.append((_num(point[0]), _num(point[1], 0.5)))
-        scenes.append(SceneSpan(_num(row.get('start')), _num(row.get('end')), points))
+        modes = [mode if mode in ('crop', 'fit') else 'crop' for mode in row.get('modes') or []]
+        scenes.append(SceneSpan(_num(row.get('start')), _num(row.get('end')), points, modes))
     output = Path(payload['output']) if payload.get('output') else None
     source = Path(payload['source']) if payload.get('source') else None
     words = payload.get('words') if isinstance(payload.get('words'), list) else None
@@ -186,6 +210,7 @@ def context_from_payload(payload: dict) -> Context:
         title=bool(payload.get('title')),
         packaged=bool(payload.get('packaged')),
         title_y=_num(payload.get('title_y'), 0.12),
+        layout=payload.get('layout') if isinstance(payload.get('layout'), str) else '',
     )
 
 

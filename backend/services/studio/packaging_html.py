@@ -151,21 +151,115 @@ def overlay_cache_limit() -> int:
     return value
 
 
-def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str) -> tuple[str, str]:
-    """Grade the base, then place the transparent overlay on top. Label is ``html``."""
+def _progress_bar(template: str, offset: float, total: float, width: int, height: int) -> str:
+    """A bar whose width follows the clip clock. It is not part of the captured overlay.
+
+    ``renderFrame`` used to bake the bar into every PNG. ``drawbox`` on ffmpeg 6.1 has no
+    ``eval`` option, so ``w='iw*t/D'`` is resolved once at init (``t`` is NAN) and the bar
+    is full width from frame 0. ``scale`` does re-evaluate, so a 2px swatch grows each frame.
+    ``t`` on that swatch starts at 0 for the scene; ``offset`` is where the scene sits in the clip.
+    Street runs from x=0 across the frame. Editorial starts at x=60 and stops at x=1020.
+    """
+    if template not in {'street', 'editorial'} or total <= 0 or width <= 0 or height <= 0:
+        return ''
+    off = f'{max(0.0, float(offset)):.3f}'
+    dur = f'{max(float(total), 0.001):.3f}'
+    if template == 'street':
+        span = max(2, int(width))
+        bar_h = 12
+        x = 0
+        y = max(0, height - bar_h)
+        color = '0xD7FF3A'
+    else:
+        span = min(960, max(2, int(width) - 120))
+        # Even height: yuva420p rejects 2x1 on ffmpeg 6.1 (CI) with "Picture size 2x0".
+        bar_h = 2
+        x = 60 if width >= 120 else 0
+        y = max(0, height - 94)
+        color = '0xF4EFE6@0.8'
+    # Even widths: the composite blends in yuv420, where chroma is shared by pixel pairs.
+    grown = f'max(2\\,min({span}\\,2*trunc({span}*(t+{off})/{dur}/2)))'
+    return (
+        f"{_still(f'color=c={color}:s=2x{bar_h}:r=30:d=1')},"
+        f"scale=w='{grown}':h={bar_h}:eval=frame:flags=neighbor[bar];"
+        f"[html][bar]overlay=x={x}:y={y}:format=yuv420:eval=frame:shortest=1:eof_action=repeat[paced]"
+    )
+
+
+def _still(source: str) -> str:
+    """One generated frame, converted once to the blend format, then repeated.
+
+    The composite runs per output frame. A generator, ``geq`` or a pixel-format conversion
+    upstream of ``loop`` runs once; downstream it would run on every frame of every scene.
+    """
+    return f"{source},trim=end_frame=1,format=yuva420p,loop=loop=-1:size=1:start=0"
+
+
+def _editorial_scrim(width: int, height: int) -> str:
+    """Lower 1000px wash, matching the template gradient, outside the captured overlay.
+
+    Stops: transparent at the top, 38% at 38% of the height, 78% at the bottom. Color ``#0C0A08``.
+    ``geq`` per pixel per frame costs about a second of video per second of clip. The wash does
+    not move, so it is one frame, converted to yuva420p once and looped.
+    """
+    scrim_h = min(1000, height)
+    if scrim_h < 2 or width < 2:
+        return ''
+    top = max(0, height - scrim_h)
+    # Commas inside geq belong to the expression, so they are escaped for the filtergraph.
+    alpha = (
+        "if(lt(Y\\,H*38/100)\\,255*Y/H\\,"
+        "255*(38/100+40/100*(Y-H*38/100)/(H*62/100)))"
+    )
+    wash = f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'"
+    return (
+        f"{_still(wash)}[scrim];"
+        # The wash is one looped frame. shortest stops it when the picture ends, so it cannot
+        # hold the composite open. The captured overlay below is the one that must not cut the scene.
+        f"[graded][scrim]overlay=0:{top}:format=yuv420:shortest=1:eof_action=repeat[based];"
+    )
+
+
+def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str, *, template: str = '', offset: float = 0.0, total: float = 0.0) -> tuple[str, str]:
+    """Grade the base, wash the editorial scrim, place the overlay, then the progress bar.
+
+    Every blend is yuv420, the format of the graded picture and of the encode. ``format=auto``
+    with a yuva444p layer made ffmpeg convert the looped scrim and the bar on every output frame;
+    that and a per-pixel ``colorbalance`` doubled the editorial composite against classic.
+    The captured overlay is converted once per captured frame (only caption changes), not per output frame.
+    """
+    scrim = _editorial_scrim(width, height) if template == 'editorial' else ''
+    base = '[based]' if scrim else '[graded]'
     graph = (
         f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
-        f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva444p[ov];"
-        f"[graded][ov]overlay=0:0:format=auto:shortest=1[html]"
+        f"{scrim}"
+        f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
+        # Repeat the last captured frame. shortest=1 would end the scene when the movie is shorter.
+        # A longer movie cannot extend the file: the encode command stops at the scene length.
+        f"{base}[ov]overlay=0:0:format=yuv420:eof_action=repeat[html]"
     )
-    return graph, 'html'
+    bar = _progress_bar(template, offset, total, width, height)
+    if not bar:
+        return graph, 'html'
+    return graph + ';' + bar, 'paced'
 
 
-def overlay_cache_path(project_id: str, template: str, fill: dict) -> Path:
-    """One file per template and fill. The name is a hash, not the caption."""
+def overlay_frame_count(duration: float, fps: int = 30) -> int:
+    """Frames an overlay movie has to cover. Matches the capture length below."""
+    return max(1, int(round(max(0.1, float(duration)) * fps)))
+
+
+def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int) -> Path:
+    """One file per template, painted fill and length. The name is a hash, not the caption.
+
+    Length is part of the key. paint_fill drops the cover title, so two captions-off clips of
+    one style can share a painted fill once the hook stops growing. The composite repeats
+    the last overlay frame and the encode stops at the scene (``-t``). A shorter movie
+    must still not be reused for a longer clip.
+    """
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-    digest = hashlib.sha256(f'{template}|{blob}'.encode()).hexdigest()[:20]
+    digest = hashlib.sha256(f'{template}|{int(frames)}|{blob}'.encode()).hexdigest()[:20]
     folder = directory(project_id) / 'output' / 'studio' / 'overlays'
     folder.mkdir(parents=True, exist_ok=True)
     return folder / f'{digest}.mkv'
@@ -249,6 +343,42 @@ def _cache_usable(path: Path) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return probe.returncode == 0 and probe.stdout.strip() == 'ffv1,yuva444p'
+
+
+def _overlay_duration(path: Path) -> float | None:
+    """Container seconds, or None when the movie cannot be timed."""
+    try:
+        from backend.utils.ffmpeg_utils import get_ffprobe_path
+        probe = subprocess.run(
+            [get_ffprobe_path(), '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'csv=p=0', str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if probe.returncode != 0:
+        return None
+    try:
+        value = float(probe.stdout.strip())
+    except ValueError:
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
+def _cached_overlay_fits(path: Path, frames: int, fps: int) -> bool:
+    """Reuse a movie only when it is a finished overlay of this clip's length.
+
+    A file that is merely valid ffv1 can still be another clip's overlay. The
+    composite stops at the shorter input, so the wrong length is not usable.
+    """
+    if fps <= 0 or frames <= 0 or not _cache_usable(path):
+        return False
+    probed = _overlay_duration(path)
+    if probed is None:
+        return False
+    return abs(probed - (frames / fps)) <= (2 / fps)
 
 
 def report_overlay_failure(error: BaseException) -> None:
@@ -370,6 +500,27 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                 page = await browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=1)
                 await page.goto(page_url)
                 await page.evaluate('(fill) => window.setData(fill)', fill)
+                # Ask for the sliced families with the glyphs on the line. check(font)
+                # stays false while an unused unicode-range file is pending, and fit()
+                # then refuses to shrink, so the English line stays past the box.
+                await page.evaluate('''(t) => window.renderFrame(t)''', 0)
+                await page.evaluate('''async () => {
+                  if (!document.fonts) return;
+                  const specs = [
+                    ['36px Anton', 'AG'],
+                    ['700 48px "Noto Sans CJK SC"', '中'],
+                    ['700 64px "Noto Sans CJK SC"', '中'],
+                    ['600 42px "Noto Sans CJK SC"', '中'],
+                    ['500 40px "Noto Sans CJK SC"', '中'],
+                    ['500 52px "Noto Sans CJK SC"', '中'],
+                    ['900 96px "Noto Serif SC"', '中'],
+                    ['italic 44px "Instrument Serif"', 'Ag'],
+                    ['italic 36px "Instrument Serif"', 'Ag'],
+                    ['500 22px "Inter Tight"', 'AG'],
+                  ];
+                  await Promise.all(specs.map(([spec, text]) => document.fonts.load(spec, text)));
+                  await document.fonts.ready;
+                }''')
                 pages.append(page)
 
             async def render(ordinal, seconds):
@@ -393,7 +544,30 @@ async def _bounded_capture(template: str, fill: dict, frames: int, fps: int, cap
     return await _playwright_frames(template, fill, frames, fps)
 
 
-def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None) -> OverlayJob:
+def load_project_word_timing(project_id: str):
+    """ASR words for this project's source SRT, or None when the sidecar is missing or stale."""
+    try:
+        from backend.services.publish_export import find_source_srt
+        from backend.utils.word_timing import load_word_timing
+        srt = find_source_srt(project_id)
+        if srt is None:
+            return None
+        return load_word_timing(srt)
+    except Exception:
+        return None
+
+
+def load_project_transcript(project_id: str):
+    """Source subtitle rows ``(start, end, text)``, including ``>>`` speaker turns. None when absent."""
+    try:
+        from backend.services.publish_export import _load_srt_entries
+        from backend.services.studio.boundaries import rows_from_entries
+        return rows_from_entries(_load_srt_entries(project_id)) or None
+    except Exception:
+        return None
+
+
+def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None) -> OverlayJob:
     """Capture the overlay, or return a classic result. This does not raise.
 
     ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
@@ -401,11 +575,12 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     browser startup, and the ffv1 encode share ``budget_seconds()``. ``duration_ms``
     is that overlay work, not the rest of the render.
     """
-    from backend.services.studio.overlay_fill import build_fill
+    from backend.services.studio.overlay_fill import build_fill, paint_fill
     from backend.services.studio.template_choice import blocking_reason
+    from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
     started_wall = time.monotonic()
-    requested = template if template in {'editorial', 'street'} else 'classic'
+    requested = template if template in HTML_TEMPLATE_IDS else 'classic'
 
     def finish(job: OverlayJob) -> OverlayJob:
         return _stamp(job, started_wall)
@@ -413,15 +588,24 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     reason = blocking_reason(features, runtime_ready=True if capture else None)
     if reason:
         return finish(_downgrade(reason, requested=requested))
-    if template not in {'editorial', 'street'}:
+    if template not in HTML_TEMPLATE_IDS:
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
-    frames = max(1, int(round(max(0.1, float(duration)) * fps)))
-    fill = build_fill(packaging, duration, fps=fps, safe_area=safe_area)
-    dest = overlay_cache_path(project_id, template, fill)
+    frames = overlay_frame_count(duration, fps)
+    timing = load_project_word_timing(project_id) if word_timing is None else word_timing
+    fill = paint_fill(
+        build_fill(
+            packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template,
+            word_timing=timing, transcript=load_project_transcript(project_id),
+        ),
+        packaging,
+        template,
+    )
+    dest = overlay_cache_path(project_id, template, fill, frames=frames)
     _enforce_overlay_cap(dest.parent)
-    if _cache_usable(dest):
+    if _cached_overlay_fits(dest, frames, fps):
         return finish(OverlayJob(dest, template, False, 'none', 'none', 'completed', requested_template=template))
+    # A valid movie of the wrong length used to stay cached and fail every retry.
     dest.unlink(missing_ok=True)
     now = clock or time.monotonic
     budget_started = now()
@@ -455,7 +639,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     except Exception as error:  # noqa: BLE001 - a capture failure must not fail the export
         report_overlay_failure(error)
         return finish(_downgrade('none', failure='capture', requested=template))
-    if not _cache_usable(dest):
+    if not _cached_overlay_fits(dest, frames, fps):
         dest.unlink(missing_ok=True)
         return finish(_downgrade('none', failure='encode', requested=template))
     _enforce_overlay_cap(dest.parent, keep=dest)

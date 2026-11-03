@@ -68,6 +68,8 @@ class DesktopServiceManager:
                 logging.StreamHandler()
             ]
         )
+        from backend.core.log_redaction import install_log_redaction
+        install_log_redaction()
         self.logger = logging.getLogger(__name__)
     
     def _create_fastapi_app(self) -> FastAPI:
@@ -110,6 +112,10 @@ class DesktopServiceManager:
                 log_level=self.config.log_level.lower(),
                 access_log=False
             )
+            # D4: uvicorn.Config rebuilds handlers (propagate=False, empty filters).
+            # Re-attach the unified redacting filter after that final log setup.
+            from backend.core.log_redaction import install_log_redaction
+            install_log_redaction()
             server = uvicorn.Server(config)
             self.server = server
 
@@ -219,6 +225,8 @@ class DesktopServiceManager:
           minutes-long model call.
         """
         from backend.core import parent_watch
+        from backend.core import project_cancellation
+        project_cancellation.begin_shutdown()
         self.logger.warning('🛑 桌面应用 (pid %s) 已退出，后端随之关闭', parent_pid)
         try:
             killed = parent_watch.terminate_children()
@@ -325,6 +333,11 @@ def main():
     from backend.services import child_guard
     child_guard.install_hooks()
     
+    # Kill ffmpeg left by a previous backend that was kill -9'd, then stamp our own children.
+    from backend.core import orphan_reaper
+    orphan_reaper.reap_orphans()
+    orphan_reaper.mark_environment()
+
     try:
         # 启动服务
         manager.start()
