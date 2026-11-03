@@ -150,18 +150,36 @@ def _tracked(stage):
             from backend.core import llm_telemetry
             from backend.core.job_budget import bound_clip_job
             budget = bound_clip_job() if stage in _BUDGETED_STAGES else nullcontext()
-            with budget, bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage), llm_telemetry.track_run():
-                if identity and identity[0] == 'analysis':
-                    _freeze_phase_identity(project_id)
+            # Map tracked studio stages onto heartbeat buckets (1.5.9 A1-C).
+            hb_stage = {
+                'screening': 'screening', 'download': 'download', 'subtitle': 'subtitle',
+                'production': 'analyze', 'analyze': 'analyze', 'render': 'render',
+                'visual_analysis': 'analyze', 'ai_cover': 'analyze',
+            }.get(stage, 'idle')
+            try:
+                from backend.services.studio import run_heartbeat
+                run_heartbeat.set_stage(hb_stage)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                with budget, bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage), llm_telemetry.track_run():
+                    if identity and identity[0] == 'analysis':
+                        _freeze_phase_identity(project_id)
+                    try:
+                        return fn(project_id, *args, **kwargs)
+                    except ProjectDeleted:
+                        return None  # deleted: the binder removes leftover files; nothing to record
+                    except PermissionError as error:
+                        if store.read_error_needs_report(error):
+                            phase = {'visual_analysis': 'analysis', 'ai_cover': 'production'}.get(stage, stage)
+                            capture_studio_exception(error, phase)
+                        raise
+            finally:
                 try:
-                    return fn(project_id, *args, **kwargs)
-                except ProjectDeleted:
-                    return None  # deleted: the binder removes leftover files; nothing to record
-                except PermissionError as error:
-                    if store.read_error_needs_report(error):
-                        phase = {'visual_analysis': 'analysis', 'ai_cover': 'production'}.get(stage, stage)
-                        capture_studio_exception(error, phase)
-                    raise
+                    from backend.services.studio import run_heartbeat
+                    run_heartbeat.set_stage('idle')
+                except Exception:  # noqa: BLE001
+                    pass
         return run
     return wrap
 
@@ -1517,15 +1535,31 @@ def _submit_production(project_id, run_id, plan, *, attempt_id=None):
     """Hand a generation run to the worker. A refused hand-off fails THIS run at the dispatch stage.
     The same guard as _fail_generation: a newer attempt that took over the generation is not rewritten."""
     try:
+        from backend.core.quota_precheck import QuotaExhausted, check_for_analysis_settings
+        quota, _extras = check_for_analysis_settings()
+        if quota == 'exhausted':
+            raise QuotaExhausted(quota_precheck='exhausted')
         executor.submit(_auto_generate, project_id, plan, _io_receipt=('analysis', run_id, 'production'))
     except Exception as error:
         store.analysis_handoff_rejected(project_id, run_id)
         store.remember_submission_rejection(project_id, ('analysis', run_id, 'production'), error_code=studio_error_code(error))
         capture_studio_exception(error, 'dispatch')
-        message = '自动制作任务未能启动，请重试；原素材已保留'
+        from backend.core.failure_codes import sentence as _sentence
         code = studio_error_code(error)
+        context = studio_failure_context(error, 'dispatch')
+        if type(error).__name__ == 'QuotaExhausted':
+            message = _sentence('insufficient_quota')
+        else:
+            message = '自动制作任务未能启动，请重试；原素材已保留'
         def fail_automatic(data):
-            return store.settle_attempt(data, kind='fail', error=message, error_code=code, failure_stage='dispatch', route=_generation_route(plan), run_id=run_id, carry=False, identify=False, guard=lambda d: _still_this_run(d, attempt_id, run_id))
+            return store.settle_attempt(
+                data, kind='fail', error=message, error_code=code, failure_stage='dispatch',
+                route=_generation_route(plan), run_id=run_id, carry=False, identify=False,
+                guard=lambda d: _still_this_run(d, attempt_id, run_id),
+                context={k: context[k] for k in (
+                    'upstream_error_type', 'quota_precheck', 'billable_calls_before_failure',
+                ) if k in context},
+            )
         if store.change(project_id, fail_automatic):
             mark_project(project_id, 'failed')
 
@@ -2112,7 +2146,10 @@ def _inspect(project_id, options, url, browser):
                 download(project_id, url, browser, options)
         store.change(project_id, lambda data:(data['analysis'].pop('percent', None), data['analysis'].update(message='快速判断适合的制作类型')))
         plan = recommend(source(project_id), options)
-        ensure_project_thumbnail(project_id)
+        try:
+            ensure_project_thumbnail(project_id)
+        except Exception:  # noqa: BLE001 - thumbnail miss must not fail screening (A2-3)
+            logger.warning('ensure_project_thumbnail failed', exc_info=True)
         plan['id'] = uuid.uuid4().hex
         if options.auto_start:
             from backend.services.studio.failure_identity import SCREENING_KEY, phase_identity, screening_identity

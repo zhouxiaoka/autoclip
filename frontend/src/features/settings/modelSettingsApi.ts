@@ -20,6 +20,8 @@ export interface Connection {
   image_base_url: string
   validation_status?: 'ok' | 'failed' | 'unchecked' | 'transient'
   validation_error_type?: string
+  /** 1.5.9 3B: ISO stamp while retry is locked after insufficient_quota. */
+  quota_exhausted_at?: string | null
   /** F2 trial-run card state — F5 import area reads the same fields. */
   trial_status?: 'passed' | 'failed' | 'unchecked'
   trial_context_ok?: boolean | null

@@ -95,6 +95,8 @@ class Connection(BaseModel):
     image_base_url: str = ''
     validation_status: Literal['ok', 'failed', 'unchecked', 'transient'] = 'unchecked'
     validation_error_type: str = ''
+    # 1.5.9 3B: ISO timestamp when insufficient_quota last hit; cleared on a successful connection test.
+    quota_exhausted_at: str | None = None
     # F2 trial-run card state (F5 import area reads the same fields).
     trial_status: Literal['passed', 'failed', 'unchecked'] = 'unchecked'
     trial_context_ok: bool | None = None

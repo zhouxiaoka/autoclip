@@ -141,7 +141,8 @@
         "asr": [],
         "image": []
       },
-      "auth": "api_key"
+      "auth": "api_key",
+      "billing_probe": "new_api"
     },
     "infistar": {
       "display_name": "Infistar 无限星河",
@@ -207,7 +208,8 @@
         "asr": [],
         "image": []
       },
-      "auth": "api_key"
+      "auth": "api_key",
+      "billing_probe": "new_api"
     },
     "deepseek": {
       "display_name": "DeepSeek",

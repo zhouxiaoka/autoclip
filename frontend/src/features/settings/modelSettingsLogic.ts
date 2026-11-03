@@ -104,6 +104,8 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
         base_url: url,
         validation_status: ok ? 'ok' : result.result === 'transient' || isRetryableUpstreamError(result.error_type || '') ? 'transient' : 'failed',
         validation_error_type: ok ? '' : (result.error_type || 'unknown'),
+        // 1.5.9 3B: a successful connection test unlocks retry after insufficient_quota.
+        ...(ok ? { quota_exhausted_at: null } : {}),
         ...(result.probe_kind === 'trial' ? {
           trial_status: trialPassed ? 'passed' as const : trialFailed ? 'failed' as const : 'unchecked' as const,
           trial_context_ok: result.trial_context_ok ?? null,
