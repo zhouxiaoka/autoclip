@@ -259,6 +259,43 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 **Agent skill**：`skills/autoclip/SKILL.md` 教 agent 何时用哪个工具、参数怎么选、结果怎么呈现、切片为 0 怎么办。
 复制到 `~/.cursor/skills/autoclip/`、`~/.claude/skills/autoclip/` 或 `~/.config/opencode/skills/autoclip/` 即生效。
 
+### MCPB（Smithery 本地 stdio）
+
+MCPB（MCP Bundle）是带 `manifest.json` 的 ZIP，扩展名 `.mcpb`。Official MCP Registry 上的 `io.github.zhouxiaoka/autoclip-mcp` 仍走 PyPI 和 `uvx autoclip-mcp`。Smithery 的本地 stdio 列表要另外上传一个 `.mcpb`。
+
+`mcpb/` 是薄封装，不把 `backend/` 打进包。`mcpb/pyproject.toml` 依赖已发布的 `autoclip-mcp`（当前 pin 与仓库根 `pyproject.toml` 的版本一致），`mcpb/src/server.py` 只转调 `backend.mcp_server:main`。宿主用 UV 安装这个 PyPI 包。安装后的 server 需要 PATH 里有 `uv`、`ffmpeg`、`ffprobe`。Python 3.10+ 由 UV 准备。
+
+可选的模型密钥在清单 `user_config.api_key` 里，类型是敏感字符串，不是必填，映射到环境变量 `AUTOCLIP_API_KEY`。桌面应用已经保存过密钥时留空。空白或尚未替换的 `${user_config...}` 会在入口丢掉，不会覆盖桌面设置。
+
+清单里 `server.type` 写成 `python`，是因为当前 Smithery CLI 认不出 MCPB 0.4 的 `uv` 类型，发布时会报 `Could not determine bundle runtime from manifest`。启动命令仍然是 `uv run --directory <包目录> src/server.py`，依赖从 PyPI 安装。清单不写 `tools`：Smithery 会把 MCPB 那种只有名字和说明的工具条目当成完整工具列表，而那种条目没有 `inputSchema`，发布会被拒绝。工具以 server 运行时列出的为准。
+
+在仓库根目录打包（需要 Node.js 自带的 `npx`；产物在 `dist/`，已被 gitignore，不提交）：
+
+```bash
+python scripts/pack_mcpb.py
+```
+
+只校验、不打包：
+
+```bash
+python scripts/pack_mcpb.py --validate-only
+```
+
+等价的 CLI：
+
+```bash
+npx --yes @anthropic-ai/mcpb@2.1.2 validate mcpb
+npx --yes @anthropic-ai/mcpb@2.1.2 pack mcpb dist/autoclip-mcp.mcpb
+```
+
+发布到 Smithery 要维护者自己的登录。仓库脚本不会执行这一步，也不保存 API key。`-n` 用 Smithery 上实际的 namespace/server；与 Official MCP Registry 同名时是：
+
+```bash
+smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp
+```
+
+Smithery 日后若接受 `server.type: uv`，只改清单里的类型即可，启动命令和 PyPI 依赖不用改。不要为此去抬 PyPI 版本。
+
 ---
 
 ## 4. 本地模型预设（Ollama / LM Studio）

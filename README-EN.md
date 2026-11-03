@@ -280,6 +280,8 @@ The MCP client starts the server. For standalone debugging, run `autoclip mcp` i
 
 Replace `PROJECT_ID` with the project ID returned by production. MCP uses `start_quick_output` / `get_quick_output_status`; set the client’s `command` to the virtualenv’s absolute `autoclip` path and `args` to `["mcp"]`. Legacy `run` / `export` and clipping tools remain available. See [CLI / MCP](docs/CLI_AND_MCP.md) (Chinese), [OpenCode](docs/OPENCODE.en.md), and [Agent skill](skills/autoclip/SKILL.md) (Chinese).
 
+Smithery’s local stdio listing uses an MCPB bundle. From the repo root, run `python scripts/pack_mcpb.py`. The artifact is `dist/autoclip-mcp.mcpb` and is not committed. Publish with `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp` using the maintainer’s own login. The repository does not store an API key. Steps are in [CLI / MCP](docs/CLI_AND_MCP.md) (Chinese).
+
 ## Model setup
 
 | Option | Setup |
@@ -318,6 +320,15 @@ Inside Docker, `localhost` is the container. Point at a host address the contain
       🧩 <strong>Model choice</strong>: The partner offers Claude, GPT, Gemini, DeepSeek, and other model families. Choose models that support the compatible endpoint to compare transcript analysis and highlight selection.<br>
       🏷️ <strong>Pricing and services</strong>: According to the partner, selected models cost as little as <strong>1% of official list prices</strong>, with RMB billing, invoices, and model authenticity verification. Check the platform for eligible models, current prices, and service terms.<br>
       🎁 <strong>AutoClip offer</strong>: New users can receive <strong>$5 in trial credit</strong> through our <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">referral registration link</a>, subject to the promotion terms. <a href="docs/INFISTAR_SETUP.en.md">Setup guide</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      Thanks to <strong>APIMart</strong> for sponsoring this project! <strong>APIMart</strong> is a low-cost API platform for AI image &amp; video generation — GPT-Image-2 from <strong>$0.006/image</strong>, <strong>160+</strong> images per dollar. One async API covers both image and video: submit a task, get an ID, fetch results via polling or callback. Batch tens of thousands of images without timeouts, switch models without changing code. Pay-as-you-go with no monthly fee — <a href="https://go.apimart.ai/tw-autoclip">sign up here</a> to get started.
     </td>
   </tr>
 </table>

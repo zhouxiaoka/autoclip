@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.zhouxiaoka/autoclip-mcp -->
+
 <div align="center">
 
 <img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
@@ -278,6 +280,8 @@ MCP 服务由客户端启动。需要单独调试时，在另一个终端运行 
 
 把 `PROJECT_ID` 换成制作结果中的项目 ID。MCP 新入口为 `start_quick_output` / `get_quick_output_status`；客户端 `command` 指向虚拟环境中的 `autoclip` 绝对路径，`args` 为 `["mcp"]`。旧 `run` / `export` 和旧切片工具继续兼容。详见 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 与 [Agent skill](skills/autoclip/SKILL.md)。
 
+Smithery 本地 stdio 用 MCPB：在仓库根目录执行 `python scripts/pack_mcpb.py`，产物是 `dist/autoclip-mcp.mcpb`（不提交）。发布命令是 `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp`，需要维护者自己的登录，仓库不保存 API key。步骤见 [CLI / MCP](docs/CLI_AND_MCP.md)。
+
 ## 模型配置
 
 | 方式        | 配置                                                             |
@@ -316,6 +320,15 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       🧩 <strong>多模型选择</strong>：合作方提供 Claude、GPT、Gemini、DeepSeek 等系列模型，可选择支持兼容接口的型号，对比字幕分析与高光筛选效果。<br>
       🏷️ <strong>价格与服务</strong>：据合作方介绍，部分模型低至官方定价的 <strong>0.1 折</strong>，支持人民币结算、开票及模型验真；具体型号、价格与服务条件以平台页面为准。<br>
       🎁 <strong>AutoClip 专属福利</strong>：通过 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">专属推广链接注册</a>可领取 <strong>$5 体验额度</strong>，领取条件以活动页面为准。 <a href="docs/INFISTAR_SETUP.md">接入说明</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      感谢 <strong>APIMart</strong> 赞助了本项目！<strong>APIMart</strong> 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 <strong>$0.006/张</strong>，1 美元可出图 <strong>160+</strong> 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过此<a href="https://go.apimart.ai/tw-autoclip">注册链接</a>注册即可开用。
     </td>
   </tr>
 </table>
