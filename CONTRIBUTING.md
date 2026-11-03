@@ -48,6 +48,8 @@ python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
 
 生产 bug 的回归需要证明旧代码失败、修复后通过。CI 全绿还需要最终安装包验收，才能作为可发布版本；局部验证命令如下。
 
+`scripts/ci_guards.py` 挂在 contracts 组里，提交前可以单独跑。测试文件不要按审查轮次命名。产品代码和测试的注释、文档字符串只写原因，不写审查编号。产品代码里的错误码字面量必须能过 `event_catalog.json` 和现有的 `failure_codes.require_code`。PR 的 job summary 会分开列出产品、测试、文档的行数变化，只展示，不拦截。
+
 后端测试从仓库根目录运行：
 
 ```bash

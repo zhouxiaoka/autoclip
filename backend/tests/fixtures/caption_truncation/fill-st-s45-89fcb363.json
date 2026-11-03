@@ -1,0 +1,48 @@
+{
+ "fps": 30,
+ "kicker": "",
+ "hook": {
+  "text": "承认落后后\n执行力全行业最强",
+  "until_frame": 72
+ },
+ "title_lines": [
+  "承认落后后",
+  "执行力全行业最强"
+ ],
+ "words": [
+  {
+   "text": "“最佳十二个月。”你指的是什么？史上最佳十二个月。只是——我觉得我们公司确实犯了一些错误，",
+   "start_frame": 0,
+   "end_frame": 166,
+   "emphasis": ""
+  },
+  {
+   "text": "这种事会周期性发生。试图押注一篮子赌注，部分就在于有时押中的多，有时押中的少。但我觉得",
+   "start_frame": 166,
+   "end_frame": 461,
+   "emphasis": ""
+  },
+  {
+   "text": "无论是产品方向，还是具体在预训练和研究上，我们都落在了想达到的位置后面。我觉得我们现在执行力不仅是",
+   "start_frame": 461,
+   "end_frame": 751,
+   "emphasis": ""
+  },
+  {
+   "text": "我们历来最好的，而且是这个领域所有公司里最好的。而且很有意思，低谷之后的上扬更有趣。",
+   "start_frame": 751,
+   "end_frame": 1020,
+   "emphasis": ""
+  },
+  {
+   "text": "所以就看模型的发展节奏。",
+   "start_frame": 1020,
+   "end_frame": 1107,
+   "emphasis": ""
+  }
+ ],
+ "gloss": [],
+ "number": null,
+ "stickers": [],
+ "safe_area": "douyin"
+}

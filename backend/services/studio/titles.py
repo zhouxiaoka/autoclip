@@ -1,4 +1,5 @@
 """Portable FFmpeg title templates; no browser/Studio runtime required."""
+from backend.core.failure_codes import UserFacingError
 import re
 import unicodedata
 from pathlib import Path
@@ -40,7 +41,7 @@ def title_layout(text, style, w, h):
         if len(lines) <= 3: break
         size -= 2
         if size < minimum:
-            raise ValueError('开头文字太长，请缩短后再导出（标题最多三行）')
+            raise UserFacingError('开头文字太长，请缩短后再导出（标题最多三行）')
     return lines, size
 
 

@@ -28,6 +28,7 @@ export interface CoverView {
   badge?: string
   content_type?: string
   warning?: string | null
+  warning_detail?: string | null
 }
 
 export interface CoverJobView {

@@ -36,6 +36,7 @@
 - [ ] `python scripts/bump_version.py --check` 版本号一致
 - [ ] 本地统一检查：`python scripts/quality_gate.py --report /absolute/local/evidence/quality.json`；记录提交和未提交改动
 - [ ] 通读 `CHANGELOG.md [未发布]`：面向用户、能对应到 issue / PR、没有内部路径 / 密钥
+- [ ] 服务商实测档位：有 PostHog 凭证时跑 `python scripts/provider_quality_report.py`，用近 14 天设备级成功率与成功耗时 p50 核对 `backend/presets/provider_quality.json`；没有凭证时脚本只打印 HogQL，不阻塞发版
 
 ### 3.2 标签前：内部构建与双平台产品验收
 - [ ] 用 `bump_version.py X.Y.Z --commit` 准备未公开候选版本，但**不打 tag**；后续修复继续使用这个未公开编号
@@ -83,7 +84,7 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 - [ ] 运行 **Internal Acceptance**：源码完整 SHA、内部 Desktop Build run ID、已提交 manifest 路径；它核对双平台全部场景、修复、当前包哈希、新执行或受影响断言的新证据、原执行的影响承接证明、时间及实名复核；Internal/Release/Promote 都从同一已审计 dispatch ref 执行 gate
 - [ ] Internal Acceptance 成功且用户已授权本版本后，在**被验收的原提交**创建带注解标签：注解必须有独立一行 `Internal-Acceptance-Run: RUN_ID`；不要在验收后再 bump / 合入修改
 - [ ] 推送标签。tag 的 Desktop Build 会核对上述不可变验收回执；缺失或提交不符时，阻断打包和 Pre-release
-- [ ] exact tag CI、双平台构建、Windows 安装/升级和运行时全绿；Release 为 Pre-release，全部 DMG / EXE / wheel / ZIP / updater / 签名 / provenance 齐全
+- [ ] exact tag CI、双平台构建、Windows 安装/升级和运行时全绿；**Provider E2E Gate**（mock 必过；tag 上的 live 为 10 条拆 5 家，Environment `provider-e2e` 有 key 时跑，没配 key 则报告标明跳过；滚动窗口未满 20 条应成功样本时不因单次成功率卡死）通过；Release 为 Pre-release，全部 DMG / EXE / wheel / ZIP / updater / 签名 / provenance 齐全
 - [ ] 核对正式构建包哈希与内部包；最终包仍须按必测矩阵留证。发生重建/换包时重跑受影响场景，不能把内部包记录改时间后冒充最终包验收
 
 此时应用内更新和官网还不推送该候选；只有手动下载 Pre-release 的人能装。标签后的核对与观察是第二道门槛，不能取代标签前的内部产品验收。
@@ -98,6 +99,7 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 - [ ] Actions → **Release Acceptance** → tag、该 tag 的 build run ID、已提交的脱敏验收 manifest 路径；等待成功
 - [ ] Actions → **Promote / Halt Release** → `tag=vX.Y.Z`，`action=promote`，`acceptance_run_id=上一步成功 run ID`
   → 该版本变成 latest，应用内更新开始推送，官网同步
+- [ ] 成功率发布时间：执行本步 Promote 的人，打开该版本的 GitHub Release，复制 `published_at`（UTC，形如 `YYYY-MM-DDTHH:MM:SSZ`）。到 PostHog 项目 `450605`、看板「AutoClip｜1.5.7 出片成功率」，把每条 insight 里的 `docs/analytics/success_rate.sql` 参数 `{release_1_5_7}` 换成 `'YYYY-MM-DD HH:MM:SS'`：去掉 `T` 和 `Z`，日期与时间之间改成空格，保留 UTC，外面加单引号（`version_releases` 中 1.5.7 那一行的 `released_at_text`）。还没拿到发布时间就填空字符串 `''`，这一版的事件先全部不计入。不要猜日期，也不要把这个时间写回仓库。1.5.6 及更早不在这张表里，不用填
 - [ ] 更新置顶帖 #96 的版本号和「这版修了什么」
 - [ ] 本版修复的 issue：回复「已在 vX.Y.Z 修复，请升级」后关闭；重复的 issue 合并到一个跟踪 issue 再一起关
 - [ ] `HANDOFF.md` 头部状态同步
@@ -155,3 +157,4 @@ PyPI 版本可以是产品版本的 post 发行（产品 `1.5.7`、包 `1.5.7.po
 | 打包脚本 | `scripts/build_macos_arm.sh`、`scripts/build_windows_x64.sh` |
 | 每周反馈周报 | `scripts/weekly_digest.py` |
 | 当前状态 / 待办 | `HANDOFF.md` |
+| 出片成功率发布时间下限 | `docs/analytics/success_rate.sql` 的 `{release_1_5_7}`。Promote 的人用 GitHub Release `published_at`（UTC）填进 PostHog insight，不写回仓库 |

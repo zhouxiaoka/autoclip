@@ -18,26 +18,21 @@ Once you have local footage, a local language model, and any required speech mod
 
 ### What footage works best?
 
-Subtitle analysis is the default, so interviews, podcasts, lectures, spoken commentary, and livestream recordings with clear speech are a good fit. As of **v1.4.0**, gameplay recordings can use optional visual analysis: you need a multimodal model and must explicitly enable paid visual screening. One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. Music or other picture-led footage, when visual analysis is left off, may not have enough subtitle information to identify highlights. There is no guaranteed clip count or quality.
+Subtitle analysis is the default, so interviews, podcasts, lectures, spoken commentary, and livestream recordings with clear speech are a good fit. Gameplay can be cut from the picture: in Settings → Providers and models, switch to a vision-capable model. Sampled frames are sent to that model and billed by the provider. One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. Music or other picture-led footage, without a vision-capable model, may not have enough subtitle information to identify highlights. There is no guaranteed clip count or quality.
 
-For a first run, bring your own 3–5 minute clip with clear speech, preferably with an accurately timed `.srt`. Use a local file, Bilibili, or YouTube, and confirm that you have the right to use it. AutoClip does not host an official sample, and Releases do not include a sample zip or finished clips.
+To see a result before you configure anything: when the home screen has no projects, click “用示例项目看看效果” (See an example project). The example ships inside the installer (`source.mp4` and `source.srt`) and needs no API key. It is not a separate sample download.
 
-For a first clip, try [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (Stanford ENERGY). 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights).
+After that, use your own 3–5 minute clip with clear speech, preferably with an accurately timed `.srt`. Use a local file or Bilibili, and confirm that you have the right to use it.
 
-Other examples are optional. Dialogue is mostly English; official captions or your own SRT/Whisper are optional.
-
-- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator). 示例·非托管·自担使用权.
-- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Sources Podcast, not an OpenAI channel. 示例·非托管·自担使用权.
-
-Setup steps are in the [installation guide](USER_INSTALLATION_GUIDE.en.md#bring-your-own-short-clip); sticking points are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
+Setup steps are in the [installation guide](USER_INSTALLATION_GUIDE.en.md#see-the-example-then-use-your-own-clip); sticking points are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 
 ## Installation and startup
 
 ### Which file should I download?
 
-In [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest), choose `aarch64.dmg` for Apple Silicon Mac or `x64-setup.exe` for Windows x64. Use Docker or CLI for Intel Mac / Linux. Check the actual release assets; `Source code` is not a desktop installer. Releases do not include an official sample video or finished clips.
+In [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest), choose `aarch64.dmg` for Apple Silicon Mac or `x64-setup.exe` for Windows x64. There is no Intel Mac desktop build; use Docker or the CLI, the same as Linux. Check the actual release assets; `Source code` is not a desktop installer. For a first look, use “用示例项目看看效果” in the app. The example is inside the installer.
 
-For first-launch system warnings, see the [installation guide](USER_INSTALLATION_GUIDE.en.md) and release notes. Routine Windows use does not require administrator privileges.
+On macOS 15 and later, double-click once. If macOS blocks the app, open System Settings → Privacy & Security → Open Anyway ([Apple’s note](https://developer.apple.com/news/?id=saqachfa)). On older macOS, right-click the app and choose Open. If Windows SmartScreen appears, choose More info → Run anyway. Routine use does not require administrator privileges. Details are in the [installation guide](USER_INSTALLATION_GUIDE.en.md).
 
 ### What if the app is blank or cannot connect to the backend?
 
@@ -57,7 +52,7 @@ Inside Docker, `localhost` refers to the container. See the [Docker guide](DOCKE
 
 ### How do I choose subtitle analysis or game visual analysis?
 
-As of **v1.4.0** there are two routes. Subtitle analysis stays the default, including for existing settings. Game visual analysis is optional: configure your own multimodal model and explicitly enable paid visual screening. Saving a model does not authorize every visual call. After you confirm, the visual route finds separate events in a gameplay recording, produces editable highlights and promo drafts, and you edit them in the shared editor. An unconfirmed import can be resumed. Understanding and cutting start only after confirmation.
+As of **v1.4.0** there are two routes. Subtitle analysis stays the default, including for existing settings. To cut from the picture, choose a vision-capable model in Settings → Providers and models. After you confirm, the visual route finds separate events in a gameplay recording, produces editable highlights and promo drafts, and you edit them in the shared editor. An unconfirmed import can be resumed. Understanding and cutting start only after confirmation.
 
 One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. v1.4.0 does not include CTA motion, generative brand end cards, or karaoke / word-level subtitles.
 
@@ -67,11 +62,20 @@ Cutting and rendering stay on your machine. The subtitle route sends the relevan
 
 ### What if I have no subtitles? Which format can I import?
 
-Local file import accepts an optional `.srt`. Without usable subtitles, you need speech transcription: install the Whisper components and model in Settings first. CLI users can install `faster-whisper`. Convert other subtitle formats to accurately timed SRT rather than assuming every format is accepted.
+Local file import accepts an optional `.srt`. When the source has no subtitles, or local Whisper will not install or is too slow, switch to Bailian cloud transcription (`qwen-audio-3.1-asr-flash`, about 0.1 yuan per hour of audio; the Alibaba Cloud bill is the actual charge). The audio is uploaded to the cloud.
+
+Open Settings → Default models → “Speech to subtitles” and choose that model. If import is blocked, click “Use cloud transcription instead”.
+
+Create a Bailian API key in two steps:
+
+1. Register or claim the offer with the author’s recommendation link: <https://www.aliyun.com/benefit?userCode=qmyj6jch>
+2. Then create the API key at <https://bailian.console.aliyun.com/> and paste it into Settings.
+
+You can still use local Whisper. A video without subtitles has to download the local transcription component the first time (about 220 MB, about 15 minutes on a slow network). If you don't want to wait, switch to cloud transcription. CLI users can install `faster-whisper`. Convert other subtitle formats to accurately timed SRT rather than assuming every format is accepted.
 
 ### What if installing Whisper on Windows still says mlx-whisper only supports Apple Silicon?
 
-If Settings → Transcription → Install still shows the red error 「mlx-whisper 仅支持 Apple Silicon (macOS)」 on Windows or any other non-Mac system, update to **v1.3.3** or later (includes [#145](https://github.com/zhouxiaoka/autoclip/pull/145)). On desktop, use Settings → Application → Check for updates, or download it from [Releases](https://github.com/zhouxiaoka/autoclip/releases). Older builds showed that message and blocked the install by mistake. After you update, use the same Install button. See [#141](https://github.com/zhouxiaoka/autoclip/issues/141).
+If installing local Whisper from Settings → Default models → “Speech to subtitles” still shows the red error 「mlx-whisper 仅支持 Apple Silicon (macOS)」 on Windows or any other non-Mac system, update to **v1.3.3** or later (includes [#145](https://github.com/zhouxiaoka/autoclip/pull/145)). On desktop, use Settings → Application → Check for updates, or download it from [Releases](https://github.com/zhouxiaoka/autoclip/releases). Older builds showed that message and blocked the install by mistake. After you update, install again. See [#141](https://github.com/zhouxiaoka/autoclip/issues/141).
 
 ### Why were no clips generated?
 
@@ -91,7 +95,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. For a first check, use a clip you provide, or try [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) above. You do not need to run every example. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
+Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. For a first check, use “用示例项目看看效果” on the home screen, or a clip you provide. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
 
 ### Why is processing slow or using too much memory?
 

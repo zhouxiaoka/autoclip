@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import AIModelSettings from '../features/settings/AIModelSettings'
 import OutputBrandingSetting from '../features/settings/OutputBrandingSetting'
+import OutputCaptionsSetting from '../features/settings/OutputCaptionsSetting'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
 import { isDesktopMode } from '../utils/desktopMode'
@@ -14,27 +15,29 @@ import { openExternalLink } from '../utils/externalLinks'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
 import { getRuntimeInfo } from '../analytics/lifecycle'
 import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
+import { isKeepAwakeEnabled, getKeepAwakeController } from '../features/studio/keepAwake'
 import { getAppVersion } from '../desktop/updater'
 import { useAppUpdate } from '../desktop/UpdatePrompt'
 import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented } from '../ui'
 import FlagOverrides, { flagOverridesVisible } from '../features/settings/FlagOverrides'
+import ImportPreferenceSettings from '../features/settings/ImportPreferenceSettings'
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
-  { key: 'ai', get label() { return t("AI 模型") } },
+  { key: 'ai', get label() { return t('settings.providers.nav') } },
   { key: 'publish', get label() { return t("发布") } },
   { key: 'app', get label() { return t("应用") } },
   { key: 'feedback', get label() { return t("反馈") } },
 ]
 // 旧链接（项目卡「模型设置」「转写设置」等）仍能打开，并滚到对应小节
 const SECTION_ALIASES: Record<string, { section: SectionKey; anchor?: string }> = {
-  model: { section: 'ai', anchor: 'ai-model' },
-  analysis: { section: 'ai', anchor: 'ai-model' },
-  vision: { section: 'ai', anchor: 'ai-model' },
-  speech: { section: 'ai', anchor: 'ai-speech' },
-  cover: { section: 'ai', anchor: 'ai-cover' },
+  model: { section: 'ai', anchor: 'ai-defaults' },
+  analysis: { section: 'ai', anchor: 'ai-defaults-analysis' },
+  vision: { section: 'ai', anchor: 'ai-defaults-vision' },
+  speech: { section: 'ai', anchor: 'ai-defaults-transcription' },
+  cover: { section: 'ai', anchor: 'ai-defaults-cover' },
 }
 
 // Calm Premium settings — left nav + setting rows (see DESIGN.md → App Layer)
@@ -80,7 +83,7 @@ const SettingsPage: React.FC = () => {
 
         <div className="ac-settings-body">
           <div hidden={active !== 'ai'}>
-            <AIModelSettings requestedSection={requested} />
+            <AIModelSettings requestedSection={requested} requestedProvider={new URLSearchParams(location.search).get('provider') || ''} />
           </div>
 
           {/* ---------------- 应用 ---------------- */}
@@ -123,6 +126,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   useTranslation()
   const { theme, setTheme } = useTheme()
   const [autostart, setAutostart] = useState(false)
+  const [keepAwake, setKeepAwake] = useState(() => isKeepAwakeEnabled())
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
@@ -173,6 +177,12 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
     }
   }
 
+
+  const toggleKeepAwake = (enabled: boolean) => {
+    setKeepAwake(enabled)
+    getKeepAwakeController().onEnabledChange(enabled)
+  }
+
   const toggleCrashReports = async (enabled: boolean) => {
     crashPreferenceChanged.current = true
     setCrashReportsEnabled(enabled)
@@ -219,7 +229,11 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("开机自动启动")} hint={t("启用后随系统启动，可从托盘打开。仅桌面应用可用。")}>
           <Switch checked={autostart} onChange={toggleAutostart} loading={busy} disabled={!desktop} />
         </Row>
+        <Row label={t("制作时阻止电脑休眠")} hint={t("制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。")}>
+          <Switch checked={keepAwake} onChange={toggleKeepAwake} />
+        </Row>
         <OutputBrandingSetting />
+        <OutputCaptionsSetting />
         {(desktop || appUpdate.preview) && (
           <>
             <Row label={t('版本')} hint={versionHint}>
@@ -245,11 +259,10 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
       </div>
-      {flagOverridesVisible() && (
-        <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
-          <FlagOverrides />
-        </div>
-      )}
+      <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
+        <ImportPreferenceSettings />
+        {flagOverridesVisible() && <FlagOverrides />}
+      </div>
     </Section>
   )
 }

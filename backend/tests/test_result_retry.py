@@ -24,6 +24,7 @@ def prompt_files(tmp_path):
 
 def _manager(fn):
     manager = LLMManager.__new__(LLMManager)
+    manager._reload_if_settings_changed = lambda: None
     manager.call = lambda *a, **k: fn()
     return manager
 
@@ -95,14 +96,10 @@ def test_caller_cannot_raise_result_retry_ceiling(monkeypatch, code):
     [
         lambda: _http(401, "invalid api key"),
         lambda: _http(403, "insufficient_user_quota"),
-        lambda: _http(429, "rate limit"),
-        lambda: _http(500, "internal server error"),
         lambda: _http(404, "does not exist"),
-        lambda: TimeoutError("timed out"),
-        lambda: ConnectionError("connection error"),
         lambda: PipelineFailure("ANALYZE", "x", code="authentication"),
     ],
-    ids=("401", "403", "429", "500", "404", "timeout", "connection", "authentication"),
+    ids=("401", "403", "404", "authentication"),
 )
 def test_other_error_types_are_not_retried(monkeypatch, factory):
     sleeps = []

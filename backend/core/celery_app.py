@@ -3,10 +3,15 @@ Celery应用配置
 任务队列配置和初始化
 """
 
+import logging
 import os
 from celery import Celery
 from celery.schedules import crontab
 from pathlib import Path
+
+from backend.core.log_redaction import install_celery_log_redaction
+
+install_celery_log_redaction()
 
 # 设置默认配置模块
 # os.environ.setdefault('CELERY_CONFIG_MODULE', 'backend.core.celery_app')

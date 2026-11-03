@@ -46,6 +46,20 @@ def test_the_same_moment_picked_in_two_windows_is_kept_once():
     assert [c['title'] for c in clip_finder._dedupe(picks, rows)] == ['b', 'c']
 
 
+def test_a_long_platform_minimum_is_written_into_the_selection_prompt():
+    sent = []
+
+    def call(prompt, data):
+        sent.append(prompt)
+        return {'clips': [{'start': 0, 'end': 40, 'title': '够长的一段', 'reason': '完整讲完一个观点', 'score': 0.9}]}
+
+    clip_finder.find_clips(_entries(12), call, threshold=0.5, platform_min_sec=180, platform_min_label='YouTube 横屏')
+    assert 'YouTube 横屏' in sent[0] and '不少于 180 秒' in sent[0]
+    sent.clear()
+    clip_finder.find_clips(_entries(12), call, threshold=0.5)
+    assert '平台时长' not in sent[0]
+
+
 def test_a_bad_response_is_retried_with_the_reason_then_fails_for_fallback():
     sent = []
 

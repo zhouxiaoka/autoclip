@@ -57,6 +57,7 @@ def test_long_audio_merges_offsets_and_failure_does_not_publish_partial(monkeypa
     def extract(command, **kwargs):
         with wave.open(command[-1], 'wb') as audio:
             audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(16000)
+            # 181s crosses the 150s upload cut, so the second cue is shifted by 2:30.
             audio.writeframes(b'\0\0' * 16000 * 181)
         return SimpleNamespace(returncode=0)
     monkeypatch.setattr(asr.subprocess, 'run', extract)
@@ -70,7 +71,7 @@ def test_long_audio_merges_offsets_and_failure_does_not_publish_partial(monkeypa
     monkeypatch.setattr(asr, 'request_chunk', response)
     output = tmp_path / 'out.srt'
     asr.transcribe(tmp_path / 'video.mp4', output, selection)
-    assert '00:03:00,100 --> 00:03:00,800' in output.read_text()
+    assert '00:02:30,100 --> 00:02:30,800' in output.read_text()
     assert len(chunks) == 2
     output.unlink(); chunks.clear()
     def fail(*args):
@@ -94,11 +95,17 @@ def test_rate_limits_and_server_errors_are_retried_but_auth_errors_are_not(monke
     import httpx
     from backend.services import cloud_transcription as ct
 
-    def status(code):
+    def status(code, body=b''):
+        # the retry decision sees the error _check_status classified (the real path)
         request = httpx.Request('POST', 'https://asr.example.com')
-        return httpx.HTTPStatusError('x', request=request, response=httpx.Response(code, request=request))
+        try:
+            ct._check_status(httpx.Response(code, request=request, content=body))
+        except ct.CloudTranscriptionError as error:
+            return error
+        raise AssertionError('no error raised')
     assert ct._retryable(status(429)) and ct._retryable(status(503)) and ct._retryable(httpx.ConnectError('down'))
     assert not ct._retryable(status(401)) and not ct._retryable(status(400))
+    assert not ct._retryable(status(429, b'{"error":{"message":"Insufficient balance"}}'))
     for value, expected in (('0', 1), ('abc', 8), ('4', 4)):
         monkeypatch.setenv('AUTOCLIP_ASR_CONCURRENCY', value)
         assert ct._workers() == expected

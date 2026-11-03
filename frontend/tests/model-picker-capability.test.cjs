@@ -1,8 +1,9 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
 function loadPicker() {
   const jsx = (type, props) => ({ type, props })
@@ -11,12 +12,17 @@ function loadPicker() {
     'react/jsx-runtime': { jsx, jsxs: jsx },
     antd: { Select: 'Select' }, '../../i18n': { t: s => s }, '../../ui': { Btn: 'Btn' },
     './modelDefaults': { analysisModels: models => models },
+    './endpointProvider': loadTs('endpointProvider.ts'),
     './modelSettingsLogic': { connectionReady: () => true, presetKey: c => c.provider },
+    './weakLocalTimeline': loadTs('weakLocalTimeline.ts'),
+    './WeakLocalTimelineNote': { default: 'weak-note' },
+    './LocalRecommendPull': { default: 'local-recommend' },
+    './localModelGate': { belowLocalAnalysisGate: () => false, localAnalysisWarnCopy: () => '', localModelSizeLabel: () => '' },
   }
   const code = ts.transpileModule(fs.readFileSync('src/features/settings/ModelPicker.tsx', 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports, require: name => modules[name] || assert.fail(name) })
+  runInSandbox(code, { module, exports: module.exports, require: name => modules[name] || assert.fail(name) })
   return module.exports.default
 }
 function findTypeSelect(node) {
@@ -41,9 +47,49 @@ for (const provider of ['dashscope', 'compatible', 'openai']) {
     assert.equal(chosen, 'multimodal')
   })
 }
+function findNote(node) {
+  if (!node || typeof node !== 'object') return false
+  if (node.type === 'weak-note') return true
+  const children = node.props?.children
+  for (const child of Array.isArray(children) ? children.flat(5) : [children]) {
+    if (findNote(child)) return true
+  }
+  return false
+}
+test('analysis picker warns for a small local timeline model and still allows the choice', () => {
+  const picker = loadPicker()
+  const warned = picker({ role: 'analysis', model: 'qwen2.5:7b', connection: { id: 'local', provider: 'ollama', base_url: 'http://127.0.0.1:11434/v1' },
+    list: { source: 'live', models: [{ id: 'qwen2.5:7b', capability: 'text' }] }, busy: false, mode: 'subtitle', onChange() {}, onRefresh() {} })
+  assert.equal(findNote(warned), true)
+  assert.equal(warned.props.children[0].props.disabled, false)
+  const larger = picker({ role: 'analysis', model: 'qwen2.5:32b', connection: { id: 'local', provider: 'ollama' },
+    list: { source: 'live', models: [{ id: 'qwen2.5:32b', capability: 'text' }] }, busy: false, mode: 'subtitle', onChange() {}, onRefresh() {} })
+  assert.equal(findNote(larger), false)
+  const cloud = picker({ role: 'analysis', model: 'qwen2.5:7b', connection: { id: 'cloud', provider: 'dashscope' },
+    list: { source: 'live', models: [{ id: 'qwen2.5:7b', capability: 'text' }] }, busy: false, mode: 'subtitle', onChange() {}, onRefresh() {} })
+  assert.equal(findNote(cloud), false)
+})
 test('known provider capability needs no manual confirmation', () => {
   const picker = loadPicker()({ role: 'analysis', model: 'known-vision',
     connection: { id: 'one', provider: 'dashscope' }, list: { source: 'live', models: [{ id: 'known-vision', capability: 'multimodal' }] },
     busy: false, mode: 'auto', onChange() {}, onRefresh() {}, onCapability() {} })
   assert.equal(findTypeSelect(picker), null)
+})
+
+
+test('every purpose picker hides endpoint-only connections until URL and validation pass', () => {
+  const Picker = loadPicker()
+  const catalog = loadTs('providerPresets.ts').getCatalog()
+  for (const preset of Object.values(catalog.providers).filter(row => !row.base_url && row.protocol !== 'local')) {
+    for (const [base_url, validation_status, ready] of [['', 'ok', false], ['https://endpoint.example.test/v1', 'unchecked', false], ['https://endpoint.example.test/v1', 'failed', false], ['https://endpoint.example.test/v1', 'ok', true]]) {
+      for (const role of ['analysis', 'vision', 'cover', 'transcription']) {
+        const tree = Picker({ role, model: '', connection: { id: 'endpoint', provider: 'compatible', catalog_provider_id: preset.id, base_url, validation_status },
+          list: { source: 'live', models: [{ id: 'test-model', analysis: true, capability: 'multimodal', image: true, asr: true, asr_supported: true }] },
+          busy: false, mode: 'auto', onChange() {}, onRefresh() {} })
+        const select = tree.props.children[0]
+        assert.equal(select.props.disabled, !ready, `${preset.id}: ${role}`)
+        assert.equal(select.props.options.length, ready ? 1 : 0, `${preset.id}: ${role}`)
+      }
+    }
+  }
 })

@@ -3,6 +3,7 @@
 基于你提出的"做笨做稳"方案
 """
 
+import math
 import time
 import json
 import logging
@@ -31,6 +32,18 @@ STAGES: List[Tuple[str, int]] = [
 WEIGHTS = {name: w for name, w in STAGES}
 # 阶段顺序
 ORDER = [name for name, _ in STAGES]
+
+# Within a stage that has no measured sub-percent (a long model call), ease toward
+# 90% of the band. The ceiling stays under the band end and under 95, so the bar
+# cannot sit on a fake 99. Completion is the only path to 100.
+EASE_TAU_SEC = 90.0
+EASE_FRACTION = 0.9
+EASE_CAP = 95
+
+# project_id -> (stage, baseline percent, monotonic time the baseline started)
+_ease_anchor: Dict[str, Tuple[str, int, float]] = {}
+# True once this run has a measured sub-percent. Heartbeats must not walk past it.
+_measured: Dict[str, bool] = {}
 
 class ProgressStore:
     def save(self, project_id: str, stage: str, percent: int, message: str, ts: int):
@@ -216,6 +229,48 @@ def compute_percent(stage: str, subpercent: Optional[float] = None) -> int:
         return min(99, done + int(cur * subpercent / 100))
 
 
+def stage_band(stage: str) -> Tuple[int, int]:
+    """Display band for one stage. DONE is 100; every other stage stays under 100."""
+    if stage == "DONE":
+        return 100, 100
+    start = compute_percent(stage)
+    end = compute_percent(stage, 100)
+    return start, end
+
+
+def ease_percent(stage: str, base: int, elapsed_sec: float) -> int:
+    """Move `base` toward the stage ceiling. Monotonic, and never 100."""
+    if stage == "DONE":
+        return 100
+    if stage not in WEIGHTS:
+        return max(0, min(99, int(base)))
+    start, end = stage_band(stage)
+    if end <= start:
+        return max(0, min(99, int(base)))
+    ceiling = start + int((end - start) * EASE_FRACTION)
+    if ceiling >= end:
+        ceiling = end - 1
+    ceiling = min(EASE_CAP, max(start, ceiling))
+    floor = max(start, min(99, int(base)))
+    if floor >= ceiling:
+        return min(99, floor)
+    moved = (ceiling - floor) * (1.0 - math.exp(-max(0.0, elapsed_sec) / EASE_TAU_SEC))
+    return min(ceiling, floor + int(moved))
+
+
+def _rebase_ease(project_id: str, stage: str, percent: int) -> None:
+    _ease_anchor[project_id] = (stage, int(percent), time.time())
+
+
+def _mirror_studio(project_id: str, stage: str, percent: int, message: str, *, approximate: bool) -> None:
+    """Copy the project-scale percent into Studio. Progress display never fails the pipeline."""
+    try:
+        from backend.services.simple_pipeline_adapter import mirror_studio_progress
+        mirror_studio_progress(project_id, stage, percent, message, approximate=approximate)
+    except Exception:  # noqa: BLE001
+        logger.debug("studio progress mirror skipped", exc_info=True)
+
+
 # 进程内监听器（CLI / MCP 用来实时打印进度；API 进程用不到）
 _listeners: List[Any] = []
 
@@ -244,6 +299,9 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
         subpercent: 子进度百分比，可选
     """
     percent = compute_percent(stage, subpercent)
+    measured = subpercent is not None or stage == "DONE"
+    _measured[project_id] = measured
+    _rebase_ease(project_id, stage, percent)
     payload = {
         "project_id": project_id,
         "stage": stage,
@@ -260,13 +318,63 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
 
     if not store:
         logger.warning("进度存储未初始化，跳过进度发送")
+    else:
+        try:
+            store.save(project_id, stage, percent, message, payload["ts"])
+            logger.info(f"进度事件已发送: {project_id} - {stage} ({percent}%) - {message}")
+        except Exception as e:
+            logger.error(f"发送进度事件失败: {e}")
+    _mirror_studio(project_id, stage, percent, message, approximate=not measured)
+
+
+def note_activity(project_id: str, message: str) -> None:
+    """Refresh an existing snapshot while a model stream is still producing.
+
+    A measured sub-percent stays put. Without one, the percent eases forward
+    inside the stage band and never jumps backward. No snapshot means this
+    call is outside the pipeline and nothing is created.
+    """
+    if not project_id or not message or not store:
         return
-    
     try:
-        store.save(project_id, stage, percent, message, payload["ts"])
-        logger.info(f"进度事件已发送: {project_id} - {stage} ({percent}%) - {message}")
-    except Exception as e:
-        logger.error(f"发送进度事件失败: {e}")
+        current = store.get(project_id)
+    except Exception:  # noqa: BLE001 - progress must not fail the model call
+        return
+    if not current:
+        return
+    existing = current.get("message") or ""
+    if "失败" in existing or "错误" in existing:
+        return
+    stage = current.get("stage") or ""
+    percent = int(current.get("percent") or 0)
+    shown = percent
+    # A measured sub-percent (download, transcription) stays put. A long model
+    # call eases toward the band ceiling and never moves backward.
+    if stage and stage != "DONE" and not _measured.get(project_id):
+        now = time.time()
+        anchor = _ease_anchor.get(project_id)
+        if not anchor or anchor[0] != stage:
+            anchor = (stage, percent, now)
+            _ease_anchor[project_id] = anchor
+        eased = ease_percent(stage, anchor[1], now - anchor[2])
+        shown = max(percent, eased)
+    payload = {
+        "project_id": project_id,
+        "stage": stage,
+        "percent": shown,
+        "message": message,
+        "ts": int(time.time()),
+    }
+    for fn in list(_listeners):
+        try:
+            fn(payload)
+        except Exception:  # noqa: BLE001
+            logger.debug("进度监听器异常", exc_info=True)
+    try:
+        store.save(project_id, payload["stage"], shown, message, payload["ts"])
+    except Exception:  # noqa: BLE001
+        logger.debug("刷新进度失败", exc_info=True)
+    _mirror_studio(project_id, stage, shown, message, approximate=not _measured.get(project_id, False))
 
 
 def get_progress_snapshot(project_id: str) -> Optional[Dict[str, Any]]:
@@ -315,6 +423,8 @@ def clear_progress(project_id: str):
     Args:
         project_id: 项目ID
     """
+    _ease_anchor.pop(project_id, None)
+    _measured.pop(project_id, None)
     if not store:
         return
     try:

@@ -2,7 +2,9 @@ const {test}=require('node:test'),assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript')
 const file=path.resolve(__dirname,'../src/features/studio/pollWorkspace.ts'),m=new Module(file,module)
 m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,file)
-const {pollWorkspace}=m.exports
+const {pollWorkspace,observeWorkspace}=m.exports
+function listenSet(){const listeners=new Set();return{listeners,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn)},emit(){for(const fn of [...listeners])fn()}}}
+async function until(predicate,label){const start=Date.now();while(!predicate()){if(Date.now()-start>500)throw new Error(label||'timed out');await new Promise(resolve=>setTimeout(resolve,5))}}
 const snapshot=(status,jobs=[])=>({drafts:[],events:[],jobs:jobs.map(status=>({status})),analysis:status?{status}:null})
 function setup(){const controller=new AbortController(),data=[],errors=[];return{controller,data,errors,options:{signal:controller.signal,intervalMs:0,onData:x=>data.push(x),onError:e=>errors.push(e),onSettled(){}}}}
 test('completion, failure and confirmation stop reads, including an empty old project',async()=>{
@@ -16,8 +18,28 @@ test('analysis and queued/running exports continue until all active work finishe
 })
 test('HTTP errors stop immediately; network failures are bounded and keep prior data',async()=>{
  for(const status of [401,404,429,500]){const c=setup();let calls=0;await pollWorkspace(async()=>{calls++;throw {response:{status}}},c.options);assert.equal(calls,1)}
- const c=setup();let calls=0;await pollWorkspace(async()=>{if(++calls===1)return snapshot('running');throw Error('network')},c.options)
+ const c=setup();let calls=0
+ const pending=pollWorkspace(async()=>{if(++calls===1)return snapshot('running');throw Error('network')},{...c.options,offlineIntervalMs:60_000})
+ const started=Date.now()
+ while(calls<4 && Date.now()-started<1000) await new Promise(resolve=>setTimeout(resolve,5))
  assert.equal(calls,4);assert.equal(c.data.length,1);assert.equal(c.errors.length,3)
+ c.controller.abort();await pending
+})
+test('network failures without a producing snapshot still stop after three',async()=>{
+ const c=setup();let calls=0
+ await pollWorkspace(async()=>{calls++;throw Error('network')},{...c.options,offlineIntervalMs:0})
+ assert.equal(calls,3);assert.equal(c.data.length,0);assert.equal(c.errors.length,3)
+})
+test('after the fast network budget a slow probe replaces a stale producing snapshot',async()=>{
+ const c=setup();let calls=0
+ await pollWorkspace(async()=>{
+  calls++
+  if(calls===1)return snapshot('running')
+  if(calls<5)throw Error('network')
+  return snapshot('failed')
+ },{...c.options,offlineIntervalMs:0})
+ assert.equal(calls,5);assert.equal(c.data.length,2);assert.equal(c.errors.length,3)
+ assert.equal(c.data.at(-1).analysis.status,'failed')
 })
 test('recovered network request resumes observation and a new observer refreshes terminal state',async()=>{
  const c=setup();let calls=0;const read=async()=>{if(++calls===1)throw Error('network');return snapshot('completed')}
@@ -34,6 +56,53 @@ test('abort interrupts the scheduled delay without another read',async()=>{
  assert.equal(calls,1)
 })
 
+test('a stopped poll stays stopped until the backend is ready again',async()=>{
+ const c=setup(),bus=listenSet();let calls=0
+ const pending=observeWorkspace(async()=>{
+  calls++
+  if(calls===1)return snapshot('running')
+  throw {response:{status:503}}
+ },{...c.options,subscribeRestart:bus.subscribe})
+ await until(()=>calls===2,'poll did not stop')
+ await new Promise(resolve=>setTimeout(resolve,20))
+ assert.equal(calls,2)
+ assert.equal(c.data.length,1)
+ assert.equal(c.data[0].analysis.status,'running')
+ c.controller.abort();await pending
+})
+test('backend restart re-arms a stopped poll and shows the reconciled failure',async()=>{
+ const c=setup(),bus=listenSet();let calls=0
+ const pending=observeWorkspace(async()=>{
+  calls++
+  if(calls===1)return snapshot('running')
+  if(calls===2)throw {response:{status:503}}
+  return snapshot('failed')
+ },{...c.options,subscribeRestart:bus.subscribe})
+ await until(()=>calls===2,'poll did not stop on HTTP')
+ await new Promise(resolve=>setTimeout(resolve,20))
+ assert.equal(calls,2)
+ bus.emit()
+ await until(()=>c.data.some(row=>row.analysis.status==='failed'),'restart did not refresh')
+ assert.equal(calls,3)
+ assert.equal(c.data.at(-1).analysis.status,'failed')
+ c.controller.abort();await pending
+})
+test('backend restart interrupts the slow probe instead of waiting out the offline interval',async()=>{
+ const c=setup(),bus=listenSet();let calls=0
+ const started=Date.now()
+ const pending=observeWorkspace(async()=>{
+  calls++
+  if(calls===1)return snapshot('running')
+  if(calls<5)throw Error('network')
+  return snapshot('failed')
+ },{...c.options,offlineIntervalMs:60_000,subscribeRestart:bus.subscribe})
+ await until(()=>calls===4,'slow probe did not start')
+ bus.emit()
+ await until(()=>c.data.at(-1)?.analysis.status==='failed','restart did not replace the producing snapshot')
+ assert.ok(Date.now()-started<1000)
+ assert.equal(c.data[0].analysis.status,'running')
+ c.controller.abort();await pending
+})
 test('saved video keeps observing its pending variant until the designed cover is available',async()=>{
  const c=setup(),pending={...snapshot('running',['completed']),output_variants:[{status:'queued'}]}
  const finished={...snapshot('completed',['completed']),output_variants:[{status:'completed',cover:'design'}]}

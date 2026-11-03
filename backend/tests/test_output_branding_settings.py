@@ -1,4 +1,5 @@
 """The application toggle controls new automatic renders and editor re-exports, and survives restart."""
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -32,6 +33,27 @@ def test_automatic_render_obeys_the_saved_switch(root, monkeypatch, enabled):
     job = jobs.export('p1', draft, brand_outro=True)
     assert job['brand_outro'] is enabled
     assert submitted[0][1].get('brand_outro', False) is enabled
+
+
+def test_unreadable_branding_file_stays_on_and_logs_once(caplog, root, monkeypatch):
+    path = output_branding.settings_path()
+    output_branding._unreadable_logged = False
+    path.write_text('{', encoding='utf-8')
+    with caplog.at_level(logging.WARNING, logger='backend.services.output_branding'):
+        assert output_branding.load_settings().enabled is True
+        assert output_branding.load_settings().enabled is True
+        path.write_text('{"enabled":"yes"}', encoding='utf-8')
+        assert output_branding.load_settings().enabled is True
+    assert [record.message for record in caplog.records if record.name == 'backend.services.output_branding'] == [
+        'output-branding.json is unreadable; outro stays on',
+    ]
+    submitted = []
+    monkeypatch.setattr(jobs, 'render_executor', SimpleNamespace(submit=lambda *args, **kwargs: submitted.append((args, kwargs))))
+    draft = Draft(id='d', title='x', scenes=[Scene(id='s', start=0, end=1)], subtitles=False)
+    job = jobs.export('p1', draft, brand_outro=True)
+    assert job['brand_outro'] is True
+    path.write_text('{"enabled":false}', encoding='utf-8')
+    assert output_branding.load_settings().enabled is False
 
 
 def test_a_different_outro_setting_cannot_reuse_the_other_active_render(root, monkeypatch):

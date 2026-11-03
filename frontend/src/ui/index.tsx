@@ -95,8 +95,8 @@ export const StatusDot: React.FC<{ tone: 'ok' | 'error' | 'accent' | 'muted'; la
   </span>
 )
 
-export const ProgressLine: React.FC<{ percent: number }> = ({ percent }) => (
-  <div className="ac-line"><i style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
+export const ProgressLine: React.FC<{ percent?: number; busy?: boolean }> = ({ percent = 0, busy }) => (
+  <div className={`ac-line${busy ? ' ac-line--busy' : ''}`}><i style={busy ? undefined : { width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
 )
 
 /* ---------- Dialog ---------- */
@@ -176,6 +176,7 @@ export const Icon = {
   Check: (p?: { size?: number }) => <I size={p?.size} d="M5 12l5 5L20 7" />,
   Close: (p?: { size?: number }) => <I size={p?.size} d="M6 6l12 12M18 6L6 18" />,
   External: (p?: { size?: number }) => <I size={p?.size} d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />,
+  Help: (p?: { size?: number }) => <I size={p?.size} d="M9.1 9a3 3 0 1 1 4.4 2.6c-.8.5-1.5 1.1-1.5 2.4M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" />,
 }
 
 /* ---------- helpers ---------- */

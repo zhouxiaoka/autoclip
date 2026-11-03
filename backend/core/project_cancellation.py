@@ -28,6 +28,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+from backend.core.failure_codes import sentence
+
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
@@ -67,7 +69,7 @@ class ServiceRestarted(RuntimeError):
     """The desktop shell exited; no new work or completed receipts may be committed."""
 
     def __init__(self):
-        super().__init__('服务已重启，请重新生成')
+        super().__init__(sentence('service_restarted'))
 
 
 def begin_shutdown() -> None:
@@ -76,6 +78,12 @@ def begin_shutdown() -> None:
     global _shutting_down
     with _lock:
         _shutting_down = True
+    # no shutdown marker here; this runs on a clean quit and on parent loss alike.
+    # The shell's shutdown-intent call writes ``clean``; parent_watch writes ``parent_lost``.
+
+
+def shutting_down() -> bool:
+    return _shutting_down
 
 
 def cancel(project_id: str) -> None:
@@ -182,6 +190,10 @@ def checkpoint(project_id: Optional[str] = None) -> None:
         return
     if is_stopped(project_id) or _marker_requests_stop(project_id):
         raise JobStopped(project_id or '')
+    # A clip job that has already used its wall-clock budget stops here, including
+    # between pipeline steps. Cancellation still wins: a deleted project raises above.
+    from backend.core.job_budget import ensure_clip_job_budget
+    ensure_clip_job_budget()
 
 
 def project_directory(project_id: str) -> Path:
@@ -491,14 +503,36 @@ def _wait_child(proc: subprocess.Popen, timeout: Optional[float], project_id: st
 
 
 def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_output: bool = False, **kwargs):
-    """subprocess.run for long children (ffmpeg) of the bound project: deleting the project kills them."""
+    """subprocess.run for long children (ffmpeg) of the bound project: deleting the project kills them.
+
+    Unbound callers (branding cache warm-up, etc.) still take ``_lock`` for check+Popen
+    so ``begin_shutdown`` cannot slip a child in between the flag read and the spawn.
+    """
     project_id = _current.get()
-    if project_id is None:
-        return subprocess.run(cmd, check=check, timeout=timeout, capture_output=capture_output, **kwargs)
-    checkpoint(project_id)
     if capture_output:
+        kwargs = dict(kwargs)
         kwargs['stdout'] = subprocess.PIPE
         kwargs['stderr'] = subprocess.PIPE
+    if project_id is None:
+        with _lock:
+            if _shutting_down:
+                raise ServiceRestarted()
+            proc = subprocess.Popen(cmd, **kwargs)
+        with proc:
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+                raise subprocess.TimeoutExpired(proc.args, timeout, output=stdout, stderr=stderr) from None
+            except BaseException:
+                proc.kill()
+                raise
+        result = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
+        if check:
+            result.check_returncode()
+        return result
+    checkpoint(project_id)
     kwargs = _spawn_kwargs(kwargs)
     with _lock:
         checkpoint(project_id)

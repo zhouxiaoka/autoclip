@@ -30,6 +30,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS as _HTML_TEMPLATE_IDS
+
 logger = logging.getLogger(__name__)
 
 PACKAGES = ["playwright>=1.49,<2"]
@@ -55,7 +57,7 @@ BROWSER_MIRROR_TIMEOUT_SECONDS = 600
 PIP_SOCKET_TIMEOUT = "15"
 PIP_RETRIES = "1"
 TIMEOUT_EXIT = 124
-HTML_TEMPLATES = frozenset({"editorial", "street"})
+HTML_TEMPLATES = frozenset(_HTML_TEMPLATE_IDS)
 CLASSIC = "classic"
 # 旧版式仍然是 ASS，读到它们时不要误当成 HTML 模板。
 _CLASSIC_ALIASES = frozenset({"", CLASSIC, "interview_zh", "podcast_en", "landscape", "none", "auto"})

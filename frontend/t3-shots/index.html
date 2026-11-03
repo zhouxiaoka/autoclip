@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>T3 local model gate shots</title>
+<style>
+  :root { --ac-sub:#6b7280; --bg:#f7f6f3; --card:#fff; --line:#e7e5e0; --danger:#b91c1c; }
+  body { margin:0; font-family:"PingFang SC","Noto Sans SC",system-ui,sans-serif; background:var(--bg); color:#1c1917; }
+  .frame { max-width:540px; margin:32px auto; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px 28px; box-shadow:0 8px 24px rgba(28,25,23,.06); }
+  h2 { margin:0 0 4px; font-size:18px; }
+  .sub { color:var(--ac-sub); font-size:13px; margin:0 0 16px; }
+  .select { width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:14px; background:#fff; }
+  .warn { color:var(--danger); font-size:13px; margin:10px 0 0; }
+  .note { color:var(--ac-sub); font-size:13px; margin:8px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .btn { border:1px solid var(--line); background:#fff; border-radius:999px; padding:7px 12px; font-size:13px; }
+  .btn.primary { background:#1c1917; color:#fff; border-color:#1c1917; }
+  ul.opts { list-style:none; margin:8px 0 0; padding:0; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  ul.opts li { padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line); }
+  ul.opts li:last-child { border-bottom:none; }
+  ul.opts li.warn { color:var(--danger); background:#fef2f2; }
+  .badge { font-size:11px; color:var(--ac-sub); }
+</style>
+</head>
+<body>
+<script>
+const scene = new URLSearchParams(location.search).get('scene') || 'warn';
+const root = document.createElement('div');
+root.className = 'frame';
+root.dataset.scene = scene;
+
+if (scene === 'recommend') {
+  root.innerHTML = `
+    <h2>模型</h2>
+    <p class="sub">Ollama · http://127.0.0.1:11434/v1</p>
+    <div class="select">qwen2.5:7b · 仅文字 · 7B · ctx 32k</div>
+    <p class="note">推荐 qwen2.5:7b / 14b（中文）或 llama3.1:8b</p>
+    <div class="row">
+      <button class="btn primary">一键拉取 qwen2.5:7b</button>
+      <button class="btn">一键拉取 qwen2.5:14b</button>
+      <button class="btn">一键拉取 llama3.1:8b</button>
+    </div>
+    <p class="note">正在拉取 qwen2.5:7b… 42%</p>
+  `;
+} else if (scene === 'unknown') {
+  root.innerHTML = `
+    <h2>模型</h2>
+    <p class="sub">LM Studio · http://127.0.0.1:1234/v1</p>
+    <div class="select">local-chat-model · 仅文字 · 未知</div>
+    <ul class="opts">
+      <li>Qwen2.5-7B-Instruct · 仅文字 · 7B</li>
+      <li>local-chat-model · 仅文字 · 未知</li>
+      <li>phi-3-mini · 仅文字 · 未知</li>
+    </ul>
+    <p class="note">当前型号未知参数量。分析建议 ≥7B 且上下文 ≥8k。</p>
+  `;
+} else {
+  root.innerHTML = `
+    <h2>模型</h2>
+    <p class="sub">Ollama · http://127.0.0.1:11434/v1</p>
+    <div class="select">phi3:3.8b · 仅文字 · 3.8B · ctx 4k ⚠</div>
+    <ul class="opts">
+      <li class="warn">phi3:3.8b · 仅文字 · 3.8B · ctx 4k ⚠</li>
+      <li>qwen2.5:7b · 仅文字 · 7B · ctx 32k</li>
+      <li>llama3.1:8b · 仅文字 · 8B · ctx 8k</li>
+    </ul>
+    <p class="warn" data-testid="local-model-gate-warn">大概率解析失败，不建议做分析</p>
+  `;
+}
+document.body.appendChild(root);
+</script>
+</body>
+</html>

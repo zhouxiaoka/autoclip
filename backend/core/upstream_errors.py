@@ -1,4 +1,4 @@
-"""上游 HTTP 错误分类（1.5.8 成功率契约）。
+"""上游 HTTP 错误分类（1.5.7 成功率契约）。
 
 只提供能力：解析状态码 + 响应体，输出稳定枚举。不改现有调用链、不重试、不上报。
 后续埋点 / 设置页校验 / 退避 / 付费前预检都只应引用这里的枚举与 ``classify_upstream_error``。
@@ -33,21 +33,12 @@ class UpstreamErrorType(str, Enum):
 
 UPSTREAM_ERROR_TYPES: frozenset[str] = frozenset(item.value for item in UpstreamErrorType)
 
-# 中文句子即前端 i18n catalog key（八语必须同步）。
-# timeout / connection / rate_limited 与 pipeline.failures.MODEL_CALL_MESSAGES 同句，避免两套文案。
-HINT_KEYS: dict[UpstreamErrorType, str] = {
-    UpstreamErrorType.INVALID_KEY: "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。",
-    UpstreamErrorType.INSUFFICIENT_QUOTA: "账户余额或令牌额度不足，请充值或更换令牌后再试。",
-    UpstreamErrorType.PERMISSION_DENIED: "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。",
-    UpstreamErrorType.MODEL_NOT_FOUND: "当前分组或服务下没有这个模型，请换一个模型或分组。",
-    UpstreamErrorType.BAD_ENDPOINT: "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。",
-    UpstreamErrorType.RATE_LIMITED: "提供商限制了请求频率或额度，请检查配额并稍后重试。",
-    UpstreamErrorType.UPSTREAM_UNAVAILABLE: "模型服务暂时不可用，请稍后重试。",
-    UpstreamErrorType.TIMEOUT: "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
-    UpstreamErrorType.CONNECTION: "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
-    UpstreamErrorType.OUTPUT_TRUNCATED: "模型输出被截断，请稍后重试或换一个模型。",
-    UpstreamErrorType.UNKNOWN: "模型服务返回了无法识别的错误，请检查配置后重试。",
-}
+def _hint_keys() -> dict[UpstreamErrorType, str]:
+    from backend.core.failure_codes import sentence
+    return {item: sentence(item.value) for item in UpstreamErrorType}
+
+
+HINT_KEYS: dict[UpstreamErrorType, str] = _hint_keys()
 
 # 瞬时故障才重试。401/402/403/404、余额、权限、地址错、截断、未知一律不重试。
 RETRYABLE_TYPES: frozenset[UpstreamErrorType] = frozenset({
@@ -66,6 +57,7 @@ _CODE_QUOTA = frozenset({
     "insufficient_quota", "insufficient_user_quota", "insufficient_balance",
     "billing_not_active", "billing_quota_exceeded", "quota_exceeded",
     "allocationquota", "allocationquota.freetieronly", "throttling.allocationquota",
+    "arrearage",  # DashScope: account in arrears
 })
 _CODE_KEY = frozenset({
     "invalid_api_key", "invalid_key", "invalid_token", "authentication_error",
@@ -78,7 +70,7 @@ _CODE_RATE = frozenset({
 })
 _CODE_PERMISSION = frozenset({
     "permission_denied", "access_denied", "model_not_supported",
-    "forbidden",
+    "forbidden", "accessdenied", "accessdenied.unpurchased",  # DashScope
 })
 _CODE_RESOURCE = frozenset({"resource_exhausted"})
 
@@ -101,7 +93,7 @@ _PERMISSION_HINTS = (
     "ip whitelist", "ip 白名单",
 )
 _MODEL_HINTS = (
-    "model_not_found", "does not exist", "no available channel",
+    "model_not_found", "does not exist", "model not exist", "no available channel",
     "没有可用渠道", "模型不存在", "is not found",
 )
 _RATE_HINTS = ("rate limit", "too many requests", "retry later", "throttl", "频率")
@@ -180,15 +172,21 @@ def classify_exception(error: BaseException, *, finish_reason: str | None = None
 
 
 def http_error_parts(error: BaseException) -> tuple[int | None, Any]:
-    """沿异常取出 ``(status_code, body)``，读不到 body 时退回 ``str(error)``。"""
+    """沿异常取出 ``(status_code, body)``，读不到 body 时退回 ``str(error)``。
+
+    google-genai 把响应 JSON 放在 ``details``（以及 ``response``）上，不设 ``body``。
+    这里把那份 JSON 交给分类器，才能读到 ``quotaId`` / ``retryDelay``。
+    """
     status = _status_from_obj(error)
     body: Any = _first_attr(error, "body")
     response = _first_attr(error, "response")
     if response is not None:
         if status is None:
             status = _status_from_obj(response)
-        if body is None:
+        if _missing_body(body):
             body = _body_from_response(response)
+    if _missing_body(body):
+        body = _body_from_details(error)
     if body is None:
         body = str(error) if error.args else ""
     return status, body
@@ -205,12 +203,20 @@ def _classify(
     reason = (finish_reason or "").strip().lower()
     if reason in _LENGTH_REASONS:
         return UpstreamErrorType.OUTPUT_TRUNCATED
+    # A gateway HTML page on 502/503/504 is an outage, not a wrong /v1 URL.
     if _looks_like_html(text, payload):
+        if status in {500, 502, 503, 504}:
+            return UpstreamErrorType.UPSTREAM_UNAVAILABLE
         return UpstreamErrorType.BAD_ENDPOINT
 
     code, kind, message = fields
     blob = " ".join(part for part in (code, kind, message, text.lower()) if part)
     named = _normalize_token(error_name or "")
+
+    # Azure-style DeploymentNotFound is a retired model id, not a wrong /v1 URL.
+    # The message often lacks the word "model", so a bare 404 would be bad_endpoint.
+    if _retired_deployment(code, kind, blob):
+        return UpstreamErrorType.MODEL_NOT_FOUND
 
     structured = _from_structured_code(code, kind, blob, status)
     if structured is not None:
@@ -242,6 +248,11 @@ def _classify(
     return UpstreamErrorType.UNKNOWN
 
 
+def _retired_deployment(code: str, kind: str, blob: str) -> bool:
+    compact = re.sub(r"[\s_]+", "", f"{code} {kind} {blob}")
+    return "deploymentnotfound" in compact
+
+
 def _from_structured_code(
     code: str, kind: str, blob: str, status: int | None,
 ) -> UpstreamErrorType | None:
@@ -255,10 +266,17 @@ def _from_structured_code(
     if tokens & _CODE_MODEL:
         if status == 404 and not _contains(blob, _MODEL_HINTS + ("model", "模型")):
             return UpstreamErrorType.BAD_ENDPOINT
+        # 88API stamps model_not_found on "no available channel" during a 5xx.
+        # That is the gateway, not a retired id, and must not swap the saved model.
+        if status in {500, 502, 503, 504} and _channel_outage(blob):
+            return UpstreamErrorType.UPSTREAM_UNAVAILABLE
         return UpstreamErrorType.MODEL_NOT_FOUND
     if tokens & _CODE_RATE:
         return UpstreamErrorType.RATE_LIMITED
     if tokens & _CODE_RESOURCE:
+        distinguished = _classify_gemini_quota(blob)
+        if distinguished is not None:
+            return distinguished
         return (
             UpstreamErrorType.INSUFFICIENT_QUOTA
             if _contains(blob, _QUOTA_HINTS)
@@ -271,9 +289,21 @@ def _from_structured_code(
     return None
 
 
+def _channel_outage(blob: str) -> bool:
+    return _contains(blob, ("no available channel", "没有可用渠道"))
+
+
 def _from_hints(blob: str, status: int | None) -> UpstreamErrorType | None:
+    # Unparsed Gemini text still carries quotaId / retryDelay. Read those before the
+    # generic "exceeded your current quota" phrase, which both RPM and RPD share.
+    if status == 429 or "resource_exhausted" in blob:
+        distinguished = _classify_gemini_quota(blob)
+        if distinguished is not None:
+            return distinguished
     if _contains(blob, _QUOTA_HINTS):
         return UpstreamErrorType.INSUFFICIENT_QUOTA
+    if _channel_outage(blob) and status in {500, 502, 503, 504}:
+        return None
     if _contains(blob, _MODEL_HINTS) and status in {400, 404, 503, None}:
         return UpstreamErrorType.MODEL_NOT_FOUND
     if status == 429 or (status is None and _contains(blob, _RATE_HINTS)):
@@ -348,20 +378,127 @@ def _parse_json_object(text: str) -> dict[str, Any] | None:
 
 def _error_fields(payload: dict[str, Any] | None, text: str) -> tuple[str, str, str]:
     if not payload:
-        return "", "", text.lower()
+        return "", "", _with_quota_signals(text.lower(), _loose_quota_signals(text.lower()))
     error = payload.get("error")
     if not isinstance(error, dict):
-        error = {}
-    details = error.get("details") if isinstance(error.get("details"), list) else []
+        error = payload if _looks_like_error_object(payload) else {}
+    details = _detail_dicts(error, payload)
     reasons = []
     for item in details:
-        if isinstance(item, dict) and item.get("reason"):
+        if item.get("reason"):
             reasons.append(str(item["reason"]))
     # Gemini 把 HTTP 状态写在 error.code（数字），真正的原因在 details[].reason。
+    # quotaId / retryDelay 不在 reason 里，必须另外带进分类文本。
     code = _symbolic_code(*reasons, error.get("reason"), error.get("code"), payload.get("code"))
     kind = _symbolic_code(error.get("type"), error.get("status"), payload.get("type"), payload.get("status"))
     message = _first_str(error.get("message"), payload.get("message"), error.get("msg"))
-    return _normalize_token(code), _normalize_token(kind), (message or text).lower()
+    blob = (message or text).lower()
+    return _normalize_token(code), _normalize_token(kind), _with_quota_signals(blob, _quota_signals(details))
+
+
+def _looks_like_error_object(payload: dict[str, Any]) -> bool:
+    return any(key in payload for key in ("message", "status", "details", "code"))
+
+
+def _detail_dicts(*sources: dict[str, Any]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for source in sources:
+        details = source.get("details")
+        if not isinstance(details, list):
+            continue
+        marker = id(details)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        found.extend(item for item in details if isinstance(item, dict))
+    return found
+
+
+def _quota_signals(details: list[dict[str, Any]]) -> tuple[list[str], bool]:
+    quota_ids: list[str] = []
+    has_delay = False
+    for item in details:
+        violations = item.get("violations")
+        if isinstance(violations, list):
+            for violation in violations:
+                if not isinstance(violation, dict):
+                    continue
+                quota_id = violation.get("quotaId")
+                if quota_id is None:
+                    quota_id = violation.get("quota_id")
+                if isinstance(quota_id, str) and quota_id.strip():
+                    quota_ids.append(quota_id.strip())
+        if _retry_delay_value(item) is not None:
+            has_delay = True
+    return quota_ids, has_delay
+
+
+def _retry_delay_value(item: dict[str, Any]) -> Any:
+    if "retryDelay" in item:
+        return item.get("retryDelay")
+    if "retry_delay" in item:
+        return item.get("retry_delay")
+    return None
+
+
+def _loose_quota_signals(text: str) -> tuple[list[str], bool]:
+    """Pull quotaId / retryDelay out of an unparsed Gemini body (JSON or Python repr)."""
+    lowered = (text or "").lower()
+    if "quotaid" not in lowered and "retrydelay" not in lowered and "retry_delay" not in lowered:
+        return [], False
+    ids = re.findall(r"quota_?id[\"']?\s*[:=]\s*[\"']?([a-z0-9_\-]+)", lowered)
+    has_delay = re.search(
+        r"retry_?delay[\"']?\s*[:=]\s*[\"']?\d+(?:\.\d+)?s",
+        lowered,
+    ) is not None
+    return ids, has_delay
+
+
+def _with_quota_signals(text: str, signals: tuple[list[str], bool]) -> str:
+    quota_ids, has_delay = signals
+    extras = [f"ac_quota_id={quota_id.lower()}" for quota_id in quota_ids]
+    if has_delay:
+        extras.append("ac_retry_delay=1s")
+    if not extras:
+        return text
+    return f"{text} {' '.join(extras)}".strip()
+
+
+def _classify_gemini_quota(blob: str) -> UpstreamErrorType | None:
+    """Classify Gemini quota signals.
+
+    Order: PerMinute → rate limit; all-PerDay → exhausted (even with RetryInfo);
+    delay alone (no PerDay/PerMinute id) → rate limit. Gemini RPD 429s often
+    include a day-scale retryDelay; treating that as RPM burned ~10 minutes of
+    capped retries before surfacing insufficient_quota.
+    """
+    ids = re.findall(r"ac_quota_id=([^\s]+)", blob)
+    has_delay = "ac_retry_delay=" in blob
+    if not ids and not has_delay:
+        ids, has_delay = _loose_quota_signals(blob)
+        ids = [item.lower() for item in ids]
+    if not ids and not has_delay:
+        return None
+    if any(_per_minute(item) for item in ids):
+        return UpstreamErrorType.RATE_LIMITED
+    if ids and all(_per_day(item) for item in ids):
+        return UpstreamErrorType.INSUFFICIENT_QUOTA
+    if has_delay:
+        return UpstreamErrorType.RATE_LIMITED
+    return None
+
+
+def _compact_quota_id(quota_id: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (quota_id or "").lower())
+
+
+def _per_minute(quota_id: str) -> bool:
+    return "perminute" in _compact_quota_id(quota_id)
+
+
+def _per_day(quota_id: str) -> bool:
+    return "perday" in _compact_quota_id(quota_id)
 
 
 def _looks_like_html(text: str, payload: dict[str, Any] | None) -> bool:
@@ -388,6 +525,17 @@ def _first_str(*values: Any) -> str:
     return ""
 
 
+def symbolic_error_code(body: Any) -> str:
+    """Normalized ``error.code`` / ``error.type`` from a response body. Empty when there is none.
+
+    Digits (Gemini's HTTP status stuffed into ``error.code``) are skipped. The value is a
+    token such as ``invalid_api_key``, never the message.
+    """
+    payload, text = _coerce_body(body)
+    code, kind, _message = _error_fields(payload, text)
+    return code or kind
+
+
 def _symbolic_code(*values: Any) -> str:
     """跳过纯数字状态码，只取 invalid_api_key / API_KEY_INVALID 这类符号。"""
     for value in values:
@@ -399,6 +547,27 @@ def _symbolic_code(*values: Any) -> str:
         if text and not text.isdigit():
             return text
     return ""
+
+
+def _missing_body(body: Any) -> bool:
+    return body is None or body == "" or body == b""
+
+
+def _body_from_details(error: BaseException) -> Any:
+    """google-genai stores the response JSON on ``details``, not ``body``."""
+    details = _first_attr(error, "details")
+    if isinstance(details, dict) and details:
+        return details
+    if isinstance(details, list) and details:
+        status = _first_attr(error, "status")
+        return {
+            "error": {
+                "message": _first_attr(error, "message") or "",
+                "status": status if isinstance(status, str) else "",
+                "details": details,
+            }
+        }
+    return None
 
 
 def _first_attr(obj: Any, name: str) -> Any:
@@ -425,3 +594,25 @@ def _parse_type(value: str) -> UpstreamErrorType:
         return UpstreamErrorType(value)
     except ValueError:
         return UpstreamErrorType.UNKNOWN
+
+
+_DNS_MARKERS = ('name or service not known', 'nodename nor servname', 'getaddrinfo', 'temporary failure in name resolution',
+                'no address associated', 'name resolution', 'failed to resolve', 'no such host', '11001')
+
+
+def network_kind_of(exc: BaseException | None) -> str:
+    """'dns' when a transport error is a name-resolution failure, '' otherwise.
+    Only the kind leaves this function; the exception text (may hold a host) never does.
+    (#3, the rule): only the explicit ``__cause__`` chain is walked; an exception
+    that was merely being handled (an earlier DNS failure) never decides this one."""
+    import socket
+    seen = 0
+    while exc is not None and seen < 8:
+        if isinstance(exc, socket.gaierror):
+            return 'dns'
+        text = str(exc).lower()
+        if any(marker in text for marker in _DNS_MARKERS):
+            return 'dns'
+        exc = exc.__cause__
+        seen += 1
+    return ''

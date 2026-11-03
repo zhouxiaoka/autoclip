@@ -11,6 +11,12 @@ from backend.services.studio.models import Draft, Scene, Preferences
 @pytest.fixture
 def root(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    # Confirmation / import fixtures assume the frontend gate already passed.
+    # Dedicated ASR-not-ready cases live in test_asr_preflight.py and do not use this fixture.
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     store.directory('p1').mkdir(parents=True)
     return store.directory('p1')
 
@@ -31,7 +37,7 @@ def test_draft_save_preserves_original_and_detects_conflict(root):
 
 def test_restart_turns_running_jobs_into_retryable_failures(root):
     store.write('p1', {'drafts': [], 'events': [], 'jobs': [{'job_id':'j1','status':'running','instance':'previous'}], 'analysis':{'status':'running','instance':'previous'}})
-    state = store.read('p1')
+    state = store.recover('p1')
     assert state['jobs'][0]['status'] == 'failed'
     assert state['analysis']['status'] == 'failed'
 
@@ -330,7 +336,7 @@ def test_export_requires_the_revision_shown_in_editor(client,monkeypatch):
 
 def test_vision_timeout_is_actionable_and_hides_credentials(monkeypatch):
     monkeypatch.setattr(intelligence.urllib.request,'urlopen',lambda *a,**k: (_ for _ in ()).throw(TimeoutError('read timed out private-key')))
-    with pytest.raises(RuntimeError,match='提高请求超时') as error:
+    with pytest.raises(RuntimeError,match='请稍后重试') as error:
         intelligence.vision_call([],config={'base_url':'https://example.test/v1','model':'vision','api_key':'private-key','timeout':10})
     assert 'private-key' not in str(error.value)
 

@@ -1,9 +1,8 @@
 """Machine-readable tracking-plan catalog and payload validator.
 
-``docs/analytics/event_catalog.json`` is the only registry. Unregistered
-business events and missing required fields fail validation when it is available.
-Builds copy that registry into the Python package; missing/unreadable catalogs
-disable validation, never platform detection or telemetry initialization.
+The packaged ``event_catalog.json`` mirrors the docs tracking plan. Unregistered
+business events and missing required fields fail validation. Telemetry
+callers must still catch errors — this module never raises on emit.
 """
 from __future__ import annotations
 
@@ -59,7 +58,7 @@ def catalog_path() -> Path:
     override = os.environ.get("AUTOCLIP_EVENT_CATALOG")
     if override:
         return Path(override)
-    packaged = Path(__file__).resolve().with_name('event_catalog.json')
+    packaged = Path(__file__).resolve().with_name("event_catalog.json")
     if packaged.is_file():
         return packaged
     return Path(__file__).resolve().parents[2] / "docs" / "analytics" / "event_catalog.json"
@@ -231,9 +230,12 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
     spec = event_spec(name, catalog) or {}
     if spec.get("kind") == "user_submitted":
         submitted.add(name)
+    count_keys = {str(key).lower() for key in privacy.get("count_keys") or []}
     errors: list[str] = []
     for key, value in props.items():
         lowered_key = str(key).lower()
+        if lowered_key in count_keys and isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            continue
         if lowered_key in forbidden_keys:
             errors.append(f"{name} has forbidden property {key}")
         if lowered_key in user_content and name not in submitted:
@@ -249,7 +251,7 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
 
 def collect_producer_events(root: Path | None = None) -> set[str]:
     """Event names referenced by frontend/backend producers."""
-    repo = root or Path(__file__).resolve().parents[2]
+    repo = root if root is not None else Path(__file__).resolve().parents[2]
     names: set[str] = set()
     frontend = repo / "frontend" / "src"
     if frontend.is_dir():

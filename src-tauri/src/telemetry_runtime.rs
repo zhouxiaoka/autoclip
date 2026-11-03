@@ -19,8 +19,20 @@ pub fn app_dir(platform_data_dir: Option<PathBuf>) -> Option<PathBuf> {
                     return home.join(relative);
                 }
             }
-            path
+            absolute(path)
         })
+}
+
+/// R24 #298: a relative AUTOCLIP_APP_DIR / AUTOCLIP_DATA_DIR is resolved against the shell's cwd
+/// ONCE, here, and the absolute path is what the backend receives, so the shell and the backend
+/// (which may start in another cwd) never resolve it to two different marker dirs.
+fn absolute(path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        return path;
+    }
+    std::path::absolute(&path)
+        .or_else(|_| std::env::current_dir().map(|cwd| cwd.join(&path)))
+        .unwrap_or(path)
 }
 
 pub fn anonymous_id(value: &str) -> bool {
@@ -88,6 +100,24 @@ pub fn webview_script(dir: Option<&Path>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn r24_298_relative_app_dir_override_reaches_the_backend_absolute() {
+        let saved_app = std::env::var_os("AUTOCLIP_APP_DIR");
+        std::env::set_var("AUTOCLIP_APP_DIR", "relative-autoclip-dir");
+        let resolved = app_dir(None).unwrap();
+        match saved_app {
+            Some(value) => std::env::set_var("AUTOCLIP_APP_DIR", value),
+            None => std::env::remove_var("AUTOCLIP_APP_DIR"),
+        }
+        assert!(resolved.is_absolute(), "relative override must be absolutized in the shell");
+        assert_eq!(resolved, std::env::current_dir().unwrap().join("relative-autoclip-dir"));
+        let mut cmd = Command::new("unused-test-command");
+        configure_backend(&mut cmd, Some(&resolved));
+        let env: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        let handed = env[std::ffi::OsStr::new("AUTOCLIP_APP_DIR")].unwrap();
+        assert!(Path::new(handed).is_absolute());
+    }
 
     #[test]
     fn only_uuid_shaped_anonymous_ids_qualify() {

@@ -22,6 +22,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type Track = { kind: 'upload-post' | 'bilibili'; jobId: string }
 
+function translatedCoverHint(warning?: string | null, detail?: string | null): string | null {
+  if (!warning) return null
+  const head = t(String(warning))
+  if (!detail) return head
+  return `${head}：${t(String(detail))}`
+}
+
 function coverPlatform(platforms: string[]): 'bilibili' | 'douyin' {
   if (platforms.includes('bilibili') && platforms.every((p) => p === 'bilibili')) return 'bilibili'
   if (platforms.some((p) => ['tiktok', 'instagram', 'youtube', 'facebook', 'threads', 'pinterest'].includes(p))) {
@@ -209,7 +216,7 @@ const PublishClipPage: React.FC = () => {
       if (coverJob.current !== session) return
       if ('url' in started && started.url) {
         setCover(started as CoverView)
-        if (started.warning) setCoverHint(String(started.warning))
+        if (started.warning) setCoverHint(translatedCoverHint(String(started.warning), started.warning_detail))
         return
       }
       const jobId = (started as { job_id: string }).job_id
@@ -219,11 +226,11 @@ const PublishClipPage: React.FC = () => {
         const job = await coverApi.job(jobId)
         if (job.status === 'completed' && job.result) {
           setCover(job.result)
-          if (job.result.warning) setCoverHint(job.result.warning)
+          if (job.result.warning) setCoverHint(translatedCoverHint(job.result.warning, job.result.warning_detail))
           return
         }
         if (job.status === 'failed' || job.status === 'cancelled') {
-          setCoverHint(job.error || t("封面生成失败，发布时会用截帧"))
+          setCoverHint(t(job.error || "封面生成失败，发布时会用截帧"))
           return
         }
       }

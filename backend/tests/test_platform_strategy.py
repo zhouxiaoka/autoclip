@@ -1,5 +1,6 @@
 from backend.services.platform_strategy import (
     legacy_export_presets,
+    long_form_minimum,
     normalize_platform_ids,
     platform_strategy,
     strategy_for_legacy_preset,
@@ -31,6 +32,12 @@ def test_templates_follow_the_audience_of_each_platform():
     for strategy_id, (template, language) in expected.items():
         strategy = platform_strategy(strategy_id)
         assert (strategy.template, strategy.audience_language) == (template, language), strategy_id
+
+
+def test_only_youtube_long_imposes_a_hard_minimum():
+    assert long_form_minimum(["youtube_long", "douyin"]) == (180, "YouTube 横屏")
+    assert long_form_minimum(["bilibili", "tiktok"]) == (None, "")
+    assert long_form_minimum([]) == (None, "")
 
 
 def test_only_youtube_shorts_has_a_hard_length_limit():

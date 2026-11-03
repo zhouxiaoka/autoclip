@@ -77,7 +77,7 @@ def get_version() -> Dict[str, Any]:
     return {'version': __version__}
 
 
-@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / classic，且只在 mcp_v2_tools 打开时接受；关闭时传了风格返回 disabled。返回的 template 是实际用的风格，requested_template 是请求值。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
+@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / news / cinema / classic，且只在 mcp_v2_tools 打开时接受；关闭时传了风格返回 disabled。返回的 template 是实际用的风格，requested_template 是请求值。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
 def start_quick_output(source: str, platforms: Optional[List[str]] = None, name: Optional[str] = None,
                        srt_path: Optional[str] = None, instruction: str = '', browser: Optional[str] = None,
                        portrait_style: str = 'auto', template: Optional[str] = None) -> Dict[str, Any]:
@@ -144,6 +144,8 @@ def _job_update(project_id: str, **fields: Any) -> None:
 def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, Any]:
     """阻塞执行；在线程里调用。"""
     from backend.services.local_runner import configure_llm, prepare_project, run_pipeline, summarize_project
+    from backend.services.studio.readiness import TranscriptionNotReady
+    from backend.services.studio.preflight import SourceRejected
 
     with _pipeline_lock:
         try:
@@ -156,11 +158,20 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
 
             result = run_pipeline(req, video_in_raw, on_progress=on_progress)
             if result.get("status") != "succeeded":
-                _job_update(req.project_id, status="failed", error_code="failed", error=result.get("error") or "处理失败")
+                from backend.services.mcp_telemetry import normalize_error
+                # keep a source failure's own code (source_unreadable...), never fold it into "failed".
+                _job_update(req.project_id, status="failed", error_code=normalize_error(result.get("error_code"), ok=False),
+                            error=result.get("error") or "处理失败")
                 return _jobs[req.project_id]
             summary = summarize_project(req.project_id)
             _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
                         error_code="none", result=summary)
+            return _jobs[req.project_id]
+        except SourceRejected as e:  # #284: the source's own code, never folded into invalid_input / failed
+            _job_update(req.project_id, status="failed", error_code=e.code, error=str(e)[:500])
+            return _jobs[req.project_id]
+        except TranscriptionNotReady as e:  # only the 1.5.7 gate; other ValueErrors are product failures
+            _job_update(req.project_id, status="failed", error_code="invalid_input", error=str(e)[:500])
             return _jobs[req.project_id]
         except Exception as e:  # noqa: BLE001
             logger.exception("MCP 任务失败")
@@ -190,7 +201,7 @@ def _make_override(provider: Optional[str], model: Optional[str], base_url: Opti
     description=(
         "把一条本地视频切成高光片段（同步，耗时数分钟到数十分钟，期间会发进度）。"
         "返回切片列表（标题 / 起止时间 / 评分 / mp4 路径）与合集。"
-        "provider 可选 dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / ollama / lmstudio；不填用桌面应用里已配置的模型。"
+        "provider 可选 dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / apimart / ollama / lmstudio；不填用桌面应用里已配置的模型。"
     ),
 )
 async def clip_video(
@@ -222,7 +233,8 @@ async def clip_video(
                 pass
     job = task.result()
     if job.get("status") != "completed":
-        return {"ok": False, "project_id": req.project_id, "error": job.get("error", "处理失败")}
+        return {"ok": False, "project_id": req.project_id, "error_code": job.get("error_code") or "failed",
+                "error": job.get("error", "处理失败")}
     return {"ok": True, **job["result"], "llm": job.get("llm")}
 
 
@@ -284,7 +296,7 @@ def list_providers() -> Dict[str, Any]:
 
     return {
         "current": get_llm_manager().get_current_provider_info(),
-        "cloud": ["dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88"],
+        "cloud": ["dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart"],
         "local_presets": presets_as_dicts(),
     }
 
@@ -430,14 +442,14 @@ def list_styles() -> Dict[str, Any]:
     """Editing styles the produce/template parameter accepts. No extra knobs."""
     if not _v2_enabled():
         return _disabled()
-    from backend.services.studio.template_recommend import TEMPLATES
     catalog = (
         {'id': 'editorial', 'name': '杂志风'},
         {'id': 'street', 'name': '街头快剪'},
+        {'id': 'news', 'name': '新闻'},
+        {'id': 'cinema', 'name': '电影'},
         {'id': 'classic', 'name': '经典'},
     )
-    styles = [row for row in catalog if row['id'] in TEMPLATES]
-    return {'ok': True, 'styles': styles}
+    return {'ok': True, 'styles': list(catalog)}
 
 
 def _sync_v2_tools() -> None:
@@ -475,7 +487,7 @@ async def _list_tools():
 server.list_tools = _list_tools  # type: ignore[method-assign]
 _V2_SPECS = (
     (cancel_job, 'cancel_job', '取消一条仍在进行的出片或切片任务，停掉它的 ffmpeg。不删除已写出的成片。查不到返回 unknown。'),
-    (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
+    (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、news（新闻）、cinema（电影）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
 )
 
 from backend.services import mcp_telemetry

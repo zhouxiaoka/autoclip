@@ -16,7 +16,7 @@
 | `studio_template_preview_played` | 一张卡片开始播放 2.5 秒静音预览 | `template`，`trigger=hover\|focus\|keyboard\|button\|select`，`first_frame_ms`，`is_recommended` |
 | `studio_template_preview_failed` | 预览解码或加载失败 | `template`，`error_kind=decode\|stalled\|unsupported\|unknown` |
 | `studio_template_restore_recommended` | 用户点了恢复推荐 | `from_template`，`recommended` |
-| `studio_generation_finished` | 整次生成结束 | 沿用 `outcome`。另有 `editorial_count` / `street_count` / `classic_count` / `html_downgrade_count`。导入时记下推荐后，还有 `recommended_template` 和 `accepted_recommendation`（所选风格等于推荐时为 true） |
+| `studio_generation_finished` | 整次生成结束 | 沿用 `outcome`。另有 `editorial_count` / `street_count` / `news_count` / `cinema_count` / `classic_count` / `html_downgrade_count`。导入时记下推荐后，还有 `recommended_template` 和 `accepted_recommendation`（所选风格等于推荐时为 true） |
 | `studio_output_shared` / `studio_download_*` | 复制文案或下载 | 沿用现有事件，`template` 增加 `editorial` / `street` / `classic`。同一条成片带上 `recommended_template` 和 `accepted_recommendation` |
 
 `downgrade_reason`：`none` / `over_budget` / `missing_runtime` / `intel_mac_unverified` / `rank` / `flag_off` / `capture` / `encode`。

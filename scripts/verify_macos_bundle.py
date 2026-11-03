@@ -20,6 +20,13 @@ import argparse
 import hashlib
 import tempfile
 
+from macos_release_contract import apply_release_launcher_env
+from posthog_bundle_check import (
+    assert_binary_contains_posthog_key,
+    assert_packaged_telemetry_identity,
+    macos_desktop_binary,
+)
+
 parser = argparse.ArgumentParser(description="Offline macOS bundled-runtime smoke check; run with the bundle's python/bin/python3.")
 parser.add_argument('--resources', type=Path, required=True, help='App Contents/Resources/resources directory')
 parser.add_argument('--output-parent', type=Path, default=Path(tempfile.gettempdir()))
@@ -30,7 +37,7 @@ if not Path(sys.executable).resolve().is_relative_to(resources / 'python'):
 args.output_parent.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='autoclip-bundle-smoke-', dir=args.output_parent)).resolve()
 print('Isolated evidence directory:', root, flush=True)
-for required in ['backend/desktop_main.py', 'backend/core/event_catalog.json', 'ffmpeg/ffmpeg', 'ffmpeg/ffprobe']:
+for required in ['backend/desktop_main.py', 'backend/core/event_catalog.json', 'backend/core/failure_messages.json', 'backend/assets/fonts/NotoSansSC-Medium.ttf', 'ffmpeg/ffmpeg', 'ffmpeg/ffprobe']:
     if not (resources / required).is_file():
         parser.error('Missing bundled runtime file: ' + required)
 os.environ.update(AUTOCLIP_DATA_DIR=str(root/'data'),AUTOCLIP_APP_DIR=str(root/'data'),AUTOCLIP_DESKTOP_MODE='true',AUTOCLIP_MODE='desktop',DATABASE_URL='sqlite:///'+str(root/'isolated.sqlite'),SENTRY_DSN='',AUTOCLIP_FFMPEG_PATH=str(resources/'ffmpeg/ffmpeg'),AUTOCLIP_FFPROBE_PATH=str(resources/'ffmpeg/ffprobe'))
@@ -74,9 +81,20 @@ sentry_sdk.init = functools.partial(sentry_sdk.init, transport=DiscardTransport)
 runpy.run_module('backend.desktop_main', run_name='__main__')
 '''
 (root/'data/privacy.json').write_text('{"analytics":false,"crash_reports":true}')
-child_env = dict(os.environ, SENTRY_DSN='https://public@example.invalid/0',
-                 AUTOCLIP_EVENT_CATALOG='', AUTOCLIP_PARENT_PID='',
-                 AUTOCLIP_POSTHOG_KEY='', VITE_PUBLIC_POSTHOG_KEY='')
+# Direct python has neither launcher value, so the packaged gate refuses.
+# Supply the release pair from the built app. No extra enable flag: source
+# trees and pytest still return false inside init_sentry.
+# Read the project key before the child env clears it. The assertion never prints it.
+assert_binary_contains_posthog_key(macos_desktop_binary(resources), os.environ.get('VITE_PUBLIC_POSTHOG_KEY', ''))
+child_env = apply_release_launcher_env(dict(
+    os.environ, SENTRY_DSN='https://public@example.invalid/0',
+    AUTOCLIP_EVENT_CATALOG='', AUTOCLIP_PARENT_PID='',
+    AUTOCLIP_POSTHOG_KEY='', VITE_PUBLIC_POSTHOG_KEY=''), resources)
+print('Sentry launch contract:',
+      {key: child_env[key] for key in ('AUTOCLIP_APP_VERSION', 'AUTOCLIP_BUILD_ENVIRONMENT')},
+      flush=True)
+os.environ['AUTOCLIP_BUILD_ENVIRONMENT'] = child_env['AUTOCLIP_BUILD_ENVIRONMENT']
+assert_packaged_telemetry_identity()
 backend_log = root/'backend-smoke.log'
 log_handle = backend_log.open('w')
 proc=subprocess.Popen([sys.executable,'-B','-c',bootstrap],cwd=resources,env=child_env,stdout=log_handle,stderr=subprocess.STDOUT,text=True)
@@ -90,7 +108,9 @@ try:
  assert port,'bundled backend failed to start'
  with urlopen(f'http://127.0.0.1:{port}/health',timeout=5) as r:assert r.status==200
  logs=backend_log.read_text()
- assert 'Sentry 已启用' in logs, 'Bundled backend did not enable Sentry'
+ if 'Sentry 已启用' not in logs:
+  relevant = [line for line in logs.splitlines() if 'Sentry' in line or 'sentry' in line]
+  raise AssertionError('Bundled backend did not enable Sentry\n' + '\n'.join(relevant[-30:]))
  assert 'Sentry 初始化失败' not in logs, 'Bundled backend Sentry initialization failed'
  report={'source':'synthetic offline fixture','backend_sha256':hashlib.sha256((resources/'backend/services/studio/render.py').read_bytes()).hexdigest(),'python':sys.version.split()[0],'six_templates':'passed','original_audio':'passed','portrait_render':info,'desktop_health':'passed','sentry_initialization':'passed (discard transport)','output':str(out)}
  (root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps(report,ensure_ascii=False))

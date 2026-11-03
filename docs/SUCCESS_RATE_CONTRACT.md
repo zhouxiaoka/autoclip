@@ -1,4 +1,4 @@
-# 1.5.8 成功率共享契约
+# 1.5.7 成功率共享契约
 
 本文件是成功率版第 0 步的引用说明。实现只提供分类与字段白名单，**不改现有调用链、不发新事件、不重试**。并行线请直接 import，不要再各自发明一套码。
 
@@ -7,7 +7,7 @@
 | #3 付费前预检 / 上游错误分类 / 退避 | `backend.core.upstream_errors.classify_upstream_error`；`retryable` 决定是否重试（401/402/403/404 与余额、权限、地址错为 false） |
 | #S 设置页接入校验 | 同一分类函数；提示用 `hint_key`（八语 catalog key） |
 | #9 埋点 | `backend.core.llm_telemetry` 的字段集合与 `sanitize_*`；前端 `frontend/src/analytics/successRateContract.ts` |
-| #10 发版回归门槛 | 故障注入的期望类型用 `UpstreamErrorType`；应拦下的组合要求 `billable_calls_before_failure = 0` |
+| #10 发版回归门槛 | 故障注入的期望类型用 `UpstreamErrorType`；应拦下的组合要求 `billable_calls_before_failure = 0`。Live 先 fail-closed（任一服务商失败 / 缺报告 / 少结果必须红），再叠加用例库近 5 次、满 20 条后的滚动成功率。实现：[`scripts/provider_e2e`](../scripts/provider_e2e/matrix.py) |
 
 源码：
 
@@ -39,13 +39,13 @@ new-api 令牌额度用尽与 key 写错都可能是 401「无效的令牌」。
 
 `success_rate_schema_version = 1`。新事件：
 
-- `llm_request_finished`：provider、model、base_url_host、kind（text/vision）、stage、http_status（100–599）、upstream_error_type、prompt/completion/reasoning_tokens、retry_count、duration_ms、outcome（success/error）、finish_reason
+- `llm_request_finished`：provider、model、base_url_host、kind（text/vision）、stage、http_status（100–599）、upstream_error_type、prompt/completion/reasoning_tokens、retry_count、degrade_count、duration_ms、outcome（success/error）、finish_reason
 - `asr_readiness_checked`：provider（whisper_local / sensevoice_local / cloud）、code、has_subtitle、blocked
 - `provider_validation_finished`：provider、base_url_host、result（success/failed/skipped）、upstream_error_type
 
 run 级（后续挂到现有 `studio_generation_finished` / `studio_production_finished` 与 Sentry tag，**不改事件名**）：
 
-provider、model、base_url_host、http_status（400–599）、upstream_error_type、failure_stage、llm_calls、tokens、retry_count、billable_calls_before_failure
+provider、model、base_url_host、http_status（400–599）、upstream_error_type、failure_stage、llm_calls、tokens、retry_count、degrade_count、billable_calls_before_failure
 
 脱敏：`hostname_of_base_url` 只留域名，本机/局域网为 `local`；`sanitize_model` 拒绝空格与超长名。sanitize 结果不得含 key、完整 URL、用户正文。
 
@@ -55,4 +55,4 @@ provider 枚举与现有 experience 契约一致：dashscope / openai / gemini /
 
 ## 明确不做（第 0 步契约本身）
 
-契约模块不改 `model_call_error_code` / `call_with_retry` / 设置页保存，也不自己打点。分类与脱敏只提供能力。
+契约模块不改 `model_call_error_code` / `call_with_retry` / 设置页保存，也不自己打点。分类与脱敏只提供能力。设置页接入校验（#S）引用本分类与 `hint_key`，由线 B 落地 `provider_validation_finished`。

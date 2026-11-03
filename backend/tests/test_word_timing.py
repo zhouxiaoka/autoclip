@@ -37,18 +37,44 @@ def test_edited_or_translated_srt_rejects_old_alignment(sample):
     assert parsed['timingSource']=='estimated'
 
 
-@pytest.mark.parametrize('mutation', ['nan','reverse','overlap','outside','partial','missing'])
+@pytest.mark.parametrize('mutation', ['nan','reverse','partial','missing'])
 def test_invalid_alignment_never_becomes_precise(sample,mutation):
     srt,segments=sample
     words=segments[0]['words']
     if mutation=='nan':words[0]['start']=float('nan')
     if mutation=='reverse':words[0]['end']=0
-    if mutation=='overlap':words[1]['start']=.2
-    if mutation=='outside':words[-1]['end']=2.1
     if mutation=='partial':words.pop()
     if mutation=='missing':words[0].pop('start')
     with pytest.raises(ValueError):write_word_timing(srt,segments)
     assert load_word_timing(srt) is None
+
+
+@pytest.mark.parametrize('mutation', ['overlap', 'outside', 'before_start', 'touching'])
+def test_e7_jittery_words_are_made_monotonic_not_discarded(sample, mutation):
+    srt, segments = sample
+    words = segments[0]['words']
+    if mutation == 'overlap': words[1]['start'] = .2          # starts before previous ends
+    if mutation == 'outside': words[-1]['end'] = 2.1          # past the sentence end
+    if mutation == 'before_start': segments[0]['start'] = .2  # first word before the sentence
+    if mutation == 'touching': words[1].update(start=.3, end=.3)
+    write_word_timing(srt, segments, 'en')
+    loaded = load_word_timing(srt)
+    assert loaded is not None
+    seg = loaded[0]
+    last = seg['start']
+    for word in seg['words']:
+        assert seg['start'] <= word['start'] < word['end'] <= seg['end']
+        assert word['start'] >= last
+        last = word['end']
+    assert [w['text'] for w in seg['words']] == ['Can', ' you', ' escape?']
+
+
+def test_e7_one_bad_word_in_a_long_file_keeps_the_rest(sample):
+    srt, segments = sample
+    srt.write_text('1\n00:00:00,000 --> 00:00:02,000\nCan you escape?\n\n2\n00:00:02,000 --> 00:00:04,000\nNo.\n')
+    segments.append({'text': 'No.', 'start': 2, 'end': 4, 'words': [{'text': 'No.', 'start': 1.95, 'end': 2.4}]})
+    write_word_timing(srt, segments, 'en')
+    assert load_word_timing(srt)[1]['words'][0]['start'] == 2
 
 
 def test_corrupt_and_future_sidecars_fall_back(sample):

@@ -21,6 +21,7 @@ BUILD_JOBS = ('candidate-gate', 'Backend tests', 'Frontend checks', 'Release con
               'windows-recovery', 'real-transcription (ubuntu-latest)',
               'real-transcription (windows-latest)', 'real-transcription (macos-14)',
               'Docker compose smoke', 'Docker development compose smoke',
+              'provider-e2e',
               'build-macos-arm64', 'build-windows-x64', 'smoke-windows-x64', 'release')
 
 

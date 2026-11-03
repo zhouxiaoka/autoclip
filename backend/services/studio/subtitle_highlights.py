@@ -1,4 +1,5 @@
 """Adapt this run's scored subtitle ranges without another model request."""
+from backend.core.failure_codes import UserFacingError
 import math
 import uuid
 from backend.services.studio.models import Draft, Scene
@@ -32,7 +33,7 @@ def make_highlights(clips, preferences, source_duration):
         if len(selected) == 6:
             break
     if not selected:
-        raise ValueError('没有可用的字幕高光，请检查字幕与选段结果；原素材已保留')
+        raise UserFacingError('没有可用的字幕高光，请检查字幕与选段结果；原素材已保留')
     return [Draft(id=uuid.uuid4().hex, title=s.label, scenes=[s], origin='subtitle-highlight',
         language=preferences.language, aspect=preferences.aspect,
         layout='crop' if preferences.aspect == 'portrait' else 'fit', subtitles=True).model_dump()

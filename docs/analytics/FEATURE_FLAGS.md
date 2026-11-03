@@ -51,6 +51,8 @@
 
 导入请求可以带 `features` JSON。后端只保留已知键，非法值丢弃，结果写进 `generation.features`。CLI、MCP 和 Docker 没有 PostHog SDK，读环境变量 `AUTOCLIP_FLAGS`（同样的 `name=value` 列表），它覆盖请求里的同名键。`autoclip_safe_mode` 打开后，其余键回到安全关闭值（多数就是默认值；默认打开的风格开关为 `false`），除非 `AUTOCLIP_FLAGS` 明确设置了那一项。两条例外要分开看：`qa_gate_blocking` 在安全模式下一律写成 `off`，即使 `AUTOCLIP_FLAGS` 点名了它；`pkg_templates_v1` 和 `mcp_v2_tools` 默认打开，安全模式把它们关回 `false`（不是默认值），除非 `AUTOCLIP_FLAGS` 写了 `pkg_templates_v1=on`。
 
+成片卡片（Q5–Q7）的行为和事件见 [UX_RESULTS.md](UX_RESULTS.md)。完成通知和修改记录（Q4、Q9）见 [UX_NOTIFY.md](UX_NOTIFY.md)。
+
 ## 还没做
 
 - 没有在 PostHog 项目里创建这些开关，也没有在 validation 环境截到真实请求。全量之前默认值保持关闭，所以未创建远程开关不影响当前用户。

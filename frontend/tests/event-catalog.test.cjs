@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 const root = path.join(__dirname, '..', '..')
@@ -14,7 +14,7 @@ function load() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, Set, Map, Object, String, JSON, URL }, { filename: file })
+  runInSandbox(js, { exports: module.exports, module, Set, Map, Object, String, JSON, URL }, { filename: file })
   return module.exports
 }
 
@@ -79,13 +79,10 @@ test('frontend producers are all registered in the catalog', () => {
 test('trackAsrReadiness payload matches the catalog', () => {
   const workflowSource = fs.readFileSync(path.join(__dirname, '../src/analytics/workflow.ts'), 'utf8')
   const studioSource = fs.readFileSync(path.join(__dirname, '../src/analytics/studio.ts'), 'utf8')
-  const workflow = { exports: {} }
-  vm.runInNewContext(ts.transpileModule(workflowSource, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports: workflow.exports, module: workflow, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL })
+  const workflow = { exports: require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/analytics/workflow.ts')) }
   const events = []
   const studioModule = { exports: {} }
-  vm.runInNewContext(ts.transpileModule(studioSource, {
+  runInSandbox(ts.transpileModule(studioSource, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText, {
     exports: studioModule.exports, module: studioModule,
@@ -93,6 +90,7 @@ test('trackAsrReadiness payload matches the catalog', () => {
       if (id === './posthog') return { captureBusinessEvent: (event, props) => { events.push({ event, props }); return true } }
       if (id === './observer') return { workflow: { generation: () => 1, active: () => true, list: () => [], rememberProject() {}, observeStudio() {}, context: () => ({}) } }
       if (id === './workflow') return workflow.exports
+      if (id === './flags') return { flagAssigned: () => false }
       throw new Error(id)
     },
   })

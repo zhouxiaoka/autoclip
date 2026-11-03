@@ -1,20 +1,35 @@
 use crate::backend_manager::BackendManager;
 use crate::commands::*;
 use crate::tray::setup_system_tray;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 mod backend_manager;
 #[cfg(windows)]
 mod windows_job;
 mod commands;
+mod quit_guard;
 mod tray;
+mod power;
 mod telemetry_runtime;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Use the same platform data-directory resolver as Tauri's path API.
     let telemetry_dir = telemetry_runtime::app_dir(dirs::data_dir());
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Must be first. The callback receives the launch argv, which can contain
+    // an autoclip:// URL and an API key. Do not log argv or cwd.
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+    builder
         .plugin(tauri::plugin::Builder::<tauri::Wry>::new("telemetry-runtime")
             .js_init_script(telemetry_runtime::webview_script(telemetry_dir.as_deref()))
             .build())
@@ -25,6 +40,9 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             start_backend_service,
             stop_backend_service,
@@ -32,13 +50,32 @@ pub fn run() {
             get_service_status,
             show_main_window,
             quit_app,
+            hide_to_tray,
+            confirm_quit,
             enable_autostart,
             disable_autostart,
             is_autostart_enabled,
+            set_keep_awake,
             crate::tray::set_tray_language,
+            crate::quit_guard::quit_guard_ready,
             save_local_download
         ])
         .manage(BackendManager::new())
+        .manage(crate::quit_guard::QuitGuardState::new())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // P2 #10: if QuitGuard never mounted, do not trap the user.
+                if !crate::quit_guard::is_ready(window.app_handle()) {
+                    window.app_handle().exit(0);
+                    return;
+                }
+                api.prevent_close();
+                let _ = window.emit(
+                    "close-requested",
+                    serde_json::json!({ "from": "window" }),
+                );
+            }
+        })
         .setup(|app| {
             // 设置环境变量
             std::env::set_var("AUTOCLIP_DESKTOP_MODE", "true");
@@ -47,6 +84,35 @@ pub fn run() {
             // 设置系统托盘
             if let Err(e) = setup_system_tray(&app.handle()) {
                 eprintln!("设置系统托盘失败: {}", e);
+            }
+
+            // macOS: replace muda Predefined Quit (terminate:) with MenuItem id "quit"
+            // so Cmd+Q / app-menu 退出 can emit close-requested. ExitRequested alone
+            // cannot prevent_exit after terminate: on tao/muda locked stack.
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = crate::quit_guard::install_interceptable_quit_menu(app.handle()) {
+                    eprintln!("install interceptable Quit menu failed: {}", e);
+                }
+            }
+
+            // Tray Quit and (macOS) app-menu Quit share MenuItem id "quit".
+            // Single handler — tray's on_menu_event is also global, so tray.rs
+            // leaves "quit" to this callback to avoid double close-requested.
+            app.handle().on_menu_event(|app, event| {
+                if event.id().as_ref() == "quit" {
+                    crate::quit_guard::handle_quit_click(app, "menu");
+                }
+            });
+
+            // macOS registers the scheme from the bundled Info.plist only.
+            // Windows and Linux also register at runtime so dev and portable builds work.
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(_err) = app.deep_link().register_all() {
+                    eprintln!("autoclip deep link registration failed");
+                }
             }
 
             let backend_manager = app.state::<BackendManager>();
@@ -64,9 +130,24 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if matches!(event, tauri::RunEvent::Exit) {
+        .run(|app, event| match event {
+            // Backstop: user-driven exits that still surface as ExitRequested
+            // with code=None (e.g. some window-destroy paths). macOS Cmd+Q /
+            // app-menu Quit are handled via the custom MenuItem + on_menu_event
+            // above — muda's predefined Quit used terminate: with no prevent_exit.
+            // Programmatic confirm_quit → AppHandle::exit(0) carries Some(code) — allow it.
+            tauri::RunEvent::ExitRequested { api, code, .. } => {
+                if crate::quit_guard::should_intercept_exit(
+                    crate::quit_guard::is_ready(app),
+                    code,
+                ) {
+                    api.prevent_exit();
+                    crate::quit_guard::emit_close_requested(app, "menu");
+                }
+            }
+            tauri::RunEvent::Exit => {
                 let _ = app.state::<BackendManager>().stop();
             }
+            _ => {}
         });
 }

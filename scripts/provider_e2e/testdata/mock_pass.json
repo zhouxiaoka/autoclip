@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "suite": "mock",
+  "status": "completed",
+  "commit": "397b3683",
+  "cases": [
+    {
+      "id": "mock:talk_zh",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:interview_zh",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:podcast_en",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:with_srt",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:portrait",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:gameplay",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:sport",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:music",
+      "expect": "succeed",
+      "passed": true,
+      "billable_calls_before_failure": 3
+    },
+    {
+      "id": "mock:too_short",
+      "expect": "block",
+      "passed": true,
+      "billable_calls_before_failure": 0
+    },
+    {
+      "id": "mock:no_audio",
+      "expect": "block",
+      "passed": true,
+      "billable_calls_before_failure": 0
+    }
+  ]
+}

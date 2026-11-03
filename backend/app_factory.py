@@ -14,7 +14,13 @@ from backend.api.v1.health import router as health_router
 from backend.core.database import engine
 from backend.models.base import Base
 from backend.core.config import get_logging_config, get_api_key
-from backend.core.error_middleware import global_exception_handler
+from backend.core.error_middleware import (
+    global_exception_handler,
+    validation_exception_handler,
+    http_exception_handler_safe,
+)
+from fastapi.exceptions import RequestValidationError
+from fastapi import HTTPException
 from backend.core.local_origin_guard import LocalOriginGuard, allowed_origins
 
 logger = logging.getLogger(__name__)
@@ -49,6 +55,8 @@ def create_app(mode: str = "web") -> FastAPI:
             logging.FileHandler(logging_config["file"])
         ]
     )
+    from backend.core.log_redaction import install_log_redaction
+    install_log_redaction()
     
     # 创建 FastAPI 应用
     app = FastAPI(
@@ -74,7 +82,10 @@ def create_app(mode: str = "web") -> FastAPI:
         allow_headers=["*"],
     )
     
-    # 注册全局异常处理器
+    # 注册全局异常处理器（RequestValidationError / HTTPException 必须单独挂上，
+    # 否则 FastAPI 默认 handler 会把 detail[].input 里的 api_key 原样回给客户端）
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler_safe)
     app.add_exception_handler(Exception, global_exception_handler)
     
     # 启动事件
@@ -99,6 +110,11 @@ def create_app(mode: str = "web") -> FastAPI:
             reconcile_interrupted_projects()
         except Exception:
             logger.exception("Studio 重启恢复失败，打开项目时会再次尝试")
+        try:
+            from backend.services.studio.terminal_outbox import replay_unsent
+            replay_unsent()
+        except Exception:
+            logger.exception("未发出的终态事件补发失败")
         try:
             # 只清 projects 根下、库里没有对应行的残留目录；库读失败则什么都不删（RC156 PR4）
             from backend.services.project_orphan_cleanup import cleanup_orphan_project_directories
@@ -133,6 +149,9 @@ def create_app(mode: str = "web") -> FastAPI:
     # 注册路由
     app.include_router(health_router, prefix="/api/health", tags=["health"])
     app.include_router(api_router, prefix="/api/v1")
+    # local-only shutdown intent from the desktop shell (token-guarded).
+    from backend.api.internal import router as internal_router
+    app.include_router(internal_router, tags=["internal"])
     
     # 添加 video-categories 路由（统一到 api_router 中）
     @app.get("/api/v1/video-categories")

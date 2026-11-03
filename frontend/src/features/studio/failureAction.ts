@@ -1,0 +1,350 @@
+import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from '../../analytics/failureCodes'
+import { getProvider } from '../settings/providerPresets'
+import { USER_CAUSE_REASONS, llmFailureText } from '../../utils/llmFailure'
+/**
+ * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
+ * configured, key lacks permission) cannot be fixed by retrying: show 「去设置」 instead.
+ * Mirrors event_catalog.json attribution.user_cause (contract-tested; same set the v4
+ * success rate excludes as user cause).
+ *
+ * Whisper/ASR install gates are the same idea: retrying cannot install the runtime or model.
+ * Those four codes (readiness.GATE_CODES without the in-progress WAITING_CODES) open
+ * 「设置 → 语音转字幕」 with 「安装转写」. Keep this list aligned with
+ * backend/services/studio/readiness.py GATE_CODES and importReadiness.gateKind === 'install'.
+ */
+export { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES }
+
+export const SETTINGS_DESTINATION = '/settings?section=analysis'
+/** Cloud transcription (ASR) credentials. SettingsPage maps `speech` to the transcription row;
+ * `section=transcription` is not a recognised value there (falls back to the top of AI settings). */
+export const TRANSCRIPTION_SETTINGS_DESTINATION = '/settings?section=speech'
+
+/** Install/repair subset of readiness.GATE_CODES. Waiting codes stay off this list. */
+export const WHISPER_GATE_CODES = [
+  'whisper_not_installed',
+  'whisper_install_failed',
+  'whisper_model_missing',
+  'whisper_model_failed',
+] as const
+
+export const INSTALL_TRANSCRIPTION_LABEL = '安装转写'
+
+/** Stable ids for diagnose_opened.suggestion / diagnose_action.action. Chinese labels stay in the UI. */
+export const DIAGNOSE_SUGGESTIONS = ['switch_model', 'install_transcription', 'change_material', 'keep_window', 'none'] as const
+export const DIAGNOSE_ACTIONS = ['switch_model', 'install_transcription', 'change_material', 'example'] as const
+export type DiagnoseSuggestionId = Exclude<(typeof DIAGNOSE_SUGGESTIONS)[number], 'none'>
+export type DiagnoseActionId = (typeof DIAGNOSE_ACTIONS)[number]
+
+export type FailureAction =
+  | { kind: 'retry' }
+  | { kind: 'settings'; reason?: string; destination: string; label?: string }
+  | { kind: 'install_asr'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL }
+  | { kind: 'switch_model' }
+  | { kind: 'recharge'; provider: string; destination: string; label?: string }
+
+/** Upstream types that can recover by switching to another configured connection (X2). */
+export const SWITCHABLE_UPSTREAM = [
+  'rate_limited',
+  'timeout',
+  'upstream_unavailable',
+  'invalid_response',
+  'model_not_found',
+  'bad_endpoint',
+] as const
+
+/** Known sponsor catalog ids for insufficient_quota → recharge (X3). */
+export const SPONSOR_PROVIDERS = ['api88', 'infistar', 'apimart'] as const
+
+export const ADD_PROVIDER_HINT = '建议再加一个服务商'
+export const RECHARGE_LABEL = '去充值'
+export const VIEW_BALANCE_LABEL = '查看余额'
+/** Fixed copy on the sponsor insufficient_quota failure card. */
+export const RECHARGE_HINT = '密钥没问题，是余额不足。充值后点重试即可。'
+export const SWITCH_MODEL_LABEL = '换模型重试'
+
+/** 「本次已消耗 N 次请求」 — no dollar amount (X3). */
+export function billableCallsLine(count: number): string {
+  return `本次已消耗 ${count} 次请求`
+}
+
+/** Resolve external recharge / balance URL for a catalog provider id. */
+export function rechargeTarget(provider?: string | null): {
+  provider: string
+  url: string
+  label: string
+  sponsor: boolean
+} | null {
+  const key = (provider || '').trim().toLowerCase()
+  if (!key) return null
+  const row = getProvider(key)
+  if (!row) return null
+  if (isIn(SPONSOR_PROVIDERS, key) && row.sponsor) {
+    const url = (row.sponsor.topup_url || row.sponsor.register_url || '').trim()
+    if (!url) return null
+    return { provider: key, url, label: `去 ${row.short_name} 充值`, sponsor: true }
+  }
+  const url = (row.docs_url || '').trim()
+  if (!url) return null
+  return { provider: key, url, label: VIEW_BALANCE_LABEL, sponsor: false }
+}
+
+/** One next step after the same error_code fails again. Pure: code, upstream type, failure stage. */
+export type SuggestedAction = {
+  id: DiagnoseSuggestionId
+  label: string
+  kind: 'settings' | 'home' | 'note'
+  destination?: string
+}
+
+const MODEL_CODES = [
+  'timeout',
+  'connection',
+  'authentication',
+  'rate_limited',
+  'provider_error',
+  'invalid_response',
+  'output_truncated',
+  'refused',
+  'llm_auth_invalid',
+  'llm_not_configured',
+  'network',
+] as const
+
+const MODEL_UPSTREAM = [
+  'invalid_key',
+  'insufficient_quota',
+  'permission_denied',
+  'model_not_found',
+  'bad_endpoint',
+  'rate_limited',
+  'upstream_unavailable',
+  'timeout',
+  'connection',
+  'output_truncated',
+] as const
+
+const MATERIAL_CODES = [
+  'source_unreadable',
+  'source_too_short',
+  'source_no_audio',
+  'source_not_found',
+  'source_blocked',
+  'file_locked',
+  'transcription_empty',
+  'subtitle_setup',
+  'timeline_empty',
+  'missing_resource',
+] as const
+
+const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
+
+export function suggestedAction(code?: string | null, upstream?: string | null, stage?: string | null): SuggestedAction | null {
+  if (code === 'service_restarted') {
+    return { id: 'keep_window', label: '保持窗口打开，或缩短素材', kind: 'note' }
+  }
+  if (isIn(WHISPER_GATE_CODES, code)) {
+    return { id: 'install_transcription', label: INSTALL_TRANSCRIPTION_LABEL, kind: 'settings', destination: TRANSCRIPTION_SETTINGS_DESTINATION }
+  }
+  if (isIn(MATERIAL_CODES, code)) {
+    return { id: 'change_material', label: '换素材 / 加字幕', kind: 'home', destination: '/' }
+  }
+  if (isIn(MODEL_CODES, code) || isIn(MODEL_UPSTREAM, upstream) || isIn(MODEL_UPSTREAM, code)) {
+    return { id: 'switch_model', label: '换模型重试', kind: 'settings', destination: settingsDestination(stage) }
+  }
+  return null
+}
+
+export function diagnoseSuggestionId(action: SuggestedAction | null | undefined): (typeof DIAGNOSE_SUGGESTIONS)[number] {
+  return action?.id || 'none'
+}
+
+/** True when the last two failures of this project share one error_code. */
+export function diagnoseInsteadOfRetry(repeat?: { count?: number | null; same_code?: boolean | null } | null): boolean {
+  const count = Number(repeat?.count)
+  return repeat?.same_code === true && Number.isFinite(count) && count >= 2
+}
+
+export function isTranscriptionInstall(action: FailureAction): action is { kind: 'install_asr'; destination: string; label: typeof INSTALL_TRANSCRIPTION_LABEL } {
+  return action.kind === 'install_asr'
+}
+
+/** Which settings row fixes a user-cause failure, keyed by failure_stage (one table):
+ * subtitle = cloud transcription (ASR), vision = visual-understanding binding; everything else
+ * is the text-analysis binding. Values are SettingsPage SECTION_ALIASES keys. */
+const STAGE_SECTION: Record<string, string> = { subtitle: 'speech', vision: 'vision' }
+export const VISION_SETTINGS_DESTINATION = '/settings?section=vision'
+
+export function settingsDestination(failureStage?: string | null): string {
+  const section = STAGE_SECTION[failureStage || '']
+  return section ? `/settings?section=${section}` : SETTINGS_DESTINATION
+}
+
+/** One classification. A Whisper install gate is not fixed by retrying, so those codes open
+ * transcription settings before any upstream type. Otherwise the controlled upstream type is
+ * the most precise signal and wins; the coarse error_code is only used when upstream says
+ * nothing user-attributable. */
+export function failureAction(
+  errorCode?: string | null,
+  upstreamType?: string | null,
+  failureStage?: string | null,
+  connectionCount?: number | null,
+  provider?: string | null,
+): FailureAction {
+  // Use includes (not isIn type-predicate): a false isIn would narrow errorCode to
+  // null|undefined and break later === 'insufficient_quota' (TS2367).
+  if (!!errorCode && (WHISPER_GATE_CODES as readonly string[]).includes(errorCode)) {
+    return { kind: 'install_asr', destination: TRANSCRIPTION_SETTINGS_DESTINATION, label: INSTALL_TRANSCRIPTION_LABEL }
+  }
+  // Avoid isIn type-predicate on the params here: a false hit would narrow them to
+  // null|undefined and poison later === 'insufficient_quota' checks (TS2367).
+  const switchHit = (!!upstreamType && (SWITCHABLE_UPSTREAM as readonly string[]).includes(upstreamType))
+    || (!!errorCode && (SWITCHABLE_UPSTREAM as readonly string[]).includes(errorCode))
+  if (switchHit && connectionCount != null && Number.isFinite(connectionCount)) {
+    if (connectionCount >= 2) return { kind: 'switch_model' }
+    if (connectionCount >= 0) {
+      return {
+        kind: 'settings',
+        reason: ADD_PROVIDER_HINT,
+        destination: settingsDestination(failureStage),
+        label: '去设置',
+      }
+    }
+  }
+  const quota = upstreamType === 'insufficient_quota' || errorCode === 'insufficient_quota'
+  if (quota) {
+    const target = rechargeTarget(provider)
+    if (target) {
+      return {
+        kind: 'recharge',
+        provider: target.provider,
+        destination: target.url,
+        label: target.label,
+      }
+    }
+  }
+  const code = isIn(USER_CAUSE_UPSTREAM_TYPES, upstreamType) ? upstreamType
+    : isIn(USER_CAUSE_ERROR_CODES, errorCode) || isIn(USER_CAUSE_UPSTREAM_TYPES, errorCode) ? errorCode : ''
+  return code ? { kind: 'settings', reason: USER_CAUSE_REASONS[code], destination: settingsDestination(failureStage) } : { kind: 'retry' }
+}
+
+export type PageFailureInfo = {
+  error_code?: string | null; upstream_error_type?: string | null; failure_stage?: string | null
+  phase?: string | null
+  billable_calls_before_failure?: number | null
+  secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
+  /** Usable analysis connections (≥2 → switch_model for SWITCHABLE_UPSTREAM). */
+  connection_count?: number | null
+  /** Catalog provider of the failed analysis binding (sponsor → recharge). */
+  provider?: string | null
+}
+
+/** Diagnose panel input. The only reader of this page's cause fields for the suggestion. */
+export function pageSuggestedAction(info: PageFailureInfo): { action: SuggestedAction | null; errorCode?: string | null } {
+  return {
+    action: suggestedAction(info.error_code, info.upstream_error_type, info.failure_stage),
+    errorCode: info.error_code,
+  }
+}
+
+/** Legacy fixed sentence. X3 prefers billableCallsLine(N); kept for callers that still read it. */
+export const BILLING_GUIDANCE = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
+
+const BARE_FAILURE = new Set(['', '错误', '失败', 'Error', 'error', '处理失败', '处理失败：错误'])
+const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked', 'file_locked'])
+const TRANSCRIBE_STAGES = new Set(['subtitle', 'transcribe'])
+const ANALYZE_STAGES = new Set(['analyze', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'vision', 'highlight'])
+
+/** The four steps a beginner can act on: download / transcribe / analyze / produce. */
+export function failureStep(stage?: string | null, phase?: string | null, code?: string | null): '下载' | '转写' | '分析' | '制作' {
+  if (code && (DOWNLOAD_CODES.has(code) || code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup')) {
+    return code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup' ? '转写' : '下载'
+  }
+  const key = (stage || '').toLowerCase()
+  if (TRANSCRIBE_STAGES.has(key)) return '转写'
+  if (ANALYZE_STAGES.has(key)) return '分析'
+  if (key === 'render' || key === 'export' || phase === 'rendering') return '制作'
+  if (key === 'ingest' || key === 'screening') return '下载'
+  // Screening without a model code is still the download/read step. Production is analysis
+  // until rendering starts. A model failure during screening names the analysis step.
+  if (phase === 'screening') return code ? '分析' : '下载'
+  if (phase === 'production') return '分析'
+  return '制作'
+}
+
+export function readableFailure(error?: string | null, code?: string | null, upstream?: string | null): string {
+  const text = llmFailureText(error, code, upstream).trim()
+  if (!BARE_FAILURE.has(text)) return text
+  if (upstream && upstream !== 'unknown' && USER_MESSAGES[upstream]) return USER_MESSAGES[upstream]
+  if (code && USER_MESSAGES[code]) return USER_MESSAGES[code]
+  return USER_MESSAGES.unknown
+}
+
+export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: '下载' | '转写' | '分析' | '制作'; reason: string; billing: string | null } {
+  const raw = (message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
+  const reason = BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw
+  const count = Number(info.billable_calls_before_failure)
+  return {
+    step: failureStep(info.failure_stage, info.phase, info.error_code),
+    reason: BARE_FAILURE.has(reason) ? USER_MESSAGES.unknown : reason,
+    billing: Number.isFinite(count) && count > 0 ? billableCallsLine(count) : null,
+  }
+}
+
+/** Page fallback when the run has no attempt receipt: the analysis record's own cause fields. */
+export function analysisPageFailure(
+  analysis?: { error_code?: string; upstream_error_type?: string; failure_stage?: string } | null,
+  generation?: { error_code?: string } | null,
+): PageFailureInfo {
+  return {
+    error_code: analysis?.error_code || generation?.error_code,
+    upstream_error_type: analysis?.upstream_error_type,
+    failure_stage: analysis?.failure_stage,
+    ...pickSecondary(analysis),
+  }
+}
+
+/** User sentence for a settled page cause. The fine upstream type stays inside this reader. */
+export function pageFailureText(info: { error?: string | null; error_code?: string | null; upstream_error_type?: string | null }): string {
+  return llmFailureText(info.error, info.error_code, info.upstream_error_type)
+}
+
+export function analysisFailureText(
+  error: string | null | undefined,
+  analysis?: { error_code?: string; upstream_error_type?: string; failure_stage?: string } | null,
+  generation?: { error_code?: string } | null,
+): string {
+  return pageFailureText({ error, ...analysisPageFailure(analysis, generation) })
+}
+
+/** (PM rule): page hint and stats are separate. Stats keep the product-first primary cause
+ * (backend failure_attribution); the page leads with the first cause the user can fix (e.g. auth),
+ * because retrying cannot fix it. Primary first, then secondaries in recorded order. */
+export function pageFailureAction(info: PageFailureInfo): FailureAction {
+  const primary = failureAction(info.error_code, info.upstream_error_type, info.failure_stage, info.connection_count, info.provider)
+  if (primary.kind !== 'retry') return primary
+  const codes = info.secondary_error_codes || []
+  for (let i = 0; i < codes.length; i++) {
+    const action = failureAction(codes[i], info.secondary_upstream_error_types?.[i], info.secondary_failure_stages?.[i], info.connection_count, info.provider)
+    if (action.kind !== 'retry') return action
+  }
+  return primary
+}
+
+const strings = (v: unknown) => Array.isArray(v) ? v.map(x => typeof x === 'string' ? x : '') : undefined
+/** The secondary causes of an analysis record, for the page rule. */
+export function pickSecondary(analysis: unknown): Pick<PageFailureInfo, 'secondary_error_codes' | 'secondary_upstream_error_types' | 'secondary_failure_stages'> {
+  const a = (analysis || {}) as Record<string, unknown>
+  return { secondary_error_codes: strings(a.secondary_error_codes), secondary_upstream_error_types: strings(a.secondary_upstream_error_types), secondary_failure_stages: strings(a.secondary_failure_stages) }
+}
+
+type Receipt = { sequence?: number; state?: string; run_id?: string | null; causes?: { stage?: string; code?: string; upstream?: string }[] }
+/** #419: the page reads the settled backend attempt receipt of the failed run it shows (its structured causes,
+ * primary first). A failure outside any attempt (e.g. screening) has no receipt: null, the caller uses analysis. */
+export function receiptFailureInfo(attempts: readonly Receipt[] | null | undefined, runId?: string | null): PageFailureInfo | null {
+  const settled = (attempts || []).filter(a => ['completed', 'partial', 'failed'].includes(a.state || ''))
+  const latest = settled.reduce<Receipt | null>((best, a) => !best || (a.sequence || 0) > (best.sequence || 0) ? a : best, null)
+  if (!latest || !runId || latest.run_id !== runId || latest.state === 'completed' || !latest.causes?.length) return null
+  const [primary, ...rest] = latest.causes
+  return { error_code: primary.code, upstream_error_type: primary.upstream || null, failure_stage: primary.stage || null,
+    secondary_error_codes: rest.map(c => c.code || ''), secondary_upstream_error_types: rest.map(c => c.upstream || ''), secondary_failure_stages: rest.map(c => c.stage || '') }
+}

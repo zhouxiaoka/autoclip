@@ -1,4 +1,5 @@
 """Explicit, bounded local H.264 preview conversion; source media is immutable."""
+from backend.core.failure_codes import UserFacingError
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 from pathlib import Path
@@ -41,7 +42,7 @@ def start(project_id):
         if current['status'] in ('queued', 'running', 'completed'):
             return current
         if any(s['status'] in ('queued', 'running') for s in _states.values()):
-            raise ValueError('已有兼容预览正在生成，请稍后重试')
+            raise UserFacingError('已有兼容预览正在生成，请稍后重试')
         while len(_states) >= 64:
             del _states[next(iter(_states))]
         _states[token] = {'status': 'queued', 'project_id': project_id}
@@ -49,7 +50,7 @@ def start(project_id):
             _executor.submit(_convert, project_id, source, output, token)
         except Exception:
             _states.pop(token, None)
-            raise ValueError('兼容预览未能启动，请重试') from None
+            raise UserFacingError('兼容预览未能启动，请重试') from None
         return dict(_states[token])
 
 

@@ -9,13 +9,16 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --require ./tests/setup.cjs --test tests/*.test.cjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
     "@sentry/react": "^10.73.0",
     "@tailwindcss/postcss": "^4.1.13",
     "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-clipboard-manager": "^2.5.0",
+    "@tauri-apps/plugin-deep-link": "^2.6.2",
+    "@tauri-apps/plugin-notification": "^2.8.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.0.0-rc",
     "@tauri-apps/plugin-updater": "^2.11.0",
@@ -45,6 +48,7 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "happy-dom": "^21.0.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.2.2",

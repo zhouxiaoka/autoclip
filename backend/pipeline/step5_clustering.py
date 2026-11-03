@@ -2,7 +2,6 @@
 Step 5: 主题聚类 - 将相似内容聚类成合集
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -10,8 +9,9 @@ from pathlib import Path
 # 导入依赖
 from ..utils.llm_client import LLMClient
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MAX_CLIPS_PER_COLLECTION
+from backend.core.failure_logging import failure_logger, clips_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class ClusteringEngine:
     """主题聚类引擎"""
@@ -31,6 +31,7 @@ class ClusteringEngine:
             metadata_dir = METADATA_DIR
         self.metadata_dir = metadata_dir
     
+    @clips_failure_context("step5_clustering")
     def cluster_clips(self, clips_with_titles: List[Dict]) -> List[Dict]:
         """
         对片段进行主题聚类
@@ -86,7 +87,7 @@ class ClusteringEngine:
             return validated_collections
             
         except Exception as e:
-            logger.error(f"主题聚类失败: {str(e)}")
+            logger.error("主题聚类失败: %s message_length=%s", type(e).__name__, len(str(e)))
             # 使用预聚类结果作为备选
             if pre_clusters:
                 logger.info("使用预聚类结果作为备选方案")
@@ -240,7 +241,7 @@ class ClusteringEngine:
                 validated_collections.append(validated_collection)
                 
             except Exception as e:
-                logger.error(f"验证合集 {i} 失败: {str(e)}")
+                logger.error("验证合集失败: %s message_length=%s", type(e).__name__, len(str(e)))
                 continue
         
         return validated_collections
@@ -311,7 +312,7 @@ class ClusteringEngine:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(collections_data, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"合集数据已保存到: {output_path}")
+        logger.info("合集数据已保存 count=%s", len(collections_data))
         return output_path
     
     def load_collections(self, input_path: Path) -> List[Dict]:

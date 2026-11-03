@@ -88,6 +88,7 @@ PROMPT = (
     '不能停在半句话，不能在对方刚开始回答时结束，不能以主持人抛出的下一个问题结尾，不要带进开场寒暄和下一段的过渡语。\n'
     '时长：每段 {min_sec}–{max_sec} 秒，最好 {target_lo}–{target_hi} 秒（按行首时间计算，结束时间取 end 下一行的开始时间）；'
     '一个回答讲完就结束，不要为了凑时长带进下一个问题；太长就在自然段落处拆开。\n'
+    '{long_rule}'
     '数量：这段字幕里挑 {count_lo}–{count_hi} 个，宁缺毋滥，片段之间不要重叠。\n'
     '每个片段给出：start / end（起止行号，含 end 行）、title（无论原文是什么语言都用中文写爆款标题，≤20 字，忠于原文、不夸张不编造）、'
     'reason（中文推荐理由，15–30 字，点出最核心的亮点）、score（0.0–1.0，综合爆款潜力，0.7 以上才算值得发）。\n'
@@ -169,8 +170,20 @@ def _window_count(profile: DurationProfile, share: float) -> tuple[int, int]:
     return max(1, round(lo * share)), max(2, round(hi * share))
 
 
+def _platform_rule(platform_min_sec: float | None, platform_min_label: str) -> str:
+    """One sentence naming a long-form platform's hard minimum. Empty when no long platform was requested."""
+    if not platform_min_sec:
+        return ''
+    label = platform_min_label or '长视频平台'
+    return (
+        f'平台时长：{label}要求至少一条片段不少于 {int(platform_min_sec)} 秒，且整段落在素材时长之内；'
+        '其余片段仍按上面的短视频时长挑选，不要把所有片段都拉到这个长度。\n'
+    )
+
+
 def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, metadata_dir: Path | None = None,
-               window: WindowSize | None = None) -> list[dict[str, Any]]:
+               window: WindowSize | None = None, platform_min_sec: float | None = None,
+               platform_min_label: str = '') -> list[dict[str, Any]]:
     """Titled clips (legacy `step4_titles.json` shape) from one pass over the transcript.
 
     `window` defaults to `window_size()` (smaller windows for local models)."""
@@ -189,7 +202,8 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
         share = min(1.0, (rows[last]['end'] - rows[first]['start']) / total)
         count_lo, count_hi = _window_count(profile, share)
         prompt = PROMPT.format(min_sec=profile.min_clip_sec, max_sec=profile.max_clip_sec, target_lo=profile.target_clip_sec[0],
-                               target_hi=profile.target_clip_sec[1], count_lo=count_lo, count_hi=count_hi)
+                               target_hi=profile.target_clip_sec[1], count_lo=count_lo, count_hi=count_hi,
+                               long_rule=_platform_rule(platform_min_sec, platform_min_label))
         payload = {'rows': '\n'.join(f"{i}|{_clock(rows[i]['start'])}|{rows[i]['text']}" for i in range(first, last + 1))}
         for attempt in range(2):
             try:

@@ -1,6 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const fs = require('node:fs'), path = require('node:path'), ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const file = path.resolve(__dirname, '../src/features/studio/nativeDownload.ts')
 function load({ desktop = true, ready = true, result = { size_bytes: 42 }, fail = false, readyResult = true } = {}) {
   const calls = [], exports = {}; let base = ready ? 'http://127.0.0.1:56101/api/v1/' : '/api/v1'
@@ -10,7 +11,7 @@ function load({ desktop = true, ready = true, result = { size_bytes: 42 }, fail 
     '@tauri-apps/api/core': { invoke: async (name, args) => { calls.push({ name, ...args }); if(fail) throw Error('disk full'); return result } },
   }
   const code = ts.transpileModule(fs.readFileSync(file,'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
-  vm.runInNewContext(code, { exports, require: id => { assert.ok(mocks[id],id); return mocks[id] }, window: desktop ? { __TAURI_INTERNALS__: {} } : {} })
+  runInSandbox(code, { exports, require: id => { assert.ok(mocks[id],id); return mocks[id] }, window: desktop ? { __TAURI_INTERNALS__: {} } : {} })
   return { ...exports, calls }
 }
 test('native download waits for backend port and saves the selected immutable job only',async()=>{
@@ -39,9 +40,10 @@ function link({ desktop = true, save } = {}) {
   '../../desktop/sentry': { captureStudioException:()=>{} },
   './api': { studioApi:{video:()=>'/immutable.mp4?download=true'} },
   './nativeDownload': { isDesktopDownload:()=>desktop,saveStudioExport:save|| (async()=>{}) },
+  './overrides': { markOutputTaken() {} },
  }
  const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText
- vm.runInNewContext(code,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
+ runInSandbox(code,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
  return {props:exports.default({projectId:'p',jobId:'j'}),calls,refs}
 }
 test('browser link keeps its download navigation; desktop blocks duplicate clicks while saving',async()=>{

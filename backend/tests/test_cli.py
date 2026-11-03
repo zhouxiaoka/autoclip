@@ -140,6 +140,9 @@ def test_prepare_project_links_video_and_registers_db(data_dir, tmp_path, isolat
     # 不真的调 ffmpeg 抽帧
     import backend.utils.thumbnail_generator as tg
     monkeypatch.setattr(tg, "generate_project_thumbnail", lambda *a, **k: None)
+    # 1.5.7 #73: CLI 没有设置文件时也按默认本地 Whisper 门禁；这条只测链接/入库，假定 Whisper 已装好
+    from backend.services.studio import readiness
+    monkeypatch.setattr(readiness, "_transcription", lambda settings: {"ok": True, "code": "whisper_installed"})
 
     video = tmp_path / "talk.mp4"
     video.write_bytes(b"\x00" * 1024)
