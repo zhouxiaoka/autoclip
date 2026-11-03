@@ -40,10 +40,46 @@ MODEL_ERROR_CODES = frozenset({"timeout", "connection", "authentication", "rate_
                                "invalid_response", "output_truncated", "refused", "llm_auth_invalid"})
 # Codes that are decisively LOCAL in any layer. Other non-model codes (``unexpected``, ``validation``...)
 # cannot decide: the walk looks past them.
-LOCAL_ERROR_CODES = frozenset({"source_blocked", "file_locked", "source_not_found", "source_too_short", "source_no_audio", "source_unreadable",
+LOCAL_ERROR_CODES = frozenset({"source_blocked", "file_locked", "source_not_found", "source_unsupported", "source_too_short", "source_no_audio", "source_unreadable",
                                "service_restarted", "whisper_not_installed", "whisper_install_failed",
                                "transcription_empty", "subtitle_setup", "timeline_empty", "store_lock_timeout",
                                "frame_extract_failed", "llm_not_configured", "missing_resource"})
+
+UNEXPECTED_TYPES = frozenset({
+    'DownloadError', 'ExtractorError', 'ValidationError', 'KeyError', 'TypeError',
+    'AttributeError', 'IndexError', 'OperationalError', 'RuntimeError', 'OSError',
+    'PermissionError', 'MemoryError', 'TimeoutError', 'JSONDecodeError',
+    'UnicodeDecodeError', 'CalledProcessError', 'other',
+})
+
+
+def unexpected_type_of(error: BaseException | None) -> str | None:
+    """Whitelist exception class name for error_code=unexpected. Anything else → other."""
+    if error is None:
+        return None
+    name = type(error).__name__
+    # pydantic.ValidationError → ValidationError; json.JSONDecodeError → JSONDecodeError
+    if name in UNEXPECTED_TYPES:
+        return name
+    # Walk the cause chain for a whitelisted name (wrappers often hide DownloadError).
+    seen = set()
+    pending = [error]
+    while pending:
+        cur = pending.pop()
+        if id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        n = type(cur).__name__
+        if n in UNEXPECTED_TYPES and n != 'other':
+            return n
+        for attr in ('__cause__', '__context__'):
+            nxt = getattr(cur, attr, None)
+            if isinstance(nxt, BaseException):
+                pending.append(nxt)
+    return 'other'
+
+
+
 _RECORD_ATTR = "_autoclip_request_record"
 
 
@@ -248,6 +284,9 @@ def _sent_and_answered(link: BaseException) -> bool:
 
 def _is_model(link: BaseException, coded: tuple, api: tuple) -> bool:
     if isinstance(link, (ModelResponseInvalid, ProviderTransportError)):
+        return True
+    # 1.5.9 3A: precheck exhausted is a provider-quota MODEL failure (no HTTP round-trip).
+    if type(link).__name__ == "QuotaExhausted":
         return True
     if coded and isinstance(link, coded):
         return getattr(link, "code", "") in MODEL_ERROR_CODES
@@ -479,6 +518,12 @@ def export_attribution(source: "FailureAttribution | dict | None", *, failed: bo
         if origin == SOURCE_LOCAL:
             for key in UPSTREAM_FIELDS:
                 out.pop(key, None)
+    # 1.5.9 2A: optional unexpected_type enum on the source dict (never invented here).
+    ut = None
+    if isinstance(source, dict):
+        ut = source.get('unexpected_type')
+    if isinstance(ut, str) and ut in UNEXPECTED_TYPES:
+        out['unexpected_type'] = ut
     return out
 
 

@@ -61,6 +61,13 @@ export const VIEW_BALANCE_LABEL = '查看余额'
 /** Fixed copy on the sponsor insufficient_quota failure card. */
 export const RECHARGE_HINT = '密钥没问题，是余额不足。充值后点重试即可。'
 export const SWITCH_MODEL_LABEL = '换模型重试'
+/** 1.5.9 3B: replace bare retry while quota is locked. */
+export const QUOTA_RETRY_CHECK_BALANCE = '核对余额并测试连接'
+export const QUOTA_PROVIDER_INSUFFICIENT = '服务商回复余额不足。'
+export const QUOTA_ZERO_BILLABLE = '这次制作没有向服务商发出计费请求。'
+export const QUOTA_N_BILLABLE = '这次制作向服务商发出了 {{count}} 次可能计费的请求。'
+export const QUOTA_PRECHECK_EXHAUSTED = '余额在开始前已核对。'
+export const QUOTA_RECHARGE_THEN_TEST = '充值后点测试连接再重试。'
 
 /** 「本次已消耗 N 次请求」 — no dollar amount (X3). */
 export function billableCallsLine(count: number): string {
@@ -221,6 +228,13 @@ export function failureAction(
         label: target.label,
       }
     }
+    // 3B: lock bare retry → send user to test connection / balance check.
+    return {
+      kind: 'settings',
+      reason: USER_CAUSE_REASONS.insufficient_quota || QUOTA_PROVIDER_INSUFFICIENT,
+      destination: settingsDestination(failureStage),
+      label: QUOTA_RETRY_CHECK_BALANCE,
+    }
   }
   const code = isIn(USER_CAUSE_UPSTREAM_TYPES, upstreamType) ? upstreamType
     : isIn(USER_CAUSE_ERROR_CODES, errorCode) || isIn(USER_CAUSE_UPSTREAM_TYPES, errorCode) ? errorCode : ''
@@ -231,6 +245,8 @@ export type PageFailureInfo = {
   error_code?: string | null; upstream_error_type?: string | null; failure_stage?: string | null
   phase?: string | null
   billable_calls_before_failure?: number | null
+  /** 1.5.9 3A: skipped|ok|exhausted|unavailable */
+  quota_precheck?: string | null
   secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
   /** Usable analysis connections (≥2 → switch_model for SWITCHABLE_UPSTREAM). */
   connection_count?: number | null
@@ -250,7 +266,7 @@ export function pageSuggestedAction(info: PageFailureInfo): { action: SuggestedA
 export const BILLING_GUIDANCE = '这次请求可能已经由服务商计费。重试前请先核对余额，并在设置里测试连接。'
 
 const BARE_FAILURE = new Set(['', '错误', '失败', 'Error', 'error', '处理失败', '处理失败：错误'])
-const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked', 'file_locked'])
+const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked', 'file_locked', 'source_unsupported'])
 const TRANSCRIBE_STAGES = new Set(['subtitle', 'transcribe'])
 const ANALYZE_STAGES = new Set(['analyze', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'vision', 'highlight'])
 
@@ -279,14 +295,34 @@ export function readableFailure(error?: string | null, code?: string | null, ups
   return USER_MESSAGES.unknown
 }
 
+export function quotaBillingCopy(info: Pick<PageFailureInfo, 'upstream_error_type' | 'error_code' | 'billable_calls_before_failure' | 'quota_precheck'>): string | null {
+  const quota = info.upstream_error_type === 'insufficient_quota' || info.error_code === 'insufficient_quota'
+  const count = Number(info.billable_calls_before_failure)
+  const billed = Number.isFinite(count) && count > 0
+  if (!quota && !billed) return null
+  const parts: string[] = []
+  if (quota) {
+    parts.push(QUOTA_PROVIDER_INSUFFICIENT)
+    if (info.quota_precheck === 'exhausted') parts.push(QUOTA_PRECHECK_EXHAUSTED)
+  }
+  if (quota && (!Number.isFinite(count) || count <= 0)) {
+    parts.push(QUOTA_ZERO_BILLABLE)
+  } else if (billed) {
+    parts.push(QUOTA_N_BILLABLE.replace('{{count}}', String(count)))
+  }
+  if (quota) parts.push(QUOTA_RECHARGE_THEN_TEST)
+  return parts.join(' ')
+}
+
 export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: '下载' | '转写' | '分析' | '制作'; reason: string; billing: string | null } {
   const raw = (message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
   const reason = BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw
   const count = Number(info.billable_calls_before_failure)
+  const quotaBilling = quotaBillingCopy(info)
   return {
     step: failureStep(info.failure_stage, info.phase, info.error_code),
     reason: BARE_FAILURE.has(reason) ? USER_MESSAGES.unknown : reason,
-    billing: Number.isFinite(count) && count > 0 ? billableCallsLine(count) : null,
+    billing: quotaBilling || (Number.isFinite(count) && count > 0 ? billableCallsLine(count) : null),
   }
 }
 

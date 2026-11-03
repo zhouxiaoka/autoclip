@@ -2110,5 +2110,23 @@
   "正在制作 {{count}} 个项目": "Production de {{count}} projet(s)",
   "退出会中断正在进行的制作。可以选择后台继续，完成后会通知你。": "Quitter interrompra le travail en cours. Vous pouvez continuer en arrière-plan ; on vous préviendra à la fin.",
   "制作时阻止电脑休眠": "Empêcher la veille pendant la production",
-  "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Maintient le système éveillé pendant la production (l’écran peut s’éteindre). Désactivé, le PC peut dormir selon le planning système."
+  "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Maintient le système éveillé pendant la production (l’écran peut s’éteindre). Désactivé, le PC peut dormir selon le planning système.",
+  "failureMessages": {
+    "unexpected": "Cette étape n’est pas terminée. Réessayez une fois ; en cas nouvel échec, touchez Commentaires sur la carte — nous recevons l’étape et le type d’erreur (jamais la vidéo).",
+    "source_unsupported": "Ce lien n’est pas une page vidéo téléchargeable. Utilisez un autre lien, ou téléchargez le fichier puis importez-le.",
+    "quota_zero_billable": "Cette exécution n’a envoyé aucune requête facturable au fournisseur.",
+    "quota_n_billable": "Cette exécution a envoyé {{count}} requête(s) éventuellement facturable(s) au fournisseur.",
+    "quota_retry_check_balance": "Vérifier le solde et tester la connexion",
+    "quota_precheck_exhausted": "Le solde a été vérifié avant le démarrage.",
+    "quota_recharge_then_test": "Après recharge, testez la connexion puis réessayez.",
+    "quota_provider_insufficient": "Le fournisseur a signalé un solde insuffisant."
+  },
+  "服务商回复余额不足。": "Le fournisseur a répondu que le solde est insuffisant.",
+  "这次制作没有向服务商发出计费请求。": "Cette exécution n’a envoyé aucune requête facturable au fournisseur.",
+  "这次制作向服务商发出了 {{count}} 次可能计费的请求。": "Cette exécution a envoyé {{count}} requête(s) éventuellement facturable(s) au fournisseur.",
+  "核对余额并测试连接": "Vérifier le solde et tester la connexion",
+  "余额在开始前已核对。": "Le solde a été vérifié avant le démarrage.",
+  "充值后点测试连接再重试。": "Après recharge, testez la connexion puis réessayez.",
+  "处理没有完成。请重试一次；再失败请在失败卡上点「反馈」，我们会收到失败阶段和错误类型（不含视频内容）。": "Cette étape n’est pas terminée. Réessayez une fois ; en cas nouvel échec, touchez Commentaires sur la carte — nous recevons l’étape et le type d’erreur (jamais la vidéo).",
+  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "Ce lien n’est pas une page vidéo téléchargeable. Utilisez un autre lien, ou téléchargez le fichier puis importez-le."
 }

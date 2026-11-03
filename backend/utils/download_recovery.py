@@ -21,6 +21,9 @@ SOURCE_BLOCKED_CODE = 'source_blocked'
 # 找不到片源。也是前端 i18n 的 key，改动时同步 locales。不要带 URL、状态码或 yt-dlp 原文。
 SOURCE_NOT_FOUND_HINT = '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。'
 SOURCE_NOT_FOUND_CODE = 'source_not_found'
+SOURCE_UNSUPPORTED_HINT = '这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。'
+SOURCE_UNSUPPORTED_CODE = 'source_unsupported'
+CONNECTION_HINT = None  # resolved via failure_messages.sentence at raise time
 # 私密、地区/年龄限制、版权或人机验证。仍用 source_blocked，但不用 403/412/429 那句（这里没有那些状态码）。
 SOURCE_ACCESS_HINT = '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。'
 # 这一次下载里的 rename 已经用完 file_access 预算。用户句只来自 failure_messages.json。
@@ -143,6 +146,10 @@ def download_with_recovery(url: str, options: dict):
                 # download, and do not keep the path or the English WinError text.
                 from backend.core.failure_codes import sentence
                 raise PipelineFailure('INGEST', sentence(FILE_LOCKED_CODE), code=FILE_LOCKED_CODE) from None
+            mapped = classify_download_error_text(text)
+            if mapped:
+                code, hint = mapped
+                raise PipelineFailure('INGEST', hint, code=code) from None
             raise
 
 
@@ -178,6 +185,10 @@ def extract_info_with_recovery(url: str, options: dict):
             kind = _link_failure(text)
             if kind:
                 code, hint = kind
+                raise PipelineFailure('INGEST', hint, code=code) from None
+            mapped = classify_download_error_text(text)
+            if mapped:
+                code, hint = mapped
                 raise PipelineFailure('INGEST', hint, code=code) from None
             raise
 
@@ -217,4 +228,36 @@ def _link_failure(text: str):
         return SOURCE_BLOCKED_CODE, SOURCE_ACCESS_HINT
     if _NOT_FOUND.search(text):
         return SOURCE_NOT_FOUND_CODE, SOURCE_NOT_FOUND_HINT
+    return None
+
+
+# 1.5.9 2B: remaining DownloadError text → known codes (lowercase substrings; never echo text).
+_LOGIN_REQUIRED = (
+    'sign in to confirm', 'not a bot', 'login required', 'private video', 'members-only', 'members only',
+)
+_UNSUPPORTED = ('unsupported url', 'no video formats', 'no video formats found')
+_CONNECTION = (
+    'unable to download webpage', 'timed out', 'timeout', 'connection reset',
+    'ssl', 'getaddrinfo', 'proxy', 'name or service not known', 'nodename nor servname',
+)
+_FRAME = ('ffmpeg', 'postprocess', 'merge')
+
+
+def classify_download_error_text(text: str):
+    """Map DownloadError text to (code, hint) or None. Hint never contains the source text/URL."""
+    lowered = (text or '').lower()
+    # Priority per plan 2B (top → bottom). Access/not-found already covered by _link_failure.
+    if any(p in lowered for p in _LOGIN_REQUIRED):
+        return SOURCE_BLOCKED_CODE, SOURCE_ACCESS_HINT
+    if any(p in lowered for p in ('video unavailable', 'has been removed', 'does not exist', '404')):
+        return SOURCE_NOT_FOUND_CODE, SOURCE_NOT_FOUND_HINT
+    if any(p in lowered for p in _CONNECTION):
+        from backend.core.failure_codes import sentence
+        return 'connection', sentence('connection')
+    if any(p in lowered for p in _FRAME):
+        from backend.core.failure_codes import sentence
+        return 'frame_extract_failed', sentence('frame_extract_failed')
+    if any(p in lowered for p in _UNSUPPORTED):
+        from backend.core.failure_codes import sentence
+        return SOURCE_UNSUPPORTED_CODE, sentence(SOURCE_UNSUPPORTED_CODE)
     return None

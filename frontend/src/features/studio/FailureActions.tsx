@@ -13,6 +13,8 @@ import {
   RECHARGE_LABEL,
   SPONSOR_PROVIDERS,
   SWITCH_MODEL_LABEL,
+  QUOTA_RETRY_CHECK_BALANCE,
+  SETTINGS_DESTINATION,
   PageFailureInfo,
 } from './failureAction'
 import { WEAK_LOCAL_TIMELINE_REASON, weakLocalTimelineFailure } from '../../utils/timelineFailure'
@@ -97,9 +99,15 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
     const reason = sponsor ? RECHARGE_HINT : pageFailureText(info)
     const card = presentedFailure(info, reason)
     const buttons: FailureButton[] = [{ key: 'recharge', label: action.label || RECHARGE_LABEL, cta: true }]
-    if (canRetry) buttons.push({ key: 'retry', label: '重试', cta: false })
+    // 3B: lock bare retry until the user tests the connection (returnedFromSettings).
+    if (canRetry && returnedFromSettings) {
+      buttons.push({ key: 'retry', label: '重试', cta: false })
+    } else if (canRetry) {
+      buttons.push({ key: 'settings', label: QUOTA_RETRY_CHECK_BALANCE, cta: false })
+    }
     return finish({
-      message: card.reason, step: card.step, billing: card.billing, destination: action.destination,
+      message: card.reason, step: card.step, billing: card.billing,
+      destination: action.destination || SETTINGS_DESTINATION,
       actionKind: 'recharge', rechargeProvider: action.provider, buttons,
     })
   }
@@ -140,7 +148,10 @@ export default function FailureActions({
     })
   }
   const click = (key: FailureButton['key']) => {
-    if (key === 'settings') return onSettings(plan.destination as string)
+    if (key === 'settings') {
+      const dest = (plan.actionKind === 'recharge' ? SETTINGS_DESTINATION : plan.destination) as string
+      return onSettings(dest || SETTINGS_DESTINATION)
+    }
     if (key === 'install_asr') return onSettings(plan.destination as string)
     if (key === 'diagnose') return showDiagnose()
     if (key === 'switch_model') {

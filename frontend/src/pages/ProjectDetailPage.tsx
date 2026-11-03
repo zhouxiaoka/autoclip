@@ -305,6 +305,10 @@ const ProjectDetailPage: React.FC = () => {
     project_id: currentProject.id,
     error_message: currentProject.error_message || undefined,
     error_code: currentProject.error_code || undefined,
+    unexpected_type: (typeof currentProject.unexpected_type === 'string' ? currentProject.unexpected_type
+      : typeof currentProject.processing_config?.unexpected_type === 'string' ? currentProject.processing_config.unexpected_type
+      : typeof currentProject.settings?.unexpected_type === 'string' ? currentProject.settings.unexpected_type
+      : undefined) || undefined,
   }
 
   return (

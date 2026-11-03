@@ -368,8 +368,40 @@ test('X3: billableCallsLine has N requests, no dollar amount', () => {
     upstream_error_type: 'insufficient_quota',
     billable_calls_before_failure: 5,
   }, fa.RECHARGE_HINT)
-  assert.equal(card.billing, '本次已消耗 5 次请求')
+  assert.match(card.billing, /发出了 5 次可能计费/)
+  assert.match(card.billing, /服务商回复余额不足/)
+  assert.match(card.billing, /充值后点测试连接再重试/)
   assert.equal(card.reason, fa.RECHARGE_HINT)
+})
+
+test('A3-3: insufficient_quota billable=0 / billable=3 copy + verify-balance lock', () => {
+  const zero = fa.presentedFailure({
+    error_code: 'provider_error',
+    upstream_error_type: 'insufficient_quota',
+    billable_calls_before_failure: 0,
+    quota_precheck: 'exhausted',
+  })
+  assert.match(zero.billing, /没有向服务商发出计费请求/)
+  assert.match(zero.billing, /余额在开始前已核对/)
+  assert.doesNotMatch(zero.billing, /发出了 \d+ 次/)
+  const three = fa.presentedFailure({
+    error_code: 'provider_error',
+    upstream_error_type: 'insufficient_quota',
+    billable_calls_before_failure: 3,
+  })
+  assert.match(three.billing, /发出了 3 次可能计费/)
+  // Without provider → settings labelled 核对余额并测试连接
+  const locked = fa.failureAction('provider_error', 'insufficient_quota')
+  assert.equal(locked.kind, 'settings')
+  assert.equal(locked.label, fa.QUOTA_RETRY_CHECK_BALANCE)
+  const planSrc = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/FailureActions.tsx'), 'utf8')
+  assert.match(planSrc, /QUOTA_RETRY_CHECK_BALANCE/)
+  assert.match(planSrc, /returnedFromSettings/)
+  for (const lang of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
+    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
+    assert.equal(typeof data['核对余额并测试连接'], 'string', lang)
+    assert.equal(typeof data['这次制作没有向服务商发出计费请求。'], 'string', lang)
+  }
 })
 
 test('X3: FailureActions opens http destination + uses RECHARGE_HINT', () => {

@@ -290,6 +290,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     stage: failedProgress?.stage,
     error_message: project.error_message || failedProgress?.message || undefined,
     error_code: project.error_code || undefined,
+    unexpected_type: (typeof project.unexpected_type === 'string' ? project.unexpected_type
+      : typeof project.processing_config?.unexpected_type === 'string' ? project.processing_config.unexpected_type
+      : typeof project.settings?.unexpected_type === 'string' ? project.settings.unexpected_type
+      : undefined) || undefined,
   }
   const upstream = project.upstream_error_type || project.processing_config?.upstream_error_type || project.settings?.upstream_error_type
   const upstreamType = typeof upstream === 'string' ? upstream : null
