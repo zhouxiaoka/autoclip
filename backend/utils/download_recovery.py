@@ -46,7 +46,7 @@ _ACCESS_BLOCKED = re.compile(
 )
 _NOT_FOUND = re.compile(
     r"\bhttp error (404|410)\b"
-    r"|video unavailable"
+    r"|video(?: is)? unavailable"
     r"|has been removed"
     r"|does not exist"
     r"|no longer available"
@@ -248,7 +248,8 @@ _FRAME = (
     'merging formats', 'error merging', 'merge the formats', 'ffmpeg merge', 'unable to merge',
 )
 _NOT_FOUND_PHRASES = (
-    'video unavailable', 'has been removed', 'does not exist',
+    # yt-dlp deleted watch often: "This video is unavailable" (intervening "is")
+    'video is unavailable', 'video unavailable', 'has been removed', 'does not exist',
     'http error 404', '404: not found', '404 not found', 'status code 404',
 )
 

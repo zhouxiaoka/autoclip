@@ -67,6 +67,9 @@ def test_n5_bare_404_ssl_merge_not_overmatched():
     # Tight 404 contexts still map
     assert classify_download_error_text('HTTP Error 404: Not Found')[0] == 'source_not_found'
     assert classify_download_error_text('ERROR: video unavailable')[0] == 'source_not_found'
+    # Mac A2-5 @ 81fb3048: yt-dlp deleted watch uses intervening "is"
+    assert classify_download_error_text('ERROR: [youtube] dead: This video is unavailable')[0] == 'source_not_found'
+    assert classify_download_error_text('ERROR: Video unavailable. This video is unavailable')[0] == 'source_not_found'
     # Bare digit soup / unrelated text must not trip on loose '404' / 'ssl' / 'merge'
     assert classify_download_error_text('clip id 40401 failed for unknown reason') is None
     assert classify_download_error_text('passlen mismatch') is None  # contains no ssl:
