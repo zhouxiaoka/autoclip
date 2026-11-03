@@ -247,6 +247,13 @@ export type PageFailureInfo = {
   billable_calls_before_failure?: number | null
   /** 1.5.9 3A: skipped|ok|exhausted|unavailable */
   quota_precheck?: string | null
+  /**
+   * 1.5.9 N3: analysis connection stamp.
+   * - string → quota locked (show 核对余额… until cleared / returnedFromSettings)
+   * - null → explicitly cleared by a successful 测试连接 (unlock without URL continue)
+   * - undefined → not plumbed; fall back to returnedFromSettings only
+   */
+  quota_exhausted_at?: string | null
   secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
   /** Usable analysis connections (≥2 → switch_model for SWITCHABLE_UPSTREAM). */
   connection_count?: number | null
@@ -296,21 +303,19 @@ export function readableFailure(error?: string | null, code?: string | null, ups
 }
 
 export function quotaBillingCopy(info: Pick<PageFailureInfo, 'upstream_error_type' | 'error_code' | 'billable_calls_before_failure' | 'quota_precheck'>): string | null {
+  // 3C: this richer sentence is ONLY for insufficient_quota. Other failures keep billableCallsLine
+  // via presentedFailure ("本次已消耗 N 次请求").
   const quota = info.upstream_error_type === 'insufficient_quota' || info.error_code === 'insufficient_quota'
+  if (!quota) return null
   const count = Number(info.billable_calls_before_failure)
-  const billed = Number.isFinite(count) && count > 0
-  if (!quota && !billed) return null
-  const parts: string[] = []
-  if (quota) {
-    parts.push(QUOTA_PROVIDER_INSUFFICIENT)
-    if (info.quota_precheck === 'exhausted') parts.push(QUOTA_PRECHECK_EXHAUSTED)
-  }
-  if (quota && (!Number.isFinite(count) || count <= 0)) {
+  const parts: string[] = [QUOTA_PROVIDER_INSUFFICIENT]
+  if (info.quota_precheck === 'exhausted') parts.push(QUOTA_PRECHECK_EXHAUSTED)
+  if (!Number.isFinite(count) || count <= 0) {
     parts.push(QUOTA_ZERO_BILLABLE)
-  } else if (billed) {
+  } else {
     parts.push(QUOTA_N_BILLABLE.replace('{{count}}', String(count)))
   }
-  if (quota) parts.push(QUOTA_RECHARGE_THEN_TEST)
+  parts.push(QUOTA_RECHARGE_THEN_TEST)
   return parts.join(' ')
 }
 

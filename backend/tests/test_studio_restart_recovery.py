@@ -471,3 +471,24 @@ def test_n4_home_list_heal_reports_crash_via_recover(sessions, monkeypatch):
     assert len(captured) == 1
     assert captured[0]['tags']['restart_reason'] == 'crash'
     assert captured[0]['fingerprint'][:2] == ['studio', 'service_restarted']
+
+
+# --- 1.5.9 N1 nested stage stack ---------------------------------------------------------------
+
+def test_n1_nested_set_stage_stack_keeps_outer_production():
+    """Nested render finishing must not report idle while outer production is still active."""
+    from backend.services.studio import run_heartbeat
+
+    run_heartbeat.set_stage('idle')  # clear any prior stack on this thread
+    # Drain leftover frames if a previous test left the thread dirty.
+    while run_heartbeat.current_stage() != 'idle':
+        run_heartbeat.set_stage('idle')
+
+    run_heartbeat.set_stage('analyze')  # outer production
+    assert run_heartbeat.current_stage() == 'analyze'
+    run_heartbeat.set_stage('render')  # nested
+    assert run_heartbeat.current_stage() == 'render'
+    run_heartbeat.set_stage('idle')  # nested done — outer must remain
+    assert run_heartbeat.current_stage() == 'analyze'
+    run_heartbeat.set_stage('idle')  # outer done
+    assert run_heartbeat.current_stage() == 'idle'

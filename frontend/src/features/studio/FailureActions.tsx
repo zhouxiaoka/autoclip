@@ -94,13 +94,16 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
     if (canRetry) buttons.push({ key: 'retry', label: '重试', cta: false })
     return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'switch_model', buttons })
   }
+  // N3: unlock quota retry when back from settings OR stamp explicitly cleared (null after 测试连接).
+  // undefined = not plumbed → returnedFromSettings only (same as 3B before the stamp).
+  const quotaRetryUnlocked = returnedFromSettings || info.quota_exhausted_at === null
   if (action.kind === 'recharge') {
     const sponsor = (SPONSOR_PROVIDERS as readonly string[]).includes(action.provider)
     const reason = sponsor ? RECHARGE_HINT : pageFailureText(info)
     const card = presentedFailure(info, reason)
     const buttons: FailureButton[] = [{ key: 'recharge', label: action.label || RECHARGE_LABEL, cta: true }]
-    // 3B: lock bare retry until the user tests the connection (returnedFromSettings).
-    if (canRetry && returnedFromSettings) {
+    // 3B/N3: lock bare retry until test-connection clears quota_exhausted_at or user returns from settings.
+    if (canRetry && quotaRetryUnlocked) {
       buttons.push({ key: 'retry', label: '重试', cta: false })
     } else if (canRetry) {
       buttons.push({ key: 'settings', label: QUOTA_RETRY_CHECK_BALANCE, cta: false })
@@ -116,7 +119,8 @@ export function failurePlan(info: FailureInfo, canRetry: boolean, returnedFromSe
   if (action.kind === 'retry') {
     return finish({ message: card.reason, step: card.step, billing: card.billing, destination: null, actionKind: 'retry', buttons: canRetry ? [{ key: 'retry', label: retryLabel(resumePoint), cta: true }] : [] })
   }
-  const resume = returnedFromSettings && canRetry
+  const quotaSettings = action.label === QUOTA_RETRY_CHECK_BALANCE
+  const resume = (returnedFromSettings || (quotaSettings && info.quota_exhausted_at === null)) && canRetry
   const settingsLabel = action.reason === ADD_PROVIDER_HINT ? '去设置' : (action.label || '去设置')
   const buttons: FailureButton[] = [{ key: 'settings', label: settingsLabel, cta: !resume }]
   if (canRetry) buttons[resume ? 'unshift' : 'push']({ key: 'continue', label: '继续制作', cta: resume })

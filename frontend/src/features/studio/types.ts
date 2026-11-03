@@ -103,6 +103,8 @@ export interface GenerationState {
   provider?: string
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
   billable_calls_before_failure?: number
+  /** 1.5.9 3A: skipped|ok|exhausted|unavailable */
+  quota_precheck?: 'skipped' | 'ok' | 'exhausted' | 'unavailable'
   /** Consecutive failed attempts after the last success, and whether the last two share an error_code. */
   repeat_failure?: { count: number; same_code: boolean }
   html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
@@ -122,7 +124,7 @@ export interface Workspace {
   attempts?: AttemptReceipt[]
   /** Live pipeline resume hint from workspace(); FailureActions retry copy. */
   resume_point?: { point: string; label: string } | null
-  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; progress_percent?: number; progress_stage?: string; progress_approximate?: boolean; progress_since?: number; progress_message?: string; created_at?: string; error?: string; error_code?: string; upstream_error_type?: string; failure_stage?: string; billable_calls_before_failure?: number; provider?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
+  analysis: null | { run_id?: string; status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; progress_percent?: number; progress_stage?: string; progress_approximate?: boolean; progress_since?: number; progress_message?: string; created_at?: string; error?: string; error_code?: string; upstream_error_type?: string; failure_stage?: string; billable_calls_before_failure?: number; quota_precheck?: 'skipped' | 'ok' | 'exhausted' | 'unavailable'; provider?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }

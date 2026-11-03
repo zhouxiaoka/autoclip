@@ -18,7 +18,8 @@ _STALE_S = 120.0
 
 _lock = threading.Lock()
 _stage = 'idle'
-_active_stages: dict[int, str] = {}  # thread id → non-idle stage (N1 concurrent)
+# N1: per-thread stack so nested _tracked(render) inside production cannot pop the outer stage to idle.
+_active_stages: dict[int, list[str]] = {}
 _started_at = time.monotonic()
 _thread: threading.Thread | None = None
 _stop = threading.Event()
@@ -29,26 +30,33 @@ _STAGES = frozenset({'screening', 'download', 'subtitle', 'analyze', 'render', '
 _STAGE_RANK = {'screening': 1, 'download': 2, 'subtitle': 3, 'analyze': 4, 'render': 5}
 
 
-def _resolve_stage(active: dict[int, str]) -> str:
-    if not active:
+def _resolve_stage(active: dict[int, list[str]]) -> str:
+    tops = [stack[-1] for stack in active.values() if stack]
+    if not tops:
         return 'idle'
-    return max(active.values(), key=lambda s: _STAGE_RANK.get(s, 0))
+    return max(tops, key=lambda s: _STAGE_RANK.get(s, 0))
 
 
 def set_stage(stage: str) -> None:
     """Workers call this at phase boundaries. Unknown values collapse to idle.
 
-    Concurrent workers (N1): each thread keeps its own active stage; the heartbeat
-    reports the highest-ranked non-idle stage so one idle sibling cannot blank another.
+    Concurrent + nested (N1): each thread keeps a stack. ``set_stage(non-idle)`` pushes;
+    ``set_stage('idle')`` pops one frame so a nested render finishing cannot blank the
+    outer production stage on the same thread. Across threads, heartbeat reports the
+    highest-ranked top-of-stack.
     """
     value = stage if stage in _STAGES else 'idle'
     tid = threading.get_ident()
     with _lock:
         global _stage
+        stack = _active_stages.setdefault(tid, [])
         if value == 'idle':
-            _active_stages.pop(tid, None)
+            if stack:
+                stack.pop()
+            if not stack:
+                _active_stages.pop(tid, None)
         else:
-            _active_stages[tid] = value
+            stack.append(value)
         _stage = _resolve_stage(_active_stages)
 
 
