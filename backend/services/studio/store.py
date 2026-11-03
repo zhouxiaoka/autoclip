@@ -531,6 +531,7 @@ def recover(project_id: str):
             _drop_receipts(path, handled)
             _pending_links.pop(path, None)
             if dead_instance:
+                _report_crash_recovery(dead_instance, data)
                 from backend.services.studio.shutdown_marker import release
                 release(dead_instance)
     else:
@@ -769,6 +770,36 @@ from backend.services.studio.failure_identity import frozen as attempt_identity 
 from backend.services.studio.failure_identity import carry_screening  # noqa: E402
 
 
+
+def _report_crash_recovery(instance, data):
+    """1.5.9 N4: every recover path (startup reconcile, home-list heal, API) reports one Sentry per crash instance.
+
+    Fingerprint / once-per-instance semantics live in ``capture_crash_recovery``. Call before
+    ``release`` so ``.fault`` frames are still on disk.
+    """
+    if not isinstance(instance, str) or len(instance) != 32:
+        return
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
+    analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+    reason = generation.get('restart_reason') or analysis.get('restart_reason')
+    if reason != 'crash':
+        return
+    fields = {
+        'restart_reason': 'crash',
+        'crash_exit': generation.get('crash_exit') or analysis.get('crash_exit') or 'unknown',
+        'crash_stage': generation.get('crash_stage') or analysis.get('crash_stage') or 'unknown',
+        'crash_uptime_bucket': generation.get('crash_uptime_bucket') or analysis.get('crash_uptime_bucket') or 'unknown',
+        'crash_rss_bucket': generation.get('crash_rss_bucket') or analysis.get('crash_rss_bucket') or 'unknown',
+        'crash_disk_bucket': generation.get('crash_disk_bucket') or analysis.get('crash_disk_bucket') or 'unknown',
+        'crash_has_fault': bool(generation.get('crash_has_fault') if 'crash_has_fault' in generation else analysis.get('crash_has_fault')),
+    }
+    try:
+        from backend.core.sentry_setup import capture_crash_recovery
+        capture_crash_recovery(instance, fields)
+    except Exception:  # noqa: BLE001 - monitoring must not block recovery
+        logger.warning('Studio crash recovery sentry report failed')
+
+
 def _record_restart_shutdown_kind(data, instance):
     """/ a render settled because of a restart records how the previous process ended."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
@@ -787,7 +818,7 @@ def _record_restart_shutdown_kind(data, instance):
         if fields:
             generation.update(fields)
             if isinstance(data.get('analysis'), dict):
-                data['analysis'].update({k: v for k, v in fields.items() if k != 'crash_has_fault' or True})
+                data['analysis'].update(fields)
 
 
 def _recover_interrupted_run(data):

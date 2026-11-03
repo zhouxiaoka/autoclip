@@ -429,3 +429,11 @@ def test_a1_1_existing_user_quit_marker_is_not_overwritten_by_exit(tmp_path, mon
     except FileExistsError:
         pass
     assert path.read_text(encoding='ascii') == 'user_quit'
+
+
+def test_n5_exit_code_3_is_nonzero_other_not_abort():
+    """N5: bare exit:3 must not be classified as abort (SIGABRT is signal:6 / exit:134)."""
+    from backend.services.studio.shutdown_marker import crash_exit_from_text
+    assert crash_exit_from_text('exit:3') == 'nonzero_other'
+    assert crash_exit_from_text('signal:6') == 'abort'
+    assert crash_exit_from_text('exit:134') == 'abort'

@@ -236,27 +236,38 @@ _LOGIN_REQUIRED = (
     'sign in to confirm', 'not a bot', 'login required', 'private video', 'members-only', 'members only',
 )
 _UNSUPPORTED = ('unsupported url', 'no video formats', 'no video formats found')
+# N5: tighten bare ssl/404/merge; keep timeouts out of _CONNECTION so FRAME can win first.
 _CONNECTION = (
-    'unable to download webpage', 'timed out', 'timeout', 'connection reset',
-    'ssl', 'getaddrinfo', 'proxy', 'name or service not known', 'nodename nor servname',
+    'unable to download webpage', 'connection reset',
+    'ssl:', '[ssl', 'ssl error', 'certificate_verify_failed', 'ssl.ssleoferror',
+    'getaddrinfo', 'proxy', 'name or service not known', 'nodename nor servname',
 )
-_FRAME = ('ffmpeg', 'postprocess', 'merge')
+_TIMEOUT = ('timed out', 'timeout')
+_FRAME = (
+    'ffmpeg', 'postprocess',
+    'merging formats', 'error merging', 'merge the formats', 'ffmpeg merge', 'unable to merge',
+)
+_NOT_FOUND = (
+    'video unavailable', 'has been removed', 'does not exist',
+    'http error 404', '404: not found', '404 not found', 'status code 404',
+)
 
 
 def classify_download_error_text(text: str):
     """Map DownloadError text to (code, hint) or None. Hint never contains the source text/URL."""
     lowered = (text or '').lower()
     # Priority per plan 2B (top → bottom). Access/not-found already covered by _link_failure.
+    # N5: FRAME before CONNECTION/TIMEOUT so "ffmpeg … timed out" → frame_extract_failed.
     if any(p in lowered for p in _LOGIN_REQUIRED):
         return SOURCE_BLOCKED_CODE, SOURCE_ACCESS_HINT
-    if any(p in lowered for p in ('video unavailable', 'has been removed', 'does not exist', '404')):
+    if any(p in lowered for p in _NOT_FOUND):
         return SOURCE_NOT_FOUND_CODE, SOURCE_NOT_FOUND_HINT
-    if any(p in lowered for p in _CONNECTION):
-        from backend.core.failure_codes import sentence
-        return 'connection', sentence('connection')
     if any(p in lowered for p in _FRAME):
         from backend.core.failure_codes import sentence
         return 'frame_extract_failed', sentence('frame_extract_failed')
+    if any(p in lowered for p in _CONNECTION) or any(p in lowered for p in _TIMEOUT):
+        from backend.core.failure_codes import sentence
+        return 'connection', sentence('connection')
     if any(p in lowered for p in _UNSUPPORTED):
         from backend.core.failure_codes import sentence
         return SOURCE_UNSUPPORTED_CODE, sentence(SOURCE_UNSUPPORTED_CODE)

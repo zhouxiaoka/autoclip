@@ -1047,24 +1047,28 @@ mod shutdown_intent_tests {
 
     #[test]
     fn crash_marker_text_covers_exit_codes_and_unix_signals() {
-        // Windows NTSTATUS access violation (0xC0000005) and a normal zero exit.
-        // ExitStatus::from_raw is Unix-only for signals; on Windows we only check codes.
+        // N7: platform-precise asserts — no signal:/exit: either-or.
         #[cfg(unix)]
         {
             use std::os::unix::process::ExitStatusExt;
-            let sigkill = std::process::ExitStatus::from_raw(9);
-            // from_raw(9) is wait-status with signal 9 in the low bits on Linux
-            // (WTERMSIG). Accept either signal:N or exit: depending on platform encoding.
-            let text = crash_marker_text(&sigkill);
-            assert!(text.starts_with("signal:") || text.starts_with("exit:"), "{text}");
-            let clean = std::process::ExitStatus::from_raw(0);
-            assert_eq!(crash_marker_text(&clean), "exit:0");
+            // Wait status with WTERMSIG in the low 7 bits (SIGKILL=9, SIGSEGV=11, SIGABRT=6).
+            assert_eq!(crash_marker_text(&std::process::ExitStatus::from_raw(9)), "signal:9");
+            assert_eq!(crash_marker_text(&std::process::ExitStatus::from_raw(11)), "signal:11");
+            assert_eq!(crash_marker_text(&std::process::ExitStatus::from_raw(6)), "signal:6");
+            // Normal exits encode the code in the high byte: status = code << 8.
+            assert_eq!(crash_marker_text(&std::process::ExitStatus::from_raw(0)), "exit:0");
+            assert_eq!(crash_marker_text(&std::process::ExitStatus::from_raw(1 << 8)), "exit:1");
+            assert_eq!(crash_marker_text(&std::process::ExitStatus::from_raw(137 << 8)), "exit:137");
         }
         #[cfg(windows)]
         {
             use std::os::windows::process::ExitStatusExt;
             let av = std::process::ExitStatus::from_raw(0xC0000005u32);
             assert_eq!(crash_marker_text(&av), "exit:3221225477");
+            let stack = std::process::ExitStatus::from_raw(0xC00000FDu32);
+            assert_eq!(crash_marker_text(&stack), "exit:3221225725");
+            let heap = std::process::ExitStatus::from_raw(0xC0000374u32);
+            assert_eq!(crash_marker_text(&heap), "exit:3221226356");
             let clean = std::process::ExitStatus::from_raw(0);
             assert_eq!(crash_marker_text(&clean), "exit:0");
             let other = std::process::ExitStatus::from_raw(1);

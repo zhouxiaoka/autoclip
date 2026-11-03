@@ -59,7 +59,7 @@ _EXIT_ENUM = {
     0xC0000005: 'access_violation',  # 3221225477
     0xC00000FD: 'stack_overflow',    # 3221225725
     0xC0000374: 'heap_corruption',   # 3221226356
-    3: 'abort',  # STATUS_INVALID_PARAMETER rarely; also SIGABRT exit on some hosts
+    # N5: bare exit:3 is not SIGABRT (that is signal:6 / exit:134). Keep 3 → nonzero_other.
     137: 'oom',  # 128 + SIGKILL on Linux OOM-kill convention
 }
 _SIGNAL_ENUM = {

@@ -42,15 +42,19 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             elif status == ProjectStatus.PROCESSING and (data.get('analysis') or {}).get('status') == 'failed':
                 _fail_manual(session_factory, project_id, data['analysis'])
             recovered.append(project_id)
-            if generation.get('restart_reason') == 'crash' and isinstance(dead_instance, str) and len(dead_instance) == 32:
+            # N4: manual / stale-analysis recoveries may stamp restart_reason on analysis only.
+            # store.recover also reports; capture_crash_recovery dedupes per instance.
+            analysis_out = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+            reason = generation.get('restart_reason') or analysis_out.get('restart_reason')
+            if reason == 'crash' and isinstance(dead_instance, str) and len(dead_instance) == 32:
                 crash_instances.setdefault(dead_instance, {
                     'restart_reason': 'crash',
-                    'crash_exit': generation.get('crash_exit', 'unknown'),
-                    'crash_stage': generation.get('crash_stage', 'unknown'),
-                    'crash_uptime_bucket': generation.get('crash_uptime_bucket', 'unknown'),
-                    'crash_rss_bucket': generation.get('crash_rss_bucket', 'unknown'),
-                    'crash_disk_bucket': generation.get('crash_disk_bucket', 'unknown'),
-                    'crash_has_fault': bool(generation.get('crash_has_fault')),
+                    'crash_exit': generation.get('crash_exit') or analysis_out.get('crash_exit') or 'unknown',
+                    'crash_stage': generation.get('crash_stage') or analysis_out.get('crash_stage') or 'unknown',
+                    'crash_uptime_bucket': generation.get('crash_uptime_bucket') or analysis_out.get('crash_uptime_bucket') or 'unknown',
+                    'crash_rss_bucket': generation.get('crash_rss_bucket') or analysis_out.get('crash_rss_bucket') or 'unknown',
+                    'crash_disk_bucket': generation.get('crash_disk_bucket') or analysis_out.get('crash_disk_bucket') or 'unknown',
+                    'crash_has_fault': bool(generation.get('crash_has_fault') if 'crash_has_fault' in generation else analysis_out.get('crash_has_fault')),
                 })
         except Exception as error:  # noqa: BLE001 - one bad project must not block startup
             logger.warning('Studio restart recovery skipped a project: %s', type(error).__name__)
