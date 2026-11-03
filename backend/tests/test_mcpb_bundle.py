@@ -36,10 +36,10 @@ def test_mcpb_manifest_is_a_thin_pypi_launcher():
     server = manifest['server']
     api_key = manifest['user_config']['api_key']
 
-    assert '__version__ = "1.5.7"' in product
+    assert f'__version__ = "{root["version"]}"' in product
     assert manifest['manifest_version'] == '0.4'
     assert manifest['name'] == PYPI_NAME
-    assert manifest['version'] == '1.5.7'
+    assert manifest['version'] == root['version']
     assert 'tools' not in manifest
     assert manifest['tools_generated'] is True
     assert server['type'] == 'python'
