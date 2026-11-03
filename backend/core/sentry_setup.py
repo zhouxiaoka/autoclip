@@ -48,6 +48,8 @@ def studio_error_code(error: Exception) -> str:
         return "timeout"
     if isinstance(error, ServiceRestarted):
         return 'service_restarted'
+    if type(error).__name__ == "QuotaExhausted":
+        return "provider_error"
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
@@ -86,6 +88,13 @@ def studio_error_code(error: Exception) -> str:
     # A blank or unreadable model body (api88 and other gateways) is not a bad
     # user input. "validation" would tell them to change the video.
     if _empty_model_reply(error):
+        return "invalid_response"
+    # 1.5.9 2B: pydantic ValidationError is invalid_response (model shape), not user validation.
+    try:
+        from pydantic import ValidationError as PydanticValidationError
+    except ImportError:
+        PydanticValidationError = ()
+    if PydanticValidationError and isinstance(error, PydanticValidationError):
         return "invalid_response"
     if isinstance(error, ValueError):
         return "validation"
@@ -145,7 +154,16 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
         stage = "vision"
     snap = build_attribution(error, failure_stage=stage)
     fields = export_attribution(snap)  # THE serializer
-    return {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
+    out = {k: fields[k] for k in ("failure_stage", "http_status", "upstream_error_type") if k in fields} or {"failure_stage": stage}
+    # 1.5.9 2A: name unexpected failures without leaking messages.
+    if studio_error_code(error) == "unexpected":
+        from backend.core.failure_attribution import unexpected_type_of
+        out["unexpected_type"] = unexpected_type_of(error)
+    if type(error).__name__ == "QuotaExhausted":
+        out["upstream_error_type"] = "insufficient_quota"
+        out["quota_precheck"] = getattr(error, "quota_precheck", "exhausted") or "exhausted"
+        out["billable_calls_before_failure"] = 0
+    return out
 
 
 PRIVACY_FILE = "privacy.json"
@@ -377,8 +395,11 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
                        "stacktrace": {"frames": frames}})
     if not values:
         return None  # Logging-only payloads can contain video text; do not send them.
-    if (event.get("tags") or {}).get("error_code") in UNREPORTED_STUDIO_ERROR_CODES:
-        return None
+    tags_preview = event.get("tags") or {}
+    if tags_preview.get("error_code") in UNREPORTED_STUDIO_ERROR_CODES:
+        # 1.5.9 1E: one synthetic crash-recovery event per dead instance is allowed through.
+        if not (tags_preview.get("crash_recovery") == "true" and tags_preview.get("restart_reason") == "crash"):
+            return None
     incoming = event.get("tags") or {}
     if _provider_expected(incoming.get("http_status"), incoming.get("upstream_error_type")):
         return None
@@ -392,6 +413,9 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         hostname_of_base_url,
     )
     from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
+    from backend.services.studio.shutdown_marker import (
+        CRASH_DISK_BUCKETS, CRASH_EXITS, CRASH_RSS_BUCKETS, CRASH_STAGES, CRASH_UPTIME_BUCKETS,
+    )
     allowed = {
         "area": {"studio"}, "error_code": STUDIO_ERROR_CODES,
         "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install", "qa", "packaging_html", "packaging_runtime", "model_download"},
@@ -407,6 +431,14 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "failure_stage": FAILURE_STAGES,
         "attribution_source": {"request", "phase", "local"},  
         "provider": TELEMETRY_PROVIDERS | ASR_PROVIDERS,
+        "crash_exit": set(CRASH_EXITS),
+        "crash_stage": set(CRASH_STAGES),
+        "crash_uptime_bucket": set(CRASH_UPTIME_BUCKETS),
+        "crash_rss_bucket": set(CRASH_RSS_BUCKETS),
+        "crash_disk_bucket": set(CRASH_DISK_BUCKETS),
+        "restart_reason": {"crash"},
+        "crash_recovery": {"true"},
+        "crash_has_fault": {"true"},
     }
     clean_tags = {key: value for key, value in tags.items()
                   if key in allowed and isinstance(value, str) and value in allowed[key]}
@@ -784,3 +816,74 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
             return sentry_sdk.capture_exception(error)
     except Exception:
         return None
+
+
+
+_crash_reported: set[str] = set()
+
+
+def capture_crash_recovery(instance: str, fields: dict | None = None) -> str | None:
+    """One synthetic Sentry event per dead instance when restart_reason=crash (1.5.9 1E).
+
+    Fingerprint: ``['studio','service_restarted',crash_exit,crash_stage]``.
+    Fault frames keep basename + function + lineno only. Still under daily budgets.
+    """
+    if not _initialized or not crash_reports_enabled():
+        return None
+    if not instance or instance in _crash_reported:
+        return None
+    fields = dict(fields or {})
+    if fields.get('restart_reason', 'crash') != 'crash':
+        return None
+    try:
+        import sentry_sdk
+        from backend.services.studio.shutdown_marker import CRASH_EXITS, CRASH_STAGES, _root
+        from backend.services.studio import run_heartbeat
+        crash_exit = fields.get('crash_exit') if fields.get('crash_exit') in CRASH_EXITS else 'unknown'
+        crash_stage = fields.get('crash_stage') if fields.get('crash_stage') in CRASH_STAGES else 'unknown'
+        phase = {
+            'screening': 'screening', 'render': 'render',
+            'download': 'production', 'subtitle': 'production', 'analyze': 'production',
+        }.get(crash_stage, 'dispatch')
+        tags = {
+            'area': 'studio',
+            'error_code': 'service_restarted',
+            'phase': phase,
+            'crash_exit': crash_exit,
+            'crash_stage': crash_stage,
+            'restart_reason': 'crash',
+            'crash_recovery': 'true',
+        }
+        for key in ('crash_uptime_bucket', 'crash_rss_bucket', 'crash_disk_bucket'):
+            value = fields.get(key)
+            if isinstance(value, str) and value:
+                tags[key] = value
+        frames = []
+        try:
+            frames = run_heartbeat.read_fault_frames(_root() / instance)
+            if frames:
+                tags['crash_has_fault'] = 'true'
+        except Exception:  # noqa: BLE001
+            frames = []
+        payload = {
+            'level': 'error',
+            'fingerprint': ['studio', 'service_restarted', crash_exit, crash_stage],
+            'tags': tags,
+            'exception': {
+                'values': [{
+                    'type': 'ServiceRestarted',
+                    'value': '[message omitted for privacy]',
+                    'stacktrace': {'frames': frames},
+                }]
+            },
+        }
+        with sentry_sdk.new_scope() as scope:
+            for key, value in tags.items():
+                scope.set_tag(key, value)
+            scope.fingerprint = payload['fingerprint']
+            event_id = sentry_sdk.capture_event(payload)
+        _crash_reported.add(instance)
+        return event_id
+    except Exception:  # noqa: BLE001
+        return None
+

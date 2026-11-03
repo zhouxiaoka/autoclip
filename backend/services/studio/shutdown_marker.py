@@ -43,6 +43,30 @@ _lock = threading.Lock()
 _consumed: dict[tuple[str, str], str] = {}
 _restart_cached: dict[tuple[str, str], str] = {}
 RESTART_REASONS = ('user_quit', 'update', 'unknown', 'crash')
+CRASH_EXITS = (
+    'access_violation', 'stack_overflow', 'heap_corruption', 'abort',
+    'sigsegv', 'sigkill', 'oom', 'nonzero_other', 'zero', 'unknown',
+)
+CRASH_STAGES = ('screening', 'download', 'subtitle', 'analyze', 'render', 'idle', 'unknown')
+CRASH_UPTIME_BUCKETS = ('lt_1m', 'lt_10m', 'lt_1h', 'ge_1h', 'unknown')
+CRASH_RSS_BUCKETS = ('lt_1g', 'lt_2g', 'lt_4g', 'ge_4g', 'unknown')
+CRASH_DISK_BUCKETS = ('lt_1g', 'lt_5g', 'ge_5g', 'unknown')
+_crash_exit_cached: dict[tuple[str, str], str] = {}
+_crash_scene_cached: dict[tuple[str, str], dict] = {}
+
+# Windows NTSTATUS / Unix signal → enum. Raw numbers never leave the box.
+_EXIT_ENUM = {
+    0xC0000005: 'access_violation',  # 3221225477
+    0xC00000FD: 'stack_overflow',    # 3221225725
+    0xC0000374: 'heap_corruption',   # 3221226356
+    3: 'abort',  # STATUS_INVALID_PARAMETER rarely; also SIGABRT exit on some hosts
+    137: 'oom',  # 128 + SIGKILL on Linux OOM-kill convention
+}
+_SIGNAL_ENUM = {
+    6: 'abort',    # SIGABRT
+    9: 'sigkill',  # SIGKILL
+    11: 'sigsegv', # SIGSEGV
+}
 
 
 MARKER_DIR_ENV = 'AUTOCLIP_SHUTDOWN_MARKER_DIR'
@@ -140,6 +164,10 @@ def prune(root: Path | None = None) -> int:
             if not store.index_protects(index, path.name):
                 path.unlink(missing_ok=True)
                 removed += 1
+                for side in _sidecar_paths(root, path.name):
+                    if side.exists():
+                        side.unlink(missing_ok=True)
+                        removed += 1
     return removed
 
 
@@ -172,6 +200,8 @@ def _kind_from_text(content: str | None) -> str:
         return 'clean'
     if content == 'parent_lost':
         return 'parent_lost'
+    if content.startswith('exit:') or content.startswith('signal:'):
+        return 'crash'
     return 'unknown'  # 'unacked' or anything unexpected
 
 
@@ -182,7 +212,43 @@ def _restart_from_text(content: str | None) -> str:
         return content
     if content == 'parent_lost':
         return 'crash'  # shell killed/crashed; shutdown_kind keeps parent_lost
+    if content is not None and (content.startswith('exit:') or content.startswith('signal:')):
+        return 'crash'
     return 'unknown'  # unacked, unreadable, invalid — not a crash
+
+
+def crash_exit_from_text(content: str | None) -> str:
+    """Map shell exit/signal marker text to a crash_exit enum. Never returns a raw number."""
+    if content is None:
+        return 'unknown'
+    if content.startswith('exit:'):
+        raw = content[5:].strip()
+        if raw == 'unknown' or raw == '':
+            return 'unknown'
+        try:
+            code = int(raw, 10)
+        except ValueError:
+            return 'unknown'
+        if code in _EXIT_ENUM:
+            return _EXIT_ENUM[code]
+        if code == 0:
+            return 'zero'
+        # SIGABRT often surfaces as exit status 134 (128+6) on Unix without signal().
+        if code == 134:
+            return 'abort'
+        if code == 139:  # 128+11 SIGSEGV
+            return 'sigsegv'
+        return 'nonzero_other'
+    if content.startswith('signal:'):
+        raw = content[7:].strip()
+        try:
+            sig = int(raw, 10)
+        except ValueError:
+            return 'unknown'
+        return _SIGNAL_ENUM.get(sig, 'nonzero_other')
+    if content == 'parent_lost':
+        return 'unknown'  # no exit code from the backend process itself
+    return 'unknown'
 
 
 def _remember(key: tuple[str, str], path: Path) -> tuple[str, str]:
@@ -190,6 +256,7 @@ def _remember(key: tuple[str, str], path: Path) -> tuple[str, str]:
     kind, reason = _kind_from_text(content), _restart_from_text(content)
     _consumed[key] = kind
     _restart_cached[key] = reason
+    _crash_exit_cached[key] = crash_exit_from_text(content) if reason == 'crash' else 'unknown'
     return kind, reason
 
 
@@ -237,6 +304,60 @@ def restart_reason(instance: str | None) -> str:
     return reason
 
 
+def crash_exit(instance: str | None) -> str:
+    """Enum-only exit classification for a crash restart. Safe when no marker."""
+    located = _instance_key(instance)
+    if located is None:
+        return 'unknown'
+    key, path = located
+    with _lock:
+        if key in _crash_exit_cached:
+            return _crash_exit_cached[key]
+        if key not in _restart_cached:
+            _remember(key, path)
+        return _crash_exit_cached.get(key, 'unknown')
+
+
+def crash_scene(instance: str | None) -> dict:
+    """Buckets from the dead instance's heartbeat / .fault. Missing files → unknown / false."""
+    located = _instance_key(instance)
+    empty = {
+        'crash_stage': 'unknown',
+        'crash_uptime_bucket': 'unknown',
+        'crash_rss_bucket': 'unknown',
+        'crash_disk_bucket': 'unknown',
+        'crash_has_fault': False,
+    }
+    if located is None:
+        return dict(empty)
+    key, path = located
+    with _lock:
+        if key in _crash_scene_cached:
+            return dict(_crash_scene_cached[key])
+    try:
+        from backend.services.studio import run_heartbeat
+        scene = run_heartbeat.read_scene(path)
+    except Exception:  # noqa: BLE001 - scene must never block recovery
+        scene = dict(empty)
+    with _lock:
+        _crash_scene_cached[key] = dict(scene)
+    return dict(scene)
+
+
+def crash_fields(instance: str | None) -> dict:
+    """Fields to attach on a service_restarted recovery when restart_reason is crash."""
+    reason = restart_reason(instance)
+    if reason != 'crash':
+        return {}
+    fields = {'crash_exit': crash_exit(instance), **crash_scene(instance)}
+    # crash_has_fault is bool; keep it for store / Sentry, not for event enums that require strings.
+    return fields
+
+
+def _sidecar_paths(root: Path, instance: str) -> list[Path]:
+    return [root / f'{instance}.hb', root / f'{instance}.fault']
+
+
 def release(instance: str | None) -> None:
     """Delete a dead instance's record once no project references it any more.
 
@@ -250,5 +371,7 @@ def release(instance: str | None) -> None:
             record = root / instance
             if (str(root), instance) in _consumed and record.exists() and not _referenced(instance):
                 record.unlink(missing_ok=True)
+                for side in _sidecar_paths(root, instance):
+                    side.unlink(missing_ok=True)
     except Exception:  # noqa: BLE001 - cleanup only; _prune bounds leftovers
         pass

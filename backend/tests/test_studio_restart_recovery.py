@@ -368,3 +368,41 @@ def test_long_video_stuck_in_processing_across_restarts_is_failed(sessions):
     assert disk['analysis']['error'] == store.RESTART_MESSAGE and 'message' not in disk['analysis']
     # Home card reads studio_generation_status=failed → 「重新生成」 entry.
     assert (row.settings or {}).get('studio_generation_status') == 'failed'
+
+
+# --- 1.5.9 A1-2 ---------------------------------------------------------------------------------
+
+def test_a1_2_crash_fields_from_heartbeat_exit_and_fault(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv('AUTOCLIP_SHUTDOWN_MARKER_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    from backend.services.studio import shutdown_marker as sm, run_heartbeat
+    sm._consumed.clear(); sm._restart_cached.clear()
+    sm._crash_exit_cached.clear(); sm._crash_scene_cached.clear()
+    instance = 'b' * 32
+    (tmp_path / instance).write_text('exit:137', encoding='ascii')
+    hb = {
+        'ts': 1, 'uptime_s': 120, 'rss_mb': 1500, 'free_disk_mb': 8000,
+        'stage': 'render', 'ffmpeg_children': 1,
+    }
+    (tmp_path / f'{instance}.hb').write_text(json.dumps(hb), encoding='utf-8')
+    (tmp_path / f'{instance}.fault').write_text(
+        'Fatal Python error: Segmentation fault\nFile "/Users/x/app/backend/services/studio/jobs.py", line 10 in _tracked\n',
+        encoding='utf-8',
+    )
+    fields = sm.crash_fields(instance)
+    assert fields['crash_exit'] == 'oom'
+    assert fields['crash_stage'] == 'render'
+    assert fields['crash_uptime_bucket'] in sm.CRASH_UPTIME_BUCKETS
+    assert fields['crash_rss_bucket'] in sm.CRASH_RSS_BUCKETS
+    assert fields['crash_disk_bucket'] in sm.CRASH_DISK_BUCKETS
+    assert fields['crash_has_fault'] is True
+    # Missing sidecars → unknown, no throw
+    instance2 = 'c' * 32
+    (tmp_path / instance2).write_text('exit:1', encoding='ascii')
+    sm._consumed.clear(); sm._restart_cached.clear()
+    sm._crash_exit_cached.clear(); sm._crash_scene_cached.clear()
+    sparse = sm.crash_fields(instance2)
+    assert sparse['crash_exit'] == 'nonzero_other'
+    assert sparse['crash_stage'] == 'unknown'
+    assert sparse['crash_has_fault'] is False

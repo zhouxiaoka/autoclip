@@ -766,13 +766,18 @@ def _record_restart_shutdown_kind(data, instance):
         return
     variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)]
     if generation.get('error_code') == RESTART_CODE or any(v.get('error_code') == RESTART_CODE for v in variants):
-        from backend.services.studio.shutdown_marker import restart_reason, shutdown_kind
+        from backend.services.studio.shutdown_marker import crash_fields, restart_reason, shutdown_kind
         if instance:
             kind = shutdown_kind(instance)
             generation['shutdown_kind'] = kind
             if isinstance(data.get('analysis'), dict):
                 data['analysis']['shutdown_kind'] = kind
         generation['restart_reason'] = restart_reason(instance)
+        fields = crash_fields(instance)
+        if fields:
+            generation.update(fields)
+            if isinstance(data.get('analysis'), dict):
+                data['analysis'].update({k: v for k, v in fields.items() if k != 'crash_has_fault' or True})
 
 
 def _recover_interrupted_run(data):
@@ -785,10 +790,11 @@ def _recover_interrupted_run(data):
     if not interrupted_run(data):
         return False
     analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
-    from backend.services.studio.shutdown_marker import restart_reason, shutdown_kind
+    from backend.services.studio.shutdown_marker import crash_fields, restart_reason, shutdown_kind
     instance = (analysis or {}).get('instance')
     kind = shutdown_kind(instance)
     reason = restart_reason(instance)
+    crash = crash_fields(instance)
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
     variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
     if generation and generation.get('status') == 'rendering' and variants:
@@ -807,10 +813,10 @@ def _recover_interrupted_run(data):
             return False
         stage = generation['status']
         identity = attempt_identity(analysis, generation)
-        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, restart_reason=reason, **identity)
+        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, restart_reason=reason, **crash, **identity)
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
                             'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now(),
-                            'failure_stage': stage, 'shutdown_kind': kind, **identity, **carry_screening(analysis, generation)}
+                            'failure_stage': stage, 'shutdown_kind': kind, **crash, **identity, **carry_screening(analysis, generation)}
         return True
     if analysis and _stale_analysis(analysis):
         # Manual (confirmation) flows and visual analysis persist the same catalog sentence.
@@ -818,7 +824,7 @@ def _recover_interrupted_run(data):
             analysis.pop(key, None)
         phase = analysis.get('phase')
         stage = phase if phase in ('screening', 'production') else 'render' if phase == 'rendering' else 'other'
-        analysis.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, shutdown_kind=kind)
+        analysis.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, shutdown_kind=kind, restart_reason=reason, **crash)
         return True
     return False
 

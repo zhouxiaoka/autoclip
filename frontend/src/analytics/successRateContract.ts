@@ -43,6 +43,22 @@ export const FAILURE_STAGES = [
   'other',
 ] as const
 
+export const CRASH_EXITS = [
+  'access_violation', 'stack_overflow', 'heap_corruption', 'abort',
+  'sigsegv', 'sigkill', 'oom', 'nonzero_other', 'zero', 'unknown',
+] as const
+export const CRASH_STAGES = ['screening', 'download', 'subtitle', 'analyze', 'render', 'idle', 'unknown'] as const
+export const CRASH_UPTIME_BUCKETS = ['lt_1m', 'lt_10m', 'lt_1h', 'ge_1h', 'unknown'] as const
+export const CRASH_RSS_BUCKETS = ['lt_1g', 'lt_2g', 'lt_4g', 'ge_4g', 'unknown'] as const
+export const CRASH_DISK_BUCKETS = ['lt_1g', 'lt_5g', 'ge_5g', 'unknown'] as const
+export const UNEXPECTED_TYPES = [
+  'DownloadError', 'ExtractorError', 'ValidationError', 'KeyError', 'TypeError',
+  'AttributeError', 'IndexError', 'OperationalError', 'RuntimeError', 'OSError',
+  'PermissionError', 'MemoryError', 'TimeoutError', 'JSONDecodeError',
+  'UnicodeDecodeError', 'CalledProcessError', 'other',
+] as const
+export const QUOTA_PRECHECKS = ['skipped', 'ok', 'exhausted', 'unavailable'] as const
+
 export const RUN_LEVEL_FIELDS = [
   'provider', 'config_source', 'model', 'base_url_host', 'http_status', 'upstream_error_type',
   'failure_stage', 'llm_calls', 'prompt_tokens', 'completion_tokens',
@@ -51,6 +67,8 @@ export const RUN_LEVEL_FIELDS = [
   'source_duration_sec', 'platform_count', 'is_first_success_device', 'attempt_index_on_device',
   // ETA (client posts eta_initial_min; backend derives eta_error_ratio)
   'eta_initial_min', 'eta_error_ratio',
+  'crash_exit', 'crash_stage', 'crash_uptime_bucket', 'crash_rss_bucket', 'crash_disk_bucket',
+  'unexpected_type', 'quota_precheck',
 ] as const
 export const LLM_REQUEST_FIELDS = [
   'success_rate_schema_version', 'provider', 'model', 'base_url_host', 'kind',

@@ -218,6 +218,9 @@ impl BackendManager {
                 let crash_restarts = self.crash_restarts.clone();
                 let crash_recovery = self.crash_recovery.clone();
                 let generation = self.generation.clone();
+                // Capture this launch's marker identity before a later start() overwrites them.
+                let launch_markers = self.marker_dir.lock().unwrap().clone();
+                let launch_instance = self.instance_id.lock().unwrap().clone();
 
                 thread::spawn(move || {
                     Self::read_port_and_health_check(
@@ -229,6 +232,8 @@ impl BackendManager {
                         crash_recovery,
                         generation,
                         launch_generation,
+                        launch_markers,
+                        launch_instance,
                     );
                 });
 
@@ -458,6 +463,8 @@ impl BackendManager {
         crash_recovery: Arc<AtomicBool>,
         generation: Arc<AtomicU64>,
         launch_generation: u64,
+        marker_dir: Option<PathBuf>,
+        instance_id: String,
     ) {
         let (stdout, stderr) = {
             let mut process_guard = process.lock().unwrap();
@@ -508,6 +515,8 @@ impl BackendManager {
                             let restarts_health = crash_restarts.clone();
                             let recovery_health = crash_recovery.clone();
                             let generation_health = generation.clone();
+                            let markers_health = marker_dir.clone();
+                            let instance_health = instance_id.clone();
                             thread::spawn(move || {
                                 Self::health_check_loop(
                                     app_health,
@@ -518,6 +527,8 @@ impl BackendManager {
                                     recovery_health,
                                     generation_health,
                                     launch_generation,
+                                    markers_health,
+                                    instance_health,
                                 );
                             });
 
@@ -537,6 +548,8 @@ impl BackendManager {
                 &crash_recovery,
                 &generation,
                 launch_generation,
+                marker_dir.as_deref(),
+                &instance_id,
             );
         }
     }
@@ -551,13 +564,21 @@ impl BackendManager {
         crash_recovery: &Arc<AtomicBool>,
         generation: &Arc<AtomicU64>,
         launch_generation: u64,
+        marker_dir: Option<&std::path::Path>,
+        instance_id: &str,
     ) {
+        let mut exit_status = None;
         let exited = {
             let mut process_guard = process.lock().unwrap();
             if let Some(child) = process_guard.as_mut() {
                 match child.try_wait() {
                     Ok(None) => false,
-                    _ => {
+                    Ok(Some(st)) => {
+                        exit_status = Some(st);
+                        *process_guard = None;
+                        true
+                    }
+                    Err(_) => {
                         *process_guard = None;
                         true
                     }
@@ -572,9 +593,18 @@ impl BackendManager {
         let already = crash_restarts.load(Ordering::SeqCst);
         if !should_auto_restart(intentional_stop.load(Ordering::SeqCst), already) {
             if !intentional_stop.load(Ordering::SeqCst) {
+                if let (Some(dir), Some(st)) = (marker_dir, exit_status.as_ref()) {
+                    let _ = record_crash_exit(dir, instance_id, &crash_marker_text(st));
+                }
                 let _ = claim_dead_launch(status, generation, launch_generation);
             }
             return;
+        }
+        // Write crash marker after the restart decision and before start() (A1-4).
+        if !intentional_stop.load(Ordering::SeqCst) {
+            if let (Some(dir), Some(st)) = (marker_dir, exit_status.as_ref()) {
+                let _ = record_crash_exit(dir, instance_id, &crash_marker_text(st));
+            }
         }
         let delay = crash_restart_delay(already);
         thread::sleep(delay);
@@ -602,6 +632,8 @@ impl BackendManager {
         crash_recovery: Arc<AtomicBool>,
         generation: Arc<AtomicU64>,
         launch_generation: u64,
+        marker_dir: Option<PathBuf>,
+        instance_id: String,
     ) {
         loop {
             thread::sleep(Duration::from_secs(5));
@@ -620,12 +652,13 @@ impl BackendManager {
             }
 
             // 检查进程是否还在运行
+            let mut exit_status = None;
             let process_exited = {
                 let mut process_guard = process.lock().unwrap();
                 if let Some(ref mut child) = process_guard.as_mut() {
                     match child.try_wait() {
-                        Ok(Some(_)) => {
-                            // 进程已退出
+                        Ok(Some(st)) => {
+                            exit_status = Some(st);
                             *process_guard = None;
                             true
                         }
@@ -649,9 +682,18 @@ impl BackendManager {
                 if !should_auto_restart(intentional_stop.load(Ordering::SeqCst), already) {
                     if !intentional_stop.load(Ordering::SeqCst) {
                         eprintln!("后端进程已退出，自动重启次数已用尽");
+                        if let (Some(dir), Some(st)) = (marker_dir.as_deref(), exit_status.as_ref()) {
+                            let _ = record_crash_exit(dir, &instance_id, &crash_marker_text(st));
+                        }
                         let _ = claim_dead_launch(&status, &generation, launch_generation);
                     }
                     break;
+                }
+                // Write crash marker after the restart decision and before start() (A1-4).
+                if !intentional_stop.load(Ordering::SeqCst) {
+                    if let (Some(dir), Some(st)) = (marker_dir.as_deref(), exit_status.as_ref()) {
+                        let _ = record_crash_exit(dir, &instance_id, &crash_marker_text(st));
+                    }
                 }
                 let delay = crash_restart_delay(already);
                 eprintln!(
@@ -779,6 +821,40 @@ pub(crate) fn record_unacknowledged_intent(dir: &std::path::Path, instance: &str
     }
 }
 
+/// 1.5.9: map a process ExitStatus to the on-disk crash marker body.
+/// Unix signals become `signal:<n>`; otherwise `exit:<code>` (or `exit:unknown`).
+pub(crate) fn crash_marker_text(status: &std::process::ExitStatus) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            return format!("signal:{sig}");
+        }
+    }
+    match status.code() {
+        Some(code) => format!("exit:{code}"),
+        None => "exit:unknown".to_string(),
+    }
+}
+
+/// Write `exit:*` / `signal:*` for an unexpected exit. Same create-new rule as
+/// `record_unacknowledged_intent`: an existing marker (user_quit / update / unacked) wins.
+pub(crate) fn record_crash_exit(dir: &std::path::Path, instance: &str, text: &str) -> std::io::Result<()> {
+    if instance.len() != 32 || !instance.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "instance"));
+    }
+    if !(text.starts_with("exit:") || text.starts_with("signal:")) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "marker"));
+    }
+    use std::io::Write;
+    std::fs::create_dir_all(dir)?;
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(dir.join(instance)) {
+        Ok(mut file) => file.write_all(text.as_bytes()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 /// R16 #42: POST /internal/shutdown-intent on loopback and wait (bounded by `budget`) for 200.
 pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownIntent, budget: Duration) -> std::io::Result<bool> {
     use std::io::{Read, Write};
@@ -808,7 +884,7 @@ pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownInt
 
 #[cfg(test)]
 mod shutdown_intent_tests {
-    use super::{crash_restart_delay, intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_unacknowledged_intent, should_auto_restart, shutdown_marker_dir, ShutdownIntent, MAX_CRASH_RESTARTS, SHUTDOWN_MARKER_DIR_ENV};
+    use super::{crash_marker_text, crash_restart_delay, intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_crash_exit, record_unacknowledged_intent, should_auto_restart, shutdown_marker_dir, ShutdownIntent, MAX_CRASH_RESTARTS, SHUTDOWN_MARKER_DIR_ENV};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
@@ -967,5 +1043,55 @@ mod shutdown_intent_tests {
         assert!(src.contains("crash_recovery.swap(false, Ordering::SeqCst)"));
         assert!(src.contains("launch_replaced(&generation, launch_generation)"));
         assert!(src.contains("claim_dead_launch("));
+    }
+
+    #[test]
+    fn crash_marker_text_covers_exit_codes_and_unix_signals() {
+        // Windows NTSTATUS access violation (0xC0000005) and a normal zero exit.
+        // ExitStatus::from_raw is Unix-only for signals; on Windows we only check codes.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            let sigkill = std::process::ExitStatus::from_raw(9);
+            // from_raw(9) is wait-status with signal 9 in the low bits on Linux
+            // (WTERMSIG). Accept either signal:N or exit: depending on platform encoding.
+            let text = crash_marker_text(&sigkill);
+            assert!(text.starts_with("signal:") || text.starts_with("exit:"), "{text}");
+            let clean = std::process::ExitStatus::from_raw(0);
+            assert_eq!(crash_marker_text(&clean), "exit:0");
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::ExitStatusExt;
+            let av = std::process::ExitStatus::from_raw(0xC0000005u32);
+            assert_eq!(crash_marker_text(&av), "exit:3221225477");
+            let clean = std::process::ExitStatus::from_raw(0);
+            assert_eq!(crash_marker_text(&clean), "exit:0");
+            let other = std::process::ExitStatus::from_raw(1);
+            assert_eq!(crash_marker_text(&other), "exit:1");
+        }
+    }
+
+    #[test]
+    fn crash_exit_marker_does_not_overwrite_user_quit() {
+        let dir = std::env::temp_dir().join(format!("acr-crash-{}", new_instance_id().unwrap()));
+        let instance = new_instance_id().unwrap();
+        let markers = shutdown_marker_dir(&dir);
+        std::fs::create_dir_all(&markers).unwrap();
+        std::fs::write(markers.join(&instance), b"user_quit").unwrap();
+        record_crash_exit(&markers, &instance, "exit:1").unwrap();
+        assert_eq!(std::fs::read(markers.join(&instance)).unwrap(), b"user_quit");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crash_marker_is_written_after_restart_decision_and_before_start() {
+        let src = include_str!("backend_manager.rs");
+        // health_check_loop: should_auto_restart -> record_crash_exit -> start
+        let health = &src[src.find("fn health_check_loop").unwrap()..src.find("pub enum ShutdownIntent").unwrap()];
+        let decision = health.find("should_auto_restart(intentional_stop.load(Ordering::SeqCst), already)").unwrap();
+        let write = health.find("record_crash_exit(").unwrap();
+        let start = health.rfind(".start(app_handle.clone())").unwrap();
+        assert!(decision < write && write < start, "write marker after should_auto_restart, before start()");
     }
 }

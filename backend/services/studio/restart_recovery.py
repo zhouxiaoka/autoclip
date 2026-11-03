@@ -21,6 +21,7 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
     if session_factory is None:
         from backend.core.database import SessionLocal as session_factory
     recovered = []
+    crash_instances: dict[str, dict] = {}
     with session_factory() as db:
         rows = [(str(row.id), row.status) for row in db.query(Project).all() if (row.processing_config or {}).get('smart_import')]
     for project_id, status in rows:
@@ -31,6 +32,9 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             data = json.loads(path.read_text(encoding='utf-8'))
             if not isinstance(data, dict) or not store.interrupted_run(data):
                 continue
+            # Capture the dead instance id before recover() drops it from analysis.
+            prior_analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+            dead_instance = prior_analysis.get('instance')
             data = store.recover(project_id)  # explicit repair: persists the failed terminal
             generation = data.get('generation') or {}
             if generation.get('auto_start'):
@@ -38,10 +42,27 @@ def reconcile_interrupted_projects(session_factory=None) -> list[str]:
             elif status == ProjectStatus.PROCESSING and (data.get('analysis') or {}).get('status') == 'failed':
                 _fail_manual(session_factory, project_id, data['analysis'])
             recovered.append(project_id)
+            if generation.get('restart_reason') == 'crash' and isinstance(dead_instance, str) and len(dead_instance) == 32:
+                crash_instances.setdefault(dead_instance, {
+                    'restart_reason': 'crash',
+                    'crash_exit': generation.get('crash_exit', 'unknown'),
+                    'crash_stage': generation.get('crash_stage', 'unknown'),
+                    'crash_uptime_bucket': generation.get('crash_uptime_bucket', 'unknown'),
+                    'crash_rss_bucket': generation.get('crash_rss_bucket', 'unknown'),
+                    'crash_disk_bucket': generation.get('crash_disk_bucket', 'unknown'),
+                    'crash_has_fault': bool(generation.get('crash_has_fault')),
+                })
         except Exception as error:  # noqa: BLE001 - one bad project must not block startup
             logger.warning('Studio restart recovery skipped a project: %s', type(error).__name__)
     if recovered:
         logger.info('Studio restart recovery closed %d interrupted run(s): %s', len(recovered), ', '.join(recovered))
+    if crash_instances:
+        try:
+            from backend.core.sentry_setup import capture_crash_recovery
+            for instance, fields in crash_instances.items():
+                capture_crash_recovery(instance, fields)
+        except Exception:  # noqa: BLE001 - monitoring must not block startup
+            logger.warning('Studio crash recovery sentry report failed')
     # /#202: bound the shutdown-record dir once per start, after recovery released what it
     # could, in the background (never on the quit path, never blocking startup).
     from backend.services.studio.shutdown_marker import prune_in_background
