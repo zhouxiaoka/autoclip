@@ -2111,16 +2111,6 @@
   "退出会中断正在进行的制作。可以选择后台继续，完成后会通知你。": "Salir interrumpirá el trabajo en curso. Puedes dejarlo en segundo plano y te avisaremos al terminar.",
   "制作时阻止电脑休眠": "Evitar suspensión al producir",
   "制作期间保持系统唤醒（允许息屏）。关闭后电脑可按系统计划休眠。": "Mantiene el sistema despierto al producir (la pantalla puede apagarse). Si lo desactivas, el PC puede suspenderse según el plan del sistema.",
-  "failureMessages": {
-    "unexpected": "Este paso no terminó. Reintenta una vez; si vuelve a fallar, toca Comentarios en la tarjeta — recibimos la etapa y el tipo de error (nunca el video).",
-    "source_unsupported": "Este enlace no es una página de video descargable. Usa otro enlace o descarga el archivo e impórtalo.",
-    "quota_zero_billable": "Esta ejecución no envió solicitudes facturables al proveedor.",
-    "quota_n_billable": "Esta ejecución envió {{count}} solicitud(es) posiblemente facturable(es) al proveedor.",
-    "quota_retry_check_balance": "Verificar saldo y probar conexión",
-    "quota_precheck_exhausted": "El saldo se verificó antes de empezar.",
-    "quota_recharge_then_test": "Tras recargar, prueba la conexión y reintenta.",
-    "quota_provider_insufficient": "El proveedor indicó saldo insuficiente."
-  },
   "服务商回复余额不足。": "El proveedor respondió que el saldo es insuficiente.",
   "这次制作没有向服务商发出计费请求。": "Esta ejecución no envió solicitudes facturables al proveedor.",
   "这次制作向服务商发出了 {{count}} 次可能计费的请求。": "Esta ejecución envió {{count}} solicitud(es) posiblemente facturable(es) al proveedor.",

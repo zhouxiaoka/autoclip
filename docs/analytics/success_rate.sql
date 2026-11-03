@@ -437,17 +437,21 @@ ORDER BY success_rate DESC, devices DESC;
 -- ---------------------------------------------------------------------------
 -- 图 10：service_restarted 按 crash_exit × crash_stage（1.5.9）
 -- ---------------------------------------------------------------------------
--- 口径：近窗口 studio_generation_finished 且 error_code = service_restarted
--- 且 restart_reason = crash。属性均为枚举/分桶，无原始退出码。
+-- 口径：与上图相同的 production / desktop / cohort / {date_from}/{date_to}。
+-- studio_generation_finished 且 error_code = service_restarted 且 restart_reason = crash。
+-- 属性均为枚举/分桶，无原始退出码。按事件计数（不再用 distinct_id）。
 SELECT
-  properties.crash_exit AS crash_exit,
-  properties.crash_stage AS crash_stage,
-  count() AS restarts,
-  count(DISTINCT distinct_id) AS devices
+  toString(properties.crash_exit) AS crash_exit,
+  toString(properties.crash_stage) AS crash_stage,
+  count() AS restarts
 FROM events
 WHERE event = 'studio_generation_finished'
-  AND properties.error_code = 'service_restarted'
-  AND properties.restart_reason = 'crash'
-  AND timestamp >= now() - INTERVAL 21 DAY
+  AND toString(properties.analytics_environment) = 'production'
+  AND toString(properties.runtime) = 'desktop'
+  AND timestamp >= toDateTime({date_from}, 'UTC')
+  AND timestamp < toDateTime({date_to}, 'UTC')
+  AND person_id NOT IN COHORT {internal_cohort_id}
+  AND toString(properties.error_code) = 'service_restarted'
+  AND toString(properties.restart_reason) = 'crash'
 GROUP BY 1, 2
 ORDER BY restarts DESC;

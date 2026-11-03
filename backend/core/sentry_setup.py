@@ -158,7 +158,9 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
     # 1.5.9 2A: name unexpected failures without leaking messages.
     if studio_error_code(error) == "unexpected":
         from backend.core.failure_attribution import unexpected_type_of
-        out["unexpected_type"] = unexpected_type_of(error)
+        ut = unexpected_type_of(error)
+        if ut:
+            out["unexpected_type"] = ut
     if type(error).__name__ == "QuotaExhausted":
         out["upstream_error_type"] = "insufficient_quota"
         out["quota_precheck"] = getattr(error, "quota_precheck", "exhausted") or "exhausted"

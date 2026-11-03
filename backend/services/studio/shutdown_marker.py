@@ -145,7 +145,16 @@ def prune(root: Path | None = None) -> int:
         if path.name.startswith('.') and path.name.endswith('.tmp') and now - mtime > _TMP_MAX_AGE:
             path.unlink(missing_ok=True)
             removed += 1
-    records = sorted(((p, m) for p, m in entries if not p.name.startswith('.')), key=lambda item: item[1])
+    # B7: heartbeat / fault sidecars are not marker records; never prune them as such.
+    records = sorted(
+        (
+            (p, m) for p, m in entries
+            if not p.name.startswith('.')
+            and not p.name.endswith('.hb')
+            and not p.name.endswith('.fault')
+        ),
+        key=lambda item: item[1],
+    )
     candidates = records[:-_KEEP] if _KEEP else records
     if not candidates:
         return removed
@@ -165,7 +174,8 @@ def prune(root: Path | None = None) -> int:
                 path.unlink(missing_ok=True)
                 removed += 1
                 for side in _sidecar_paths(root, path.name):
-                    if side.exists():
+                    # Only drop sidecars when the instance itself is unprotected.
+                    if side.exists() and not store.index_protects(index, side.name):
                         side.unlink(missing_ok=True)
                         removed += 1
     return removed

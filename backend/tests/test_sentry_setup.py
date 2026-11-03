@@ -157,7 +157,7 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
         'failure_stage': 'vision', 'http_status': 429, 'upstream_error_type': 'rate_limited'}
 
     timeout = sentry_setup.studio_failure_context(TimeoutError('private'), 'render')
-    assert timeout == {'failure_stage': 'render'}
+    assert timeout == {'failure_stage': 'render', 'unexpected_type': 'TimeoutError'}
     assert 'private' not in json.dumps(timeout)
 
 
@@ -242,7 +242,7 @@ def test_studio_failure_context_without_status_in_chain_and_with_cycles():
     # A cyclic chain must terminate.
     a, b = RuntimeError('a'), RuntimeError('b')
     a.__cause__, b.__cause__ = b, a
-    assert sentry_setup.studio_failure_context(a, 'render') == {'failure_stage': 'render'}
+    assert sentry_setup.studio_failure_context(a, 'render') == {'failure_stage': 'render', 'unexpected_type': 'RuntimeError'}
 
 
 def test_studio_expected_pipeline_failure_keeps_code_and_warning(monkeypatch, tmp_path):

@@ -18,20 +18,38 @@ _STALE_S = 120.0
 
 _lock = threading.Lock()
 _stage = 'idle'
+_active_stages: dict[int, str] = {}  # thread id → non-idle stage (N1 concurrent)
 _started_at = time.monotonic()
 _thread: threading.Thread | None = None
 _stop = threading.Event()
 _fault_handle = None  # kept open for faulthandler
 
 _STAGES = frozenset({'screening', 'download', 'subtitle', 'analyze', 'render', 'idle'})
+# Prefer later pipeline stages when several threads are active.
+_STAGE_RANK = {'screening': 1, 'download': 2, 'subtitle': 3, 'analyze': 4, 'render': 5}
+
+
+def _resolve_stage(active: dict[int, str]) -> str:
+    if not active:
+        return 'idle'
+    return max(active.values(), key=lambda s: _STAGE_RANK.get(s, 0))
 
 
 def set_stage(stage: str) -> None:
-    """Workers call this at phase boundaries. Unknown values collapse to idle."""
+    """Workers call this at phase boundaries. Unknown values collapse to idle.
+
+    Concurrent workers (N1): each thread keeps its own active stage; the heartbeat
+    reports the highest-ranked non-idle stage so one idle sibling cannot blank another.
+    """
     value = stage if stage in _STAGES else 'idle'
+    tid = threading.get_ident()
     with _lock:
         global _stage
-        _stage = value
+        if value == 'idle':
+            _active_stages.pop(tid, None)
+        else:
+            _active_stages[tid] = value
+        _stage = _resolve_stage(_active_stages)
 
 
 def current_stage() -> str:
@@ -40,25 +58,19 @@ def current_stage() -> str:
 
 
 def _rss_mb() -> int | None:
+    """Current RSS in MiB. Prefer psutil (Win/macOS/Linux); fail-open → None."""
     try:
-        import resource
-        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        # Linux: kB; macOS: bytes
-        if usage > 10_000_000:  # clearly bytes
-            return int(usage / (1024 * 1024))
-        return int(usage / 1024)
-    except Exception:  # noqa: BLE001
-        try:
-            import psutil  # optional
-            return int(psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024))
-        except Exception:  # noqa: BLE001
-            return None
+        import psutil
+        return int(psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024))
+    except Exception:  # noqa: BLE001 - heartbeat must not crash
+        return None
 
 
 def _free_disk_mb(root: Path) -> int | None:
+    """Free disk MiB via shutil.disk_usage (works on Windows). Fail-open → None."""
     try:
-        usage = os.statvfs(root)
-        return int(usage.f_bavail * usage.f_frsize / (1024 * 1024))
+        import shutil
+        return int(shutil.disk_usage(root).free / (1024 * 1024))
     except Exception:  # noqa: BLE001
         return None
 

@@ -21,7 +21,7 @@ SOURCE_BLOCKED_CODE = 'source_blocked'
 # 找不到片源。也是前端 i18n 的 key，改动时同步 locales。不要带 URL、状态码或 yt-dlp 原文。
 SOURCE_NOT_FOUND_HINT = '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。'
 SOURCE_NOT_FOUND_CODE = 'source_not_found'
-SOURCE_UNSUPPORTED_HINT = '这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。'
+SOURCE_UNSUPPORTED_HINT = None  # resolved via failure_messages.sentence
 SOURCE_UNSUPPORTED_CODE = 'source_unsupported'
 CONNECTION_HINT = None  # resolved via failure_messages.sentence at raise time
 # 私密、地区/年龄限制、版权或人机验证。仍用 source_blocked，但不用 403/412/429 那句（这里没有那些状态码）。

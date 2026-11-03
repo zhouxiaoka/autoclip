@@ -298,3 +298,23 @@ def _mark_quota_exhausted(settings) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+
+def mark_analysis_quota_exhausted() -> None:
+    """1.5.9 3B/N3: stamp on precheck OR real insufficient_quota (closed loop with connection-test clear)."""
+    try:
+        settings = ai_models.load()
+    except Exception:  # noqa: BLE001
+        return
+    _mark_quota_exhausted(settings)
+
+
+def maybe_mark_quota_from_failure(error=None, *, upstream_error_type: str | None = None) -> None:
+    """Stamp when this failure is insufficient_quota (precheck or live provider)."""
+    upstream = upstream_error_type
+    if upstream is None and error is not None:
+        upstream = getattr(error, 'upstream_error_type', None)
+        if not upstream and type(error).__name__ == 'QuotaExhausted':
+            upstream = 'insufficient_quota'
+    if upstream == 'insufficient_quota' or getattr(error, 'code', None) == 'insufficient_quota':
+        mark_analysis_quota_exhausted()
+

@@ -703,7 +703,17 @@ def _reference_index():
 
 
 def index_protects(index, instance):
-    return instance in index
+    """True when ``instance`` (or its ``.hb`` / ``.fault`` sidecar name) is still referenced."""
+    if not instance:
+        return False
+    name = str(instance)
+    if name in index:
+        return True
+    # B7: protect heartbeat / fault sidecars of a referenced marker before recovery reads them.
+    for suffix in ('.hb', '.fault'):
+        if name.endswith(suffix) and name[: -len(suffix)] in index:
+            return True
+    return False
 
 
 def producer_alive(generation):

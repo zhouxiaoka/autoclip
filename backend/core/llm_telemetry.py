@@ -305,6 +305,8 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
         _put_enum(out, raw, "code", None, pattern=re.compile(r"^[a-z][a-z0-9_]{1,64}$"))
         _put_bool(out, raw, "has_subtitle")
         _put_bool(out, raw, "blocked")
+        # 1.5.9 N2: New API billing probe result (enum only).
+        _put_enum(out, raw, "quota_precheck", frozenset({"skipped", "ok", "exhausted", "unavailable"}))
     else:
         _put_enum(out, raw, "result", VALIDATION_RESULTS)
         _put_enum(out, raw, "probe_kind", PROBE_KINDS)

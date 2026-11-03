@@ -420,7 +420,7 @@ def _terminal_event(receipt):
     summary = receipt.get('summary') if isinstance(receipt.get('summary'), dict) else {}
     failed, local, generation = receipt.get('state') != 'completed', summary.get('attribution_source') == 'local', receipt.get('kind') == 'generation'
     props = {k: v for k, v in summary.items() if isinstance(v, bool) or (isinstance(v, str) and v) or (isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0)}
-    for key in (*(() if failed else ('shutdown_kind', 'restart_reason', 'crash_exit', 'crash_stage', 'crash_uptime_bucket', 'crash_rss_bucket', 'crash_disk_bucket', 'crash_has_fault', 'unexpected_type', 'quota_precheck', 'billable_calls_before_failure', 'error_code', 'upstream_error_type', 'http_status')), *(('upstream_error_type', 'http_status') if local else ())):
+    for key in (*(() if failed else ('shutdown_kind', 'restart_reason', 'crash_exit', 'crash_stage', 'crash_uptime_bucket', 'crash_rss_bucket', 'crash_disk_bucket', 'crash_has_fault', 'unexpected_type', 'billable_calls_before_failure', 'error_code', 'upstream_error_type', 'http_status')), *(('upstream_error_type', 'http_status') if local else ())):
         props.pop(key, None)
     props.pop('analysis_mode' if generation else 'recommendation_mode', None)
     props.pop('route', None) if not generation else props.update(trigger=receipt['trigger']) if receipt.get('trigger') else None

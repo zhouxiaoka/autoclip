@@ -445,6 +445,7 @@ def emit_asr_readiness_checked(
     code: str | None = None,
     has_subtitle: bool = False,
     blocked: bool | None = None,
+    quota_precheck: str | None = None,
 ) -> dict[str, Any]:
     """asr_readiness_checked. Frontend also emits this; backend covers API/MCP/old UI."""
     try:
@@ -454,11 +455,18 @@ def emit_asr_readiness_checked(
             provider = provider or check.get("provider") or _asr_provider_from_code(code)
             if blocked is None:
                 blocked = (check.get("ok") is False) and not has_subtitle
+        if quota_precheck is None:
+            try:
+                from backend.core.quota_precheck import check_for_analysis_settings
+                quota_precheck, _ = check_for_analysis_settings()
+            except Exception:  # noqa: BLE001
+                quota_precheck = None
         properties = schema.sanitize_asr_readiness_properties({
             "provider": _asr_provider_from_code(code, provider),
             "code": code,
             "has_subtitle": bool(has_subtitle),
             "blocked": bool(blocked),
+            **({"quota_precheck": quota_precheck} if quota_precheck else {}),
         })
         _submit_event(schema.EVENT_ASR_READINESS_CHECKED, properties)
         return properties

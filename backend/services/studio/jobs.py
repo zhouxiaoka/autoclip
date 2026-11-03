@@ -1432,6 +1432,11 @@ def _fail_generation(project_id, error, started, skipped, attempt_id=None, run_i
     capture_studio_exception(error, 'production')
     code = studio_error_code(error)
     context = studio_failure_context(error, 'production')
+    try:
+        from backend.services.studio.readiness import maybe_mark_quota_from_failure
+        maybe_mark_quota_from_failure(error)
+    except Exception:  # noqa: BLE001
+        pass
     error_text = user_visible_error(error)
     def fail(data):
         return store.settle_attempt(data, kind='fail', error=error_text, error_code=code, skipped=skipped, context=context, duration_ms=round((monotonic() - started) * 1000), guard=lambda d: _still_this_run(d, attempt_id, run_id))
@@ -1538,7 +1543,20 @@ def _submit_production(project_id, run_id, plan, *, attempt_id=None):
         from backend.core.quota_precheck import QuotaExhausted, check_for_analysis_settings
         quota, _extras = check_for_analysis_settings()
         if quota == 'exhausted':
+            from backend.services.studio.readiness import mark_analysis_quota_exhausted
+            mark_analysis_quota_exhausted()
             raise QuotaExhausted(quota_precheck='exhausted')
+        # N2: persist ok/skipped/unavailable onto the open generation for terminal passthrough.
+        if quota in ('ok', 'skipped', 'unavailable'):
+            def _stamp_quota(data, q=quota):
+                gen = data.get('generation') if isinstance(data.get('generation'), dict) else None
+                if isinstance(gen, dict):
+                    gen['quota_precheck'] = q
+                return data
+            try:
+                store.change(project_id, _stamp_quota)
+            except Exception:  # noqa: BLE001
+                pass
         executor.submit(_auto_generate, project_id, plan, _io_receipt=('analysis', run_id, 'production'))
     except Exception as error:
         store.analysis_handoff_rejected(project_id, run_id)
