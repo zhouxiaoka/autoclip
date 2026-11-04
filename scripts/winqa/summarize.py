@@ -1,11 +1,29 @@
-import re
 #!/usr/bin/env python3
-"""Summarise a winqa evidence directory into Markdown (stdout) and windows-rows.draft.json."""
+"""Render a winqa evidence directory into Markdown (stdout) and windows-rows.draft.json.
+
+    summarize.py EVIDENCE_DIR --verdict FILE
+
+R29 point 3: this file decides nothing. The conclusion is the verdict that py/winqa_verdict.py wrote, and it is
+rendered only if winqa_chain.verify_chain(render), recomputed now (plan, receipt chain, bundle ZIP and members,
+the evidence view), gives the same binding and result (#386, M9). The rows
+below show evidence; their marks never change the conclusion."""
 import json
+import re
 import sys
 from pathlib import Path, PureWindowsPath
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'py'))
+import winqa_verdict  # noqa: E402
+import winqa_chain  # noqa: E402
+
+if len(sys.argv) != 4 or sys.argv[2] != '--verdict':
+    print(__doc__, file=sys.stderr); sys.exit(2)
 ev = Path(sys.argv[1])
+VERDICT = json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
+if VERDICT.get('schema') != winqa_verdict.SCHEMA or not winqa_verdict.check_binding(ev, VERDICT):
+    print('summarize: verdict is not bound to this evidence directory; not rendered', file=sys.stderr); sys.exit(3)
+_HEAD = winqa_chain.LABELS[VERDICT['overall']]   # v5 M6: the verdict values exist only in winqa_chain
+print(f"{_HEAD}：{'；'.join(VERDICT['reasons']) or '全部步骤通过、必需证据完整'}\n")
 
 
 def load(name):
@@ -56,9 +74,11 @@ row(f'旧版运行中覆盖升级到 {cand_v}（+残留 python 占 _asyncio.pyd�
 celery = lc.get('celery_processes')
 row(f'启动 {cand_v}', lc.get('ok'), f"mode={lc.get('mode')} 端口文件 {lc.get('port_file_seconds')}s 健康 {lc.get('healthy_seconds')}s exe FileVersion {lc.get('exe_file_version')}")
 cel_logs = [l for l in (ck.get('log_celery_lines') or []) if 'Celery' in l]
+# Python 3.11: no backslash inside an f-string expression (R29: summarize failures are no longer ignored)
+cel_last = re.sub(r'^.*?(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d).*?(✅.*)$', r'\1 \2', cel_logs[-1])[:80] if cel_logs else '无'
 row('进程里没有 Celery', (celery == [] and lc.get('ok')) if celery is not None else None,
     f"候选版进程树：autoclip-desktop.exe + WebView2 + 1 个 python（-m backend.desktop_main），命令行含 celery 的 {len(celery or [])} 个；"
-    f"日志里唯一的 Celery 行来自升级前的 {prev_v}：{re.sub(r'^.*?(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d).*?(✅.*)$', r'\1 \2', cel_logs[-1])[:80] if cel_logs else '无'}")
+    f"日志里唯一的 Celery 行来自升级前的 {prev_v}：{cel_last}")
 for key, label in [('reported_version_matches', f"后端上报版本 = {cand_v}（实际 {ck.get('app_version')}）"), ('backend_health_200', '/health 200'),
                    ('settings_endpoint_200', '/api/v1/settings/ 200'), ('upgrade_kept_privacy_off', '升级后隐私设置保留'),
                    ('upgrade_kept_model_connection_and_key', '升级后模型连接和 key 保留'), ('upgrade_kept_project', '升级后项目保留'),
@@ -147,7 +167,6 @@ if real_rows:
 
 # Draft internal-acceptance rows: automated parts only; case rows stay pending (each needs UI / real model).
 now = __import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')
-auto_ok = all(r[1] is True for r in rows)
 draft = {
     'note': 'DRAFT ONLY. Windows rows for internal_acceptance.py; matrix cases stay pending until the GUI/real-model parts are done by a named tester.',
     'platform': 'windows-x64',
@@ -188,4 +207,4 @@ if RM:
     reg('1.5.6-issue266-key-kept', 'saving AI settings with the key field left empty keeps the stored key; connection test still passes (real model endpoint)',
         all(RM.get('assertions', {}).get(k) for k in ('issue266_field_absent_key_kept', 'issue266_field_absent_test_passes', 'issue266_explicit_null_key_kept', 'issue266_explicit_null_test_passes')), 'real/model.json')
 (ev / 'windows-rows.draft.json').write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding='utf-8')
-print(f"\n自动项全部通过：{auto_ok}。矩阵 10 个 case 全部保持 pending（需界面/真实模型）。草稿：{ev / 'windows-rows.draft.json'}")
+print(f"\n最终裁决：{_HEAD}（runs/{VERDICT['run_id']}/verdict-final.json）。矩阵 10 个 case 全部保持 pending（需界面/真实模型）。草稿：{ev / 'windows-rows.draft.json'}")

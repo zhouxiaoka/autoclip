@@ -13,6 +13,10 @@ import argparse, json, os, re, subprocess, sys, time
 from pathlib import Path
 import requests
 
+# redact.py is uploaded next to this file (run_winqa.sh step 1); in the repo it is one level up.
+sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
+from redact import scrub_diagnostic, scrub_obj  # noqa: E402
+
 for s in (sys.stdout, sys.stderr):
     try: s.reconfigure(encoding='utf-8', errors='replace')
     except (AttributeError, ValueError): pass
@@ -38,16 +42,12 @@ def body(r):
     except ValueError: return r.text[:2000]
 
 
-def scrub_text(t):
-    for s in SECRETS:
-        if s: t = t.replace(s, '***')
-    t = re.sub(r'("api_key_masked"\s*:\s*")[^"]*(")', r'\1***\2', t)
-    t = re.sub(r'(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{6,}', r'\1sk-***', t)
-    return re.sub(r'(?i)(bearer\s+)[A-Za-z0-9._-]{8,}', r'\1***', t)
+def scrub_text(t):   # R24 #216: redact.py is the one scrubber (key, key shapes, home dirs, URLs)
+    return scrub_diagnostic(t, keys=SECRETS)
 
 
 def save(name, value):
-    (OUT / name).write_text(scrub_text(json.dumps(value, ensure_ascii=False, indent=2)), encoding='utf-8')
+    (OUT / name).write_text(json.dumps(scrub_obj(value, keys=SECRETS), ensure_ascii=False, indent=2), encoding='utf-8')
     print('saved', OUT / name, flush=True)
 
 
@@ -271,7 +271,7 @@ def collect(pid, ws, tag, out):
     for j in ws.get('jobs') or []:
         if j.get('status') != 'completed' or not j.get('job_id'): continue
         hits = list(DATA.glob(f'**/{pid}/output/studio/{j["job_id"]}.mp4'))
-        e = {'job_id': j['job_id'], 'draft_id': j.get('draft_id'), 'path': str(hits[0]).replace(os.environ.get('USERNAME', '~'), '<user>') if hits else None}
+        e = {'job_id': j['job_id'], 'draft_id': j.get('draft_id'), 'path': scrub_text(str(hits[0])) if hits else None}
         if hits: e['ffprobe'] = ffprobe(hits[0])
         exports.append(e)
     out['exports'] = exports

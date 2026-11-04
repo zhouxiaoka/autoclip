@@ -38,4 +38,7 @@ if ($r.copied -gt 0) {
   } catch { $r.failed += "zip: $($_.Exception.Message)" }
 }
 Remove-Item -Recurse -Force $t -ErrorAction SilentlyContinue
+$r.ok = ($r.failed.Count -eq 0)
 Save-Json ([pscustomobject]$r) "collect-logs-$Label.json"
+# R29 #321: a copy or zip failure is a failure of this step (exit 3), not exit 0 with a list nobody reads
+Exit-WithResult $r.ok 3

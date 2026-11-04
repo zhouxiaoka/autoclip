@@ -3,14 +3,18 @@
 # 用法见同目录 README.md；主机、账号、SSH 身份、模型地址和 key 只从环境变量/参数读，仓库里不放任何默认值：
 #   ./run_winqa.sh --prev <上一正式版 setup.exe> --candidate <候选 setup.exe> --version X.Y.Z [选项]
 set -uo pipefail
-
+# R29 #320: first pure bash only - read the key, unset it from the environment, THEN start any child process
+MODEL_API_KEY="${WINQA_MODEL_API_KEY:-${AUTOCLIP_QA_DASHSCOPE_KEY:-}}"
+unset WINQA_MODEL_API_KEY AUTOCLIP_QA_DASHSCOPE_KEY
+export -n MODEL_API_KEY 2>/dev/null || true
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOST="${WINQA_HOST:-}"
 USER_="${WINQA_USER:-}"
 IDENTITY="${WINQA_SSH_IDENTITY:-}"   # 可选：SSH 私钥文件路径；不设则用 ssh-agent / ~/.ssh/config
 REPO="${WINQA_REPO:-$(cd "$HERE/../.." && pwd)}"
 MODEL_BASE_URL="${WINQA_MODEL_BASE_URL:-}"; MODEL="${WINQA_MODEL:-}"; MODEL_PROVIDER="${WINQA_MODEL_PROVIDER:-dashscope}"
-MODEL_API_KEY="${WINQA_MODEL_API_KEY:-${AUTOCLIP_QA_DASHSCOPE_KEY:-}}"
+# R27 #308: the key stays in this shell only. It is never exported to ssh/scp/sftp or any other child; the log
+# channel gets it on a private pipe (--keys-fd) and the remote Python on stdin after the request line.
 PREV=""; CAND=""; VERSION=""; PREV_VERSION=""
 MARKER='resources\backend\services\studio\readiness.py'
 UPDATER_URL='https://github.com/zhouxiaoka/autoclip/releases/latest/download/latest.json'
@@ -55,24 +59,197 @@ done
 [ -n "$PREV_VERSION" ] || PREV_VERSION="$(basename "$PREV" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 TS="$(date +%Y%m%d-%H%M%S)"
 OUT="${OUTDIR:-${WINQA_EVIDENCE_ROOT:-${TMPDIR:-/tmp}/autoclip-winqa}/evidence-$TS}"
-mkdir -p "$OUT"
+umask 077
+mkdir -p "$OUT"; chmod 700 "$OUT"   # R27 #259: the evidence dir is private too (asserted by the tests)
 LOG="$OUT/run.log"
-exec > >(tee -a "$LOG") 2>&1
+RUN_ID="r$TS-$$"; EXPORT_SEQ=0
+PLAN_PY="$HERE/py/winqa_plan.py"
+FLAGS=""; [ "$SMOKE" = 1 ] && FLAGS="$FLAGS,smoke"; [ "$WITH_ASR" = 1 ] && FLAGS="$FLAGS,asr"; [ "$FAILURE" = 1 ] && FLAGS="$FLAGS,failure"
+[ "$REAL" = 1 ] && FLAGS="$FLAGS,real"; [ -n "$BILI_URL" ] && FLAGS="$FLAGS,bili"; [ "$HF_MIRROR" = 1 ] && FLAGS="$FLAGS,hf"
+# R29 #317 log channel. FD topology: 3/4 = the original stdout/stderr; logpipe.py (scrubber + run.log + terminal,
+# one process) reads a pipe that becomes this script's stdout AND stderr only after its READY handshake, so no
+# business output exists before scrubbing is live. Children never get a spare write end (the pipe is only 1/2).
+LP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/winqa-lp.XXXXXX")" || { echo "WINQA_E_LOGPIPE 70" >&2; exit 70; }
+LP_STATUS="$LP_DIR/status"; : > "$LP_STATUS" || { echo "WINQA_E_LOGPIPE 70" >&2; exit 70; }
+exec 3>&1 4>&2
+# #414 v5 M3/#395: the process substitution is a bash subshell that WAITS for logpipe and appends "RC <real exit
+# status>" (137 after SIGKILL). The exit code comes only from that line, never from logpipe's own "EXIT" claim.
+exec 5> >(python3 -u "$HERE/logpipe.py" --log "$LOG" --status "$LP_STATUS" --keys-fd 6 6< <(printf '%s\n' "$MODEL_API_KEY") 1>&3 2>&4; echo "RC $?" >> "$LP_STATUS")
+LP_SPAWN="${!:-}"   # pid of the process substitution where bash reports it; READY carries logpipe's own pid
+# handshake and drain bounds (hardening, #389 not reproduced): WINQA_LOGPIPE_HANDSHAKE_S (default 30) and
+# WINQA_LOGPIPE_DRAIN_S (default 10), 1..600 s. R31 I433: real-time deadlines on bash's own $SECONDS (Bash 3.2 has
+# it; no `date` fork per pass). $SECONDS counts whole seconds, so a deadline of N+1 waits at least N s.
+HS="${WINQA_LOGPIPE_HANDSHAKE_S:-30}"; DRAIN="${WINQA_LOGPIPE_DRAIN_S:-10}"
+for v in "$HS" "$DRAIN"; do
+  case "$v" in ''|*[!0-9]*) echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S/WINQA_LOGPIPE_DRAIN_S" >&4; exit 70;; esac
+  { [ "$v" -ge 1 ] && [ "$v" -le 600 ]; } || { echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S/WINQA_LOGPIPE_DRAIN_S" >&4; exit 70; }
+done
+LP_PID=""; hs_end=$((SECONDS + HS + 1))
+while [ "$SECONDS" -lt "$hs_end" ]; do
+  LP_PID="$(sed -n 's/^READY \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null)"
+  [ -n "$LP_PID" ] && break
+  grep -q '^RC ' "$LP_STATUS" 2>/dev/null && break
+  sleep 0.1
+done
+if [ -z "$LP_PID" ]; then
+  # the reason is decided BEFORE stopping it (stopping it writes an RC line of its own)
+  if grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then why=died_before_ready; detail="($(sed -n 's/^RC //p' "$LP_STATUS"))"
+  else why=handshake_timeout; detail="after ${HS}s"; fi
+  exec 5>&-
+  # no handshake: stop logpipe (a child of the waiting subshell) and the subshell; never wait on them
+  case "$LP_SPAWN" in ''|*[!0-9]*) ;; *) pkill -TERM -P "$LP_SPAWN" 2>/dev/null; kill -TERM "$LP_SPAWN" 2>/dev/null;; esac
+  # R31 I474: this exit leaves its close record too
+  { echo "script_rc_before_close 70"; echo "reason $why"; grep -E '^(READY|EXIT|RC) ' "$LP_STATUS" 2>/dev/null; } \
+    > "$OUT/logpipe-final.txt" 2>/dev/null || :
+  echo "WINQA_E_LOGPIPE 70 $why $detail" >&4; rm -rf "$LP_DIR"; exit 70
+fi
+exec 1>&5 2>&5 5>&-
+logpipe_alive() { kill -0 "$LP_PID" 2>/dev/null && ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; }
+lp_wrapper_alive() {   # the waiting subshell (writes the RC line); where bash 3.2 gives no $!, logpipe itself
+  case "$LP_SPAWN" in ''|*[!0-9]*) kill -0 "$LP_PID" 2>/dev/null;; *) kill -0 "$LP_SPAWN" 2>/dev/null;; esac
+}
+# close order: give the terminal back, close the only write end, wait up to WINQA_LOGPIPE_DRAIN_S for the "RC" line
+# of the waiting subshell. At the deadline, check first, then decide (R31 I439): subshell gone without an RC line ->
+# wrapper_gone (a logpipe left behind is killed: orphan=1); subshell alive -> drain_timeout, TERM, KILL. With an RC
+# line: killed=SIGn (RC>128 not matching its own EXIT), exited=n (EXIT == RC), exit=n. The result is a fact for the
+# log_channel receipt (R31 I438); nothing here touches a verdict.
+LP_REASON=""; LP_CLOSED=0; STAGE=""
+logpipe_close() {
+  local rc="$1" lp ex end orphan=""
+  LP_CLOSED=1
+  exec 1>&3 2>&4
+  end=$((SECONDS + DRAIN + 1))
+  while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ "$SECONDS" -lt "$end" ]; do sleep 0.1; done
+  if ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then
+    if lp_wrapper_alive; then
+      LP_REASON=drain_timeout; kill -TERM "$LP_PID" 2>/dev/null; sleep 0.2; kill -KILL "$LP_PID" 2>/dev/null
+      end=$((SECONDS + 2)); while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ "$SECONDS" -lt "$end" ]; do sleep 0.1; done
+    else
+      LP_REASON=wrapper_gone
+      if kill -0 "$LP_PID" 2>/dev/null; then kill -KILL "$LP_PID" 2>/dev/null; orphan=" orphan=1"; fi
+    fi
+  fi
+  lp="$(sed -n 's/^RC \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
+  ex="$(sed -n 's/^EXIT \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
+  if [ -z "$LP_REASON" ] && [ "${lp:-x}" != 0 ]; then
+    if [ "$lp" -gt 128 ] && [ "${ex:-x}" != "$lp" ]; then LP_REASON="killed=SIG$((lp - 128))"
+    elif [ "${ex:-x}" = "$lp" ]; then LP_REASON="exited=$lp"
+    else LP_REASON="exit=$lp"; fi
+  fi
+  { echo "script_rc_before_close $rc"; echo "reason ${LP_REASON:-none}$orphan"; grep -E '^(READY|EXIT|RC) ' "$LP_STATUS" 2>/dev/null; } \
+    > "$OUT/logpipe-final.txt" 2>/dev/null || :
+  if [ -n "$LP_REASON" ]; then
+    # #414 test_a2: a channel that died mid-run (the script then stops on SIGPIPE, rc 141) is announced once
+    echo "WINQA_E_LOGPIPE 70 $LP_REASON" >&4
+    [ "$rc" = 0 ] && rc=70
+  fi
+  rm -rf "$LP_DIR"
+  return "$rc"
+}
+# R31 I474: the trap is set right after the handshake, before migrate / create (exits 71) and everything else, so
+# every exit this script makes on its own leaves logpipe-final.txt.
+cleanup() {
+  local rc=$?; trap - EXIT; [ -n "$STAGE" ] && rm -rf "$STAGE"
+  [ "$LP_CLOSED" = 1 ] && exit "$rc"
+  logpipe_close "$rc"; exit $?
+}
+trap cleanup EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE   # #311: the log channel died -> stop, clean up
+python3 "$PLAN_PY" migrate --out "$OUT" || { echo "FAIL: 旧证据迁移失败"; exit 71; }
+PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
+# v5 #385: the plan names the candidate installer; a resume for another candidate is refused (exit 71)
+PLAN_SHA="$(python3 "$PLAN_PY" create --out "$OUT" --run-id "$RUN_ID" --from "$FROM" --to "$TO" --flags "${FLAGS#,}" \
+  --inputs "{\"candidate_sha256\":\"$CAND_SHA\",\"prev_sha256\":\"$PREV_SHA\"}")"; PLAN_RC=$?
+[ "$PLAN_RC" = 0 ] || { echo "FAIL: 写不了执行计划（plan.json，rc=${PLAN_RC}；续跑必须是同一个候选安装包）"; exit 71; }
+PLAN="$OUT/runs/$RUN_ID/plan.json"
+# A run killed with -9 cannot clean up. R25 #248: staging dirs live under one fixed private root (not $TMPDIR, which
+# can change between runs); a leftover is deleted when its run is gone, its pid now belongs to another program, or
+# it is older than 24 h. Legacy winqa-stage.* dirs under $TMPDIR and /tmp get the same check.
+STAGE_ROOT="${WINQA_STAGE_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/autoclip-winqa-stage}"
+mkdir -p "$STAGE_ROOT"; chmod 700 "$STAGE_ROOT"
+stage_is_live() {   # $1 = dir named winqa-stage.<pid>.<rand>
+  local p="${1##*/winqa-stage.}"; p="${p%%.*}"
+  case "$p" in ''|*[!0-9]*) return 1;; esac
+  [ -n "$(find "$1" -maxdepth 0 -mmin +1440 2>/dev/null)" ] && return 1
+  kill -0 "$p" 2>/dev/null || return 1
+  ps -o args= -p "$p" 2>/dev/null | grep -q run_winqa
+}
+for d in "$STAGE_ROOT"/winqa-stage.* "${TMPDIR:-/tmp}"/winqa-stage.* /tmp/winqa-stage.*; do
+  [ -d "$d" ] || continue
+  stage_is_live "$d" || rm -rf "$d"
+done
+STAGE="$(mktemp -d "$STAGE_ROOT/winqa-stage.$$.XXXXXX")"; chmod 700 "$STAGE"
 
 ID_OPT=(); [ -n "$IDENTITY" ] && ID_OPT=(-i "$IDENTITY")
 SSH=(ssh ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 "$USER_@$HOST")
 SCP=(scp -q ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20)
-PS='powershell -NoProfile -ExecutionPolicy Bypass -File'
-step() { echo; echo "==== [$(date +%H:%M:%S)] $*"; }
-remote() { "${SSH[@]}" "$@"; }
-rps() { "${SSH[@]}" 'powershell -NoProfile -ExecutionPolicy Bypass -Command -'; }  # PowerShell 脚本从 stdin 传，避免远端默认 shell 展开 $
-record() { echo "$1=$2" >> "$OUT/steps.txt"; echo "-> $1: $2"; }  # 追加写，续跑时保留之前步骤的结果
+# R29 #323: every remote call with a variable part goes through ONE fixed command line; the values travel as a JSON
+# line on stdin (py/winqa_req.py builds it from separate argv entries), the key as the next line when needed.
+ENTRY='powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\winqa\ps\entry.ps1'
+CHAIN_PY="$HERE/py/winqa_chain.py"
+# v5 B2: before every step the one verification point re-checks plan, resume chain and receipt chain (exit 73)
+step() { logpipe_alive || exit 70; python3 "$CHAIN_PY" check --out "$OUT" --run-id "$RUN_ID" --mode stage || { echo "FAIL: 证据链校验失败"; exit 73; }; echo; echo "==== [$(date +%H:%M:%S)] $*"; }
+remote() { "${SSH[@]}" "$@"; }                 # fixed strings only (hostname, fixed mkdir)
+rcall() {                                      # rcall OP ARGS...   (see py/winqa_req.py)
+  local req; req="$(python3 "$HERE/py/winqa_req.py" "$@")" || return 64
+  printf '%s\n' "$req" | "${SSH[@]}" "$ENTRY"
+}
+rcall_key() {                                  # rcall_key SCRIPT ARGS...: a py op that reads the key from stdin
+  local s="$1" req; shift; req="$(python3 "$HERE/py/winqa_req.py" py "$s" --key "$@")" || return 64
+  { printf '%s\n' "$req"; printf '%s\n' "$MODEL_API_KEY"; } | "${SSH[@]}" "$ENTRY"
+}
+# R29 point 1/2: one receipt per result, written by winqa_plan.py (never printf'd JSON). exit_code is the
+# producer's real return code: `cmd; rec step $?`. A receipt that cannot be written stops the run (exit 72).
+rec() {   # rec STEP RC  (RC 0 -> ok, else FAIL with that code)
+  local st=ok; [ "$2" = 0 ] || st=FAIL
+  python3 "$PLAN_PY" record --out "$OUT" --run-id "$RUN_ID" --step "$1" --status "$st" --exit-code "$2" \
+    || { echo "FAIL: 回执写入失败（$1）"; exit 72; }
+  echo "-> $1: $st (rc=${2})"
+}
+record() { local rc=$?; local c="${3:-$rc}"; [ "$2" = ok ] && c=0; [ "$2" != ok ] && [ "$c" = 0 ] && c=1; rec "$1" "$c"; }
 want() { [ "$FROM" -le "$1" ] && [ "$1" -le "$TO" ]; }
-pull() { "${SCP[@]}" "$USER_@$HOST:C:/winqa/out/$1" "$OUT/" 2>/dev/null || true; }
-pull_all() { "${SCP[@]}" -r "$USER_@$HOST:C:/winqa/out/*" "$OUT/" 2>/dev/null || true; }
+# R27 export boundary. C:\winqa\out is never modified. export_evidence.py (bundled Python on the VM) reads the exact
+# key from stdin, builds C:\winqa\export\<run>-<n>.zip and commits it only after scrubbing and verifying; it prints
+# "EXPORT <complete|incomplete> <file> <sha256>". Here: download exactly that file (scp failure = FAIL #253), check
+# the hash, re-check every member with the same policy, and only then copy into $OUT. Any failure leaves $OUT as it
+# was and records FAIL.
+fail_export() { rm -rf "$STAGE/b"; echo "FAIL: $2"; record "$1" FAIL "${3:-1}"; return 1; }
+export_bundle() {   # $1 = label for the step record, $2 = step number the export is due for (99 = final)
+  local res line status file digest rc req
+  EXPORT_SEQ=$((EXPORT_SEQ + 1))
+  # #306: the receipts so far go into the bundle as steps.json (from C:\winqa\ctl, never into C:\winqa\out)
+  python3 "$PLAN_PY" steps --out "$OUT" --dest "$STAGE/steps.json" || { fail_export "$1" "写不了 steps.json"; return 1; }
+  req="$(python3 "$PLAN_PY" due --out "$OUT" --run-id "$RUN_ID" --upto "$2")" || { fail_export "$1" "读不了执行计划"; return 1; }
+  [ "$2" -ge 99 ] && req="$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["required"]))' "$PLAN")"
+  remote 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force C:\winqa\ctl | Out-Null"' >/dev/null \
+    && "${SCP[@]}" "$STAGE/steps.json" "$USER_@$HOST:C:/winqa/ctl/" || { fail_export "$1" "steps.json 上传失败（scp）"; return 1; }
+  res=$(rcall_key export_evidence export --src 'C:\winqa\out' --dest 'C:\winqa\export' --bundle "$RUN_ID-$EXPORT_SEQ" \
+        --require "$req" --plan-sha256 "$PLAN_SHA" --steps 'C:\winqa\ctl\steps.json' --keys-stdin); rc=$?
+  line=$(printf '%s\n' "$res" | tr -d '\r' | grep '^EXPORT ' | tail -1)
+  read -r _ status file digest <<<"$line"
+  # #305: ${rc} - Bash 3.2 in a UTF-8 locale reads "$rc）" as one (unset) variable name and set -u exits
+  case "$rc:$status" in 0:complete|3:incomplete) ;; *) fail_export "$1" "验收机上导出失败（rc=${rc}），没有可传的证据包" "$rc"; return 1;; esac
+  case "$file" in "$RUN_ID-$EXPORT_SEQ.zip") ;; *) fail_export "$1" "导出结果不认识"; return 1;; esac
+  # #309: every local mkdir/mv/cp is checked; a failure records FAIL instead of a silent "ok"
+  rm -rf "$STAGE/b" && mkdir -p "$STAGE/b" || { fail_export "$1" "建不了临时目录"; return 1; }
+  "${SCP[@]}" "$USER_@$HOST:C:/winqa/export/$file" "$STAGE/b/$file" || { fail_export "$1" "证据包下载失败（scp）"; return 1; }
+  printf '%s\n' "$MODEL_API_KEY" | python3 "$HERE/py/export_evidence.py" verify --bundle "$STAGE/b/$file" --sha256 "$digest" \
+    --into "$STAGE/b/x" --plan "$PLAN" --upto "$2" --keys-stdin; rc=$?
+  if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then fail_export "$1" "证据包本地校验失败（rc=${rc}），未写入证据目录" "$rc"; return 1; fi
+  mkdir -p "$OUT/bundles" || { fail_export "$1" "建不了 bundles 目录"; return 1; }
+  # v5 #384/#386/M8/M9: the receipt binds the bundle. record keeps the ZIP in bundles/, moves the verified members
+  # to runs/<id>/a<n>/<step>/ and hashes them; the evidence view in $OUT is a copy that render re-checks.
+  local st=ok code=0 adir; [ "$status" = complete ] || { st=FAIL; code=3; }
+  adir="$(python3 "$PLAN_PY" record --out "$OUT" --run-id "$RUN_ID" --step "$1" --status "$st" --exit-code "$code" \
+          --bundle-zip "$STAGE/b/$file" --bundle-dir "$STAGE/b/x" --print-attempt-dir)" || { echo "FAIL: 回执写入失败（$1）"; exit 72; }
+  echo "-> $1: $st (rc=${code})"
+  rm -rf "$STAGE/b"
+  cp "$adir/manifest.json" "$OUT/bundles/$RUN_ID-$EXPORT_SEQ.manifest.json" || { fail_export "$1" "manifest 落盘失败"; return 1; }
+  cp -R "$adir/." "$OUT/" && rm -f "$OUT/manifest.json" || { fail_export "$1" "证据落盘失败（cp），证据目录可能不完整"; return 1; }
+  if [ "$st" != ok ]; then echo "FAIL: 必需证据缺失、为空或被扣留，见 bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"; return 1; fi
+}
 
 step "0. 本地准备  prev=$PREV ($PREV_VERSION)  candidate=$CAND ($VERSION)"
-PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
 want 0 && printf '{"prev":{"file":"%s","version":"%s","sha256":"%s"},"candidate":{"file":"%s","version":"%s","sha256":"%s"},"repo_commit":"%s","started_at":"%s"}\n' \
   "$(basename "$PREV")" "$PREV_VERSION" "$PREV_SHA" "$(basename "$CAND")" "$VERSION" "$CAND_SHA" \
   "$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" "$(date -Iseconds)" > "$OUT/inputs.json"
@@ -82,28 +259,27 @@ remote 'hostname' >/dev/null || { echo "SSH 不通（检查 WINQA_HOST / WINQA_U
 if want 1; then
 step "1. 上传脚本、安装包和 CI 冒烟用到的仓库文件"
 remote 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force C:\winqa\ps,C:\winqa\py,C:\winqa\inst,C:\winqa\out,C:\winqa\repo | Out-Null"'
-"${SCP[@]}" "$HERE"/ps/*.ps1 "$USER_@$HOST:C:/winqa/ps/"
-"${SCP[@]}" "$HERE"/py/*.py "$USER_@$HOST:C:/winqa/py/"
-remote_hash() { remote "powershell -NoProfile -Command \"if (Test-Path C:\\winqa\\inst\\$1) { (Get-FileHash C:\\winqa\\inst\\$1).Hash.ToLower() }\"" | tr -d '\r'; }
-# copy /b 的分片列表：C:\winqa\inst\parts-<dst>\p00+...。以前用 sed "s|^|...\\|"，结尾的 \| 把分隔符转义掉了
-# （unterminated s command），列表为空，拼接后的哈希永远对不上（RC156 Win QA #16）。printf 不经过 sed 的转义。
-windows_parts() { ls "$1" | while IFS= read -r n; do printf 'C:\\winqa\\inst\\parts-%s\\%s\n' "$2" "$n"; done | paste -sd+; }
+# R27 #253: an upload that fails stops the run (the exporter and redact.py must be the repo's versions)
+"${SCP[@]}" "$HERE"/ps/*.ps1 "$USER_@$HOST:C:/winqa/ps/" &&
+"${SCP[@]}" "$HERE"/py/*.py "$USER_@$HOST:C:/winqa/py/" &&
+"${SCP[@]}" "$HERE/redact.py" "$USER_@$HOST:C:/winqa/py/" || { echo "上传脚本失败（scp）"; exit 4; }   # export_evidence.py + winqa_probe.py import it
+remote_hash() { rcall hash "$1" | tr -d '\r'; }
+# 分片：C:\winqa\inst\parts-<dst>\p00...，拼接在验收机上按名字顺序做（entry.ps1 merge_parts，不经 cmd copy /b）
 upload_installer() { # 已在机器上且哈希一致就不重传；否则分 12 片、3 路并发、sftp reput 可续传，再在验收机上拼接
   local src="$1" dst="$2" sha="$3"
   if [ "$(remote_hash "$dst")" = "$sha" ]; then echo "$dst already on VM (hash ok)"; return 0; fi
   local tmp="/tmp/winqa-chunks/$dst"; rm -rf "$tmp"; mkdir -p "$tmp"
   split -n 12 -d -a 2 "$src" "$tmp/p"
+  local names; names=$(ls "$tmp")
   # 先在验收机上建空分片，reput 就总能从已传字节处续传
-  rps <<PS
-New-Item -ItemType Directory -Force C:\\winqa\\inst\\parts-$dst | Out-Null
-foreach (\$n in '$(ls "$tmp" | paste -sd,)'.Split(',')) { \$f = 'C:\\winqa\\inst\\parts-$dst\\' + \$n; if (-not (Test-Path \$f)) { New-Item -ItemType File \$f | Out-Null } }
-PS
+  # shellcheck disable=SC2086  # names are p00..p11
+  rcall make_parts "$dst" $names || { echo "建分片失败"; exit 4; }
   export IDENTITY USER_ HOST dst
   ls "$tmp" | xargs -P 3 -I{} bash -c 'for t in 1 2 3 4 5 6; do echo "reput '"$tmp"'/{} /C:/winqa/inst/parts-$dst/{}" | sftp -q ${IDENTITY:+-i "$IDENTITY"} -o BatchMode=yes -o ServerAliveInterval=15 -b - "$USER_@$HOST" >/dev/null && exit 0; sleep 5; done; exit 1'
-  local parts; parts=$(windows_parts "$tmp" "$dst")
-  remote "cmd /c copy /y /b $parts C:\\winqa\\inst\\$dst"
+  # shellcheck disable=SC2086
+  rcall merge_parts "$dst" $names || { echo "拼接 $dst 失败"; exit 4; }
   [ "$(remote_hash "$dst")" = "$sha" ] || { echo "upload of $dst failed hash check"; exit 4; }
-  remote "powershell -NoProfile -Command \"Remove-Item -Recurse -Force C:\\winqa\\inst\\parts-$dst\""
+  rcall remove_parts "$dst"
   rm -rf "$tmp"
 }
 upload_installer "$PREV" prev-setup.exe "$PREV_SHA"
@@ -111,118 +287,116 @@ upload_installer "$CAND" candidate-setup.exe "$CAND_SHA"
 tar --sort=name --mtime=@0 --owner=0 --group=0 -C "$REPO" -cf /tmp/winqa-repo.tar scripts/verify_windows_install.py scripts/installed_video_acceptance.py \
   scripts/windows_python_crt.py scripts/windows_desktop_crt.py scripts/verify_sensevoice.py scripts/verify_whisper_recovery.py \
   backend/assets/example/source.mp4 backend/assets/example/source.srt
-TAR_SHA=$(sha256sum /tmp/winqa-repo.tar | cut -d' ' -f1)
-[ "$(remote_hash ../repo.tar)" = "$TAR_SHA" ] || "${SCP[@]}" /tmp/winqa-repo.tar "$USER_@$HOST:C:/winqa/repo.tar"
+"${SCP[@]}" /tmp/winqa-repo.tar "$USER_@$HOST:C:/winqa/repo.tar" || { echo "上传 repo.tar 失败"; exit 4; }
 remote 'tar -xf C:\winqa\repo.tar -C C:\winqa\repo'
 fi
 
 if want 2; then
 step "2. 清理旧安装与用户数据（幂等）"
-remote "$PS C:\\winqa\\ps\\clean.ps1" && record clean ok || record clean FAIL
-remote "$PS C:\\winqa\\ps\\env.ps1 -PrevInstaller C:\\winqa\\inst\\prev-setup.exe -CandInstaller C:\\winqa\\inst\\candidate-setup.exe"
-pull clean.json; pull env.json
+rcall ps clean; rec clean $?
+rcall ps env PrevInstaller='C:\winqa\inst\prev-setup.exe' CandInstaller='C:\winqa\inst\candidate-setup.exe'; rec env $?   # v5 #388
 fi
 
 if want 3; then
 step "3. 干净安装上一正式版 $PREV_VERSION 并在交互桌面启动"
-remote "$PS C:\\winqa\\ps\\seed_privacy.ps1"
-remote "$PS C:\\winqa\\ps\\install.ps1 -Installer C:\\winqa\\inst\\prev-setup.exe -Label prev -ExpectVersion $PREV_VERSION" && record install_prev ok || record install_prev FAIL
-remote "$PS C:\\winqa\\ps\\launch.ps1 -Label prev" && record launch_prev ok || record launch_prev FAIL
-remote "$PS C:\\winqa\\ps\\ui_probe.ps1 -Label prev" >/dev/null
-remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\winqa_probe.py seed" && record seed_prev ok || record seed_prev FAIL
-pull_all
+rcall ps seed_privacy
+rcall ps install Installer='C:\winqa\inst\prev-setup.exe' Label=prev ExpectVersion="$PREV_VERSION"; rec install_prev $?
+rcall ps launch Label=prev; rec launch_prev $?
+rcall ps ui_probe Label=prev >/dev/null
+rcall py winqa_probe seed; rec seed_prev $?
+export_bundle export_after_3 3
 fi
 
 if want 4; then
 step "4. 旧版仍在运行 + 模拟残留 python 占住 _asyncio.pyd，静默覆盖安装候选 $VERSION"
-remote "$PS C:\\winqa\\ps\\install.ps1 -Installer C:\\winqa\\inst\\candidate-setup.exe -Label upgrade -ExpectVersion $VERSION -Marker '$MARKER' -LockLeftover -Interactive" && record upgrade ok || record upgrade FAIL
-pull install-upgrade.json
+rcall ps install Installer='C:\winqa\inst\candidate-setup.exe' Label=upgrade ExpectVersion="$VERSION" Marker="$MARKER" LockLeftover Interactive; rec upgrade $?
 fi
 
 if want 5; then
 step "5. 启动候选版并检查版本/健康/Celery/设置/预检/更新清单/项目列表"
-remote "$PS C:\\winqa\\ps\\launch.ps1 -Label candidate" && record launch_candidate ok || record launch_candidate FAIL
-remote "$PS C:\\winqa\\ps\\ui_probe.ps1 -Label candidate" >/dev/null
-remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\winqa_probe.py check --label candidate --expect-version $VERSION --updater-url $UPDATER_URL" && record check_candidate ok || record check_candidate FAIL
+rcall ps launch Label=candidate; rec launch_candidate $?
+rcall ps ui_probe Label=candidate >/dev/null
+rcall py winqa_probe check --label candidate --expect-version "$VERSION" --updater-url "$UPDATER_URL"; rec check_candidate $?
 fi
 if [ "$FAILURE" = 1 ] && want 6; then
   step "6. 失败事件字段与预检回退（本机 loopback fixture / 关闭端口，零费用）"
-  remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\winqa_probe.py failure" && record failure_probe ok || record failure_probe FAIL
+  rcall py winqa_probe failure; rec failure_probe $?
 fi
 if want 6; then
-remote "$PS C:\\winqa\\ps\\ui_probe.ps1 -Label after-probes" >/dev/null
-remote "$PS C:\\winqa\\ps\\stop.ps1 -Label candidate" && record stop_candidate ok || record stop_candidate FAIL
+rcall ps ui_probe Label=after-probes >/dev/null
+rcall ps stop Label=candidate; rec stop_candidate $?
+export_bundle export_after_6 6
 fi
-want 6 && pull_all
 
 if [ "$SMOKE" = 1 ] && want 7; then
   step "7. CI 同款安装后冒烟：自带 Python 跑 verify_windows_install.py --launch-desktop"
-  A=""; [ "$WITH_ASR" = 1 ] && A="-WithAsr"
-  remote "$PS C:\\winqa\\ps\\smoke.ps1 -LaunchDesktop $A" && record smoke ok || record smoke FAIL
-  remote "$PS C:\\winqa\\ps\\stop.ps1 -Label smoke" >/dev/null
+  if [ "$WITH_ASR" = 1 ]; then rcall ps smoke LaunchDesktop WithAsr; else rcall ps smoke LaunchDesktop; fi; rec smoke $?
+  rcall ps stop Label=smoke >/dev/null
 fi
 
 if [ "$REAL" = 1 ]; then
-RP="$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\winqa_real.py"
 if want 10; then
   step "10. 真实模型：保存模型连接 + 连接测试 + #266 空 key 重存 + 预检（key 只经 stdin）"
   [ -n "$MODEL_API_KEY" ] || { echo "缺少 WINQA_MODEL_API_KEY"; exit 2; }
   [ -n "$MODEL_BASE_URL" ] && [ -n "$MODEL" ] || { echo "第 10 步需要 --model-base-url 和 --model（或 WINQA_MODEL_BASE_URL / WINQA_MODEL）"; exit 2; }
   "${SCP[@]}" "$HERE/py/winqa_real.py" "$USER_@$HOST:C:/winqa/py/winqa_real.py"
-  remote "$PS C:\\winqa\\ps\\launch.ps1 -Label real" && record launch_real ok || record launch_real FAIL
-  printf '%s\n' "$MODEL_API_KEY" | remote "$RP model --key-stdin --base-url '$MODEL_BASE_URL' --model '$MODEL' --provider '$MODEL_PROVIDER'" && record real_model ok || record real_model FAIL
+  rcall ps launch Label=real; rec launch_real $?
+  rcall_key winqa_real model --key-stdin --base-url "$MODEL_BASE_URL" --model "$MODEL" --provider "$MODEL_PROVIDER"; rec real_model $?
 fi
 if want 11; then
   step "11. Whisper：安装前导入是否被预检拦住 → 走应用自己的安装路由 → 下载模型"
   "${SCP[@]}" "$HERE/py/winqa_real.py" "$USER_@$HOST:C:/winqa/py/winqa_real.py"; "${SCP[@]}" "$HERE/ps/hf_mirror.ps1" "$HERE/ps/clean.ps1" "$USER_@$HOST:C:/winqa/ps/"
-  if remote "$RP whisper"; then record real_whisper ok; else
-    record real_whisper FAIL
-    if [ "$HF_MIRROR" = 1 ]; then
+  rcall py winqa_real whisper; rc=$?; rec real_whisper "$rc"
+  if [ "$rc" != 0 ] && [ "$HF_MIRROR" = 1 ]; then
       step "11b. 绕过：HF_ENDPOINT=https://hf-mirror.com（用户级）→ 重启应用 → 再下载 Whisper 模型"
-      remote "$PS C:\\winqa\\ps\\hf_mirror.ps1 -On"
-      remote "$PS C:\\winqa\\ps\\stop.ps1 -Label real-before-hf" >/dev/null
-      remote "$PS C:\\winqa\\ps\\launch.ps1 -Label real-hf" && record launch_real_hf ok || record launch_real_hf FAIL
-      remote "$RP whisper --label whisper-hfmirror" && record real_whisper_hfmirror ok || record real_whisper_hfmirror FAIL
-    fi
+      rcall ps hf_mirror On
+      rcall ps stop Label=real-before-hf >/dev/null
+      rcall ps launch Label=real-hf; rec launch_real_hf $?
+      rcall py winqa_real whisper --label whisper-hfmirror; rec real_whisper_hfmirror $?
   fi
 fi
 if want 12; then
   step "12. 本地视频（无字幕，${LOCAL_SECONDS}s）→ Whisper 转写 → 真实模型出片 → 导出 + ffprobe"
   "${SCP[@]}" "$HERE/py/winqa_real.py" "$USER_@$HOST:C:/winqa/py/winqa_real.py"
-  remote "$RP local --seconds $LOCAL_SECONDS" && record real_local ok || record real_local FAIL
+  rcall py winqa_real local --seconds "$LOCAL_SECONDS"; rec real_local $?
 fi
 if want 13 && [ -n "$BILI_URL" ]; then
   step "13. B 站链接导入 → 进度 → 出片  $BILI_URL"
-  remote "$RP link --url '$BILI_URL'" && record real_link ok || record real_link FAIL
+  rcall py winqa_real link --url "$BILI_URL"; rec real_link $?
 fi
 if want 14; then
   step "14. 首页/项目列表无卡住的 processing；截图；停止应用"
-  remote "$RP final" && record real_final ok || record real_final FAIL
-  remote "$PS C:\\winqa\\ps\\ui_probe.ps1 -Label real" >/dev/null
-  remote "$PS C:\\winqa\\ps\\stop.ps1 -Label real" >/dev/null
-  remote "$PS C:\\winqa\\ps\\hf_mirror.ps1 -Off" >/dev/null
+  rcall py winqa_real final; rec real_final $?
+  rcall ps ui_probe Label=real >/dev/null
+  rcall ps stop Label=real >/dev/null
+  rcall ps hf_mirror Off >/dev/null
 fi
 fi
 
-step "8. 收集日志（脱敏）"
-remote "powershell -NoProfile -Command \"Remove-Item -Recurse -Force C:\\winqa\\out\\media,C:\\winqa\\out\\real\\media -ErrorAction SilentlyContinue\""
-# 以前这里用 `powershell -Command -` 从 stdin 跑跨多行的 if 块：结尾没有空行时 PowerShell 不会执行它（stdin 模式的已知行为，
-# 最可能的原因），错误又被 catch/2>/dev/null 吞掉，app-logs 回来是空的。
-# 改成 -File 跑 ps/collect_logs.ps1（共享读方式复制后端与桌面壳日志，打包成 app-logs.zip，并写 collect-logs-final.json）
-remote "$PS C:\\winqa\\ps\\collect_logs.ps1 -Label final" || echo "WARN: collect_logs.ps1 failed"
-pull_all
-mkdir -p "$OUT/app-logs"
-if [ -f "$OUT/app-logs.zip" ]; then
-  python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$OUT/app-logs.zip" "$OUT/app-logs" && rm -f "$OUT/app-logs.zip"
-fi
-[ -n "$(ls -A "$OUT/app-logs")" ] || echo "WARN: app-logs is empty; see $OUT/collect-logs-final.json"
-# 脱敏：密钥、Bearer、用户目录
-find "$OUT" -type f \( -name '*.log' -o -name '*.json' -o -name '*.err' -o -name '*.txt' \) -print0 | xargs -0 -r sed -i -E \
-  -e 's/(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{6,}/\1sk-***/g' -e 's/(Bearer )[A-Za-z0-9._-]+/\1***/g'
-rm -rf "$OUT/media" "$OUT/real/media"
-WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 "$HERE/redact.py" "$OUT"  # 按环境变量里的真实 key 精确替换，并抹掉应用的打码形式
+step "8. 收集日志并在验收机上导出证据包"
+# collect_logs.ps1 zips the app logs into C:\winqa\out\app-logs.zip; it stays on the test machine (R27 reduced
+# scope: raw logs, screenshots and media are withheld and listed in the manifest, handled by hand on the VM).
+rcall ps collect_logs Label=final; rec collect_logs $?
+export_bundle pull_final 99
 
 step "9. 汇总"
-sort -t= -k1,1 -u "$OUT/steps.txt" -o "$OUT/steps.txt" 2>/dev/null || true
-python3 "$HERE/summarize.py" "$OUT" | tee "$OUT/summary.md"
-grep -q FAIL "$OUT/steps.txt" && exit 1 || exit 0
+# R31 I438, in this order: (1) the steps are done; (2) logpipe_close; (3) the log channel's final state becomes the
+# log_channel receipt; (4) winqa_verdict final runs verify_chain ONCE and writes verdict-final.json and steps.txt;
+# (5) summarize.py renders summary.md from that verdict only; (6) the exit code is the verdict's. Nothing rewrites
+# the verdict afterwards. After (2) there is no log channel: every remaining line goes synchronously through
+# `redact.py --lines` and is appended to run.log.
+logpipe_close 0
+say() { python3 "$HERE/redact.py" --lines --keys-fd 6 6< <(printf '%s\n' "$MODEL_API_KEY") | tee -a "$LOG"; }
+if [ -n "$LP_REASON" ]; then LC_ST=FAIL; LC_RC=70; else LC_ST=ok; LC_RC=0; fi
+python3 "$PLAN_PY" record --out "$OUT" --run-id "$RUN_ID" --step log_channel --status "$LC_ST" --exit-code "$LC_RC" \
+  --reason "$(printf '%s' "${LP_REASON:-none}" | tr -c 'A-Za-z0-9_=.,\n-' '_')" 2>&1 | say
+[ "${PIPESTATUS[0]}" = 0 ] || { echo "FAIL: 回执写入失败（log_channel）" | say; exit 72; }
+echo "-> log_channel: $LC_ST (rc=${LC_RC})" | say
+VERDICT="$OUT/runs/$RUN_ID/verdict-final.json"
+python3 "$HERE/py/winqa_verdict.py" final --out "$OUT" --run-id "$RUN_ID" --dest "$VERDICT" 2>&1 | say; V_RC=${PIPESTATUS[0]}
+[ -f "$VERDICT" ] || { echo "FAIL: 没有生成最终裁决" | say; exit 1; }
+python3 "$HERE/summarize.py" "$OUT" --verdict "$VERDICT" > "$OUT/summary.md" 2> "$STAGE/summarize.err"; S_RC=$?
+say < "$STAGE/summarize.err"
+say < "$OUT/summary.md" || S_RC=1
+[ "$S_RC" = 0 ] || { echo "FAIL: 汇总渲染失败（rc=${S_RC}）" | say; exit 1; }
+exit "$V_RC"   # the verdict alone decides: 0 pass, 70 log channel failed, 1 otherwise

@@ -53,7 +53,8 @@ def get(path, **kw):
 
 
 def save(name, value):
-    (OUT / name).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
+    # R24 #215: the whole value goes through redact.py before it touches the disk (every string, keys included)
+    (OUT / name).write_text(json.dumps(scrub_obj(value), ensure_ascii=False, indent=2), encoding='utf-8')
     print('saved', OUT / name, flush=True)
 
 
@@ -64,10 +65,9 @@ def body(r, limit=4000):
         return r.text[:limit]
 
 
-def redact(text):
-    text = re.sub(r'sk-[A-Za-z0-9_\-]{6,}', 'sk-***', text)
-    text = re.sub(r'(?i)(api[_-]?key|authorization|bearer)(["\'=:\s]+)[^\s"\',]+', r'\1\2***', text)
-    return re.sub(r'C:\\\\?Users\\\\?[^\\\\]+', r'C:\\Users\\<user>', text)
+# R23: one scrubber. redact.py is uploaded next to this file (run_winqa.sh step 1); in the repo it is one level up.
+sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
+from redact import scrub_diagnostic as redact, scrub_obj  # noqa: E402
 
 
 # ---------------------------------------------------------------- media
@@ -141,7 +141,9 @@ def seed(args):
     out['seed_project_analysis'] = (ws.get('analysis') if isinstance(ws, dict) else ws)
     out['projects'] = projects_index()
     out['finished_at'] = now()
+    out['ok'] = bool(pid) and out.get('ai_models_put') == 200
     save('seed.json', out)
+    return 0 if out['ok'] else 1
 
 
 def check(args):
@@ -206,7 +208,7 @@ def check(args):
         verdict = judge_updater_manifest(u.status_code, uj, 'windows-x86_64')
         uj = uj if isinstance(uj, dict) else {}
         plats = uj.get('platforms') if isinstance(uj.get('platforms'), dict) else {}
-        out['updater_fetch'] = {'status': u.status_code, 'final_url': re.sub(r'\?.*', '', u.url), 'seconds': round(time.monotonic() - t0, 1),
+        out['updater_fetch'] = {'status': u.status_code, 'final_url': u.url, 'seconds': round(time.monotonic() - t0, 1),
                                 'version': uj.get('version'), 'pub_date': uj.get('pub_date'), 'platforms': sorted(plats.keys()),
                                 'windows_url': (plats.get('windows-x86_64') or {}).get('url'), 'verdict': verdict}
         A['updater_manifest_readable'] = verdict == 'ok'
@@ -223,6 +225,7 @@ def check(args):
     out['finished_at'] = now()
     out['ok'] = all(A.values())
     save(f'check-{args.label}.json', out)
+    return 0 if out['ok'] else 1
 
 
 def log_lines(pattern, tail=8):
@@ -370,6 +373,7 @@ def failure(args):
     out['finished_at'] = now()
     out['ok'] = all(A.values())
     save('failure.json', out)
+    return 0 if out['ok'] else 1
 
 
 if __name__ == '__main__':
@@ -381,4 +385,5 @@ if __name__ == '__main__':
     ap.add_argument('--label', default='candidate')
     ap.add_argument('--timeout', type=int, default=420)
     a = ap.parse_args()
-    {'seed': seed, 'check': check, 'failure': failure}[a.phase](a)
+    # R29 point 2: the phase's own ok decides the exit code (it used to exit 0 after writing ok:false)
+    sys.exit({'seed': seed, 'check': check, 'failure': failure}[a.phase](a) or 0)

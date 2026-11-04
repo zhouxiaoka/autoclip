@@ -120,6 +120,34 @@ jobs:
           ./stop_autoclip.sh || true
           docker rm -f autoclip-source-redis || true
 
+  winqa-bash32:
+    # R27 #414 #305: the real control machine runs macOS /bin/bash 3.2, which reads "$rc）" as one variable name
+    # in a UTF-8 locale (BSD libc); Linux bash 3.2 does not reproduce that, so this runs on macOS.
+    name: WinQA harness on macOS Bash 3.2
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test-only dependencies (no backend requirements on purpose)
+        # scripts/winqa/tests has its own conftest scope and fails if a backend module gets imported;
+        # requests is only for the updater-manifest cases, pwsh is preinstalled on macOS runners.
+        run: python -m pip install pytest requests
+      - name: WinQA harness tests (export + scripts) under /bin/bash 3.2
+        env:
+          WINQA_TEST_BASH32: /bin/bash
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: |
+          /bin/bash --version | head -1
+          /bin/bash --version | head -1 | grep -q 'version 3\.2\.' || { echo "expected /bin/bash 3.2"; exit 1; }
+          command -v pwsh
+          python -m pytest -q -p no:cacheprovider scripts/winqa/tests
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
