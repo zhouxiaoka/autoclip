@@ -1091,3 +1091,61 @@ def test_validate_connection_with_probe_trial_merges_flags(monkeypatch):
     assert result.trial_passed is True
     api = result.as_api()
     assert api['trial_estimate_requests'] == 2
+
+
+def test_analysis_rejects_image_model_without_probe(monkeypatch):
+    """#565: seedream in the analysis slot must not chat-probe or paint trial lights."""
+    from backend.services import provider_validation as pv
+
+    calls = {'probe': 0, 'trial': 0, 'models': 0}
+
+    def boom_probe(*a, **k):
+        calls['probe'] += 1
+        raise AssertionError('_probe must not run for image models')
+
+    def boom_trial(*a, **k):
+        calls['trial'] += 1
+        raise AssertionError('trial_run must not run for image models')
+
+    def boom_models(*a, **k):
+        calls['models'] += 1
+        raise AssertionError('/models must not run for image models in analysis')
+
+    monkeypatch.setattr(pv, '_probe', boom_probe)
+    monkeypatch.setattr(pv, 'trial_run', boom_trial)
+    monkeypatch.setattr(pv, '_get_models', boom_models)
+
+    seedream = 'doubao-seedream-5-0-flash-260915'
+    result = pv.validate_connection_with_probe(
+        _connection(provider='seed'), seedream, purpose='analysis', probe_kind='trial',
+    )
+    assert result.ok is False
+    assert result.error_type == pv.IMAGE_MODEL_IN_ANALYSIS
+    assert result.error_code == 'image_model_in_analysis'
+    assert '生图模型' in result.hint_key
+    assert result.trial_passed is None
+    assert result.trial_context_ok is None
+    assert result.trial_rate_limited is None
+    assert result.trial_json_ok is None
+    assert calls == {'probe': 0, 'trial': 0, 'models': 0}
+
+    quick = pv.validate_connection(_connection(provider='seed'), seedream, purpose='analysis')
+    assert quick.ok is False and quick.error_code == 'image_model_in_analysis'
+    assert calls == {'probe': 0, 'trial': 0, 'models': 0}
+
+
+def test_cover_seedream_still_validates_without_image_model_block(monkeypatch):
+    """Cover purpose must keep accepting seedream (access check only, no chat)."""
+    from backend.services import provider_validation as pv
+
+    def handler(method, url, headers, payload):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'doubao-seedream-5-0-flash-260915'}]})
+        raise AssertionError('cover must not chat-probe')
+
+    _patch_httpx(monkeypatch, handler)
+    result = pv.validate_connection(
+        _connection(provider='seed'), 'doubao-seedream-5-0-flash-260915', purpose='cover',
+    )
+    assert result.ok is True
+    assert result.error_type == ''

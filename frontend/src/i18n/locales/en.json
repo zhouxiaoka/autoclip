@@ -2118,5 +2118,11 @@
   "余额在开始前已核对。": "Balance was checked before starting.",
   "充值后点测试连接再重试。": "After topping up, test the connection, then retry.",
   "处理没有完成。请重试一次；再失败请在失败卡上点「反馈」，我们会收到失败阶段和错误类型（不含视频内容）。": "This step did not finish. Please retry once; if it fails again, tap Feedback on the failure card — we receive the stage and error type (never the video).",
-  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "This link is not a downloadable video page. Use another video link, or download the file and import it."
+  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "This link is not a downloadable video page. Use another video link, or download the file and import it.",
+  "这是生图模型，只能用于封面": "This is an image model — cover only",
+  "{{model}} 是生图模型，只能用于封面，不能做分析。分析请选 {{recommend}}。": "{{model}} is an image model for covers only, not analysis. For analysis pick {{recommend}}.",
+  "{{model}} 是生图模型，只能用于封面，不能做分析。": "{{model}} is an image model for covers only, not analysis.",
+  "改用 {{recommend}}": "Switch to {{recommend}}",
+  "该模型是生图模型，只能用于封面，不能做分析。": "This model is an image model for covers only, not analysis.",
+  "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} is an image model for covers only, not analysis. Switch to a chat model in Settings → Providers & models, then generate again."
 }

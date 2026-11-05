@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 /**
  * Default-model purpose slots (U2).
  *
@@ -11,8 +12,9 @@ export { modelHasVision } from './modelSettingsLogic'
 import { enabledModelIds } from './modelVisibility'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
 import { syncFollowingCover } from './modelDefaults'
-import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
+import { analysisCandidates, getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
 import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings, ModelSource } from './modelSettingsApi'
+import { isImageModel } from './modelKind'
 
 export type PurposeId = 'analysis' | 'vision' | 'transcription' | 'cover'
 export type SlotKind = 'smart' | 'fixed' | 'local' | 'follow' | 'off' | 'empty'
@@ -367,3 +369,45 @@ export function isFixedSelected(settings: ModelSettings, purpose: PurposeId, mod
   const binding = settings[purpose]
   return binding?.model === modelId && binding.connection_id === offer.connectionId && resolvedModelSource(binding) === 'user'
 }
+
+/** Saved analysis (or vision) binding that is an image/T2I id — settings must offer a fix, not silent rebind. */
+export function analysisImageMisconfig(settings: ModelSettings): { model: string; connectionId: string; recommend: string } | null {
+  const binding = settings.analysis
+  if (!binding?.model || !isImageModel(binding.model)) return null
+  const connection = settings.connections.find(item => item.id === binding.connection_id)
+  const recommend = analysisCandidates(connection?.provider || connection?.catalog_provider_id)[0] || ''
+  return { model: binding.model, connectionId: binding.connection_id, recommend }
+}
+
+/** Copy for the analysis-slot image-model error. */
+export function analysisImageMisconfigCopy(model: string, recommend: string): string {
+  if (recommend) {
+    return t('{{model}} 是生图模型，只能用于封面，不能做分析。分析请选 {{recommend}}。', { model, recommend })
+  }
+  return t('{{model}} 是生图模型，只能用于封面，不能做分析。', { model })
+}
+
+/**
+ * Switch analysis off the image id onto the recommended chat model.
+ * If AI covers are on and cover is empty, park the image id on cover (explicit, not silent).
+ */
+export function applyAnalysisImageFix(settings: ModelSettings, fix: { model: string; connectionId: string; recommend: string }): ModelSettings {
+  if (!fix.recommend) return settings
+  const next: ModelSettings = {
+    ...settings,
+    analysis: settings.analysis
+      ? { ...settings.analysis, model: fix.recommend, model_source: 'preset' }
+      : { connection_id: fix.connectionId, model: fix.recommend, capability: 'auto', model_source: 'preset' },
+  }
+  if (next.cover_enabled && !next.cover?.model) {
+    next.cover = {
+      connection_id: fix.connectionId,
+      model: fix.model,
+      capability: 'auto',
+      model_source: 'user',
+    }
+    next.cover_follows_analysis = false
+  }
+  return next
+}
+

@@ -104,6 +104,9 @@ _IMAGE_MARKERS = ("gpt-image", "dall-e", "seedream", "wanx", "flux", "imagen", "
                   "recraft", "stable-diffusion", "sdxl", "sd3", "kolors", "cogview", "hunyuan-image", "qwen-image")
 
 
+IMAGE_MARKERS = _IMAGE_MARKERS  # public alias; keep in sync with frontend modelKind.ts
+
+
 def is_image_model(model: str) -> bool:
     name = (model or "").lower()
     return any(m in name for m in _IMAGE_MARKERS)

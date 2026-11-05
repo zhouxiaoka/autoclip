@@ -18,6 +18,7 @@ function loadPicker() {
     './WeakLocalTimelineNote': { default: 'weak-note' },
     './LocalRecommendPull': { default: 'local-recommend' },
     './localModelGate': { belowLocalAnalysisGate: () => false, localAnalysisWarnCopy: () => '', localModelSizeLabel: () => '' },
+    './modelKind': loadTs('modelKind.ts'),
   }
   const code = ts.transpileModule(fs.readFileSync('src/features/settings/ModelPicker.tsx', 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText

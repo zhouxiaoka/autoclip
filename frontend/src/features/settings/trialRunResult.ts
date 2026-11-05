@@ -21,7 +21,10 @@ export type TrialLine = {
 }
 
 export function trialLines(result: TrialResultLike | null | undefined): TrialLine[] {
+  // Only a successful trial probe may paint the three lights. A failed address/key/kind
+  // check used to hard-code trial_*=false and still render a fake 「速率 ✓」.
   if (!result || result.probe_kind !== 'trial') return []
+  if (result.ok === false || result.success === false) return []
   const contextOk = result.trial_context_ok === true
   const rateLimited = result.trial_rate_limited === true
   const jsonOk = result.trial_json_ok === true

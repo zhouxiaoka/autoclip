@@ -10,6 +10,7 @@ import { isKnownWeakLocalTimelineModel } from './weakLocalTimeline'
 import WeakLocalTimelineNote from './WeakLocalTimelineNote'
 import LocalRecommendPull from './LocalRecommendPull'
 import { belowLocalAnalysisGate, localAnalysisWarnCopy, localModelSizeLabel } from './localModelGate'
+import { isImageMarker } from './modelKind'
 
 export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSettings['analysis_mode']) {
   if (role === 'cover') return models.filter(m => m.image)
@@ -42,7 +43,17 @@ export default function ModelPicker({ role, model, capability, connection, list,
   const models = list && endpointReady ? eligibleModels(role, list.models, mode) : []
   const custom = search.trim()
   const allowCustom = endpointReady && (role !== 'transcription' || connection?.provider === 'compatible')
-  const customOption = allowCustom && custom && !models.some(m => m.id === custom) ? [{ value: custom, label: `${t('使用自定义型号')}：${custom}` }] : []
+  const customIsImage = !!custom && isImageMarker(custom)
+  const customBlocked = customIsImage && (role === 'analysis' || role === 'vision')
+  const customOption = allowCustom && custom && !models.some(m => m.id === custom)
+    ? [{
+        value: custom,
+        label: customBlocked
+          ? t('这是生图模型，只能用于封面')
+          : `${t('使用自定义型号')}：${custom}`,
+        disabled: customBlocked,
+      }]
+    : []
   const localProvider = connection?.provider === 'ollama' || connection?.provider === 'lmstudio'
   const tag = (m: ModelEntry) => {
     if (role === 'transcription') return m.asr_note ? ` · ${t(m.asr_note)}` : ''
@@ -77,7 +88,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
       loading={busy} optionFilterProp="value"
       notFoundContent={t(role === 'cover' ? '该服务没有可用的生图模型。' : '暂无可用模型，请检查 API Key 后刷新。')}
       options={[...customOption, ...models.map(m => ({ value: m.id, label: optionLabel(m), disabled: role === 'transcription' && !m.asr_supported }))]}
-      onChange={(value: string) => { onChange(value); setOpen(false) }} />
+      onChange={(value: string) => { if ((role === 'analysis' || role === 'vision') && isImageMarker(value)) return; onChange(value); setOpen(false) }} />
     {(actions || stale) && <div className="ac-model-control-action">
       {actions}
       {stale && <Btn variant="text" size="sm" onClick={onRefresh}>{t('刷新')}</Btn>}

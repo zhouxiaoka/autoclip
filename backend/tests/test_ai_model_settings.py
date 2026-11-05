@@ -1068,3 +1068,34 @@ def test_cover_follow_flag_drives_analysis_switch_round_trip(entry, follow):
         assert loaded.cover_follows_analysis is follow
         assert ai.connection_for(loaded, loaded.cover).id == ('new' if follow else 'old')
         assert cover.load_config().model == ('new-cover' if follow else 'own-cover')
+
+
+def test_save_rejects_image_model_in_analysis(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(id='c1', name='seed', provider='seed', api_key='sk-x')],
+        analysis=ai.Assignment(connection_id='c1', model='doubao-seedream-5-0-flash-260915'),
+        transcription=ai.Transcription(provider='whisper_local', model='base'),
+    )
+    with pytest.raises(ValueError, match='生图模型'):
+        ai.save(settings)
+
+
+def test_save_allows_same_image_model_on_cover(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
+    seedream = 'doubao-seedream-5-0-flash-260915'
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(id='c1', name='seed', provider='seed', api_key='sk-x')],
+        analysis=ai.Assignment(connection_id='c1', model='doubao-seed-2-1-lite-260915'),
+        cover=ai.Assignment(connection_id='c1', model=seedream),
+        cover_enabled=True,
+        cover_follows_analysis=False,
+        transcription=ai.Transcription(provider='whisper_local', model='base'),
+    )
+    public = ai.save(settings)
+    assert public['cover']['model'] == seedream
+    assert public['analysis']['model'] == 'doubao-seed-2-1-lite-260915'

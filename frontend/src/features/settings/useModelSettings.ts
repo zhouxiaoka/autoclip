@@ -16,6 +16,7 @@ import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 
 import { applyCustomProvider, emptyDraft, emptyOffer, mergeCustomList, type CustomProviderDraft } from './customProvider'
+import { isImageMarker } from './modelKind'
 import { notifySettingsSaved } from '../studio/settingsReturn'
 import { CUSTOM_PROVIDER_ID, planPlacement, saveToast, type GuideEndpoint } from './keyGuide'
 import { registerKeyGuideApplier, stagePendingSelect, takePendingRequest, type KeyGuideRequest } from './keyGuideBus'
@@ -242,7 +243,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       setLists(old => ({
         ...old,
         [connection.id]: mergeCustomList(connection, {
-          models: ids.map(id => ({ id, capability: null, analysis: true, image: false })),
+          models: ids.map(id => ({ id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id) })),
           source: 'live', preview: false, updated_at: Date.now(),
         }),
       }))
@@ -261,7 +262,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         setLists(old => ({
           ...old,
           [connection.id]: mergeCustomList(connection, {
-            models: orderedIds(listing).map(id => ({ id, capability: null, analysis: true, image: false })),
+            models: orderedIds(listing).map(id => ({ id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id) })),
             source: listing.source === 'cache' || listing.source === 'catalog' ? listing.source : 'live',
             preview: false,
             updated_at: Date.now(),

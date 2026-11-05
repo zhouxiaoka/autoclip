@@ -58,6 +58,25 @@ LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama
 MODEL_NOT_LISTED_WARNING = '这个模型名不在服务器的模型列表里。请改选列表中已有的模型，否则后面生成时可能会失败。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
 
+# Local capability miss: an image/T2I id bound to the analysis (or vision) slot.
+IMAGE_MODEL_IN_ANALYSIS = 'image_model_in_analysis'
+
+
+def image_model_in_analysis_hint(model: str, recommend: str = '') -> str:
+    name = (model or '').strip() or '该模型'
+    rec = (recommend or '').strip()
+    if rec:
+        return f'{name} 是生图模型，只能用于封面，不能做分析。分析请选 {rec}。'
+    return f'{name} 是生图模型，只能用于封面，不能做分析。'
+
+
+def _recommended_analysis_model(connection: ai_models.Connection) -> str:
+    try:
+        from backend.services.model_settings_source import recommended_model
+        return recommended_model(connection.provider, 'analysis') or ''
+    except Exception:
+        return ''
+
 
 @dataclass
 class ValidationResult:
@@ -354,6 +373,27 @@ def validate_connection(
     connection: ai_models.Connection, model: str,
     *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
 ) -> ValidationResult:
+    # Analysis/vision chat probe must never fire for a pure image/T2I id (#565).
+    if purpose == 'analysis':
+        from backend.core.model_catalog import is_image_model
+        if is_image_model(model):
+            hint = image_model_in_analysis_hint(model, _recommended_analysis_model(connection))
+            base = ''
+            try:
+                base = ai_models.chat_endpoint(connection, model or 'unused')['base_url']
+            except Exception:
+                base = connection.base_url or ''
+            return ValidationResult(
+                ok=False,
+                result='failed',
+                error_type=IMAGE_MODEL_IN_ANALYSIS,
+                hint_key=hint,
+                normalized_base_url=base,
+                base_url_host=_host(base) if base else '',
+                empty_key=False,
+                # No trial lights: leave trial_* as None so the UI only shows validationCopy.
+                probe_kind='quick',
+            )
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     result = _validate_resolved(resolved, model, purpose=purpose)
     result.empty_key = not (resolved.api_key or '').strip()
@@ -685,11 +725,13 @@ def validate_connection_with_probe(
     if probe_kind != 'trial' or purpose != 'analysis':
         return result
     if not result.ok:
-        # Address / key already failed — skip the expensive trial.
-        result.trial_passed = False
-        result.trial_context_ok = False
-        result.trial_json_ok = False
-        result.trial_rate_limited = False
+        # Address / key / kind already failed — skip the expensive trial.
+        # image_model_in_analysis leaves trial_* unset (no fake three lights).
+        if result.error_type != IMAGE_MODEL_IN_ANALYSIS:
+            result.trial_passed = False
+            result.trial_context_ok = False
+            result.trial_json_ok = False
+            result.trial_rate_limited = False
         return result
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']

@@ -237,6 +237,7 @@
       "cors",
       "network",
       "vision_unsupported",
+      "image_model_in_analysis",
       "output_truncated",
       "invalid_request",
       "unknown"
