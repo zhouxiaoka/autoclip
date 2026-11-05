@@ -60,14 +60,15 @@ VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设�
 
 # Local capability miss: an image/T2I id bound to the analysis (or vision) slot.
 IMAGE_MODEL_IN_ANALYSIS = 'image_model_in_analysis'
+# Fixed eight-locale i18n key — never embed a model id (that would break non-zh locales).
+IMAGE_MODEL_IN_ANALYSIS_HINT = '该模型是生图模型，只能用于封面，不能做分析。'
 
 
-def image_model_in_analysis_hint(model: str, recommend: str = '') -> str:
-    name = (model or '').strip() or '该模型'
-    rec = (recommend or '').strip()
-    if rec:
-        return f'{name} 是生图模型，只能用于封面，不能做分析。分析请选 {rec}。'
-    return f'{name} 是生图模型，只能用于封面，不能做分析。'
+def image_model_in_analysis_hint(model: str = '', recommend: str = '') -> str:
+    """Fixed catalog sentence. Put recommend in ValidationResult.recommended['analysis'];
+    frontend composes with analysisImageMisconfigCopy(model, recommend).
+    """
+    return IMAGE_MODEL_IN_ANALYSIS_HINT
 
 
 def _recommended_analysis_model(connection: ai_models.Connection) -> str:
@@ -108,11 +109,16 @@ class ValidationResult:
     trial_estimate_requests: Optional[int] = None
     trial_estimate_minutes: Optional[float] = None
     trial_passed: Optional[bool] = None
+    # Capability miss that is not an UpstreamErrorType (vision_unsupported / image_model_in_analysis).
+    # Carried as error_code while error_type stays 'unknown' so sanitize + known_validation_type keep it.
+    capability_error_code: str = ''
 
     @property
     def error_code(self) -> str:
         if self.ok:
             return ''
+        if self.capability_error_code:
+            return self.capability_error_code
         from backend.core.connection_test_codes import connection_test_error_code
         return connection_test_error_code(self.error_type, http_status=self.http_status,
                                           network_kind=self.network_kind, empty_key=self.empty_key,
@@ -377,7 +383,7 @@ def validate_connection(
     if purpose == 'analysis':
         from backend.core.model_catalog import is_image_model
         if is_image_model(model):
-            hint = image_model_in_analysis_hint(model, _recommended_analysis_model(connection))
+            recommend = _recommended_analysis_model(connection)
             base = ''
             try:
                 base = ai_models.chat_endpoint(connection, model or 'unused')['base_url']
@@ -386,8 +392,11 @@ def validate_connection(
             return ValidationResult(
                 ok=False,
                 result='failed',
-                error_type=IMAGE_MODEL_IN_ANALYSIS,
-                hint_key=hint,
+                # Like vision_unsupported: persistable upstream class is 'unknown'; code carries the miss.
+                error_type='unknown',
+                hint_key=IMAGE_MODEL_IN_ANALYSIS_HINT,
+                recommended={'analysis': [recommend]} if recommend else {},
+                capability_error_code=IMAGE_MODEL_IN_ANALYSIS,
                 normalized_base_url=base,
                 base_url_host=_host(base) if base else '',
                 empty_key=False,
@@ -727,7 +736,7 @@ def validate_connection_with_probe(
     if not result.ok:
         # Address / key / kind already failed — skip the expensive trial.
         # image_model_in_analysis leaves trial_* unset (no fake three lights).
-        if result.error_type != IMAGE_MODEL_IN_ANALYSIS:
+        if result.capability_error_code != IMAGE_MODEL_IN_ANALYSIS:
             result.trial_passed = False
             result.trial_context_ok = False
             result.trial_json_ok = False

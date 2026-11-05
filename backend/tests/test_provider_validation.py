@@ -1120,9 +1120,12 @@ def test_analysis_rejects_image_model_without_probe(monkeypatch):
         _connection(provider='seed'), seedream, purpose='analysis', probe_kind='trial',
     )
     assert result.ok is False
-    assert result.error_type == pv.IMAGE_MODEL_IN_ANALYSIS
+    assert result.error_type == 'unknown'
     assert result.error_code == 'image_model_in_analysis'
-    assert '生图模型' in result.hint_key
+    assert result.hint_key == pv.IMAGE_MODEL_IN_ANALYSIS_HINT
+    assert result.hint_key == '该模型是生图模型，只能用于封面，不能做分析。'
+    # Fixed sentence must not embed the model id (breaks non-zh i18n lookup).
+    assert 'seedream' not in result.hint_key.lower()
     assert result.trial_passed is None
     assert result.trial_context_ok is None
     assert result.trial_rate_limited is None

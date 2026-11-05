@@ -1,6 +1,8 @@
 /** F2 trial-run result lines + estimate copy. Pure helpers for the connection card. */
 
 export type TrialResultLike = {
+  ok?: boolean
+  success?: boolean
   probe_kind?: 'quick' | 'trial'
   trial_context_ok?: boolean | null
   trial_rate_limited?: boolean | null

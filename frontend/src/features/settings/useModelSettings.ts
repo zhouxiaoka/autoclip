@@ -13,7 +13,8 @@ import * as logic from './modelSettingsLogic'
 import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
-import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
+import { passed, telemetryHost, validationCopy, IMAGE_MODEL_IN_ANALYSIS, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
+import { analysisImageMisconfigCopy } from './defaultModelSlots'
 
 import { applyCustomProvider, emptyDraft, emptyOffer, mergeCustomList, type CustomProviderDraft } from './customProvider'
 import { isImageMarker } from './modelKind'
@@ -33,9 +34,22 @@ export const roleLabel = (role: Role) =>
 
 export const issueText = (issue: SaveIssue) =>
   issue.reason === 'provider' ? t('请先选择一家 AI 服务')
+    : issue.reason === 'image_model' ? t('该模型是生图模型，只能用于封面，不能做分析。')
     : `${roleLabel(issue.role)}：${issue.reason === 'model' ? t('请先选择模型') : t('请填写 API Key')}`
 
 export type ModelSettingsStore = ReturnType<typeof useModelSettings>
+
+/** Prefer analysisImageMisconfigCopy when the probe returned the image-slot miss + recommend. */
+function failureCopy(result: ValidationResult, model?: string) {
+  const imageMiss = result.error_code === IMAGE_MODEL_IN_ANALYSIS
+    || result.error_type === IMAGE_MODEL_IN_ANALYSIS
+  if (imageMiss && model) {
+    const recommend = result.recommended?.analysis?.[0] || ''
+    return analysisImageMisconfigCopy(model, recommend)
+  }
+  return validationCopy(result.error_type, result.hint_key)
+}
+
 
 /**
  * One editable copy of the AI model document, shared by the settings page and the first-run card.
@@ -352,7 +366,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         }
         else {
           acceptWarning(connection.id, result)
-          setError(validationCopy(result.error_type, result.hint_key))
+          setError(failureCopy(result, model))
         }
         setSettings(next)
       }
@@ -467,7 +481,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         setError('')
       } else {
         acceptWarning(connection.id, value)
-        const text = validationCopy(value.error_type, value.hint_key)
+        const text = failureCopy(value, binding.model)
         setError(text)
         message.error(text)
       }
@@ -562,7 +576,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         setError('')
       } else {
         acceptWarning(connection.id, value)
-        const text = validationCopy(value.error_type, value.hint_key)
+        const text = failureCopy(value, model)
         setError(text)
         message.error(text)
       }
@@ -646,7 +660,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const result = await probe(connection, model, false, 'analysis')
         emitValidation(connection, result)
         next = logic.applyValidation(next, connection.id, result)
-        if (!passed(result)) setError(validationCopy(result.error_type, result.hint_key))
+        if (!passed(result)) setError(failureCopy(result, model))
       }
     }
     const selectId = custom ? `custom:${connectionId}` : request.providerId

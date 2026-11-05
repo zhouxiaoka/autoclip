@@ -88,12 +88,8 @@ def ensure_analysis_usable() -> None:
     ai_models.require_analysis(settings)
     check = _analysis(settings)
     if check['code'] == 'image_model_in_analysis':
-        from backend.services.provider_validation import image_model_in_analysis_hint
-        from backend.services.model_settings_source import recommended_model
-        binding = settings.analysis
-        connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
-        recommend = recommended_model(connection.provider, 'analysis') if connection else ''
-        raise UserFacingError(image_model_in_analysis_hint(check.get('label') or '', recommend))
+        from backend.services.provider_validation import IMAGE_MODEL_IN_ANALYSIS_HINT
+        raise UserFacingError(IMAGE_MODEL_IN_ANALYSIS_HINT)
     if check['code'] == 'validation_failed':
         raise UserFacingError('当前模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
     if ai_models.vision_follow_lacks_capability(settings):
