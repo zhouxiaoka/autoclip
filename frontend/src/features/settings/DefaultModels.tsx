@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { Icon } from '../../ui'
 import type { ModelList, ModelSettings } from './modelSettingsApi'
 import {
+  analysisImageMisconfig, analysisImageMisconfigCopy, applyAnalysisImageFix,
   applyCoverOff, applyFixedSelection, applyLocalTranscription, applySmartSelection, applyVisionFollow,
   collectModelGroups, COMING_SOON, hiddenNonVisionCount, isFixedSelected, isSmartSelected,
   preferredOffer, PURPOSE_SLOTS, slotSummary, visionWarning, WHISPER_MODELS,
@@ -189,6 +190,25 @@ export default function DefaultModels({ settings, lists, onChange, transcription
                 </p>
               )}
               {slot.id === 'analysis' && analysisUsesWeakLocalTimelineModel(settings) && <WeakLocalTimelineNote />}
+              {slot.id === 'analysis' && (() => {
+                const fix = analysisImageMisconfig(settings)
+                if (!fix) return null
+                return (
+                  <div className="ac-note ac-note--error" role="alert" data-testid="analysis-image-misconfig">
+                    <p>{analysisImageMisconfigCopy(fix.model, fix.recommend)}</p>
+                    {fix.recommend && (
+                      <button
+                        type="button"
+                        className="ac-link-button"
+                        data-testid="analysis-image-fix"
+                        onClick={() => onChange(applyAnalysisImageFix(settings, fix))}
+                      >
+                        {t('改用 {{recommend}}', { recommend: fix.recommend })}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
               {open === slot.id && (
                 <div id={`ai-defaults-panel-${slot.id}`}>
                   <PurposePanel settings={settings} lists={lists} purpose={slot.id} onChange={next => { onChange(next) }} />

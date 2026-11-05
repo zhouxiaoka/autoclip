@@ -2118,5 +2118,11 @@
   "余额在开始前已核对。": "O saldo foi verificado antes de começar.",
   "充值后点测试连接再重试。": "Após recarregar, teste a conexão e tente de novo.",
   "处理没有完成。请重试一次；再失败请在失败卡上点「反馈」，我们会收到失败阶段和错误类型（不含视频内容）。": "Esta etapa não terminou. Tente de novo; se falhar outra vez, toque em Comentários no cartão — recebemos o estágio e o tipo de erro (nunca o vídeo).",
-  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "Este link não é uma página de vídeo baixável. Use outro link ou baixe o arquivo e importe."
+  "这个链接不是可下载的视频页，请换一个视频链接或先下载后导入。": "Este link não é uma página de vídeo baixável. Use outro link ou baixe o arquivo e importe.",
+  "这是生图模型，只能用于封面": "Modelo de imagem — só para capas",
+  "{{model}} 是生图模型，只能用于封面，不能做分析。分析请选 {{recommend}}。": "{{model}} é um modelo de imagem só para capas, não para análise. Para analisar escolha {{recommend}}.",
+  "{{model}} 是生图模型，只能用于封面，不能做分析。": "{{model}} é um modelo de imagem só para capas, não para análise.",
+  "改用 {{recommend}}": "Usar {{recommend}}",
+  "该模型是生图模型，只能用于封面，不能做分析。": "Este modelo de imagem é só para capas, não para análise.",
+  "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} é um modelo de imagem só para capas. Troque para um modelo de chat em Definições → Fornecedores e modelos e gere de novo."
 }

@@ -58,6 +58,7 @@ const CONSOLE_COPY = '这是控制台或官网地址，不是模型接口。请�
 export const VISION_UNSUPPORTED = 'vision_unsupported'
 export const VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请到「设置 → 服务商与模型」换一个能看图的模型。'
 export const VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
+export const IMAGE_MODEL_IN_ANALYSIS = 'image_model_in_analysis'
 
 /** Locked presets still show the official default and allow overrides (接口地址). */
 export const canEditAddress = (key?: string) => {
@@ -106,6 +107,7 @@ export function telemetryHost(url?: string) {
 export function validationCopy(errorType?: string, hintKey?: string) {
   if (errorType === 'console_host') return t(CONSOLE_COPY)
   if (errorType === VISION_UNSUPPORTED) return t(hintKey || VISION_HINT_KEY)
+  if (errorType === IMAGE_MODEL_IN_ANALYSIS) return t(hintKey || '该模型是生图模型，只能用于封面，不能做分析。')
   return t(hintKey || hintKeyForUpstreamError(errorType || 'unknown'))
 }
 

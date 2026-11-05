@@ -314,6 +314,18 @@ test('save strips key spaces, normalizes a compatible URL, and records a failed 
   assert.equal(passed.connections[0].quota_exhausted_at, null)
 })
 
+
+test('saveIssue blocks image model in analysis before key check', () => {
+  const seed = {
+    ...fresh(),
+    connections: [conn('a', 'seed', { api_key: 'sk-x' })],
+    analysis: { connection_id: 'a', model: 'doubao-seedream-5-0-flash-260915', capability: 'auto' },
+  }
+  assert.deepEqual(plain(logic.saveIssue(seed)), { role: 'analysis', reason: 'image_model' })
+  const chat = { ...seed, analysis: { connection_id: 'a', model: 'doubao-seed-2-1-lite-260915', capability: 'auto' } }
+  assert.equal(logic.saveIssue(chat), null)
+})
+
 test('save validation reports the first blocking field in page order and prunes blank custom connections', () => {
   assert.deepEqual(plain(logic.saveIssue(fresh())), { role: 'analysis', reason: 'key' })
   const noModel = { ...fresh(), connections: [conn('a', 'dashscope', { api_key: 'k' })], analysis: logic.cleanBinding('a') }

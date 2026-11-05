@@ -576,6 +576,11 @@ def save(settings: ModelSettings) -> dict:
         })
         if not resolved.analysis:
             raise ValueError('请选择高光分析模型')
+        from backend.core.model_catalog import is_image_model
+        from backend.services.provider_validation import IMAGE_MODEL_IN_ANALYSIS_HINT
+        for binding in (resolved.analysis, resolved.vision):
+            if binding and binding.model and is_image_model(binding.model):
+                raise ValueError(IMAGE_MODEL_IN_ANALYSIS_HINT)
         # Visual-follow without vision: persist (marked red) and block at generation.
         target = path()
         target.parent.mkdir(parents=True, exist_ok=True)

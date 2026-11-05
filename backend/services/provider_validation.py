@@ -58,6 +58,26 @@ LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama
 MODEL_NOT_LISTED_WARNING = '这个模型名不在服务器的模型列表里。请改选列表中已有的模型，否则后面生成时可能会失败。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
 
+# Local capability miss: an image/T2I id bound to the analysis (or vision) slot.
+IMAGE_MODEL_IN_ANALYSIS = 'image_model_in_analysis'
+# Fixed eight-locale i18n key — never embed a model id (that would break non-zh locales).
+IMAGE_MODEL_IN_ANALYSIS_HINT = '该模型是生图模型，只能用于封面，不能做分析。'
+
+
+def image_model_in_analysis_hint(model: str = '', recommend: str = '') -> str:
+    """Fixed catalog sentence. Put recommend in ValidationResult.recommended['analysis'];
+    frontend composes with analysisImageMisconfigCopy(model, recommend).
+    """
+    return IMAGE_MODEL_IN_ANALYSIS_HINT
+
+
+def _recommended_analysis_model(connection: ai_models.Connection) -> str:
+    try:
+        from backend.services.model_settings_source import recommended_model
+        return recommended_model(connection.provider, 'analysis') or ''
+    except Exception:
+        return ''
+
 
 @dataclass
 class ValidationResult:
@@ -89,11 +109,16 @@ class ValidationResult:
     trial_estimate_requests: Optional[int] = None
     trial_estimate_minutes: Optional[float] = None
     trial_passed: Optional[bool] = None
+    # Capability miss that is not an UpstreamErrorType (vision_unsupported / image_model_in_analysis).
+    # Carried as error_code while error_type stays 'unknown' so sanitize + known_validation_type keep it.
+    capability_error_code: str = ''
 
     @property
     def error_code(self) -> str:
         if self.ok:
             return ''
+        if self.capability_error_code:
+            return self.capability_error_code
         from backend.core.connection_test_codes import connection_test_error_code
         return connection_test_error_code(self.error_type, http_status=self.http_status,
                                           network_kind=self.network_kind, empty_key=self.empty_key,
@@ -354,6 +379,30 @@ def validate_connection(
     connection: ai_models.Connection, model: str,
     *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
 ) -> ValidationResult:
+    # Analysis/vision chat probe must never fire for a pure image/T2I id (#565).
+    if purpose == 'analysis':
+        from backend.core.model_catalog import is_image_model
+        if is_image_model(model):
+            recommend = _recommended_analysis_model(connection)
+            base = ''
+            try:
+                base = ai_models.chat_endpoint(connection, model or 'unused')['base_url']
+            except Exception:
+                base = connection.base_url or ''
+            return ValidationResult(
+                ok=False,
+                result='failed',
+                # Like vision_unsupported: persistable upstream class is 'unknown'; code carries the miss.
+                error_type='unknown',
+                hint_key=IMAGE_MODEL_IN_ANALYSIS_HINT,
+                recommended={'analysis': [recommend]} if recommend else {},
+                capability_error_code=IMAGE_MODEL_IN_ANALYSIS,
+                normalized_base_url=base,
+                base_url_host=_host(base) if base else '',
+                empty_key=False,
+                # No trial lights: leave trial_* as None so the UI only shows validationCopy.
+                probe_kind='quick',
+            )
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     result = _validate_resolved(resolved, model, purpose=purpose)
     result.empty_key = not (resolved.api_key or '').strip()
@@ -685,11 +734,13 @@ def validate_connection_with_probe(
     if probe_kind != 'trial' or purpose != 'analysis':
         return result
     if not result.ok:
-        # Address / key already failed — skip the expensive trial.
-        result.trial_passed = False
-        result.trial_context_ok = False
-        result.trial_json_ok = False
-        result.trial_rate_limited = False
+        # Address / key / kind already failed — skip the expensive trial.
+        # image_model_in_analysis leaves trial_* unset (no fake three lights).
+        if result.capability_error_code != IMAGE_MODEL_IN_ANALYSIS:
+            result.trial_passed = False
+            result.trial_context_ok = False
+            result.trial_json_ok = False
+            result.trial_rate_limited = False
         return result
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']

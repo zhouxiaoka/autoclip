@@ -11,9 +11,10 @@ import { applyModelDefaults, coverFollowsAnalysis, defaultModel, syncFollowingCo
 import { normalizeCompatibleUrl, passed, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 import { isRetryableUpstreamError } from '../../analytics/successRateContract'
+import { isImageModel } from './modelKind'
 
 export type Role = 'analysis' | 'vision' | 'cover' | 'transcription'
-export type SaveIssue = { role: Role; reason: 'provider' | 'model' | 'key' }
+export type SaveIssue = { role: Role; reason: 'provider' | 'model' | 'key' | 'image_model' }
 
 const OPENAI_URL = /^https:\/\/api\.openai\.com(?:\/v1)?\/?$/
 
@@ -225,6 +226,9 @@ export function saveIssue(s: ModelSettings): SaveIssue | null {
     const connection = s.connections.find(c => c.id === binding?.connection_id)
     if (!connection) return { role, reason: 'provider' }
     if (!binding?.model) return { role, reason: 'model' }
+    if ((role === 'analysis' || role === 'vision') && isImageModel(binding.model)) {
+      return { role, reason: 'image_model' }
+    }
     if (connection && !connectionReady(connection)) return { role, reason: 'key' }
   }
   return null

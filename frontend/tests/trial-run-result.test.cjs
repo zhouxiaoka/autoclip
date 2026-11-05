@@ -103,3 +103,27 @@ test('applyValidation persists trial_* on connection for F5', () => {
   // Connection still validated ok — yellow badge only.
   assert.equal(row.validation_status === 'failed', false)
 })
+
+test('trialLines empty when ok is false even if probe_kind is trial', () => {
+  assert.deepEqual(plain(trial.trialLines({
+    ok: false,
+    probe_kind: 'trial',
+    trial_context_ok: false,
+    trial_rate_limited: false,
+    trial_json_ok: false,
+  })), [])
+  assert.deepEqual(plain(trial.trialLines({
+    success: false,
+    probe_kind: 'trial',
+    trial_context_ok: false,
+    trial_rate_limited: false,
+    trial_json_ok: false,
+  })), [])
+  assert.equal(trial.trialLines({
+    ok: true,
+    probe_kind: 'trial',
+    trial_context_ok: true,
+    trial_rate_limited: false,
+    trial_json_ok: true,
+  }).length, 3)
+})

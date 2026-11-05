@@ -9,6 +9,7 @@ import TrialRunPanel from './TrialRunPanel'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
+import { isImageModel } from './modelKind'
 import ProviderCatalog from './ProviderCatalog'
 import ProviderDetail from './ProviderDetail'
 import {
@@ -17,6 +18,7 @@ import {
 } from './providerCatalogView'
 import DefaultModels from './DefaultModels'
 import {
+  analysisImageMisconfig, analysisImageMisconfigCopy, applyAnalysisImageFix,
   applyRequestedCloudTranscription, cloudTranscriptionDiscoverTargets, cloudTranscriptionSavePatch,
   cloudTranscriptionWaitExpired, CLOUD_TRANSCRIPTION_WAIT_MS,
 } from './defaultModelSlots'
@@ -87,6 +89,7 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
               busy={!!busy[connection.id]}
               listError={listErrors[connection.id]}
               mode={settings.analysis_mode}
+              invalid={isImageModel(settings.analysis.model)}
               onChange={value => m.update({ analysis: { connection_id: connection.id, model: value, capability: 'auto', model_source: 'user' } })}
               onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
               onRefresh={() => void m.discover(connection, true)}
@@ -100,6 +103,20 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
                 </span>
               )}
             />
+            {(() => {
+              const fix = analysisImageMisconfig(settings)
+              if (!fix) return null
+              return (
+                <div className="ac-note ac-note--error" role="alert" data-testid="analysis-image-misconfig">
+                  <p>{analysisImageMisconfigCopy(fix.model, fix.recommend)}</p>
+                  {fix.recommend && (
+                    <Btn variant="text" size="sm" data-testid="analysis-image-fix" onClick={() => m.update(applyAnalysisImageFix(settings, fix))}>
+                      {t('改用 {{recommend}}', { recommend: fix.recommend })}
+                    </Btn>
+                  )}
+                </div>
+              )
+            })()}
             {m.testWarning?.id === connection.id && (
               <p className="ac-note" role="status">{m.testWarning.text}</p>
             )}

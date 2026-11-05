@@ -35,6 +35,7 @@ import './quick-output.css'
 
 function issueCopy(item: ReadinessIssue) {
   if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+  if (item.key === 'analysis' && item.code === 'image_model_in_analysis') return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model: item.label || '' })
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
   if (item.code === 'whisper_installing') return t('正在安装本地转写…')
   if (item.code === 'whisper_not_installed') return t('本地转写还没安装。已有字幕可以直接继续。')
@@ -50,7 +51,7 @@ function issueCopy(item: ReadinessIssue) {
 }
 
 function repairLabel(item: ReadinessIssue) {
-  if (item.repair === 'settings_ai') return item.code === 'validation_failed' ? t('去设置修改') : t('连接 AI 服务')
+  if (item.repair === 'settings_ai') return (item.code === 'validation_failed' || item.code === 'image_model_in_analysis') ? t('去设置修改') : t('连接 AI 服务')
   if (item.repair === 'install_whisper') return item.model ? t('下载转写模型') : t('安装 Whisper')
   if (item.repair === 'settings_transcription') return t('转写设置')
   if (item.repair === 'settings_vision') return t('视觉设置')
@@ -96,9 +97,16 @@ function longFormNotice(durationSec: number | null, platforms: string[]) {
 
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
-  if (reason === 'analysis') return readiness?.checks?.analysis?.code === 'validation_failed'
-    ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
-    : t('请先连接 AI 服务，再导入视频。')
+  if (reason === 'analysis') {
+    const code = readiness?.checks?.analysis?.code
+    if (code === 'image_model_in_analysis') {
+      const model = readiness?.checks?.analysis?.label || ''
+      return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model })
+    }
+    return code === 'validation_failed'
+      ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+      : t('请先连接 AI 服务，再导入视频。')
+  }
   if (reason === 'transcription') return t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
   if (reason === 'visual') return readiness?.checks?.visual?.code === 'vision_unsupported'
     ? t('画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。')

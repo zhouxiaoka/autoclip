@@ -63,6 +63,9 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
         return _check(False, 'invalid_connection', 'settings_ai', label=label or None, trial_ok=trial)
     if not label:
         return _check(False, 'no_model', 'settings_ai', trial_ok=trial)
+    from backend.core.model_catalog import is_image_model
+    if is_image_model(label):
+        return _check(False, 'image_model_in_analysis', 'settings_ai', label=label, trial_ok=trial)
     if getattr(connection, 'validation_status', 'unchecked') == 'failed':
         return _check(False, 'validation_failed', 'settings_ai', label=label, trial_ok=trial)
     return _check(True, 'configured', label=label, trial_ok=trial)
@@ -84,6 +87,9 @@ def ensure_analysis_usable() -> None:
         return
     ai_models.require_analysis(settings)
     check = _analysis(settings)
+    if check['code'] == 'image_model_in_analysis':
+        from backend.services.provider_validation import IMAGE_MODEL_IN_ANALYSIS_HINT
+        raise UserFacingError(IMAGE_MODEL_IN_ANALYSIS_HINT)
     if check['code'] == 'validation_failed':
         raise UserFacingError('当前模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
     if ai_models.vision_follow_lacks_capability(settings):
