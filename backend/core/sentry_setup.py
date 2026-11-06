@@ -37,6 +37,17 @@ EXPECTED_PROVIDER_UPSTREAM = frozenset({
     "invalid_key", "insufficient_quota", "permission_denied", "model_not_found",
     "bad_endpoint", "rate_limited", "upstream_unavailable", "output_truncated",
 })
+# Studio codes already classified in PostHog; drop when Vision/provider attributed.
+EXPECTED_STUDIO_NOISE_CODES = frozenset({"timeout", "output_truncated"})
+# Tags that mean this failure was already attributed to a provider call.
+_PROVIDER_ATTR_TAG_KEYS = frozenset({
+    "http_status", "upstream_error_type", "provider", "base_url_host",
+})
+# Backend releases at or below this triple are discarded client-side (quota guard).
+_LEGACY_BACKEND_RELEASE_MAX = (1, 5, 6)
+_BACKEND_RELEASE_RE = re.compile(
+    r"^autoclip-backend@(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$"
+)
 # Legacy import task kinds (backend.tasks.import_processing) with the same meaning.
 UNREPORTED_IMPORT_FAILURE_KINDS = {"source-input"}
 PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE"}
@@ -374,6 +385,47 @@ def _is_harmless_proactor_disconnect(event: dict, hint: Optional[dict]) -> bool:
     return True
 
 
+
+def _is_legacy_backend_release(release: object) -> bool:
+    """True for autoclip-backend@1.5.6 and earlier. Unparseable releases are kept."""
+    if not isinstance(release, str):
+        return False
+    match = _BACKEND_RELEASE_RE.match(release.strip())
+    if not match:
+        return False
+    version = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    return version <= _LEGACY_BACKEND_RELEASE_MAX
+
+
+def _exception_type_name(event: dict, hint: Optional[dict]) -> str:
+    info = (hint or {}).get("exc_info") if hint else None
+    if isinstance(info, tuple) and len(info) >= 2 and isinstance(info[1], BaseException):
+        return type(info[1]).__name__
+    value = _raised_value(event)
+    if value is not None:
+        return str(value.get("type") or "")
+    return ""
+
+
+def _is_job_duration_exceeded(event: dict, hint: Optional[dict]) -> bool:
+    """Wall-clock job cap: PostHog only, never Sentry."""
+    return _exception_type_name(event, hint) == "JobDurationExceeded"
+
+
+def _is_expected_studio_noise(event: dict, hint: Optional[dict]) -> bool:
+    """Drop Vision/provider timeouts and truncations already recorded in PostHog.
+
+    Requires error_code in {timeout, output_truncated} plus VisionRequestError or
+    provider-attribution tags. Plain local timeouts (e.g. subprocess) stay in Sentry.
+    """
+    tags = event.get("tags") or {}
+    if tags.get("error_code") not in EXPECTED_STUDIO_NOISE_CODES:
+        return False
+    if _exception_type_name(event, hint) == "VisionRequestError":
+        return True
+    return any(isinstance(tags.get(key), str) and tags.get(key) for key in _PROVIDER_ATTR_TAG_KEYS)
+
+
 def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     """Recheck consent for every event, including long-running worker processes.
 
@@ -383,6 +435,10 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     if not crash_reports_enabled():
         return None
     if _is_harmless_proactor_disconnect(event, hint):
+        return None
+    if _is_legacy_backend_release(event.get("release")):
+        return None
+    if _is_job_duration_exceeded(event, hint):
         return None
     clean = {k: event[k] for k in (
         "event_id", "timestamp", "platform", "level", "release", "environment", "sdk"
@@ -406,6 +462,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
             return None
     incoming = event.get("tags") or {}
     if _provider_expected(incoming.get("http_status"), incoming.get("upstream_error_type")):
+        return None
+    if _is_expected_studio_noise(event, hint):
         return None
     clean["exception"] = {"values": values}
     kind, fingerprint = _import_monitoring_fields(event, hint)
@@ -790,6 +848,8 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
     from backend.core.project_cancellation import ProjectDeleted
     if isinstance(error, ProjectDeleted):
         return None  # the user deleted the project mid-run: expected, not a crash (RC156 #12)
+    if type(error).__name__ == "JobDurationExceeded":
+        return None  # wall-clock cap: PostHog only (quota guard)
     try:
         code = studio_error_code(error)
         if code in UNREPORTED_STUDIO_ERROR_CODES:
