@@ -18,7 +18,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14]
+        # Matrix value is the runner and the `real-transcription (<os>)` job name.
+        # Keep that name in scripts/release_acceptance.py BUILD_JOBS.
+        os: [ubuntu-latest, windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     env:

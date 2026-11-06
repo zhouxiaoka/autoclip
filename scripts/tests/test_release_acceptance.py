@@ -2,6 +2,7 @@ import copy
 import datetime as dt
 import json
 from pathlib import Path
+import re
 import sys
 import subprocess
 import shutil
@@ -229,6 +230,40 @@ class AcceptanceTests(unittest.TestCase):
         value = copy.deepcopy(self.manifest)
         value['assets'] = gate.assets_in(downloaded)
         gate.validate(value, self.root, downloaded, self.tag, self.commit, self.repo, self.build, self.jobs, self.now)
+
+    def test_pinned_macos_runner_is_the_required_transcription_job(self):
+        root = Path(__file__).resolve().parents[2]
+        sensevoice = (root / '.github/workflows/sensevoice.yml').read_text(encoding='utf-8')
+        desktop = (root / '.github/workflows/desktop-build.yml').read_text(encoding='utf-8')
+        matrix = re.search(r'(?m)^[ ]+os:\s*\[([^\]]+)\]\s*$', sensevoice)
+        self.assertIsNotNone(matrix)
+        labels = [part.strip().strip("'\"") for part in matrix.group(1).split(',')]
+        self.assertEqual(labels, ['ubuntu-latest', 'windows-latest', 'macos-15'])
+        self.assertIn('runs-on: ${{ matrix.os }}', sensevoice)
+        self.assertIsNone(re.search(r'macos-14', sensevoice))
+        block = desktop.split('  build-macos-arm64:\n', 1)[1].split('\n  build-windows-x64:\n', 1)[0]
+        self.assertRegex(block, r'(?m)^    runs-on:\s*macos-15\b')
+        self.assertIsNone(re.search(r'(?m)^[ ]*runs-on:\s*macos-14\b', desktop))
+        self.assertIsNone(re.search(r'(?m)^[ ]*runs-on:\s*macos-latest\b', desktop))
+        for label in labels:
+            self.assertIn(f'real-transcription ({label})', gate.BUILD_JOBS)
+        self.assertNotIn('real-transcription (macos-14)', gate.BUILD_JOBS)
+        self.assertIn('build-macos-arm64', gate.BUILD_JOBS)
+        self.assertIn('build-windows-x64', gate.BUILD_JOBS)
+        retired = copy.deepcopy(self.jobs)
+        for row in retired['jobs']:
+            row['name'] = row['name'].replace(
+                'real-transcription (macos-15)', 'real-transcription (macos-14)')
+        with self.assertRaisesRegex(
+                gate.GateError, r'required build check did not pass: real-transcription \(macos-15\)'):
+            gate.validate_build(self.manifest, self.build, retired, self.commit)
+        cancelled = copy.deepcopy(self.jobs)
+        for row in cancelled['jobs']:
+            if row['name'].endswith('real-transcription (macos-15)'):
+                row['conclusion'] = 'cancelled'
+        with self.assertRaisesRegex(
+                gate.GateError, r'required build check did not pass: real-transcription \(macos-15\)'):
+            gate.validate_build(self.manifest, self.build, cancelled, self.commit)
 
     def test_colliding_build_names_are_rejected(self):
         (self.assets / 'AutoClip Desktop.dmg').write_text('one')
