@@ -17,11 +17,14 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 ## A3-5 额度预检
 88API 余额为 0 的 key 导入 → 门口提示余额不足 +「去充值」；充值 / 换 key 后测试连接通过，重试可用。
 
-（本文件为 harness 记录位；真机结果填入下方）
+（本文件仍是操作提纲。2026-11-06 装包 `001acd8e` 的已证、待证和阻断见 [RELEASE_1_5_9_ACCEPTANCE_REMEDIATION.md](RELEASE_1_5_9_ACCEPTANCE_REMEDIATION.md)。下表不是通过结论。）
 
-| 项 | 平台 | 包哈希 | 源 SHA | 结果 | 日期 |
+| 项 | 平台 | 包 | 源 SHA | 结果 | 日期 |
 |---|---|---|---|---|---|
-| A1-5 | | | | 待补 | |
-| A1-6 | | | | 待补 | |
-| A2-5 | | | | 待补 | |
-| A3-5 | | | | 待补 | |
+| A1-5 | macOS arm64 | DMG `f58f98f9…da7e28b5` | `001acd8e` | 重启与 screening 现场已见到；遥测是 production，不是 validation | 2026-11-06 |
+| A1-5 | Windows x64 | EXE `9adb59b0…` | `001acd8e` | 重启已见到；`crash_stage=idle` 根因未证；当时 Sentry 不可核验 | 2026-11-06 |
+| A1-6 | macOS arm64 | 同上 | `001acd8e` | 仅空闲 Cmd+Q 写出 `user_quit`；活动中的「仍然退出」待证 | 2026-11-06 |
+| A1-6 | Windows x64 | 同上 | `001acd8e` | `CloseMainWindow` 写出 `user_quit`；不是托盘确认 | 2026-11-06 |
+| A2-5 | macOS arm64 | 同上 | `001acd8e` | `source_not_found` 与 `source_blocked` 已见到；主按钮是「选择已登录的浏览器」 | 2026-11-06 |
+| A2-5 | Windows x64 | 同上 | `001acd8e` | 两条 URL 都是 `connection/ingest`；缺 yt-dlp 原文，未改分类 | 2026-11-06 |
+| A3-5 | 双平台 | 同上 | `001acd8e` | 未测：没有真实零余额 key | 2026-11-06 |
