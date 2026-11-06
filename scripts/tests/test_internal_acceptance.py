@@ -46,6 +46,20 @@ class InternalAcceptanceTests(unittest.TestCase):
         return gate.validate(self.manifest if value is None else value, self.root, self.assets,
             self.version, self.commit, self.build, self.jobs, self.now)
 
+    def test_internal_build_still_requires_pinned_macos_transcription(self):
+        self.assertIn('real-transcription (macos-15)', gate.BUILD_JOBS)
+        self.assertNotIn('real-transcription (macos-14)', gate.BUILD_JOBS)
+        self.assertIn('build-macos-arm64', gate.BUILD_JOBS)
+        self.assertIn('build-windows-x64', gate.BUILD_JOBS)
+        renamed = copy.deepcopy(self.jobs)
+        for row in renamed['jobs']:
+            row['name'] = row['name'].replace(
+                'real-transcription (macos-15)', 'real-transcription (macos-14)')
+        with self.assertRaisesRegex(
+                release.GateError, r'required internal check did not pass: real-transcription \(macos-15\)'):
+            gate.validate(self.manifest, self.root, self.assets, self.version, self.commit,
+                          self.build, renamed, self.now)
+
     def test_full_internal_acceptance_without_observation_can_pass(self):
         self.assertNotIn('observation', self.manifest)
         self.assertNotIn('tag', self.manifest)
