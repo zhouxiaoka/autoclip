@@ -254,6 +254,39 @@ _NOT_FOUND_PHRASES = (
 )
 
 
+def observe_download_failure(text: str) -> dict:
+    """Closed token for a downloader error. Never returns the input, a URL, or a host.
+
+    Same order as the download path: HTTP block, access/not-found regexes, then the
+    phrase table. ``timeout`` and ``dns`` share the ``connection`` code so a later
+    capture can tell a slow network from a missed unavailable/sign-in phrase.
+    """
+    lowered = (text or '').lower()
+    if _BLOCKED_HTTP_ERROR.search(lowered):
+        return {'token': 'http_block', 'code': SOURCE_BLOCKED_CODE}
+    if _ACCESS_BLOCKED.search(lowered):
+        return {'token': 'sign_in', 'code': SOURCE_BLOCKED_CODE}
+    if _NOT_FOUND.search(lowered):
+        return {'token': 'unavailable', 'code': SOURCE_NOT_FOUND_CODE}
+    if _rename_locked(lowered):
+        return {'token': 'file_locked', 'code': FILE_LOCKED_CODE}
+    if any(phrase in lowered for phrase in _LOGIN_REQUIRED):
+        return {'token': 'sign_in', 'code': SOURCE_BLOCKED_CODE}
+    if any(phrase in lowered for phrase in _NOT_FOUND_PHRASES):
+        return {'token': 'unavailable', 'code': SOURCE_NOT_FOUND_CODE}
+    if any(phrase in lowered for phrase in _FRAME):
+        return {'token': 'frame', 'code': 'frame_extract_failed'}
+    if any(phrase in lowered for phrase in ('getaddrinfo', 'name or service not known', 'nodename nor servname')):
+        return {'token': 'dns', 'code': 'connection'}
+    if any(phrase in lowered for phrase in _TIMEOUT):
+        return {'token': 'timeout', 'code': 'connection'}
+    if any(phrase in lowered for phrase in _CONNECTION):
+        return {'token': 'connection', 'code': 'connection'}
+    if any(phrase in lowered for phrase in _UNSUPPORTED):
+        return {'token': 'unsupported', 'code': SOURCE_UNSUPPORTED_CODE}
+    return {'token': 'unmatched', 'code': None}
+
+
 def classify_download_error_text(text: str):
     """Map DownloadError text to (code, hint) or None. Hint never contains the source text/URL."""
     lowered = (text or '').lower()

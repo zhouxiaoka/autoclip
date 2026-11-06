@@ -58,6 +58,29 @@ Windows 这次的 Sentry 交付不可核验：当时 QA 的 `#winqa-sentry` host
 
 解锁不是零花费路径。现有「测试连接」会要一条非空模型回答，那是计费调用。没有不花钱的解锁。换一把仍有余额的专用 key 并做测试连接之前，需要单独的花费授权。本记录不创建也不充值任何账号。
 
+## 本轮已执行（不是真机通过）
+
+本地无外网的回归：
+
+- `test_screening_record_can_diverge_from_saved_heartbeat`：项目阶段可以已经是 screening，磁盘心跳仍是 idle；`write_once` 之后 `read_scene` 才变成 screening。缺文件仍是 `unknown`，不是 idle。
+- `test_observe_download_failure_splits_network_from_source_without_echoing_text`：`timed out` → `timeout`/`connection`，`getaddrinfo` → `dns`/`connection`，unavailable → `source_not_found`，private → `source_blocked`。输出不含原文。
+- `scripts/tests/test_acceptance_capture.py` 与 `scripts/tests/test_macos_release_contract.py`：7 项通过。正式包观察为 production 时，`--expect validation` 失败。
+
+采集命令（不杀进程、不打印下载器原文）：
+
+```bash
+python scripts/qa/acceptance_capture.py heartbeat --marker-dir <shutdown_markers> --pid <backend-pid>
+python scripts/qa/acceptance_capture.py download-error --exception-type DownloadError --seconds <elapsed> --text-file <local-error.txt>
+python scripts/check_telemetry_environment.py --observed <allowlisted.json> --expect production
+python scripts/check_telemetry_environment.py --print-validation-build
+```
+
+在已安装的 `001acd8e` 上读到子进程 `AUTOCLIP_BUILD_ENVIRONMENT=production`。检查脚本接受这个观察，并拒绝把它当成 validation。validation 构建标志只打印，不写进正式启动器。
+
+同一隔离进程里，项目列表已经是 `processing` / analysis `screening` 时，最新心跳行的 `stage` 仍是 `idle`。快照留在本机隔离目录，不入库。这复现了两个时钟可以不一致，但没有强杀，所以不能把 Windows 那次 `crash_stage=idle` 收成已经定位。强杀前要保存的就是这份 `ts`/`stage` 再加当时的 backend PID。
+
+活动中的 Mac Cmd+Q 没有完成。CoreGraphics 能看到窗口 69829（1200×801），但本次 `screencapture` 无法从该窗口取图，Accessibility 的窗口数为 0，Cmd+Q 没有让进程退出。不能把这次算成「仍然退出」已测。Windows 托盘确认仍由 PM 在虚拟机上做，这里不去连那台机器。
+
 ## 不在这次改动里的事
 
 - 不把正式包或它的启动器改成 validation，也不增加让已安装正式包改报 validation 的开关。
@@ -68,8 +91,8 @@ Windows 这次的 Sentry 交付不可核验：当时 QA 的 `#winqa-sentry` host
 
 ## 下一轮还缺什么
 
-1. 死亡 instance 的 `.hb` 只保存 `ts` 和 `stage`，并标明 instance，不能只留新进程的心跳。
-2. 看得见窗口时，在 `processing` 仍为进行中的情况下走真实 Cmd+Q 或托盘，并留下「仍然退出」被按下的证据。
-3. Windows 两条 URL 的脱敏 yt-dlp 类别：匹配到的短语类别、耗时、是否超时或 DNS 失败。不要保存异常全文。
-4. 专用 `API88_ZERO_KEY`。没有它，A3-5 继续保持未测。
-5. 若要 validation 收数，另做 `TESTING_ACCEPTANCE.md` 写明的 validation 构建；不要复用这次 production 安装包。
+1. 强杀前运行上面的 `heartbeat` 命令，保存死亡 instance 的 `ts`、`stage` 和 backend PID。有了正文才能决定要不要改写盘时机。这次没有改 `set_stage`。
+2. Mac 要在当前会话能对窗口截图并送入 Cmd+Q 之后，再于 `processing` 未结束时点「仍然退出」。Windows 托盘确认由 PM 做。窗口没起来或按键没送达，保持未完成。
+3. Windows 两条 URL 用 `download-error` 保存 `exception_type`、`token`、`code`、`seconds`。`timeout` 或 `dns` 表示网络被收成 `connection`；`unavailable` / `sign_in` 才说明分类器没命中。不要保存异常全文，也不要套用 Mac 原文。
+4. 专用零余额 key 仍缺。A3-5 未测。测试连接会发起计费请求，没有不花钱的解锁。
+5. validation 收数需要单独构建，不重打这次正式包。待批准的最小动作只是：用 `VITE_TELEMETRY_VALIDATION=true` 打一版前端，并且后端不要走会覆盖成 production 的正式启动器。本变更不实现那条启动器分叉，也不派发 Desktop Build。

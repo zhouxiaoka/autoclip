@@ -1,7 +1,25 @@
 """A2-1/A2-2: map DownloadError / ValidationError text to named studio codes."""
 from __future__ import annotations
 
+import json
+
 import pytest
+
+
+def test_observe_download_failure_splits_network_from_source_without_echoing_text():
+    from backend.utils.download_recovery import observe_download_failure
+    unavailable = observe_download_failure('ERROR: [youtube] abc: This video is unavailable https://youtu.be/secret')
+    assert unavailable == {'token': 'unavailable', 'code': 'source_not_found'}
+    sign_in = observe_download_failure('ERROR: Private video. Sign in if you have access https://youtu.be/secret')
+    assert sign_in == {'token': 'sign_in', 'code': 'source_blocked'}
+    timeout = observe_download_failure('ERROR: timed out https://example.invalid/watch')
+    assert timeout == {'token': 'timeout', 'code': 'connection'}
+    dns = observe_download_failure('ERROR: getaddrinfo failed')
+    assert dns == {'token': 'dns', 'code': 'connection'}
+    assert observe_download_failure('something else') == {'token': 'unmatched', 'code': None}
+    for row in (unavailable, sign_in, timeout, dns):
+        assert 'http' not in json.dumps(row)
+        assert 'secret' not in json.dumps(row)
 
 
 def test_a2_1_classify_download_error_text_maps_known_phrases():

@@ -475,6 +475,37 @@ def test_n4_home_list_heal_reports_crash_via_recover(sessions, monkeypatch):
 
 # --- 1.5.9 N1 nested stage stack ---------------------------------------------------------------
 
+def test_screening_record_can_diverge_from_saved_heartbeat(tmp_path):
+    """A project can already say screening while the heartbeat file still says idle.
+
+    inspect_project writes that phase before the worker calls set_stage, and
+    set_stage only updates memory until write_once. Missing this file is
+    crash_stage=unknown, not idle. The test does not decide which gap the
+    Windows kill hit; it only makes the two clocks reproducible.
+    """
+    instance = 'd' * 32
+    marker = tmp_path / instance
+    heartbeat = tmp_path / f'{instance}.hb'
+    heartbeat.write_text(json.dumps({
+        'ts': 10, 'uptime_s': 30, 'rss_mb': 200, 'free_disk_mb': 9000,
+        'stage': 'idle', 'ffmpeg_children': 0,
+    }), encoding='ascii')
+    from backend.services.studio import run_heartbeat
+    assert run_heartbeat.read_scene(marker)['crash_stage'] == 'idle'
+    while run_heartbeat.current_stage() != 'idle':
+        run_heartbeat.set_stage('idle')
+    run_heartbeat.set_stage('screening')
+    assert run_heartbeat.current_stage() == 'screening'
+    assert json.loads(heartbeat.read_text(encoding='ascii'))['stage'] == 'idle'
+    published = run_heartbeat.write_once(root=tmp_path, instance=instance)
+    assert published == heartbeat
+    saved = json.loads(heartbeat.read_text(encoding='ascii'))
+    assert saved['stage'] == 'screening'
+    assert isinstance(saved['ts'], float)
+    assert run_heartbeat.read_scene(marker)['crash_stage'] == 'screening'
+    run_heartbeat.set_stage('idle')
+
+
 def test_n1_nested_set_stage_stack_keeps_outer_production():
     """Nested render finishing must not report idle while outer production is still active."""
     from backend.services.studio import run_heartbeat
