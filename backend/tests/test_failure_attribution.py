@@ -2216,6 +2216,7 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function builtinSecPerSourceMin(',
              'export function rechargeTarget(',
              'export function failureAction(',
+             'export function downloadConnectionFailure(',
              'export function suggestedAction(',
              'export function failurePlan(',
              'export default function StudioResults(',

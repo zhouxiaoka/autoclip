@@ -21,7 +21,7 @@ export default function ImportReview() {
   const [busy,setBusy]=useState(false)
   const retry=async()=>{if(!id)return;setBusy(true);setActionError('');try{await studioApi.correctPlan(id,{...defaultImportOptions,...workspace.plan?.overrides});refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy(false)}}
   const running=workspace.analysis?.status==='running'
-  const downloadConnection=downloadConnectionFailure(workspace.analysis?.error_code, workspace.analysis?.failure_stage)
+  const downloadConnection=downloadConnectionFailure(workspace.analysis)
   const producing=running&&workspace.analysis?.phase==='production'
   if(!id)return null
   return <main className="ac-page studio-import-review">
