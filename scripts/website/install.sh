@@ -22,12 +22,16 @@ cp "$HERE/sync-release.yml" "$TARGET/.github/workflows/sync-release.yml"
 chmod +x "$TARGET/scripts/sync_release.py" "$HERE/install_publish_guide.py"
 grep -q '__pycache__' "$TARGET/.gitignore" 2>/dev/null || echo '__pycache__/' >> "$TARGET/.gitignore"
 
-echo "已复制到 $TARGET："
+echo "已复制到 ${TARGET}："
 echo "  scripts/sync_release.py"
 echo "  .github/workflows/sync-release.yml"
 echo
-echo "现在同步一次到最新正式 Release："
-(cd "$TARGET" && python3 scripts/sync_release.py)
+if [[ "${SKIP_RELEASE_SYNC:-}" == "1" ]]; then
+  echo "已跳过 Release 同步（SKIP_RELEASE_SYNC=1，仅供检查覆盖开关）。"
+else
+  echo "现在同步一次到最新正式 Release："
+  (cd "$TARGET" && python3 scripts/sync_release.py)
+fi
 if [[ "${WITH_PUBLISH_GUIDE:-}" == "1" ]]; then
   echo
   echo "按显式要求重装发布教程页。这会覆盖官网已有的 guides/publish/index.html。"

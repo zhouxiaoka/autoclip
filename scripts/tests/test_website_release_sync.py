@@ -1,6 +1,8 @@
 """官网同步脚本必须拒绝预发布，并只改当前版本槽位。"""
 
 import importlib.util
+import os
+import subprocess
 import tempfile
 import unittest
 import urllib.error
@@ -68,6 +70,42 @@ class WebsiteReleaseSync(unittest.TestCase):
         self.assertIn("v1.5.8 for Windows", updated)
         self.assertIn(">AutoClip 1.5.0<", updated)
         self.assertNotIn("当前版本 1.5.0", updated)
+
+    def test_publish_guide_flag_does_not_overwrite_unless_the_homepage_patch_succeeds(self):
+        install = ROOT / "scripts" / "website" / "install.sh"
+        template = (ROOT / "scripts" / "website" / "guides" / "publish" / "index.html").read_text(encoding="utf-8")
+
+        def run(flag):
+            target = Path(tempfile.mkdtemp())
+            (target / "index.html").write_text("<html>current homepage</html>", encoding="utf-8")
+            page = target / "guides" / "publish" / "index.html"
+            page.parent.mkdir(parents=True)
+            page.write_text("SENTINEL-CURRENT-GUIDE", encoding="utf-8")
+            env = os.environ.copy()
+            env["SKIP_RELEASE_SYNC"] = "1"
+            env["WITH_PUBLISH_GUIDE"] = flag
+            env["LANG"] = "C.UTF-8"
+            env["LC_ALL"] = "C.UTF-8"
+            completed = subprocess.run(
+                ["bash", str(install), str(target)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return completed, page.read_text(encoding="utf-8")
+
+        default, kept = run("0")
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertIn("未覆盖 guides/publish", default.stdout)
+        self.assertEqual(kept, "SENTINEL-CURRENT-GUIDE")
+
+        forced, still = run("1")
+        self.assertNotEqual(forced.returncode, 0)
+        self.assertIn("找不到插入点", forced.stderr + forced.stdout)
+        self.assertEqual(still, "SENTINEL-CURRENT-GUIDE")
+        self.assertNotIn(template[:40], still)
 
     def test_promote_workflow_does_not_notify_from_the_prerelease_build(self):
         workflow = (ROOT / ".github" / "workflows" / "promote-release.yml").read_text(encoding="utf-8")
