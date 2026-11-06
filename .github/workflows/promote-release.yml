@@ -116,12 +116,30 @@ jobs:
             echo "已经升级到 $TAG 的用户不会被降级，需要尽快发补丁版。"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # 通知官网仓库更新版本号 / 下载链接（autoclip_intro/.github/workflows/sync-release.yml）。
-      # 没配 WEBSITE_DISPATCH_TOKEN 就跳过，官网每日 cron 兜底。见 scripts/website/README.md。
+      # 通知官网仓库同步当前正式版（autoclip_intro/.github/workflows/sync-release.yml）。
+      # 只在 promote / halt 之后发送。打 tag 产生的 Pre-release 不走这里。
+      # 没配 WEBSITE_DISPATCH_TOKEN 就跳过，官网每日 cron 仍会读 GitHub Latest。见 scripts/website/README.md。
       - name: Notify website (repository_dispatch)
         if: env.WEBSITE_DISPATCH_TOKEN != ''
         run: |
-          current="$TAG"; [ "${{ inputs.action }}" = "halt" ] && current="$FALLBACK"
+          set -euo pipefail
+          current="$TAG"
+          if [ "${{ inputs.action }}" = "halt" ]; then current="$FALLBACK"; fi
+          if gh release view "$current" --json isDraft,isPrerelease > /tmp/website-release.json; then
+            py=0
+            python3 - <<'PY' || py=$?
+          import json, sys
+          rel = json.load(open("/tmp/website-release.json"))
+          sys.exit(2 if rel.get("isDraft") or rel.get("isPrerelease") else 0)
+          PY
+            if [ "$py" -eq 2 ]; then
+              echo "::warning::$current 仍是 draft 或 prerelease，不通知官网。官网只跟正式 Latest。"
+              exit 0
+            fi
+            if [ "$py" -ne 0 ]; then exit "$py"; fi
+          else
+            echo "::warning::读不到 $current 的发布状态，仍发送通知；官网脚本会拒绝预发布并且不改页面"
+          fi
           curl -sS -f -X POST \
             -H "Authorization: Bearer $WEBSITE_DISPATCH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
