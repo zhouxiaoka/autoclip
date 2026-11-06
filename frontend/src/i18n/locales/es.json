@@ -2124,5 +2124,6 @@
   "{{model}} 是生图模型，只能用于封面，不能做分析。": "{{model}} es un modelo de imagen solo para portadas, no para análisis.",
   "改用 {{recommend}}": "Usar {{recommend}}",
   "该模型是生图模型，只能用于封面，不能做分析。": "Este modelo es de imagen: solo para portadas, no para análisis.",
-  "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} es un modelo de imagen solo para portadas. Cambia a un modelo de chat en Ajustes → Proveedores y modelos y vuelve a generar."
+  "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} es un modelo de imagen solo para portadas. Cambia a un modelo de chat en Ajustes → Proveedores y modelos y vuelve a generar.",
+  "下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。": "La descarga del vídeo agotó el tiempo o se cortó la red. Comprueba la red y reinténtalo, o prueba otro enlace."
 }

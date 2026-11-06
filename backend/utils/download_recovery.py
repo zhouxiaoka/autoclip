@@ -35,7 +35,8 @@ SOURCE_BLOCKED_HINT = '视频网站拒绝了这次下载（HTTP 403/412/429）�
 # 找不到片源。也是前端 i18n 的 key，改动时同步 locales。不要带 URL、状态码或 yt-dlp 原文。
 SOURCE_NOT_FOUND_HINT = '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。'
 SOURCE_UNSUPPORTED_HINT = None  # resolved via failure_messages.sentence
-CONNECTION_HINT = None  # resolved via failure_messages.sentence at raise time
+# Download timeouts keep error_code connection, but the user sentence is
+# INGEST_CONNECTION_MESSAGE. sentence('connection') stays the model-service line.
 # 私密、地区/年龄限制、版权或人机验证。仍用 source_blocked，但不用 403/412/429 那句（这里没有那些状态码）。
 SOURCE_ACCESS_HINT = '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。'
 # 这一次下载里的 rename 已经用完 file_access 预算。用户句只来自 failure_messages.json。
@@ -218,8 +219,8 @@ def classify_download_error_text(text: str):
         from backend.core.failure_codes import sentence
         return 'frame_extract_failed', sentence('frame_extract_failed')
     if any(p in lowered for p in _CONNECTION) or any(p in lowered for p in _TIMEOUT):
-        from backend.core.failure_codes import sentence
-        return 'connection', sentence('connection')
+        from backend.utils.download_failure_observe import INGEST_CONNECTION_MESSAGE
+        return 'connection', INGEST_CONNECTION_MESSAGE
     if any(p in lowered for p in _UNSUPPORTED):
         from backend.core.failure_codes import sentence
         return SOURCE_UNSUPPORTED_CODE, sentence(SOURCE_UNSUPPORTED_CODE)

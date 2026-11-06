@@ -31,9 +31,33 @@ class CaptureTests(unittest.TestCase):
                 'readable': True,
                 'ts': 12.5,
                 'stage': 'screening',
-                'observed_pid': 10276,
+                'pid_bound': False,
             }])
+            self.assertNotIn('observed_pid', result.stdout)
+            self.assertNotIn('10276', result.stdout)
             self.assertNotIn('do-not-print', result.stdout)
+
+    def test_heartbeat_pid_binds_only_when_the_file_records_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            matched = 'b' * 32
+            other = 'c' * 32
+            (directory / f'{matched}.hb').write_text(json.dumps({
+                'ts': 1, 'stage': 'screening', 'pid': 3696,
+            }), encoding='ascii')
+            (directory / f'{other}.hb').write_text(json.dumps({
+                'ts': 2, 'stage': 'idle', 'pid': 111,
+            }), encoding='ascii')
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), 'heartbeat', '--marker-dir', temp, '--pid', '3696'],
+                capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = {row['instance']: row for row in json.loads(result.stdout)['rows']}
+            self.assertEqual(rows[matched]['file_pid'], 3696)
+            self.assertIs(rows[matched]['pid_bound'], True)
+            self.assertEqual(rows[other]['file_pid'], 111)
+            self.assertIs(rows[other]['pid_bound'], False)
+            self.assertNotIn('observed_pid', result.stdout)
 
     def test_download_error_capture_runs_without_yt_dlp(self):
         with tempfile.TemporaryDirectory() as temp:

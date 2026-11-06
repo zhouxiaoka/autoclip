@@ -11,6 +11,10 @@ SOURCE_BLOCKED_CODE = 'source_blocked'
 SOURCE_NOT_FOUND_CODE = 'source_not_found'
 SOURCE_UNSUPPORTED_CODE = 'source_unsupported'
 FILE_LOCKED_CODE = 'file_locked'
+# Shown for a download-stage ``connection`` (timeout, DNS, reset). Not the model-service
+# sentence: that one stays on failure_messages['connection'] for model calls. This string
+# is also the i18n key in all eight frontend locales.
+INGEST_CONNECTION_MESSAGE = '下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。'
 # 4120 不是 412：状态码后面必须是词边界。
 _BLOCKED_HTTP_ERROR = re.compile(r'\bhttp error (403|412|429)\b')
 _ACCESS_BLOCKED = re.compile(

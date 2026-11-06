@@ -404,7 +404,12 @@ const ProjectDetailPage: React.FC = () => {
           <b>{t("这次处理没有成功")}</b>
           {currentProject.error_message ? (
             <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-word' }}>
-              {t(llmFailureText(currentProject.error_message, currentProject.error_code, failureUpstream))}
+              {t(llmFailureText(
+                currentProject.error_message,
+                currentProject.error_code,
+                typeof failureUpstream === 'string' ? failureUpstream : null,
+                [currentProject.processing_config?.failure_stage, currentProject.settings?.failure_stage].find((value): value is string => typeof value === 'string'),
+              ))}
             </span>
           ) : (
             t("可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。")

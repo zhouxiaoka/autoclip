@@ -16,8 +16,12 @@ INSTANCE = re.compile(r'^[0-9a-f]{32}$')
 STAGES = frozenset({'screening', 'download', 'subtitle', 'analyze', 'render', 'idle'})
 
 
-def heartbeat_rows(marker_dir: Path, observed_pid: int | None = None) -> list[dict]:
-    """One row per ``<instance>.hb``. Only ts, stage, and optional pids."""
+def heartbeat_rows(marker_dir: Path, claimed_pid: int | None = None) -> list[dict]:
+    """One row per ``<instance>.hb``. Bind a pid only when the file itself records it.
+
+    ``claimed_pid`` is the process the operator asked about. It is never copied
+    onto a row. ``pid_bound`` is true only when ``file_pid`` equals that claim.
+    """
     rows = []
     if not marker_dir.is_dir():
         return rows
@@ -25,7 +29,9 @@ def heartbeat_rows(marker_dir: Path, observed_pid: int | None = None) -> list[di
         instance = path.name[:-3]
         if path.name.startswith('.') or not INSTANCE.fullmatch(instance):
             continue
-        row: dict = {'instance': instance, 'readable': False, 'ts': None, 'stage': None}
+        row: dict = {
+            'instance': instance, 'readable': False, 'ts': None, 'stage': None, 'pid_bound': False,
+        }
         try:
             data = json.loads(path.read_text(encoding='ascii'))
         except (OSError, UnicodeError, json.JSONDecodeError):
@@ -38,10 +44,9 @@ def heartbeat_rows(marker_dir: Path, observed_pid: int | None = None) -> list[di
             row['ts'] = ts if isinstance(ts, (int, float)) else None
             row['stage'] = stage if stage in STAGES else None
             file_pid = data.get('pid')
-            if isinstance(file_pid, int) and not isinstance(file_pid, bool):
+            if isinstance(file_pid, int) and not isinstance(file_pid, bool) and file_pid > 0:
                 row['file_pid'] = file_pid
-        if observed_pid is not None:
-            row['observed_pid'] = observed_pid
+                row['pid_bound'] = claimed_pid is not None and file_pid == claimed_pid
         rows.append(row)
     return rows
 

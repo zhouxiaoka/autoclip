@@ -506,6 +506,85 @@ def test_screening_record_can_diverge_from_saved_heartbeat(tmp_path):
     run_heartbeat.set_stage('idle')
 
 
+def test_stage_change_publishes_without_waiting_out_the_idle_interval(tmp_path, monkeypatch):
+    """The heartbeat thread writes the new stage itself. Workers do not fsync.
+
+    The idle cadence is 60s. A screening transition must land well inside that,
+    and only on this instance's file. Logic is the same on macOS and Windows.
+    """
+    import threading
+    import time
+    from backend.services.studio import run_heartbeat, shutdown_marker
+
+    monkeypatch.setattr(shutdown_marker, '_root', lambda: tmp_path)
+    monkeypatch.setattr(run_heartbeat, '_INTERVAL_IDLE', 60.0)
+    monkeypatch.setattr(run_heartbeat, '_INTERVAL_ACTIVE', 60.0)
+    run_heartbeat.stop()
+    if run_heartbeat._thread is not None:
+        run_heartbeat._thread.join(timeout=2)
+    run_heartbeat._thread = None
+    while run_heartbeat.current_stage() != 'idle':
+        run_heartbeat.set_stage('idle')
+    instance = 'e' * 32
+    other = tmp_path / f'{"f" * 32}.hb'
+    other.write_text(json.dumps({'ts': 1, 'stage': 'render', 'pid': 1}), encoding='ascii')
+    try:
+        run_heartbeat.start(instance=instance)
+        path = tmp_path / f'{instance}.hb'
+        deadline = time.time() + 2
+        while time.time() < deadline and not path.is_file():
+            time.sleep(0.02)
+        assert path.is_file()
+        assert json.loads(path.read_text(encoding='ascii'))['stage'] == 'idle'
+        run_heartbeat.set_stage('screening')
+        deadline = time.time() + 2
+        published = None
+        while time.time() < deadline:
+            published = json.loads(path.read_text(encoding='ascii'))
+            if published.get('stage') == 'screening':
+                break
+            time.sleep(0.02)
+        else:
+            raise AssertionError(path.read_text(encoding='ascii'))
+        assert published['pid'] == os.getpid()
+        assert json.loads(other.read_text(encoding='ascii')) == {'ts': 1, 'stage': 'render', 'pid': 1}
+        missing = run_heartbeat.read_scene(tmp_path / ('a' * 32))
+        assert missing['crash_stage'] == 'unknown'
+    finally:
+        while run_heartbeat.current_stage() != 'idle':
+            run_heartbeat.set_stage('idle')
+        run_heartbeat.stop()
+        if run_heartbeat._thread is not None:
+            run_heartbeat._thread.join(timeout=2)
+        run_heartbeat._thread = None
+
+
+def test_deepest_live_stage_wins_across_threads_until_that_frame_pops():
+    """analyze above screening is the rank rule, not a second instance's file."""
+    import threading
+    from backend.services.studio import run_heartbeat
+
+    while run_heartbeat.current_stage() != 'idle':
+        run_heartbeat.set_stage('idle')
+    run_heartbeat.set_stage('screening')
+    seen = {}
+
+    def other():
+        run_heartbeat.set_stage('analyze')
+        seen['during'] = run_heartbeat.current_stage()
+        run_heartbeat.set_stage('idle')
+        seen['after'] = run_heartbeat.current_stage()
+
+    worker = threading.Thread(target=other)
+    worker.start()
+    worker.join()
+    assert seen['during'] == 'analyze'
+    assert seen['after'] == 'screening'
+    assert run_heartbeat.current_stage() == 'screening'
+    run_heartbeat.set_stage('idle')
+    assert run_heartbeat.current_stage() == 'idle'
+
+
 def test_n1_nested_set_stage_stack_keeps_outer_production():
     """Nested render finishing must not report idle while outer production is still active."""
     from backend.services.studio import run_heartbeat

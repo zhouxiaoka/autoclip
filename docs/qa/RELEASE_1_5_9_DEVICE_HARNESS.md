@@ -22,9 +22,9 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 | 项 | 平台 | 包 | 源 SHA | 结果 | 日期 |
 |---|---|---|---|---|---|
 | A1-5 | macOS arm64 | DMG `f58f98f9…da7e28b5` | `001acd8e` | 重启与 screening 现场已见到；遥测是 production，不是 validation | 2026-11-06 |
-| A1-5 | Windows x64 | EXE `9adb59b0…` | `001acd8e` | 重启已见到；`crash_stage=idle` 根因未证；当时 Sentry 不可核验 | 2026-11-06 |
-| A1-6 | macOS arm64 | 同上 | `001acd8e` | 仅空闲 Cmd+Q 写出 `user_quit`；活动中的「仍然退出」待证 | 2026-11-06 |
-| A1-6 | Windows x64 | 同上 | `001acd8e` | `CloseMainWindow` 写出 `user_quit`；不是托盘确认 | 2026-11-06 |
+| A1-5 | Windows x64 | EXE `9adb59b0…` | `001acd8e` | 14:24 重启已见到且 `crash_stage=idle`；补采同一 instance 有 idle（旧 30 秒）和 analyze。源码已修写盘滞后，此包装包未含该修复，也没有新的强杀链 | 2026-11-06 |
+| A1-6 | macOS arm64 | 同上 | `001acd8e` | 仅空闲 Cmd+Q 写出 `user_quit`。活动中的「仍然退出」未测：本会话窗口不能截图、不能送键 | 2026-11-06 |
+| A1-6 | Windows x64 | 同上 | `001acd8e` | 阻断：需要交互桌面。AMSI 拦住托盘 helper。早先 `CloseMainWindow` 不是托盘。源码审查未发现「退出应用」绕过 QuitGuard | 2026-11-06 |
 | A2-5 | macOS arm64 | 同上 | `001acd8e` | `source_not_found` 与 `source_blocked` 已见到；主按钮是「选择已登录的浏览器」 | 2026-11-06 |
-| A2-5 | Windows x64 | 同上 | `001acd8e` | 两条 URL 都是 `connection/ingest`；缺 yt-dlp 原文，未改分类 | 2026-11-06 |
+| A2-5 | Windows x64 | 同上 | `001acd8e` | 两条 URL 都是 yt-dlp `timed out` → `connection`/`ingest`，卡片误用模型服务文案。源码已改下载句；此包未含该修复。没有 unavailable/sign-in 原文 | 2026-11-06 |
 | A3-5 | 双平台 | 同上 | `001acd8e` | 未测：没有真实零余额 key | 2026-11-06 |
