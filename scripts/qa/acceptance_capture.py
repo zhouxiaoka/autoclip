@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         text = Path(args.text_file).read_text(encoding='utf-8', errors='replace')
         root = Path(__file__).resolve().parents[2]
         sys.path.insert(0, str(root))
-        from backend.utils.download_recovery import observe_download_failure
+        from backend.utils.download_failure_observe import observe_download_failure
         observed = observe_download_failure(text)
         payload = {
             'exception_type': args.exception_type,

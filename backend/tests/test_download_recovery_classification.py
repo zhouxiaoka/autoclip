@@ -7,7 +7,7 @@ import pytest
 
 
 def test_observe_download_failure_splits_network_from_source_without_echoing_text():
-    from backend.utils.download_recovery import observe_download_failure
+    from backend.utils.download_failure_observe import observe_download_failure
     unavailable = observe_download_failure('ERROR: [youtube] abc: This video is unavailable https://youtu.be/secret')
     assert unavailable == {'token': 'unavailable', 'code': 'source_not_found'}
     sign_in = observe_download_failure('ERROR: Private video. Sign in if you have access https://youtu.be/secret')

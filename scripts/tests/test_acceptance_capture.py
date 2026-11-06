@@ -35,6 +35,33 @@ class CaptureTests(unittest.TestCase):
             }])
             self.assertNotIn('do-not-print', result.stdout)
 
+    def test_download_error_capture_runs_without_yt_dlp(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / 'err.txt'
+            source.write_text('ERROR: timed out https://secret.example/watch?v=abc', encoding='utf-8')
+            blocker = (
+                'import sys\n'
+                'class Block:\n'
+                '    def find_spec(self, name, path, target=None):\n'
+                '        if name == "yt_dlp" or name.startswith("yt_dlp."):\n'
+                '            raise ModuleNotFoundError(name)\n'
+                '        return None\n'
+                'sys.meta_path.insert(0, Block())\n'
+                'import runpy\n'
+                f'sys.argv = ["acceptance_capture.py", "download-error", "--exception-type", "DownloadError", "--seconds", "131.5", "--text-file", {str(source)!r}]\n'
+                f'runpy.run_path({str(SCRIPT)!r}, run_name="__main__")\n'
+            )
+            result = subprocess.run([sys.executable, '-c', blocker], capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('secret.example', result.stdout)
+            self.assertNotIn('yt_dlp', result.stderr)
+            self.assertEqual(json.loads(result.stdout), {
+                'exception_type': 'DownloadError',
+                'seconds': 131.5,
+                'token': 'timeout',
+                'code': 'connection',
+            })
+
     def test_download_error_capture_does_not_echo_the_text(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / 'err.txt'

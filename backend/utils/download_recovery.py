@@ -1,10 +1,25 @@
 """Bounded media retries shared by legacy imports and Studio."""
-import re
 from urllib.parse import urlparse
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError
 
 from backend.pipeline.failures import PipelineFailure
+from backend.utils.download_failure_observe import (
+    FILE_LOCKED_CODE,
+    SOURCE_BLOCKED_CODE,
+    SOURCE_NOT_FOUND_CODE,
+    SOURCE_UNSUPPORTED_CODE,
+    _ACCESS_BLOCKED,
+    _BLOCKED_HTTP_ERROR,
+    _CONNECTION,
+    _FRAME,
+    _LOGIN_REQUIRED,
+    _NOT_FOUND,
+    _NOT_FOUND_PHRASES,
+    _TIMEOUT,
+    _UNSUPPORTED,
+    _rename_locked,
+)
 
 # yt-dlp 默认 file_access_retries=3，且不设 file_access 的 retry sleep，
 # 两次尝试之间只在 warn 里睡约 10ms。Windows 杀毒/索引锁住
@@ -17,41 +32,14 @@ FILE_ACCESS_RETRIES = 8
 COOKIE_ACCESS_HINT = '无法读取浏览器登录信息。请完全退出该浏览器后再重试，或换一个已登录的浏览器。公开视频也可以不选浏览器。原素材已保留。'
 # 也是前端 i18n 的 key（8 个 locale），改动时同步 frontend/src/i18n/locales/*.json 与 browserCookieRecovery.ts。
 SOURCE_BLOCKED_HINT = '视频网站拒绝了这次下载（HTTP 403/412/429），常见于当前网络被网站风控或请求过于频繁。请稍后换个网络（如手机热点）重试，或在导入时选择已登录的浏览器读取 Cookie。'
-SOURCE_BLOCKED_CODE = 'source_blocked'
 # 找不到片源。也是前端 i18n 的 key，改动时同步 locales。不要带 URL、状态码或 yt-dlp 原文。
 SOURCE_NOT_FOUND_HINT = '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。'
-SOURCE_NOT_FOUND_CODE = 'source_not_found'
 SOURCE_UNSUPPORTED_HINT = None  # resolved via failure_messages.sentence
-SOURCE_UNSUPPORTED_CODE = 'source_unsupported'
 CONNECTION_HINT = None  # resolved via failure_messages.sentence at raise time
 # 私密、地区/年龄限制、版权或人机验证。仍用 source_blocked，但不用 403/412/429 那句（这里没有那些状态码）。
 SOURCE_ACCESS_HINT = '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。'
 # 这一次下载里的 rename 已经用完 file_access 预算。用户句只来自 failure_messages.json。
-FILE_LOCKED_CODE = 'file_locked'
-# yt-dlp: "Unable to download webpage: HTTP Error 412: Precondition Failed"
-# 4120 不是 412：状态码后面必须是词边界。
-_BLOCKED_HTTP_ERROR = re.compile(r'\bhttp error (403|412|429)\b')
-_ACCESS_BLOCKED = re.compile(
-    r"sign in to confirm you.?re not a bot"
-    r"|not a bot"
-    r"|private video"
-    r"|video is private"
-    r"|not available in your country"
-    r"|geo[- ]restrict"
-    r"|copyright"
-    r"|age[- ]restricted"
-    r"|confirm your age"
-    r"|members[- ]only"
-    r"|join this channel"
-)
-_NOT_FOUND = re.compile(
-    r"\bhttp error (404|410)\b"
-    r"|video(?: is)? unavailable"
-    r"|has been removed"
-    r"|does not exist"
-    r"|no longer available"
-    r"|account associated with this video has been terminated"
-)
+# Codes and matchers live in download_failure_observe so contract checks need no yt_dlp.
 
 
 def _browser_cookie_permission_failure(error):
@@ -204,20 +192,6 @@ def _raise_cookie_access():
     raise PipelineFailure('INGEST', COOKIE_ACCESS_HINT, code=SOURCE_BLOCKED_CODE) from None
 
 
-def _rename_locked(text: str) -> bool:
-    """A rename that lost to a sharing lock, after yt-dlp's own retries.
-
-    Other rename failures (missing file, full disk) stay unclassified here.
-    """
-    if 'unable to rename file' not in text:
-        return False
-    return any(phrase in text for phrase in (
-        'winerror 32',
-        'being used by another process',
-        'sharing violation',
-    ))
-
-
 def _link_failure(text: str):
     """A missing or gated link that is not HTTP 403/412/429.
 
@@ -229,62 +203,6 @@ def _link_failure(text: str):
     if _NOT_FOUND.search(text):
         return SOURCE_NOT_FOUND_CODE, SOURCE_NOT_FOUND_HINT
     return None
-
-
-# 1.5.9 2B: remaining DownloadError text → known codes (lowercase substrings; never echo text).
-_LOGIN_REQUIRED = (
-    'sign in to confirm', 'not a bot', 'login required', 'private video', 'members-only', 'members only',
-)
-_UNSUPPORTED = ('unsupported url', 'no video formats', 'no video formats found')
-# N5: tighten bare ssl/404/merge; keep timeouts out of _CONNECTION so FRAME can win first.
-_CONNECTION = (
-    'unable to download webpage', 'connection reset',
-    'ssl:', '[ssl', 'ssl error', 'certificate_verify_failed', 'ssl.ssleoferror',
-    'getaddrinfo', 'proxy', 'name or service not known', 'nodename nor servname',
-)
-_TIMEOUT = ('timed out', 'timeout')
-_FRAME = (
-    'ffmpeg', 'postprocess',
-    'merging formats', 'error merging', 'merge the formats', 'ffmpeg merge', 'unable to merge',
-)
-_NOT_FOUND_PHRASES = (
-    # yt-dlp deleted watch often: "This video is unavailable" (intervening "is")
-    'video is unavailable', 'video unavailable', 'has been removed', 'does not exist',
-    'http error 404', '404: not found', '404 not found', 'status code 404',
-)
-
-
-def observe_download_failure(text: str) -> dict:
-    """Closed token for a downloader error. Never returns the input, a URL, or a host.
-
-    Same order as the download path: HTTP block, access/not-found regexes, then the
-    phrase table. ``timeout`` and ``dns`` share the ``connection`` code so a later
-    capture can tell a slow network from a missed unavailable/sign-in phrase.
-    """
-    lowered = (text or '').lower()
-    if _BLOCKED_HTTP_ERROR.search(lowered):
-        return {'token': 'http_block', 'code': SOURCE_BLOCKED_CODE}
-    if _ACCESS_BLOCKED.search(lowered):
-        return {'token': 'sign_in', 'code': SOURCE_BLOCKED_CODE}
-    if _NOT_FOUND.search(lowered):
-        return {'token': 'unavailable', 'code': SOURCE_NOT_FOUND_CODE}
-    if _rename_locked(lowered):
-        return {'token': 'file_locked', 'code': FILE_LOCKED_CODE}
-    if any(phrase in lowered for phrase in _LOGIN_REQUIRED):
-        return {'token': 'sign_in', 'code': SOURCE_BLOCKED_CODE}
-    if any(phrase in lowered for phrase in _NOT_FOUND_PHRASES):
-        return {'token': 'unavailable', 'code': SOURCE_NOT_FOUND_CODE}
-    if any(phrase in lowered for phrase in _FRAME):
-        return {'token': 'frame', 'code': 'frame_extract_failed'}
-    if any(phrase in lowered for phrase in ('getaddrinfo', 'name or service not known', 'nodename nor servname')):
-        return {'token': 'dns', 'code': 'connection'}
-    if any(phrase in lowered for phrase in _TIMEOUT):
-        return {'token': 'timeout', 'code': 'connection'}
-    if any(phrase in lowered for phrase in _CONNECTION):
-        return {'token': 'connection', 'code': 'connection'}
-    if any(phrase in lowered for phrase in _UNSUPPORTED):
-        return {'token': 'unsupported', 'code': SOURCE_UNSUPPORTED_CODE}
-    return {'token': 'unmatched', 'code': None}
 
 
 def classify_download_error_text(text: str):
