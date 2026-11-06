@@ -1,6 +1,6 @@
 import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from '../../analytics/failureCodes'
 import { getProvider } from '../settings/providerPresets'
-import { USER_CAUSE_REASONS, llmFailureText } from '../../utils/llmFailure'
+import { USER_CAUSE_REASONS, ingestConnectionCopy, llmFailureText } from '../../utils/llmFailure'
 /**
  * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
  * configured, key lacks permission) cannot be fixed by retrying: show 「去设置」 instead.
@@ -145,7 +145,15 @@ const MATERIAL_CODES = [
 
 const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
 
+/** Import page: a download timeout is not a model-settings failure. Reads stage here so the page does not. */
+export function downloadConnectionFailure(analysis?: { error_code?: string | null; failure_stage?: string | null } | null): boolean {
+  return ingestConnectionCopy(analysis?.error_code, null, analysis?.failure_stage) != null
+}
+
 export function suggestedAction(code?: string | null, upstream?: string | null, stage?: string | null): SuggestedAction | null {
+  if (ingestConnectionCopy(code, upstream, stage)) {
+    return { id: 'change_material', label: '换一个视频', kind: 'home', destination: '/' }
+  }
   if (code === 'service_restarted') {
     return { id: 'keep_window', label: '保持窗口打开，或缩短素材', kind: 'note' }
   }
@@ -320,8 +328,9 @@ export function quotaBillingCopy(info: Pick<PageFailureInfo, 'upstream_error_typ
 }
 
 export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: '下载' | '转写' | '分析' | '制作'; reason: string; billing: string | null } {
-  const raw = (message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
-  const reason = BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw
+  const ingest = ingestConnectionCopy(info.error_code, info.upstream_error_type, info.failure_stage)
+  const raw = (ingest ?? message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
+  const reason = ingest || (BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw)
   const count = Number(info.billable_calls_before_failure)
   const quotaBilling = quotaBillingCopy(info)
   return {
@@ -345,8 +354,8 @@ export function analysisPageFailure(
 }
 
 /** User sentence for a settled page cause. The fine upstream type stays inside this reader. */
-export function pageFailureText(info: { error?: string | null; error_code?: string | null; upstream_error_type?: string | null }): string {
-  return llmFailureText(info.error, info.error_code, info.upstream_error_type)
+export function pageFailureText(info: { error?: string | null; error_code?: string | null; upstream_error_type?: string | null; failure_stage?: string | null }): string {
+  return llmFailureText(info.error, info.error_code, info.upstream_error_type, info.failure_stage)
 }
 
 export function analysisFailureText(

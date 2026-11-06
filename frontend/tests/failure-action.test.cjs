@@ -438,6 +438,52 @@ test('A3-3: insufficient_quota billable=0 / billable=3 copy + verify-balance loc
   }
 })
 
+test('ingest connection copy is the download sentence, not the model sentence or a login CTA', () => {
+  const model = '无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。'
+  const card = fa.presentedFailure({
+    error: model,
+    error_code: 'connection',
+    failure_stage: 'ingest',
+  }, model)
+  assert.equal(card.step, '下载')
+  assert.equal(card.reason, '下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。')
+  assert.equal(card.reason.includes('模型'), false)
+  assert.equal(fa.failureAction('connection', null, 'ingest').kind, 'retry')
+  assert.equal(fa.suggestedAction('connection', null, 'ingest').id, 'change_material')
+  assert.equal(fa.suggestedAction('connection', null, 'analyze').id, 'switch_model')
+  const analyze = fa.presentedFailure({
+    error: model,
+    error_code: 'connection',
+    failure_stage: 'analyze',
+  }, model)
+  assert.equal(analyze.reason, model)
+  assert.equal(analyze.step, '分析')
+  const deleted = fa.presentedFailure({
+    error: '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。',
+    error_code: 'source_not_found',
+    failure_stage: 'ingest',
+  })
+  assert.equal(deleted.reason.includes('超时'), false)
+  assert.equal(fa.pageFailureText({
+    error: model,
+    error_code: 'connection',
+    failure_stage: 'download',
+  }), card.reason)
+  const importSrc = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/ImportReview.tsx'), 'utf8')
+  assert.match(importSrc, /downloadConnectionFailure\(workspace\.analysis\)/)
+  assert.doesNotMatch(importSrc, /llmFailure/)
+  assert.doesNotMatch(importSrc, /upstream_error_type/)
+  assert.doesNotMatch(importSrc, /failure_stage/)
+  assert.match(importSrc, /选择已登录的浏览器/)
+  for (const lang of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
+    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
+    const text = data[card.reason]
+    assert.equal(typeof text, 'string', lang)
+    assert.equal(text.includes('模型'), false, lang)
+    assert.notEqual(text, data[model])
+  }
+})
+
 test('X3: FailureActions opens http destination + uses RECHARGE_HINT', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/FailureActions.tsx'), 'utf8')
   assert.match(src, /RECHARGE_HINT/)

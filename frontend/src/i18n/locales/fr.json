@@ -2124,5 +2124,6 @@
   "{{model}} 是生图模型，只能用于封面，不能做分析。": "{{model}} est un modèle d’image réservé aux couvertures, pas à l’analyse.",
   "改用 {{recommend}}": "Passer à {{recommend}}",
   "该模型是生图模型，只能用于封面，不能做分析。": "Ce modèle d’image est réservé aux couvertures, pas à l’analyse.",
-  "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} est un modèle d’image réservé aux couvertures. Passez à un modèle de chat dans Réglages → Fournisseurs et modèles, puis régénérez."
+  "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} est un modèle d’image réservé aux couvertures. Passez à un modèle de chat dans Réglages → Fournisseurs et modèles, puis régénérez.",
+  "下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。": "Le téléchargement de la vidéo a expiré ou le réseau a coupé. Vérifiez le réseau et réessayez, ou utilisez un autre lien."
 }
