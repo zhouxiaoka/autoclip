@@ -3,10 +3,10 @@
 #
 #   bash scripts/website/install.sh ../autoclip_intro
 #
-# 之后在 autoclip_intro 里 `git add -A && git commit -m "build: sync release info automatically" && git push`。
-# 主仓库这端的 repository_dispatch 见 .github/workflows/desktop-build.yml 的 "Notify website" 步骤，
-# 需要在主仓库 Settings → Secrets 里加 WEBSITE_DISPATCH_TOKEN（fine-grained PAT：仓库 autoclip_intro，Contents: Read and write）。
-# 不加也行：官网 workflow 里有每日 cron 兜底，只是会晚最多一天。
+# 复制后在官网仓库的分支上审阅再提交。不要直接推 main。
+# 主仓库的通知在 .github/workflows/promote-release.yml。Pre-release 不通知。
+# 可选 secret：WEBSITE_DISPATCH_TOKEN（fine-grained PAT，只授权 autoclip_intro，Contents: Read and write）。
+# 没配 secret 时，官网每日 cron 读取 GitHub Latest。
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,10 +26,14 @@ echo "已复制到 $TARGET："
 echo "  scripts/sync_release.py"
 echo "  .github/workflows/sync-release.yml"
 echo
-echo "现在同步一次到最新 Release："
+echo "现在同步一次到最新正式 Release："
 (cd "$TARGET" && python3 scripts/sync_release.py)
+if [[ "${WITH_PUBLISH_GUIDE:-}" == "1" ]]; then
+  echo
+  echo "按显式要求重装发布教程页。这会覆盖官网已有的 guides/publish/index.html。"
+  python3 "$HERE/install_publish_guide.py" "$TARGET"
+else
+  echo "未覆盖 guides/publish。该页已在官网单独维护；只有要重装旧模板时才设置 WITH_PUBLISH_GUIDE=1。"
+fi
 echo
-echo "写入发布教程页，并在首页 FAQ / 页脚留下入口："
-python3 "$HERE/install_publish_guide.py" "$TARGET"
-echo
-echo "下一步：cd $TARGET && git add -A && git commit -m 'docs: add the publish guide page' && git push"
+echo "下一步：在 $TARGET 审阅 diff，再提交并推到官网仓库的分支。不要直接推 main。"
