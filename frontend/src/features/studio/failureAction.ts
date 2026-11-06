@@ -145,6 +145,11 @@ const MATERIAL_CODES = [
 
 const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
 
+/** Import page: a download timeout is not a model-settings failure. Stage + code only. */
+export function downloadConnectionFailure(code?: string | null, stage?: string | null): boolean {
+  return ingestConnectionCopy(code, null, stage) != null
+}
+
 export function suggestedAction(code?: string | null, upstream?: string | null, stage?: string | null): SuggestedAction | null {
   if (ingestConnectionCopy(code, upstream, stage)) {
     return { id: 'change_material', label: '换一个视频', kind: 'home', destination: '/' }

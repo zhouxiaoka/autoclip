@@ -8,8 +8,7 @@ import { studioApi, errorText } from './api'
 import PlanSummary from './PlanSummary'
 import { sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
-import { analysisFailureText } from './failureAction'
-import { ingestConnectionCopy } from '../../utils/llmFailure'
+import { analysisFailureText, downloadConnectionFailure } from './failureAction'
 import { defaultImportOptions } from './types'
 import './studio.css'
 
@@ -22,7 +21,7 @@ export default function ImportReview() {
   const [busy,setBusy]=useState(false)
   const retry=async()=>{if(!id)return;setBusy(true);setActionError('');try{await studioApi.correctPlan(id,{...defaultImportOptions,...workspace.plan?.overrides});refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy(false)}}
   const running=workspace.analysis?.status==='running'
-  const downloadConnection=!!ingestConnectionCopy(workspace.analysis?.error_code, workspace.analysis?.upstream_error_type, workspace.analysis?.failure_stage)
+  const downloadConnection=downloadConnectionFailure(workspace.analysis?.error_code, workspace.analysis?.failure_stage)
   const producing=running&&workspace.analysis?.phase==='production'
   if(!id)return null
   return <main className="ac-page studio-import-review">

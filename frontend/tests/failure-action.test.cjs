@@ -470,8 +470,9 @@ test('ingest connection copy is the download sentence, not the model sentence or
     failure_stage: 'download',
   }), card.reason)
   const importSrc = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/ImportReview.tsx'), 'utf8')
-  assert.match(importSrc, /ingestConnectionCopy/)
-  assert.match(importSrc, /downloadConnection/)
+  assert.match(importSrc, /downloadConnectionFailure/)
+  assert.doesNotMatch(importSrc, /llmFailure/)
+  assert.doesNotMatch(importSrc, /upstream_error_type/)
   assert.match(importSrc, /选择已登录的浏览器/)
   for (const lang of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
