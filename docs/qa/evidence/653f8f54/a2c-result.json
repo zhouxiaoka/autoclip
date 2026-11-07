@@ -1,0 +1,7 @@
+{
+  "status": "failed",
+  "phase": "screening",
+  "code": "connection",
+  "stage": "ingest",
+  "msg": "下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。"
+}

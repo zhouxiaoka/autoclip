@@ -17,7 +17,7 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 ## A3-5 额度预检
 88API 余额为 0 的 key 导入 → 门口提示余额不足 +「去充值」；充值 / 换 key 后测试连接通过，重试可用。
 
-（本文件仍是操作提纲。2026-11-06 装包 `001acd8e` 的已证、待证和阻断见 [RELEASE_1_5_9_ACCEPTANCE_REMEDIATION.md](RELEASE_1_5_9_ACCEPTANCE_REMEDIATION.md)。下表不是通过结论。）
+（本文件仍是操作提纲。2026-11-06 装包 `001acd8e` 的已证、待证和阻断见 [RELEASE_1_5_9_ACCEPTANCE_REMEDIATION.md](RELEASE_1_5_9_ACCEPTANCE_REMEDIATION.md)。2026-11-07 新 Mac 包 `653f8f54` 的实机结果见 [RELEASE_1_5_9_MAC_653F8F54.md](RELEASE_1_5_9_MAC_653F8F54.md)。下表不是把整包写成通过。）
 
 | 项 | 平台 | 包 | 源 SHA | 结果 | 日期 |
 |---|---|---|---|---|---|
@@ -28,3 +28,9 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 | A2-5 | macOS arm64 | 同上 | `001acd8e` | `source_not_found` 与 `source_blocked` 已见到；主按钮是「选择已登录的浏览器」 | 2026-11-06 |
 | A2-5 | Windows x64 | 同上 | `001acd8e` | 两条 URL 都是 yt-dlp `timed out` → `connection`/`ingest`，卡片误用模型服务文案。源码已改下载句；此包未含该修复。没有 unavailable/sign-in 原文 | 2026-11-06 |
 | A3-5 | 双平台 | 同上 | `001acd8e` | 未测：没有真实零余额 key | 2026-11-06 |
+| A1-5 | macOS arm64 | 原 DMG `ee65b388…baeb786` | `653f8f54` | parent 已核 hb 与图和遥测一致。JSON 无包身份、无独立 kill 记录；截图无采集时间，不补写 | 2026-11-07 |
+| A1-6 | macOS arm64 | 原 DMG | `653f8f54` | fixture-assisted。对话框和 `user_quit` 已见到。Sentry 只查了 `PYTHON-FASTAPI-5Z` 的 last seen | 2026-11-07 |
+| A2-5 | macOS arm64 | 原 DMG | `653f8f54` | 直连是 `source_not_found`。原包没有超时句，也没有英文页 | 2026-11-07 |
+| A2-5 | macOS arm64 | 同一副本改 bundle id 后 ad-hoc，不是原 DMG | `653f8f54` | PARTIAL。`127.0.0.1` 代理诱导的套接字超时，不是 YouTube 上游 timeout。中英页面在这个副本上。项目页仍有 Model settings | 2026-11-07 |
+| #565 | macOS arm64 | 原包后端 + 已改 bundle 的窗口；本机夹具，不是真实上游 | `653f8f54` | PARTIAL。保存 422。隔离配置下 readiness 是 `image_model_in_analysis`，试跑不点灯。界面有推荐。不是真实豆包连接 | 2026-11-07 |
+| A3-5 | macOS arm64 | 原 DMG | `653f8f54` | 未测 | 2026-11-07 |
