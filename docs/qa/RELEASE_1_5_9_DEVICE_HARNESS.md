@@ -28,8 +28,9 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 | A2-5 | macOS arm64 | 同上 | `001acd8e` | `source_not_found` 与 `source_blocked` 已见到；主按钮是「选择已登录的浏览器」 | 2026-11-06 |
 | A2-5 | Windows x64 | 同上 | `001acd8e` | 两条 URL 都是 yt-dlp `timed out` → `connection`/`ingest`，卡片误用模型服务文案。源码已改下载句；此包未含该修复。没有 unavailable/sign-in 原文 | 2026-11-06 |
 | A3-5 | 双平台 | 同上 | `001acd8e` | 未测：没有真实零余额 key | 2026-11-06 |
-| A1-5 | macOS arm64 | DMG `ee65b388…baeb786` | `653f8f54` | 证据已入库 `docs/qa/evidence/653f8f54/`。杀前 hb stage=screening、pid=31788、age 0.042s。恢复字段与卡片一致。PostHog/Sentry 由 parent 按同秒 production 字段独立核 | 2026-11-07 |
-| A1-6 | macOS arm64 | 同上 | `653f8f54` | 对话框与 `user_quit` 已见到，但是 fixture-assisted。只复查了 `PYTHON-FASTAPI-5Z` 的 last seen，不是全域 Sentry 无事件 | 2026-11-07 |
-| A2-5 | macOS arm64 | 同上 | `653f8f54` | PARTIAL。YouTube 直连是 `source_not_found`。套接字挂起后下载器超时，中英页面有下载句。项目页仍有「模型设置」。没有 sign-in 原文 | 2026-11-07 |
-| #565 | macOS arm64 | 同上 | `653f8f54` | PARTIAL。`doubao-seedream-5-0-flash-260915` 的保存接口 422 且含「生图」，但界面没有把该 id 选进槽位。readiness 不是 `image_model_in_analysis` | 2026-11-07 |
-| A3-5 | macOS arm64 | 同上 | `653f8f54` | 未测 | 2026-11-07 |
+| A1-5 | macOS arm64 | 原 DMG `ee65b388…baeb786` | `653f8f54` | parent 已核 hb 与图和遥测一致。JSON 无包身份、无独立 kill 记录；截图无采集时间，不补写 | 2026-11-07 |
+| A1-6 | macOS arm64 | 原 DMG | `653f8f54` | fixture-assisted。对话框和 `user_quit` 已见到。Sentry 只查了 `PYTHON-FASTAPI-5Z` 的 last seen | 2026-11-07 |
+| A2-5 | macOS arm64 | 原 DMG | `653f8f54` | 直连是 `source_not_found`。原包没有超时句，也没有英文页 | 2026-11-07 |
+| A2-5 | macOS arm64 | 同一副本改 bundle id 后 ad-hoc，不是原 DMG | `653f8f54` | PARTIAL。`127.0.0.1` 代理诱导的套接字超时，不是 YouTube 上游 timeout。中英页面在这个副本上。项目页仍有 Model settings | 2026-11-07 |
+| #565 | macOS arm64 | 原包 `dall-e-3`；改过的副本上才是 seedream | `653f8f54` | PARTIAL。两处都只是接口 422。界面没有选中 `doubao-seedream-5-0-flash-260915`。readiness 不是 `image_model_in_analysis` | 2026-11-07 |
+| A3-5 | macOS arm64 | 原 DMG | `653f8f54` | 未测 | 2026-11-07 |
