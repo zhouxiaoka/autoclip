@@ -78,6 +78,39 @@ Sentry：`PYTHON-FASTAPI-5Z` 最新事件 2026-11-06T17:16:21Z，`release=autocl
 
 本地文件导入和制作启动已经发生（A1-5 的 screening，A1-6 的 processing）。没有做出可导出的成片。导出不记通过。示例视频和付费模型都没有用。
 
+## 2026-11-07 下午补充
+
+证据已放进本仓库 `docs/qa/evidence/653f8f54/`，供复核。`/opt/cursor/artifacts` 在这台机器上不可写，所以没有用那条上传路径。没有把误截到其他窗口的那张图放进来。
+
+WebKit 隔离：只改了验收副本的 `CFBundleIdentifier` 为 `com.autoclip.desktop.qa653f8f54` 并重新 ad-hoc 签名。语言只用 `defaults write` 写这个新 id 的 `AppleLanguages`。旧 id `com.autoclip.desktop` 没有 `AppleLanguages`，它的 WebKit `localstorage.sqlite3` 修改时间在整个下午操作后仍是 `1793988643`。`$HOME` 改不了 WebKit 目录，因为目录跟 bundle id 走。
+
+### A2 下载超时：PARTIAL
+
+不经代理时，删除候选 URL 仍在约 3 秒内变成 `source_not_found`。这次为了让已安装下载器真正走出超时，只给验收进程设置了 `https_proxy=http://127.0.0.1:8877`（本机接受连接但不回答），并排除了 `127.0.0.1`。没有改 hosts、防火墙。约 181 秒后失败：`error_code=connection`，`failure_stage=ingest`，句子是「下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。」这是下载器的真实套接字超时，不是 YouTube 自己返回的 `timed out` 原文。YouTube 在这台机器上直接回答时仍是 `source_not_found`。登录候选此前也是 `source_not_found`，没有 sign-in 原文可留。
+
+页面：
+
+- 中文首页 `docs/qa/evidence/653f8f54/a2c-zh-home.png`：该句，按钮「重新生成」，没有「模型设置」。步骤前缀仍是「制作」，因为项目列表没有 `failure_stage`。
+- 英文首页 `a2c-en-reload.png`：同一句的英文。
+- 英文项目页 `a2c-en-project.png`：句子正确，但旁边有「Model settings」。这是项目页 `StudioResults` 在下载超时上仍给出的模型设置入口。导入确认页没有这个按钮。
+- 英文导入页 `a2c-en-import.png`：同一句，按钮「Use another video」，没有模型设置。
+
+### A1-6 标注
+
+「仍然退出」那一次的进行中状态是本机挂起服务撑住的，不是完整模型制作。截图 `a16-dialog.png`。`user_quit` 写在隔离 profile 的 marker `b62a5ae977e0`。Sentry 只复查了 issue `PYTHON-FASTAPI-5Z`：到 17:29 UTC last seen 仍是 17:16:21Z。这不能当成所有 Sentry 项目都没有新事件。PostHog 只查了 17:28–17:32 的 `studio_generation_finished`，该窗口没有新行。
+
+### #565 `doubao-seedream-5-0-flash-260915`：PARTIAL
+
+设置页已打开（`settings-models.png` 留在本机 evidence，未入库）。分析槽当前是 `fixture-language`。点开后界面写「还没有已连接的服务商」，所以没有在界面里把这个生图 id 选进槽位并点保存。已安装后端对这个确切 id 的 `PUT /api/v1/settings/ai-models` 返回 422，正文含「生图」，不含密钥，也不回显模型 id。保存被拒绝后 readiness 仍是 `configured` / `fixture-language`，不是 `image_model_in_analysis`，也不是三灯全绿。先前的 `dall-e-3` 接口拒绝同样只说明保存门，不能代替这个 id 的界面试跑。
+
+### #567
+
+已收到的 Sentry 事件标签里没有 key 名称字段。因此新 key 名未证。不打印 DSN。release 仍是 `autoclip-backend@1.5.9`，`build_environment=production`。
+
+### 导入制作导出：BLOCKED
+
+这台机器没有 Ollama、LM Studio 或已安装的本地转写模型。不用 fixture 把分析跑完冒充完整成片。没有可播放的导出。
+
 ## 没有写成全通过的项
 
 - 下载超时那句在这台 Mac 上没有触发。

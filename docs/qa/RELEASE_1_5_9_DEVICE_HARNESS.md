@@ -28,8 +28,8 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 | A2-5 | macOS arm64 | 同上 | `001acd8e` | `source_not_found` 与 `source_blocked` 已见到；主按钮是「选择已登录的浏览器」 | 2026-11-06 |
 | A2-5 | Windows x64 | 同上 | `001acd8e` | 两条 URL 都是 yt-dlp `timed out` → `connection`/`ingest`，卡片误用模型服务文案。源码已改下载句；此包未含该修复。没有 unavailable/sign-in 原文 | 2026-11-06 |
 | A3-5 | 双平台 | 同上 | `001acd8e` | 未测：没有真实零余额 key | 2026-11-06 |
-| A1-5 | macOS arm64 | DMG `ee65b388…baeb786` | `653f8f54` | PASS。杀前同 instance 心跳 stage=screening、pid 等于被杀进程、age 0.042s；恢复卡与 crash 字段一致；PostHog 一条、Sentry 一条 | 2026-11-07 |
-| A1-6 | macOS arm64 | 同上 | `653f8f54` | PASS。制作中 Cmd+Q 出现「仍然退出」并点击；marker `user_quit`；此后 Sentry `ServiceRestarted` 没有新事件。制作状态由本机无外呼 fixture 挂住 | 2026-11-07 |
-| A2-5 | macOS arm64 | 同上 | `653f8f54` | 部分。两条 YouTube URL 都是 `source_not_found`，不是超时，也不是 sign-in。项目页和导入页是删除句和「换一个视频」。超时句这次没有出现。英文界面未改 | 2026-11-07 |
-| #565 | macOS arm64 | 同上 | `653f8f54` | PASS（接口）。分析槽保存 `dall-e-3` 被拒绝，设置文件没有写成；就绪不是 `image_model_in_analysis` | 2026-11-07 |
+| A1-5 | macOS arm64 | DMG `ee65b388…baeb786` | `653f8f54` | 证据已入库 `docs/qa/evidence/653f8f54/`。杀前 hb stage=screening、pid=31788、age 0.042s。恢复字段与卡片一致。PostHog/Sentry 由 parent 按同秒 production 字段独立核 | 2026-11-07 |
+| A1-6 | macOS arm64 | 同上 | `653f8f54` | 对话框与 `user_quit` 已见到，但是 fixture-assisted。只复查了 `PYTHON-FASTAPI-5Z` 的 last seen，不是全域 Sentry 无事件 | 2026-11-07 |
+| A2-5 | macOS arm64 | 同上 | `653f8f54` | PARTIAL。YouTube 直连是 `source_not_found`。套接字挂起后下载器超时，中英页面有下载句。项目页仍有「模型设置」。没有 sign-in 原文 | 2026-11-07 |
+| #565 | macOS arm64 | 同上 | `653f8f54` | PARTIAL。`doubao-seedream-5-0-flash-260915` 的保存接口 422 且含「生图」，但界面没有把该 id 选进槽位。readiness 不是 `image_model_in_analysis` | 2026-11-07 |
 | A3-5 | macOS arm64 | 同上 | `653f8f54` | 未测 | 2026-11-07 |
