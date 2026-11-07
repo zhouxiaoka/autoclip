@@ -32,5 +32,5 @@ Cmd+Q / 托盘「仍然退出」→ `restart_reason=user_quit`，Sentry 不收�
 | A1-6 | macOS arm64 | 原 DMG | `653f8f54` | fixture-assisted。对话框和 `user_quit` 已见到。Sentry 只查了 `PYTHON-FASTAPI-5Z` 的 last seen | 2026-11-07 |
 | A2-5 | macOS arm64 | 原 DMG | `653f8f54` | 直连是 `source_not_found`。原包没有超时句，也没有英文页 | 2026-11-07 |
 | A2-5 | macOS arm64 | 同一副本改 bundle id 后 ad-hoc，不是原 DMG | `653f8f54` | PARTIAL。`127.0.0.1` 代理诱导的套接字超时，不是 YouTube 上游 timeout。中英页面在这个副本上。项目页仍有 Model settings | 2026-11-07 |
-| #565 | macOS arm64 | 原包 `dall-e-3`；改过的副本上才是 seedream | `653f8f54` | PARTIAL。两处都只是接口 422。界面没有选中 `doubao-seedream-5-0-flash-260915`。readiness 不是 `image_model_in_analysis` | 2026-11-07 |
+| #565 | macOS arm64 | 原包后端 + 已改 bundle 的窗口；本机夹具，不是真实上游 | `653f8f54` | PARTIAL。保存 422。隔离配置下 readiness 是 `image_model_in_analysis`，试跑不点灯。界面有推荐。不是真实豆包连接 | 2026-11-07 |
 | A3-5 | macOS arm64 | 原 DMG | `653f8f54` | 未测 | 2026-11-07 |

@@ -79,7 +79,42 @@ YouTube 直连在这台机器上仍是 `source_not_found`。为了让已安装�
 
 ## 没有通过的项
 
-- 完整导入、制作、导出：BLOCKED。这台机器没有可用的免费本地模型。不用 fixture 把分析跑完冒充成片。
-- 真实 sign-in / `source_blocked`：这次没有出现。
+- 完整导入、制作、导出：仍是 BLOCKED。见下面的资源核对。没有用 fixture 跑出成片。
 - 原 DMG 上的下载超时句和英文界面：没有。下午这两项只存在于改过的副本，而且超时是本机代理诱导的。
 - A3、validation、Windows：不做。
+
+## 2026-11-07 晚些时候新增
+
+没有再改 bundle id、签名或共享偏好。原 GUI 没有启动。旧 bundle 的 WebKit 文件修改时间仍是 `1793988643`。用户 8000 端口后端还在。
+
+从原 DMG 另拷了一份未改 plist 的应用，bundle id 仍是 `com.autoclip.desktop`，Info.plist SHA-256 与 DMG 内的一致：`5b0d64db198a7aed9a4cbe2d43559c488d9e237e1b46cbe1402bc3cedf6e1cfd`。用这份包里的 `backend.desktop_main` 起了后端，没有开窗口。
+
+### 更新清单
+
+`releases/latest/download/latest.json` 能读到，版本是 `1.5.8`。darwin-aarch64 的目标文件名是 `AutoClip.Desktop_1.5.8_aarch64.app.tar.gz`。没有 1.5.9 的 latest.json，没有造一份。
+
+### sign-in：原包后端见到 `source_blocked`
+
+一个公开、需要确认年龄才能看的页面，没有登录、没有读 Cookie。原包后端导入后项目是 `source_blocked`，阶段 `ingest`，句子是产品自己的「这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认…」。句子里没有链接。这不是 timeout，也不是 `source_not_found`。
+
+### #565：界面拒绝和就绪门都看到了，仍不是真实上游
+
+隔离配置里写了一个本机 `127.0.0.1:9` 的 seed 连接和 `doubao-seedream-5-0-flash-260915`。这是防错夹具，不是连上了豆包。
+
+原包后端：
+
+- 保存该配置返回 422，正文含「生图」，不回显密钥和模型 id。
+- 文件直接放进隔离 profile 后，readiness 是 `image_model_in_analysis`，`trial_ok` 为空。分析灯和转写灯都不是通过，不是三灯全绿。
+- 同一后端的试跑接口 `probe_kind=trial` 立刻返回 `image_model_in_analysis`，`trial_passed` 为空，没有把灯点亮。
+
+窗口是已经改过 bundle id 的那份副本，因为原 GUI 会写共享 WebKit。截图：
+
+- `565-settings.png`：分析槽是这个 id，并推荐改用 `doubao-seed-2-1-lite-260915`。
+- `565-save.png`：点保存后提示「该模型是生图模型，只能用于封面，不能做分析。」文件里的模型 id 没有被写成别的。
+- `565-home.png`：导入区写着这个 id 不能做分析，模型灯是叉，转写灯是叉，FFmpeg 是勾。不是三灯全绿。
+
+设置摘要页没有单独的「试跑一段」按钮；试跑走的是上面那个原包接口。
+
+### 成片：BLOCKED
+
+数据卷可用约 262 GiB。产品目录里的 whisper tiny 约 75 MB、base 约 145 MB，放得下。QA profile 里的 whisper 目录是空的，readiness 是 `whisper_not_installed`。没有 Ollama、LM Studio，也没有现成的本地对话模型。分析槽现在是上面的生图夹具，产品会在调用前拦住。没有下载一套对话模型来冒充完整制作，也没有可播放的导出。
