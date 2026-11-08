@@ -244,25 +244,59 @@ def _non_stream_completion(payload: Any) -> bool:
     return bool(_completion_text(choices[0].get('message')))
 
 
+def _reasoning_only_response(response: Any) -> bool:
+    """A 200 whose whole output budget went to hidden reasoning tokens, leaving no answer.
+
+    Thinking models served through an OpenAI-compatible gateway keep reasoning on and
+    ignore ``thinking`` / ``enable_thinking``, so the short probe finishes with
+    ``finish_reason="length"`` and empty content. The caller retries once with the
+    reasoning budget instead of reporting the blank answer as an unknown failure.
+    """
+    try:
+        payload = response.json()
+    except Exception:  # noqa: BLE001 - non-JSON bodies are classified further down
+        return False
+    if not isinstance(payload, dict):
+        return False
+    choices = payload.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    choice = choices[0]
+    if choice.get('finish_reason') != 'length':
+        return False
+    if _completion_text(choice.get('message')):
+        return False
+    usage = payload.get('usage')
+    details = usage.get('completion_tokens_details') if isinstance(usage, dict) else None
+    reasoning = details.get('reasoning_tokens') if isinstance(details, dict) else None
+    return isinstance(reasoning, int) and reasoning > 0
+
+
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
     from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
     from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
-    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
-        'model': model,
-        'messages': [{'role': 'user', 'content': 'ok'}],
-        'max_tokens': tokens,
-    })))
-    # Hosts such as APIMart default to text/event-stream unless this is false.
-    payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
+    headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+
+    def _payload(max_tokens: int) -> dict:
+        body = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+            'model': model,
+            'messages': [{'role': 'user', 'content': 'ok'}],
+            'max_tokens': max_tokens,
+        })))
+        # Hosts such as APIMart default to text/event-stream unless this is false.
+        body['stream'] = False
+        return body
+
     try:
         with httpx.Client(timeout=PROBE_TIMEOUT, trust_env=not is_local_url(base)) as client:
-            response = client.post(
-                url, json=payload,
-                headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'},
-            )
+            response = client.post(url, json=_payload(tokens), headers=headers)
+            # A reasoning model can spend the short probe on hidden tokens and answer nothing.
+            # One retry with the reasoning budget; a genuinely broken model still fails below.
+            if tokens < PROBE_REASONING_MAX_TOKENS and _reasoning_only_response(response):
+                response = client.post(url, json=_payload(PROBE_REASONING_MAX_TOKENS), headers=headers)
     except httpx.TimeoutException:
         return _with_detail(_classify(None, '', error_name='TimeoutError'))
     except httpx.RequestError as exc:

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from backend.core.upstream_errors import HINT_KEYS, UpstreamErrorType
 from backend.core.provider_model_fetch import GEMINI_PAGE_SIZE
 from backend.services import ai_model_settings as ai
+from backend.services import provider_validation as pv
 from backend.services.provider_validation import validate_connection
 
 
@@ -243,6 +244,45 @@ def test_success_probes_with_about_sixteen_tokens_and_returns_models(monkeypatch
     assert posted[0]['max_tokens'] == 16
     assert posted[0]['model'] == 'gpt-4o-mini'
     assert posted[0]['stream'] is False
+
+
+def test_reasoning_only_probe_retries_once_with_the_reasoning_budget(monkeypatch):
+    posted = []
+
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'deepseek/deepseek-v4.1-flash'}]})
+        posted.append(body)
+        if body['max_tokens'] == pv.PROBE_MAX_TOKENS:
+            return _FakeResponse(200, {
+                'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}],
+                'usage': {'completion_tokens': 16, 'completion_tokens_details': {'reasoning_tokens': 16}},
+            })
+        return _FakeResponse(200, {
+            'choices': [{'message': {'content': 'Hey! What can I help you with?'}, 'finish_reason': 'stop'}],
+            'usage': {'completion_tokens': 78, 'completion_tokens_details': {'reasoning_tokens': 64}},
+        })
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'deepseek/deepseek-v4.1-flash')
+    assert result.ok is True
+    assert [body['max_tokens'] for body in posted] == [pv.PROBE_MAX_TOKENS, pv.PROBE_REASONING_MAX_TOKENS]
+
+
+def test_blank_answer_without_reasoning_tokens_fails_without_a_retry(monkeypatch):
+    posted = []
+
+    def handler(method, url, headers, body):
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gw-model'}]})
+        posted.append(body)
+        return _FakeResponse(200, {'choices': [{'message': {'content': ''}, 'finish_reason': 'stop'}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gw-model')
+    assert result.ok is False
+    assert result.error_type == UpstreamErrorType.UNKNOWN.value
+    assert len(posted) == 1
 
 
 @pytest.mark.parametrize('provider', ['gemini', 'compatible'])
