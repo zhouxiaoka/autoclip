@@ -351,3 +351,35 @@ def ensure_desktop_directories() -> bool:
 
 def save_desktop_config(config: DesktopConfig) -> bool:
     return True
+
+
+def get_data_dir_info() -> dict:
+    """Current data/cache/temp directories, as returned by GET /settings/paths/data-directory."""
+    paths = _desktop_config.paths
+    return {
+        "data_dir": str(paths.data_dir),
+        "cache_dir": str(paths.cache_dir),
+        "temp_dir": str(paths.temp_dir),
+        "database_url": paths.database_url,
+        "exists": paths.data_dir.exists(),
+    }
+
+
+def set_data_dir(new_path: str, migrate_data: bool = True) -> dict:
+    """Module-level wrapper used by POST /settings/paths/data-directory.
+
+    The endpoint expects ``{"success": bool, ...}``; ``DesktopConfig.set_data_dir``
+    returns a different shape and raises on failure, so adapt it here.
+    """
+    try:
+        result = _desktop_config.set_data_dir(Path(new_path), migrate_from_old=migrate_data)
+    except Exception as exc:  # noqa: BLE001 - report to the caller instead of a bare 500
+        return {"success": False, "error": str(exc)}
+    return {
+        "success": True,
+        "message": "数据目录已更新",
+        "new_path": result["data_dir"],
+        "migrated": result["migrated"],
+        "migrated_files": [],
+        "failed_files": [],
+    }
