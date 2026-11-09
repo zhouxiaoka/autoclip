@@ -475,6 +475,8 @@ test('ingest connection copy is the download sentence, not the model sentence or
   assert.doesNotMatch(importSrc, /upstream_error_type/)
   assert.doesNotMatch(importSrc, /failure_stage/)
   assert.match(importSrc, /选择已登录的浏览器/)
+  const projectPage = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
+  assert.match(projectPage, /!downloadConnectionFailure\(failureInfo\(\)\) && !weakLocalTimelineFailure/)
   for (const lang of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     const text = data[card.reason]

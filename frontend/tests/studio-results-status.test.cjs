@@ -433,3 +433,62 @@ test('1.5.7 results page has no control that appends platforms', () => {
   const html = render(true, 'rendering', 'completed')
   assert.doesNotMatch(html, /追加平台/)
 })
+
+function labels(buttons) {
+  return buttons.map(button => button.children)
+}
+
+test('download connection hides the extra model-settings button; a model-stage connection keeps it', () => {
+  const downloadSentence = '下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。'
+  for (const stage of ['ingest', 'download']) {
+    const buttons = []
+    const html = render(true, 'screening', 'failed', buttons, [], 'connection', stage, downloadSentence)
+    assert.equal(labels(buttons).includes('模型设置'), false, stage)
+    assert.equal(labels(buttons).includes('去设置'), false, stage)
+    assert.equal(labels(buttons).includes('安装转写'), false, stage)
+    assert.equal(labels(buttons).includes('选择已登录的浏览器'), false, stage)
+    assert.ok(labels(buttons).includes('重试'), stage)
+    assert.ok(labels(buttons).includes('调整制作方案'), stage)
+    assert.match(html, new RegExp(downloadSentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    assert.doesNotMatch(html, /无法连接模型服务/)
+  }
+  for (const stage of ['analyze', 'outline', 'screening']) {
+    const buttons = []
+    render(true, 'production', 'failed', buttons, [], 'connection', stage, '无法连接模型服务。请检查 API 地址和网络；如果是本地模型，请先启动服务再重试。')
+    assert.ok(labels(buttons).includes('模型设置'), stage)
+    assert.ok(labels(buttons).includes('重试'), stage)
+    assert.equal(labels(buttons).includes('去设置'), false, stage)
+  }
+  const unspecified = []
+  render(true, 'production', 'failed', unspecified, [], 'connection', undefined, '无法连接模型服务。请检查 API 地址和网络；如果是本地模型，请先启动服务再重试。')
+  assert.ok(labels(unspecified).includes('模型设置'), 'a connection failure without a download stage stays a model entry')
+})
+
+test('existing settings entries stay on their own failures', () => {
+  const whisper = []
+  render(true, 'screening', 'failed', whisper, [], 'whisper_not_installed')
+  assert.ok(labels(whisper).includes('安装转写'))
+  assert.equal(labels(whisper).includes('模型设置'), false)
+  assert.equal(labels(whisper).includes('去设置'), false)
+
+  const blocked = []
+  render(true, 'screening', 'failed', blocked, [], 'source_blocked', 'ingest', '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。')
+  assert.ok(labels(blocked).includes('选择已登录的浏览器'))
+  assert.ok(labels(blocked).includes('换一个视频'))
+  assert.equal(labels(blocked).includes('模型设置'), false)
+
+  const missing = []
+  render(true, 'screening', 'failed', missing, [], 'source_not_found', 'ingest', '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。')
+  assert.ok(labels(missing).includes('换一个视频'))
+  assert.equal(labels(missing).includes('模型设置'), false)
+  assert.equal(labels(missing).includes('重试'), false)
+
+  const unconfigured = []
+  render(true, 'screening', 'failed', unconfigured, [], 'llm_not_configured')
+  assert.ok(labels(unconfigured).includes('模型设置'))
+
+  const invalid = []
+  render(true, 'production', 'failed', invalid, [], 'invalid_key', 'analyze')
+  assert.ok(labels(invalid).includes('去设置'))
+  assert.equal(labels(invalid).includes('重试'), false)
+})
