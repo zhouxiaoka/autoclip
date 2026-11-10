@@ -216,6 +216,34 @@ def test_same_code_keeps_the_generation_stage_and_a_same_run_receipt():
     assert wrong[1] == 'rate_limited'
     assert wrong[2] == 'render'
     assert wrong[5] == 'rate_limited'
+    missing_stage = _failure(
+        {'error': '无法连接模型服务。', 'error_code': 'connection'},
+        {'error': '无法连接模型服务。', 'error_code': 'connection', 'failure_stage': 'download', 'run_id': 'run-1'},
+    )
+    assert missing_stage[1] == 'connection'
+    assert missing_stage[2] is None
+    receipt_without_stage = _failure(
+        {'error': '无法连接模型服务。', 'error_code': 'connection'},
+        {'error': '无法连接模型服务。', 'error_code': 'connection', 'failure_stage': 'download', 'run_id': 'run-1'},
+        [{'sequence': 1, 'state': 'failed', 'run_id': 'run-1', 'causes': [
+            {'code': 'connection', 'upstream': 'connection'},
+        ]}],
+    )
+    assert receipt_without_stage[2] is None
+    assert receipt_without_stage[5] == 'connection'
+    wrong_run_stage = _failure(
+        {'error': '无法连接模型服务。', 'error_code': 'connection'},
+        {'error': '无法连接模型服务。', 'error_code': 'connection', 'failure_stage': 'download', 'run_id': 'run-1'},
+        [{'sequence': 1, 'state': 'failed', 'run_id': 'other-run', 'causes': [
+            {'code': 'connection', 'stage': 'download', 'upstream': 'connection'},
+        ]}],
+    )
+    assert wrong_run_stage[2] is None
+    explicit_download = _failure(
+        {'error': '下载中断', 'error_code': 'connection', 'failure_stage': 'download'},
+        {'error': '下载中断', 'error_code': 'connection', 'failure_stage': 'screening', 'run_id': 'run-1'},
+    )
+    assert explicit_download[2] == 'download'
     assert preserved_result_count([], [], [{'job_id': 'j1', 'status': 'completed'}]) == 1
     assert preserved_result_count([], [{'status': 'completed', 'render_job_id': 'j1'}], [{'job_id': 'j1', 'status': 'completed'}], 0, 1) == 2
 

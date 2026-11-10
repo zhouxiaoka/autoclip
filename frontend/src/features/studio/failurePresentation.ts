@@ -107,8 +107,6 @@ export function resolveFailureCause(input: {
       secondary_upstream_error_types: receipt.secondary_upstream_error_types,
       secondary_failure_stages: receipt.secondary_failure_stages,
     }
-  } else if (!chosen.failure_stage && analysis?.failure_stage) {
-    chosen = { ...chosen, failure_stage: analysis.failure_stage }
   }
   if (!chosen.phase && analysis?.phase) chosen = { ...chosen, phase: analysis.phase }
   const requests = [analysis?.llm_calls, generation?.llm_calls].map(value => Number(value)).filter(value => Number.isFinite(value) && value > 0)
