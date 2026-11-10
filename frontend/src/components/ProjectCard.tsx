@@ -10,13 +10,13 @@ import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
-import { openExternalLink } from '../utils/externalLinks'
-import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
-import { classifySubtitleFailure } from '../utils/subtitleFailure'
-import { ADD_PROVIDER_HINT, failureAction, isTranscriptionInstall, presentedFailure, SWITCH_MODEL_LABEL } from '../features/studio/failureAction'
+import { llmFailureText } from '../utils/llmFailure'
+import { presentFailure, type PrimaryAction } from '../features/studio/failurePresentation'
+import DiagnosePanel from '../features/studio/DiagnosePanel'
+import { stageBrowserCookieRecovery } from '../features/studio/browserCookieRecovery'
 import SwitchModelDialog from '../features/studio/SwitchModelDialog'
 import type { SwitchModelOption } from '../features/studio/switchModelOptions'
-import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
+import { weakLocalTimelineFailure } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
@@ -65,7 +65,7 @@ function suggestLine(name: string) {
   return <>{text.slice(0, at)}<strong>{name}</strong>{text.slice(at + name.length)}</>
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick, replacement, switchOptions, connectionCount, analysisProvider, onSwitchAndRetry }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick, replacement, switchOptions, connectionCount, onSwitchAndRetry }) => {
   useTranslation()
   const navigate = useNavigate()
   const creative = project.settings?.creative || project.processing_config?.creative
@@ -232,8 +232,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // An automatic Studio run that ended failed/partial (including one interrupted by a restart,
   // RC156 #13) is regenerated from the project page (Studio retry → /studio/{id}/analyze, or
   // per-version retry), not by re-running the import screening.
-  const studioGeneration = String(project.settings?.studio_generation_status || project.processing_config?.studio_generation_status || '')
-  const regenerateInStudio = isManaged && (studioGeneration === 'failed' || studioGeneration === 'partial')
   
   // 状态标准化处理
   const normalizedStatus = project.status === 'error' ? 'failed' : 
@@ -283,6 +281,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                          project.status === 'processing' ? 10 : 0
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false)
   const failedProgress = useSimpleProgressStore((st) => st.getProgress(project.id))
   const failureContext = {
     source: 'failure' as const,
@@ -304,32 +303,24 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const billableRaw = project.processing_config?.billable_calls_before_failure
     ?? project.settings?.billable_calls_before_failure
   const billableCount = Number(billableRaw)
-  const failureCard = presentedFailure({
+  const preservedCount = Math.max(
+    Number(project.processing_config?.studio_draft_count ?? project.settings?.studio_draft_count ?? 0) || 0,
+    Number(project.processing_config?.studio_completed_variant_count ?? project.settings?.studio_completed_variant_count ?? 0) || 0,
+    Number(project.total_clips || 0) || 0,
+  )
+  const requestCount = Number(project.processing_config?.llm_calls ?? project.settings?.llm_calls)
+  const failureView = presentFailure({
     error: rawFailure,
     error_code: project.error_code,
     upstream_error_type: upstreamType,
-    failure_stage: failedProgress?.stage || project.processing_config?.failure_stage || project.settings?.failure_stage,
+    failure_stage: project.processing_config?.failure_stage || project.settings?.failure_stage,
     phase: project.processing_config?.analysis_phase || project.settings?.analysis_phase,
-    // Same plum as studio FailureActions (#491 tip soft): home must pass billable, not only screenshots.
-    billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
-  }, failureText)
-  const timelineEmpty = classifyTimelineEmpty(failureText || failureCard.reason, project.error_code)
-  const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureCard.reason, project.error_code)
-  const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText || failureCard.reason, project.error_code)
-  const subtitleFailure = timelineEmpty
-    ? null
-    : classifySubtitleFailure(failureText || failureCard.reason, project.error_code)
-  const recoveryAction = failureAction(
-    project.error_code,
-    upstreamType,
-    null,
+    preservedCount,
     connectionCount,
-    analysisProvider,
-  )
-  const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
-  const switchModelPrimary = recoveryAction.kind === 'switch_model'
-  const addProviderPrimary = recoveryAction.kind === 'settings' && recoveryAction.reason === ADD_PROVIDER_HINT
-  const rechargePrimary = recoveryAction.kind === 'recharge'
+    llm_calls: Number.isFinite(requestCount) ? requestCount : undefined,
+    billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
+  })
+  const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureView.reason, project.error_code)
 
   const handleRetry = async (opts?: { silent?: boolean; stay?: boolean }) => {
     if (isRetrying) return
@@ -341,7 +332,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       if (isManaged && opts?.stay) {
         await studioApi.retry(project.id)
       } else if (isManaged) {
-        navigate(regenerateInStudio ? `/project/${project.id}` : `/import/${project.id}`)
+        navigate(`/import/${project.id}`)
         return
       } else if (project.status === 'pending') {
         await projectApi.startProcessing(project.id)
@@ -387,6 +378,37 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     finally { setIsRetrying(false); setSwitchOpen(false) }
   }
 
+  const runPrimary = async (action: PrimaryAction) => {
+    if (isRetrying) return
+    if (action.id === 'view_results') { navigate(`/project/${project.id}`); return }
+    if (action.id === 'settings' || action.id === 'install_transcription' || action.id === 'quota_check') {
+      navigate(action.destination || '/settings?section=analysis')
+      return
+    }
+    if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
+    if (action.id === 'change_video') { navigate('/'); return }
+    if (action.id === 'switch_model') { openSwitchDialog(); return }
+    const studioStatus = String(project.settings?.studio_generation_status || project.processing_config?.studio_generation_status || '')
+    if (isManaged && !studioStatus) {
+      navigate(`/import/${project.id}`)
+      return
+    }
+    if (isManaged || studioStatus) {
+      setIsRetrying(true)
+      try {
+        await studioApi.retry(project.id, { retry_kind: 'same' })
+        if (onRetry) onRetry(project.id)
+      } catch (error) {
+        console.error('重试失败:', error)
+        message.error(t('重试失败，请稍后再试'))
+      } finally {
+        setIsRetrying(false)
+      }
+      return
+    }
+    await handleRetry()
+  }
+
   const openProject = () => {
     if (weakLocalTimeline) return
     if (!isManaged && project.status === 'pending') {
@@ -404,7 +426,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
 
   return (
     <>
-      <article className={`ac-card ac-project-card${weakLocalTimeline ? ' ac-project-card--weak' : ''}`}>
+      <article className={`ac-card ac-project-card${normalizedStatus === 'failed' ? ' ac-project-card--failed' : ''}${weakLocalTimeline ? ' ac-project-card--weak' : ''}`}>
         <div className="ac-card-thumb" style={{ backgroundImage: videoThumbnail ? `url(${videoThumbnail})` : undefined }}>
           {weakLocalTimeline ? (
             <div className="ac-project-open" aria-hidden="true" />
@@ -428,7 +450,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               <span className="ac-card-title">{project.name}</span>
             </button>
           )}
-          {!weakLocalTimeline && (awaitingConfirmation ? (
+          {normalizedStatus !== 'failed' && (awaitingConfirmation ? (
             <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={() => navigate(`/import/${project.id}`)}>{t("查看建议")}</Btn></div>
           ) : isManaged && project.status === 'processing' ? (
             <StatusDot tone="accent" label={t("制作中 · 查看进度")} />
@@ -440,45 +462,22 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               {isVisual ? t('成片草稿数量', { count: project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0 }) : <>{t("切片数量", { count: project.total_clips || 0 })}<span> · </span>{t("合集数量", { count: project.total_collections || 0 })}</>}
             </div>
           )}
-          {weakLocalTimeline && (
-            <div className="ac-project-weak">
-              <p className="ac-project-weak-reason">{t("当前本地模型无法返回可用时间线")}</p>
-              {replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
-              <div className="ac-project-weak-actions">
-                {replacement?.displayName ? (
-                  <>
-                    <Btn variant="cta" loading={isRetrying} onClick={openSwitchDialog}>{t("切换并重试")}</Btn>
-                    <Btn variant="text" onClick={openSettings}>{t("其他模型")}</Btn>
-                  </>
-                ) : (
-                  <>
-                    <Btn variant="cta" onClick={openSettings}>{t("去配置模型")}</Btn>
-                    <Btn variant="text" loading={isRetrying} onClick={() => handleRetry({ stay: true })}>{t("重试")}</Btn>
-                  </>
-                )}
+          {normalizedStatus === 'failed' && (
+            <div className="ac-failure-summary" role="alert">
+              <StatusDot tone="error" label={t(failureView.status)} />
+              <p className="ac-failure-reason">{failureView.step ? <>{t(failureView.step)}：{t(failureView.reason)}</> : t(failureView.reason)}</p>
+              {weakLocalTimeline && replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
+              <p className="ac-failure-outcome">{t(failureView.outcome, { count: preservedCount })}</p>
+              {failureView.primary && <Btn variant="cta" size="sm" loading={isRetrying} onClick={() => {
+                const action: PrimaryAction = weakLocalTimeline && replacement?.displayName
+                  ? { id: 'switch_model', label: '切换并重试' }
+                  : failureView.primary!
+                void runPrimary(action)
+              }}>{t(weakLocalTimeline && replacement?.displayName ? '切换并重试' : failureView.primary.label)}</Btn>}
+              <div className="ac-failure-weak">
+                <Btn variant="text" size="sm" onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn>
+                <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t('反馈')}</Btn>
               </div>
-            </div>
-          )}
-          {!weakLocalTimeline && normalizedStatus === 'failed' && (
-            <div className="ac-empty ac-project-error" role="alert">
-              <span className="ac-mono">{t(failureCard.step)}：{t(failureCard.reason)}</span>
-              {failureCard.billing ? <p className="ac-project-billing">{t(failureCard.billing)}</p> : null}
-            </div>
-          )}
-          {!weakLocalTimeline && normalizedStatus === 'failed' && (
-            <div className="ac-project-recovery">
-              {installTranscription && <Btn variant="cta" size="sm" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
-              {switchModelPrimary && !installTranscription && <Btn variant="cta" size="sm" loading={isRetrying} onClick={openSwitchDialog}>{t(SWITCH_MODEL_LABEL)}</Btn>}
-              {addProviderPrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => navigate(recoveryAction.destination)}>{t(recoveryAction.label || '去设置')}</Btn>}
-              {rechargePrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => {
-                const url = (recoveryAction.destination || '').trim()
-                if (/^https?:\/\//i.test(url)) void openExternalLink(url)
-                else navigate(url || '/settings?section=analysis')
-              }}>{t(recoveryAction.label || '去充值')}</Btn>}
-              {subtitleFailure && !installTranscription && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
-              {llmKeyFailure && !switchModelPrimary && !addProviderPrimary && !rechargePrimary && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
-              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
-              <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
             </div>
           )}
           <div className="ac-card-foot">
@@ -493,6 +492,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t("确定要删除这个项目吗？")} description={t("删除后无法恢复")}
         footer={<div className="right"><Btn onClick={() => setDeleteOpen(false)}>{t("取消")}</Btn><Btn variant="danger" onClick={() => { setDeleteOpen(false); onDelete(project.id) }}>{t("确定")}</Btn></div>} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+      <DiagnosePanel open={diagnoseOpen} onClose={() => setDiagnoseOpen(false)} info={{ error: rawFailure, error_code: project.error_code, upstream_error_type: upstreamType, failure_stage: project.processing_config?.failure_stage || project.settings?.failure_stage, llm_calls: Number.isFinite(requestCount) ? requestCount : undefined, billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined }} reason={failureView.reason} onSettings={destination => navigate(destination)} />
       <SwitchModelDialog
         open={switchOpen}
         options={switchOptions || []}

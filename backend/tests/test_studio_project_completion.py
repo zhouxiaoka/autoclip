@@ -164,6 +164,25 @@ def test_malformed_receipt_never_breaks_the_project_list(project, bad):
     assert path.read_text() == bad
 
 
+def test_budget_timeout_projects_stage_phase_and_request_count():
+    from backend.services.studio.project_completion import _failure
+    message, code, stage, phase, calls = _failure(
+        {'error': '没有自动生成的成片，可选择备选片段继续生成', 'error_code': 'validation'},
+        {
+            'error': '这次制作已超过时间上限，已停止。请重试；服务商一直很慢时可以换一个更快的模型。',
+            'error_code': 'job_budget',
+            'failure_stage': 'analyze',
+            'phase': 'production',
+            'llm_calls': 9,
+        },
+    )
+    assert code == 'job_budget'
+    assert stage == 'analyze'
+    assert phase == 'production'
+    assert calls == 9
+    assert '时间上限' in message
+
+
 def test_failed_generation_mirrors_billable_calls_onto_home_settings(project):
     """Home ProjectCard reads processing_config.billable_calls_before_failure for 「本次已消耗」."""
     data = state(['failed'])

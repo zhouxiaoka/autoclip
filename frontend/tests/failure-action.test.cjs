@@ -144,7 +144,8 @@ test('R24 page: FailureActions uses the page rule', () => {
 
 test('R24 page: StudioResults hands the secondary causes to FailureActions', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.match(src, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\?\.run_id\) \|\| analysisPageFailure\(workspace\.analysis, workspace\.generation\)/)
+  assert.match(src, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\?\.run_id\)/)
+  assert.match(src, /resolveFailureCause\(\{/)
   const info = fa.analysisPageFailure(record)
   assert.deepEqual(info.secondary_error_codes, ['authentication'])
   assert.deepEqual(info.secondary_upstream_error_types, ['invalid_key'])
@@ -476,7 +477,9 @@ test('ingest connection copy is the download sentence, not the model sentence or
   assert.doesNotMatch(importSrc, /failure_stage/)
   assert.match(importSrc, /选择已登录的浏览器/)
   const projectPage = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.match(projectPage, /!downloadConnectionFailure\(failureInfo\(\)\) && !weakLocalTimelineFailure/)
+  const presentation = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/failurePresentation.ts'), 'utf8')
+  assert.match(presentation, /failure_stage === 'ingest' \|\| input\.failure_stage === 'download'/)
+  assert.doesNotMatch(presentation, /模型设置/)
   for (const lang of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     const text = data[card.reason]

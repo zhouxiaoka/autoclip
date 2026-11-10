@@ -8,7 +8,7 @@ import { pageSuggestedAction, presentedFailure, type PageFailureInfo, type Sugge
 import type { ImportReadiness } from './importReadiness'
 import { openExample } from './openExample'
 
-type FailureInfo = PageFailureInfo & { error?: string | null }
+type FailureInfo = PageFailureInfo & { error?: string | null; llm_calls?: number | null }
 
 const CHECKS = [
   ['analysis', '分析模型'],
@@ -97,7 +97,10 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
         </div>)}
       </div>
       <p className="studio-muted">{t('上次失败')}</p>
-      <p className="studio-error">{t(card.step)}：{t(card.reason)}</p>
+      <p className="studio-error">{card.step ? <>{t(card.step)}：{t(card.reason)}</> : t(card.reason)}</p>
+      {Number.isFinite(Number(info.llm_calls)) && Number(info.llm_calls) > 0 && Number.isFinite(Number(info.billable_calls_before_failure)) && (
+        <p className="studio-muted">{t('这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。', { requests: info.llm_calls, successes: info.billable_calls_before_failure })}</p>
+      )}
       {suggestion && <>
         <p className="studio-muted">{t('建议先做这一步')}</p>
         {suggestion.kind === 'note'

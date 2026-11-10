@@ -44,6 +44,8 @@ function renderResults(workspace, studioApi, cards) {
     if (name === './browserCookieRecovery') return loadTs(path.resolve(ROOT, '../src/features/studio/browserCookieRecovery.ts'))
     if (name === './settingsReturn') return loadTs(path.resolve(ROOT, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return loadTs(path.resolve(ROOT, '../src/features/studio/failureAction.ts'))
+    if (name === './failurePresentation') return loadTs(path.resolve(ROOT, '../src/features/studio/failurePresentation.ts'))
+    if (name === './DiagnosePanel') return { __esModule: true, default: empty }
     if (name === './studioProgress') return loadTs(path.resolve(ROOT, '../src/features/studio/studioProgress.ts'))
     if (name === './FailureActions') {
       const out = {}

@@ -61,7 +61,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       {packagingHint && <p className="studio-output-hint">{packagingHint}</p>}
       {reason && <p className="studio-clip-reason">{reason.kind === 'evidence' ? reason.evidence : t(reason.key)}</p>}
       <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
-      {failed && <p className="studio-output-hint studio-error">{t(failureStep(undefined, 'rendering', variant.error_code))}：{t(readableFailure(variant.error || job?.error, variant.error_code))}</p>}
+      {failed && <p className="studio-output-hint studio-error">{(() => { const step = failureStep('render', null, variant.error_code); const text = readableFailure(variant.error || job?.error, variant.error_code); return step ? `${t(step)}：${t(text)}` : t(text) })()}</p>}
       {failed && billable && <p className="studio-billing">{t(BILLING_GUIDANCE)}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}`)}>{t('预览与修改')}</Btn>}

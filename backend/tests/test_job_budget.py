@@ -36,7 +36,7 @@ def test_env_budget_overrides_the_default_and_is_still_a_timeout(monkeypatch):
         time.sleep(0.08)
         with pytest.raises(JobDurationExceeded):
             ensure_clip_job_budget()
-    assert studio_error_code(JobDurationExceeded()) == 'timeout'
+    assert studio_error_code(JobDurationExceeded()) == 'job_budget'
 
 
 def test_default_cap_covers_one_slow_read_but_not_an_unbounded_retry_stack():
@@ -86,7 +86,7 @@ def test_read_timeout_shrinks_to_the_time_left():
 
 def test_duration_cap_is_a_timeout_the_user_can_read_and_is_not_retried():
     error = JobDurationExceeded()
-    assert studio_error_code(error) == "timeout"
+    assert studio_error_code(error) == "job_budget"
     assert "时间上限" in user_visible_error(error)
     assert user_visible_error(error) != sentence("unknown")
     info, _status, _retry_after = classify_for_retry(error)
@@ -121,7 +121,7 @@ def test_pipeline_reports_the_cap_as_a_failed_timeout(tmp_path, monkeypatch):
     with bound_clip_job(0):
         result = asyncio.run(adapter.process_project_sync(str(tmp_path / "in.mp4"), None, clips_only=True))
     assert result["status"] == "failed"
-    assert result["error_code"] == "timeout"
+    assert result["error_code"] == "job_budget"
     assert result["stage"] == "ANALYZE"
     assert "时间上限" in result["error"]
 

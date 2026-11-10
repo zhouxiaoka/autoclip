@@ -14,10 +14,11 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     'react-i18next': { useTranslation: () => ({}) },
     'react-router-dom': { useNavigate: () => navigate },
     '../services/api': { projectApi: {} },
-    '../features/studio/api': { studioApi: {} },
+    '../features/studio/api': { studioApi: { retry: async () => ({}) } },
     '../utils/externalLinks': { openExternalLink: (url) => { opened.push(url); if (extra.onExternal) extra.onExternal(url) } },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
+    '../features/studio/DiagnosePanel': { __esModule: true, default: () => null },
     '../features/studio/SwitchModelDialog': { __esModule: true, default: () => null },
     '../stores/useSimpleProgressStore': {
       useSimpleProgressStore: (select) => select({ getProgress: () => ({ message: progressMessage }) }),
@@ -80,8 +81,8 @@ test('#428 home card with a replacement stays on the card and offers switch-and-
   assert.equal(html.includes('href="/project/'), false)
   buttons['切换并重试']()
   assert.deepEqual(switched, ['test'])
-  buttons['其他模型']()
-  assert.deepEqual(visited, ['/settings?section=analysis'])
+  assert.equal(buttons['其他模型'], undefined)
+  assert.equal(buttons['重试'], undefined)
 })
 
 test('#428 home card without a replacement offers configure, and does not open the project', () => {
@@ -96,7 +97,7 @@ test('#428 home card without a replacement offers configure, and does not open t
   assert.equal(buttons['切换并重试'], undefined)
   buttons['去配置模型']()
   assert.deepEqual(visited, ['/settings?section=analysis'])
-  assert.equal(typeof buttons['重试'], 'function')
+  assert.equal(buttons['重试'], undefined)
 })
 
 test('B2 home card: whisper gate codes lead with 安装转写 and keep retry secondary', () => {
@@ -108,7 +109,7 @@ test('B2 home card: whisper gate codes lead with 安装转写 and keep retry sec
       onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
     }, to => visited.push(to))
     assert.equal(buttons['安装转写'].variant, 'cta', code)
-    assert.equal(buttons['重试'].variant, 'text', code)
+    assert.equal(buttons['重试'], undefined, code)
     assert.equal(buttons['转写设置'], undefined, code)
     buttons['安装转写'].onClick()
     assert.deepEqual(visited, ['/settings?section=speech'])
@@ -119,7 +120,7 @@ test('B2 home card: whisper gate codes lead with 安装转写 and keep retry sec
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
   })
   assert.equal(buttons['安装转写'], undefined)
-  assert.equal(buttons['重试'].variant, 'text')
+  assert.equal(buttons['重试'].variant, 'cta')
 })
 
 test('a generic invalid timeline does not add model settings on the project card', () => {
@@ -168,9 +169,10 @@ test('restart-interrupted automatic project shows its reason and regenerates fro
   }, (to) => visited.push(to))
   assert.match(html, /role="alert"/)
   assert.ok(html.includes(restart))
-  assert.match(html, />重新生成</)
-  await buttons['重新生成']()
-  assert.deepEqual(visited, ['/project/test'])
+  assert.match(html, />重试制作</)
+  assert.equal(buttons['重新生成'], undefined)
+  await buttons['重试制作']()
+  assert.deepEqual(visited, [])
 })
 
 test('managed project without a finished generation still reopens import review', async () => {
@@ -216,37 +218,33 @@ test('X2 home card: switchable upstream + ≥2 connections offers 换模型重�
     onSwitchAndRetry: (id, choice) => { switched.push({ id, choice }) },
   })
   assert.equal(buttons['换模型重试'].variant, 'cta')
-  assert.equal(typeof buttons['重试'].onClick, 'function')
+  assert.equal(buttons['重试'], undefined)
   // Without a real dialog stub capturing open, openSwitchDialog sets switchOpen;
   // SwitchModelDialog is stubbed null so confirm path is covered via onSwitchAndRetry with choice in HomePage.
   buttons['换模型重试'].onClick()
 })
 
-test('X2 home card: switchable upstream + 1 connection offers 去设置 (add provider)', () => {
-  const visited = []
+test('X2 home card: one connection timeout retries and does not demand another provider', () => {
   const buttons = {}
-  renderCard('failed', '上游超时', null, {
+  const html = renderCard('failed', '上游超时', null, {
     project: { error_code: 'timeout', upstream_error_type: 'timeout' },
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
-  }, to => visited.push(to), { connectionCount: 1 })
-  assert.equal(buttons['去设置'].variant, 'cta')
+  }, () => {}, { connectionCount: 1 })
+  assert.equal(buttons['重试'].variant, 'cta')
+  assert.equal(buttons['去设置'], undefined)
   assert.equal(buttons['换模型重试'], undefined)
-  buttons['去设置'].onClick()
-  assert.deepEqual(visited, ['/settings?section=analysis'])
+  assert.doesNotMatch(html, /建议再加一个服务商/)
 })
 
-test('X2/X3 home card: insufficient_quota + sponsor offers 去 88API 充值', () => {
-  const visited = []
+test('X2/X3 home card: insufficient_quota leads with balance check, not a recharge button wall', () => {
   const buttons = {}
-  const extra = {
+  const html = renderCard('failed', '余额不足', null, {
     project: { error_code: 'provider_error', upstream_error_type: 'insufficient_quota' },
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
-  }
-  renderCard('failed', '余额不足', null, extra, to => visited.push(to), { analysisProvider: 'api88' })
-  assert.equal(buttons['去 88API 充值'].variant, 'cta')
-  buttons['去 88API 充值'].onClick()
-  assert.deepEqual(visited, [])
-  assert.ok(extra.opened.some(url => url.includes('88api.ai')))
+  }, () => {}, { analysisProvider: 'api88' })
+  assert.equal(buttons['核对余额并测试连接'].variant, 'cta')
+  assert.equal(buttons['去 88API 充值'], undefined)
+  assert.doesNotMatch(html, /API Key 无效/)
 })
 
 
@@ -255,8 +253,8 @@ test('failed card with empty/bare message still shows step-level human copy (#49
   for (const [error, code] of [[null, 'service_restarted'], ['', 'timeout'], ['错误', 'provider_error'], ['失败', null]]) {
     const html = renderCard('failed', error, null, { project: { error_code: code } })
     assert.match(html, /role="alert"/, String(error))
-    assert.match(html, /[下载转写分析制作]：/, String(error))
-    assert.doesNotMatch(html, /role="alert"[^>]*>\s*<span[^>]*>错误<\/span>/, String(error))
+    assert.doesNotMatch(html, /<p class="ac-failure-reason"><\/p>/, String(error))
+    assert.doesNotMatch(html, /<p class="ac-failure-reason">错误<\/p>/, String(error))
     if (code === 'service_restarted') assert.ok(html.includes(messages.service_restarted))
   }
 })
@@ -271,7 +269,7 @@ test('failed card with catalog message keeps step prefix without rewriting the r
 })
 
 
-test('failed card with billable_calls_before_failure shows 本次已消耗 (#491 tip soft)', () => {
+test('failed card keeps the step and does not show a billable-call charge line', () => {
   const html = renderCard('failed', '错误', null, {
     project: {
       error_code: 'provider_error',
@@ -279,14 +277,6 @@ test('failed card with billable_calls_before_failure shows 本次已消耗 (#491
     },
   })
   assert.match(html, /分析：/)
-  assert.match(html, /ac-project-billing/)
-  assert.match(html, /本次已消耗 3 次请求/)
-  const quiet = renderCard('failed', '错误', null, {
-    project: { error_code: 'provider_error', processing_config: { billable_calls_before_failure: 0 } },
-  })
-  assert.doesNotMatch(quiet, /本次已消耗/)
-  const viaSettings = renderCard('failed', '错误', null, {
-    project: { error_code: 'provider_error', settings: { billable_calls_before_failure: 2 } },
-  })
-  assert.match(viaSettings, /本次已消耗 2 次请求/)
+  assert.doesNotMatch(html, /本次已消耗/)
+  assert.doesNotMatch(html, /ac-project-billing/)
 })

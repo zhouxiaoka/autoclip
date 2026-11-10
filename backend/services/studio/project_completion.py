@@ -64,7 +64,7 @@ def sync_project_completion(project_id, db=None):
             # generation.status is the project-index source of truth. A terminal
             # receipt must leave SQLite even when analysis or variant rows lag.
             completed = sum(item.get('status') == 'completed' for item in variants)
-            failure = _failure(generation, analysis) if outcome != 'completed' else (None, None)
+            failure = _failure(generation, analysis) if outcome != 'completed' else (None, None, None, None, None)
             billable = _billable_before_failure(generation, analysis) if outcome != 'completed' else None
             if db is not None:
                 return _update_index(project_id, db, outcome, completed, len(drafts), failure, billable)
@@ -78,12 +78,64 @@ def sync_project_completion(project_id, db=None):
             return False
 
 
+_PLACEHOLDER_CODES = {'validation', 'multiple', 'unknown'}
+_EMPTY_VARIANT = '没有自动生成的成片，可选择备选片段继续生成'
+
+
+def _specific(record):
+    """A pipeline cause, not the empty-output placeholder settle_generation writes."""
+    if not isinstance(record, dict):
+        return False
+    code = record.get('error_code')
+    if not isinstance(code, str) or not code or code in _PLACEHOLDER_CODES:
+        return False
+    message = record.get('error')
+    if message == _EMPTY_VARIANT:
+        return False
+    return True
+
+
+def _choose_failure(generation, analysis):
+    """Receipt fields are copied by the caller. Here, analysis wins a conflict with a placeholder generation."""
+    analysis_specific = _specific(analysis)
+    generation_specific = _specific(generation)
+    if analysis_specific and not generation_specific:
+        return analysis
+    if generation_specific and not analysis_specific:
+        return generation
+    if analysis_specific and generation_specific and analysis.get('error_code') != generation.get('error_code'):
+        return analysis
+    if isinstance(generation, dict) and (generation.get('error') or generation.get('error_code')):
+        return generation
+    return analysis if isinstance(analysis, dict) else {}
+
+
 def _failure(generation, analysis):
-    """The generation's own reason; Task rows can be stale or empty for a Studio run (RC156 #13 4b)."""
-    message = generation.get('error') or analysis.get('error')
-    code = generation.get('error_code') or analysis.get('error_code')
+    """The run's own reason. A placeholder generation must not hide the analysis cause (RC156 #13 4b)."""
+    chosen = _choose_failure(generation, analysis)
+    message = chosen.get('error') if isinstance(chosen, dict) else None
+    code = chosen.get('error_code') if isinstance(chosen, dict) else None
+    stage = None
+    if isinstance(analysis, dict) and isinstance(analysis.get('failure_stage'), str) and analysis.get('failure_stage'):
+        stage = analysis.get('failure_stage')
+    elif isinstance(chosen, dict) and isinstance(chosen.get('failure_stage'), str):
+        stage = chosen.get('failure_stage') or None
+    phase = analysis.get('phase') if isinstance(analysis, dict) and isinstance(analysis.get('phase'), str) else None
+    calls = None
+    for record in (analysis, generation):
+        if not isinstance(record, dict):
+            continue
+        try:
+            count = int(record.get('llm_calls'))
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            calls = count if calls is None else max(calls, count)
     return (message[:700] if isinstance(message, str) and message else None,
-            code if isinstance(code, str) and code else None)
+            code if isinstance(code, str) and code else None,
+            stage,
+            phase,
+            calls)
 
 
 def _billable_before_failure(generation, analysis):
@@ -101,20 +153,27 @@ def _billable_before_failure(generation, analysis):
     return max(counts) if counts else None
 
 
-def _update_index(project_id, db, outcome, completed, draft_count, failure=(None, None), billable=None):
+def _update_index(project_id, db, outcome, completed, draft_count, failure=(None, None, None, None, None), billable=None):
     from backend.models.project import Project, ProjectStatus
     project = db.get(Project, project_id)
     if project is None or not (project.processing_config or {}).get('smart_import'):
         return False
     status = ProjectStatus.COMPLETED if outcome == 'completed' else ProjectStatus.FAILED
     config = {key: value for key, value in (project.processing_config or {}).items()
-              if key not in ('studio_generation_error', 'studio_generation_error_code', 'billable_calls_before_failure')}
+              if key not in ('studio_generation_error', 'studio_generation_error_code', 'billable_calls_before_failure',
+                             'failure_stage', 'analysis_phase', 'llm_calls')}
     config.update(studio_completed_variant_count=completed, studio_draft_count=draft_count, studio_generation_status=outcome)
-    message, code = failure
+    message, code, stage, phase, calls = failure if len(failure) == 5 else (*failure, None, None, None)
     if message:
         config['studio_generation_error'] = message
     if code:
         config['studio_generation_error_code'] = code
+    if stage:
+        config['failure_stage'] = stage
+    if phase:
+        config['analysis_phase'] = phase
+    if isinstance(calls, int) and calls > 0:
+        config['llm_calls'] = calls
     if isinstance(billable, int) and billable > 0:
         config['billable_calls_before_failure'] = billable
     if project.status == status and project.processing_config == config:

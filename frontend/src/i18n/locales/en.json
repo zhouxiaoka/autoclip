@@ -2125,5 +2125,11 @@
   "改用 {{recommend}}": "Switch to {{recommend}}",
   "该模型是生图模型，只能用于封面，不能做分析。": "This model is an image model for covers only, not analysis.",
   "{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。": "{{model}} is an image model for covers only, not analysis. Switch to a chat model in Settings → Providers & models, then generate again.",
-  "下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。": "The video download timed out or the network dropped. Check the network and retry, or try another video link."
+  "下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。": "The video download timed out or the network dropped. Check the network and retry, or try another video link.",
+  "重试制作": "Retry this production",
+  "查看已有结果": "View saved results",
+  "本次没有可用成果": "Nothing usable was saved this time",
+  "已保留 {{count}} 条成片": "{{count}} finished videos kept",
+  "筛选": "Screening",
+  "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "This run recorded {{requests}} model requests, and {{successes}} of them returned successfully. This is not a charge."
 }

@@ -123,8 +123,8 @@ test('#264: auth + timeout - the statistics keep timeout; with 0 usable connecti
   const html = renderResults({ drafts: [], events: [], jobs: [], output_variants: [], generation: { auto_start: true, status: 'failed' },
     analysis: { status: 'failed', phase: 'production', run_id: 'run-x', error_code: 'timeout' }, attempts: [settled] }, h.studioApi, [])
   assert.match(html, /去设置/)
-  // StudioResults injects connection_count=0 → SWITCHABLE timeout prefers ADD_PROVIDER_HINT over auth copy.
-  assert.match(html, /建议再加一个服务商/)
+  assert.doesNotMatch(html, /建议再加一个服务商/)
+  assert.match(html, /模型响应超时/)
 })
 
 test('first clip is reported once per real generation, also when a retry adds a watch', async () => {
@@ -455,10 +455,11 @@ test('retry page (DOM): the mounted page adopts the open retry attempt, the obse
   assert.ok(!r.text.includes('追加平台'), 'no append-platform entry on the page')
   assert.ok(r.text.includes('这次制作未完成'), '(b) failure block rendered')
   // rate_limited is SWITCHABLE; with 0 usable connections the page prefers ADD_PROVIDER_HINT over vision auth copy.
-  assert.ok(r.text.includes('建议再加一个服务商'), '(b) add-provider hint for run_id ' + RUN)
+  assert.ok(!r.text.includes('建议再加一个服务商'), '(b) rate limit is not rewritten as add-a-provider for run_id ' + RUN)
+  assert.ok(r.text.includes('提供商限制了请求频率或额度'), '(b) the rate-limit reason stays')
   assert.ok(!r.text.includes('secret-ish raw text'), '(b) never the raw upstream text')
-  assert.ok(r.hasSettings, '(b) the page offers 「去设置」')
-  assert.deepEqual(r.navigations, ['/settings?section=analysis&return_project=p1'])                    // (b) analysis settings, back to p1
+  assert.ok(r.text.includes('查看已有结果'), '(b) the kept output is the one primary action')
+  assert.equal(r.hasSettings, false)
 })
 
 test('R31 addition 2 (DOM): a settled receipt of another run is not shown for this failure (looked up by run_id)', async () => {
@@ -469,8 +470,8 @@ test('R31 addition 2 (DOM): a settled receipt of another run is not shown for th
     assert.ok(text.includes('这次制作未完成'))
     assert.ok(!text.includes('API Key 无效或已过期'), 'the receipt of another run must not supply the cause')
     // Analysis primary is rate_limited (SWITCHABLE). With 0 connections that is 「去设置」+ add-provider, not the other run's vision auth.
-    assert.ok(text.includes('建议再加一个服务商'), 'analysis primary drives the hint when the receipt run_id mismatches')
-    assert.ok(settingsButton(page.container), 'rate_limited + 0 connections offers 「去设置」')
+    assert.ok(!text.includes('建议再加一个服务商'), 'a mismatched receipt does not become an add-provider hint')
+    assert.ok(text.includes('重试'), 'the analysis rate limit keeps a retry, without the other run')
   } finally { await page.close() }
 })
 
