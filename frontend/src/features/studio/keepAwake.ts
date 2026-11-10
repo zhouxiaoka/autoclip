@@ -1,13 +1,24 @@
 /**
  * System keep-awake while any project is producing.
- * Hold immediately on running; release 10s after none remain.
+ * Acquire when a source is active; release 10s after the last one stops.
  * Setting 「制作时阻止电脑休眠」 defaults on (localStorage).
+ *
+ * The native lock has three states: held, released, unknown. Unknown means the
+ * last command failed or a newer command superseded it, so the UI must not say
+ * production is still running and must not claim the machine may sleep.
+ * The header pill is shown only while a source is active and the lock is confirmed.
+ * A failed release retries on a bounded backoff, then again on a later sync
+ * after that window. It does not poll.
  */
 
 export const KEEP_AWAKE_SETTING_KEY = 'autoclip.keep_awake.enabled.v1'
 export const KEEP_AWAKE_RELEASE_DELAY_MS = 10_000
+/** One immediate attempt, then these delays. After the last delay, wait for a later sync. */
+export const KEEP_AWAKE_RETRY_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const
 
 const RUNNING_GENERATION = new Set(['screening', 'production', 'rendering'])
+
+export type KeepAwakeLockState = 'held' | 'released' | 'unknown'
 
 export type KeepAwakeProjectLike = {
   status?: string
@@ -54,85 +65,170 @@ export type KeepAwakeControllerOptions = {
   setTimeout?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
   clearTimeout?: (id: ReturnType<typeof setTimeout>) => void
   releaseDelayMs?: number
+  retryBackoffMs?: readonly number[]
   getEnabled?: () => boolean
   storage?: Pick<Storage, 'getItem' | 'setItem'>
 }
 
 /**
- * Multi-source producing signals → idempotent native keep-awake with delayed release.
+ * Multi-source producing signals → one native keep-awake command at a time.
+ * Commands are serialized. A late result never overwrites a newer decision.
  */
 export function createKeepAwakeController(options: KeepAwakeControllerOptions = {}) {
   const sources = new Map<string, boolean>()
-  let held = false
+  let lock: KeepAwakeLockState = 'released'
+  let generation = 0
+  let chain: Promise<void> = Promise.resolve()
+  let queued = false
+  let queuedOn: boolean | null = null
   let releaseTimer: ReturnType<typeof setTimeout> | null = null
-  let pendingInvoke: Promise<void> = Promise.resolve()
-  const listeners = new Set<(held: boolean) => void>()
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retryAttempt = 0
+  let retryFor: boolean | null = null
+  let lastFailureAt = 0
+  let transport: 'unchecked' | 'desktop' | 'absent' | 'no-invoke' = 'unchecked'
+  const listeners = new Set<(show: boolean) => void>()
 
   const releaseDelayMs = options.releaseDelayMs ?? KEEP_AWAKE_RELEASE_DELAY_MS
+  const backoff = options.retryBackoffMs ?? KEEP_AWAKE_RETRY_BACKOFF_MS
   const schedule = options.setTimeout ?? ((fn, ms) => setTimeout(fn, ms))
   const cancel = options.clearTimeout ?? ((id) => clearTimeout(id))
   const storage = options.storage
   const getEnabled = options.getEnabled ?? (() => isKeepAwakeEnabled(storage))
+  const now = options.now ?? (() => Date.now())
+
+  const anySource = () => [...sources.values()].some(Boolean)
+  const wantOn = () => anySource() && getEnabled()
+  const activityVisible = () => anySource() && lock === 'held' && getEnabled()
 
   const notify = () => {
-    for (const listener of listeners) listener(held)
+    const show = activityVisible()
+    for (const listener of listeners) listener(show)
   }
 
-  const applyNative = (on: boolean) => {
-    if (held === on) return pendingInvoke
-    // Optimistic UI + tray: mark held before the native round-trip so the
-    // status-bar pill appears immediately; roll back only if invoke fails.
-    const previous = held
-    held = on
-    notify()
-    const run = async () => {
-      try {
-        let desktop = true
-        if (options.isDesktop) {
-          desktop = Boolean(await options.isDesktop())
-        }
-        if (!desktop) return
-        if (options.invoke) {
-          await options.invoke('set_keep_awake', { on })
-        }
-      } catch (err) {
-        console.warn('[keepAwake] set_keep_awake failed', err)
-        if (held === on) {
-          held = previous
-          notify()
-        }
-      }
-    }
-    pendingInvoke = pendingInvoke.then(run, run)
-    return pendingInvoke
-  }
-
-  const clearReleaseTimer = () => {
-    if (releaseTimer !== null) {
+  const clearTimer = (kind: 'release' | 'retry') => {
+    if (kind === 'release' && releaseTimer !== null) {
       cancel(releaseTimer)
       releaseTimer = null
     }
+    if (kind === 'retry' && retryTimer !== null) {
+      cancel(retryTimer)
+      retryTimer = null
+    }
+  }
+
+  const scheduleRetry = () => {
+    if (retryAttempt >= backoff.length) {
+      lastFailureAt = now()
+      return
+    }
+    const delay = backoff[retryAttempt]
+    retryAttempt += 1
+    const scheduledGen = generation
+    retryTimer = schedule(() => {
+      retryTimer = null
+      if (generation !== scheduledGen) return
+      kick(true)
+    }, delay)
+  }
+
+  const kick = (fromRetry = false) => {
+    if (transport === 'absent' || transport === 'no-invoke') return
+    const want = wantOn()
+    // Same in-flight or already-scheduled intent is one command, not a second IPC.
+    if ((queued || retryTimer !== null) && queuedOn === want) return
+    if (!queued && retryTimer === null && want && lock === 'held') return
+    if (!queued && retryTimer === null && !want && lock === 'released') return
+    if (retryFor !== want) {
+      retryFor = want
+      retryAttempt = 0
+      lastFailureAt = 0
+    }
+    if (!fromRetry && !queued && retryTimer === null && lock === 'unknown' && queuedOn === want && retryAttempt >= backoff.length) {
+      const cap = backoff[backoff.length - 1] ?? 0
+      if (now() - lastFailureAt < cap) return
+      retryAttempt = 0
+    }
+
+    clearTimer('retry')
+    queued = true
+    queuedOn = want
+    const gen = ++generation
+    const run = async () => {
+      try {
+        if (gen !== generation) return
+        const desired = wantOn()
+        if (desired && lock === 'held') return
+        if (!desired && lock === 'released') return
+        try {
+          let desktop = true
+          if (options.isDesktop) desktop = Boolean(await options.isDesktop())
+          if (gen !== generation) {
+            lock = 'unknown'
+            notify()
+            return
+          }
+          if (!desktop) {
+            transport = 'absent'
+            lock = 'released'
+            notify()
+            return
+          }
+          transport = 'desktop'
+          if (!options.invoke) {
+            transport = 'no-invoke'
+            lock = 'unknown'
+            notify()
+            return
+          }
+          await options.invoke('set_keep_awake', { on: desired })
+          if (gen !== generation) {
+            lock = 'unknown'
+            notify()
+            return
+          }
+          lock = desired ? 'held' : 'released'
+          retryAttempt = 0
+          lastFailureAt = 0
+          notify()
+        } catch (err) {
+          console.warn('[keepAwake] set_keep_awake failed', err)
+          if (gen !== generation) {
+            lock = 'unknown'
+            notify()
+            return
+          }
+          lock = 'unknown'
+          notify()
+          scheduleRetry()
+        }
+      } finally {
+        if (gen === generation) queued = false
+      }
+    }
+    chain = chain.then(run, run)
   }
 
   const recompute = () => {
-    const anyRunning = [...sources.values()].some(Boolean)
-    if (!getEnabled()) {
-      clearReleaseTimer()
-      void applyNative(false)
+    if (!getEnabled() || anySource()) {
+      clearTimer('release')
+      kick()
       return
     }
-    if (anyRunning) {
-      clearReleaseTimer()
-      void applyNative(true)
+    if (queued) {
+      kick()
       return
     }
-    if (!held && releaseTimer === null) return
-    if (releaseTimer !== null) return
-    releaseTimer = schedule(() => {
-      releaseTimer = null
-      if ([...sources.values()].some(Boolean) || !getEnabled()) return
-      void applyNative(false)
-    }, releaseDelayMs)
+    if (lock === 'held') {
+      if (releaseTimer !== null) return
+      releaseTimer = schedule(() => {
+        releaseTimer = null
+        if (anySource() || !getEnabled()) return
+        kick()
+      }, releaseDelayMs)
+      return
+    }
+    if (lock === 'unknown') kick()
   }
 
   return {
@@ -146,39 +242,48 @@ export function createKeepAwakeController(options: KeepAwakeControllerOptions = 
       }
       recompute()
     },
-    /** Replace the projects-list source from a snapshot. */
+    /** Replace only the projects-list source. Other mounted sources stay. */
     syncProjects(projects: KeepAwakeProjectLike[]) {
       const producing = anyProjectProducing(projects)
       if (!producing) {
-        if (sources.has('projects')) {
-          sources.delete('projects')
-          recompute()
-        }
+        const hadList = sources.has('projects')
+        if (hadList) sources.delete('projects')
+        // An idle list must not erase workspace/statusbar sources. It may still
+        // retry a release whose previous command failed.
+        if (!hadList && lock !== 'unknown') return
       } else {
         sources.set('projects', true)
-        recompute()
       }
+      recompute()
     },
     /** Settings toggle flipped — re-evaluate immediately. */
     onEnabledChange(enabled: boolean) {
       setKeepAwakeEnabled(enabled, storage)
       if (!enabled) {
-        clearReleaseTimer()
-        void applyNative(false)
+        clearTimer('release')
+        kick()
       } else {
         recompute()
       }
     },
+    /** Confirmed native lock. Unknown is not held and is not a claim that sleep is allowed. */
     isHeld() {
-      return held
+      return lock === 'held'
     },
-    subscribe(listener: (held: boolean) => void) {
+    lockState(): KeepAwakeLockState {
+      return lock
+    },
+    /** Header pill: a source is active and the native lock was confirmed. */
+    showsActivityLock() {
+      return activityVisible()
+    },
+    subscribe(listener: (show: boolean) => void) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
     /** Test helper: flush pending invoke chain. */
     async flush() {
-      await pendingInvoke
+      await chain
     },
     /** Test helper. */
     getSources() {
