@@ -25,7 +25,7 @@ RETIRED = (
 )
 HISTORICAL_SENTRY = {
     "validation", "missing_resource", "unexpected", "timeout", "connection", "authentication",
-    "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused",
+    "rate_limited", "provider_error", "invalid_response", "job_budget", "output_truncated", "refused",
     "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed",
     "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "file_locked", "source_not_found", "source_too_short",
     "no_complete_version",
