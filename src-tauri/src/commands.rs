@@ -402,12 +402,7 @@ mod download_tests {
 pub fn set_keep_awake(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
     let held = crate::power::set_keep_awake(on)?;
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let tip = if held {
-            "AutoClip — 制作中，已阻止休眠"
-        } else {
-            "AutoClip"
-        };
-        let _ = tray.set_tooltip(Some(tip));
+        let _ = tray.set_tooltip(Some(crate::power::keep_awake_tooltip(held)));
     }
     Ok(held)
 }

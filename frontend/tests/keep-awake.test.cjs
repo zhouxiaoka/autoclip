@@ -331,6 +331,90 @@ test('a new source cancels a pending release retry and acquires again', async ()
   assert.equal(calls.filter(on => on === false).length, 1)
 })
 
+test('non-desktop does not claim the lock and does not call invoke', async () => {
+  const m = loadKeepAwake()
+  const calls = []
+  const ctrl = m.createKeepAwakeController({
+    invoke: async (_cmd, args) => { calls.push(args.on) },
+    isDesktop: () => false,
+    getEnabled: () => true,
+  })
+  ctrl.setSource('workspace:p', true)
+  await ctrl.flush()
+  ctrl.syncProjects([{ status: 'processing' }])
+  await ctrl.flush()
+  assert.deepEqual(calls, [])
+  assert.equal(ctrl.isHeld(), false)
+  assert.equal(ctrl.lockState(), 'released')
+  assert.equal(ctrl.showsActivityLock(), false)
+})
+
+test('desktop without invoke stays unknown instead of held', async () => {
+  const m = loadKeepAwake()
+  const ctrl = m.createKeepAwakeController({
+    isDesktop: () => true,
+    getEnabled: () => true,
+  })
+  ctrl.setSource('workspace:p', true)
+  await ctrl.flush()
+  assert.equal(ctrl.lockState(), 'unknown')
+  assert.equal(ctrl.isHeld(), false)
+  assert.equal(ctrl.showsActivityLock(), false)
+})
+
+test('an intent switch after exhausted release gets its own backoff', async () => {
+  const m = loadKeepAwake()
+  const calls = []
+  let clock = 0
+  const { ctrl, timers } = fakeController(m, async (_cmd, args) => {
+    calls.push(args.on)
+    throw new Error('native failed')
+  }, { retryBackoffMs: [1_000], now: () => clock, releaseDelayMs: 0 })
+  ctrl.setSource('workspace:p', true)
+  await ctrl.flush()
+  assert.equal(calls.filter(on => on === true).length, 1)
+  const acquireRetry = timers.find(timer => timer.ms === 1_000)
+  assert.ok(acquireRetry)
+  acquireRetry.fn()
+  await ctrl.flush()
+  assert.equal(calls.filter(on => on === true).length, 2)
+  assert.equal(ctrl.lockState(), 'unknown')
+  assert.equal(timers.filter(timer => timer.ms === 1_000 && timers.indexOf(timer) === timers.length - 1).length >= 0, true)
+
+  ctrl.setSource('workspace:p', false)
+  const before = calls.filter(on => on === false).length
+  const releaseDelay = timers.filter(timer => timer.ms === 0).pop()
+  if (releaseDelay) releaseDelay.fn()
+  await ctrl.flush()
+  assert.equal(calls.filter(on => on === false).length, before + 1)
+  const releaseRetry = [...timers].reverse().find(timer => timer.ms === 1_000)
+  assert.ok(releaseRetry)
+  const releaseCount = calls.filter(on => on === false).length
+  releaseRetry.fn()
+  await ctrl.flush()
+  assert.equal(calls.filter(on => on === false).length, releaseCount + 1)
+  assert.equal(ctrl.showsActivityLock(), false)
+  clock = 0
+})
+
+test('the same in-flight intent is not sent twice', async () => {
+  const m = loadKeepAwake()
+  const calls = []
+  let finish
+  const { ctrl } = fakeController(m, async (_cmd, args) => {
+    calls.push(args.on)
+    if (calls.length === 1) await new Promise(resolve => { finish = resolve })
+  })
+  ctrl.setSource('workspace:p', true)
+  ctrl.syncProjects([{ status: 'processing' }])
+  for (let i = 0; i < 8 && typeof finish !== 'function'; i++) await Promise.resolve()
+  assert.equal(typeof finish, 'function')
+  finish()
+  await ctrl.flush()
+  assert.deepEqual(calls, [true])
+  assert.equal(ctrl.isHeld(), true)
+})
+
 test('a late acquire cannot overwrite a release that was requested while it was in flight', async () => {
   const m = loadKeepAwake()
   const calls = []

@@ -84,7 +84,9 @@ export function createKeepAwakeController(options: KeepAwakeControllerOptions = 
   let releaseTimer: ReturnType<typeof setTimeout> | null = null
   let retryTimer: ReturnType<typeof setTimeout> | null = null
   let retryAttempt = 0
+  let retryFor: boolean | null = null
   let lastFailureAt = 0
+  let transport: 'unchecked' | 'desktop' | 'absent' | 'no-invoke' = 'unchecked'
   const listeners = new Set<(show: boolean) => void>()
 
   const releaseDelayMs = options.releaseDelayMs ?? KEEP_AWAKE_RELEASE_DELAY_MS
@@ -131,10 +133,17 @@ export function createKeepAwakeController(options: KeepAwakeControllerOptions = 
   }
 
   const kick = (fromRetry = false) => {
+    if (transport === 'absent' || transport === 'no-invoke') return
     const want = wantOn()
+    // Same in-flight or already-scheduled intent is one command, not a second IPC.
     if ((queued || retryTimer !== null) && queuedOn === want) return
     if (!queued && retryTimer === null && want && lock === 'held') return
     if (!queued && retryTimer === null && !want && lock === 'released') return
+    if (retryFor !== want) {
+      retryFor = want
+      retryAttempt = 0
+      lastFailureAt = 0
+    }
     if (!fromRetry && !queued && retryTimer === null && lock === 'unknown' && queuedOn === want && retryAttempt >= backoff.length) {
       const cap = backoff[backoff.length - 1] ?? 0
       if (now() - lastFailureAt < cap) return
@@ -159,7 +168,20 @@ export function createKeepAwakeController(options: KeepAwakeControllerOptions = 
             notify()
             return
           }
-          if (desktop && options.invoke) await options.invoke('set_keep_awake', { on: desired })
+          if (!desktop) {
+            transport = 'absent'
+            lock = 'released'
+            notify()
+            return
+          }
+          transport = 'desktop'
+          if (!options.invoke) {
+            transport = 'no-invoke'
+            lock = 'unknown'
+            notify()
+            return
+          }
+          await options.invoke('set_keep_awake', { on: desired })
           if (gen !== generation) {
             lock = 'unknown'
             notify()
