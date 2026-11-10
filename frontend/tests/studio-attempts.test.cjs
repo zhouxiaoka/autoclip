@@ -354,7 +354,7 @@ async function mount(server, override = {}) {
     })() },
   }
   const stubs = {
-    'i18n': { t, getLocale: () => 'zh' }, 'ui': { Btn, Section: ({ title, description, right, children }) => h('section', null, h('h2', null, title), h('p', { className: 'desc' }, description), right, children), Dialog: empty, fmtDuration: String },
+    'i18n': { t, getLocale: () => 'zh' }, 'ui': { Btn, StatusDot: ({ label }) => h('span', null, label), Section: ({ title, description, right, children }) => h('section', null, h('h2', null, title), h('p', { className: 'desc' }, description), right, children), Dialog: empty, fmtDuration: String },
     'features/studio/api': { studioApi: { get: async () => { gets.page++; return JSON.parse(JSON.stringify(server.state)) }, source: () => '' }, errorText: String },
     'features/studio/ExportHistory': { __esModule: true, default: empty }, 'features/studio/DraftResultCard': { __esModule: true, default: empty },
     'features/studio/OutputVariantCard': { __esModule: true, default: empty }, 'features/studio/PlatformPicker': { __esModule: true, default: empty },
