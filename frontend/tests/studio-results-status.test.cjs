@@ -258,7 +258,7 @@ test('1.5.7 settings page resolves both 「去设置」 targets to their own row
 
 test('1.5.7 manual failed run hides Retry once a collection exists (R18 82)', () => {
   const src = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.ok(src.includes('project.collections?.length || workspace.jobs?.some'))
+  assert.ok(src.includes('countPreservedResults'))
 })
 for (const [code, stage, destination] of [['authentication', 'subtitle', '/settings?section=speech'], ['provider_error', 'subtitle', null]]) {
   test(`1.5.7 cloud ASR ${code} at ${stage} -> ${destination || 'Retry'} (R18 80)`, () => {

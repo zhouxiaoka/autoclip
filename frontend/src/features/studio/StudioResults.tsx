@@ -8,7 +8,7 @@ import { studioApi, errorText } from './api'
 import { sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
 import { receiptFailureInfo } from './failureAction'
-import { presentFailure, resolveFailureCause } from './failurePresentation'
+import { countPreservedResults, presentFailure, resolveFailureCause } from './failurePresentation'
 import DiagnosePanel from './DiagnosePanel'
 import SwitchModelDialog from './SwitchModelDialog'
 import { listSwitchModelOptions, usableConnectionCount } from './switchModelOptions'
@@ -44,6 +44,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
   const [history, setHistory] = useState(false)
   const [busy,setBusy] = useState('')
+  const busyRef = useRef('')
   const [actionError,setActionError] = useState('')
   const [preview,setPreview] = useState<Scene|null>(null)
   const [exporting,setExporting] = useState<Draft|null>(null)
@@ -98,7 +99,11 @@ export default function StudioResults({ project, children, onCreateCollection, o
   // A retry whose response was lost is still watched: the open generation attempt on the snapshot is the source.
   useEffect(()=>{workflow.adoptOpenAttempt(project.id, workspace)},[project.id, workspace.attempts])
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
-  const act = async (key: string, fn:()=>Promise<void>) => {setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy('')}}
+  const act = async (key: string, fn:()=>Promise<void>) => {
+    if (busyRef.current) return
+    busyRef.current = key
+    setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{busyRef.current = '';setBusy('')}
+  }
   const [progressNow, setProgressNow] = useState(() => Date.now())
   const progressRun = workspace.analysis?.status === 'running' || workspace.jobs.some(job => job.status === 'queued' || job.status === 'running')
   useEffect(() => {
@@ -160,11 +165,15 @@ export default function StudioResults({ project, children, onCreateCollection, o
     generation: workspace.generation,
     receipt: receiptCause,
   })
-  const manualKept = project.collections?.length || workspace.jobs?.some(job => job.status === 'completed')
-  const preservedCount = (workspace.drafts?.length || 0)
-    + (workspace.output_variants || []).filter(item => item.status === 'completed').length
-    + (project.clips?.length || 0)
-    + (manualKept ? 1 : 0)
+  const completedVariants = (workspace.output_variants || []).filter(item => item.status === 'completed')
+  const representedJobs = new Set(completedVariants.map(item => item.render_job_id).filter(Boolean))
+  const preservedCount = countPreservedResults({
+    drafts: workspace.drafts?.length,
+    completedVariants: completedVariants.length,
+    clips: project.clips?.length,
+    collections: project.collections?.length,
+    completedJobs: (workspace.jobs || []).filter(job => job.status === 'completed' && !representedJobs.has(job.job_id)).length,
+  })
   const presented = presentFailure({
     ...resolvedCause,
     error: resolvedCause.error || workspace.analysis?.error,

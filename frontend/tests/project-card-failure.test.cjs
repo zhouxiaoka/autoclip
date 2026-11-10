@@ -14,7 +14,7 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     'react-i18next': { useTranslation: () => ({}) },
     'react-router-dom': { useNavigate: () => navigate },
     '../services/api': { projectApi: {} },
-    '../features/studio/api': { studioApi: { retry: async () => ({}) } },
+    '../features/studio/api': { studioApi: { retry: extra.studioRetry || (async () => ({})) } },
     '../utils/externalLinks': { openExternalLink: (url) => { opened.push(url); if (extra.onExternal) extra.onExternal(url) } },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
@@ -79,10 +79,30 @@ test('#428 home card with a replacement stays on the card and offers switch-and-
   assert.match(html, /<strong>DeepSeek<\/strong>/)
   assert.doesNotMatch(html, /82|话题|字幕块|自动重试|经常无法/)
   assert.equal(html.includes('href="/project/'), false)
-  buttons['切换并重试']()
-  assert.deepEqual(switched, ['test'])
-  assert.equal(buttons['其他模型'], undefined)
-  assert.equal(buttons['重试'], undefined)
+  assert.equal(buttons['切换并重试'], undefined)
+  buttons['去配置模型']()
+  assert.deepEqual(switched, [])
+  assert.deepEqual(visited, ['/settings?section=analysis'])
+})
+
+test('a second click before the first retry settles does not send another attempt', async () => {
+  const calls = []
+  let release
+  const pending = new Promise(resolve => { release = resolve })
+  const buttons = {}
+  const restart = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8')).service_restarted
+  renderCard('failed', restart, null, {
+    project: { error_code: 'service_restarted', settings: { smart_import: { auto_start: true }, studio_generation_status: 'failed' } },
+    studioRetry: async (id, body) => { calls.push([id, body]); await pending },
+    onButton: (label, onClick) => { buttons[label] = onClick },
+  })
+  const first = buttons['重试制作']()
+  const second = buttons['重试制作']()
+  release()
+  await first
+  await second
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][1].retry_kind, 'same')
 })
 
 test('#428 home card without a replacement offers configure, and does not open the project', () => {

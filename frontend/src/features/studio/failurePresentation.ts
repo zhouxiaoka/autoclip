@@ -96,6 +96,7 @@ export function resolveFailureCause(input: {
   else if (specific(analysis) && specific(generation) && analysis?.error_code !== generation?.error_code) chosen = { ...analysis }
   else if (generation?.error || generation?.error_code) chosen = { ...generation }
   else chosen = { ...(analysis || {}) }
+  // The chosen record's own stage. Do not replace it with the other record's stage.
   if (receipt?.error_code) {
     chosen = {
       ...chosen,
@@ -207,6 +208,18 @@ export function presentFailure(input: PresentInput): FailureView {
     primary: primaryFor(input, preserved),
     technical: Number.isFinite(requests) && requests > 0 ? { requests, successes: Number.isFinite(successes) ? successes : null } : null,
   }
+}
+
+/** Drafts, finished variants, clips, collections, and completed exports not already represented by a variant. */
+export function countPreservedResults(input: {
+  drafts?: number | null
+  completedVariants?: number | null
+  clips?: number | null
+  collections?: number | null
+  completedJobs?: number | null
+}): number {
+  return [input.drafts, input.completedVariants, input.clips, input.collections, input.completedJobs]
+    .reduce<number>((sum, value) => sum + Math.max(0, Number(value) || 0), 0)
 }
 
 export function technicalCountText(view: FailureView): string | null {

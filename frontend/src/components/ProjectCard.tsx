@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
@@ -11,7 +11,7 @@ import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { llmFailureText } from '../utils/llmFailure'
-import { presentFailure, type PrimaryAction } from '../features/studio/failurePresentation'
+import { countPreservedResults, presentFailure, type PrimaryAction } from '../features/studio/failurePresentation'
 import DiagnosePanel from '../features/studio/DiagnosePanel'
 import { stageBrowserCookieRecovery } from '../features/studio/browserCookieRecovery'
 import SwitchModelDialog from '../features/studio/SwitchModelDialog'
@@ -74,6 +74,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
+  const retryLock = useRef(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
 
@@ -303,28 +304,39 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const billableRaw = project.processing_config?.billable_calls_before_failure
     ?? project.settings?.billable_calls_before_failure
   const billableCount = Number(billableRaw)
-  const preservedCount = Math.max(
-    Number(project.processing_config?.studio_draft_count ?? project.settings?.studio_draft_count ?? 0) || 0,
-    Number(project.processing_config?.studio_completed_variant_count ?? project.settings?.studio_completed_variant_count ?? 0) || 0,
-    Number(project.total_clips || 0) || 0,
-  )
-  const requestCount = Number(project.processing_config?.llm_calls ?? project.settings?.llm_calls)
+  const indexed = project.processing_config || {}
+  const mirrored = project.settings || {}
+  const projectedPreserved = indexed.preserved_result_count ?? mirrored.preserved_result_count
+  // Old rows have no preserved_result_count. Use only the counts already on the
+  // project; do not invent collections or export jobs the index never stored.
+  const preservedCount = typeof projectedPreserved === 'number'
+    ? Math.max(0, projectedPreserved)
+    : countPreservedResults({
+      drafts: Number(indexed.studio_draft_count ?? mirrored.studio_draft_count ?? 0) || 0,
+      completedVariants: Number(indexed.studio_completed_variant_count ?? mirrored.studio_completed_variant_count ?? 0) || 0,
+      clips: Number(project.total_clips || 0) || 0,
+    })
+  const requestCount = Number(indexed.llm_calls ?? mirrored.llm_calls)
+  const asStrings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
   const failureView = presentFailure({
     error: rawFailure,
     error_code: project.error_code,
     upstream_error_type: upstreamType,
-    failure_stage: project.processing_config?.failure_stage || project.settings?.failure_stage,
-    phase: project.processing_config?.analysis_phase || project.settings?.analysis_phase,
+    failure_stage: indexed.failure_stage || mirrored.failure_stage,
+    phase: indexed.analysis_phase || mirrored.analysis_phase,
     preservedCount,
     connectionCount,
     llm_calls: Number.isFinite(requestCount) ? requestCount : undefined,
     billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
+    secondary_error_codes: asStrings(indexed.secondary_error_codes ?? mirrored.secondary_error_codes),
+    secondary_upstream_error_types: asStrings(indexed.secondary_upstream_error_types ?? mirrored.secondary_upstream_error_types),
+    secondary_failure_stages: asStrings(indexed.secondary_failure_stages ?? mirrored.secondary_failure_stages),
   })
   const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureView.reason, project.error_code)
 
   const handleRetry = async (opts?: { silent?: boolean; stay?: boolean }) => {
-    if (isRetrying) return
-
+    if (retryLock.current) return
+    retryLock.current = true
     setIsRetrying(true)
     try {
       // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing。
@@ -352,6 +364,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         message.error(t("重试失败，请稍后再试"))
       }
     } finally {
+      retryLock.current = false
       setIsRetrying(false)
     }
   }
@@ -360,26 +373,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const openSwitchDialog = () => {
     if (!onSwitchAndRetry) return
     if (switchOptions && switchOptions.length) { setSwitchOpen(true); return }
-    // Weak-timeline card may only know the recommended display name (no full option list yet).
-    if (replacement?.displayName) {
-      void (async () => {
-        setIsRetrying(true)
-        try { await onSwitchAndRetry(project.id) }
-        finally { setIsRetrying(false) }
-      })()
-      return
-    }
+    // A recommended name is not a selected connection. The user picks one in settings.
     openSettings()
   }
   const confirmSwitch = async (choice: { connectionId: string; model: string }) => {
-    if (isRetrying || !onSwitchAndRetry) return
+    if (retryLock.current || !onSwitchAndRetry) return
+    retryLock.current = true
     setIsRetrying(true)
     try { await onSwitchAndRetry(project.id, choice) }
-    finally { setIsRetrying(false); setSwitchOpen(false) }
+    finally { retryLock.current = false; setIsRetrying(false); setSwitchOpen(false) }
   }
 
   const runPrimary = async (action: PrimaryAction) => {
-    if (isRetrying) return
+    if (retryLock.current) return
     if (action.id === 'view_results') { navigate(`/project/${project.id}`); return }
     if (action.id === 'settings' || action.id === 'install_transcription' || action.id === 'quota_check') {
       navigate(action.destination || '/settings?section=analysis')
@@ -389,24 +395,25 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     if (action.id === 'change_video') { navigate('/'); return }
     if (action.id === 'switch_model') { openSwitchDialog(); return }
     const studioStatus = String(project.settings?.studio_generation_status || project.processing_config?.studio_generation_status || '')
+    // A managed project that never started a studio attempt still belongs on import review.
     if (isManaged && !studioStatus) {
       navigate(`/import/${project.id}`)
       return
     }
-    if (isManaged || studioStatus) {
-      setIsRetrying(true)
-      try {
-        await studioApi.retry(project.id, { retry_kind: 'same' })
-        if (onRetry) onRetry(project.id)
-      } catch (error) {
-        console.error('重试失败:', error)
-        message.error(t('重试失败，请稍后再试'))
-      } finally {
-        setIsRetrying(false)
-      }
-      return
+    retryLock.current = true
+    setIsRetrying(true)
+    try {
+      if (isManaged || studioStatus) await studioApi.retry(project.id, { retry_kind: 'same' })
+      else if (project.status === 'pending') await projectApi.startProcessing(project.id)
+      else await projectApi.retryProcessing(project.id)
+      if (onRetry) onRetry(project.id)
+    } catch (error) {
+      console.error('重试失败:', error)
+      message.error(t('重试失败，请稍后再试'))
+    } finally {
+      retryLock.current = false
+      setIsRetrying(false)
     }
-    await handleRetry()
   }
 
   const openProject = () => {
@@ -469,11 +476,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               {weakLocalTimeline && replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
               <p className="ac-failure-outcome">{t(failureView.outcome, { count: preservedCount })}</p>
               {failureView.primary && <Btn variant="cta" size="sm" loading={isRetrying} onClick={() => {
-                const action: PrimaryAction = weakLocalTimeline && replacement?.displayName
+                const selectable = Boolean(switchOptions && switchOptions.length)
+                const action: PrimaryAction = weakLocalTimeline && selectable
                   ? { id: 'switch_model', label: '切换并重试' }
                   : failureView.primary!
                 void runPrimary(action)
-              }}>{t(weakLocalTimeline && replacement?.displayName ? '切换并重试' : failureView.primary.label)}</Btn>}
+              }}>{t(weakLocalTimeline && switchOptions && switchOptions.length ? '切换并重试' : failureView.primary.label)}</Btn>}
               <div className="ac-failure-weak">
                 <Btn variant="text" size="sm" onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn>
                 <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t('反馈')}</Btn>

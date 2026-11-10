@@ -166,7 +166,7 @@ def test_malformed_receipt_never_breaks_the_project_list(project, bad):
 
 def test_budget_timeout_projects_stage_phase_and_request_count():
     from backend.services.studio.project_completion import _failure
-    message, code, stage, phase, calls = _failure(
+    message, code, stage, phase, calls, upstream, secondary = _failure(
         {'error': '没有自动生成的成片，可选择备选片段继续生成', 'error_code': 'validation'},
         {
             'error': '这次制作已超过时间上限，已停止。请重试；服务商一直很慢时可以换一个更快的模型。',
@@ -180,7 +180,44 @@ def test_budget_timeout_projects_stage_phase_and_request_count():
     assert stage == 'analyze'
     assert phase == 'production'
     assert calls == 9
+    assert upstream is None
+    assert secondary == ([], [], [])
     assert '时间上限' in message
+
+
+def test_same_code_keeps_the_generation_stage_and_a_same_run_receipt():
+    from backend.services.studio.project_completion import _failure, preserved_result_count
+    plain = _failure(
+        {'error': '渲染失败', 'error_code': 'provider_error', 'failure_stage': 'render'},
+        {'error': '渲染失败', 'error_code': 'provider_error', 'failure_stage': 'screening', 'phase': 'production', 'run_id': 'run-1'},
+    )
+    assert plain[1] == 'provider_error'
+    assert plain[2] == 'render'
+    message, code, stage, phase, calls, upstream, secondary = _failure(
+        {'error': '渲染失败', 'error_code': 'provider_error', 'failure_stage': 'render'},
+        {'error': '渲染失败', 'error_code': 'provider_error', 'failure_stage': 'screening', 'phase': 'production', 'run_id': 'run-1'},
+        [{'sequence': 2, 'state': 'failed', 'run_id': 'run-1', 'causes': [
+            {'code': 'timeout', 'stage': 'analyze', 'upstream': 'timeout'},
+            {'code': 'insufficient_quota', 'stage': 'analyze', 'upstream': 'insufficient_quota'},
+        ]}],
+    )
+    assert code == 'timeout'
+    assert stage == 'analyze'
+    assert upstream == 'timeout'
+    assert secondary[0] == ['insufficient_quota']
+    assert '渲染失败' in message
+    wrong = _failure(
+        {'error': '频率', 'error_code': 'rate_limited', 'failure_stage': 'render', 'upstream_error_type': 'rate_limited'},
+        {'error': '频率', 'error_code': 'rate_limited', 'failure_stage': 'screening', 'run_id': 'run-1', 'phase': 'production'},
+        [{'sequence': 1, 'state': 'failed', 'run_id': 'other-run', 'causes': [
+            {'code': 'invalid_key', 'stage': 'analyze', 'upstream': 'invalid_key'},
+        ]}],
+    )
+    assert wrong[1] == 'rate_limited'
+    assert wrong[2] == 'render'
+    assert wrong[5] == 'rate_limited'
+    assert preserved_result_count([], [], [{'job_id': 'j1', 'status': 'completed'}]) == 1
+    assert preserved_result_count([], [{'status': 'completed', 'render_job_id': 'j1'}], [{'job_id': 'j1', 'status': 'completed'}], 0, 1) == 2
 
 
 def test_failed_generation_mirrors_billable_calls_onto_home_settings(project):

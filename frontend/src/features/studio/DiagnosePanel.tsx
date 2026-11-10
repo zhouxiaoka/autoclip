@@ -5,6 +5,7 @@ import { Btn, Dialog, StatusDot } from '../../ui'
 import { trackDiagnoseAction, trackDiagnoseOpened } from '../../analytics/studio'
 import { studioApi } from './api'
 import { pageSuggestedAction, presentedFailure, type PageFailureInfo, type SuggestedAction } from './failureAction'
+import { presentFailure, technicalCountText } from './failurePresentation'
 import type { ImportReadiness } from './importReadiness'
 import { openExample } from './openExample'
 
@@ -98,9 +99,10 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
       </div>
       <p className="studio-muted">{t('上次失败')}</p>
       <p className="studio-error">{card.step ? <>{t(card.step)}：{t(card.reason)}</> : t(card.reason)}</p>
-      {Number.isFinite(Number(info.llm_calls)) && Number(info.llm_calls) > 0 && Number.isFinite(Number(info.billable_calls_before_failure)) && (
-        <p className="studio-muted">{t('这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。', { requests: info.llm_calls, successes: info.billable_calls_before_failure })}</p>
-      )}
+      {(() => {
+        const technical = technicalCountText(presentFailure({ llm_calls: info.llm_calls, billable_calls_before_failure: info.billable_calls_before_failure }))
+        return technical ? <p className="studio-muted">{t(technical, { requests: info.llm_calls, successes: info.billable_calls_before_failure })}</p> : null
+      })()}
       {suggestion && <>
         <p className="studio-muted">{t('建议先做这一步')}</p>
         {suggestion.kind === 'note'
