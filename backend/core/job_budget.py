@@ -18,18 +18,18 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Iterator, Optional
 
+from backend.core.failure_codes import sentence
+
 # One read is 600s. 20 minutes covers that read plus its SDK retry, then stops
 # the next manager retry instead of stacking hours of 600s waits.
 CLIP_JOB_BUDGET_SEC = 20 * 60
-
-_MESSAGE = "这次制作已超过时间上限，已停止。请重试；服务商一直很慢时可以换一个更快的模型。"
 
 
 class JobDurationExceeded(Exception):
     """The clip/generation job used its wall-clock budget. Not a single-request timeout."""
 
     def __init__(self) -> None:
-        super().__init__(_MESSAGE)
+        super().__init__(sentence("job_budget"))
 
 
 class _Budget:

@@ -56,7 +56,7 @@ PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE
 def studio_error_code(error: Exception) -> str:
     from backend.core.project_cancellation import ServiceRestarted
     if type(error).__name__ == "JobDurationExceeded":
-        return "timeout"
+        return "job_budget"
     if isinstance(error, ServiceRestarted):
         return 'service_restarted'
     if type(error).__name__ == "QuotaExhausted":

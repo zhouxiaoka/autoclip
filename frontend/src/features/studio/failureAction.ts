@@ -284,22 +284,22 @@ const BARE_FAILURE = new Set(['', '错误', '失败', 'Error', 'error', '处理�
 const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked', 'file_locked', 'source_unsupported'])
 const TRANSCRIBE_STAGES = new Set(['subtitle', 'transcribe'])
 const ANALYZE_STAGES = new Set(['analyze', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'vision', 'highlight'])
+const PRODUCE_STAGES = new Set(['render', 'export', 'production', 'dispatch'])
 
-/** The four steps a beginner can act on: download / transcribe / analyze / produce. */
-export function failureStep(stage?: string | null, phase?: string | null, code?: string | null): '下载' | '转写' | '分析' | '制作' {
-  if (code && (DOWNLOAD_CODES.has(code) || code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup')) {
-    return code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup' ? '转写' : '下载'
-  }
-  const key = (stage || '').toLowerCase()
+export type FailureStep = '下载' | '转写' | '分析' | '制作' | '筛选'
+
+/** Label a recorded stage. A missing stage stays unlabeled; phase alone is not a guess. */
+export function failureStep(stage?: string | null, _phase?: string | null, code?: string | null): FailureStep | null {
+  const key = (stage || '').trim().toLowerCase()
+  if (key === 'screening') return '筛选'
   if (TRANSCRIBE_STAGES.has(key)) return '转写'
   if (ANALYZE_STAGES.has(key)) return '分析'
-  if (key === 'render' || key === 'export' || phase === 'rendering') return '制作'
-  if (key === 'ingest' || key === 'screening') return '下载'
-  // Screening without a model code is still the download/read step. Production is analysis
-  // until rendering starts. A model failure during screening names the analysis step.
-  if (phase === 'screening') return code ? '分析' : '下载'
-  if (phase === 'production') return '分析'
-  return '制作'
+  if (PRODUCE_STAGES.has(key)) return '制作'
+  if (key === 'ingest' || key === 'download') return '下载'
+  if (key) return null
+  if (code && (code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup')) return '转写'
+  if (code && DOWNLOAD_CODES.has(code)) return '下载'
+  return null
 }
 
 export function readableFailure(error?: string | null, code?: string | null, upstream?: string | null): string {
@@ -327,7 +327,7 @@ export function quotaBillingCopy(info: Pick<PageFailureInfo, 'upstream_error_typ
   return parts.join(' ')
 }
 
-export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: '下载' | '转写' | '分析' | '制作'; reason: string; billing: string | null } {
+export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: FailureStep | null; reason: string; billing: string | null } {
   const ingest = ingestConnectionCopy(info.error_code, info.upstream_error_type, info.failure_stage)
   const raw = (ingest ?? message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
   const reason = ingest || (BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw)

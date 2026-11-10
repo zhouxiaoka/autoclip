@@ -75,7 +75,7 @@ test('failure screens deep-link to Settings → Model', () => {
   const empty = fs.readFileSync(path.join(__dirname, '../src/components/LlmKeyFailureEmpty.tsx'), 'utf8')
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/i18n/locales/en.json'), 'utf8'))
   assert.match(detail, /\/settings\?section=model/)
-  assert.match(card, /\/settings\?section=model/)
+  assert.match(card, /\/settings\?section=analysis/)
   assert.match(empty, /打开模型设置/)
   assert.match(en['切片分析需要你自己的 API Key。打开「设置 → 服务商与模型」，填上提供商、密钥和模型名，再点「测试连接」。密钥在该提供商的控制台申请，只保存在这台机器上。'], /Settings → Providers and models/)
   assert.match(en['切片分析需要你自己的 API Key。打开「设置 → 服务商与模型」，填上提供商、密钥和模型名，再点「测试连接」。密钥在该提供商的控制台申请，只保存在这台机器上。'], /Bring your own API key/)

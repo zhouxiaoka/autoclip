@@ -37,6 +37,7 @@ function loadPanel() {
       }
       if (id === './api') return { studioApi: { readiness: async () => null } }
       if (id === './failureAction') return loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
+      if (id === './failurePresentation') return loadTs(path.resolve(__dirname, '../src/features/studio/failurePresentation.ts'))
       if (id === './openExample') return { openExample: async navigate => { await navigate('/project/sample') } }
       throw new Error(id)
     },

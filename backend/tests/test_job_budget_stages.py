@@ -116,7 +116,7 @@ def test_auto_production_records_a_spent_budget(isolated, monkeypatch):
     jobs._auto_generate('prod-budget', {'recommended_analysis': 'subtitle'})
     state = store.read('prod-budget')
     assert state['generation']['status'] == 'failed'
-    assert state['generation']['error_code'] == 'timeout'
+    assert state['generation']['error_code'] == 'job_budget'
     assert '时间上限' in state['generation']['error']
     assert state['analysis']['status'] == 'failed'
     assert state['analysis']['run_id'] == 'run-1'
@@ -147,7 +147,7 @@ def test_on_demand_packaging_stops_at_the_clip_budget(isolated, monkeypatch):
     variant = state['output_variants'][0]
     assert variant['status'] == 'failed'
     assert variant['needs_prepare'] is True
-    assert variant['error_code'] == 'timeout'
+    assert variant['error_code'] == 'job_budget'
     assert '时间上限' in variant['error']
     assert clip_job_active() is False
 
@@ -171,7 +171,7 @@ def test_confirmed_production_records_a_spent_budget(isolated, monkeypatch):
     })
     state = store.read('confirm-budget')
     assert state['analysis']['status'] == 'failed'
-    assert state['analysis']['error_code'] == 'timeout'
+    assert state['analysis']['error_code'] == 'job_budget'
     assert '时间上限' in state['analysis']['error']
     assert state['analysis']['run_id'] == 'run-c'
     assert clip_job_active() is False
@@ -195,7 +195,7 @@ def test_render_model_work_stops_at_the_clip_budget(isolated, monkeypatch):
     state = store.read('render-budget')
     job = next(item for item in state['jobs'] if item['job_id'] == 'active')
     assert job['status'] == 'failed'
-    assert job['error_code'] == 'timeout'
+    assert job['error_code'] == 'job_budget'
     assert '时间上限' in job['error']
     assert state['output_variants'][0]['status'] == 'failed'
     assert '时间上限' in state['output_variants'][0]['error']

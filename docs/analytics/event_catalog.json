@@ -68,6 +68,7 @@
     "studio_error_code": [
       "network",
       "timeout",
+      "job_budget",
       "unknown",
       "validation",
       "missing_resource",

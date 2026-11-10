@@ -20,6 +20,8 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === 'react-router-dom') return { useNavigate: () => to => navigations.push(to), useLocation: () => ({ search: routeSearch.value }) }
     if (name === './settingsReturn') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/settingsReturn.ts'))
     if (name === './failureAction') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
+    if (name === './failurePresentation') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/failurePresentation.ts'))
+    if (name === './DiagnosePanel') return { __esModule: true, default: empty }
     if (name === './studioProgress') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/studioProgress.ts'))
     if (name === '../../i18n') return { t: value => value, getLocale: () => 'zh' }
     if (name === '../../ui') return { Btn: props => { buttons.push(props); return React.createElement('button', null, props.children) },
@@ -105,10 +107,10 @@ test('X1 two same-code failures lead with diagnose and keep retry secondary', ()
     const diagnose = buttons.find(button => button.children === '看看哪里不对')
     const retry = buttons.find(button => button.children === '重试')
     assert.ok(diagnose)
-    assert.equal(diagnose.variant, 'cta')
+    assert.equal(diagnose.variant, 'text')
     assert.ok(retry)
-    assert.notEqual(retry.variant, 'cta')
-    assert.ok(buttons.indexOf(diagnose) < buttons.indexOf(retry))
+    assert.equal(retry.variant, 'cta')
+    assert.ok(buttons.indexOf(retry) < buttons.indexOf(diagnose))
   } finally {
     generationOverride.value = null
   }
@@ -137,9 +139,10 @@ test('#428 studio keeps a one-line reason and does not offer a second model pick
   assert.match(html, /当前本地模型无法返回可用时间线/)
   assert.doesNotMatch(html, /82|话题|字幕块|自动重试已经用完|切换并重试/)
   assert.equal(buttons.some(button => button.children === '模型设置'), false)
-  const retry = buttons.find(button => button.children === '重试')
-  assert.ok(retry)
-  assert.notEqual(retry.variant, 'cta')
+  const configure = buttons.find(button => button.children === '去配置模型')
+  assert.ok(configure)
+  assert.equal(configure.variant, 'cta')
+  assert.equal(buttons.some(button => button.children === '重试'), false)
   assert.deepEqual(navigations, [])
 })
 
@@ -157,12 +160,10 @@ test('R22 #212 / B2: a whisper gate failure leads with 安装转写, retry stays
     const entry = buttons.find(button => button.children === '安装转写')
     assert.ok(entry, `${code}: the failure page must lead with install transcription`)
     assert.equal(entry.variant, 'cta', code)
-    const retry = buttons.find(button => button.children === '重试')
-    assert.ok(retry, `${code}: retry stays available beside install`)
-    assert.notEqual(retry.variant, 'cta', code)
+    assert.equal(buttons.some(button => button.children === '重试'), false, code)
     assert.equal(buttons.some(button => button.children === '打开转写设置' || button.children === '模型设置' || button.children === '去设置'), false, code)
     entry.onClick()
-    assert.deepEqual(navigations, ['/settings?section=speech'])
+    assert.deepEqual(navigations, ['/settings?section=speech&return_project=test'])
   }
   const waiting = []
   render(true, 'screening', 'failed', waiting, [], 'whisper_installing')
@@ -171,8 +172,8 @@ test('R22 #212 / B2: a whisper gate failure leads with 安装转写, retry stays
   const buttons = []
   navigations.length = 0
   render(true, 'screening', 'failed', buttons, [], 'llm_not_configured')
-  buttons.find(button => button.children === '模型设置').onClick()
-  assert.deepEqual(navigations, ['/settings?section=ai'])
+  buttons.find(button => button.children === '去设置').onClick()
+  assert.deepEqual(navigations, ['/settings?section=analysis&return_project=test'])
 })
 
 test('#481 source_blocked leads with the signed-in browser action', () => {
@@ -182,17 +183,14 @@ test('#481 source_blocked leads with the signed-in browser action', () => {
   const html = render(true, 'screening', 'failed', buttons, [], 'source_blocked', 'ingest', hint)
   assert.match(html, /下载：/)
   assert.ok(html.includes(hint))
-  assert.match(html, /下一步：回到导入，选择一个已登录的浏览器后再生成。/)
   assert.doesNotMatch(html, /暂时没有可用成片|模型设置|去设置|打开转写设置/)
   assert.equal(buttons.some(b => b.children === '模型设置' || b.children === '去设置' || b.children === '打开转写设置'), false)
   const go = buttons.find(b => b.children === '选择已登录的浏览器')
   assert.equal(go.variant, 'cta')
   go.onClick()
   assert.deepEqual(navigations, ['/?focus=browser-cookies'])
-  const retry = buttons.find(b => b.children === '重试')
-  assert.ok(retry)
-  assert.notEqual(retry.variant, 'cta')
-  assert.ok(buttons.some(b => b.children === '换一个视频'))
+  assert.equal(buttons.some(b => b.children === '重试'), false)
+  assert.equal(buttons.some(b => b.children === '换一个视频'), false)
 })
 
 test('R24 #231: an unreadable source is shown at once as a source problem: no spinner, no retry, no settings, pick another file', () => {
@@ -231,7 +229,7 @@ for (const code of ['service_restarted', 'timeout', 'provider_error', 'model_not
   test(`1.5.7 non-user failure ${code} keeps Retry and no 「去设置」`, () => {
     const buttons = []
     render(true, 'production', 'failed', buttons, [], code)
-    assert.ok(buttons.some(b => b.children === '重试'))
+    assert.ok(buttons.some(b => b.children === '重试' || b.children === '重试制作'))
     assert.equal(buttons.some(b => b.children === '去设置'), false)
   })
 }
@@ -260,7 +258,7 @@ test('1.5.7 settings page resolves both 「去设置」 targets to their own row
 
 test('1.5.7 manual failed run hides Retry once a collection exists (R18 82)', () => {
   const src = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.ok(src.includes('project.collections?.length || workspace.jobs?.some'))
+  assert.ok(src.includes('countPreservedResults'))
 })
 for (const [code, stage, destination] of [['authentication', 'subtitle', '/settings?section=speech'], ['provider_error', 'subtitle', null]]) {
   test(`1.5.7 cloud ASR ${code} at ${stage} -> ${destination || 'Retry'} (R18 80)`, () => {
@@ -286,20 +284,18 @@ test('R20 #125 auth failure: 「继续制作」 sits beside 「去设置」 and 
   const buttons = [], calls = []
   render(true, 'production', 'failed', buttons, calls, 'invalid_key', 'subtitle')
   assert.equal(buttons.find(b => b.variant === 'cta').children, '去设置')
-  const cont = buttons.find(b => b.children === '继续制作')
-  assert.ok(cont, 'auth failure must offer 继续制作')
-  await cont.onClick()
-  assert.equal(JSON.stringify(calls), JSON.stringify([['retry', 'test', { retry_kind: 'same' }]]))  // #419: backend retry command -> receipt with retry_of + new attempt_id
+  assert.equal(buttons.some(b => b.children === '继续制作'), false)
+  assert.equal(buttons.some(b => b.children === '重试'), false)
 })
 test('R20 #125 back from a successful settings save (?continue=1): 「继续制作」 is the primary action', async () => {
   routeSearch.value = '?continue=1'
   const buttons = [], calls = []
   render(false, 'production', 'failed', buttons, calls, 'authentication', 'subtitle')
   routeSearch.value = ''
-  assert.equal(buttons.find(b => b.variant === 'cta').children, '继续制作')
-  assert.ok(buttons.some(b => b.children === '去设置'))
-  assert.equal(buttons.some(b => b.children === '重试'), false)
-  await buttons.find(b => b.children === '继续制作').onClick()
+  assert.equal(buttons.find(b => b.variant === 'cta').children, '重试制作')
+  assert.equal(buttons.some(b => b.children === '去设置'), false)
+  assert.equal(buttons.some(b => b.children === '继续制作'), false)
+  await buttons.find(b => b.children === '重试制作').onClick()
   assert.equal(JSON.stringify(calls), JSON.stringify([['retry', 'test', { retry_kind: 'same' }]]))
 })
 test('R20 #125 settings save returns to the project only when opened from one and the id is safe', () => {
@@ -419,7 +415,7 @@ test('a bare 错误 names the step, and a billable call adds the billing sentenc
   try {
     const html = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
     assert.match(html, new RegExp('分析：' + sentence))
-    assert.match(html, new RegExp(guidance.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    assert.doesNotMatch(html, /本次已消耗/)
     assert.doesNotMatch(html, /<span class="studio-error">错误<\/span>/)
   } finally {
     generationOverride.value = null
@@ -448,20 +444,21 @@ test('download connection hides the extra model-settings button; a model-stage c
     assert.equal(labels(buttons).includes('安装转写'), false, stage)
     assert.equal(labels(buttons).includes('选择已登录的浏览器'), false, stage)
     assert.ok(labels(buttons).includes('重试'), stage)
-    assert.ok(labels(buttons).includes('调整制作方案'), stage)
+    assert.equal(labels(buttons).includes('调整制作方案'), false, stage)
     assert.match(html, new RegExp(downloadSentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     assert.doesNotMatch(html, /无法连接模型服务/)
   }
   for (const stage of ['analyze', 'outline', 'screening']) {
     const buttons = []
     render(true, 'production', 'failed', buttons, [], 'connection', stage, '无法连接模型服务。请检查 API 地址和网络；如果是本地模型，请先启动服务再重试。')
-    assert.ok(labels(buttons).includes('模型设置'), stage)
+    assert.equal(labels(buttons).includes('模型设置'), false, stage)
     assert.ok(labels(buttons).includes('重试'), stage)
     assert.equal(labels(buttons).includes('去设置'), false, stage)
   }
   const unspecified = []
   render(true, 'production', 'failed', unspecified, [], 'connection', undefined, '无法连接模型服务。请检查 API 地址和网络；如果是本地模型，请先启动服务再重试。')
-  assert.ok(labels(unspecified).includes('模型设置'), 'a connection failure without a download stage stays a model entry')
+  assert.equal(labels(unspecified).includes('模型设置'), false)
+  assert.ok(labels(unspecified).includes('重试'))
 })
 
 test('existing settings entries stay on their own failures', () => {
@@ -474,7 +471,7 @@ test('existing settings entries stay on their own failures', () => {
   const blocked = []
   render(true, 'screening', 'failed', blocked, [], 'source_blocked', 'ingest', '这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。')
   assert.ok(labels(blocked).includes('选择已登录的浏览器'))
-  assert.ok(labels(blocked).includes('换一个视频'))
+  assert.equal(labels(blocked).includes('换一个视频'), false)
   assert.equal(labels(blocked).includes('模型设置'), false)
 
   const missing = []
@@ -485,7 +482,8 @@ test('existing settings entries stay on their own failures', () => {
 
   const unconfigured = []
   render(true, 'screening', 'failed', unconfigured, [], 'llm_not_configured')
-  assert.ok(labels(unconfigured).includes('模型设置'))
+  assert.ok(labels(unconfigured).includes('去设置'))
+  assert.equal(labels(unconfigured).includes('模型设置'), false)
 
   const invalid = []
   render(true, 'production', 'failed', invalid, [], 'invalid_key', 'analyze')

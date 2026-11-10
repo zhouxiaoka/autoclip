@@ -700,7 +700,7 @@ class SimplePipelineAdapter:
                 "stage": "ANALYZE",
                 "error": message,
                 "message": message,
-                "error_code": "timeout",
+                "error_code": "job_budget",
             }
             _carry_attribution(failed, error)
             return failed

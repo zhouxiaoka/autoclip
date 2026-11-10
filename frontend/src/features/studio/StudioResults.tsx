@@ -5,18 +5,19 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
-import { failureSettings, sourceFailure } from './importReadiness'
+import { sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
-import { analysisFailureText, analysisPageFailure, receiptFailureInfo, failureAction, isTranscriptionInstall, downloadConnectionFailure } from './failureAction'
-import { weakLocalTimelineFailure } from '../../utils/timelineFailure'
-import FailureActions, { FailureCopy } from './FailureActions'
-import { analysisProviderId, listSwitchModelOptions, usableConnectionCount } from './switchModelOptions'
+import { receiptFailureInfo } from './failureAction'
+import { countPreservedResults, presentFailure, resolveFailureCause } from './failurePresentation'
+import DiagnosePanel from './DiagnosePanel'
+import SwitchModelDialog from './SwitchModelDialog'
+import { listSwitchModelOptions, usableConnectionCount } from './switchModelOptions'
 import { modelSettingsApi, type ModelSettings } from '../settings/modelSettingsApi'
 import { forSave } from '../settings/modelSettingsLogic'
 import { syncFollowingCover } from '../settings/modelDefaults'
 import { displayedProgress, studioRunProgress } from './studioProgress'
 import { recordSuccess } from './etaModel'
-import { CONTINUE_PARAM, settingsReturnUrl } from './settingsReturn'
+import { settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
 import { Scene, Draft } from './types'
 import ExportHistory from './ExportHistory'
@@ -38,11 +39,12 @@ import './quick-output.css'
 export default function StudioResults({ project, children, onCreateCollection, onReload }: { project: Project; children: ReactNode; onCreateCollection: () => void; onReload: () => void }) {
   useTranslation()
   const navigate = useNavigate()
-  // back from a successful settings save -> 「继续制作」 is the primary action.
-  const returnedFromSettings = new URLSearchParams(useLocation().search).get(CONTINUE_PARAM) === '1'
+  const location = useLocation()
+  const resumeAfterSettings = new URLSearchParams(location.search || '').get('continue') === '1'
   const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
   const [history, setHistory] = useState(false)
   const [busy,setBusy] = useState('')
+  const busyRef = useRef('')
   const [actionError,setActionError] = useState('')
   const [preview,setPreview] = useState<Scene|null>(null)
   const [exporting,setExporting] = useState<Draft|null>(null)
@@ -62,10 +64,6 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const failedCode = workspace.analysis?.error_code || workspace.generation?.error_code
   const sourceUnusable = workspace.analysis?.status === 'failed' && sourceFailure(failedCode)
   const cookieRecovery = workspace.analysis?.status === 'failed' && browserCookieRecovery(failedCode, workspace.analysis?.error)
-  const canRetryAnalysis = automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || project.collections?.length || workspace.jobs?.some(job => job.status === 'completed'))
-  const whisperSettings = workspace.analysis?.status === 'failed' && !sourceUnusable && failureSettings(failedCode).label === '打开转写设置' ? failureSettings(failedCode) : null
-  const recoveryAction = failureAction(failedCode)
-  const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
   // the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
   const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
@@ -101,7 +99,11 @@ export default function StudioResults({ project, children, onCreateCollection, o
   // A retry whose response was lost is still watched: the open generation attempt on the snapshot is the source.
   useEffect(()=>{workflow.adoptOpenAttempt(project.id, workspace)},[project.id, workspace.attempts])
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
-  const act = async (key: string, fn:()=>Promise<void>) => {setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy('')}}
+  const act = async (key: string, fn:()=>Promise<void>) => {
+    if (busyRef.current) return
+    busyRef.current = key
+    setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{busyRef.current = '';setBusy('')}
+  }
   const [progressNow, setProgressNow] = useState(() => Date.now())
   const progressRun = workspace.analysis?.status === 'running' || workspace.jobs.some(job => job.status === 'queued' || job.status === 'running')
   useEffect(() => {
@@ -155,18 +157,32 @@ export default function StudioResults({ project, children, onCreateCollection, o
     connectionId: aiSettings?.analysis?.connection_id,
     model: aiSettings?.analysis?.model,
   })
-  const analysisConnection = aiSettings?.connections?.find(c => c.id === aiSettings.analysis?.connection_id)
-  const failureInfo = (extra?: { error?: string }) => ({
-    error: extra?.error ?? workspace.analysis?.error,
-    ...(receiptFailureInfo(workspace.attempts, workspace.analysis?.run_id) || analysisPageFailure(workspace.analysis, workspace.generation)),
-    phase: workspace.analysis?.phase,
-    billable_calls_before_failure: billable,
-    quota_precheck: workspace.generation?.quota_precheck || workspace.analysis?.quota_precheck,
-    // N3: pass through so FailureActions can unlock after 测试连接 clears the stamp.
-    quota_exhausted_at: analysisConnection?.quota_exhausted_at,
-    connection_count: usableConnectionCount(aiSettings),
-    provider: analysisProviderId(aiSettings),
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const receiptCause = receiptFailureInfo(workspace.attempts, workspace.analysis?.run_id)
+  const resolvedCause = resolveFailureCause({
+    analysis: workspace.analysis,
+    generation: workspace.generation,
+    receipt: receiptCause,
   })
+  const completedVariants = (workspace.output_variants || []).filter(item => item.status === 'completed')
+  const representedJobs = new Set(completedVariants.map(item => item.render_job_id).filter(Boolean))
+  const preservedCount = countPreservedResults({
+    drafts: workspace.drafts?.length,
+    completedVariants: completedVariants.length,
+    clips: project.clips?.length,
+    collections: project.collections?.length,
+    completedJobs: (workspace.jobs || []).filter(job => job.status === 'completed' && !representedJobs.has(job.job_id)).length,
+  })
+  const presented = presentFailure({
+    ...resolvedCause,
+    error: resolvedCause.error || workspace.analysis?.error,
+    preservedCount,
+    connectionCount: usableConnectionCount(aiSettings),
+  })
+  const detailView = resumeAfterSettings && presented.primary && (presented.primary.id === 'settings' || presented.primary.id === 'quota_check' || presented.primary.id === 'install_transcription')
+    ? { ...presented, primary: { id: 'retry_production' as const, label: '重试制作' } }
+    : presented
   const switchModelAndRetry = async (choice: { connectionId: string; model: string }) => {
     if (!aiSettings) return
     const saved = await modelSettingsApi.save(forSave(syncFollowingCover(aiSettings, {
@@ -245,22 +261,22 @@ export default function StudioResults({ project, children, onCreateCollection, o
         {progress.detail && progress.detail !== progress.label && <p className="studio-muted">{t(progress.detail)}</p>}
         {workspace.analysis?.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}
       </div>}
-      {workspace.analysis?.status==='failed' && sourceUnusable && <div className="ac-empty" role="alert"><b>{t("这个素材无法使用")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions"><Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn>{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
-      {cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis?.error, workspace.analysis, workspace.generation)} /><p className="studio-muted">{t("下一步：回到导入，选择一个已登录的浏览器后再生成。")}</p><div className="studio-actions"><Btn variant="cta" disabled={!!busy} onClick={()=>navigate(stageBrowserCookieRecovery(project.source_url))}>{t("选择已登录的浏览器")}</Btn>{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}<Btn disabled={!!busy} onClick={()=>navigate('/')}>{t("换一个视频")}</Btn></div></div>}
-      {workspace.analysis?.status==='failed' && whisperSettings && !cookieRecovery && <div className="ac-empty" role="alert"><b>{t("这次制作未完成")}</b><FailureCopy info={failureInfo()} message={analysisFailureText(workspace.analysis.error, workspace.analysis, workspace.generation)} /><div className="studio-actions">{installTranscription && <Btn variant="cta" disabled={!!busy} onClick={()=>navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}{canRetryAnalysis && <Btn disabled={!!busy} loading={busy==='retry-analysis'} onClick={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id)})}>{t("重试")}</Btn>}{!installTranscription && <Btn disabled={!!busy} onClick={()=>navigate(whisperSettings.to)}>{t(whisperSettings.label)}</Btn>}{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}</div></div>}
-      {workspace.analysis?.status==='failed' && !sourceUnusable && !whisperSettings && !cookieRecovery && <div className="ac-empty"><b>{t("这次制作未完成")}</b>
-        <FailureActions info={failureInfo()}
-          canRetry={canRetryAnalysis}
-          returnedFromSettings={returnedFromSettings} busy={!!busy} retrying={busy==='retry-analysis'}
-          repeatFailure={workspace.generation?.repeat_failure}
-          resumePoint={workspace.resume_point}
-          switchOptions={switchOptions}
-          onSwitchModel={choice => act('retry-analysis', async () => { await switchModelAndRetry(choice) })}
-          onRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id, { retry_kind: 'same' })})}
-          onFreshRetry={()=>act('retry-analysis', async()=>{await studioApi.retry(project.id, { retry_kind: 'same', fresh: true })})}
-          onSettings={destination=>navigate(settingsReturnUrl(destination, project.id))}>
-          {!downloadConnectionFailure(failureInfo()) && !weakLocalTimelineFailure(failureInfo().error, failureInfo().error_code) && <Btn disabled={!!busy} onClick={()=>navigate('/settings?section=ai')}>{t("模型设置")}</Btn>}{!hideLegacy && <Btn disabled={!!busy} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{t("调整制作方案")}</Btn>}
-        </FailureActions></div>}
+      {workspace.analysis?.status==='failed' && <div className="ac-failure-summary" role="alert">
+        <b>{t(detailView.status)}</b>
+        <p className="ac-failure-reason">{detailView.step ? <>{t(detailView.step)}：{t(detailView.reason)}</> : t(detailView.reason)}</p>
+        <p className="ac-failure-outcome">{t(detailView.outcome, { count: preservedCount })}</p>
+        {detailView.primary && <Btn variant="cta" disabled={!!busy} loading={busy==='retry-analysis'} onClick={() => {
+          const action = detailView.primary
+          if (!action || busy) return
+          if (action.id === 'view_results') { document.querySelector('.studio-result-grid')?.scrollIntoView({ block: 'start' }); return }
+          if (action.id === 'settings' || action.id === 'quota_check' || action.id === 'install_transcription') { navigate(settingsReturnUrl(action.destination || '/settings?section=analysis', project.id)); return }
+          if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
+          if (action.id === 'change_video') { navigate('/'); return }
+          if (action.id === 'switch_model') { setSwitchOpen(true); return }
+          void act('retry-analysis', async () => { await studioApi.retry(project.id, { retry_kind: 'same' }) })
+        }}>{t(detailView.primary.label)}</Btn>}
+        <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>
+      </div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
       <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
         onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} allowExport={!hideLegacy} onExport={()=>{ noteLegacy('export_confirm'); setExporting(d) }} onHistory={()=>setHistory(true)} />)}{loaded && !automatic && children}</div>
@@ -276,5 +292,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
     <ExportHistory projectId={project.id} jobs={workspace.jobs} open={history} onClose={()=>setHistory(false)}/>
     <Dialog open={!!preview} title={preview?.label||t("原片")} onClose={()=>setPreview(null)}>{preview&&<video key={preview.id} controls preload="metadata" className="studio-source-video" src={`${studioApi.source(project.id)}#t=${preview.start},${preview.end}`}/>}<p className="studio-muted">{preview?.evidence}</p></Dialog>
     <Dialog open={!!exporting} title={t("导出成片")} onClose={()=>!busy&&setExporting(null)} description={t("按当前草稿设置渲染，完成后在导出记录下载。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setExporting(null)}>{t("关闭")}</Btn><Btn variant="cta" disabled={!!busy} loading={busy==='export'} onClick={()=>exporting&&act('export',async()=>{await studioApi.export(project.id,exporting.id,exporting.revision, exporting);setExporting(null);setHistory(true)})}>{t("确认导出")}</Btn></div>}><p>{exporting?.title}</p><p className="studio-muted">{exporting?.aspect==='portrait'?t("9:16 竖屏"):exporting?.aspect==='landscape'?t("16:9 横屏"):t("原画幅")} · MP4 · 30 fps</p>{actionError&&<p className="studio-error">{actionError}</p>}</Dialog>
+    <DiagnosePanel open={diagnoseOpen} onClose={() => setDiagnoseOpen(false)} info={{ ...resolvedCause, error: resolvedCause.error || workspace.analysis?.error }} reason={detailView.reason} onSettings={destination => navigate(settingsReturnUrl(destination, project.id))} />
+    <SwitchModelDialog open={switchOpen} options={switchOptions} busy={busy==='retry-analysis'} onClose={() => setSwitchOpen(false)} onConfirm={choice => { setSwitchOpen(false); void act('retry-analysis', async () => { await switchModelAndRetry(choice) }) }} />
   </div>
 }
