@@ -114,7 +114,7 @@ jobs:
   build-macos-arm64:
     needs: [candidate-gate, source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_macos
-    runs-on: macos-14  # Apple Silicon runner
+    runs-on: macos-15  # Apple Silicon runner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
