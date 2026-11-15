@@ -51,7 +51,8 @@ test('old files without model_source count as user; empty slots are preset', () 
 
 test('provider rank is recommended then popular then other', () => {
   assert.ok(slots.providerRank('api88') < slots.providerRank('dashscope'))
-  assert.ok(slots.providerRank('infistar') < slots.providerRank('openai'))
+  assert.ok(slots.providerRank('apimart') < slots.providerRank('infistar'))
+  assert.equal(slots.providerRank('infistar'), slots.providerRank('openai'))
   assert.ok(slots.providerRank('dashscope') < slots.providerRank('openrouter'))
 })
 

@@ -97,9 +97,10 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
   }
   const openKey = () => {
     const sponsor = preset.sponsor
-    const href = sponsor ? promotionRegisterUrl(identity, sponsor.registerUrl) : null
-    if (!sponsor || !href) return
-    trackSponsorLinkOpened({ sponsor: identity, target: 'register', placement: 'import_card' })
+    if (!sponsor) return
+    const href = promotionRegisterUrl(sponsor.id, sponsor.registerUrl)
+    if (!href) return
+    trackSponsorLinkOpened({ sponsor: sponsor.id, target: 'register', placement: 'import_card' })
     openExternalLink(href)
   }
 
