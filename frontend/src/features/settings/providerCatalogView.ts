@@ -3,6 +3,7 @@
  * Driven by backend/presets/provider_presets.json. No React, no telemetry payloads.
  */
 import { PROVIDERS, type ProviderKey } from './providers'
+import { promotionEligible, promotionRank } from './sponsorPromoState'
 import { compareRecommended, displayCatalogGroup, qualityFor } from './providerQuality'
 import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
 import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
@@ -75,11 +76,20 @@ export function filterCatalog(query: string, filter: CapabilityFilter): Provider
 
 export function groupCatalog(presets: ProviderPreset[]): Record<ProviderGroupId, ProviderPreset[]> {
   const groups: Record<ProviderGroupId, ProviderPreset[]> = { recommended: [], popular: [], local: [], more: [] }
-  for (const preset of presets) groups[displayCatalogGroup(preset)].push(preset)
-  groups.recommended.sort((a, b) => compareRecommended(
-    { sponsor: a.sponsor, success_tier: a.success_tier, success_rate: qualityFor(a.id)?.success_rate },
-    { sponsor: b.sponsor, success_tier: b.success_tier, success_rate: qualityFor(b.id)?.success_rate },
-  ))
+  for (const preset of presets) {
+    let group = displayCatalogGroup(preset)
+    if (group === 'recommended' && !promotionEligible(preset.id)) group = 'popular'
+    groups[group].push(preset)
+  }
+  groups.recommended.sort((a, b) => {
+    const left = promotionRank(a.id)
+    const right = promotionRank(b.id)
+    if (left !== null && right !== null && left !== right) return left - right
+    return compareRecommended(
+      { sponsor: a.sponsor, success_tier: a.success_tier, success_rate: qualityFor(a.id)?.success_rate },
+      { sponsor: b.sponsor, success_tier: b.success_tier, success_rate: qualityFor(b.id)?.success_rate },
+    )
+  })
   return groups
 }
 

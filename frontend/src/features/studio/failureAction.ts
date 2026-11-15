@@ -1,5 +1,6 @@
 import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from '../../analytics/failureCodes'
 import { getProvider } from '../settings/providerPresets'
+import { readPromoSnapshot } from '../settings/sponsorPromoState'
 import { USER_CAUSE_REASONS, ingestConnectionCopy, llmFailureText } from '../../utils/llmFailure'
 /**
  * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
@@ -53,7 +54,7 @@ export const SWITCHABLE_UPSTREAM = [
 ] as const
 
 /** Known sponsor catalog ids for insufficient_quota → recharge (X3). */
-export const SPONSOR_PROVIDERS = ['api88', 'infistar', 'apimart'] as const
+export const SPONSOR_PROVIDERS = ['api88', 'apimart'] as const
 
 export const ADD_PROVIDER_HINT = '建议再加一个服务商'
 export const RECHARGE_LABEL = '去充值'
@@ -83,6 +84,9 @@ export function rechargeTarget(provider?: string | null): {
 } | null {
   const key = (provider || '').trim().toLowerCase()
   if (!key) return null
+  const snap = readPromoSnapshot()
+  if (snap?.statuses?.[key] === 'out_of_service') return null
+  if (snap && isIn(SPONSOR_PROVIDERS, key) && !snap.choices.includes(key)) return null
   const row = getProvider(key)
   if (!row) return null
   if (isIn(SPONSOR_PROVIDERS, key) && row.sponsor) {

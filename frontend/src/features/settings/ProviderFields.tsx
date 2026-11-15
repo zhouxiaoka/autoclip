@@ -13,6 +13,7 @@ import {
 } from './providerAccess'
 import { offerPastedKey } from './keyGuideWatch'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
+import { promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
 
 const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
@@ -39,7 +40,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const picker = !hideProvider && <Row wide label={t('提供商')} hint={preset?.hint || t('国内直连、国际服务和本机免费模型都可以选；不确定就从「推荐」开始。')}>
     <Select aria-label={label(t('提供商'))} value={key} placeholder={t('选择一家 AI 服务')} showSearch optionFilterProp="search" style={{ width: '100%' }} options={providerPickerOptions()}
       onChange={onChoose}
-      optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; return <span>{p.name}{p.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {p.sponsor.offer}</small>}</span> }} />
+      optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; const upsell = p.sponsor && promotionAllowsUpsell(p.sponsor.id); return <span>{p.name}{upsell && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {p.sponsor!.offer}</small>}</span> }} />
   </Row>
   if (!connection) return <>{picker}</>
   const failed = connection.validation_status === 'failed'
@@ -76,14 +77,16 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             }}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
-          {preset?.sponsor && (
+          {preset?.sponsor && promotionRegisterUrl(preset.sponsor.id, preset.sponsor.registerUrl) && (
             <span className="ac-sponsor-inline" data-sponsor={preset.sponsor.id}>
               <Btn
                 size="sm"
                 className="ac-btn--pill"
                 onClick={() => {
+                  const href = promotionRegisterUrl(preset.sponsor!.id, preset.sponsor!.registerUrl)
+                  if (!href) return
                   trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement })
-                  openExternalLink(preset.sponsor!.registerUrl)
+                  openExternalLink(href)
                 }}
               >
                 {t('settings.providers.one_click')}<span aria-hidden>↗</span>

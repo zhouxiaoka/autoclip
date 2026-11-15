@@ -11,11 +11,13 @@ const experience = loadTs(path.join(__dirname, '../src/analytics/experience.ts')
   './successRateContract': { sanitizeProviderValidationProperties: x => x, SuccessRateEvent: { ProviderValidationFinished: 'provider_validation_finished' }, TELEMETRY_PROVIDERS: loadTs(path.join(__dirname, '../src/analytics/successRateContract.ts')).TELEMETRY_PROVIDERS },
 }, path.join(__dirname, '../src/analytics'))
 
-test('first-run defaults to 88API and maps choices to later / one-click / settings', () => {
-  assert.deepEqual([...guidance.FIRST_RUN_CHOICES], ['api88', 'infistar', 'other'])
-  assert.equal(guidance.FIRST_RUN_DEFAULT, 'api88')
+test('first-run defaults to APIMart and keeps 88API as a one-click option', () => {
+  assert.deepEqual([...guidance.FIRST_RUN_CHOICES], ['apimart', 'api88', 'other'])
+  assert.equal(guidance.FIRST_RUN_DEFAULT, 'apimart')
+  assert.equal(guidance.firstRunPrimaryAction('apimart'), 'one_click')
   assert.equal(guidance.firstRunPrimaryAction('api88'), 'one_click')
-  assert.equal(guidance.firstRunPrimaryAction('infistar'), 'one_click')
+  assert.equal(guidance.firstRunSponsor('apimart'), 'apimart')
+  assert.equal(guidance.firstRunSponsor('api88'), 'api88')
   assert.equal(guidance.firstRunPrimaryAction('other'), 'connect_recommended')
   assert.equal(guidance.firstRunSponsor('other'), null)
   assert.equal(guidance.firstRunPrimaryLabel('other', 'DeepSeek').key, '连接 {{name}}')

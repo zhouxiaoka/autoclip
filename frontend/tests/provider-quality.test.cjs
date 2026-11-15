@@ -46,7 +46,7 @@ test('tier mapping reads the static quality JSON and hides unmeasured providers'
 })
 
 test('sponsors stay first, low tiers stay in the hot or cloud group', () => {
-  assert.deepEqual([...providers.recommendedSetupProviders()], ['api88', 'infistar', 'apimart', 'deepseek', 'dashscope'])
+  assert.deepEqual([...providers.recommendedSetupProviders()], ['api88', 'apimart', 'deepseek', 'dashscope'])
   const cloud = providers.providerPickerOptions().find(group => group.options.some(option => option.value === 'openai'))
   const cloudIds = [...cloud.options.map(option => option.value)].filter(id => id === 'gemini' || id === 'openai' || id === 'deepseek' || id === 'dashscope').sort()
   assert.deepEqual(cloudIds, ['gemini', 'openai'])

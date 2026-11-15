@@ -45,7 +45,7 @@ def test_catalog_has_forty_grouped_providers():
     groups = {}
     for item in catalog.providers.values():
         groups[item.group] = groups.get(item.group, 0) + 1
-    assert groups == {"recommended": 3, "popular": 10, "local": 4, "more": 23}
+    assert groups == {"recommended": 2, "popular": 11, "local": 4, "more": 23}
     assert set(catalog.providers) >= {
         "api88", "infistar", "apimart", "deepseek", "dashscope", "siliconflow", "seed", "glm",
         "kimi", "minimax-cn", "xiaomi", "openai", "gemini", "whisper", "sensevoice",
@@ -87,7 +87,7 @@ def test_existing_product_defaults_are_preserved():
         assert provider_presets.candidates_for(provider, "image") == ()
         assert all(model_catalog.supports_vision(model) for model in models)
     assert provider_presets.candidates_for("apimart", "analysis") == (
-        "qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash",
+        "deepseek-v4-flash", "qwen3.8-flash", "gemini-3.8-flash",
     )
     assert provider_presets.candidates_for("apimart", "vision") == (
         "qwen3.8-flash", "gemini-3.8-flash",

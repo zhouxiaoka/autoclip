@@ -355,6 +355,29 @@ def remove_files(project_id: str, attempts: int = 5) -> bool:
     return not folder.exists()
 
 
+def any_worker_bound() -> bool:
+    """Process-wide: a generation worker is inside ``bind``. Safe to read from another thread."""
+    with _lock:
+        return any(depth > 0 for depth in _binds.values())
+
+
+_idle_listeners: list = []
+
+
+def add_idle_listener(callback) -> None:
+    """Called on the worker thread when the last bound generation finishes."""
+    if callback not in _idle_listeners:
+        _idle_listeners.append(callback)
+
+
+def _notify_workers_idle() -> None:
+    for callback in list(_idle_listeners):
+        try:
+            callback()
+        except Exception:
+            logger.info("generation idle listener failed")
+
+
 @contextmanager
 def bind(project_id: str):
     """Run a worker for `project_id`: checkpoints see it, and its leftovers go if it was deleted.
@@ -397,6 +420,9 @@ def bind(project_id: str):
                 _binds[project_id] = depth
                 finished = 0
             busy = bool(_processes.get(project_id))
+            idle = not any(depth > 0 for depth in _binds.values())
+        if idle:
+            _notify_workers_idle()
         if finished:
             _retire_marker(project_id, finished)
         if is_cancelled(project_id) and not busy:

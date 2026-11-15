@@ -299,6 +299,15 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
 <table>
   <tr>
     <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      感谢 <strong>APIMart</strong> 赞助了本项目！<strong>APIMart</strong> 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 <strong>$0.006/张</strong>，1 美元可出图 <strong>160+</strong> 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过此<a href="https://go.apimart.ai/tw-autoclip">注册链接</a>注册即可开用。
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
       <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
@@ -307,28 +316,6 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       🎨 <strong>多媒体能力</strong>：平台提供 GPT-Image、Gemini、Grok 等图片模型，Seedance、Veo、MiniMax Hailuo H3、Kling、Grok 等视频模型，以及 Whisper、TTS 等语音能力；AutoClip 可接入兼容的分析、封面生图与字幕转写接口。<br>
       🏷️ <strong>服务与结算</strong>：据合作方介绍，由海外企业运营，提供人工客服、正规发票，充值比例 1:1；具体模型、服务与结算条件以平台页面为准。<br>
       🎁 <strong>新用户福利</strong>：通过 <a href="https://88api.ai/sign-up?aff=2PIc">专属推广链接注册</a>可获体验额度，用于测试模型能力，领取条件以活动页面为准。 <a href="docs/88API_SETUP.md">接入说明</a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc<br>无限星河</strong></a>
-    </td>
-    <td>
-      感谢 <strong>Infistar.cc 无限星河</strong> 赞助 AutoClip！提供多模型 API 服务，适合长视频字幕分析、高光筛选与标题生成等工作流。<br>
-      ⚙️ <strong>兼容接入</strong>：在 AutoClip 选择 OpenAI 兼容接口，填写 Base URL、API Key 和可用模型，即可配置使用。<br>
-      🧩 <strong>多模型选择</strong>：合作方提供 Claude、GPT、Gemini、DeepSeek 等系列模型，可选择支持兼容接口的型号，对比字幕分析与高光筛选效果。<br>
-      🏷️ <strong>价格与服务</strong>：据合作方介绍，部分模型低至官方定价的 <strong>0.1 折</strong>，支持人民币结算、开票及模型验真；具体型号、价格与服务条件以平台页面为准。<br>
-      🎁 <strong>AutoClip 专属福利</strong>：通过 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">专属推广链接注册</a>可领取 <strong>$5 体验额度</strong>，领取条件以活动页面为准。 <a href="docs/INFISTAR_SETUP.md">接入说明</a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
-      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
-    </td>
-    <td>
-      感谢 <strong>APIMart</strong> 赞助了本项目！<strong>APIMart</strong> 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 <strong>$0.006/张</strong>，1 美元可出图 <strong>160+</strong> 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过此<a href="https://go.apimart.ai/tw-autoclip">注册链接</a>注册即可开用。
     </td>
   </tr>
 </table>

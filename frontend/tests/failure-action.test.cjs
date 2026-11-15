@@ -215,7 +215,7 @@ test('X2: FailureAction.kind covers retry | settings | install_asr | switch_mode
   assert.deepEqual([...fa.SWITCHABLE_UPSTREAM].sort(), [
     'bad_endpoint', 'invalid_response', 'model_not_found', 'rate_limited', 'timeout', 'upstream_unavailable',
   ].sort())
-  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['api88', 'apimart', 'infistar'].sort())
+  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['api88', 'apimart'].sort())
 
   assert.equal(fa.failureAction('timeout').kind, 'retry')
 
@@ -255,7 +255,7 @@ test('X2: pageFailureAction uses connection_count and provider', () => {
   }).kind, 'settings')
   assert.equal(fa.pageFailureAction({
     error_code: 'provider_error', upstream_error_type: 'insufficient_quota', provider: 'infistar',
-  }).kind, 'recharge')
+  }).kind, 'settings')
 })
 
 test('X2: FailureActions routes the five kinds', () => {
@@ -369,15 +369,17 @@ const { loadTs } = require('./load-ts.cjs')
 const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
 
 test('X3: sponsor insufficient_quota → 去 XX 充值 with topup_url', () => {
-  for (const [id, short] of [['api88', '88API'], ['infistar', 'Infistar'], ['apimart', 'APIMart']]) {
+  for (const [id, short] of [['api88', '88API'], ['apimart', 'APIMart']]) {
     const action = fa.failureAction('provider_error', 'insufficient_quota', null, null, id)
     assert.equal(action.kind, 'recharge', id)
     assert.equal(action.label, `去 ${short} 充值`, id)
     const target = fa.rechargeTarget(id)
     assert.equal(target.sponsor, true, id)
     assert.equal(action.destination, target.url, id)
-    assert.ok(target.url.includes(id === 'api88' ? '88api.ai' : id === 'infistar' ? 'infistar' : 'apimart'), id)
+    assert.ok(target.url.includes(id === 'api88' ? '88api.ai' : 'apimart'), id)
   }
+  const stored = fa.rechargeTarget('infistar')
+  assert.equal(stored, null)
   assert.equal(fa.RECHARGE_HINT, '密钥没问题，是余额不足。充值后点重试即可。')
 })
 

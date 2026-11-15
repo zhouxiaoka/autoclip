@@ -24,9 +24,12 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     './providerUrl': load('providerUrl.ts', {}),
   }).default
   const options = providers.providerPickerOptions()
-  assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'infistar', 'apimart', 'deepseek', 'dashscope'])
+  assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'apimart', 'deepseek', 'dashscope'])
+  assert.equal(providers.PROVIDERS.infistar.sponsor, undefined)
+  assert.equal(providers.PROVIDERS.infistar.cloud.baseUrl, 'https://infistar.cc/v1')
+  assert.equal(access.sponsorKeyLink('infistar'), null)
   for (const placement of ['home_setup', 'settings_model']) {
-    for (const provider of ['api88', 'infistar', 'apimart']) {
+    for (const provider of ['api88', 'apimart']) {
       const preset = providers.PROVIDERS[provider]
       const nodes = flatten(Fields({ connection: { provider, api_key: '' }, placement, onChoose() {}, onEdit() {} }))
       const text = nodes.filter(n => typeof n === 'string').join(' ')

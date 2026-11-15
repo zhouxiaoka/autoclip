@@ -10,6 +10,8 @@ import { Btn, Icon } from '../../ui'
 import { openExternalLink } from '../../utils/externalLinks'
 import { useQuickConnect } from '../settings/useQuickConnect'
 import { PROVIDERS, recommendedSetupProviders, type ProviderKey } from '../settings/providers'
+import { promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl } from '../settings/sponsorPromoState'
+import { useSponsorPromo } from '../settings/sponsorPromoWatch'
 
 const STEPS = ['provider', 'key', 'connect'] as const
 type Step = (typeof STEPS)[number]
@@ -30,11 +32,19 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
   keptMaterial?: boolean
 }) {
   useTranslation()
+  const promo = useSponsorPromo()
   const navigate = useNavigate()
   const connect = useQuickConnect('import_card')
   const providers = recommendedSetupProviders()
   const [step, setStep] = useState<Step>('provider')
   const [provider, setProvider] = useState<ProviderKey>(providers[0] || 'api88')
+  const touched = useRef(false)
+  const lockedProvider = useRef<ProviderKey | null>(null)
+  useEffect(() => {
+    if (lockedProvider.current || touched.current || step !== 'provider' || !promo) return
+    const next = recommendedSetupProviders()[0]
+    if (next) setProvider(next)
+  }, [promo, step])
   const [apiKey, setApiKey] = useState('')
   const presentation = useRef('')
   useEffect(() => {
@@ -54,10 +64,13 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
       provider: telemetryProvider(provider),
     })
   }
-  const preset = PROVIDERS[provider]
+  const identity = lockedProvider.current || provider
+  const preset = PROVIDERS[identity]
   const index = STEPS.indexOf(step)
   const next = () => {
     if (step === 'provider') {
+      lockedProvider.current = provider
+      touched.current = true
       connect.selectProvider(provider)
       done('provider')
       setStep('key')
@@ -71,15 +84,23 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
       setStep('connect')
     }
   }
+  const back = () => {
+    if (step === 'key') {
+      lockedProvider.current = null
+      setApiKey('')
+    }
+    setStep(STEPS[index - 1])
+  }
   const save = async () => {
     const result = await connect.connect()
     if (result.ok && !result.validationFailed) done('connect')
   }
   const openKey = () => {
     const sponsor = preset.sponsor
-    if (!sponsor) return
-    trackSponsorLinkOpened({ sponsor: sponsor.id, target: 'register', placement: 'import_card' })
-    openExternalLink(sponsor.registerUrl)
+    const href = sponsor ? promotionRegisterUrl(identity, sponsor.registerUrl) : null
+    if (!sponsor || !href) return
+    trackSponsorLinkOpened({ sponsor: identity, target: 'register', placement: 'import_card' })
+    openExternalLink(href)
   }
 
   return <div className="ac-import-setup">
@@ -93,9 +114,9 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
     {step === 'provider' && <div className="ac-choice-list" role="radiogroup" aria-label={t('选择服务商')}>
       {providers.map(id => {
         const row = PROVIDERS[id]
-        return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={provider === id} onClick={() => setProvider(id)}>
+        return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={provider === id} onClick={() => { touched.current = true; setProvider(id) }}>
           <span className="ac-choice-text">
-            <b>{row.short}{row.sponsor && <span className="ac-badge">{row.sponsor.offer}</span>}</b>
+            <b>{row.short}{row.sponsor && promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{row.sponsor && !promotionRecommends(id) && promotionAllowsUpsell(id) && <span className="ac-badge">{row.sponsor.offer}</span>}</b>
             <span>{row.sponsor?.description || row.hint}</span>
           </span>
           {provider === id && <Icon.Check />}
@@ -105,7 +126,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
     {step === 'key' && <label className="studio-field">
       {t('API 密钥')}
       <input type="password" autoComplete="new-password" aria-label={t('API 密钥')} placeholder={preset.placeholder || 'sk-…'} value={apiKey} onChange={event => setApiKey(event.target.value)} />
-      {preset.sponsor && <button type="button" className="studio-link" onClick={openKey}>{t('获取 API Key')}</button>}
+      {preset.sponsor && promotionAllowsUpsell(identity) && <button type="button" className="studio-link" onClick={openKey}>{t('获取 API Key')}</button>}
     </label>}
     {step === 'connect' && <div>
       <p className="studio-muted">{t('连接会先做一次快速检查，通过后保存。')}</p>
@@ -115,7 +136,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
     {keptMaterial && <p className="studio-muted">{t('刚才的链接或文件会留着，连上之后可以继续导入。')}</p>}
     <div className="ac-import-setup-foot">
       <div className="ac-import-setup-side">
-        {index > 0 && <Btn variant="text" size="sm" onClick={() => setStep(STEPS[index - 1])}>{t('返回')}</Btn>}
+        {index > 0 && <Btn variant="text" size="sm" onClick={back}>{t('返回')}</Btn>}
         <button type="button" className="studio-link" disabled={exampleBusy} onClick={() => onExample?.()}>{t('先用示例视频看看效果')}</button>
         {step === 'provider' && <button type="button" className="studio-link" onClick={() => navigate('/settings?section=ai', { state: { settingsEntry: 'home_setup' } })}>{t('去设置选择其他服务商')}</button>}
       </div>

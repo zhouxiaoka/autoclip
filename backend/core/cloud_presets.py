@@ -87,7 +87,7 @@ def cloud_preset_display_name(key: Optional[str]) -> Optional[str]:
 def sponsor_topup_url(provider: Optional[str]) -> Optional[str]:
     """X3: sponsor recharge URL (topup_url, else register_url). None if not a sponsor."""
     key = normalize_cloud_preset_key(provider)
-    if key not in {"api88", "infistar", "apimart"}:
+    if key not in {"api88", "apimart"}:
         return None
     row = get_provider(key)
     if not row or not row.sponsor:

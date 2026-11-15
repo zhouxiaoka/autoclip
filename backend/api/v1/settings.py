@@ -51,6 +51,23 @@ def get_ai_models():
     return ai_models.public(ai_models.for_editing())
 
 
+@router.get('/sponsor-promo')
+def get_sponsor_promo(
+    trigger: Optional[Literal['startup', 'settings', 'interval', 'resume']] = None,
+    after: int = 0,
+    wait: float = 0,
+):
+    """Chooser order and service notices. Does not read or write model settings.
+
+    ``wait`` is one bounded read for a revision newer than ``after``. It does not start another fetch.
+    """
+    from backend.core.sponsor_promo_client import get_client
+    client = get_client()
+    if wait > 0:
+        return client.wait_for_change(after, min(wait, 3))
+    return client.view(trigger=trigger or 'settings')
+
+
 @router.put('/ai-models')
 def put_ai_models(body: ai_models.ModelSettings):
     try:

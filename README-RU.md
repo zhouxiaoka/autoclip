@@ -295,6 +295,15 @@ autoclip outputs PROJECT_ID --export-kits
 <table>
   <tr>
     <td align="center" width="140">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
+    </td>
+    <td>
+      Благодарим <strong>APIMart</strong> за поддержку этого проекта! <strong>APIMart</strong> — недорогая API-платформа для генерации изображений и видео с помощью ИИ: GPT-Image-2 от <strong>$0.006/image</strong>, более <strong>160</strong> изображений за один доллар. Один асинхронный API охватывает и изображения, и видео: отправьте задачу, получите ID и заберите результат опросом или через callback. Пакетная обработка десятков тысяч изображений без таймаутов, смена модели без изменения кода. Оплата по факту использования, без ежемесячной платы — <a href="https://go.apimart.ai/tw-autoclip">зарегистрируйтесь здесь</a>, чтобы начать.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
       <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
@@ -303,28 +312,6 @@ autoclip outputs PROJECT_ID --export-kits
       🎨 <strong>Мультимедиа</strong>: Модели изображений, видео и аудио, включая GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper и TTS. AutoClip использует совместимые API анализа, создания обложек и транскрипции.<br>
       🏷️ <strong>Сервис и оплата</strong>: По информации партнёра, сервис управляется зарубежной компанией и предлагает поддержку операторов, счета и пополнение в соотношении 1:1; действуют условия платформы.<br>
       🎁 <strong>Новым пользователям</strong>: Получите пробный кредит для проверки моделей по <a href="https://88api.ai/sign-up?aff=2PIc">реферальной ссылке</a> на условиях акции. <a href="docs/88API_SETUP.en.md">Инструкция по настройке (англ.)</a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
-    </td>
-    <td>
-      Благодарим <strong>Infistar.cc</strong> за поддержку AutoClip! Сервис предоставляет API разных моделей для анализа субтитров длинных видео, выбора ярких моментов и создания заголовков.<br>
-      ⚙️ <strong>Совместимый API</strong>: Выберите в AutoClip провайдера с поддержкой OpenAI-совместимого API и укажите Base URL, свой ключ API и доступную модель.<br>
-      🧩 <strong>Выбор моделей</strong>: Партнёр предлагает Claude, GPT, Gemini, DeepSeek и другие семейства. Выбирайте модели, поддерживающие совместимую конечную точку, чтобы сравнивать анализ субтитров и подбор ярких моментов.<br>
-      🏷️ <strong>Цены и услуги</strong>: По данным партнёра, некоторые модели доступны по цене <strong>от 1% официального тарифа</strong>, с оплатой в юанях, выставлением счетов и проверкой подлинности модели. Список моделей, действующие цены и условия уточняйте на платформе.<br>
-      🎁 <strong>Предложение для AutoClip</strong>: Новые пользователи могут получить <strong>$5 пробного кредита</strong> при регистрации по <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">реферальной ссылке</a> на условиях акции. <a href="docs/INFISTAR_SETUP.en.md">Инструкция по настройке (англ.)</a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
-      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
-    </td>
-    <td>
-      Благодарим <strong>APIMart</strong> за поддержку этого проекта! <strong>APIMart</strong> — недорогая API-платформа для генерации изображений и видео с помощью ИИ: GPT-Image-2 от <strong>$0.006/image</strong>, более <strong>160</strong> изображений за один доллар. Один асинхронный API охватывает и изображения, и видео: отправьте задачу, получите ID и заберите результат опросом или через callback. Пакетная обработка десятков тысяч изображений без таймаутов, смена модели без изменения кода. Оплата по факту использования, без ежемесячной платы — <a href="https://go.apimart.ai/tw-autoclip">зарегистрируйтесь здесь</a>, чтобы начать.
     </td>
   </tr>
 </table>

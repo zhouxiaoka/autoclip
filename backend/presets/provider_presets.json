@@ -73,9 +73,9 @@
       "kind": "preset",
       "candidates": {
         "analysis": [
+          "deepseek-v4-flash",
           "qwen3.8-flash",
-          "gemini-3.8-flash",
-          "deepseek-v4-flash"
+          "gemini-3.8-flash"
         ],
         "vision": [
           "qwen3.8-flash",
@@ -149,7 +149,7 @@
       "ui_name": "Infistar 无限星河",
       "short_name": "Infistar",
       "catalog_label": "Infistar",
-      "group": "recommended",
+      "group": "popular",
       "protocol": "openai-completions",
       "base_url": "https://infistar.cc/v1",
       "accepted_hosts": [
@@ -162,7 +162,7 @@
         "language",
         "image"
       ],
-      "docs_url": "https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
+      "docs_url": "",
       "locked": true,
       "default_model": "",
       "catalog": [],
@@ -178,15 +178,8 @@
       "legacy_ui": true,
       "api_key_setting": "infistar_api_key",
       "placeholder": "sk-…",
-      "hint": "赞助合作伙伴。一个 Key 调用 Claude、GPT、Gemini、DeepSeek 等模型，接口地址已预设。",
-      "cloud_hint": "赞助合作伙伴。一个 Key 调 Claude / GPT / Gemini / DeepSeek 等模型，专属链接注册可领体验额度。",
-      "sponsor": {
-        "register_url": "https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
-        "guide_url": "https://github.com/zhouxiaoka/autoclip/blob/main/docs/INFISTAR_SETUP.md",
-        "offer": "$5 免费体验额度",
-        "description": "通过专属链接注册，可领取 $5 免费体验额度。",
-        "topup_url": "https://www.infistar.cc/"
-      },
+      "hint": "OpenAI 兼容网关。使用已保存的接口地址和密钥。",
+      "cloud_hint": "OpenAI 兼容网关。使用已保存的接口地址和密钥。",
       "kind": "preset",
       "candidates": {
         "analysis": [

@@ -12,6 +12,7 @@ import { useQuickConnect } from './useQuickConnect'
 import { PROVIDERS } from './providers'
 import ProviderFields from './ProviderFields'
 import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogic'
+import { readSponsorPromo, subscribeSponsorPromo } from './sponsorPromoWatch'
 import {
   FIRST_RUN_CHOICES,
   FIRST_RUN_DEFAULT,
@@ -19,21 +20,20 @@ import {
   firstRunPrimaryAction,
   firstRunPrimaryLabel,
   firstRunSponsor,
-  type FirstRunChoice,
 } from './firstRunGuidance'
 
 const DISMISSED_KEY = 'autoclip.firstRunSetup.dismissed'
 
-const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: (name?: string) => string; badge?: () => string }> = {
+const OPTION_COPY: Record<'apimart' | 'api88' | 'other', { title: () => string; detail: (name?: string) => string; badge?: () => string }> = {
+  apimart: {
+    title: () => PROVIDERS.apimart.short,
+    detail: () => PROVIDERS.apimart.sponsor?.description || PROVIDERS.apimart.hint,
+    badge: () => t('推荐'),
+  },
   api88: {
     title: () => PROVIDERS.api88.short,
     detail: () => PROVIDERS.api88.sponsor?.description || PROVIDERS.api88.hint,
-    badge: () => t('推荐 · 新用户赠送额度'),
-  },
-  infistar: {
-    title: () => PROVIDERS.infistar.short,
-    detail: () => PROVIDERS.infistar.sponsor?.description || PROVIDERS.infistar.hint,
-    badge: () => PROVIDERS.infistar.sponsor ? `${t('赞助')} · ${PROVIDERS.infistar.sponsor.offer}` : t('赞助'),
+    badge: () => PROVIDERS.api88.sponsor ? `${t('赞助')} · ${t(PROVIDERS.api88.sponsor.offer)}` : t('赞助'),
   },
   other: {
     title: () => t('其他服务商'),
@@ -42,7 +42,7 @@ const OPTION_COPY: Record<FirstRunChoice, { title: () => string; detail: (name?:
 }
 
 /**
- * First-launch chooser: 88API / Infistar / other providers. "Later" hides it for the session;
+ * First-launch chooser: APIMart / 88API / other providers. "Later" hides it for the session;
  * a blocked import can reopen it. One-click opens the sponsor site; deeplink write is L1.
  */
 export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?: (needed: boolean) => void; openRequest?: number }) {
@@ -50,7 +50,14 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   const m = useQuickConnect('home_setup')
   const { settings } = m
   const [open, setOpen] = useState(false)
-  const [choice, setChoice] = useState<FirstRunChoice>(FIRST_RUN_DEFAULT)
+  const [choice, setChoice] = useState<string>(FIRST_RUN_DEFAULT)
+  const [recommendedId, setRecommendedId] = useState<string>(FIRST_RUN_DEFAULT)
+  const [choices, setChoices] = useState<readonly string[]>(FIRST_RUN_CHOICES)
+  const [notices, setNotices] = useState<Record<string, Record<string, string>>>({})
+  const [registerUrls, setRegisterUrls] = useState<Record<string, string>>({})
+  const touched = useRef(false)
+  const frozen = useRef(false)
+  const stepRef = useRef<'choose' | 'connect'>('choose')
   const [step, setStep] = useState<'choose' | 'connect'>('choose')
   const initial = useRef<boolean | null>(null)
   if (settings && initial.current === null) initial.current = needsSetup(settings)
@@ -65,21 +72,40 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   useEffect(() => { if (openRequest > 0 && needed) setOpen(true) }, [openRequest])
   const presentation = useRef('')
   const showing = open && needed && !!settings
+  const translation = useTranslation() as { i18n?: { language?: string } } | void
+  const language = translation && translation.i18n ? translation.i18n.language : undefined
   useEffect(() => {
     if (!showing) {
       presentation.current = ''
+      touched.current = false
+      frozen.current = false
+      stepRef.current = 'choose'
       setStep('choose')
       setChoice(FIRST_RUN_DEFAULT)
+      setRecommendedId(FIRST_RUN_DEFAULT)
+      setChoices(FIRST_RUN_CHOICES)
+      setNotices({})
+      setRegisterUrls({})
       return
     }
     if (!presentation.current) {
       presentation.current = telemetryId()
       trackExperience('setup_presented', { placement: 'home_setup', presentation_id: presentation.current, trigger: openRequest > 0 ? 'import_blocked' : 'initial' })
     }
+    const apply = () => {
+      const applied = readSponsorPromo()
+      if (!applied || touched.current || frozen.current || stepRef.current !== 'choose') return
+      setChoices(applied.choices)
+      setNotices(applied.notices)
+      setRegisterUrls(applied.registerUrls)
+      setRecommendedId(applied.defaultChoice)
+      setChoice(applied.defaultChoice)
+    }
+    apply()
+    return subscribeSponsorPromo(apply)
   }, [showing, openRequest])
-  const translation = useTranslation() as { i18n?: { language?: string } } | void
-  const language = translation && translation.i18n ? translation.i18n.language : undefined
   const otherDefault = firstRunOtherDefault(language)
+  const noticeLanguage = (language || 'zh').toLowerCase().split('-')[0]
   const otherName = PROVIDERS[otherDefault].short
   const action = (value: 'later' | 'open_settings' | 'one_click' | 'connect_recommended', provider?: string) =>
     trackExperience('setup_action', { placement: 'home_setup', presentation_id: presentation.current, action: value, ...(provider ? { provider } : {}) })
@@ -93,11 +119,14 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     navigate('/settings?section=ai', { state: { settingsEntry: 'home_setup' } })
   }
   const primary = () => {
+    frozen.current = true
+    touched.current = true
     const next = firstRunPrimaryAction(choice)
     if (next === 'open_settings') { goSettings(); return }
     if (next === 'connect_recommended') {
       action('connect_recommended', otherDefault)
       m.chooseProvider('analysis', otherDefault)
+      stepRef.current = 'connect'
       setStep('connect')
       return
     }
@@ -107,9 +136,10 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     action('one_click', sponsor)
     if (preset.sponsor) {
       trackSponsorLinkOpened({ sponsor, target: 'register', placement: 'home_setup' })
-      openExternalLink(preset.sponsor.registerUrl)
+      openExternalLink(registerUrls[sponsor] || preset.sponsor.registerUrl)
     }
     m.chooseProvider('analysis', sponsor)
+    stepRef.current = 'connect'
     setStep('connect')
   }
   const main = mainConnection(settings)
@@ -144,18 +174,20 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
           <div className="ac-setup-status"><StatusDot tone={fetching ? 'accent' : model ? 'ok' : 'muted'} label={status} /></div>
         </> : <>
           <div className="ac-choice-list" role="radiogroup" aria-label={t('选择 AI 服务商')}>
-            {FIRST_RUN_CHOICES.map(id => {
-              const copy = OPTION_COPY[id]
+            {choices.map(id => {
+              const copy = OPTION_COPY[id as keyof typeof OPTION_COPY]
+              if (!copy) return null
               return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={choice === id}
-                onClick={() => setChoice(id)}>
+                onClick={() => { touched.current = true; setChoice(id) }}>
                 <span className="ac-choice-text">
-                  <b>{copy.title()}{copy.badge && <span className="ac-badge">{copy.badge()}</span>}</b>
+                  <b>{copy.title()}{id !== 'other' && <span className="ac-badge">{id === recommendedId ? t('推荐') : (PROVIDERS[id as 'apimart' | 'api88'].sponsor ? `${t('赞助')} · ${t(PROVIDERS[id as 'apimart' | 'api88'].sponsor!.offer)}` : t('赞助'))}</span>}</b>
                   <span>{copy.detail(id === 'other' ? otherName : undefined)}</span>
                 </span>
                 {choice === id && <Icon.Check />}
               </button>
             })}
           </div>
+          {notices[choice] && <p className="ac-note">{notices[choice][noticeLanguage] || notices[choice].en || notices[choice].zh}</p>}
           <p className="ac-note">{t('可随时在设置中更换')}</p>
           {choice === 'other' && <p className="ac-note"><button type="button" className="ac-link-button" onClick={goSettings}>{t('去设置选择其他服务商')}</button></p>}
         </>}

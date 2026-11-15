@@ -79,7 +79,15 @@ function renderFirstRun() {
   return { events, links, navigations, store, providers, render }
 }
 
-test('first-run chooser defaults to 88API, opens the register URL, and never pastes the clipboard', () => {
+function radios(nodes) {
+  return nodes.filter(n => n?.props?.['aria-checked'] !== undefined)
+}
+
+function textOf(node) {
+  return flatten(node).filter(item => typeof item === 'string').join('')
+}
+
+test('first-run chooser defaults to APIMart, opens its register URL, and never pastes the clipboard', () => {
   const { events, links, navigations, store, providers, render } = renderFirstRun()
   const nodes = flatten(render())
   const dialog = nodes.find(n => n?.props?.title)
@@ -87,29 +95,44 @@ test('first-run chooser defaults to 88API, opens the register URL, and never pas
   assert.equal(dialog?.props.description, undefined)
   assert.equal(JSON.stringify(nodes).includes('没有字幕的视频需要转写'), false)
   assert.equal(JSON.stringify(nodes).includes('AutoClip 通过 AI 服务商理解视频'), false)
-  const options = nodes.filter(n => n?.props?.['aria-checked'] !== undefined)
-  assert.deepEqual(options.map(n => n.props['aria-checked']), [true, false, false])
+  const options = radios(nodes)
+  assert.equal(options[0].props['aria-checked'], true)
+  assert.match(textOf(options[0]), /APIMart/)
+  assert.equal(options.slice(1).every(item => item.props['aria-checked'] === false), true)
   const cta = nodes.filter(n => n?.type === 'button').at(-1)
-  assert.match(String(cta.props.children), /88API/)
+  assert.match(String(cta.props.children), /APIMart/)
   cta.props.onClick()
-  assert.equal(links[0], providers.PROVIDERS.api88.sponsor.registerUrl)
-  assert.equal(events.some(e => e.event === 'setup_action' && e.props.action === 'one_click' && e.props.provider === 'api88'), true)
+  assert.equal(links[0], providers.PROVIDERS.apimart.sponsor.registerUrl)
+  assert.equal(events.some(e => e.event === 'setup_action' && e.props.action === 'one_click' && e.props.provider === 'apimart'), true)
   assert.equal(JSON.stringify(events).includes('sk-'), false)
   assert.equal(JSON.stringify(events).includes(links[0]), false)
-  assert.equal(store.settings.connections[0].provider, 'api88')
+  assert.equal(store.settings.connections[0].provider, 'apimart')
+  assert.equal(store.settings.connections[0].base_url, '')
   assert.equal(navigations.length, 0)
 })
 
-test('first-run Infistar opens its register URL; other connects the measured default and can still open settings', () => {
+test('first-run still offers 88API without replacing a choice the user already made', () => {
+  const { links, store, providers, render } = renderFirstRun()
+  const nodes = flatten(render())
+  const api88 = radios(nodes).find(node => textOf(node).includes('88API'))
+  assert.ok(api88)
+  api88.props.onClick()
+  const cta = flatten(render()).filter(n => n?.type === 'button').at(-1)
+  assert.match(String(cta.props.children), /88API/)
+  cta.props.onClick()
+  assert.equal(links[0], providers.PROVIDERS.api88.sponsor.registerUrl)
+  assert.equal(store.settings.connections[0].provider, 'api88')
+})
+
+test('first-run does not promote Infistar; the saved preset and other providers remain', () => {
   const infistar = renderFirstRun()
-  flatten(infistar.render()).filter(n => n?.props?.['aria-checked'] !== undefined)[1].props.onClick()
-  flatten(infistar.render()).filter(n => n?.type === 'button').at(-1).props.onClick()
-  assert.equal(infistar.links[0], infistar.providers.PROVIDERS.infistar.sponsor.registerUrl)
-  assert.equal(infistar.events.some(e => e.event === 'setup_action' && e.props.action === 'one_click' && e.props.provider === 'infistar'), true)
-  assert.equal(infistar.navigations.length, 0)
+  const shown = radios(flatten(infistar.render()))
+  assert.equal(shown.some(node => textOf(node).includes('Infistar')), false)
+  assert.equal(infistar.providers.PROVIDERS.infistar.sponsor, undefined)
+  assert.equal(infistar.providers.PROVIDERS.infistar.cloud.baseUrl, 'https://infistar.cc/v1')
 
   const other = renderFirstRun()
-  flatten(other.render()).filter(n => n?.props?.['aria-checked'] !== undefined)[2].props.onClick()
+  radios(flatten(other.render())).find(node => textOf(node).includes('其他')).props.onClick()
   const chosen = flatten(other.render())
   assert.match(chosen.filter(n => typeof n === 'string').join(''), /建议先连接 DeepSeek/)
   const settingsButton = chosen.find(n => n?.type === 'button' && String(n.props?.children).includes('去设置选择其他服务商'))
@@ -119,7 +142,7 @@ test('first-run Infistar opens its register URL; other connects the measured def
   assert.equal(other.events.some(e => e.event === 'setup_action' && e.props.action === 'open_settings'), true)
 
   const connect = renderFirstRun()
-  flatten(connect.render()).filter(n => n?.props?.['aria-checked'] !== undefined)[2].props.onClick()
+  radios(flatten(connect.render())).find(node => textOf(node).includes('其他')).props.onClick()
   flatten(connect.render()).filter(n => n?.type === 'button').at(-1).props.onClick()
   assert.equal(connect.links.length, 0)
   assert.equal(connect.navigations.length, 0)
