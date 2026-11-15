@@ -5,4 +5,4 @@
 
 八语 README 统一使用 AutoClip 专属推广码 `XLK3BCM6`。品牌名称与 Logo 归相应权利人所有。
 
-- `88api-logo.jpg`：项目维护者于 2026-09-30 提供的 88API 官方 Logo；原图保存，README 中以 88 像素宽展示。
+- `88api-logo.jpg`：项目维护者于 2026-09-30 提供的 88API 官方 Logo。文件保留，供已保存的 88API 配置使用。README 赞助表不再展示这个推广位。

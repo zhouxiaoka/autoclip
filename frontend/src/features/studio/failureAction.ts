@@ -54,7 +54,7 @@ export const SWITCHABLE_UPSTREAM = [
 ] as const
 
 /** Known sponsor catalog ids for insufficient_quota → recharge (X3). */
-export const SPONSOR_PROVIDERS = ['api88', 'apimart'] as const
+export const SPONSOR_PROVIDERS = ['apimart'] as const
 
 export const ADD_PROVIDER_HINT = '建议再加一个服务商'
 export const RECHARGE_LABEL = '去充值'

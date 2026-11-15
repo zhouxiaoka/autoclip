@@ -103,7 +103,8 @@ def test_low_tier_stays_out_of_recommended_and_sponsors_stay_first():
     assert display_catalog_group("popular", sponsor=False, success_tier_value="high") == "recommended"
     assert display_catalog_group("recommended", sponsor=True, success_tier_value=None) == "recommended"
     ids = recommended_provider_ids()
-    assert ids == ["apimart", "api88", "deepseek", "dashscope"]
+    assert ids == ["apimart", "deepseek", "dashscope"]
+    assert "api88" not in ids
     assert "infistar" not in ids
     assert get_provider("infistar") is not None
     assert "gemini" not in ids
@@ -152,7 +153,8 @@ def test_settings_provider_quality_api_returns_tiers_and_recommended_order():
         response = client.get("/settings/provider-quality")
     assert response.status_code == 200
     body = response.json()
-    assert body["recommended"] == ["apimart", "api88", "deepseek", "dashscope"]
+    assert body["recommended"] == ["apimart", "deepseek", "dashscope"]
+    assert "api88" not in body["recommended"]
     assert "infistar" not in body["recommended"]
     assert body["providers"]["deepseek"] == {
         "success_tier": "high",

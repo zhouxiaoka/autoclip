@@ -306,19 +306,7 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       感谢 <strong>APIMart</strong> 赞助了本项目！<strong>APIMart</strong> 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 <strong>$0.006/张</strong>，1 美元可出图 <strong>160+</strong> 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过此<a href="https://go.apimart.ai/tw-autoclip">注册链接</a>注册即可开用。
     </td>
   </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
-      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
-    </td>
-    <td>
-      感谢 <strong>88API Token聚合平台</strong> 赞助 AutoClip！聚合 GPT、Claude、Gemini、Grok、DeepSeek、Kimi、GLM 等语言与编程模型，适合字幕分析、高光筛选与标题生成。<br>
-      🎨 <strong>多媒体能力</strong>：平台提供 GPT-Image、Gemini、Grok 等图片模型，Seedance、Veo、MiniMax Hailuo H3、Kling、Grok 等视频模型，以及 Whisper、TTS 等语音能力；AutoClip 可接入兼容的分析、封面生图与字幕转写接口。<br>
-      🏷️ <strong>服务与结算</strong>：据合作方介绍，由海外企业运营，提供人工客服、正规发票，充值比例 1:1；具体模型、服务与结算条件以平台页面为准。<br>
-      🎁 <strong>新用户福利</strong>：通过 <a href="https://88api.ai/sign-up?aff=2PIc">专属推广链接注册</a>可获体验额度，用于测试模型能力，领取条件以活动页面为准。 <a href="docs/88API_SETUP.md">接入说明</a>
-    </td>
-  </tr>
-</table>
+  </table>
 
 ## 推荐链接
 

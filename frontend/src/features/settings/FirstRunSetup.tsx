@@ -13,6 +13,7 @@ import { PROVIDERS } from './providers'
 import ProviderFields from './ProviderFields'
 import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogic'
 import { readSponsorPromo, subscribeSponsorPromo } from './sponsorPromoWatch'
+import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl, readPromoSnapshot, subscribePromoSnapshot } from './sponsorPromoState'
 import {
   FIRST_RUN_CHOICES,
   FIRST_RUN_DEFAULT,
@@ -24,25 +25,33 @@ import {
 
 const DISMISSED_KEY = 'autoclip.firstRunSetup.dismissed'
 
-const OPTION_COPY: Record<'apimart' | 'api88' | 'other', { title: () => string; detail: (name?: string) => string; badge?: () => string }> = {
-  apimart: {
-    title: () => PROVIDERS.apimart.short,
-    detail: () => PROVIDERS.apimart.sponsor?.description || PROVIDERS.apimart.hint,
-    badge: () => t('推荐'),
-  },
-  api88: {
-    title: () => PROVIDERS.api88.short,
-    detail: () => PROVIDERS.api88.sponsor?.description || PROVIDERS.api88.hint,
-    badge: () => PROVIDERS.api88.sponsor ? `${t('赞助')} · ${t(PROVIDERS.api88.sponsor.offer)}` : t('赞助'),
-  },
-  other: {
-    title: () => t('其他服务商'),
-    detail: (name?: string) => t('建议先连接 {{name}}', { name: name || '' }),
-  },
+function optionTitle(id: string): (() => string) | null {
+  if (id === 'other') return () => t('其他服务商')
+  if (!firstRunSponsor(id) || !PROVIDERS[id as keyof typeof PROVIDERS]) return null
+  return () => PROVIDERS[id as keyof typeof PROVIDERS].short
+}
+
+function choiceDetail(id: string, otherName: string): string {
+  if (id === 'other') return t('建议先连接 {{name}}', { name: otherName })
+  const preset = PROVIDERS[id as keyof typeof PROVIDERS]
+  if (preset?.sponsor && promotionAllowsUpsell(id)) return preset.sponsor.description
+  if (preset?.sponsor) return t(NEUTRAL_PROVIDER_COPY)
+  return preset?.hint || ''
+}
+
+/** Latest accepted choices. A locked selection stays even after it leaves the promotion. */
+function choicesFor(latest: readonly string[], selected: string, locked: boolean): string[] {
+  const shown = [...latest]
+  if (locked && selected && !shown.includes(selected)) {
+    const other = shown.indexOf('other')
+    if (other === -1) shown.push(selected)
+    else shown.splice(other, 0, selected)
+  }
+  return shown
 }
 
 /**
- * First-launch chooser: APIMart / 88API / other providers. "Later" hides it for the session;
+ * First-launch chooser: APIMart / other providers. "Later" hides it for the session;
  * a blocked import can reopen it. One-click opens the sponsor site; deeplink write is L1.
  */
 export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?: (needed: boolean) => void; openRequest?: number }) {
@@ -51,10 +60,9 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   const { settings } = m
   const [open, setOpen] = useState(false)
   const [choice, setChoice] = useState<string>(FIRST_RUN_DEFAULT)
-  const [recommendedId, setRecommendedId] = useState<string>(FIRST_RUN_DEFAULT)
+  const choiceRef = useRef(choice)
   const [choices, setChoices] = useState<readonly string[]>(FIRST_RUN_CHOICES)
   const [notices, setNotices] = useState<Record<string, Record<string, string>>>({})
-  const [registerUrls, setRegisterUrls] = useState<Record<string, string>>({})
   const touched = useRef(false)
   const frozen = useRef(false)
   const stepRef = useRef<'choose' | 'connect'>('choose')
@@ -81,11 +89,10 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       frozen.current = false
       stepRef.current = 'choose'
       setStep('choose')
+      choiceRef.current = FIRST_RUN_DEFAULT
       setChoice(FIRST_RUN_DEFAULT)
-      setRecommendedId(FIRST_RUN_DEFAULT)
       setChoices(FIRST_RUN_CHOICES)
       setNotices({})
-      setRegisterUrls({})
       return
     }
     if (!presentation.current) {
@@ -94,15 +101,21 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     }
     const apply = () => {
       const applied = readSponsorPromo()
-      if (!applied || touched.current || frozen.current || stepRef.current !== 'choose') return
-      setChoices(applied.choices)
-      setNotices(applied.notices)
-      setRegisterUrls(applied.registerUrls)
-      setRecommendedId(applied.defaultChoice)
-      setChoice(applied.defaultChoice)
+      const snap = readPromoSnapshot()
+      const nextChoices = snap?.choices || applied?.choices
+      if (!nextChoices) return
+      setNotices(snap?.notices || applied?.notices || {})
+      const locked = touched.current || frozen.current || stepRef.current !== 'choose'
+      setChoices(choicesFor(nextChoices, choiceRef.current, locked))
+      if (locked) return
+      const nextDefault = snap?.defaultChoice || applied?.defaultChoice || FIRST_RUN_DEFAULT
+      choiceRef.current = nextDefault
+      setChoice(nextDefault)
     }
     apply()
-    return subscribeSponsorPromo(apply)
+    const stopPromo = subscribeSponsorPromo(apply)
+    const stopSnap = subscribePromoSnapshot(apply)
+    return () => { stopPromo(); stopSnap() }
   }, [showing, openRequest])
   const otherDefault = firstRunOtherDefault(language)
   const noticeLanguage = (language || 'zh').toLowerCase().split('-')[0]
@@ -132,11 +145,13 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     }
     const sponsor = firstRunSponsor(choice)
     if (!sponsor) return
-    const preset = PROVIDERS[sponsor]
     action('one_click', sponsor)
-    if (preset.sponsor) {
+    const snap = readPromoSnapshot()
+    const packaged = !snap || snap.source === 'bundled' ? (PROVIDERS[sponsor].sponsor?.registerUrl || '') : ''
+    const href = promotionRegisterUrl(sponsor, packaged)
+    if (href) {
       trackSponsorLinkOpened({ sponsor, target: 'register', placement: 'home_setup' })
-      openExternalLink(registerUrls[sponsor] || preset.sponsor.registerUrl)
+      openExternalLink(href)
     }
     m.chooseProvider('analysis', sponsor)
     stepRef.current = 'connect'
@@ -149,11 +164,18 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     : model ? t('已选好模型：{{model}}', { model })
     : main && connectionReady(main) ? t('请确认 API Key，或直接输入模型名')
     : t('等待 API Key')
-  const label = firstRunPrimaryLabel(choice, choice === 'other' ? otherName : (firstRunSponsor(choice) ? PROVIDERS[firstRunSponsor(choice)!].short : ''))
+  const sponsorId = firstRunSponsor(choice)
+  const snapNow = readPromoSnapshot()
+  const packagedNow = !snapNow || snapNow.source === 'bundled' ? (sponsorId ? PROVIDERS[sponsorId].sponsor?.registerUrl || '' : '') : ''
+  const liveLink = sponsorId ? promotionRegisterUrl(sponsorId, packagedNow) : null
+  const sponsorName = choice === 'other' ? otherName : (sponsorId ? PROVIDERS[sponsorId].short : '')
+  const label = choice !== 'other' && sponsorId && !liveLink
+    ? { key: '下一步' }
+    : firstRunPrimaryLabel(choice, sponsorName)
   const connecting = step === 'connect' && !!main
 
   return <Dialog open={open} onClose={later} title={t('选择 AI 服务商')}
-    description={connecting ? (choice === 'other' ? t('把 API 密钥粘贴到下方即可。') : t('在浏览器完成注册后，把 API 密钥粘贴到下方。')) : undefined}
+    description={connecting ? (choice === 'other' || !liveLink ? t('把 API 密钥粘贴到下方即可。') : t('在浏览器完成注册后，把 API 密钥粘贴到下方。')) : undefined}
     footer={<div className="ac-setup-foot">
       {connecting
         ? <Btn variant="text" size="sm" onClick={() => setStep('choose')}>{t('返回')}</Btn>
@@ -175,13 +197,15 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
         </> : <>
           <div className="ac-choice-list" role="radiogroup" aria-label={t('选择 AI 服务商')}>
             {choices.map(id => {
-              const copy = OPTION_COPY[id as keyof typeof OPTION_COPY]
-              if (!copy) return null
+              const title = optionTitle(id)
+              if (!title) return null
+              const preset = id === 'other' ? undefined : PROVIDERS[id as keyof typeof PROVIDERS]
+              const promoted = id !== 'other' && promotionAllowsUpsell(id)
               return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={choice === id}
-                onClick={() => { touched.current = true; setChoice(id) }}>
+                onClick={() => { touched.current = true; choiceRef.current = id; setChoice(id) }}>
                 <span className="ac-choice-text">
-                  <b>{copy.title()}{id !== 'other' && <span className="ac-badge">{id === recommendedId ? t('推荐') : (PROVIDERS[id as 'apimart' | 'api88'].sponsor ? `${t('赞助')} · ${t(PROVIDERS[id as 'apimart' | 'api88'].sponsor!.offer)}` : t('赞助'))}</span>}</b>
-                  <span>{copy.detail(id === 'other' ? otherName : undefined)}</span>
+                  <b>{title()}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{promoted && !promotionRecommends(id) && preset?.sponsor && <span className="ac-badge">{`${t('赞助')} · ${preset.sponsor.offer}`}</span>}</b>
+                  <span>{choiceDetail(id, otherName)}</span>
                 </span>
                 {choice === id && <Icon.Check />}
               </button>

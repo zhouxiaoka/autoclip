@@ -302,19 +302,7 @@ Dentro do Docker, `localhost` é o contêiner. Use um endereço do host que o co
       Agradecemos à <strong>APIMart</strong> por patrocinar este projeto! A <strong>APIMart</strong> é uma plataforma de API de baixo custo para geração de imagens e vídeos com IA — GPT-Image-2 a partir de <strong>$0.006/image</strong>, mais de <strong>160</strong> imagens por dólar. Uma única API assíncrona cobre imagem e vídeo: envie uma tarefa, receba um ID e obtenha os resultados por polling ou callback. Processe dezenas de milhares de imagens em lote sem timeouts e troque de modelo sem alterar o código. Pagamento conforme o uso, sem mensalidade — <a href="https://go.apimart.ai/tw-autoclip">cadastre-se aqui</a> para começar.
     </td>
   </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
-      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
-    </td>
-    <td>
-      Agradecemos à <strong>88API</strong> por patrocinar o AutoClip! Reúne GPT, Claude, Gemini, Grok, DeepSeek, Kimi e GLM para analisar legendas, selecionar destaques e gerar títulos.<br>
-      🎨 <strong>Multimídia</strong>: Modelos de imagem, vídeo e áudio, incluindo GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper e TTS. O AutoClip utiliza APIs compatíveis de análise, capas e transcrição.<br>
-      🏷️ <strong>Serviço e faturamento</strong>: Segundo o parceiro, a operação é de uma empresa no exterior, com atendimento humano, faturas e proporção de recarga de 1:1; aplicam-se as condições da plataforma.<br>
-      🎁 <strong>Novos usuários</strong>: Receba créditos de teste para avaliar modelos pelo <a href="https://88api.ai/sign-up?aff=2PIc">link de indicação</a>, conforme as condições da promoção. <a href="docs/88API_SETUP.en.md">Guia de configuração (inglês)</a>
-    </td>
-  </tr>
-</table>
+  </table>
 
 ## Perguntas frequentes
 

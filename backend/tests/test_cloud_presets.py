@@ -126,9 +126,9 @@ def test_api88_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):
     provider, url, preset = resolve_cloud_preset("api88")
     assert provider == "openai"
     assert url == "https://api.88api.ai/v1"
-    # 多模型网关不预设型号；专属注册链接带推广参数
+    # 多模型网关不预设型号，也不再带赞助注册链接。
     assert preset.default_model == ""
-    assert "aff=" in preset.docs_url
+    assert preset.docs_url == ""
 
     settings = tmp_path / "settings.json"
     settings.write_text(

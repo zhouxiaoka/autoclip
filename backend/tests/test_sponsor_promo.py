@@ -110,8 +110,8 @@ def test_packaged_config_does_not_fetch_and_catalog_stays_local(profiles):
     assert "api_key" not in text
     assert "base_url" not in text
     bundled = Path("frontend/src/features/settings/firstRunGuidance.ts").read_text(encoding="utf-8")
-    assert "FIRST_RUN_CHOICES = ['apimart', 'api88', 'other']" in bundled
-    assert sponsor_promo.BUNDLED_CHOICES == ("apimart", "api88", "other")
+    assert "FIRST_RUN_CHOICES = ['apimart', 'other']" in bundled
+    assert sponsor_promo.BUNDLED_CHOICES == ("apimart", "other")
     assert sponsor_promo.BUNDLED_DEFAULT == "apimart"
 
 
@@ -146,6 +146,8 @@ def test_signed_document_sets_order_default_and_keeps_cache_when_offline(tmp_pat
     assert shown["choices"] == ["apimart", "api88", "other"]
     assert shown["default"] == "apimart"
     assert shown["statuses"] == {"apimart": "healthy", "api88": "healthy"}
+    assert "api88" in shown["choices"]
+    assert "api88" not in shown["register_urls"]
     assert shown["source"] == "cache"
     assert "base_url" not in shown
     assert client.refresh_sync() == "unreachable"
@@ -202,7 +204,7 @@ def test_out_of_service_is_hidden_and_register_host_must_match(tmp_path, profile
     private, public = _keys()
     hidden = _payload(sponsors=[
         {"id": "apimart", "order": 1, "status": "out_of_service", "new_user_default": True},
-        {"id": "api88", "order": 2, "status": "healthy", "register_url": "https://88api.ai/sign-up?aff=ok"},
+        {"id": "api88", "order": 2, "status": "healthy"},
     ])
     foreign = _payload(sequence=2)
     foreign["sponsors"][0]["register_url"] = "https://keys.evil.example/steal"
@@ -216,8 +218,9 @@ def test_out_of_service_is_hidden_and_register_host_must_match(tmp_path, profile
     assert shown["choices"] == ["api88", "other"]
     assert shown["default"] == "api88"
     assert "apimart" not in shown["choices"]
+    assert "api88" in shown["choices"]
     assert shown["statuses"]["apimart"] == "out_of_service"
-    assert shown["register_urls"]["api88"].startswith("https://88api.ai/")
+    assert "api88" not in shown["register_urls"]
     http.second = True
     assert client.refresh_sync() == "sponsors"
     assert client.view()["default"] == "api88"
@@ -236,10 +239,13 @@ def test_replay_downgrade_and_authorized_rollback(tmp_path, profiles):
     stage["payload"] = _payload(sequence=4)
     assert client.refresh_sync() == "downgrade"
     stage["payload"] = _payload(sequence=6, sponsors=[
-        {"id": "api88", "order": 1, "status": "healthy", "new_user_default": True},
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True},
+        {"id": "api88", "order": 2, "status": "fault", "notices": {"zh": "余额查询失败"}},
     ])
     assert client.refresh_sync() == "ok"
-    assert client.view()["default"] == "api88"
+    assert client.view()["default"] == "apimart"
+    assert "api88" in client.view()["choices"]
+    assert client.view()["statuses"]["api88"] == "fault"
     assert client.view()["sequence"] == 6
     stage["payload"] = _payload(sequence=5)
     assert client.refresh_sync() == "downgrade"
@@ -254,7 +260,7 @@ def test_unreachable_without_cache_uses_bundle_and_busy_skips_fetch(tmp_path, pr
     client = _client(tmp_path, private, public, explode)
     assert client.refresh_sync() == "unreachable"
     assert client.view()["source"] == "bundled"
-    assert client.view()["choices"] == ["apimart", "api88", "other"]
+    assert client.view()["choices"] == ["apimart", "other"]
     busy = _client(tmp_path, private, public, explode, busy=lambda: True)
     assert busy.refresh_sync() == "busy"
     assert busy.schedule("startup") is False
@@ -267,7 +273,7 @@ def test_infistar_status_is_a_notice_not_a_promotion(tmp_path, profiles):
         {"id": "infistar", "order": 2, "status": "out_of_service", "notices": {"zh": "暂停服务", "en": "Paused"}},
     ])
     refused = _payload(sequence=2, sponsors=[
-        {"id": "infistar", "order": 1, "status": "fault", "register_url": "https://www.infistar.cc/register?aff=1"},
+        {"id": "infistar", "order": 1, "status": "fault", "register_url": "https://evil.example/register"},
     ])
 
     def http(url, timeout, max_bytes):
@@ -284,6 +290,58 @@ def test_infistar_status_is_a_notice_not_a_promotion(tmp_path, profiles):
     http.second = True
     assert client.refresh_sync() == "sponsors"
     assert shown["default"] == client.view()["default"]
+
+
+def test_higher_sequence_restores_trusted_host_then_withdraws(tmp_path, profiles):
+    private, public = _keys()
+    stage = {"payload": _payload(sequence=3, sponsors=[
+        {
+            "id": "api88", "order": 1, "status": "healthy", "new_user_default": True,
+            "register_url": "https://88api.ai/sign-up?aff=2PIc",
+        },
+        {
+            "id": "infistar", "order": 2, "status": "healthy",
+            "register_url": "https://www.infistar.cc/register?aff=1",
+        },
+        {"id": "apimart", "order": 3, "status": "fault"},
+    ])}
+
+    def http(url, timeout, max_bytes):
+        return _envelope(private, stage["payload"])
+
+    client = _client(tmp_path, private, public, http)
+    assert client.refresh_sync() == "ok"
+    shown = client.view()
+    assert shown["choices"] == ["api88", "infistar", "apimart", "other"]
+    assert shown["default"] == "api88"
+    assert shown["register_urls"]["api88"] == "https://88api.ai/sign-up?aff=2PIc"
+    assert shown["register_urls"]["infistar"] == "https://www.infistar.cc/register?aff=1"
+    assert "apimart" not in shown["register_urls"]
+    stage["payload"] = _payload(sequence=4, sponsors=[
+        {"id": "other-gateway", "order": 1, "status": "healthy"},
+    ])
+    assert client.refresh_sync() == "sponsors"
+    assert client.view()["default"] == "api88"
+    stage["payload"] = _payload(sequence=5, sponsors=[
+        {"id": "api88", "order": 1, "status": "healthy", "register_url": "https://api.88api.ai/sign-up"},
+    ])
+    assert client.refresh_sync() == "sponsors"
+    assert client.view()["register_urls"]["api88"] == "https://88api.ai/sign-up?aff=2PIc"
+    stage["payload"] = _payload(sequence=6, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True,
+         "register_url": "https://go.apimart.ai/tw-autoclip"},
+        {"id": "api88", "order": 2, "status": "out_of_service", "notices": {"zh": "暂停"}},
+        {"id": "infistar", "order": 3, "status": "out_of_service"},
+    ])
+    assert client.refresh_sync() == "ok"
+    withdrawn = client.view()
+    assert withdrawn["choices"] == ["apimart", "other"]
+    assert withdrawn["default"] == "apimart"
+    assert withdrawn["statuses"]["api88"] == "out_of_service"
+    assert withdrawn["statuses"]["infistar"] == "out_of_service"
+    assert "api88" not in withdrawn["register_urls"]
+    assert "infistar" not in withdrawn["register_urls"]
+    assert withdrawn["notices"]["api88"]["zh"] == "暂停"
 
 
 def test_lower_sequence_stays_rejected_after_display_expiry_and_restart(tmp_path, profiles):

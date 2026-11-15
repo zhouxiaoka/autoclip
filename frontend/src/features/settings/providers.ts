@@ -1,7 +1,7 @@
 import { t } from '../../i18n'
 import { compareRecommended, pickerBucket, qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
 import { getCatalog, getProvider } from './providerPresets'
-import { promotionEligible, promotionRank } from './sponsorPromoState'
+import { promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 
 export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
@@ -36,7 +36,7 @@ const UI_KEYS: ProviderKey[] = [
 
 function groupFor(key: ProviderKey): ProviderGroup {
   if (key === 'compatible') return 'compatible'
-  if (key === 'api88' || key === 'apimart') return 'sponsor'
+  if (key === 'apimart') return 'sponsor'
   if (key === 'ollama' || key === 'lmstudio') return 'local'
   return 'cloud'
 }
@@ -69,7 +69,7 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
       ...measured,
     }
   }
-  if (row.sponsor && (key === 'api88' || key === 'apimart')) {
+  if (row.sponsor && key === 'apimart') {
     entry.sponsor = {
       id: key,
       registerUrl: row.sponsor.register_url,
@@ -111,8 +111,11 @@ function recommendedCompare(a: ProviderKey, b: ProviderKey): number {
 }
 
 function visibleBucket(key: ProviderKey): ProviderGroup {
+  if (promotionCurrentlyPromoted(key)) return 'sponsor'
   const bucket = pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier)
   if (bucket === 'sponsor' && !promotionEligible(key)) return 'cloud'
+  // No accepted promotion: a measured tier must not lift these into the chooser.
+  if ((key === 'api88' || key === 'infistar') && !promotionCurrentlyPromoted(key)) return 'cloud'
   return bucket
 }
 

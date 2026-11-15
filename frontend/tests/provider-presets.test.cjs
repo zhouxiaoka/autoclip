@@ -18,7 +18,7 @@ test('the shared JSON lists 40 providers in the four product groups', () => {
     return acc
   }, {})
   assert.equal(Object.keys(catalog.providers).length, 40)
-  assert.deepEqual(groups, { recommended: 2, popular: 11, local: 4, more: 23 })
+  assert.deepEqual(groups, { recommended: 1, popular: 12, local: 4, more: 23 })
 })
 
 test('current settings dropdown still reads addresses and defaults from the JSON', () => {

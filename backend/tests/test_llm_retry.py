@@ -248,9 +248,9 @@ def test_x3_insufficient_quota_is_not_llm_auth_invalid():
 
 def test_x3_sponsor_topup_url_prefers_topup_over_register():
     from backend.core import cloud_presets
-    for key in ('api88', 'apimart'):
-        url = cloud_presets.sponsor_topup_url(key)
-        assert url and url.startswith('http'), key
+    url = cloud_presets.sponsor_topup_url('apimart')
+    assert url and url.startswith('http')
+    assert cloud_presets.sponsor_topup_url('api88') is None
     assert cloud_presets.sponsor_topup_url('infistar') is None
     assert cloud_presets.sponsor_topup_url('openai') is None
     assert cloud_presets.sponsor_topup_url(None) is None

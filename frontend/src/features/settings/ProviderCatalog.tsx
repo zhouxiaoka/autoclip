@@ -9,7 +9,7 @@ import {
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
 import ProviderQualityMarks from './providerQualityMarks'
-import { promotionAllowsUpsell, promotionRecommends } from './sponsorPromoState'
+import { promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl } from './sponsorPromoState'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
   all: 'settings.providers.filter.all',
@@ -32,7 +32,7 @@ function actionLabel(preset: ProviderPreset, connected: boolean, configured = fa
   if (connected) return preset.id === 'whisper' || preset.id === 'sensevoice' ? t('settings.providers.available') : t('settings.providers.connected')
   if (configured) return t('已配置')
   if (connectKind(preset) === 'needs_endpoint') return t('settings.providers.needs_endpoint')
-  if (preset.sponsor && promotionAllowsUpsell(preset.id)) return t('settings.providers.one_click')
+  if (promotionRegisterUrl(preset.id, preset.sponsor?.register_url || '')) return t('settings.providers.one_click')
   return t('settings.providers.configure')
 }
 
@@ -107,7 +107,7 @@ function ProviderCard({
       <span className="ac-provider-card-body">
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
-          {preset.sponsor && recommended && <span className="ac-badge">{t('推荐')}</span>}
+          {(preset.sponsor || recommended) && recommended && <span className="ac-badge">{t('推荐')}</span>}
           {preset.sponsor && !recommended && upsell && <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>}
         </span>
         {caps.length > 0 && (

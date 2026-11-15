@@ -1,12 +1,13 @@
 /**
- * First-run chooser: APIMart (default), 88API, or a measured default under 「其他」.
- * Infistar stays a saved-provider preset; it is not offered here.
- * Deeplink write is out of scope; one-click only opens the sponsor registration URL.
+ * Packaged first-run chooser: APIMart (default) or a measured default under 「其他」.
+ * 88API and Infistar are not in that packaged list. An accepted signed view may
+ * still name either id, because the register host is already trusted.
+ * Deeplink write is out of scope; one-click only opens a currently eligible register URL.
  * 「其他」 connects DeepSeek, or on zh the higher tier of DeepSeek and DashScope.
  */
 import { firstRunOtherDefault, pickHigherQuality } from './providerQuality'
 
-export const FIRST_RUN_CHOICES = ['apimart', 'api88', 'other'] as const
+export const FIRST_RUN_CHOICES = ['apimart', 'other'] as const
 export type FirstRunChoice = (typeof FIRST_RUN_CHOICES)[number]
 export type FirstRunAction = 'later' | 'open_settings' | 'one_click' | 'connect_recommended'
 
@@ -18,8 +19,8 @@ export function firstRunPrimaryAction(choice: string): Exclude<FirstRunAction, '
   return choice === 'other' ? 'connect_recommended' : 'one_click'
 }
 
-export function firstRunSponsor(choice: string): 'apimart' | 'api88' | null {
-  if (choice === 'apimart' || choice === 'api88') return choice
+export function firstRunSponsor(choice: string): 'apimart' | 'api88' | 'infistar' | null {
+  if (choice === 'apimart' || choice === 'api88' || choice === 'infistar') return choice
   return null
 }
 

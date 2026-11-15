@@ -5,10 +5,11 @@
  */
 import { FIRST_RUN_CHOICES, FIRST_RUN_DEFAULT } from './firstRunGuidance'
 import { PROVIDERS } from './providers'
+import { TRUSTED_REGISTER_HOSTS } from './sponsorPromoState'
 
 const STATUSES = new Set(['healthy', 'fault', 'out_of_service'])
 
-const PROMO_CHOICES = ['apimart', 'api88', 'other'] as const
+const PROMO_CHOICES = ['apimart', 'api88', 'infistar', 'other'] as const
 const NOTICE_IDS = ['apimart', 'api88', 'infistar'] as const
 
 export interface AppliedSponsorPromo {
@@ -35,8 +36,10 @@ function hostOf(url: string): string {
 }
 
 function packagedHost(id: string): string {
+  const trusted = TRUSTED_REGISTER_HOSTS[id] || ''
   const sponsor = PROVIDERS[id as keyof typeof PROVIDERS]?.sponsor
-  return sponsor ? hostOf(sponsor.registerUrl) : ''
+  if (!sponsor) return trusted
+  return hostOf(sponsor.registerUrl) === trusted ? trusted : ''
 }
 
 function unwrap(response: unknown): Record<string, unknown> | null {
@@ -52,7 +55,6 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
   if (!Array.isArray(record.choices) || typeof record.default !== 'string') return null
   const choices: Array<(typeof PROMO_CHOICES)[number]> = []
   for (const id of record.choices) {
-    if (id === 'infistar') continue
     if (typeof id !== 'string' || !PROMO_CHOICES.includes(id as (typeof PROMO_CHOICES)[number]) || choices.includes(id as (typeof PROMO_CHOICES)[number])) return null
     choices.push(id as (typeof PROMO_CHOICES)[number])
   }

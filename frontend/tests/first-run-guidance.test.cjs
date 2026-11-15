@@ -11,13 +11,15 @@ const experience = loadTs(path.join(__dirname, '../src/analytics/experience.ts')
   './successRateContract': { sanitizeProviderValidationProperties: x => x, SuccessRateEvent: { ProviderValidationFinished: 'provider_validation_finished' }, TELEMETRY_PROVIDERS: loadTs(path.join(__dirname, '../src/analytics/successRateContract.ts')).TELEMETRY_PROVIDERS },
 }, path.join(__dirname, '../src/analytics'))
 
-test('first-run defaults to APIMart and keeps 88API as a one-click option', () => {
-  assert.deepEqual([...guidance.FIRST_RUN_CHOICES], ['apimart', 'api88', 'other'])
+test('first-run defaults to APIMart and does not offer 88API', () => {
+  assert.deepEqual([...guidance.FIRST_RUN_CHOICES], ['apimart', 'other'])
   assert.equal(guidance.FIRST_RUN_DEFAULT, 'apimart')
   assert.equal(guidance.firstRunPrimaryAction('apimart'), 'one_click')
   assert.equal(guidance.firstRunPrimaryAction('api88'), 'one_click')
   assert.equal(guidance.firstRunSponsor('apimart'), 'apimart')
   assert.equal(guidance.firstRunSponsor('api88'), 'api88')
+  assert.equal(guidance.firstRunSponsor('infistar'), 'infistar')
+  assert.equal(guidance.firstRunSponsor('deepseek'), null)
   assert.equal(guidance.firstRunPrimaryAction('other'), 'connect_recommended')
   assert.equal(guidance.firstRunSponsor('other'), null)
   assert.equal(guidance.firstRunPrimaryLabel('other', 'DeepSeek').key, '连接 {{name}}')
@@ -28,9 +30,9 @@ test('first-run defaults to APIMart and keeps 88API as a one-click option', () =
   assert.equal(guidance.firstRunOtherDefault('en'), 'deepseek')
   assert.equal(guidance.firstRunOtherDefault('ja'), 'deepseek')
   assert.equal(experience.safeExperience({ action: 'connect_recommended', provider: 'deepseek', placement: 'home_setup' }).action, 'connect_recommended')
-  const oneClick = guidance.firstRunPrimaryLabel('api88', '88API')
+  const oneClick = guidance.firstRunPrimaryLabel('apimart', 'APIMart')
   assert.equal(oneClick.key, '通过 {{name}} 一键获取')
-  assert.equal(oneClick.values.name, '88API')
+  assert.equal(oneClick.values.name, 'APIMart')
 })
 
 test('import card placement and setup steps stay on the experience whitelist', () => {

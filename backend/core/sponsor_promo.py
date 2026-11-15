@@ -1,8 +1,10 @@
 """Signed sponsor-promotion documents.
 
-The packaged provider catalog stays local. A promotion document may only
-reorder built-in sponsor ids, pick the new-user default, and attach a status
-or a short notice. It cannot name an API host, a key, or a model.
+The packaged provider catalog stays local. A promotion document may reorder
+ids whose register host this package already trusts, pick the new-user
+default, and attach a status or a short notice. It cannot name an API host,
+a key, a model, an unknown provider, or a register host this package has
+not already trusted. Current bundled promotion is a separate list.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ PAYLOAD_KEYS = frozenset({
     "rollback_of", "sponsors",
 })
 SPONSOR_KEYS = frozenset({"id", "order", "new_user_default", "status", "notices", "register_url"})
-BUNDLED_CHOICES = ("apimart", "api88", "other")
+BUNDLED_CHOICES = ("apimart", "other")
 BUNDLED_DEFAULT = "apimart"
 # Status notices may name a built-in provider that is no longer promoted.
 NOTICE_PROVIDER_IDS = frozenset({"api88", "infistar", "apimart"})
@@ -62,9 +64,17 @@ def notice_provider_ids() -> set[str]:
     return {item for item in NOTICE_PROVIDER_IDS if get_provider(item)}
 
 
+# Register hosts this package already trusts. Independent of whether the
+# bundled catalog currently promotes the provider. A signature cannot add one.
+_TRUSTED_REGISTER_HOSTS = {
+    "api88": "88api.ai",
+    "infistar": "www.infistar.cc",
+}
+
+
 def builtin_sponsor_hosts() -> dict[str, str]:
-    """Built-in sponsor id → registration hostname. No API base URL leaves this map."""
-    from backend.core.provider_presets import iter_providers
+    """Provider id → registration hostname. No API base URL leaves this map."""
+    from backend.core.provider_presets import get_provider, iter_providers
 
     hosts: dict[str, str] = {}
     for item in iter_providers():
@@ -72,6 +82,9 @@ def builtin_sponsor_hosts() -> dict[str, str]:
         host = (urlparse(sponsor.get("register_url") or "").hostname or "").lower().rstrip(".")
         if host:
             hosts[item.id] = host
+    for sponsor_id, host in _TRUSTED_REGISTER_HOSTS.items():
+        if sponsor_id not in hosts and get_provider(sponsor_id):
+            hosts[sponsor_id] = host
     return hosts
 
 
