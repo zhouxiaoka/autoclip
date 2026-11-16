@@ -1977,8 +1977,10 @@ def _produce_on_demand(project_id, variant_id):
         burned = _source_has_burned_subtitles(project_id, video)
         strategy_id = variant['strategy_id']
         value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
-        value = _apply_packaging(project_id, value, strategy_id, burned, {})
-        posts = _posts_for(project_id, [(strategy_id, value)], {})
+        packaging_cache = {}
+        _prefetch_packaging(project_id, [(strategy_id, value)], burned, packaging_cache)
+        value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+        posts = _posts_for(project_id, [(strategy_id, value)], packaging_cache)
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 
