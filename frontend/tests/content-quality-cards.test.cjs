@@ -63,7 +63,7 @@ test('caption-only recovery is available for incomplete enabled translations', (
   }))
   const label = escaped(catalog['只重试字幕翻译'])
   assert.ok(show(draft).includes(label))
-  assert.ok(!show({ ...draft, subtitles: false }).includes(label))
+  assert.ok(!show({ ...draft, packaging: { ...pack, captions_enabled: false } }).includes(label))
   assert.ok(!show({ ...draft, packaging: { ...pack, translation_status: 'complete' } }).includes(label))
 })
 
@@ -71,7 +71,7 @@ test('caption-only recovery sends the current edit without starting generation o
   const { setup } = require('./helpers/studio-harness.cjs')
   const seen = []
   const harness = setup({ post: async (url, body) => { seen.push({ url, body }); return { ...pack, translation_status: 'complete' } } })
-  const reply = await harness.api.retryTranslation('project', draft)
+  const reply = await harness.studioApi.retryTranslation('project', draft)
   assert.deepEqual(seen, [{ url: '/studio/project/retry-translation', body: draft }])
   assert.equal(reply.translation_status, 'complete')
   assert.equal(harness.events.length, 0) // a caption repair is not a new generation success denominator

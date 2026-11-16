@@ -353,5 +353,5 @@ def test_quality_warnings_reach_export_result_without_changing_accepted_captions
     result = render.render_draft('quality', 'video.mp4', draft, 'j', lambda *_: None)
     assert result['warnings'] == ['片尾完整性需要复核，请预览最后一段', '字幕翻译尚未完成，请检查后再发布']
     assert captured == [package.model_dump()]
-    draft.subtitles = False
+    draft.packaging.captions_enabled = False
     assert render.render_draft('quality', 'video.mp4', draft, 'j2', lambda *_: None)['warnings'] == ['片尾完整性需要复核，请预览最后一段']
