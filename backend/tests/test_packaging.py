@@ -14,26 +14,33 @@ DRAFT = {'title': 'Great investors are flight instructors', 'hook': ''}
 
 def good_response(**overrides):
     body = {
+        'lines': [{'id': 0, 'text': 'Paul 以前常说'}, {'id': 1, 'text': '好的投资人像飞行教练'},
+                  {'id': 2, 'text': 'Garry，你把同样的能量带给了创始人'}],
         'title_lines': ['好的投资人', '应该像飞行教练'], 'accent_line': 1,
         'segments': [{'from': 0, 'to': 1, 'text': 'Paul 以前常说，好的投资人像飞行教练'}, {'from': 2, 'to': 2, 'text': 'Garry，你把同样的能量带给了创始人'}],
         'speakers': [{'line': 0, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}, {'line': 2, 'name': 'Garry Tan', 'role': 'YC 总裁'}],
         'tags': [{'line': 1, 'text': '飞行教练'}], 'highlights': [],
     }
+    segments = overrides.get('segments')
+    if segments and all(item.get('from') == item.get('to') for item in segments):
+        body['lines'] = [{'id': item['from'], 'text': item['text']} for item in segments]
     return {**body, **overrides}
 
 
-def test_interview_packaging_regroups_lines_into_translated_sentences():
+def test_interview_packaging_translates_cues_without_retiming_them():
     sent = []
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), known_names='Sam Altman: Never a Better Time',
                                        call=lambda prompt, data: sent.append(data) or good_response())
     assert result['template'] == 'interview_zh' and result['source_language'] == 'en' and not result['fallback']
-    first, second = result['cues']
-    assert (first['start'], first['end']) == (10.0, 15.0) and first['text'] == 'Paul 以前常说，好的投资人像飞行教练'
-    assert first['original'] == f"{LINES[0]['text']} {LINES[1]['text']}"
-    assert (second['start'], second['end']) == (15.0, 18.0)
+    first, second, third = result['cues']
+    assert (first['start'], first['end']) == (10.0, 12.0) and first['text'] == 'Paul 以前常说'
+    assert first['original'] == LINES[0]['text']
+    assert (second['start'], second['end']) == (12.0, 15.0)
+    assert (third['start'], third['end']) == (15.0, 18.0)
+    assert result['translation_status'] == 'complete'
     assert [s['name'] for s in result['speakers']] == ['Sam Altman', 'Garry Tan']
     assert result['tags'] == [{'at': 12.2, 'text': '飞行教练'}]
-    assert [line['text'] for line in sent[0]['lines']] == [line['text'] for line in LINES]  # only the draft's rows
+    assert [line['text'] for data in sent if data.get('task') == 'translate_captions' for line in data['lines']] == [line['text'] for line in LINES]  # only the draft's rows
 
 
 def test_names_not_seen_in_subtitles_or_listing_are_dropped():
@@ -48,15 +55,15 @@ def test_names_not_seen_in_subtitles_or_listing_are_dropped():
     {'segments': [{'from': 0, 'to': 2, 'text': 'x' * 700}]},                                   # too long
     {'segments': None},
 ])
-def test_malformed_segments_fall_back_to_line_translation_never_the_source_language(bad):
+def test_decoration_segments_cannot_invalidate_completed_translation(bad):
     def call(prompt, data):
         if '逐条翻译' in prompt:
-            return {'lines': [f'第{i}句' for i in range(len(data['lines']))]}
+            return {'lines': [{'id': row['id'], 'text': f"第{row['id']}句"} for row in data['lines']]}
         return good_response(**bad)
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
-    assert result['fallback'] is True
+    assert result['translation_status'] == 'complete'
     assert [c['text'] for c in result['cues']] == ['第0句', '第1句', '第2句']
-    broken = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(**bad))
+    broken = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: {'lines': None})
     assert [c['text'] for c in broken['cues']] == [l['text'] for l in LINES]  # readable original captions survive rejected translation
 
 
@@ -116,7 +123,7 @@ def test_captions_are_added_only_when_the_audience_cannot_read_the_burned_ones(l
     result = packaging.build_packaging(DRAFT, lines, platform_strategy(platform), burned=True, burned_language=burned_language,
                                        call=lambda _p, data: sent.append(data) or response)
     assert [c['text'] for c in result['cues']] == ([expect] if expect else [])
-    assert sent[0]['translate'] is bool(expect and (expect == 'This is a subtitle' or zh))  # no translation asked for when not shown
+    assert (sent[0].get('task') == 'translate_captions') is bool(expect)  # no translation when not shown
 
 
 def test_japanese_is_not_mistaken_for_chinese():
@@ -174,12 +181,13 @@ def test_an_unknown_mood_keeps_the_golden_default_look():
     assert (result['mood'], result['palette'], result['style']) == (None, None, None)
 
 
-def test_a_rejected_response_is_retried_once_with_the_reason():
+def test_rejected_translation_is_repaired_before_decoration():
     sent = []
-    replies = iter([good_response(segments=[{'from': 1, 'to': 2, 'text': '乱序'}]), good_response()])
+    replies = iter([{'lines': []}, good_response(), good_response(), good_response(), good_response()])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda _, data: sent.append(data) or next(replies))
-    assert not result['fallback'] and len(result['cues']) == 2
-    assert 'previous_error' not in sent[0] and 'contiguous' in sent[1]['previous_error']
+    assert not result['fallback'] and len(result['cues']) == 3
+    assert 'repair' not in sent[0] and 'repair' in sent[1]
+    assert sent[-1]['task'] == 'decorate_captions'
 
 
 def test_titles_are_plain_text_in_the_audience_language():
@@ -204,9 +212,7 @@ def test_a_batch_does_not_repeat_the_last_palettes_when_the_mood_allows():
 
 
 def test_failed_translation_preserves_source_captions_instead_of_silent_video():
-    replies = iter([good_response(segments=[{'from': 0, 'to': 0, 'text': '第一句'}]),
-                    good_response(segments=[{'from': 0, 'to': 0, 'text': '第一句'}]),
-                    {'lines': ['数量不足的译文']}])
+    replies = iter([{'lines': []}, {'lines': ['没有编号的译文']}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: next(replies))
     assert result['fallback']
     assert [c['text'] for c in result['cues']] == [line['text'] for line in LINES]
@@ -222,10 +228,11 @@ def test_translation_recovery_uses_row_ids_and_retains_bilingual_source():
             return {'lines': [{'id': i, 'text': f'译文{i}'} for i in (2, 0, 1)]}
         return good_response(segments=[{'from': 0, 'to': 0, 'text': '第一句'}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
-    assert result['fallback'] and len(sent) == 3
+    assert not result['fallback'] and len(sent) == 4
     assert [c['text'] for c in result['cues']] == ['译文0', '译文1', '译文2']
     assert [c['original'] for c in result['cues']] == [line['text'] for line in LINES]
-    assert sent[0]['last_line_id'] == 2 and '2' in sent[1]['previous_error']
+    assert [row['id'] for data in sent[:-1] for row in data['lines']] == [0, 1, 2]
+    assert sent[-1]['task'] == 'decorate_captions'
 
 
 def test_duplicate_translation_ids_cannot_replace_a_missing_caption():
@@ -234,7 +241,8 @@ def test_duplicate_translation_ids_cannot_replace_a_missing_caption():
             return {'lines': [{'id': 0, 'text': '重复一'}, {'id': 0, 'text': '重复二'}, {'id': 2, 'text': '第三句'}]}
         return good_response(segments=None)
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
-    assert [c['text'] for c in result['cues']] == [l['text'] for l in LINES]
+    assert [c['text'] for c in result['cues']] == [LINES[0]['text'], LINES[1]['text'], '第三句']
+    assert result['translation_status'] == 'partial' and result['translated_rows'] == 1
 
 
 def test_failed_english_translation_does_not_burn_unreadable_chinese():
@@ -277,7 +285,7 @@ def test_person_names_from_mixed_title_survive_malformed_group_and_row_translati
         return good_response(title_lines=['斐济离开后', '新搭档配合很好'],
                              segments=[{'from': i, 'to': i, 'text': text} for i, text in enumerate(wrong)])
     result = packaging.build_packaging(draft, lines, platform_strategy('douyin'), call=call)
-    assert result['fallback'] and len(calls) == 3
+    assert result['fallback'] and len(calls) == 4
     assert [cue['text'] for cue in result['cues']] == [line['text'] for line in lines]
     assert all(not cue['original'] for cue in result['cues'])
     assert all(name in ''.join(result['title_lines']) for name in ('Fiji', 'Greg'))
@@ -299,11 +307,12 @@ def test_name_translation_can_recover_with_one_bounded_packaging_retry():
     lines = [{'start': 0., 'end': 2., 'text': 'Fiji and Greg worked here.'}]
     replies = iter([good_response(segments=[{'from': 0, 'to': 0, 'text': '斐济和格雷格在这里共事。'}]),
                     good_response(title_lines=['Fiji离开后', '我和Greg配合很好'],
-                                  segments=[{'from': 0, 'to': 0, 'text': 'Fiji 和 Greg 在这里共事。'}])])
+                                  segments=[{'from': 0, 'to': 0, 'text': 'Fiji 和 Greg 在这里共事。'}]),
+                    good_response(title_lines=['Fiji离开后', '我和Greg配合很好'])])
     calls = []
     result = packaging.build_packaging(draft, lines, platform_strategy('douyin'),
                                       call=lambda _, data: calls.append(data) or next(replies))
-    assert len(calls) == 2 and not result['fallback']
+    assert len(calls) == 3 and not result['fallback']
     assert result['cues'][0]['text'] == 'Fiji 和 Greg 在这里共事。'
 
 
@@ -316,6 +325,7 @@ def test_an_omitted_speaker_comes_from_the_listing_title_not_the_cover_line():
 
     def call(_prompt, _data):
         return {
+            'lines': [{'id': 0, 'text': '你说我们过去没有最好的那12个月'}, {'id': 1, 'text': '未来12个月将是最佳'}],
             'title_lines': ['未来十二个月将是最佳'], 'accent_line': 0,
             'segments': [
                 {'from': 0, 'to': 0, 'text': '你说我们过去没有最好的那12个月'},

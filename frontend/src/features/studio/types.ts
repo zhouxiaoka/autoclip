@@ -60,6 +60,8 @@ export interface Packaging {
   tags: { at: number; text: string }[]; tags_enabled: boolean; captions_enabled?: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
+  translation_status?: 'not_required' | 'complete' | 'partial' | 'source_fallback' | null
+  translated_rows?: number; translation_total_rows?: number
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
   mood?: 'calm' | 'serious' | 'bold' | 'warm' | 'playful' | null
   palette?: 'azure' | 'amber' | 'coral' | 'mint' | 'lemon' | 'rose' | 'lilac' | null
@@ -73,6 +75,7 @@ export interface Draft {
   parent_draft_id?: string | null; parent_revision?: number | null
   /** Automatic template packaging; kept as-is on save so edits never drop it. */
   packaging?: Packaging | null
+  ending_review_required?: boolean
 }
 export interface QaCheck { checker: 'avsync' | 'face' | 'loudness' | 'jitter' | 'ending'; outcome: 'pass' | 'fail' | 'skip'; bucket: string; duration_ms: number }
 export interface QaReport { schema_version: 1; mode: 'shadow'; duration_ms: number; checks: QaCheck[] }

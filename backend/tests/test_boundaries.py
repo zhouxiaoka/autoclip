@@ -94,12 +94,12 @@ def test_end_snaps_into_the_real_pause_instead_of_the_estimate():
     assert 6.1 < end <= 6.35  # inside the pause, before the next sentence starts at 6.5
 
 
-def test_an_end_without_a_pause_finishes_the_next_sentence_that_has_a_breath():
-    # "…is here." runs straight into "Second point…": no pause there, so end after the next breath.
+def test_a_later_breath_cannot_move_the_semantic_end_into_another_sentence():
+    # Audio alignment must not extend the selected sentence into the next point.
     rows = [(0.0, 5.0, 'First point is here.'), (5.0, 10.0, 'Second point follows.'), (10.0, 14.0, 'And the conclusion.')]
     pauses = lambda lo, hi: [(7.0, 7.2), (10.0, 10.9)]  # a hitch mid-sentence, then a clear breath
     _, end = b.sentence_bounds(rows, 0.0, 5.0, pauses)
-    assert 10.0 < end < 10.9
+    assert end == 5.0
 
 
 def test_a_pause_after_the_rest_of_the_row_is_not_taken_for_the_sentence_end():
@@ -111,12 +111,12 @@ def test_a_pause_after_the_rest_of_the_row_is_not_taken_for_the_sentence_end():
     assert 3230.07 < end < 3230.47
 
 
-def test_a_long_pause_just_after_extends_to_finish_the_passage():
+def test_a_long_pause_after_the_next_clause_cannot_override_the_selected_ending():
     rows = [(0.0, 4.0, 'The more you do, the more they attack you.'), (4.0, 6.0, 'State of the world. It will just escalate'),
             (10.0, 13.0, 'One thing I noticed about ideas.')]
     pauses = lambda lo, hi: [(4.9, 5.2), (6.1, 9.9)]  # after "world.", then the passage ends
     _, end = b.sentence_bounds(rows, 0.0, 5.0, pauses)
-    assert 6.1 < end < 6.5
+    assert 4.9 < end <= 5.2
 
 
 def test_start_begins_after_the_pause_before_the_first_word():
@@ -166,8 +166,9 @@ def merge_everything(_prompt, payload):
 
 def test_model_refinement_cannot_merge_neighbouring_clips():
     clips = [(0.0, 28.0), (30.0, 58.0)]
-    # Each clip alone accepts the merged span: this is what produced the duplicate drafts.
-    assert b.refine_with_model(SENTENCES, *clips[0], merge_everything) == b.refine_with_model(SENTENCES, *clips[1], merge_everything)
+    # The first merge is now outside the shorter end-search budget; neighbour guards
+    # still reject the second model result reaching back into the first clip.
+    assert b.refine_with_model(SENTENCES, *clips[0], merge_everything) is None
     (a_start, a_end), (b_start, b_end) = b.refine_clips(SENTENCES, clips, merge_everything)
     assert a_end <= b_start
     assert [(a_start, a_end), (b_start, b_end)] == [b.sentence_bounds(SENTENCES, *clip) for clip in clips]
@@ -178,9 +179,9 @@ def test_model_refinement_inside_the_gap_is_kept_and_order_does_not_matter():
 
     def finish_to_gap(_prompt, payload):
         texts = [line['text'] for line in payload['lines']]
-        if payload['start_line'] == texts.index('Sentence 0.'):
-            return {'start_line': payload['start_line'], 'end_line': texts.index('Sentence 26.')}
-        return {'start_line': payload['start_line'], 'end_line': payload['end_line']}
+        if texts[payload['end_line']] == 'Sentence 8.':
+            return {'end_line': texts.index('Sentence 26.')}
+        return {'end_line': payload['end_line']}
 
     refined = b.refine_clips(SENTENCES, clips, finish_to_gap)
     assert refined[1] == b.sentence_bounds(SENTENCES, 0.0, 28.0)

@@ -864,15 +864,21 @@ def _content_drafts(project_id, plan, video, platforms=()):
             except (TypeError, ValueError):
                 win_start = win_end = None
         drafts = []
+        ending_reviews = {tuple(bound): getattr(bound, 'needs_review', True) for bound in bounds}
         for clip, start, end in _distinct_ranges(picked, bounds):
+            ending_review = ending_reviews.get((start, end), True)
             # Transcript timestamps can run past the final video frame. Keep valid content
             # from that clip, and never let one invalid range discard the whole batch.
+            if end > source_duration:
+                ending_review = True
             end = min(end, source_duration)
             # T2: drop clips that fall entirely outside the requested source_window.
             if win_start is not None and win_end is not None:
                 if end <= win_start or start >= win_end:
                     continue
                 start = max(start, win_start)
+                if end > win_end:
+                    ending_review = True
                 end = min(end, win_end)
                 if end <= start:
                     continue
@@ -891,6 +897,7 @@ def _content_drafts(project_id, plan, video, platforms=()):
                 id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
                 language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
                 subtitles=True,
+                ending_review_required=ending_review,
             ).model_dump(), SCORE_KEY: _score(clip)})
         if not drafts:
             raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
@@ -1376,9 +1383,17 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache, *, allow_mod
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
         used = cache.setdefault('palettes', [])
+        from backend.services.studio.caption_translation import model_fingerprint
+        if 'translation_model_key' not in cache:
+            try:
+                cache['translation_model_key'] = model_fingerprint()
+            except (OSError, ValueError, TypeError, AttributeError):
+                cache['translation_model_key'] = ''  # optional cache must not block export
         with llm_usage.stage('packaging'):
             cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, burned_language=cache.get('burned_language'),
                                                    known_names=cache['names'],
+                                                   translation_cache=store.directory(project_id) / 'metadata' / 'caption-translations',
+                                                   model_key=cache['translation_model_key'],
                                                    avoid_palettes=tuple(used[-2:]), **({} if allow_model else {'allow_model': False}))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
@@ -1396,11 +1411,14 @@ def _fit_platform_limit(project_id, value, strategy):
     if not limit or sum(s['end'] - s['start'] for s in scenes) <= limit:
         return value, None
     try:
-        from backend.services.publish_export import _load_srt_entries, to_seconds
-        ends = sorted(to_seconds(e['end_time']) for e in _load_srt_entries(project_id) if e.get('end_time'))
+        from backend.services.publish_export import _load_srt_entries
+        from backend.services.studio.boundaries import rows_from_entries, ends_sentence, punctuated
+        rows = rows_from_entries(_load_srt_entries(project_id))
+        has_punct = punctuated(rows)
+        ends = sorted(row[1] for i, row in enumerate(rows) if ends_sentence(rows, i, has_punct))
     except Exception:  # noqa: BLE001 - no subtitles: fall back to an exact cut
         ends = []
-    remaining, kept = float(limit), []
+    remaining, kept, ending_review = float(limit), [], True
     for scene in scenes:
         length = scene['end'] - scene['start']
         if length <= remaining:
@@ -1410,8 +1428,9 @@ def _fit_platform_limit(project_id, value, strategy):
         target = scene['start'] + remaining
         boundary = [end for end in ends if scene['start'] + 1 < end <= target]
         kept.append({**scene, 'end': max(boundary) if boundary else target})
+        ending_review = not boundary
         break
-    return {**value, 'scenes': kept}, limit
+    return {**value, 'scenes': kept, 'ending_review_required': bool(ending_review)}, limit
 
 
 def _still_this_run(data, attempt_id, run_id) -> bool:
@@ -1864,6 +1883,7 @@ def _ensure_long_coverage(drafts, source_duration, min_sec):
     return [*drafts, {
         **template,
         'id': uuid.uuid4().hex,
+        'ending_review_required': True,
         'title': scene['label'],
         'scenes': [scene],
         SCORE_KEY: piece['score'],

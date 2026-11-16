@@ -2134,5 +2134,10 @@
   "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "This run recorded {{requests}} model requests, and {{successes}} of them returned successfully. This is not a charge.",
   "OpenAI 兼容网关。使用已保存的接口地址和密钥。": "OpenAI-compatible gateway. Uses the saved endpoint and key.",
   "该服务商当前不稳定。已保存的接口和密钥保持不变。": "This provider is unstable. The saved endpoint and key stay as they are.",
-  "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "This provider is paused. The saved endpoint and key stay as they are."
+  "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "This provider is paused. The saved endpoint and key stay as they are.",
+  "字幕翻译尚未完成，请检查后再发布": "Caption translation is incomplete. Review it before publishing.",
+  "字幕翻译已完成，使用简化包装": "Captions are translated; simplified styling is used.",
+  "片尾完整性需要复核，请预览最后一段": "The ending needs review. Preview the final passage.",
+  "只重试字幕翻译": "Retry caption translation only",
+  "补译后请保存并重新导出，已有成片保留。": "Save and export again after translation. Existing videos are kept."
 }

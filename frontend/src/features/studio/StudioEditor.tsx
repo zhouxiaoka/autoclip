@@ -50,6 +50,8 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [muted, setMuted] = useState(false)
   const [renderedDuration, setRenderedDuration] = useState(0)
   const [framing, setFraming] = useState<FramingState>({ busy: false })
+  const translationRequest = useRef<AbortController | null>(null)
+  useEffect(() => () => { translationRequest.current?.abort() }, [projectId, draftId])
   useEffect(() => {
     const controller = new AbortController()
     studioApi.subtitles(projectId, controller.signal).then(v => setCues(v.cues)).catch(() => setCues([]))
@@ -190,6 +192,21 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     if (!draft || !instruction.trim()) return
     await perform('rewrite', async () => setSuggestion(await studioApi.rewrite(projectId, draft, instruction.trim())))
   }
+  const retryTranslation = async () => {
+    if (!draft || busy) return
+    const controller = new AbortController()
+    translationRequest.current = controller
+    await perform('translate', async () => {
+      try {
+        const packaging = await studioApi.retryTranslation(projectId, draft, controller.signal)
+        if (controller.signal.aborted) return
+        setUndo(draft); patch({ packaging })
+        setNotice(packaging.translation_status === 'complete' ? '补译后请保存并重新导出，已有成片保留。' : '字幕翻译尚未完成，请检查后再发布')
+      } catch (error) {
+        if (!controller.signal.aborted) throw error
+      }
+    })
+  }
   if (!draft) return <div className="ac-page"><button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button><div className="ac-empty"><b>{loading ? t("加载成片草稿…") : t("无法打开草稿")}</b>{loadError || (!loading && t("草稿不存在或已移除"))}<Btn onClick={refresh}>{t("重试")}</Btn></div></div>
   const subtitlesOn = effectiveSubtitles(draft)
   const previewUrl = currentJob?.status === 'completed' ? studioApi.video(projectId, currentJob.job_id) : ''
@@ -225,6 +242,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
       </details>
       </section>
       <DraftSettingsPanel draft={draft} patch={patch} scene={scene} currentTime={currentTime} onShot={setShot}
+        onRetryTranslation={() => void retryTranslation()} translating={busy === 'translate'}
         framing={framing} onAutoFrame={() => void autoFrame()} onInstallFraming={() => void installFraming()} onPortrait={applyPortrait}
         coverHref={previewUrl && currentJob ? `/project/${projectId}/publish/studio-${currentJob.job_id}` : undefined}
         onOpenCover={href => navigate(href)} /></div>

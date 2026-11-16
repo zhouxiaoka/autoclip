@@ -2134,5 +2134,10 @@
   "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "Esta execução registrou {{requests}} pedidos ao modelo e {{successes}} tiveram sucesso. Isso não é uma cobrança.",
   "OpenAI 兼容网关。使用已保存的接口地址和密钥。": "Gateway compatível com OpenAI. Usa o endpoint e a chave salvos.",
   "该服务商当前不稳定。已保存的接口和密钥保持不变。": "Este provedor está instável. O endpoint e a chave salvos permanecem.",
-  "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "Este provedor está pausado. O endpoint e a chave salvos permanecem."
+  "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "Este provedor está pausado. O endpoint e a chave salvos permanecem.",
+  "字幕翻译尚未完成，请检查后再发布": "A tradução das legendas está incompleta. Revise antes de publicar.",
+  "字幕翻译已完成，使用简化包装": "As legendas foram traduzidas; foi usada uma apresentação simplificada.",
+  "片尾完整性需要复核，请预览最后一段": "O final precisa de revisão. Pré-visualize o último trecho.",
+  "只重试字幕翻译": "Tentar apenas a tradução novamente",
+  "补译后请保存并重新导出，已有成片保留。": "Salve e exporte novamente após a tradução. Os vídeos existentes são mantidos."
 }

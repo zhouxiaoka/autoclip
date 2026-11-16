@@ -44,7 +44,7 @@ class LLMClient:
         self.model = MODEL_NAME
         self.llm_manager = get_llm_manager()
     
-    def call(self, prompt: str, input_data: Any = None) -> str:
+    def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
         """
         调用大模型API - 使用新的LLM管理器
         
@@ -56,7 +56,7 @@ class LLMClient:
             模型响应文本
         """
         try:
-            return self.llm_manager.call(prompt, input_data)
+            return self.llm_manager.call(prompt, input_data, **kwargs)
         except Exception as e:
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None

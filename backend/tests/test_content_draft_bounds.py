@@ -1,5 +1,6 @@
 """Transcript/video duration mismatch cannot discard valid clips in the automatic batch."""
 from backend.services.studio import jobs
+from backend.services.studio.boundaries import ClipBounds
 
 
 def test_clamp_the_tail_and_skip_invalid_ranges_without_losing_other_clips(monkeypatch):
@@ -133,3 +134,39 @@ def test_small_overlap_between_neighbours_is_kept(monkeypatch):
     ]
     result = _content(monkeypatch, clips, [(0.0, 31.0), (27.0, 60.0)])
     assert [(d['scenes'][0]['start'], d['scenes'][0]['end']) for d in result] == [(0.0, 31.0), (27.0, 60.0)]
+
+
+def test_unresolved_end_survives_draft_validation_and_distinct_range_fallback(monkeypatch):
+    from backend.services.studio.models import Draft
+    clips = [{'generated_title': 'first', 'start_time_seconds': 0, 'end_time_seconds': 30, 'final_score': .4},
+             {'generated_title': 'second', 'start_time_seconds': 40, 'end_time_seconds': 70, 'final_score': .9}]
+    result = _content(monkeypatch, clips, [ClipBounds(0, 65), ClipBounds(40, 70)])
+    validate = lambda value: Draft.model_validate({k: v for k, v in value.items() if k != jobs.SCORE_KEY})
+    assert validate(result[0]).ending_review_required  # dedup restored the unverified original range
+    assert not validate(result[1]).ending_review_required
+    result = _content(monkeypatch, clips[:1], [ClipBounds(0, 30, needs_review=True)])
+    assert Draft.model_validate_json(validate(result[0]).model_dump_json()).ending_review_required
+
+
+def test_source_window_cut_invalidates_verified_ending(monkeypatch):
+    monkeypatch.setattr(jobs, 'run_content', lambda *_: [{'generated_title': 'clip', 'start_time_seconds': 0, 'end_time_seconds': 30}])
+    monkeypatch.setattr(jobs, '_complete_thought_bounds', lambda *_: [ClipBounds(0, 30)])
+    monkeypatch.setattr(jobs.intelligence, '_probe', lambda _: {'duration': 60})
+    draft = jobs._content_drafts('p', {'preferences': {'goal': 'content'}, 'overrides': {'source_window': {'start': 0, 'end': 25}}}, 'video.mp4')[0]
+    assert draft['scenes'][0]['end'] == 25 and draft['ending_review_required']
+
+
+def test_hard_platform_limit_cannot_treat_a_dangling_row_as_sentence_end(monkeypatch):
+    from backend.services import publish_export
+    from backend.services.platform_strategy import platform_strategy
+    entries = [{'start_time': '00:00:00,000', 'end_time': '00:02:45,000', 'text': 'A complete thought.'},
+               {'start_time': '00:02:45,000', 'end_time': '00:02:59,000', 'text': 'The next thought because'},
+               {'start_time': '00:03:00,000', 'end_time': '00:03:10,000', 'text': 'its explanation comes later.'}]
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda *_: entries)
+    original = {'scenes': [{'start': 0., 'end': 240.}], 'ending_review_required': False}
+    cut, _ = jobs._fit_platform_limit('p', original, platform_strategy('youtube_shorts'))
+    assert cut['scenes'][0]['end'] == 165 and not cut['ending_review_required']
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda *_: [])
+    cut, _ = jobs._fit_platform_limit('p', original, platform_strategy('youtube_shorts'))
+    assert cut['scenes'][0]['end'] == 180 and cut['ending_review_required']
+    assert original['scenes'][0]['end'] == 240 and not original['ending_review_required']

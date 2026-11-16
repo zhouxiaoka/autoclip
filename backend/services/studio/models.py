@@ -128,6 +128,10 @@ class Packaging(BaseModel):
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
+    # None for legacy projects: never infer translation completion from a playable file.
+    translation_status: Literal['not_required', 'complete', 'partial', 'source_fallback'] | None = None
+    translated_rows: int = Field(default=0, ge=0)
+    translation_total_rows: int = Field(default=0, ge=0)
     # Visual style inside the classic templates; None = the golden default (classic / pop).
     style: Literal['classic', 'boxed', 'spotlight', 'pop', 'cinematic'] | None = None
     # Content mood chosen by the model; it picks the palette and style (packaging.choose_look).
@@ -193,6 +197,7 @@ class Draft(BaseModel):
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
     packaging: Packaging | None = None
+    ending_review_required: bool = False
     # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
     # an English version of a source with Chinese captions in the picture.
     caption_mask: tuple[float, float] | None = None

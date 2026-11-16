@@ -378,7 +378,8 @@ def _stamp_cues(payload: dict) -> dict:
 
 def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy, *, burned: bool = False,
                     burned_language: str | None = None, known_names: str = '', call: Callable[[str, dict], dict] | None = None,
-                    avoid_palettes: tuple[str, ...] = (), allow_model: bool = True) -> dict[str, Any]:
+                    avoid_palettes: tuple[str, ...] = (), allow_model: bool = True,
+                    translation_cache=None, model_key='') -> dict[str, Any]:
     """Packaging dict for `Draft.packaging`; never raises for model problems."""
     template, audience = strategy.template, strategy.audience_language
     src = source_language([line['text'] for line in lines])
@@ -394,9 +395,11 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     fallback_title = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
+    if translate and lines:
+        return _translated_packaging(draft, lines, base, fallback, burned, known_names, call,
+                                     avoid_palettes, allow_model, translation_cache, model_key)
+    base['translation_status'] = fallback['translation_status'] = 'not_required'
     if not lines or not allow_model:
-        if translate and not burned:
-            fallback['cues'] = source_cues(lines, audience)
         return _stamp_cues(fallback)
     if call is None:
         from backend.services.studio.intelligence import text_json as call
@@ -407,7 +410,6 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
                'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
     # Short ASR rows make the segment contract easy to break once; a second try with the reason
     # usually fixes it, and losing the whole package (captions included) costs far more.
-    can_translate = True
     for attempt in range(2):
         try:
             result = call(PROMPT, payload)
@@ -419,56 +421,107 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
         except Exception as error:  # noqa: BLE001 - packaging must never block output
             logger.warning('Packaging fell back: %s', type(error).__name__)
-            can_translate = False
             break
-    if translate:
-        # Last resort for foreign-language audiences: plain line-by-line translation, so the
-        # version still gets captions in its own language instead of none (or the source's).
-        fallback['cues'] = (_translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
-                                              protected_terms=_protected_terms(draft, lines, audience)) if can_translate else [])
-        if not fallback['cues'] and not burned:
-            # A rejected model response must not turn an English interview into a captionless
-            # video. Keep readable source rows and disclose the loss of translation in the UI.
-            fallback['cues'] = source_cues(lines, audience)
     return _stamp_cues(fallback)
+
+
+def _translated_packaging(draft, lines, base, fallback, burned, known_names, call,
+                          avoid_palettes, allow_model, translation_cache, model_key):
+    """Translation is the required content; optional decoration cannot replace or discard it."""
+    from backend.core.job_budget import budget_expired, clip_step_budget, ensure_clip_job_budget
+    from backend.services.studio.caption_translation import translate
+    audience = base['audience_language']
+    translated = translate(lines, audience, terms=_protected_terms(draft, lines, audience), call=call,
+                           cache_dir=translation_cache, model_key=model_key, allow_model=allow_model)
+    facts, cues = _translation_content(lines, translated, audience, burned)
+    complete = facts['translation_status'] == 'complete'
+    result = {**fallback, **facts, 'cues': cues}
+    if not allow_model or not complete:
+        return _stamp_cues(result)
+    decorated_lines = [{**line, 'text': translated[i]} for i, line in enumerate(lines)]
+    payload = {'task': 'decorate_captions', 'template': base['template'], 'audience_language': audience,
+               'translate': False, 'title_limit': TITLE_LIMIT[audience], 'title_hint': draft.get('title', ''),
+               'known_names': known_names[:300], 'line_count': len(lines), 'last_line_id': len(lines) - 1,
+               'protected_terms': _protected_terms(draft, lines, audience),
+               'lines': [{'id': i, 'text': line['text']} for i, line in enumerate(decorated_lines)]}
+    step_expired = False
+    try:
+        with clip_step_budget(15):
+            try:
+                ensure_clip_job_budget()
+                if call is None:
+                    from backend.services.studio.intelligence import text_json
+                    response = text_json(PROMPT, payload, max_tokens=1200)
+                else:
+                    response = call(PROMPT, payload)
+                ensure_clip_job_budget()
+            finally:
+                step_expired = budget_expired()
+        package = _validated(response, decorated_lines, base, False, burned, known_names, draft, avoid_palettes, True)
+        # Validation can normalize decoration, but never rewrite accepted translations or their source timing.
+        for cue, retained in zip(package['cues'], cues):
+            cue.update(retained)
+        result = {**package, **facts}
+    except JobDurationExceeded:
+        if not step_expired:
+            raise
+        ensure_clip_job_budget()
+        logger.warning('Caption decoration timed out; keeping completed translation')
+    except (JobStopped, ProjectDeleted, ServiceRestarted):
+        raise
+    except Exception as error:  # noqa: BLE001 - optional decoration cannot invalidate translated captions
+        logger.warning('Caption decoration unavailable: %s', type(error).__name__)
+    return _stamp_cues(result)
+
+
+def _translation_content(lines, translated, audience, burned):
+    complete = bool(lines) and len(translated) == len(lines)
+    facts = {'translation_status': 'complete' if complete else 'partial' if translated else 'source_fallback',
+             'translated_rows': len(translated), 'translation_total_rows': len(lines)}
+    cues = []
+    for i, line in enumerate(lines):
+        text = translated.get(i)
+        original = line['text'][:600] if text is not None and audience == 'zh' and not burned else ''
+        if text is None:
+            # Preserve readable source rows only; do not claim them as target-language captions.
+            if burned or foreign_for(audience, line['text']):
+                continue
+            text = line['text'][:600]
+        cues.append({'start': line['start'], 'end': line['end'], 'text': text, 'original': original})
+    return facts, cues
+
+
+def retry_translation(project_id, draft):
+    """Return a caption-only editor suggestion. Never save a draft, select scenes or render a file."""
+    from backend.core import llm_usage, project_cancellation
+    from backend.core.job_budget import bound_clip_job, clip_step_budget, ensure_clip_job_budget
+    from backend.services.publish_export import _load_srt_entries
+    from backend.services.studio import caption_translation, store
+    if draft.packaging is None:
+        raise ValueError('原素材没有可用字幕，本次未烧录字幕')
+    if draft.packaging.translation_status == 'not_required' or draft.packaging.source_language == draft.packaging.audience_language:
+        return draft.packaging
+    lines = draft_lines(_load_srt_entries(project_id), [scene.model_dump() for scene in draft.scenes])
+    if not lines:
+        raise ValueError('原素材没有可用字幕，本次未烧录字幕')
+    kwargs = {'terms': _protected_terms(draft.model_dump(), lines, draft.packaging.audience_language),
+              'cache_dir': store.directory(project_id) / 'metadata' / 'caption-translations',
+              'model_key': caption_translation.model_fingerprint()}
+    with project_cancellation.bind(project_id), bound_clip_job(seconds=180), llm_usage.tracking(project_id), llm_usage.stage('packaging'):
+        try:
+            with clip_step_budget(120):
+                translated = caption_translation.translate(lines, draft.packaging.audience_language, **kwargs)
+        except JobDurationExceeded:
+            ensure_clip_job_budget()
+            translated = caption_translation.translate(lines, draft.packaging.audience_language, allow_model=False, **kwargs)
+        project_cancellation.checkpoint(project_id)
+    facts, cues = _translation_content(lines, translated, draft.packaging.audience_language, draft.packaging.burned_captions)
+    return Packaging.model_validate({**draft.packaging.model_dump(), **facts, 'cues': cues})
 
 
 def source_cues(lines: list[dict[str, Any]], audience: str) -> list[dict[str, Any]]:
     return [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''}
             for l in lines if not foreign_for(audience, l['text'])]
-
-
-def _translated_rows(lines: list[dict[str, Any]], audience: str, call, *, keep_original=False,
-                     protected_terms: list[str] | None = None) -> list[dict[str, Any]]:
-    language = {'zh': '简体中文', 'en': 'English'}[audience]
-    try:
-        result = call(f'把 lines 逐条翻译成{language}，口语自然，不合并、不遗漏，不添加事实。'
-                      'protected_terms 中的原文专名和术语在译文中必须保留拼写，不猜测音译或改成地名。'
-                      '每个输入 id 必须恰好返回一次。返回 {"lines":[{"id":0,"text":"..."}]}',
-                      {'protected_terms': protected_terms or [],
-                       'lines': [{'id': i, 'text': line['text']} for i, line in enumerate(lines)]})
-        rows = (result or {}).get('lines') if isinstance(result, dict) else None
-        if not isinstance(rows, list) or len(rows) != len(lines):
-            return []
-        if all(isinstance(r, dict) for r in rows):
-            ids = [r.get('id') for r in rows]
-            if any(type(i) is not int for i in ids) or set(ids) != set(range(len(lines))):
-                return []
-            rows = [r.get('text') for r in sorted(rows, key=lambda r: r['id'])]
-        # Accept the earlier ordered-string contract too; never silently zip a short result.
-        if not all(isinstance(r, str) and _clean(r) and not foreign_for(audience, r) for r in rows):
-            return []
-        if audience == 'zh' and not any(CJK.search(r) for r in rows):
-            return []
-        for line, row in zip(lines, rows):
-            _check_preserved_terms(line['text'], _clean(row)[:600], protected_terms or [])
-        return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600],
-                 'original': l['text'][:900] if keep_original else ''} for l, r in zip(lines, rows)]
-    except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
-        raise
-    except Exception as error:  # noqa: BLE001
-        logger.warning('Row translation failed: %s', type(error).__name__)
-        return []
 
 
 def _line(result_item: dict, lines: list) -> int | None:
