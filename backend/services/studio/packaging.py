@@ -407,6 +407,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
                'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
     # Short ASR rows make the segment contract easy to break once; a second try with the reason
     # usually fixes it, and losing the whole package (captions included) costs far more.
+    can_translate = True
     for attempt in range(2):
         try:
             result = call(PROMPT, payload)
@@ -418,12 +419,13 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
         except Exception as error:  # noqa: BLE001 - packaging must never block output
             logger.warning('Packaging fell back: %s', type(error).__name__)
+            can_translate = False
             break
     if translate:
         # Last resort for foreign-language audiences: plain line-by-line translation, so the
         # version still gets captions in its own language instead of none (or the source's).
-        fallback['cues'] = _translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
-                                             protected_terms=_protected_terms(draft, lines, audience))
+        fallback['cues'] = (_translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
+                                              protected_terms=_protected_terms(draft, lines, audience)) if can_translate else [])
         if not fallback['cues'] and not burned:
             # A rejected model response must not turn an English interview into a captionless
             # video. Keep readable source rows and disclose the loss of translation in the UI.

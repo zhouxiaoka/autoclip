@@ -91,3 +91,14 @@ def test_packaging_propagates_control_signals_without_another_model_call(packagi
     with pytest.raises(error):
         packaging.build_packaging({'title': 'Title'}, [{'start': 0, 'end': 5, 'text': 'Source words'}], strategy, call=call)
     assert len(calls) == (3 if translation else 1)
+
+
+def test_packaging_transport_failure_does_not_retry_as_translation(packaging_run):
+    _, _, _, strategy = packaging_run
+    calls = []
+    def call(*args):
+        calls.append(True)
+        raise RuntimeError('transport unavailable')
+    result = packaging.build_packaging({'title': 'Title'}, [{'start': 0, 'end': 5, 'text': 'Source words'}], strategy, call=call)
+    assert result['fallback'] and result['cues'][0]['text'] == 'Source words'
+    assert len(calls) == 1
