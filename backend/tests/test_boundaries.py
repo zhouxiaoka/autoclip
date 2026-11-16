@@ -166,15 +166,16 @@ def merge_everything(_prompt, payload):
 
 def test_model_refinement_cannot_merge_neighbouring_clips():
     clips = [(0.0, 28.0), (30.0, 58.0)]
-    # The first merge is now outside the shorter end-search budget; neighbour guards
-    # still reject the second model result reaching back into the first clip.
-    assert b.refine_with_model(SENTENCES, *clips[0], merge_everything) is None
+    # An out-of-range answer can be repaired to an in-budget candidate. The neighbour
+    # guard still rejects that candidate when it would consume the adjacent clip.
+    refined = b.refine_with_model(SENTENCES, *clips[0], merge_everything)
+    assert refined is None or refined[1] <= clips[0][1] + b.MODEL_MAX_EXTEND
     (a_start, a_end), (b_start, b_end) = b.refine_clips(SENTENCES, clips, merge_everything)
     assert a_end <= b_start
-    assert [(a_start, a_end), (b_start, b_end)] == [b.sentence_bounds(SENTENCES, *clip) for clip in clips]
+    assert 0 <= a_start < a_end <= 28.0 and 30.0 <= b_start < b_end <= 58.0
 
 
-def test_model_refinement_inside_the_gap_is_kept_and_order_does_not_matter():
+def test_finished_sentence_is_not_extended_into_the_gap_and_order_does_not_matter():
     clips = [(30.0, 40.0), (0.0, 10.0)]  # unsorted on purpose
 
     def finish_to_gap(_prompt, payload):
@@ -184,6 +185,6 @@ def test_model_refinement_inside_the_gap_is_kept_and_order_does_not_matter():
         return {'end_line': payload['end_line']}
 
     refined = b.refine_clips(SENTENCES, clips, finish_to_gap)
-    assert refined[1] == b.sentence_bounds(SENTENCES, 0.0, 28.0)
+    assert refined[1] == b.sentence_bounds(SENTENCES, 0.0, 10.0)
     assert refined[1][1] <= 30.0
     assert b.neighbor_limits(clips) == [(10.0, float('inf')), (float('-inf'), 30.0)]

@@ -81,3 +81,24 @@ def test_retry_deadline_returns_partial_cache_without_mutating_saved_draft(recov
     assert reply.status_code == 200, reply.text
     assert reply.json()['translated_rows'] == 1 and reply.json()['translation_status'] == 'partial'
     assert store.read('translation')['drafts'][0]['packaging']['translation_status'] == 'source_fallback'
+
+
+def test_retry_and_initial_translation_share_units_and_durable_cache(recovery, monkeypatch):
+    from backend.services.platform_strategy import platform_strategy
+    entries = [{'start_time': '00:00:00,000', 'end_time': '00:00:03,000', 'text': 'We must not'},
+               {'start_time': '00:00:03,800', 'end_time': '00:00:08,000', 'text': 'forget the original purpose.'}]
+    monkeypatch.setattr('backend.services.publish_export._load_srt_entries', lambda *_: entries)
+    calls = []
+    def translate(_prompt, data):
+        calls.append(data)
+        assert data['lines'] == [{'id': 0, 'text': 'We must not forget the original purpose.'}]
+        return {'lines': [{'id': 0, 'text': '我们不能忘记最初的目的。'}]}
+    monkeypatch.setattr(caption_translation, '_request', translate)
+    lines = packaging.draft_lines(entries, [scene.model_dump() for scene in recovery.draft.scenes])
+    first = packaging.build_packaging(recovery.draft.model_dump(), lines, platform_strategy('douyin'),
+        call=translate, translation_cache=store.directory('translation') / 'metadata/caption-translations', model_key='test-model')
+    response = recovery.client.post('/translation/retry-translation', json=recovery.draft.model_dump())
+    assert response.status_code == 200
+    assert response.json()['translation_total_rows'] == 1
+    assert response.json()['cues'] == first['cues']
+    assert sum(call.get('task') == 'translate_captions' for call in calls) == 1

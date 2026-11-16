@@ -61,6 +61,7 @@ export interface Packaging {
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
   translation_status?: 'not_required' | 'complete' | 'partial' | 'source_fallback' | null
+  /** Source translation units; not rendered pages or a measure of semantic correctness. */
   translated_rows?: number; translation_total_rows?: number
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
   mood?: 'calm' | 'serious' | 'bold' | 'warm' | 'playful' | null

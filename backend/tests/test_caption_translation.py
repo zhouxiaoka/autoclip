@@ -138,7 +138,22 @@ def test_real_request_adapter_binds_plain_translation_to_exactly_one_source_row(
     monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
     assert captions.translate(rows(1), 'zh') == {0: '这是第0个有用的想法。'}
     assert seen[0][0]['text'] == rows(1)[0]['text'] and 'lines' not in seen[0][0]
+    assert 'context_before' not in seen[0][0] and 'context_after' not in seen[0][0]
     assert seen[0][1] == {'max_tokens': 600}
+
+
+def test_neighbouring_facts_never_enter_the_translation_request(monkeypatch):
+    from backend.utils import llm_client
+    seen = []
+    def call(prompt, data, **kwargs):
+        seen.append(data)
+        return '这家公司很有吸引力。' if len(seen) == 1 else '但创建它很困难。'
+    monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
+    source = [{'text': 'This company is appealing.'}, {'text': 'But building it is difficult.'}]
+    translated = captions.translate(source, 'zh')
+    assert len(translated) == 2
+    assert [p['text'] for p in seen] == [r['text'] for r in source]
+    assert all(set(p) == {'text', 'protected_terms'} for p in seen)
 
 
 def test_long_sentence_cannot_be_accepted_as_one_character_from_another_row():

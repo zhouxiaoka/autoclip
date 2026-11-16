@@ -130,6 +130,8 @@ class Packaging(BaseModel):
     fallback: bool = False
     # None for legacy projects: never infer translation completion from a playable file.
     translation_status: Literal['not_required', 'complete', 'partial', 'source_fallback'] | None = None
+    # Coverage of source translation units (joined utterances), not original SRT rows,
+    # rendered subtitle pages, semantic correctness or generation success.
     translated_rows: int = Field(default=0, ge=0)
     translation_total_rows: int = Field(default=0, ge=0)
     # Visual style inside the classic templates; None = the golden default (classic / pop).

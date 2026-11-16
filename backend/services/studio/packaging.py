@@ -144,7 +144,7 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
     """Subtitle rows used by the draft, clipped to its scenes, in source seconds."""
     from backend.pipeline.quality import to_seconds
     lines = []
-    for scene in scenes:
+    for scene_index, scene in enumerate(scenes):
         for entry in entries:
             start, end = to_seconds(entry['start_time']), to_seconds(entry['end_time'])
             text = str(entry.get('text') or '').strip()
@@ -176,7 +176,7 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
                 # Silence-snapped cuts can overlap only the last few milliseconds of the
                 # previous question. Do not replay that entire row in captions or translation.
                 if b - a >= min(.15, (end - start) * .2):
-                    lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' ')})
+                    lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' '), '_scene': scene_index})
     return lines
 
 
@@ -447,6 +447,8 @@ def _translated_packaging(draft, lines, base, fallback, burned, known_names, cal
     """Translation is the required content; optional decoration cannot replace or discard it."""
     from backend.core.job_budget import budget_expired, clip_step_budget, ensure_clip_job_budget
     from backend.services.studio.caption_translation import translate
+    from backend.services.studio.caption_units import translation_units
+    lines = translation_units(lines)
     audience = base['audience_language']
     translated = translate(lines, audience, terms=_protected_terms(draft, lines, audience), call=call,
                            cache_dir=translation_cache, model_key=model_key, allow_model=allow_model)
@@ -518,7 +520,8 @@ def retry_translation(project_id, draft):
         raise ValueError('原素材没有可用字幕，本次未烧录字幕')
     if draft.packaging.translation_status == 'not_required' or draft.packaging.source_language == draft.packaging.audience_language:
         return draft.packaging
-    lines = draft_lines(_load_srt_entries(project_id), [scene.model_dump() for scene in draft.scenes])
+    from backend.services.studio.caption_units import translation_units
+    lines = translation_units(draft_lines(_load_srt_entries(project_id), [scene.model_dump() for scene in draft.scenes]))
     if not lines:
         raise ValueError('原素材没有可用字幕，本次未烧录字幕')
     kwargs = {'terms': _protected_terms(draft.model_dump(), lines, draft.packaging.audience_language),

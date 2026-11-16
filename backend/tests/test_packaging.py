@@ -5,9 +5,9 @@ from backend.services.platform_strategy import platform_strategy
 from backend.services.studio import packaging
 
 LINES = [
-    {'start': 10.0, 'end': 12.0, 'text': 'Paul had this thing he used to say'},
-    {'start': 12.0, 'end': 15.0, 'text': 'a good investor is like a flight instructor'},
-    {'start': 15.0, 'end': 18.0, 'text': 'Garry, you brought the same energy to founders'},
+    {'start': 10.0, 'end': 12.0, 'text': 'Paul used to say this.'},
+    {'start': 12.0, 'end': 15.0, 'text': 'A good investor is like a flight instructor.'},
+    {'start': 15.0, 'end': 18.0, 'text': 'Garry, you brought the same energy to founders.'},
 ]
 DRAFT = {'title': 'Great investors are flight instructors', 'hook': ''}
 
@@ -57,7 +57,7 @@ def test_names_not_seen_in_subtitles_or_listing_are_dropped():
 ])
 def test_decoration_segments_cannot_invalidate_completed_translation(bad):
     def call(prompt, data):
-        if '逐条翻译' in prompt:
+        if data.get('task') == 'translate_captions':
             return {'lines': [{'id': row['id'], 'text': f"第{row['id']}句"} for row in data['lines']]}
         return good_response(**bad)
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
@@ -224,7 +224,7 @@ def test_translation_recovery_uses_row_ids_and_retains_bilingual_source():
     sent = []
     def call(prompt, data):
         sent.append(data)
-        if '逐条翻译' in prompt:
+        if data.get('task') == 'translate_captions':
             return {'lines': [{'id': i, 'text': f'译文{i}'} for i in (2, 0, 1)]}
         return good_response(segments=[{'from': 0, 'to': 0, 'text': '第一句'}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
@@ -237,7 +237,7 @@ def test_translation_recovery_uses_row_ids_and_retains_bilingual_source():
 
 def test_duplicate_translation_ids_cannot_replace_a_missing_caption():
     def call(prompt, data):
-        if '逐条翻译' in prompt:
+        if data.get('task') == 'translate_captions':
             return {'lines': [{'id': 0, 'text': '重复一'}, {'id': 0, 'text': '重复二'}, {'id': 2, 'text': '第三句'}]}
         return good_response(segments=None)
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
@@ -275,7 +275,7 @@ def test_chinese_fallback_title_breaks_on_a_clause_not_inside_a_word():
 
 def test_unchanged_english_response_cannot_be_claimed_as_a_chinese_translation():
     def call(prompt, data):
-        if '逐条翻译' in prompt:
+        if data.get('task') == 'translate_captions':
             return {'lines': [line['text'] for line in LINES]}
         return good_response(segments=[{'from': 0, 'to': 2, 'text': 'Unchanged English source words.'}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
@@ -291,7 +291,7 @@ def test_person_names_from_mixed_title_survive_malformed_group_and_row_translati
     calls = []
     def call(prompt, data):
         calls.append(data)
-        if '逐条翻译' in prompt:
+        if data.get('task') == 'translate_captions':
             return {'lines': [{'id': i, 'text': text} for i, text in enumerate(wrong)]}
         return good_response(title_lines=['斐济离开后', '新搭档配合很好'],
                              segments=[{'from': i, 'to': i, 'text': text} for i, text in enumerate(wrong)])
