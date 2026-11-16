@@ -4,14 +4,16 @@ This change depends on the bounded pipeline/retry repairs. It does not authorize
 
 ## Translation
 
-Translation runs before optional decoration. Each production model request receives one
-target subtitle row, with neighbouring rows as context only, and returns plain text. Code
-owns the cue ID and timestamps. Real local-model experiments showed that a multi-row JSON
-request could merge adjacent sentences and renumber them, even when the response parsed.
+Translation runs before optional decoration. Display pages are rejoined into bounded source
+utterances or short passages before translation, without crossing explicit speaker/scene
+boundaries. Each production model request receives only that source unit and protected terms,
+and returns plain text. Separate neighbouring context is excluded: local-model comparisons
+showed that it could leak into the current cue. Code owns cue IDs and timestamps; display
+pagination follows translation. Sentence boundaries exclude initials and common abbreviations.
 
 Accepted rows survive later malformed replies, transport errors, step deadlines and decoration
 failure. Language, numbers, protected terms and conspicuously incomplete translations are
-checked. There is at most one content-repair attempt per missing row; transport failures do
+checked, including newly repeated whole paragraphs. There is at most one content-repair attempt per missing unit; transport failures do
 not trigger content retries. Responses that echo repair instructions are rejected, and oversized
 rows fall back rather than consuming an unbounded request. Each request inherits the job deadline and has a 45-second cap.
 The existing 300-second packaging budget still reserves time for export.
@@ -20,7 +22,7 @@ Project-local caches include subtitle text/timing, audience, protected terms, co
 identity and policy version. Cache reads revalidate content; writes are atomic and private.
 Only hashes name cache files. No captions, paths or model endpoints are added to analytics.
 
-`translation_status` describes row coverage (`not_required`, `complete`, `partial`, or
+`translation_status` describes source-unit coverage (`not_required`, `complete`, `partial`, or
 `source_fallback`); it does not certify semantic accuracy or publication quality. Legacy
 packages with no status remain unknown. Partial/source fallback is disclosed in all eight UI
 locales and is not labelled as completed bilingual subtitles.
@@ -39,7 +41,10 @@ fallback searches for an earlier complete sentence and refuses cuts that remove 
 clip. Unresolved endings retain a review flag through draft serialization and export warnings.
 
 Model refinement sees the tail's context and must choose an allowed row. Explicit dangling
-connectives and unpunctuated copulas are excluded; model extension is capped at 25 seconds.
+connectives and unpunctuated copulas are excluded. Extension requires a transcript-supported
+sentence ending and is capped at 25 seconds; a complete original ending cannot grow into the
+next topic. An invalid candidate ID gets at most one repair using allowed candidates only;
+transport failures and explicit review requests are not retried.
 The existing start alignment remains deterministic. Silence detection only adjusts within the
 chosen ending's window and cannot select a later sentence. Platform duration caps also use
 sentence endings; an unavoidable hard cut or unverified long-form extension is marked for review.
@@ -59,5 +64,9 @@ full quality gate. Real-media evidence must additionally bind input hashes, mode
 source version, actual exported files and last-passage review; test counts are not media acceptance.
 
 The representative media used locally are not the unavailable original production failures.
+Comparisons still exposed untranslated units, incorrect negation and awkward idioms with the
+local 3B model. Structural coverage and playable exports do not constitute content acceptance.
+Sentence timing within an SRT row is estimated, not word-level alignment. Review the same
+frozen material before/after and keep unresolved semantic errors as blockers.
 Raw video, subtitles, model replies and private run metadata stay outside this repository.
 Installed Windows/macOS acceptance and release promotion remain separate, required steps.
