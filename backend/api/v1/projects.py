@@ -809,38 +809,18 @@ async def get_project_logs(
     lines: int = Query(50, ge=1, le=1000, description="Number of log lines to return"),
     project_service: ProjectService = Depends(get_project_service)
 ):
-    """Get project logs."""
+    """Allowlisted log lines for this project. Raw log files are not returned."""
     try:
-        # 模拟日志数据，实际应该从日志服务获取
-        return {
-            "logs": [
-                {
-                    "timestamp": "2025-08-01T13:30:00.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "开始处理项目"
-                },
-                {
-                    "timestamp": "2025-08-01T13:30:05.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "Step 1: 提取大纲完成"
-                },
-                {
-                    "timestamp": "2025-08-01T13:30:10.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "Step 2: 时间定位完成"
-                },
-                {
-                    "timestamp": "2025-08-01T13:30:15.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "Step 3: 内容评分进行中..."
-                }
-            ]
-        }
-    except Exception as e:
+        from backend.core.path_utils import get_log_file_path
+        from backend.services.diagnostics.redact import sanitized_log_file
+        project = project_service.get(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        logs = sanitized_log_file(get_log_file_path(), project_id=project_id, limit=lines)
+        return {"logs": logs, "returned_lines": len(logs)}
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("获取项目日志失败: %s", project_id)
         raise HTTPException(status_code=500, detail="获取项目日志失败，请稍后重试")
 

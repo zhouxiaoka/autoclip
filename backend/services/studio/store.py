@@ -414,7 +414,16 @@ def _post_deferred_terminals(pending):
     accept(pending)
 
 
-lock.after_release = _deliver_deferred_terminals
+def _after_store_release():
+    _deliver_deferred_terminals()
+    try:
+        from backend.services.diagnostics.observe import deliver_pending
+        deliver_pending()
+    except Exception:
+        logger.warning('diagnostics delivery failed')
+
+
+lock.after_release = _after_store_release
 
 
 def _replace_state(temporary, destination):
@@ -1047,6 +1056,11 @@ def write(project_id, data, *, restore=False):
         _observe_worker_write(path, previous, data)
         _io_failures.pop(path, None)
         _defer_terminals(pending)  # send after the outermost lock release, never while this write holds it
+        try:
+            from backend.services.diagnostics.observe import schedule_new_failures
+            schedule_new_failures(project_id, previous, data)
+        except Exception:
+            logger.warning('diagnostics schedule failed')
     except OSError:
         if refs is not None:
             rollback_refs(refs)  # the surviving studio.json keeps its references protected

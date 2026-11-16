@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Switch, message } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { settingsApi } from '../services/api'
+import { diagnosticsApi, settingsApi } from '../services/api'
 import AIModelSettings from '../features/settings/AIModelSettings'
 import OutputBrandingSetting from '../features/settings/OutputBrandingSetting'
 import OutputCaptionsSetting from '../features/settings/OutputCaptionsSetting'
@@ -130,6 +130,9 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
+  const [helpDiagnostics, setHelpDiagnostics] = useState(false)
+  const [helpMedia, setHelpMedia] = useState(false)
+  const [helpOriginal, setHelpOriginal] = useState(false)
   const crashPreferenceChanged = useRef(false)
   const [version, setVersion] = useState('')
   const appUpdate = useAppUpdate()
@@ -154,6 +157,16 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           }
         } catch {
           /* 后端未起或非桌面数据目录时用 localStorage */
+        }
+        try {
+          const grant = await diagnosticsApi.consent()
+          if (active) {
+            setHelpDiagnostics(grant.diagnostics)
+            setHelpMedia(grant.media)
+            setHelpOriginal(grant.full_original)
+          }
+        } catch {
+          /* 诊断同意只存在本机；读不到就保持关闭 */
         }
       } catch (err) {
         console.error('检查自动启动状态失败:', err)
@@ -181,6 +194,23 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const toggleKeepAwake = (enabled: boolean) => {
     setKeepAwake(enabled)
     getKeepAwakeController().onEnabledChange(enabled)
+  }
+
+  const saveDiagnostics = async (diagnostics: boolean, media: boolean, fullOriginal: boolean) => {
+    setHelpDiagnostics(diagnostics)
+    setHelpMedia(media)
+    setHelpOriginal(fullOriginal)
+    try {
+      const saved = await diagnosticsApi.setConsent({
+        diagnostics, media, full_original: fullOriginal, informed: true,
+      })
+      setHelpDiagnostics(saved.diagnostics)
+      setHelpMedia(saved.media)
+      setHelpOriginal(saved.full_original)
+      if (!saved.diagnostics) message.info(t('关闭改进后，新的失败不会再自动上传。'))
+    } catch {
+      message.warning(t('诊断设置没有保存，请重试。'))
+    }
   }
 
   const toggleCrashReports = async (enabled: boolean) => {
@@ -257,6 +287,15 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
+        </Row>
+        <Row label={t("帮助改进 AutoClip")} hint={t("失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。关闭后会停掉尚未完成的上传。")}>
+          <Switch checked={helpDiagnostics} onChange={(enabled) => void saveDiagnostics(enabled, enabled ? helpMedia : false, enabled && helpMedia ? helpOriginal : false)} />
+        </Row>
+        <Row label={t("允许附带失败任务的片段")} hint={t("在已开启改进诊断后，可额外上传该任务开头的短片段。短片段可能复现不了片尾才出现的超时。默认仍然关闭。")}>
+          <Switch checked={helpMedia} disabled={!helpDiagnostics} onChange={(enabled) => void saveDiagnostics(true, enabled, enabled ? helpOriginal : false)} />
+        </Row>
+        <Row label={t("允许附带完整原片")} hint={t("需要单独同意。完整原片体积大，只在你明确允许后才会上传，并且受大小上限约束。")}>
+          <Switch checked={helpOriginal} disabled={!helpDiagnostics || !helpMedia} onChange={(enabled) => void saveDiagnostics(true, true, enabled)} />
         </Row>
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>

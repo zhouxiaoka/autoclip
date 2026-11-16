@@ -65,4 +65,7 @@ api_router.include_router(studio_router, prefix="/studio", tags=["studio"])
 from .example_project import router as example_project_router
 api_router.include_router(example_project_router, tags=["example-project"])
 
+from .diagnostics import router as diagnostics_router
+api_router.include_router(diagnostics_router, tags=["diagnostics"])
+
 __all__ = ["api_router"]

@@ -8,6 +8,7 @@ import { projectApi } from '../services/api'
 import { studioApi } from '../features/studio/api'
 import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
+import DiagnosticsDialog from '../features/diagnostics/DiagnosticsDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
 import { llmFailureText } from '../utils/llmFailure'
@@ -282,6 +283,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                          project.status === 'processing' ? 10 : 0
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const [diagnoseOpen, setDiagnoseOpen] = useState(false)
   const failedProgress = useSimpleProgressStore((st) => st.getProgress(project.id))
   const failureContext = {
@@ -484,6 +486,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               }}>{t(weakLocalTimeline && switchOptions && switchOptions.length ? '切换并重试' : failureView.primary.label)}</Btn>}
               <div className="ac-failure-weak">
                 <Btn variant="text" size="sm" onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn>
+                <Btn variant="text" size="sm" onClick={() => setDiagnosticsOpen(true)}>{t('提交诊断')}</Btn>
                 <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t('反馈')}</Btn>
               </div>
             </div>
@@ -500,6 +503,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t("确定要删除这个项目吗？")} description={t("删除后无法恢复")}
         footer={<div className="right"><Btn onClick={() => setDeleteOpen(false)}>{t("取消")}</Btn><Btn variant="danger" onClick={() => { setDeleteOpen(false); onDelete(project.id) }}>{t("确定")}</Btn></div>} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+      <DiagnosticsDialog open={diagnosticsOpen} onClose={() => setDiagnosticsOpen(false)} projectId={project.id} />
       <DiagnosePanel open={diagnoseOpen} onClose={() => setDiagnoseOpen(false)} info={{ error: rawFailure, error_code: project.error_code, upstream_error_type: upstreamType, failure_stage: project.processing_config?.failure_stage || project.settings?.failure_stage, llm_calls: Number.isFinite(requestCount) ? requestCount : undefined, billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined }} reason={failureView.reason} onSettings={destination => navigate(destination)} />
       <SwitchModelDialog
         open={switchOpen}
