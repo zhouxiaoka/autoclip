@@ -1331,19 +1331,33 @@ def _packaging_inputs(project_id, cache):
 def _prefetch_packaging(project_id, items, burned, cache):
     """Run the packaging model calls of a batch side by side (one per distinct content and template).
 
-    Each call waits ~20 s on the model; done one after another they were ~8 minutes for 25 clips.
+    Keep completed packages when the optional phase expires; remaining drafts use
+    deterministic fallback captions so model formatting cannot block rendering.
     """
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)  # load shared inputs once, before the threads
     first = {}
     for strategy_id, value in items:
         strategy = _project_strategy(project_id, strategy_id)
         key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
         first.setdefault(key, (strategy_id, value))
-    map_chunks(lambda item: _apply_packaging(project_id, item[1], item[0], burned, cache), first.values())
+    def one(item):
+        ensure_clip_job_budget()
+        return _apply_packaging(project_id, item[1], item[0], burned, cache)
+
+    try:
+        with clip_step_budget(packaging.PACKAGING_BUDGET_SEC, reserve_seconds=30):
+            map_chunks(one, first.values(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # expiration of the whole job is still terminal
+        logger.warning('Packaging step timed out; keeping completed packages and available source captions')
+        for strategy_id, value in first.values():
+            _apply_packaging(project_id, value, strategy_id, burned, cache, allow_model=False)
 
 
-def _apply_packaging(project_id, value, strategy_id, burned, cache):
+def _apply_packaging(project_id, value, strategy_id, burned, cache, *, allow_model=True):
     """Attach template packaging (title, captions, nameplates, tags) for vertical templates.
 
     One model call per scene set and template; every vertical platform of the same audience
@@ -1365,7 +1379,7 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
         with llm_usage.stage('packaging'):
             cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, burned_language=cache.get('burned_language'),
                                                    known_names=cache['names'],
-                                                   avoid_palettes=tuple(used[-2:]))
+                                                   avoid_palettes=tuple(used[-2:]), **({} if allow_model else {'allow_model': False}))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
     return {**value, 'packaging': cache[key]}
