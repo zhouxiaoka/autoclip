@@ -262,7 +262,7 @@ def test_render_ffmpeg_wall_time_does_not_spend_clip_budget(isolated, monkeypatc
 
 def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isolated, monkeypatch):
     from backend.core import job_budget
-    from backend.services.studio import intelligence
+    from backend.services.studio import caption_translation
     now = [100.0]
     monkeypatch.setattr(job_budget.time, 'monotonic', lambda: now[0])
     draft = {'id': 'd1', 'title': 'Title', 'scenes': [{'id': 's1', 'label': 'Scene', 'start': 0.0, 'end': 12.0}]}
@@ -285,7 +285,7 @@ def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isol
         while not job_budget.budget_expired():
             now[0] += 30
         raise JobDurationExceeded()
-    monkeypatch.setattr(intelligence, 'text_json', slow)
+    monkeypatch.setattr(caption_translation, '_request', slow)
     dispatched = []
     monkeypatch.setattr(jobs, '_dispatch_pending_variants', dispatched.append)
     jobs._produce_on_demand('ondemand-step-budget', 'v1')

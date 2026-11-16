@@ -170,3 +170,13 @@ def test_hard_platform_limit_cannot_treat_a_dangling_row_as_sentence_end(monkeyp
     cut, _ = jobs._fit_platform_limit('p', original, platform_strategy('youtube_shorts'))
     assert cut['scenes'][0]['end'] == 180 and cut['ending_review_required']
     assert original['scenes'][0]['end'] == 240 and not original['ending_review_required']
+
+
+def test_platform_cap_does_not_discard_most_of_clip_for_a_distant_sentence(monkeypatch):
+    from backend.services import publish_export
+    from backend.services.platform_strategy import platform_strategy
+    entries = [{'start_time': '00:00:00,000', 'end_time': '00:00:10,000', 'text': 'Opening.'}]
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda *_: entries)
+    cut, _ = jobs._fit_platform_limit('p', {'scenes': [{'start': 0., 'end': 240.}]},
+                                     platform_strategy('youtube_shorts'))
+    assert cut['scenes'][0]['end'] == 180 and cut['ending_review_required']

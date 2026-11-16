@@ -150,6 +150,23 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
             text = str(entry.get('text') or '').strip()
             if not text or end <= scene['start'] or start >= scene['end']:
                 continue
+            # Sentence refinement can cut inside a multi-sentence SRT row. Keep its
+            # text on the same boundary, rather than translating the unspoken next sentence.
+            from backend.services.studio.boundaries import _inner_ends, _time_at, _cut_window
+            row = (start, end, text)
+            points = [(offset, _time_at(row, offset)) for offset in _inner_ends(text)]
+            def nearest_cut(at):
+                fits = [(offset, when) for offset, when in points
+                        if _cut_window([row], 0, offset, when)[0] <= at <= _cut_window([row], 0, offset, when)[1]]
+                return min(fits, key=lambda point: abs(point[1] - at))[0] if fits else None
+            left = nearest_cut(scene['start']) if start + .15 < scene['start'] < end else None
+            right = nearest_cut(scene['end']) if start < scene['end'] < end - .15 else None
+            if (left is not None or right is not None) and (left or 0) < (right if right is not None else len(text)):
+                text = text[left or 0:right].strip()
+                if left is not None:
+                    start = scene['start']
+                if right is not None:
+                    end = scene['end']
             from backend.services.studio.caption_layout import timed_screens, width
             # Paragraph cues need pages on their source clock, just like landscape subtitles.
             # This also avoids silently losing their tail to PackagingCue's 600-character cap.

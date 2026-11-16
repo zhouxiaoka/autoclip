@@ -147,6 +147,19 @@ def test_long_sentence_cannot_be_accepted_as_one_character_from_another_row():
     assert captions._valid('Our company is for everyone.', '我们的公司是为了 all', 'zh', ()) is None
 
 
+def test_repair_instruction_echo_is_rejected_instead_of_cached_as_translation(monkeypatch):
+    from backend.utils import llm_client
+    echo = '只补齐本批未通过校验的 ID；勿复述已成功译文，保留数字和专名。'
+    monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=lambda *args, **kwargs: echo))
+    source = [{'start': 0., 'end': 2., 'text': 'And maybe my highest advice'}]
+    assert captions.translate(source, 'zh') == {}
+
+
+def test_oversized_source_row_does_not_exhaust_a_request_or_truncate_a_translation():
+    source = [{'start': 0., 'end': 10., 'text': 'words ' * 1000}]
+    assert captions.translate(source, 'zh', call=lambda *_: pytest.fail('oversized source sent')) == {}
+
+
 def test_model_cache_identity_uses_endpoint_and_controls_but_not_credentials(monkeypatch):
     from backend.core import llm_manager
     info = {'provider': 'test', 'backend_provider': 'openai', 'model': 'local', 'base_url': 'http://a/v1'}

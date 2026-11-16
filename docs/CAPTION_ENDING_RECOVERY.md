@@ -12,7 +12,8 @@ request could merge adjacent sentences and renumber them, even when the response
 Accepted rows survive later malformed replies, transport errors, step deadlines and decoration
 failure. Language, numbers, protected terms and conspicuously incomplete translations are
 checked. There is at most one content-repair attempt per missing row; transport failures do
-not trigger content retries. Each request inherits the job deadline and has a 45-second cap.
+not trigger content retries. Responses that echo repair instructions are rejected, and oversized
+rows fall back rather than consuming an unbounded request. Each request inherits the job deadline and has a 45-second cap.
 The existing 300-second packaging budget still reserves time for export.
 
 Project-local caches include subtitle text/timing, audience, protected terms, configured model
@@ -42,6 +43,8 @@ connectives and unpunctuated copulas are excluded; model extension is capped at 
 The existing start alignment remains deterministic. Silence detection only adjusts within the
 chosen ending's window and cannot select a later sentence. Platform duration caps also use
 sentence endings; an unavoidable hard cut or unverified long-form extension is marked for review.
+When a sentence cut falls inside an SRT row, its caption text is trimmed at the same nearby
+sentence boundary before translation, so unspoken text is not burned into the ending.
 
 These are heuristics plus model assistance, not word-level forced alignment. Unpunctuated
 ASR, topic changes and model mistakes still require reviewing the final passage. Declined or

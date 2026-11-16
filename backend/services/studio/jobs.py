@@ -1426,7 +1426,7 @@ def _fit_platform_limit(project_id, value, strategy):
             remaining -= length
             continue
         target = scene['start'] + remaining
-        boundary = [end for end in ends if scene['start'] + 1 < end <= target]
+        boundary = [end for end in ends if max(scene['start'] + 1, target - 25) < end <= target]
         kept.append({**scene, 'end': max(boundary) if boundary else target})
         ending_review = not boundary
         break

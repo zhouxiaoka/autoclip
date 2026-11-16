@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 MAX_ROWS = 1
 MAX_CHARS = 1100
 BATCH_SECONDS = 45
-POLICY_VERSION = 2
+POLICY_VERSION = 3
 _LOCK = threading.Lock()
 PROMPT = (
     '你是字幕译员，逐条翻译。本次只翻译 text，只输出译文，不输出 JSON、解释或原文。'
@@ -35,7 +35,7 @@ def _request(prompt, data):
     payload = {key: data[key] for key in ('context_before', 'context_after', 'protected_terms')}
     payload['text'] = row['text']
     if data.get('repair'):
-        payload['repair'] = data['repair']
+        prompt += '上次译文不合格。请直接翻译 text 的内容，保留数字和专名；不要复述这些规则。'
     return {'lines': [{'id': row['id'], 'text': LLMClient().call(prompt, payload, max_tokens=600)}]}
 
 
@@ -93,6 +93,9 @@ def _valid(source, text, audience, terms):
         return None
     text = _clean(text)
     if not text or len(text) > 600 or '\n' in text or text.startswith(('{', '[')):
+        return None
+    if any(marker in text for marker in ('只补齐本批未通过校验', '勿复述已成功译文', '只输出译文，不输出',
+                                         'context_before', 'context_after', '上次译文不合格')):
         return None
     try:
         _check_preserved_terms(source, text, terms)
@@ -175,7 +178,7 @@ def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = 
         return found
     if call is None:
         call = _request
-    for batch in _batches([i for i in range(len(lines)) if i not in found], lines):
+    for batch in _batches([i for i in range(len(lines)) if i not in found and len(lines[i]['text']) <= MAX_CHARS], lines):
         pending = list(batch)
         for attempt in range(2):
             checkpoint()

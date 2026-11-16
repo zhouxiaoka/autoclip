@@ -258,6 +258,17 @@ def test_negligible_tail_of_a_previous_subtitle_is_not_replayed():
     assert [l['text'] for l in lines] == ['The answer starts here.']
 
 
+@pytest.mark.parametrize('edge', ['start', 'end'])
+def test_sentence_cut_inside_one_srt_row_trims_the_caption_text_as_well(edge):
+    text = 'Earlier thought. The next complete thought. But now we can'
+    offset = text.index(' But now')
+    cut = 10. + 8. * offset / len(text)
+    entries = [{'start_time': '00:00:10,000', 'end_time': '00:00:18,000', 'text': text}]
+    scene = {'start': 10., 'end': cut + .2} if edge == 'end' else {'start': cut + .1, 'end': 18.}
+    lines = packaging.draft_lines(entries, [scene])
+    assert ' '.join(row['text'] for row in lines) == (text[:offset] if edge == 'end' else text[offset:].strip())
+
+
 def test_chinese_fallback_title_breaks_on_a_clause_not_inside_a_word():
     assert packaging._fallback_title({'title': '我们曾掉队，现在执行力全球最强'}, 'zh') == ['我们曾掉队，', '现在执行力全球最强']
 
