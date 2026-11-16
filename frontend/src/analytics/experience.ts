@@ -49,9 +49,100 @@ export function safeExperience(value: Record<string, unknown>): Properties {
 export function trackExperience(event: ExperienceEvent, properties: Record<string, unknown>) {
   captureBusinessEvent(event, safeExperience(properties))
 }
-/** Settings access check. Never include keys or a full URL. */
+/** Quiet window for one edit-discovery pair, and for an identical validation repeat. */
+export const CAPTURE_QUIET_MS = 1500
+
+/** Connection fields that should rediscover models. Not a telemetry payload. */
+export function connectionSignature(value: { connections?: Array<{ id?: string; provider?: string; base_url?: string; api_key?: string | null; image_base_url?: string }> } | null | undefined) {
+  return JSON.stringify((value?.connections || []).map(c => [c.id, c.provider, c.base_url, c.api_key ?? '', c.image_base_url]))
+}
+
+/** trigger=load, manual, and provider_change always report. trigger=edit reports only after the loaded document changes. */
+export function shouldReportModelDiscovery(trigger: string, currentSignature: string, loadedSignature: string | null) {
+  return trigger !== 'edit' || currentSignature !== loadedSignature
+}
+
+type ExperienceFinish = (outcome: 'completed' | 'failed' | 'blocked', extra?: Record<string, unknown>, error?: unknown) => void
+type EditSlot = {
+  id: number
+  timer: ReturnType<typeof setTimeout> | null
+  properties: Record<string, unknown>
+  settled: { outcome: 'completed' | 'failed' | 'blocked'; extra: Record<string, unknown>; error?: unknown } | null
+  quiet: boolean
+  sent: boolean
+}
+let editSerial = 0
+const editSlots = new Map<string, EditSlot>()
+const loadedSettings = new Map<string, string>()
+let lastValidation = { key: '', at: 0 }
+
+function rememberEdit(slot: EditSlot, outcome: 'completed' | 'failed' | 'blocked', extra: Record<string, unknown>, error?: unknown) {
+  // A failure inside the burst is the outcome we keep. A later success must not hide it.
+  if (slot.settled?.outcome === 'failed' && outcome !== 'failed') return
+  slot.settled = { outcome, extra, error }
+}
+
+function emitEdit(slot: EditSlot) {
+  if (slot.sent || !slot.settled) return
+  slot.sent = true
+  if (slot.timer) clearTimeout(slot.timer)
+  slot.timer = null
+  beginExperience('model_discovery', slot.properties)(slot.settled.outcome, slot.settled.extra, slot.settled.error)
+}
+
+/**
+ * trigger=edit only. Keystrokes and incremental setting changes in one placement
+ * become one requested/finished pair, CAPTURE_QUIET_MS after the last call.
+ * The discovery request itself is not delayed here.
+ */
+export function beginDebouncedEditDiscovery(properties: Record<string, unknown>, quietMs = CAPTURE_QUIET_MS): ExperienceFinish {
+  const key = typeof properties.placement === 'string' ? properties.placement : 'default'
+  let slot = editSlots.get(key)
+  if (!slot || slot.sent) {
+    slot = { id: ++editSerial, timer: null, properties, settled: null, quiet: false, sent: false }
+    editSlots.set(key, slot)
+  }
+  const generation = slot.id
+  slot.properties = properties
+  slot.quiet = false
+  if (slot.timer) clearTimeout(slot.timer)
+  slot.timer = setTimeout(() => {
+    const current = editSlots.get(key)
+    if (!current || current.id !== generation || current.sent) return
+    current.quiet = true
+    current.timer = null
+    emitEdit(current)
+  }, quietMs)
+  let used = false
+  return (outcome, extra = {}, error) => {
+    if (used) return
+    used = true
+    const current = editSlots.get(key)
+    if (!current || current.id !== generation || current.sent) return
+    rememberEdit(current, outcome, extra, error)
+    if (current.quiet) emitEdit(current)
+  }
+}
+
+/** True the first time this placement loads this document, and again when it changes. Failures do not call this. */
+export function claimModelSettingsLoad(placement: string, snapshot: unknown): boolean {
+  const key = placement || 'default'
+  let signature = ''
+  try { signature = JSON.stringify(snapshot) } catch { return true }
+  if (loadedSettings.get(key) === signature) return false
+  loadedSettings.set(key, signature)
+  return true
+}
+
+/** Settings access check. Never include keys or a full URL.
+ * Identical results inside CAPTURE_QUIET_MS collapse; a new result or probe still emits. */
 export function trackProviderValidation(properties: Record<string, unknown>) {
-  captureBusinessEvent(SuccessRateEvent.ProviderValidationFinished, sanitizeProviderValidationProperties(properties))
+  const safe = sanitizeProviderValidationProperties(properties)
+  const key = JSON.stringify([safe.provider, safe.base_url_host, safe.result, safe.upstream_error_type, safe.probe_kind, safe.trial_context_ok, safe.trial_rate_limited, safe.trial_json_ok])
+  const now = Date.now()
+  if (key === lastValidation.key && now - lastValidation.at < CAPTURE_QUIET_MS) return
+  lastValidation = { key, at: now }
+  captureBusinessEvent(SuccessRateEvent.ProviderValidationFinished, safe)
 }
 /** The same token gates request + result, including consent changes while awaiting an API. */
 export function beginExperience(name: 'model_settings_load' | 'model_discovery' | 'provider_configuration_save' | 'provider_connection_test' | 'example_project_open' | 'output_branding_save', properties: Record<string, unknown>) {
