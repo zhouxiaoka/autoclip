@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +188,16 @@ def _platform_rule(platform_min_sec: float | None, platform_min_label: str) -> s
     )
 
 
+def _wait_before_retry(seconds: float, stopped: threading.Event) -> None:
+    """Observe user cancellation and the job cap even during a long Retry-After."""
+    deadline = time.monotonic() + seconds
+    while True:
+        checkpoint()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or stopped.wait(min(0.2, remaining)):
+            return
+
+
 def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, metadata_dir: Path | None = None,
                window: WindowSize | None = None, platform_min_sec: float | None = None,
                platform_min_label: str = '') -> list[dict[str, Any]]:
@@ -239,7 +250,7 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
                 if info.error_type.value == 'rate_limited':
                     from .concurrency import note_rate_limited
                     note_rate_limited()
-                stopped.wait(clip_job_read_timeout(backoff_seconds(retry_after, attempt)))
+                _wait_before_retry(clip_job_read_timeout(backoff_seconds(retry_after, attempt)), stopped)
         return None
 
     def one(span):

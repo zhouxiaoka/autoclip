@@ -121,6 +121,31 @@ def test_spent_job_budget_stops_before_retry(one_pass, monkeypatch):
     assert len(calls) == 1
 
 
+def test_cancel_during_long_backoff_is_checked_promptly(one_pass, monkeypatch):
+    waits, calls = [], []
+    error = ProviderFailure(429, 'rate_limit_exceeded')
+    error.retry_after = 120
+    stopped = JobStopped()
+    def checkpoint():
+        if waits:
+            raise stopped
+    def wait(_event, seconds):
+        waits.append(seconds)
+        return False
+    def call(*args):
+        calls.append(args)
+        raise error
+    monkeypatch.setattr(clip_finder, 'checkpoint', checkpoint)
+    monkeypatch.setattr(threading.Event, 'wait', wait)
+    monkeypatch.setattr(intelligence, 'text_json', call)
+    with pytest.raises(JobStopped) as caught:
+        one_pass()
+    assert caught.value is stopped
+    assert len(calls) == 1
+    assert waits and max(waits) <= 0.25
+    concurrency.reset_limiter()
+
+
 def test_terminal_window_failure_does_not_start_queued_windows(monkeypatch):
     monkeypatch.setenv('AUTOCLIP_LLM_CONCURRENCY', '2')
     concurrency.reset_limiter()

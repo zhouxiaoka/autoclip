@@ -704,6 +704,8 @@ class SpeechRecognizer:
                     from backend.core.job_budget import pause_clip_job_budget
                     with pause_clip_job_budget():
                         cached_model = manager.ensure_downloaded(config.model)
+                except stop_errors:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     # 每个下载源的失败原因只进日志；界面文案不带异常名和原文（RC156 #11）。
                     logger.warning("Whisper 模型 %s 下载失败: %s: %s", config.model, type(exc).__name__, exc)
