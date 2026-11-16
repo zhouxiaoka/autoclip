@@ -2131,5 +2131,8 @@
   "本次没有可用成果": "Nothing usable was saved this time",
   "已保留 {{count}} 条成片": "{{count}} finished videos kept",
   "筛选": "Screening",
-  "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "This run recorded {{requests}} model requests, and {{successes}} of them returned successfully. This is not a charge."
+  "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "This run recorded {{requests}} model requests, and {{successes}} of them returned successfully. This is not a charge.",
+  "OpenAI 兼容网关。使用已保存的接口地址和密钥。": "OpenAI-compatible gateway. Uses the saved endpoint and key.",
+  "该服务商当前不稳定。已保存的接口和密钥保持不变。": "This provider is unstable. The saved endpoint and key stay as they are.",
+  "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "This provider is paused. The saved endpoint and key stay as they are."
 }

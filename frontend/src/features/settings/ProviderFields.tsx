@@ -13,6 +13,7 @@ import {
 } from './providerAccess'
 import { offerPastedKey } from './keyGuideWatch'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
+import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
 
 const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
@@ -39,7 +40,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const picker = !hideProvider && <Row wide label={t('提供商')} hint={preset?.hint || t('国内直连、国际服务和本机免费模型都可以选；不确定就从「推荐」开始。')}>
     <Select aria-label={label(t('提供商'))} value={key} placeholder={t('选择一家 AI 服务')} showSearch optionFilterProp="search" style={{ width: '100%' }} options={providerPickerOptions()}
       onChange={onChoose}
-      optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; return <span>{p.name}{p.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {p.sponsor.offer}</small>}</span> }} />
+      optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; const upsell = p.sponsor && promotionAllowsUpsell(p.sponsor.id); return <span>{p.name}{upsell && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {p.sponsor!.offer}</small>}</span> }} />
   </Row>
   if (!connection) return <>{picker}</>
   const failed = connection.validation_status === 'failed'
@@ -60,7 +61,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
         </Row>
       : <Row wide label={t('API 密钥')} hint={
           preset?.sponsor
-            ? undefined
+            ? (promotionAllowsUpsell(preset.sponsor.id) ? undefined : t(NEUTRAL_PROVIDER_COPY))
             : preset?.keyUrl
               ? <>{t('在官网创建后粘贴到这里。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
                 {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}
@@ -76,20 +77,27 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             }}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
-          {preset?.sponsor && (
-            <span className="ac-sponsor-inline" data-sponsor={preset.sponsor.id}>
+          {(() => {
+            const promo = connection.provider === 'apimart' || connection.provider === 'api88' || connection.provider === 'infistar' ? connection.provider : null
+            const href = promo ? promotionRegisterUrl(promo, preset?.sponsor?.registerUrl || '') : null
+            if (!promo || !href) return null
+            return (
+            <span className="ac-sponsor-inline" data-sponsor={promo}>
               <Btn
                 size="sm"
                 className="ac-btn--pill"
                 onClick={() => {
-                  trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement })
-                  openExternalLink(preset.sponsor!.registerUrl)
+                  const next = promotionRegisterUrl(promo, preset?.sponsor?.registerUrl || '')
+                  if (!next) return
+                  trackSponsorLinkOpened({ sponsor: promo, target: 'register', placement })
+                  openExternalLink(next)
                 }}
               >
                 {t('settings.providers.one_click')}<span aria-hidden>↗</span>
               </Btn>
             </span>
-          )}
+            )
+          })()}
         </Row>)}
     {addressEditable && <Row wide label={t('接口地址')} hint={[
       preset?.local ? t('本机服务用默认地址即可。')

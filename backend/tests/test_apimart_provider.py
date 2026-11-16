@@ -132,7 +132,7 @@ def test_apimart_preset_is_an_openai_compatible_sponsor():
     assert preset.default_model == ""
     assert preset.catalog == ()
     assert preset.catalog_image == ()
-    assert preset.candidates["analysis"] == ("qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash")
+    assert preset.candidates["analysis"] == ("deepseek-v4-flash", "qwen3.8-flash", "gemini-3.8-flash")
     assert preset.candidates["vision"] == ("qwen3.8-flash", "gemini-3.8-flash")
     assert preset.candidates["image"] == ()
     # Catalog badges declare language / image / video. Empty image lists stay empty:
@@ -150,14 +150,14 @@ def test_live_list_uses_capability_tags_and_drops_non_chat_models():
     http = _http(LIVE_LIST)
     result = fetch_provider_models(base_url=BASE, api_key=SECRET, provider="apimart", http=http)
     assert result.ok
-    assert result.models[:3] == ["qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash"]
+    assert result.models[:3] == ["deepseek-v4-flash", "qwen3.8-flash", "gemini-3.8-flash"]
     assert set(result.models) == set(CHAT_IDS)
     # Vision/Omni adds multimodal. A Text tag is not stored and does not veto.
     assert result.capabilities == {
         "chatgpt-4o-latest": "multimodal",
         "gpt-4-vision-preview": "multimodal",
     }
-    assert result.recommended["analysis"] == ["qwen3.8-flash", "gemini-3.8-flash", "deepseek-v4-flash"]
+    assert result.recommended["analysis"] == ["deepseek-v4-flash", "qwen3.8-flash", "gemini-3.8-flash"]
     assert result.recommended["vision"] == ["qwen3.8-flash", "gemini-3.8-flash"]
     assert http.seen[0]["url"] == BASE + "/models?expand=category"
     assert http.seen[0]["headers"]["Authorization"] == "Bearer " + SECRET

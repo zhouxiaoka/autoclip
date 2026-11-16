@@ -51,7 +51,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   const cards = nodes.filter(node => node.props && node.props['data-provider-id'])
   const recommended = nodes.find(node => node.props && node.props['data-provider-group'] === 'recommended')
   const recommendedIds = flatten(recommended).filter(node => node.props && node.props['data-provider-id']).map(node => node.props['data-provider-id'])
-  assert.deepEqual(recommendedIds, ['apimart', 'api88', 'infistar', 'deepseek', 'dashscope'])
+  assert.deepEqual(recommendedIds, ['apimart', 'deepseek', 'dashscope'])
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'api88'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'deepseek'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'whisper'))
@@ -66,7 +66,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   const deepseek = cards.find(node => node.props['data-provider-id'] === 'deepseek')
   assert.match(textOf(deepseek), /settings\.providers\.configure/)
   const api88 = cards.find(node => node.props['data-provider-id'] === 'api88')
-  assert.match(textOf(api88), /settings\.providers\.one_click/)
+  assert.match(textOf(api88), /settings\.providers\.configure/)
   deepseek.props.onClick()
   assert.deepEqual(opened, ['deepseek'])
   assert.ok(flatten(deepseek).some(node => node.props && node.props['data-success-tier'] === 'high'))
@@ -543,7 +543,8 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
   }).default
-  for (const id of ['api88', 'infistar', 'apimart']) {
+  assert.equal(view.catalogPreset('api88').sponsor, undefined)
+  for (const id of ['apimart']) {
     const preset = view.catalogPreset(id)
     assert.ok(preset?.sponsor)
     const tree = Detail({

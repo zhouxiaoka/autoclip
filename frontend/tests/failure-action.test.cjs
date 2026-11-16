@@ -215,7 +215,7 @@ test('X2: FailureAction.kind covers retry | settings | install_asr | switch_mode
   assert.deepEqual([...fa.SWITCHABLE_UPSTREAM].sort(), [
     'bad_endpoint', 'invalid_response', 'model_not_found', 'rate_limited', 'timeout', 'upstream_unavailable',
   ].sort())
-  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['api88', 'apimart', 'infistar'].sort())
+  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['apimart'])
 
   assert.equal(fa.failureAction('timeout').kind, 'retry')
 
@@ -234,11 +234,14 @@ test('X2: FailureAction.kind covers retry | settings | install_asr | switch_mode
     assert.equal(fa.failureAction(null, upstream, null, null).kind, 'retry', upstream)
   }
 
-  const recharge = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'api88')
+  const recharge = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'apimart')
   assert.equal(recharge.kind, 'recharge')
-  assert.equal(recharge.provider, 'api88')
-  assert.equal(recharge.label, '去 88API 充值')
+  assert.equal(recharge.provider, 'apimart')
+  assert.equal(recharge.label, '去 APIMart 充值')
   assert.match(recharge.destination, /^https?:\/\//)
+  const ended = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'api88')
+  assert.equal(String(ended.destination || '').includes('apimart'), false)
+  assert.equal(String(ended.label || '').includes('APIMart'), false)
   // non-sponsor quota → 查看余额 (opens keyUrl / docs)
   const quota = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'openai')
   assert.equal(quota.kind, 'recharge')
@@ -255,7 +258,7 @@ test('X2: pageFailureAction uses connection_count and provider', () => {
   }).kind, 'settings')
   assert.equal(fa.pageFailureAction({
     error_code: 'provider_error', upstream_error_type: 'insufficient_quota', provider: 'infistar',
-  }).kind, 'recharge')
+  }).kind, 'settings')
 })
 
 test('X2: FailureActions routes the five kinds', () => {
@@ -334,7 +337,7 @@ test('N3: quota_exhausted_at null unlocks bare retry without returnedFromSetting
   const locked = fa.failurePlan({
     error_code: 'provider_error',
     upstream_error_type: 'insufficient_quota',
-    provider: 'api88',
+    provider: 'apimart',
     quota_exhausted_at: '2026-11-02T12:00:00Z',
   }, true, false)
   assert.ok(locked.buttons.some(b => b.key === 'settings' && b.label === '核对余额并测试连接'))
@@ -343,7 +346,7 @@ test('N3: quota_exhausted_at null unlocks bare retry without returnedFromSetting
   const cleared = fa.failurePlan({
     error_code: 'provider_error',
     upstream_error_type: 'insufficient_quota',
-    provider: 'api88',
+    provider: 'apimart',
     quota_exhausted_at: null,
   }, true, false)
   assert.ok(cleared.buttons.some(b => b.key === 'retry'), 'cleared stamp unlocks retry')
@@ -352,7 +355,7 @@ test('N3: quota_exhausted_at null unlocks bare retry without returnedFromSetting
   const unplumbed = fa.failurePlan({
     error_code: 'provider_error',
     upstream_error_type: 'insufficient_quota',
-    provider: 'api88',
+    provider: 'apimart',
   }, true, false)
   assert.equal(unplumbed.buttons.some(b => b.key === 'retry'), false, 'undefined stamp still locks without returnedFromSettings')
 })
@@ -369,15 +372,18 @@ const { loadTs } = require('./load-ts.cjs')
 const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
 
 test('X3: sponsor insufficient_quota → 去 XX 充值 with topup_url', () => {
-  for (const [id, short] of [['api88', '88API'], ['infistar', 'Infistar'], ['apimart', 'APIMart']]) {
+  for (const [id, short] of [['apimart', 'APIMart']]) {
     const action = fa.failureAction('provider_error', 'insufficient_quota', null, null, id)
     assert.equal(action.kind, 'recharge', id)
     assert.equal(action.label, `去 ${short} 充值`, id)
     const target = fa.rechargeTarget(id)
     assert.equal(target.sponsor, true, id)
     assert.equal(action.destination, target.url, id)
-    assert.ok(target.url.includes(id === 'api88' ? '88api.ai' : id === 'infistar' ? 'infistar' : 'apimart'), id)
+    assert.ok(target.url.includes('apimart'), id)
   }
+  assert.equal(fa.rechargeTarget('api88'), null)
+  const stored = fa.rechargeTarget('infistar')
+  assert.equal(stored, null)
   assert.equal(fa.RECHARGE_HINT, '密钥没问题，是余额不足。充值后点重试即可。')
 })
 

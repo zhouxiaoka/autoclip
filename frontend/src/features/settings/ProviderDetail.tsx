@@ -15,6 +15,7 @@ import {
 import { providerIcon } from './providerIcons'
 import ProviderQualityMarks from './providerQualityMarks'
 import { enabledModelIds } from './modelVisibility'
+import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
 
 const CAP_KEY: Record<string, string> = {
   language: 'settings.providers.filter.language',
@@ -69,7 +70,8 @@ export default function ProviderDetail({
   const models = fetched ? list!.models : []
   const needsEndpoint = kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
-  const isSponsor = !!preset.sponsor
+  const packagedRegister = preset.sponsor?.register_url || ''
+  const showPromo = promotionAllowsUpsell(preset.id) && (!!preset.sponsor || !!promotionRegisterUrl(preset.id, packagedRegister))
 
   // Visibility only: no revalidation, no list reset. Only enabled IDs reach the default-model pickers.
   const enabledSet = persisted && list ? enabledModelIds(settings, persisted, list.models) : new Set<string>()
@@ -111,7 +113,7 @@ export default function ProviderDetail({
   ) || (!connection.base_url.trim() && !preset.base_url && preset.protocol !== 'local')
 
   return (
-    <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6-stack" data-sponsor={isSponsor ? '1' : undefined}>
+    <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6-stack" data-sponsor={showPromo ? '1' : undefined}>
       <button type="button" className="ac-back" onClick={onBack}>
         <Icon.Back />{t('settings.providers.back')}
       </button>
@@ -123,20 +125,20 @@ export default function ProviderDetail({
             </span>
           )}
           {name}
-          {isSponsor && (
-            <span className="ac-badge">
-              {preset.sponsor!.offer
-                ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor!.offer) })
+          {showPromo && (
+            <span className="ac-badge" data-promo="sponsor">
+              {preset.sponsor?.offer
+                ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor.offer) })
                 : t('settings.providers.badge.sponsor')}
             </span>
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
           {!connected && isCatalogConfigured(settings, preset) && <span className="ac-badge">{t('已配置')}</span>}
         </h3>
-        {/* Sponsors: no long hint / marketing. Others keep one short line. */}
-        {!isSponsor && <p className="ac-note">{t(preset.hint)}</p>}
+        {/* Active promotion hides the long hint. A removed or stopped sponsor keeps the neutral caps. */}
+        {!showPromo && <p className="ac-note">{t(preset.sponsor ? NEUTRAL_PROVIDER_COPY : preset.hint)}</p>}
         <ProviderQualityMarks preset={preset} />
-        {!isSponsor && (
+        {!showPromo && (
           <div className="ac-provider-caps">
             {preset.capabilities.map(capability => CAP_KEY[capability] && (
               <span key={capability} className="ac-provider-cap">{t(CAP_KEY[capability])}</span>

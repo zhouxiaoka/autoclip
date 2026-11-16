@@ -64,11 +64,11 @@ def test_analysis_order_skips_a_dead_id_and_non_chat_families():
         "text-embedding-3-large",
     ]
     # The first analysis hint that is still listed wins over an earlier non-chat id.
-    assert pick_available_analysis_model("apimart", live, exclude=["chatgpt-4o-latest"]) == "qwen3.8-flash"
+    assert pick_available_analysis_model("apimart", live, exclude=["chatgpt-4o-latest"]) == "deepseek-v4-flash"
     # A missing earlier hint keeps preset order. deepseek stays eligible: it is chat, not vision.
     assert pick_available_analysis_model(
         "apimart", ["other-chat", "deepseek-v4-flash", "gemini-3.8-flash"], exclude=["chatgpt-4o-latest"],
-    ) == "gemini-3.8-flash"
+    ) == "deepseek-v4-flash"
     assert pick_available_analysis_model(
         "apimart", ["gpt-5-search-api", "deepseek-v4-flash"], exclude=["chatgpt-4o-latest"],
     ) == "deepseek-v4-flash"

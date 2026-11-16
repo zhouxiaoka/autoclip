@@ -24,6 +24,10 @@ import {
 } from './defaultModelSlots'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 import { requestClipboardScan, takePendingSelect } from './keyGuideBus'
+import { PROVIDERS } from './providers'
+import { enabledUsageNotices } from './sponsorPromo'
+import { useSponsorPromo } from './sponsorPromoWatch'
+import type { UsageSlot } from './sponsorPromo'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
   const [ready, setReady] = useState<LocalAsrReady>({})
@@ -130,7 +134,9 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
 }
 
 export default function AIModelSettings({ requestedSection, requestedProvider = '' }: { requestedSection: string; requestedProvider?: string }) {
-  useTranslation()
+  const translation = useTranslation() as { i18n?: { language?: string } }
+  const promo = useSponsorPromo()
+  const language = (translation?.i18n?.language || 'zh').toLowerCase().split('-')[0]
   const m = useModelSettings()
   const { settings } = m
   const asrReady = useLocalAsrReady(settings)
@@ -217,9 +223,23 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
+  const providerOf = (id?: string) => settings.connections.find(item => item.id === id)?.provider
+  const usageSlots: UsageSlot[] = [
+    { provider: providerOf(settings.analysis?.connection_id), label: 'analysis' },
+    { provider: providerOf(settings.vision?.connection_id), label: 'vision' },
+    { provider: settings.cover_enabled ? providerOf(settings.cover?.connection_id) : undefined, label: 'cover' },
+    { provider: settings.transcription?.provider === 'cloud' ? providerOf(settings.transcription.connection_id) : undefined, label: 'transcription' },
+  ]
+  const usageNotices = enabledUsageNotices(usageSlots, promo, language)
   const visionFailed = visionFollowLacksCapability(settings, m.lists)
   const failed = validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') || visionFailed
   return <div className="ac-ai-settings" data-layout="v6">
+    {usageNotices.map(notice => {
+      const usageKey = notice.label === 'vision' ? '画面理解' : notice.label === 'cover' ? '封面' : notice.label === 'transcription' ? '转写' : '分析'
+      const who = PROVIDERS[notice.provider as keyof typeof PROVIDERS]?.short || notice.provider
+      const body = notice.text || t(notice.status === 'out_of_service' ? '该服务商当前暂停服务。已保存的接口和密钥保持不变。' : '该服务商当前不稳定。已保存的接口和密钥保持不变。')
+      return <p key={`${notice.provider}:${notice.label}`} className="ac-note" role="status" data-provider-service-notice={notice.status} data-usage-label={notice.label}>{t(usageKey)} · {who}：{body}</p>
+    })}
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.includes('purpose_reset_to_recommended') && <p role="alert" className="ac-note">{t('部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。')}</p>}
     {settings.migration_warnings?.includes('preset_catalog_updated') && <p role="alert" className="ac-note">{t('服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。')}</p>}

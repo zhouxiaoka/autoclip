@@ -2131,5 +2131,8 @@
   "本次没有可用成果": "Rien d’utilisable n’a été gardé cette fois",
   "已保留 {{count}} 条成片": "{{count}} vidéos terminées ont été conservées",
   "筛选": "Sélection",
-  "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "Cette fois, {{requests}} requêtes au modèle ont été enregistrées, dont {{successes}} ont réussi. Ce n’est pas un débit."
+  "这次记录了 {{requests}} 次模型请求，其中 {{successes}} 次返回成功。这不是费用。": "Cette fois, {{requests}} requêtes au modèle ont été enregistrées, dont {{successes}} ont réussi. Ce n’est pas un débit.",
+  "OpenAI 兼容网关。使用已保存的接口地址和密钥。": "Passerelle compatible OpenAI. Utilise l’endpoint et la clé enregistrés.",
+  "该服务商当前不稳定。已保存的接口和密钥保持不变。": "Ce fournisseur est instable. L’endpoint et la clé enregistrés restent en place.",
+  "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "Ce fournisseur est en pause. L’endpoint et la clé enregistrés restent en place."
 }

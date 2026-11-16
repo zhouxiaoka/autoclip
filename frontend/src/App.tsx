@@ -14,6 +14,7 @@ import KeyGuidePrompt from './features/settings/KeyGuidePrompt'
 import QuitGuard from './features/studio/quitGuard'
 import KeepAwakeGuard from './features/studio/KeepAwakeGuard'
 import { startKeyGuideWatch } from './features/settings/keyGuideWatch'
+import { refreshSponsorPromo, startSponsorPromoWatch } from './features/settings/sponsorPromoWatch'
 import Header from './components/Header'
 import { UpdateProvider } from './desktop/UpdatePrompt'
 import { trackPageview } from './analytics/posthog'
@@ -29,6 +30,15 @@ function usePageviewTracking() {
   }, [location.pathname, location.search])
 }
 
+function SponsorPromoHost() {
+  const location = useLocation()
+  useEffect(() => startSponsorPromoWatch(), [])
+  useEffect(() => {
+    if (location.pathname === '/settings') void refreshSponsorPromo('settings')
+  }, [location.pathname])
+  return null
+}
+
 function App() {
   console.log('🎬 App组件已加载');
   usePageviewTracking()
@@ -39,6 +49,7 @@ function App() {
     <UpdateProvider>
       <Layout>
         <Header />
+        <SponsorPromoHost />
         <SettingsReturnListener />
         <KeyGuidePrompt />
         <QuitGuard />

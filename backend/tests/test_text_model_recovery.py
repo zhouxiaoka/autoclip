@@ -17,7 +17,8 @@ from backend.services import ai_model_settings as ai
 
 SECRET = "sk-live-secret-should-never-leak"
 DEAD = "chatgpt-4o-latest"
-ALT = "qwen3.8-flash"
+# Preset analysis order, not live-list order. qwen3.8-flash is earlier in LIVE.
+ALT = "deepseek-v4-flash"
 LIVE = [
     "gpt-5-search-api",
     "omni-moderation-latest",
