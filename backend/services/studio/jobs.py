@@ -1497,7 +1497,12 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
             if now:
                 with llm_usage.timed('framing'):
-                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache, use_html)
+                    # Rank skips the HTML overlay only. The picture uses the same 9:16
+                    # window as the selected template, not the classic 4:3 interview window.
+                    value, framed = _apply_framing(
+                        project_id, value, strategy_id, video, burned, framing_cache,
+                        use_html or rank_fallback,
+                    )
             planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id))
     with llm_usage.timed('packaging'):
         _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], burned, packaging_cache)
@@ -1508,6 +1513,11 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
             value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         layout = 'crop' if use_html and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
+        # Rank skips the overlay. Only the interview window is put back on the 9:16 crop.
+        # Blur stays blur. Burned-in captions stay on the classic fallback. A classic
+        # import never sets rank_fallback, so an explicit interview window stays.
+        if rank_fallback and framed != 'full_frame_captions' and layout == 'window':
+            layout = 'crop'
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(generation))
         derived_drafts.append(draft.model_dump())
         variants.append({

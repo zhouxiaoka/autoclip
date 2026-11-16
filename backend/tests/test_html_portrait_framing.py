@@ -3,7 +3,8 @@
 Douyin and Xiaohongshu classic templates frame a 1080x810 interview window. Editorial and street
 cover the full 1080x1920 frame, then composite a transparent overlay. Reusing the 4:3 crop_x for
 that narrower window slices an off-center speaker. The classic retry after an overlay failure
-renders the same draft, so it needs the same 9:16 crop. Rank fallback stays on the interview window.
+renders the same draft, so it needs the same 9:16 crop. Rank fallback skips the overlay and keeps
+that same 9:16 crop. A classic import, with no HTML template, stays on the interview window.
 """
 import subprocess
 
@@ -175,9 +176,11 @@ def test_html_9x16_crop_contains_an_off_center_face(tmp_path, monkeypatch, templ
         assert rank_variant['html_fallback'] == 'rank'
         assert rank_variant['requested_template'] == template
         assert 'html_template' not in rank_variant
-        assert rank_draft['layout'] == 'window'
-        assert rank_draft['scenes'][0]['crop_x'] == classic[(strategy_id, rank_start)][0]['scenes'][0]['crop_x']
-        assert rank_draft['scenes'][0]['crop_track'] == classic[(strategy_id, rank_start)][0]['scenes'][0]['crop_track']
+        assert rank_draft['layout'] == 'crop'
+        assert rank_draft['scenes'][0]['crop_x'] != classic[(strategy_id, rank_start)][0]['scenes'][0]['crop_x']
+        assert rank_draft['scenes'][0]['crop_x'] == html[(strategy_id, html_starts[0])][0]['scenes'][0]['crop_x']
+        assert _covers(rank_draft['scenes'][0]['crop_x'], portrait_fraction, FACE)
+        assert _red_pixels(still, _crop_used(rank_draft), PORTRAIT) > 0
 
     for start in html_starts:
         for strategy_id in HTML_PLATFORMS:
