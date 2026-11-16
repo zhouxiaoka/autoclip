@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { useTranslation } from 'react-i18next'
@@ -60,7 +60,6 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
   }
 
   const attempt = preview?.manifest.attempt
-  const run = preview?.manifest.run
   const available = new Set((preview?.files || []).filter((file) => !file.rejected).map((file) => file.role))
 
   return (
@@ -85,8 +84,6 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
             {attempt.error_code && <span>{attempt.error_code}</span>}
             {attempt.failure_stage && <span>{attempt.failure_stage}</span>}
             {typeof attempt.sequence === 'number' && <span>{`#${attempt.sequence}`}</span>}
-            {run?.provider && <span>{run.provider}</span>}
-            {run?.model && <span>{run.model}</span>}
           </div>
         )}
         <p className="ac-note">{t('不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。')}</p>

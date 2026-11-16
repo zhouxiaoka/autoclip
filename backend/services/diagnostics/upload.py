@@ -46,7 +46,7 @@ def endpoint() -> str:
 
 
 def allowed_upload_url(url: str) -> bool:
-    """Presigned R2 URLs, or loopback for tests. Never file:, credentials, or link-local."""
+    """Presigned object-storage URLs, or loopback for tests. Never file:, credentials, or link-local."""
     parsed = urlparse(url)
     if parsed.username or parsed.password or parsed.scheme not in {"https", "http"}:
         return False
