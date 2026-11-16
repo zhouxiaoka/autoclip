@@ -9,6 +9,7 @@ export interface ObjectRow {
   actualBytes: number | null
   sha256: string
   uploadId: string | null
+  partPlan: { number: number; offset: number; length: number }[]
   state: 'reserved' | 'complete' | 'aborted'
   createdAt: string
   updatedAt: string
@@ -27,6 +28,23 @@ export interface CaseRow {
   createdAt: string
   expiresAt: string
   updatedAt: string
+}
+
+export interface Repo {
+  reserve(bytes: number, limits: Pick<Limits, 'landedCap' | 'inflightCap'>): Promise<{ ok: true } | { ok: false; reason: string }>
+  release(bytes: number): Promise<void>
+  land(bytes: number): Promise<void>
+  unland(bytes: number): Promise<void>
+  snapshot(): QuotaState | Promise<QuotaState>
+  hit(bucket: string, limit: number): Promise<boolean>
+  findByIdempotency(key: string): Promise<CaseRow | null>
+  getCase(id: string): Promise<CaseRow | null>
+  saveCase(row: CaseRow): Promise<void>
+  getObject(id: string): Promise<ObjectRow | null>
+  saveObject(row: ObjectRow): Promise<void>
+  objectsFor(caseId: string): Promise<ObjectRow[]>
+  allCases(): Promise<CaseRow[]>
+  reconcile(): QuotaState | Promise<QuotaState>
 }
 
 export class MemoryRepo {

@@ -1,14 +1,33 @@
-import { MemoryRepo, type CaseRow, type ObjectRow } from './memory.ts'
+import { type CaseRow, type ObjectRow, type Repo } from './memory.ts'
 import { orphanKeys, type Limits } from './quota.ts'
 import { fileProblems, manifestProblems } from './validate.ts'
 
+export interface UploadedPart {
+  partNumber: number
+  etag: string
+}
+
+/** The methods documented for a multipart upload handle. Completion assembles the parts. */
+export interface MultipartUpload {
+  key: string
+  uploadId: string
+  uploadPart(partNumber: number, value: Uint8Array): Promise<UploadedPart>
+  abort(): Promise<void>
+  complete(uploadedParts: UploadedPart[]): Promise<{ size: number; httpEtag: string }>
+}
+
+export interface StoredObject {
+  size: number
+  arrayBuffer(): Promise<ArrayBuffer>
+}
+
 export interface Bucket {
   put(key: string, body: Uint8Array): Promise<void>
+  get(key: string): Promise<StoredObject | null>
   head(key: string): Promise<{ size: number } | null>
   delete(key: string): Promise<void>
-  createMultipartUpload(key: string): Promise<{ uploadId: string }>
-  listParts(key: string, uploadId: string): Promise<number[]>
-  abortMultipart(key: string, uploadId: string): Promise<void>
+  createMultipartUpload(key: string): Promise<MultipartUpload>
+  resumeMultipartUpload(key: string, uploadId: string): MultipartUpload
   list(prefix: string): Promise<string[]>
 }
 
@@ -17,7 +36,7 @@ export interface Signer {
 }
 
 export interface Deps {
-  repo: MemoryRepo
+  repo: Repo
   bucket: Bucket
   limits: Limits
   now: () => Date
@@ -57,7 +76,7 @@ function bearer(request: Request): string {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''
 }
 
-async function authorized(repo: MemoryRepo, caseId: string, request: Request): Promise<CaseRow | null> {
+async function authorized(repo: Repo, caseId: string, request: Request): Promise<CaseRow | null> {
   const row = await repo.getCase(caseId)
   if (!row || row.state === 'deleted') return null
   const presented = bearer(request)
@@ -104,11 +123,81 @@ function admin(request: Request, deps: Deps, next: () => Response | Promise<Resp
   return next()
 }
 
+type UploadFile = { role: string; bytes: number; sha256: string; content_type?: string }
+
+async function readableSize(bucket: Bucket, key: string): Promise<number> {
+  const stored = await bucket.get(key)
+  if (!stored) return -1
+  const bytes = new Uint8Array(await stored.arrayBuffer())
+  if (bytes.byteLength !== stored.size) return -1
+  return bytes.byteLength
+}
+
+async function signParts(deps: Deps, object: ObjectRow, digest?: string): Promise<{ number: number; offset: number; length: number; url: string; headers: Record<string, string> }[]> {
+  if (!object.partPlan.length) throw new Error('incomplete_plan')
+  const multipart = object.partPlan.length > 1
+  if (multipart && !object.uploadId) throw new Error('incomplete_plan')
+  const signed = []
+  for (const part of object.partPlan) {
+    const signature = await deps.signer!.sign({
+      key: object.r2Key,
+      contentLength: part.length,
+      sha256Hex: multipart ? undefined : digest,
+      uploadId: multipart ? object.uploadId ?? undefined : undefined,
+      partNumber: multipart ? part.number : undefined,
+    })
+    if (signature.headers['content-length'] !== String(part.length)) throw new Error('signer_length_mismatch')
+    signed.push({ number: part.number, offset: part.offset, length: part.length, url: signature.url, headers: signature.headers })
+  }
+  return signed
+}
+
+async function rotateCapability(deps: Deps, row: CaseRow): Promise<string> {
+  const capability = token()
+  row.capabilitySha256 = await sha256Hex(encoder.encode(capability))
+  row.updatedAt = deps.now().toISOString()
+  await deps.repo.saveCase(row)
+  return capability
+}
+
+async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[]): Promise<Response> {
+  if (existing.state === 'deleted') return json(404, { error: 'not_found' })
+  if (existing.state === 'failed') return json(409, { error: 'incomplete_plan' })
+  if (files.length && !deps.signer) return json(503, { error: 'upload_signing_unconfigured' })
+  const objects = await deps.repo.objectsFor(existing.caseId)
+  const byRole = new Map(objects.map((object) => [object.role, object]))
+  const uploads = []
+  for (const file of files) {
+    const object = byRole.get(file.role)
+    if (!object || object.declaredBytes !== file.bytes || object.sha256 !== file.sha256 || !object.partPlan.length) {
+      return json(409, { error: 'incomplete_plan' })
+    }
+    if (object.state === 'complete') {
+      const size = await readableSize(deps.bucket, object.r2Key)
+      if (size !== object.declaredBytes) return json(409, { error: 'incomplete_plan' })
+      uploads.push({ object_id: object.objectId, role: object.role, parts: [], already_complete: true, bytes: size })
+      continue
+    }
+    if (object.state !== 'reserved') return json(409, { error: 'incomplete_plan' })
+    const signed = await signParts(deps, object, file.sha256)
+    uploads.push({
+      object_id: object.objectId, role: object.role, parts: signed,
+      url: signed.length === 1 ? signed[0]!.url : undefined,
+      headers: signed.length === 1 ? signed[0]!.headers : undefined,
+    })
+  }
+  const capability = await rotateCapability(deps, existing)
+  return json(200, {
+    case_id: existing.caseId,
+    capability,
+    existing: true,
+    expires_at: existing.expiresAt,
+    uploads,
+    approval: 'pending',
+  })
+}
+
 async function createCase(request: Request, deps: Deps): Promise<Response> {
-  const ip = request.headers.get('cf-connecting-ip') || 'local'
-  const hour = deps.now().toISOString().slice(0, 13)
-  const bucket = await sha256Hex(encoder.encode(`${ip}:${hour}`))
-  if (!await deps.repo.hit(bucket, deps.limits.ratePerHour)) return json(429, { error: 'rate_limited' })
   let body: Record<string, unknown>
   try {
     const raw = new Uint8Array(await request.arrayBuffer())
@@ -123,7 +212,7 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
   const manifest = body.manifest
   const problems = [...manifestProblems(manifest, deps.limits.manifestMax), ...fileProblems(body.files, deps.limits)]
   if (problems.length) return json(422, { error: 'rejected', reasons: [...new Set(problems)] })
-  const files = (body.files as { role: string; bytes: number; sha256: string; content_type?: string }[]) || []
+  const files = (body.files as UploadFile[]) || []
   const idempotency = request.headers.get('idempotency-key') || ''
   if (!/^[a-f0-9]{64}$/.test(idempotency)) return json(422, { error: 'idempotency_key' })
   const manifestBytes = encoder.encode(JSON.stringify(manifest)).byteLength
@@ -131,8 +220,12 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
   const existing = await deps.repo.findByIdempotency(idempotency)
   if (existing) {
     if (existing.manifestSha256 !== manifestHash) return json(409, { error: 'idempotency_conflict' })
-    return json(200, { case_id: existing.caseId, existing: true })
+    return replayCase(deps, existing, files)
   }
+  const ip = request.headers.get('cf-connecting-ip') || 'local'
+  const hour = deps.now().toISOString().slice(0, 13)
+  const rateBucket = await sha256Hex(encoder.encode(`${ip}:${hour}`))
+  if (!await deps.repo.hit(rateBucket, deps.limits.ratePerHour)) return json(429, { error: 'rate_limited' })
   if (files.length && !deps.signer) return json(503, { error: 'upload_signing_unconfigured' })
   if (deps.bucketName === 'autoclip-media') return json(500, { error: 'refusing_media_bucket' })
   const total = manifestBytes + files.reduce((sum, file) => sum + file.bytes, 0)
@@ -148,8 +241,8 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     const bytes = encoder.encode(JSON.stringify(manifest))
     if (bytes.byteLength !== manifestBytes) throw new Error('manifest_size')
     await deps.bucket.put(manifestKey, bytes)
-    const head = await deps.bucket.head(manifestKey)
-    if (!head || head.size !== manifestBytes) throw new Error('manifest_size')
+    const stored = await readableSize(deps.bucket, manifestKey)
+    if (stored !== manifestBytes) throw new Error('manifest_size')
   } catch {
     await deps.bucket.delete(manifestKey)
     await deps.repo.release(total)
@@ -158,30 +251,31 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
   await deps.repo.land(manifestBytes)
   const fileBytes = total - manifestBytes
   const uploads = []
+  const opened: MultipartUpload[] = []
   try {
-  for (const file of files) {
-    const objectId = crypto.randomUUID()
-    const key = `cases/${caseId}/${file.role}`
-    const parts = partPlan(file.bytes, deps.partBytes)
-    const multipart = parts.length > 1
-    const uploadId = multipart ? (await deps.bucket.createMultipartUpload(key)).uploadId : null
-    const signed = []
-    for (const part of parts) {
-      const signature = await deps.signer!.sign({
-        key, contentLength: part.length, sha256Hex: parts.length === 1 ? file.sha256 : undefined,
-        uploadId: uploadId ?? undefined, partNumber: multipart ? part.number : undefined,
+    for (const file of files) {
+      const objectId = crypto.randomUUID()
+      const key = `cases/${caseId}/${file.role}`
+      const parts = partPlan(file.bytes, deps.partBytes)
+      const multipart = parts.length > 1
+      const upload = multipart ? await deps.bucket.createMultipartUpload(key) : null
+      if (upload) opened.push(upload)
+      const row: ObjectRow = {
+        objectId, caseId, role: file.role, r2Key: key, declaredBytes: file.bytes, actualBytes: null,
+        sha256: file.sha256, uploadId: upload?.uploadId ?? null, partPlan: parts, state: 'reserved', createdAt, updatedAt: createdAt,
+      }
+      const signed = await signParts(deps, row, file.sha256)
+      await deps.repo.saveObject(row)
+      uploads.push({
+        object_id: objectId, role: file.role, parts: signed,
+        url: signed.length === 1 ? signed[0]!.url : undefined,
+        headers: signed.length === 1 ? signed[0]!.headers : undefined,
       })
-      if (signature.headers['content-length'] !== String(part.length)) throw new Error('signer_length_mismatch')
-      signed.push({ number: part.number, offset: part.offset, length: part.length, url: signature.url, headers: signature.headers })
     }
-    const row: ObjectRow = {
-      objectId, caseId, role: file.role, r2Key: key, declaredBytes: file.bytes, actualBytes: null,
-      sha256: file.sha256, uploadId, state: 'reserved', createdAt, updatedAt: createdAt,
-    }
-    await deps.repo.saveObject(row)
-    uploads.push({ object_id: objectId, role: file.role, parts: signed, url: signed.length === 1 ? signed[0]!.url : undefined, headers: signed.length === 1 ? signed[0]!.headers : undefined })
-  }
   } catch {
+    for (const upload of opened) {
+      try { await upload.abort() } catch { /* the upload may not exist */ }
+    }
     await deps.bucket.delete(manifestKey)
     await deps.repo.unland(manifestBytes)
     await deps.repo.release(fileBytes)
@@ -198,29 +292,57 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     capability,
     expires_at: expires,
     uploads,
-    checksum_note: 'Per-object size is enforced at complete via HEAD or ListParts. A whole-object rehash is not done inside the Worker.',
+    checksum_note: 'Completion reads the assembled object and checks its byte length. A whole-object cryptographic rehash is not done inside the Worker.',
     approval: 'pending',
   })
+}
+
+async function partsFrom(request: Request): Promise<UploadedPart[] | null> {
+  try {
+    const body = await request.json() as { parts?: { partNumber?: unknown; etag?: unknown }[] }
+    if (!Array.isArray(body.parts)) return []
+    const parts: UploadedPart[] = []
+    for (const part of body.parts) {
+      if (typeof part?.partNumber !== 'number' || typeof part.etag !== 'string' || !part.etag) return null
+      parts.push({ partNumber: part.partNumber, etag: part.etag })
+    }
+    return parts
+  } catch {
+    return []
+  }
 }
 
 async function completeFile(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {
   const row = await authorized(deps.repo, caseId, request)
   if (!row || row.state === 'deleted') return json(404, { error: 'not_found' })
   const object = await deps.repo.getObject(objectId)
-  if (!object || object.caseId !== caseId || object.state !== 'reserved') return json(404, { error: 'object' })
+  if (!object || object.caseId !== caseId) return json(404, { error: 'object' })
+  if (object.state === 'complete') {
+    const size = await readableSize(deps.bucket, object.r2Key)
+    if (size !== object.declaredBytes) return json(409, { error: 'byte_mismatch' })
+    return json(200, { ok: true, bytes: size })
+  }
+  if (object.state !== 'reserved') return json(404, { error: 'object' })
   let actual = 0
   if (object.uploadId) {
-    const sizes = await deps.bucket.listParts(object.r2Key, object.uploadId)
-    actual = sizes.reduce((sum, size) => sum + size, 0)
+    const parts = await partsFrom(request)
+    if (!parts?.length) return json(409, { error: 'incomplete_plan' })
+    try {
+      await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).complete(parts)
+    } catch {
+      try { await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).abort() } catch { /* already gone */ }
+      await deps.bucket.delete(object.r2Key)
+      await failObject(deps, row, object)
+      return json(409, { error: 'byte_mismatch' })
+    }
+    actual = await readableSize(deps.bucket, object.r2Key)
     if (actual !== object.declaredBytes) {
-      await deps.bucket.abortMultipart(object.r2Key, object.uploadId)
       await deps.bucket.delete(object.r2Key)
       await failObject(deps, row, object)
       return json(409, { error: 'byte_mismatch' })
     }
   } else {
-    const head = await deps.bucket.head(object.r2Key)
-    actual = head?.size ?? -1
+    actual = await readableSize(deps.bucket, object.r2Key)
     if (actual !== object.declaredBytes) {
       await deps.bucket.delete(object.r2Key)
       await failObject(deps, row, object)
@@ -265,7 +387,9 @@ async function deleteCase(caseId: string, request: Request, deps: Deps): Promise
 
 async function purgeCase(deps: Deps, row: CaseRow): Promise<void> {
   for (const object of await deps.repo.objectsFor(row.caseId)) {
-    if (object.uploadId && object.state === 'reserved') await deps.bucket.abortMultipart(object.r2Key, object.uploadId)
+    if (object.uploadId && object.state === 'reserved') {
+      try { await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).abort() } catch { /* already finished */ }
+    }
     await deps.bucket.delete(object.r2Key)
     if (object.state === 'reserved') await deps.repo.release(object.declaredBytes)
     object.state = 'aborted'

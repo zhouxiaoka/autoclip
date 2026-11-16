@@ -62,9 +62,12 @@ def _receipt(state: dict, attempt_id: str) -> dict:
 
 
 def _log_text(project_id: str) -> str:
-    records = sanitized_log_file(get_log_file_path(), project_id=project_id, limit=50)
+    files = [get_log_file_path(), get_data_directory() / "logs" / "autoclip.log"]
+    records = []
+    for file in files:
+        records.extend(sanitized_log_file(file, project_id=project_id, limit=50))
     return "\n".join(
-        f"{row['timestamp']} {row['level']} {row['message']}" for row in records
+        f"{row['timestamp']} {row['level']} {row['message']}" for row in records[:50]
     )
 
 
@@ -136,7 +139,9 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
         "epoch": consent.epoch,
         "consent_version": consent.text_version,
         "explicit": True,
-        "save_local": bool(save_local) or not upload.endpoint(),
+        "save_local": bool(save_local),
+        "disposition": "local" if save_local else "upload",
+        "version": 1,
         "manifest": manifest,
         "files": files,
         "attempts": 0,
@@ -180,24 +185,13 @@ def _abort_remote(items: list[dict], transport) -> None:
 
 
 def delete_local(item_id: str, *, transport=None) -> dict:
-    found = next((row for row in queue.list_items() if row.get("id") == item_id), None)
+    found = queue.get(item_id)
     if found is None:
         raise DiagnosticsError("case", 404)
-    session = found.get("upload") if isinstance(found.get("upload"), dict) else {}
-    capability = session.get("capability")
-    case_id = session.get("case_id") or found.get("case_id")
-    base = upload.endpoint()
-    if base and capability and case_id:
-        transport = transport or upload.UrllibTransport()
-        try:
-            if hasattr(transport, "delete"):
-                transport.delete(base, case_id, capability)
-            else:
-                transport.abort(base, case_id, capability)
-        except Exception as exc:
-            raise DiagnosticsError("delete_failed", 502) from exc
-    updated = queue.update(item_id, status="deleted", updated_at=queue.now_iso())
-    return _public_item(updated or found)
+    if found.get("status") == "deleted":
+        return _public_item(found)
+    finished = upload.finish_delete(found, transport or upload.UrllibTransport())
+    return _public_item(finished)
 
 
 def _public_item(item: dict) -> dict:
@@ -253,6 +247,8 @@ def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | No
         "consent_version": consent.text_version,
         "explicit": False,
         "save_local": False,
+        "disposition": "upload",
+        "version": 1,
         "manifest": manifest,
         "files": files,
         "attempts": 0,

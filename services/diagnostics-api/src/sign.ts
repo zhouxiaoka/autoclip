@@ -18,8 +18,28 @@ function hex(buf: ArrayBuffer): string {
   return [...new Uint8Array(buf)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+/** Encode one SigV4 component. Only unreserved ASCII bytes stay literal. */
+export function awsEncode(value: string): string {
+  let out = ''
+  for (const byte of new TextEncoder().encode(value)) {
+    const char = String.fromCharCode(byte)
+    out += /[A-Za-z0-9\-._~]/.test(char) ? char : `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
+  }
+  return out
+}
+
 function encodePath(value: string): string {
-  return value.split('/').map((part) => encodeURIComponent(part)).join('/')
+  return value.split('/').map((part) => awsEncode(part)).join('/')
+}
+
+function byteCompare(left: string, right: string): number {
+  const a = new TextEncoder().encode(left)
+  const b = new TextEncoder().encode(right)
+  const length = Math.min(a.length, b.length)
+  for (let index = 0; index < length; index += 1) {
+    if (a[index] !== b[index]) return a[index]! - b[index]!
+  }
+  return a.length - b.length
 }
 
 async function hmac(key: ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> {
@@ -49,8 +69,9 @@ export function canonicalPut(input: SignInput, now = input.now ?? new Date()): {
   ]
   if (input.partNumber) query.push(['partNumber', String(input.partNumber)])
   if (input.uploadId) query.push(['uploadId', input.uploadId])
-  query.sort((a, b) => a[0].localeCompare(b[0]))
-  const canonicalQuery = query.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&')
+  const encoded = query.map(([key, value]) => [awsEncode(key), awsEncode(value)] as [string, string])
+  encoded.sort((left, right) => byteCompare(left[0], right[0]) || byteCompare(left[1], right[1]))
+  const canonicalQuery = encoded.map(([key, value]) => `${key}=${value}`).join('&')
   const headerLines = [`content-length:${input.contentLength}`, `host:${host}`]
   if (input.checksumSha256Base64) headerLines.push(`x-amz-checksum-sha256:${input.checksumSha256Base64}`)
   headerLines.sort()

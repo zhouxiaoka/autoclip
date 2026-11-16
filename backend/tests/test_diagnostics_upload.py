@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -157,11 +158,12 @@ def test_revocation_during_authorize_aborts_and_does_not_upload_bytes(data_dir, 
             consent.update(diagnostics=False, media=False, full_original=False, informed=True)
             return {"case_id": "remote", "capability": "cap", "uploads": [{"role": "excerpt", "url": "http://169.254.169.254/latest"}]}
 
-        def abort(self, base, case_id, capability):
+        def delete(self, base, case_id, capability):
             calls["abort"] += 1
 
         def put_part(self, url, data, headers):
             calls["put"] += 1
+            return "etag"
 
     built = build_manifest(_receipt())
     queue.enqueue({
@@ -171,7 +173,7 @@ def test_revocation_during_authorize_aborts_and_does_not_upload_bytes(data_dir, 
     upload.pump_once(Transport())
     assert calls["put"] == 0
     assert calls["abort"] == 1
-    assert queue.list_items()[0]["status"] == "cancelled"
+    assert queue.list_items()[0]["status"] == "deleted"
 
 
 def test_offline_retry_and_idempotent_enqueue(data_dir, tmp_path):
@@ -238,3 +240,247 @@ def test_one_click_original_requires_separate_ack_and_api_is_local(data_dir):
     })
     assert missing.status_code == 422
     assert missing.json()["detail"] == "full_original_required"
+
+
+def test_real_logger_formats_keep_safe_lines_and_drop_secrets():
+    desktop = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    runner = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    safe = logging.LogRecord(
+        "backend.services.studio.jobs", logging.ERROR, __file__, 10,
+        "project_id=proj step=analyze error_code=timeout", (), None,
+    )
+    leaked = logging.LogRecord(
+        "backend.services.studio.jobs", logging.ERROR, __file__, 11,
+        "project_id=proj sk-abcdefghijklmnopqrstuvwxyz https://api.example/v1?token=secret /Users/me/a.mp4 cue --> text",
+        (), None,
+    )
+    from backend.services.diagnostics.redact import sanitized_log_records
+    rows = sanitized_log_records(desktop.format(safe) + "\n" + runner.format(safe), project_id="proj")
+    assert len(rows) == 2
+    assert all("error_code=timeout" in row["message"] for row in rows)
+    blob = json.dumps(sanitized_log_records(desktop.format(leaked) + "\n" + runner.format(leaked), project_id="proj"))
+    assert "sk-" not in blob
+    assert "token=" not in blob
+    assert "/Users/" not in blob
+    assert "-->" not in blob
+
+
+def test_save_local_never_touches_the_network_when_an_endpoint_exists(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    from backend.services.studio import store
+    project = "proj"
+    root = store.directory(project)
+    (root / "metadata").mkdir(parents=True)
+    (root / "raw").mkdir()
+    video = root / "raw" / "input.mp4"
+    video.write_bytes(b"clip-bytes")
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    calls = {"n": 0}
+
+    class Transport:
+        def create_case(self, *args, **kwargs):
+            calls["n"] += 1
+            raise AssertionError("local save contacted the network")
+
+        def put_part(self, *args, **kwargs):
+            calls["n"] += 1
+            raise AssertionError("local save uploaded media")
+
+        def complete(self, *args, **kwargs):
+            calls["n"] += 1
+            raise AssertionError("local save completed a remote file")
+
+        def delete(self, *args, **kwargs):
+            calls["n"] += 1
+            raise AssertionError("local save deleted remotely")
+
+    result = service.submit(
+        project, TOKEN, roles=["original"], informed=True, full_original_ack=True,
+        save_local=True, transport=Transport(),
+    )
+    assert result["status"] == "saved_local"
+    assert calls["n"] == 0
+    exported = Path(result["export_path"])
+    assert (exported / "manifest.json").is_file()
+    assert (exported / "original.mp4").read_bytes() == b"clip-bytes"
+    assert "sk-" not in (exported / "manifest.json").read_text(encoding="utf-8")
+    removed = service.delete_local(result["id"], transport=Transport())
+    assert removed["status"] == "deleted"
+    assert calls["n"] == 0
+
+
+def test_delete_during_upload_is_not_overwritten_and_stays_retryable(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    built = build_manifest(_receipt())
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "raw").mkdir(parents=True)
+    media_file = root / "raw" / "input.mp4"
+    media_file.write_bytes(b"abcdef")
+    item = queue.enqueue({
+        "id": "c-del", "idempotency_key": "del", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": True, "disposition": "upload",
+        "save_local": False, "manifest": built, "attempts": 0, "upload": {},
+        "files": [{"role": "excerpt", "path": str(media_file), "size_bytes": 6, "sha256": __import__("hashlib").sha256(b"abcdef").hexdigest(), "content_type": "video/mp4"}],
+    })
+
+    class Transport:
+        def __init__(self):
+            self.puts = 0
+            self.deletes = 0
+            self.completes = 0
+            self.allow_delete = False
+
+        def create_case(self, base, body, key):
+            return {"case_id": "remote", "capability": "secret-token", "uploads": [{
+                "role": "excerpt", "object_id": "obj",
+                "parts": [{"number": 1, "url": "http://127.0.0.1/part", "headers": {}, "offset": 0, "length": 6}],
+            }]}
+
+        def put_part(self, url, data, headers):
+            self.puts += 1
+            service.delete_local(item["id"], transport=self)
+            return "etag-1"
+
+        def delete(self, base, case_id, capability):
+            self.deletes += 1
+            if not self.allow_delete:
+                raise upload.Offline("timeout")
+
+        def complete(self, *args, **kwargs):
+            self.completes += 1
+            raise AssertionError("complete after delete")
+
+    transport = Transport()
+    upload.pump_once(transport)
+    assert queue.get("c-del")["status"] == "delete_pending"
+    assert transport.completes == 0
+    assert "secret-token" not in queue.queue_path().read_text(encoding="utf-8")
+    transport.allow_delete = True
+    upload.pump_once(transport)
+    assert queue.get("c-del")["status"] == "deleted"
+    assert transport.deletes >= 2
+
+
+def test_lost_create_response_replays_the_plan_and_uploads_every_byte(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    payload = b"hello-media"
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "raw").mkdir(parents=True)
+    media_file = root / "raw" / "input.mp4"
+    media_file.write_bytes(payload)
+    digest = __import__("hashlib").sha256(payload).hexdigest()
+    built = build_manifest(_receipt())
+    queue.enqueue({
+        "id": "c-lost", "idempotency_key": "lost-key", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": True, "disposition": "upload",
+        "save_local": False, "manifest": built, "attempts": 0, "upload": {},
+        "files": [{"role": "excerpt", "path": str(media_file), "size_bytes": len(payload), "sha256": digest, "content_type": "video/mp4"}],
+    })
+    server = {"uploads": [{
+        "role": "excerpt", "object_id": "obj",
+        "parts": [{"number": 1, "url": "http://127.0.0.1/part", "headers": {}, "offset": 0, "length": len(payload)}],
+    }]}
+
+    class Transport:
+        def __init__(self):
+            self.creates = 0
+            self.received = b""
+            self.completed = []
+
+        def create_case(self, base, body, key):
+            self.creates += 1
+            if self.creates == 1:
+                raise upload.Offline("response_lost")
+            return {"case_id": "remote", "capability": "second-secret", "uploads": server["uploads"]}
+
+        def put_part(self, url, data, headers):
+            self.received += data
+            return "etag-1"
+
+        def complete(self, base, case_id, capability, body):
+            self.completed.append(body)
+            return {"ok": True, "bytes": body["bytes"]}
+
+        def delete(self, *args, **kwargs):
+            raise AssertionError("delete")
+
+    transport = Transport()
+    first = upload.pump_once(transport)
+    assert first[0]["status"] == "offline"
+    assert transport.received == b""
+    second = upload.pump_once(transport, now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc) + __import__("datetime").timedelta(hours=1))
+    assert second[0]["status"] == "uploaded"
+    assert transport.received == payload
+    assert transport.completed[0]["bytes"] == len(payload)
+    assert "second-secret" not in queue.queue_path().read_text(encoding="utf-8")
+    assert queue.read_capability("c-lost") == "second-secret"
+
+
+def test_preview_without_attempt_id_maps_the_failure_and_submit_uses_it(data_dir):
+    spec = importlib.util.spec_from_file_location(
+        "backend.api.v1.diagnostics_preview", ROOT / "backend/api/v1/diagnostics.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["backend.api.v1.diagnostics"] = module
+    spec.loader.exec_module(module)
+    app = FastAPI()
+    app.include_router(module.router, prefix="/api/v1")
+    client = TestClient(app)
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "metadata").mkdir(parents=True)
+    path = root / "metadata" / "studio.json"
+    path.write_text(json.dumps({"attempts": [_receipt(), {**_receipt(), "attempt_id": OTHER, "sequence": 1, "state": "failed"}]}), encoding="utf-8")
+    before = path.read_bytes()
+    preview = client.get("/api/v1/diagnostics/preview", params={"project_id": "proj"})
+    assert preview.status_code == 200
+    attempt_id = preview.json()["manifest"]["attempt"]["attempt_id"]
+    assert attempt_id == TOKEN
+    submitted = client.post("/api/v1/diagnostics/submit", json={
+        "project_id": "proj", "attempt_id": attempt_id, "roles": [], "informed": True, "save_local": True,
+    })
+    assert submitted.status_code == 200
+    assert submitted.json()["status"] == "saved_local"
+    assert path.read_bytes() == before
+
+
+def test_incomplete_plan_is_not_marked_uploaded(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "raw").mkdir(parents=True)
+    media_file = root / "raw" / "input.mp4"
+    payload = b"abcdef"
+    media_file.write_bytes(payload)
+    queue.enqueue({
+        "id": "c-plan", "idempotency_key": "plan", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": True, "disposition": "upload",
+        "save_local": False, "manifest": build_manifest(_receipt()), "attempts": 0, "upload": {},
+        "files": [{"role": "excerpt", "path": str(media_file), "size_bytes": len(payload), "sha256": __import__("hashlib").sha256(payload).hexdigest(), "content_type": "video/mp4"}],
+    })
+
+    class Transport:
+        def create_case(self, base, body, key):
+            return {"case_id": "remote", "capability": "secret", "uploads": []}
+
+        def put_part(self, *args, **kwargs):
+            raise AssertionError("put")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("complete")
+
+        def delete(self, *args, **kwargs):
+            return None
+
+    result = upload.pump_once(Transport())
+    assert result[0]["status"] == "failed"
+    assert result[0]["error"] == "RuntimeError"

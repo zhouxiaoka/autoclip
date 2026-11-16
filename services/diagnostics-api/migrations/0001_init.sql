@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS objects (
   actual_bytes INTEGER,
   sha256 TEXT,
   upload_id TEXT,
+  part_plan TEXT NOT NULL DEFAULT '[]',
   state TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

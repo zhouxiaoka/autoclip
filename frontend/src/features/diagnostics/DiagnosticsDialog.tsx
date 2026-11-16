@@ -35,13 +35,15 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
     setRoles((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])
   }
 
+  const resolvedAttemptId = attemptId || preview?.manifest.attempt?.attempt_id || ''
+
   const send = async (saveLocal: boolean) => {
-    if (!projectId || !attemptId) return
+    if (!projectId || !resolvedAttemptId) return
     setBusy(true)
     try {
       const value = await diagnosticsApi.submit({
         project_id: projectId,
-        attempt_id: attemptId,
+        attempt_id: resolvedAttemptId,
         roles,
         informed: true,
         full_original_ack: roles.includes('original'),
@@ -71,14 +73,14 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
       footer={
         <div className="right">
           <Btn size="sm" onClick={onClose}>{t('关闭')}</Btn>
-          {!result && <Btn size="sm" disabled={busy || !attemptId} onClick={() => void send(true)}>{t('保存到本机')}</Btn>}
-          {!result && <Btn size="sm" variant="cta" loading={busy} disabled={!attemptId} onClick={() => void send(false)}>{t('我将对照清单再提交')}</Btn>}
+          {!result && <Btn size="sm" disabled={busy || !resolvedAttemptId} onClick={() => void send(true)}>{t('保存到本机')}</Btn>}
+          {!result && <Btn size="sm" variant="cta" loading={busy} disabled={!resolvedAttemptId} onClick={() => void send(false)}>{t('我将对照清单再提交')}</Btn>}
           {result?.id && <Btn size="sm" onClick={() => void diagnosticsApi.remove(result.id).then(() => { message.success(t('已取消上传')); onClose() })}>{t('删除已上传的诊断')}</Btn>}
         </div>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {!attemptId && <p className="ac-note">{t('这次失败没有可关联的尝试编号，仍然可以写下反馈。')}</p>}
+        {!resolvedAttemptId && <p className="ac-note">{t('这次失败没有可关联的尝试编号，仍然可以写下反馈。')}</p>}
         {attempt && (
           <div className="ac-context" title={t('将随诊断一起发送的字段')}>
             {attempt.error_code && <span>{attempt.error_code}</span>}

@@ -71,7 +71,7 @@ export class D1Repo {
     await this.db.prepare(
       `INSERT INTO cases (case_id, idempotency_key, manifest_sha256, state, capability_sha256, consent_version, manifest_bytes, reserved_bytes, landed_bytes, created_at, expires_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-       ON CONFLICT (case_id) DO UPDATE SET state = ?4, reserved_bytes = ?8, landed_bytes = ?9, updated_at = ?12`,
+       ON CONFLICT (case_id) DO UPDATE SET state = ?4, capability_sha256 = ?5, reserved_bytes = ?8, landed_bytes = ?9, updated_at = ?12`,
     ).bind(row.caseId, row.idempotencyKey, row.manifestSha256, row.state, row.capabilitySha256, row.consentVersion, row.manifestBytes, row.reservedBytes, row.landedBytes, row.createdAt, row.expiresAt, row.updatedAt).run()
   }
 
@@ -82,10 +82,13 @@ export class D1Repo {
 
   async saveObject(row: ObjectRow): Promise<void> {
     await this.db.prepare(
-      `INSERT INTO objects (object_id, case_id, role, r2_key, declared_bytes, actual_bytes, sha256, upload_id, state, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-       ON CONFLICT (object_id) DO UPDATE SET actual_bytes = ?6, state = ?9, updated_at = ?11`,
-    ).bind(row.objectId, row.caseId, row.role, row.r2Key, row.declaredBytes, row.actualBytes, row.sha256, row.uploadId, row.state, row.createdAt, row.updatedAt).run()
+      `INSERT INTO objects (object_id, case_id, role, r2_key, declared_bytes, actual_bytes, sha256, upload_id, part_plan, state, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+       ON CONFLICT (object_id) DO UPDATE SET actual_bytes = ?6, state = ?10, updated_at = ?12`,
+    ).bind(
+      row.objectId, row.caseId, row.role, row.r2Key, row.declaredBytes, row.actualBytes, row.sha256,
+      row.uploadId, JSON.stringify(row.partPlan), row.state, row.createdAt, row.updatedAt,
+    ).run()
   }
 
   async objectsFor(caseId: string): Promise<ObjectRow[]> {
@@ -118,11 +121,28 @@ function caseFrom(row: Record<string, unknown>): CaseRow {
   }
 }
 
+function partPlanFrom(value: unknown): ObjectRow['partPlan'] {
+  if (typeof value !== 'string' || !value) return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((part) => {
+      if (!part || typeof part !== 'object') return []
+      const row = part as { number?: unknown; offset?: unknown; length?: unknown }
+      if (typeof row.number !== 'number' || typeof row.offset !== 'number' || typeof row.length !== 'number') return []
+      return [{ number: row.number, offset: row.offset, length: row.length }]
+    })
+  } catch {
+    return []
+  }
+}
+
 function objectFrom(row: Record<string, unknown>): ObjectRow {
   return {
     objectId: String(row.object_id), caseId: String(row.case_id), role: String(row.role), r2Key: String(row.r2_key),
     declaredBytes: Number(row.declared_bytes), actualBytes: row.actual_bytes == null ? null : Number(row.actual_bytes),
     sha256: String(row.sha256), uploadId: row.upload_id == null ? null : String(row.upload_id),
+    partPlan: partPlanFrom(row.part_plan),
     state: row.state as ObjectRow['state'], createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   }
 }

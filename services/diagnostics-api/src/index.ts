@@ -1,15 +1,16 @@
 /**
  * Worker entry. No resources are created by this file.
  * Bindings (proposed, not provisioned): DIAGNOSTICS_BUCKET, DIAGNOSTICS_DB.
- * R2 S3 signing secrets stay in Worker secrets, never in the desktop client.
+ * Object-storage signing secrets stay in Worker secrets, never in the desktop client.
  */
-import { handle, sweep, type Bucket, type Deps, type Signer } from './app.ts'
+import type { R2Bucket, R2MultipartUpload, R2UploadedPart } from '@cloudflare/workers-types'
+import { handle, sweep, type Bucket, type Deps, type MultipartUpload, type Signer } from './app.ts'
 import { D1Repo, type D1 } from './d1.ts'
 import { limitsFrom } from './quota.ts'
 import { presignPut, sha256Base64 } from './sign.ts'
 
 interface Env {
-  DIAGNOSTICS_BUCKET: Bucket & { list: (options?: { prefix?: string }) => Promise<{ objects: { key: string }[] }> }
+  DIAGNOSTICS_BUCKET: R2Bucket
   DIAGNOSTICS_DB: D1
   ADMIN_TOKEN?: string
   R2_ACCOUNT_ID?: string
@@ -33,7 +34,7 @@ function signer(env: Env, bucketName: string): Signer | null {
   if (!env.R2_ACCOUNT_ID || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) return null
   return {
     async sign(input) {
-      const signed = await presignPut({
+      return presignPut({
         accountId: env.R2_ACCOUNT_ID!,
         accessKeyId: env.R2_ACCESS_KEY_ID!,
         secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
@@ -45,28 +46,51 @@ function signer(env: Env, bucketName: string): Signer | null {
         uploadId: input.uploadId,
         partNumber: input.partNumber,
       })
-      return signed
     },
+  }
+}
+
+function wrapUpload(upload: R2MultipartUpload): MultipartUpload {
+  return {
+    key: upload.key,
+    uploadId: upload.uploadId,
+    uploadPart: (partNumber, value) => upload.uploadPart(partNumber, value),
+    abort: () => upload.abort(),
+    complete: async (uploadedParts: R2UploadedPart[]) => {
+      const assembled = await upload.complete(uploadedParts)
+      return { size: assembled.size, httpEtag: assembled.httpEtag }
+    },
+  }
+}
+
+export function adaptBucket(bucket: R2Bucket): Bucket {
+  return {
+    put: async (key, body) => { await bucket.put(key, body) },
+    head: async (key) => {
+      const head = await bucket.head(key)
+      return head ? { size: head.size } : null
+    },
+    get: async (key) => {
+      const object = await bucket.get(key)
+      if (!object) return null
+      return { size: object.size, arrayBuffer: () => object.arrayBuffer() }
+    },
+    delete: (key) => bucket.delete(key),
+    createMultipartUpload: async (key) => wrapUpload(await bucket.createMultipartUpload(key)),
+    resumeMultipartUpload: (key, uploadId) => wrapUpload(bucket.resumeMultipartUpload(key, uploadId)),
+    list: async (prefix) => (await bucket.list({ prefix })).objects.map((object) => object.key),
   }
 }
 
 function deps(env: Env): Deps {
   const bucketName = env.R2_BUCKET_NAME || 'autoclip-diagnostics'
   if (bucketName === 'autoclip-media') throw new Error('refusing_media_bucket')
-  const bucket = env.DIAGNOSTICS_BUCKET
   if (!env.DIAGNOSTICS_DB) throw new Error('DIAGNOSTICS_DB missing')
+  if (!env.DIAGNOSTICS_BUCKET) throw new Error('DIAGNOSTICS_BUCKET missing')
   return {
     repo: new D1Repo(env.DIAGNOSTICS_DB, () => new Date().toISOString()),
-    bucket: {
-      put: (key, body) => bucket.put(key, body),
-      head: (key) => bucket.head(key),
-      delete: (key) => bucket.delete(key),
-      createMultipartUpload: (key) => bucket.createMultipartUpload(key),
-      listParts: (key, uploadId) => bucket.listParts(key, uploadId),
-      abortMultipart: (key, uploadId) => bucket.abortMultipart(key, uploadId),
-      list: async (prefix) => (await bucket.list({ prefix })).objects.map((object) => object.key),
-    },
-    limits: limitsFrom(env as Record<string, string | undefined>),
+    bucket: adaptBucket(env.DIAGNOSTICS_BUCKET),
+    limits: limitsFrom(env as unknown as Record<string, string | undefined>),
     now: () => new Date(),
     signer: signer(env, bucketName),
     adminToken: env.ADMIN_TOKEN || '',
@@ -83,4 +107,3 @@ export default {
     await sweep(deps(env))
   },
 }
-

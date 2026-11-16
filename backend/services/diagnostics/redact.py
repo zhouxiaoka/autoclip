@@ -6,6 +6,16 @@ from pathlib import Path
 
 from backend.core.log_redaction import redact_text
 
+# desktop_main: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# local_runner file: "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_DESKTOP = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - [\w.]+ - "
+    r"(?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL) - (?P<rest>.*)$"
+)
+_RUNNER = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) "
+    r"(?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL) [\w.]+: (?P<rest>.*)$"
+)
 _LINE = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?)\s+"
     r"(?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\s+(?P<rest>.+)$"
@@ -38,7 +48,7 @@ def sanitized_log_records(text: str, *, project_id: str | None = None, limit: in
     out: list[dict] = []
     marker = f"project_id={project_id}" if project_id else None
     for raw in (text or "").splitlines():
-        match = _LINE.match(raw.strip())
+        match = _DESKTOP.match(raw.strip()) or _RUNNER.match(raw.strip()) or _LINE.match(raw.strip())
         if not match:
             continue
         rest = match.group("rest")

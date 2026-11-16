@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -12,7 +13,17 @@ from backend.core.path_utils import get_data_directory
 
 MAX_ITEMS = 32
 TERMINAL = frozenset({"uploaded", "cancelled", "saved_local", "deleted", "failed"})
+OPEN = frozenset({"queued", "uploading", "offline", "needs_endpoint"})
 _LOCK = threading.Lock()
+_CANNOT_BECOME = {
+    "deleted": frozenset({"uploaded", "uploading", "queued", "offline", "saved_local", "needs_endpoint", "delete_pending"}),
+    "delete_pending": frozenset({"uploaded", "uploading", "queued", "needs_endpoint", "saved_local", "offline"}),
+    "saved_local": frozenset({"uploaded", "uploading", "queued"}),
+    "cancelled": frozenset({"uploaded", "uploading", "queued"}),
+    "uploaded": frozenset({"uploading", "queued", "offline"}),
+    "failed": frozenset({"uploaded", "uploading"}),
+}
+_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 
 
 def _now() -> datetime:
@@ -79,23 +90,69 @@ def enqueue(item: dict) -> dict:
         terminal_budget = MAX_ITEMS - len(active) - 1
         keep_terminal = room[-terminal_budget:] if terminal_budget > 0 else []
         items = keep_terminal + active
+        item.setdefault("version", 1)
+        item.setdefault("disposition", "local" if item.get("save_local") is True else "upload")
         items.append(item)
         _save(items)
-        return item
+        return dict(item)
 
 
-def update(item_id: str, **values) -> dict | None:
+def get(item_id: str) -> dict | None:
+    with _LOCK:
+        return next((dict(row) for row in _load() if row.get("id") == item_id), None)
+
+
+def update(item_id: str, *, if_version: int | None = None, if_status: frozenset[str] | set[str] | None = None, **values) -> dict | None:
+    """Compare-and-set. A stale version or a forbidden terminal move changes nothing."""
     with _LOCK:
         items = _load()
-        found = None
-        for row in items:
-            if row.get("id") == item_id:
-                row.update(values)
-                found = row
-                break
-        if found is not None:
-            _save(items)
-        return found
+        found = next((row for row in items if row.get("id") == item_id), None)
+        if found is None:
+            return None
+        if if_version is not None and found.get("version") != if_version:
+            return None
+        if if_status is not None and found.get("status") not in if_status:
+            return None
+        new_status = values.get("status", found.get("status"))
+        if new_status in _CANNOT_BECOME.get(found.get("status"), frozenset()):
+            return None
+        if values.get("disposition") not in (None, found.get("disposition")):
+            return None
+        found["version"] = int(found.get("version") or 0) + 1
+        found.update(values)
+        found["disposition"] = found.get("disposition") or "upload"
+        _save(items)
+        return dict(found)
+
+
+def capability_path(item_id: str) -> Path:
+    if not _ID.fullmatch(item_id):
+        raise ValueError("capability_id")
+    return get_data_directory() / "diagnostics" / "capabilities" / item_id
+
+
+def write_capability(item_id: str, secret: str) -> None:
+    """The secret lives outside the queue file, mode 0600, and is never copied into an export."""
+    path = capability_path(item_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(secret, encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def read_capability(item_id: str) -> str:
+    try:
+        return capability_path(item_id).read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        return ""
 
 
 def cancel_before(epoch: int) -> list[dict]:
@@ -104,10 +161,12 @@ def cancel_before(epoch: int) -> list[dict]:
         items = _load()
         changed = []
         for row in items:
-            if row.get("status") in TERMINAL:
+            if row.get("status") in TERMINAL or row.get("status") == "delete_pending":
                 continue
             if isinstance(row.get("epoch"), int) and row["epoch"] < epoch:
-                row["status"] = "cancelled"
+                row["version"] = int(row.get("version") or 0) + 1
+                remote = bool((row.get("upload") or {}).get("case_id") or row.get("case_id"))
+                row["status"] = "delete_pending" if remote else "cancelled"
                 row["error"] = "revoked"
                 row["updated_at"] = now_iso()
                 changed.append(dict(row))
