@@ -660,6 +660,57 @@ def test_endpoint_returns_bundle_without_saving_settings(monkeypatch, profiles):
     assert "base_url" not in json.dumps(body)
 
 
+def test_restarted_process_keeps_sequence_and_replaces_the_revision_epoch(tmp_path, profiles):
+    private, public = _keys()
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, _payload(sequence=11)))
+    assert client.refresh_sync() == "ok"
+    opened = client.view()
+    assert opened["sequence"] == 11
+    assert opened["revision"] == 0
+    assert isinstance(opened["instance"], str) and opened["instance"]
+    restarted = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, _payload(sequence=11)))
+    again = restarted.view()
+    assert again["sequence"] == 11
+    assert again["revision"] == 0
+    assert again["instance"] != opened["instance"]
+    assert restarted.refresh_sync() == "current"
+    assert restarted.view()["sequence"] == 11
+
+
+def test_undecodable_copy_falls_through_to_another_signed_copy(tmp_path, profiles):
+    private, public = _keys()
+    stage = {"body": _envelope(private, _payload(sequence=11))}
+
+    def http(url, timeout, max_bytes):
+        return stage["body"]
+
+    client = _client(tmp_path, private, public, http)
+    assert client.refresh_sync() == "ok"
+    (tmp_path / "sponsor-promo-state.bak").write_bytes(b"\xff\xfe")
+    assert client.view()["sequence"] == 11
+    (tmp_path / "sponsor-promo-state.json").write_bytes(b"\xff\xfe\x00\x00")
+    (tmp_path / "sponsor-promo-state.bak").unlink()
+    shown = client.view()
+    assert shown["sequence"] == 11
+    assert shown.get("security_state") != "error"
+    (tmp_path / "sponsor-promo-state.json").write_bytes(b"\xff\xfe")
+    (tmp_path / "sponsor-promo-checkpoint.json").write_bytes(b"\xff\xfe")
+    backup_only = client.view()
+    assert backup_only["sequence"] == 11
+    stage["body"] = {"payload": _payload(sequence=12), "signature": "aa"}
+    assert client.refresh_sync() == "unsigned"
+    assert client.view()["sequence"] == 11
+    stage["body"] = _envelope(private, _payload(sequence=10))
+    assert client.refresh_sync() == "downgrade"
+    assert client.view()["sequence"] == 11
+    for name in ("sponsor-promo-state.json", "sponsor-promo-state.bak", "sponsor-promo-checkpoint.json"):
+        (tmp_path / name).write_bytes(b"\xff\xfe")
+    blocked = _client(tmp_path, private, public, http)
+    assert blocked.view()["security_state"] == "error"
+    assert blocked.view()["source"] == "bundled"
+    assert blocked.refresh_sync() == "security_state"
+
+
 def test_sign_script_refuses_a_private_key_inside_the_repo(tmp_path):
     import importlib.util
 
