@@ -107,6 +107,24 @@ def bound_clip_job(seconds: Optional[float] = None) -> Iterator[None]:
 
 
 @contextmanager
+def clip_step_budget(seconds: float, *, reserve_seconds: float = 0) -> Iterator[None]:
+    """A tighter deadline for an optional step, without resetting the parent clock.
+
+    Stream readers/watchdogs inherit this deadline. After the context restores
+    the job budget, callers must check it before treating a step timeout as a
+    fallback: expiration of the whole job is still terminal.
+    """
+    ensure_clip_job_budget()
+    parent = _current.get()
+    limit = min(float(seconds), max(0, parent.remaining() - reserve_seconds)) if parent is not None else float(seconds)
+    token = _current.set(_Budget(limit, time.monotonic()))
+    try:
+        yield
+    finally:
+        _current.reset(token)
+
+
+@contextmanager
 def pause_clip_job_budget() -> Iterator[None]:
     """Freeze the provider/clip-job clock.
 

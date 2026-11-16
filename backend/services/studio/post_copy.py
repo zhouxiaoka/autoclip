@@ -8,6 +8,8 @@ missing or malformed falls back to the clip title, so a post is never blocked on
 from __future__ import annotations
 
 from backend.core.failure_codes import UserFacingError
+from backend.core.job_budget import JobDurationExceeded
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
 import logging
 import re
 import unicodedata
@@ -41,6 +43,7 @@ RULES = {
     'original': PostRules('zh', 60, 300, (3, 5), '通用：标题概括核心观点，描述交代出处'),
 }
 TAG_CHARS = 20
+POST_COPY_BUDGET_SEC = 120
 
 PROMPT = (
     '你是短视频运营编辑。根据这段视频的字幕 lines 与参考标题 title_hint，为 platforms 里的每个平台写发布文案。'
@@ -199,7 +202,12 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
             if mixed and attempt == 0:
                 raise UserFacingError(f'{"、".join(mixed)} 的标题必须是英文，不能有中文')
             return posts
-        except Exception as error:  # noqa: BLE001 - copy falls back to the clip title
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise  # a stopped request is not malformed copy to regenerate
+        except (ValueError, TypeError, UserFacingError) as error:
             logger.warning('Post copy rejected (attempt %d): %s', attempt + 1, type(error).__name__)
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按格式重新返回。'}
+        except Exception as error:  # noqa: BLE001 - transport/auth errors are not format repairs
+            logger.warning('Post copy fell back: %s', type(error).__name__)
+            break
     return posts

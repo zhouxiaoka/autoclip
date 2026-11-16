@@ -1172,25 +1172,39 @@ def _content_key(value):
 def _posts_for(project_id, items, cache):
     """{(content key, strategy id): post copy}: one model call per clip covering all its platforms, side by side."""
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+    from threading import Lock
     from backend.services.studio import packaging, post_copy
     _packaging_inputs(project_id, cache)
     clips = {}
     for strategy_id, value in items:
         clips.setdefault(_content_key(value), (value, []))[1].append(strategy_id)
+    completed = {}
+    completed_lock = Lock()
 
     def one(entry):
         key, (value, platforms) = entry
         lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
         title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
-        return key, post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        posts = post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        with completed_lock:
+            completed[key] = posts
 
     try:
-        with llm_usage.stage('post_copy'):
-            results = map_chunks(one, clips.items())
+        # Publishing descriptions are optional. A small model can keep streaming
+        # them indefinitely; do not spend the entire generation budget before
+        # any of the already prepared videos can enter rendering.
+        with clip_step_budget(post_copy.POST_COPY_BUDGET_SEC, reserve_seconds=30), llm_usage.stage('post_copy'):
+            map_chunks(one, clips.items(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # parent expiration remains a real job failure
+        logger.warning('Post copy step timed out; keeping completed copy and rendering prepared clips')
+    except (JobStopped, ProjectDeleted, ServiceRestarted):
+        raise
     except Exception as error:  # noqa: BLE001 - copy is never a blocker
         logger.warning('Post copy failed: %s', type(error).__name__)
-        return {}
-    return {(key, platform): post for key, by_platform in results for platform, post in by_platform.items()}
+    return {(key, platform): post for key, by_platform in completed.items() for platform, post in by_platform.items()}
 
 
 def _design_covers(project_id, draft, job_id):
