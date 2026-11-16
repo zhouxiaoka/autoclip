@@ -73,7 +73,7 @@ def staging_empty(tmp_path):
     return not staging.exists() or not any(staging.iterdir())
 
 
-def studio_import(monkeypatch, tmp_path, video_bytes, data=None, srt=False):
+def studio_import(monkeypatch, tmp_path, video_bytes, data=None, srt=False, subtitle_text=SRT):
     from backend.api.v1 import studio as api
     created, inspected = [], []
 
@@ -85,10 +85,29 @@ def studio_import(monkeypatch, tmp_path, video_bytes, data=None, srt=False):
     app = FastAPI(); app.include_router(api.router)
     files = {'video': ('a.mp4', video_bytes, 'video/mp4')}
     if srt:
-        files['subtitle'] = ('a.srt', SRT.encode(), 'application/x-subrip')
+        files['subtitle'] = ('a.srt', subtitle_text.encode(), 'application/x-subrip')
     with TestClient(app, raise_server_exceptions=False) as client:
         r = client.post('/import', files=files, data={'auto_start': 'true', 'goal': 'auto', **(data or {})})
     return r, created, inspected
+
+
+@pytest.mark.real_media_probe
+@pytest.mark.parametrize('subtitle_text,allowed', [(SRT, True), ('\n', False), ('not SRT', False)])
+def test_http_import_checks_actual_subtitle_before_asr_gate(tmp_path, monkeypatch, subtitle_text, allowed):
+    settings('subtitle')
+    asr(monkeypatch, 'missing')
+    video = media(tmp_path / 'valid.mp4')
+    response, created, inspected = studio_import(monkeypatch, tmp_path, video.read_bytes(),
+                                                 srt=True, subtitle_text=subtitle_text)
+    if allowed:
+        assert created == [1], response.text
+        assert response.status_code == 500  # deliberate stop at project creation, after gate
+    else:
+        assert response.status_code == 422
+        assert response.json()['detail']['code'] == 'whisper_not_installed'
+        assert not created
+    assert not inspected
+    assert staging_empty(tmp_path)
 
 
 # ---------------------------------------------------------------- I1: unreadable first, before any paid call ---

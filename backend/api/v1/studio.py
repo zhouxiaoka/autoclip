@@ -55,16 +55,16 @@ def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
 
-async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
+async def _stage_for_gate(video, first_chunk, ext, *, subtitle_bytes: bytes | None, route: str = 'studio', goal: str | None = 'auto'):
     """Stage the upload outside any project and run the one preflight on it, in the threadpool.
     Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
     from backend.services.studio import preflight
     from backend.api.v1 import transcription_gate
     staged = await stage_upload(video, first_chunk, ext)
     try:
-        subtitle = staged.with_suffix('.srt') if srt_available else None
+        subtitle = staged.with_suffix('.srt') if subtitle_bytes is not None else None
         if subtitle is not None:
-            subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
+            subtitle.write_bytes(subtitle_bytes)  # Preflight validates the same bytes later persisted in the project.
         try:
             await transcription_gate.run(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
         finally:
@@ -279,7 +279,7 @@ async def import_visual(
     if video:
         # 1.5.7: block before creating a project when local Whisper is required but missing.
         try:
-            staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
+            staged = await _stage_for_gate(video, first_chunk, ext, subtitle_bytes=subtitle_bytes, goal=goal)
         except HTTPException:
             await video.close()
             raise

@@ -27,6 +27,9 @@ errors could become an incorrect `transcription_empty` result.
 - Readiness, local planning, resume and the adapter require parsed nonempty SRT
   cues with positive time spans. A mere file, header or invalid text is not a
   usable transcript. Numeric spoken text remains valid.
+- HTTP import stages the actual uploaded subtitle bytes for preflight, rather
+  than an empty presence marker. Valid attached subtitles bypass missing ASR;
+  invalid content cannot bypass it. Refused uploads still leave no staged files.
 - Unusable imported subtitles are preserved; when ASR is ready, generated text
   goes into project metadata. Missing ASR blocks before model work.
 - Empty generated SRT is rejected before resume stamps or analysis. Unexpected
