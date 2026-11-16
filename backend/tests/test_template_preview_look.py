@@ -335,7 +335,7 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
 
     lines = [
         {'start': 0.2, 'end': 2.0, 'text': 'I think for most people this opens more opportunities'},
-        {'start': 2.0, 'end': 6.0, 'text': 'Jensen says the economy grows 8 times'},
+        {'start': 2.0, 'end': 6.0, 'text': '>> Jensen says the economy grows 8 times'},
     ]
     draft = {'title': '黄仁勋', 'hook': ''}
 
@@ -440,7 +440,7 @@ def test_chinese_audience_sees_the_guest_name_only_on_the_guest_line():
 
     lines = [
         {'start': 0.2, 'end': 2.0, 'text': 'I completely disagree with that'},
-        {'start': 2.0, 'end': 6.0, 'text': 'Jensen says the dream is still alive'},
+        {'start': 2.0, 'end': 6.0, 'text': '>> Jensen says the dream is still alive'},
     ]
 
     def call(_prompt, _data):

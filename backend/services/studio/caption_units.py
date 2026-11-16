@@ -14,6 +14,7 @@ _ABBREVIATION = re.compile(r'(?:\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc)|\b[A-Z])
 _DEPENDENT = re.compile(r'\b(?:not|never|no|any|every|some|is|are|was|were|be|been|being|'
                         r'who|which|that|because|although|unless|if|when|while|and|or|but|'
                         r'the|a|an|of|to|for|with|without|from|in|at|than|even like|can do now)\s*[,;:]?$', re.I)
+_ZH_DEPENDENT = re.compile(r'(?:因为|如果|虽然|为了|但是|还是|非常|的|就|和|或|从|把|被|让)\s*[，、：；]?$')
 
 
 def sentence_offsets(text):
@@ -49,18 +50,39 @@ def _part(row, text, start, end):
 
 def translation_units(lines):
     """Rejoin adjacent half sentences without crossing a speaker turn or scene gap."""
+    # Undo display-only pagination before finding sentences. A page boundary can lie
+    # inside a name or clause and must not decide either a translation or its context.
+    paragraphs = []
+    for row in lines:
+        if (paragraphs and row.get('_entry') is not None
+                and paragraphs[-1].get('_entry') == row['_entry']
+                and paragraphs[-1].get('_scene') == row.get('_scene')
+                and abs(paragraphs[-1]['end'] - row['start']) < .02):
+            previous = paragraphs[-1]
+            joiner = '' if re.search(r'[\u3400-\u9fff]$', previous['text']) and re.match(r'[\u3400-\u9fff]', row['text']) else ' '
+            previous.update(end=row['end'], text=previous['text'] + joiner + row['text'])
+        else:
+            paragraphs.append(dict(row))
     units = []
     previous_scene = None
-    for row in lines:
+    previous_entry = None
+    for row in paragraphs:
         for part in _pieces(row):
             if units:
                 previous = units[-1]
                 text = previous['text']
                 gap = part['start'] - previous['end']
                 closed = len(text) in set(sentence_offsets(text))
-                dependent = bool(_DEPENDENT.search(text))
+                dependent = bool(_DEPENDENT.search(text) or _ZH_DEPENDENT.search(text))
+                # Short sentences in one source paragraph share referents/word senses
+                # (e.g. "cool" after an acting anecdote). Translate that whole passage;
+                # never pass separate neighbouring facts as context-only instructions.
+                short_passage = (row.get('_entry') is not None and previous_entry == row['_entry']
+                                 and part['end'] - previous['start'] <= 12
+                                 and len(text) + len(part['text']) < 260)
                 joiner = '' if re.search(r'[\u3400-\u9fff]$', text) and re.match(r'[\u3400-\u9fff]', part['text']) else ' '
-                if (previous_scene == row.get('_scene') and not closed and not part['text'].lstrip().startswith('>>')
+                if (previous_scene == row.get('_scene') and (not closed or short_passage)
+                        and not part['text'].lstrip().startswith('>>')
                         and -.05 <= gap <= (1.5 if dependent else .6)
                         and part['end'] - previous['start'] <= MAX_SECONDS
                         and len(text) + len(joiner) + len(part['text']) <= MAX_CHARS):
@@ -68,4 +90,5 @@ def translation_units(lines):
                     continue
             units.append(dict(part))
             previous_scene = row.get('_scene')
+            previous_entry = row.get('_entry')
     return units

@@ -313,6 +313,14 @@ def test_correct_captions_keep_original_names_when_model_rewrites_title_entities
     assert '斐济' not in ''.join(result['title_lines'])
 
 
+def test_full_source_names_are_protected_even_without_a_mixed_language_title():
+    lines = [{'start': 0., 'end': 5., 'text': 'Dana K. Morgan played Casey Reed in Winter Garden.'}]
+    terms = packaging._protected_terms({'title': 'An interview'}, lines, 'zh')
+    assert terms == ['Dana K. Morgan', 'Casey Reed', 'Winter Garden']
+    with pytest.raises(ValueError):
+        packaging._check_preserved_terms(lines[0]['text'], 'Dana Kelly Morgan出演了Casey Reed，作品是Winter Garden。', terms)
+
+
 def test_name_translation_can_recover_with_one_bounded_packaging_retry():
     draft = {'title': 'Fiji离开后，我和Greg配合很好', 'hook': ''}
     lines = [{'start': 0., 'end': 2., 'text': 'Fiji and Greg worked here.'}]

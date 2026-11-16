@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 MAX_ROWS = 1
 MAX_CHARS = 1100
 BATCH_SECONDS = 45
-POLICY_VERSION = 4
+POLICY_VERSION = 5
 _LOCK = threading.Lock()
 PROMPT = (
     'You are a professional subtitle translator. Translate the entire text faithfully. '
@@ -97,6 +97,11 @@ def _valid(source, text, audience, terms):
         return None
     text = _clean(text)
     if not text or len(text) > 600 or '\n' in text or text.startswith(('{', '[')):
+        return None
+    # A repeated paragraph is a model loop, not extra source coverage. Preserve
+    # deliberate source repetition, but do not cache newly duplicated passages.
+    compact = re.sub(r'\s+', '', text)
+    if re.fullmatch(r'(.{12,}?)\1+', compact) and not re.fullmatch(r'(.{12,}?)\1+', re.sub(r'\s+', '', source)):
         return None
     if any(marker in text for marker in ('只补齐本批未通过校验', '勿复述已成功译文', '只输出译文，不输出',
                                          'context_before', 'context_after', '上次译文不合格')):

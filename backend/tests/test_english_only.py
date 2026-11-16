@@ -34,7 +34,8 @@ def test_chinese_model_output_never_reaches_an_english_package():
             return {'lines': [{'id': row['id'], 'text': '好的投资人像飞行教练' if len(calls) == 1 else 'Good investors let founders fly.'} for row in payload['lines']]}
         return _response(title_lines=['好的投资人', '像飞行教练'], speakers=[{'line': 0, 'name': 'Sam Altman', 'role': 'OpenAI 首席执行官'}])
     result = packaging.build_packaging(ZH_DRAFT, ZH_LINES, platform_strategy('tiktok'), known_names='Sam Altman', call=chinese_titles_then_good)
-    assert len(calls) == 4 and 'repair' in calls[1]
+    # Adjacent Chinese half sentences form one source unit: translate, repair, decorate.
+    assert len(calls) == 3 and 'repair' in calls[1]
     assert not _has_foreign({k: result[k] for k in ('title_lines', 'cues', 'speakers')}), result
     assert result['speakers'] == [{'at': 0.0, 'name': 'Sam Altman', 'role': ''}]
 

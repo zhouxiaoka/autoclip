@@ -69,8 +69,8 @@ def test_extension_is_bounded():
 
 
 def test_model_can_finish_the_answer_but_not_pick_another_clip():
-    finish = lambda *_: {'start_line': 1, 'end_line': 6}      # window ids: row 0 is id 0
-    assert b.refine_with_model(ROWS, 104.0, 116.0, finish) == (104.0, 128.4)
+    finish = lambda *_: {'start_line': 1, 'end_line': 4}      # finish the actual unfinished sentence
+    assert b.refine_with_model(ROWS, 104.0, 118.0, finish) == (104.0, 120.0)
     wander = lambda *_: {'start_line': 6, 'end_line': 6}      # a single unrelated row
     assert b.refine_with_model(ROWS, 104.0, 124.0, wander) is None
     broken = lambda *_: {'start_line': 'x'}

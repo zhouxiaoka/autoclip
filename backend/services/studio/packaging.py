@@ -39,11 +39,16 @@ def _protected_terms(draft: dict[str, Any], lines: list[dict[str, Any]], audienc
     # Protect only those also present as complete words in the actual source rows;
     # never infer a person's identity or force an English headline to remain English.
     title = str(draft.get('title') or '')
-    if audience != 'zh' or not CJK.search(title):
+    if audience != 'zh':
         return []
     source = ' '.join(str(line.get('text') or '') for line in lines)
-    return list(dict.fromkeys(term for term in re.findall(r'[A-Z][A-Za-z0-9_+-]{1,39}', title)
-                             if _term_present(term, source)))
+    title_terms = [term for term in re.findall(r'[A-Z][A-Za-z0-9_+-]{1,39}', title)
+                   if CJK.search(title) and _term_present(term, source)]
+    # Keep explicitly spelled multi-word names (including a middle initial) instead
+    # of letting a translator expand the initial or guess a different person's name.
+    # Single capitalized words may just be ASR sentence starts, so do not infer them.
+    names = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z]+)+\b', source)
+    return list(dict.fromkeys([*title_terms, *names]))
 
 
 def _check_preserved_terms(source: str, target: str, terms: list[str]) -> None:
@@ -145,7 +150,7 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
     from backend.pipeline.quality import to_seconds
     lines = []
     for scene_index, scene in enumerate(scenes):
-        for entry in entries:
+        for entry_index, entry in enumerate(entries):
             start, end = to_seconds(entry['start_time']), to_seconds(entry['end_time'])
             text = str(entry.get('text') or '').strip()
             if not text or end <= scene['start'] or start >= scene['end']:
@@ -176,7 +181,8 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
                 # Silence-snapped cuts can overlap only the last few milliseconds of the
                 # previous question. Do not replay that entire row in captions or translation.
                 if b - a >= min(.15, (end - start) * .2):
-                    lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' '), '_scene': scene_index})
+                    lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' '),
+                                  '_scene': scene_index, '_entry': entry_index})
     return lines
 
 

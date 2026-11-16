@@ -31,3 +31,19 @@ def test_sentence_cut_does_not_treat_a_name_initial_as_an_ending():
     text = 'I met Hunter S. Thompson. Then we talked.'
     offsets = boundaries._inner_ends(text)
     assert [text[:offset] for offset in offsets] == ['I met Hunter S. Thompson.']
+
+
+def test_model_cannot_extend_without_a_supported_sentence_completion():
+    rows = [(0., 10., 'The original answer is complete.'),
+            (10., 13., 'I have another question about people who'),
+            (13., 18., 'might be worried that well'),
+            (18., 23., 'they could choose something else'),
+            (23., 28., 'and then they might'),
+            (28., 60., 'continue this unrelated topic for much longer.')]
+    seen = []
+    def call(_, data):
+        seen.append(data)
+        return {'end_line': 0}
+    result = boundaries.refine_with_model(rows, 0., 13., call)
+    assert result == (0., 10.)
+    assert seen[0]['end_candidates'] == [0]

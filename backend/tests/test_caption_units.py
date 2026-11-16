@@ -48,6 +48,19 @@ def test_chinese_quotes_stay_with_the_finished_sentence():
     assert [u['text'] for u in units] == ['他说“明天见。”', '然后离开。']
 
 
+def test_short_sentences_in_one_paragraph_keep_their_shared_context():
+    text = 'We filmed in his house. It felt like meeting a ghost. That was cool.'
+    entries = [{'start_time': '00:00:00,000', 'end_time': '00:00:09,000', 'text': text}]
+    units = translation_units(packaging.draft_lines(entries, [{'start': 0., 'end': 9.}]))
+    assert units == [{'start': 0., 'end': 9., 'text': text}]
+
+
+def test_chinese_connector_keeps_the_rest_of_the_sentence_after_a_breath():
+    rows = [{'start': 0., 'end': 4., 'text': '一个人怎么从这些光鲜的东西里就'},
+            {'start': 4.64, 'end': 7., 'text': '退出去了'}]
+    assert translation_units(rows) == [{'start': 0., 'end': 7., 'text': '一个人怎么从这些光鲜的东西里就退出去了'}]
+
+
 def test_all_source_words_survive_a_long_unpunctuated_run():
     rows = [{'start': i*3., 'end': i*3.+3., 'text': f'word{i} ' * 20} for i in range(40)]
     units = translation_units(rows)

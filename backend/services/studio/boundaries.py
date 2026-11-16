@@ -357,7 +357,12 @@ def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[
     # let it consume that topic merely because more context was supplied.
     pause_after = last + 1 < len(rows) and rows[last + 1][0] - rows[last][1] >= .8
     already_closed = not unfinished(rows[last][2]) and (ends_sentence(rows, last) or pause_after)
-    latest = rows[last][1] if already_closed else end + MODEL_MAX_EXTEND
+    # Time allowance alone is not evidence that another answer belongs in this clip.
+    # Extension must first have a transcript-supported sentence ending; otherwise
+    # the model can only choose an earlier completed thought from the selected span.
+    supported = sentence_bounds(rows, start, end)
+    extension = supported[1] if not supported.needs_review else end
+    latest = rows[last][1] if already_closed else min(end + MODEL_MAX_EXTEND, max(end, extension))
     candidates = [n for n, (_, r) in enumerate(window)
                   if end - MAX_TAIL_SEC <= r[1] <= latest
                   and not unfinished(r[2]) and not QUESTION.search(r[2])]

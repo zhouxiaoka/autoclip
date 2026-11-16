@@ -175,6 +175,13 @@ def test_source_acronyms_and_names_remain_readable_in_chinese():
     assert captions._valid('Sam builds AI tools for YC.', 'Sam为YC构建AI工具。', 'zh', ())
 
 
+def test_a_model_loop_is_not_accepted_as_complete_translation():
+    source = 'We used the original costume on set, and the experience helped the performance greatly.'
+    translated = '穿着原本的戏服表演让我们更容易进入角色。'
+    assert captions._valid(source, translated * 2, 'zh', ()) is None
+    assert captions._valid(source, translated, 'zh', ()) == translated
+
+
 def test_repair_instruction_echo_is_rejected_instead_of_cached_as_translation(monkeypatch):
     from backend.utils import llm_client
     echo = '只补齐本批未通过校验的 ID；勿复述已成功译文，保留数字和专名。'
