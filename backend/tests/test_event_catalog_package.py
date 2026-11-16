@@ -66,7 +66,9 @@ def test_installed_wheel_loads_event_catalog():
         )
         wheel, = (work / "wheels").glob("*.whl")
         target = work / "venv"
-        venv.EnvBuilder(with_pip=True).create(target)
+        # Match `python -m venv` on POSIX: copying a relocatable interpreter can
+        # break its @executable_path-relative libpython lookup before ensurepip.
+        venv.EnvBuilder(with_pip=True, symlinks=os.name != 'nt').create(target)
         python = target / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         subprocess.run(
             [str(python), "-I", "-m", "pip", "install", "--no-index", "--no-deps", str(wheel)],
