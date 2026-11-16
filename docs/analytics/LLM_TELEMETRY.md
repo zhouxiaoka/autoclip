@@ -30,7 +30,7 @@
 | `model` | `[\w.\-:/]{1,64}`，不合规则省略 |
 | `base_url_host` | 只域名；环回/内网/`.local` → `local` |
 | `kind` | `text` / `vision` |
-| `stage` | 管线阶段或 `other`（契约 `FAILURE_STAGES`） |
+| `stage` | 请求的细分步骤或 `other`（契约 `LLM_REQUEST_STAGES`）；与 run 的 `failure_stage` 分开 |
 | `http_status` | 100–599 的整数，可空 |
 | `upstream_error_type` | 契约闭集：`invalid_key` / `insufficient_quota` / `permission_denied` / `model_not_found` / `bad_endpoint` / `rate_limited` / `upstream_unavailable` / `timeout` / `connection` / `output_truncated` / `unknown` |
 | `prompt_tokens` / `completion_tokens` / `reasoning_tokens` | 非负计数 |
@@ -82,6 +82,10 @@
 ## 查询
 
 见 `docs/analytics/release_validation.sql` 末尾「1.5.7 成功率埋点」。失败事件缺 `error_code` 或 `failure_stage` 视为收数缺陷，不是失败原因。
+
+请求阶段诊断使用 [`request_stage_diagnosis.sql`](request_stage_diagnosis.sql)，固定版本、环境和时间窗分别检查 `clip_finder` / `boundaries` / `packaging` / `post_copy` / `burned_captions` / `cover_frame` / `cover_check` 的次数与耗时。该查询按请求计数，不能当作出片成功率分母；当前请求事件没有 attempt ID，同设备时间窗不能证明精确归属。旧记录的 `other` / `render` 保留未知，不反推或回填。
+
+源码验收：通过真实 Provider 观察器和异步发送队列，验证成功、失败以及并行分块上下文保留请求步骤；任务失败归因保持原粗粒度；未知步骤、提示词、字幕和密钥不进入载荷。前后端请求枚举及事件目录必须一致。安装包验收：使用隔离 validation 构建，在真实文本和已授权视觉流程执行相应步骤，按上述 SQL 核查实际入库步骤；未执行步骤保持 pending，不能用源码测试代替收数。此次变更不代表线上看板已更新。
 
 S5：仅 AUTO 模式的视觉校验失败或初筛不可用时，方案保存 `degrade_reason=vision_unavailable_subtitle_fallback`，`studio_screen_finished` 与 `studio_generation_finished` 从该方案读取并按尝试去重。此字段只接受这个固定代码，不发送原因正文；不计入同服务商模型候选切换的 `degrade_count`。用户手动选择视觉仍阻断，不切换服务商。
 

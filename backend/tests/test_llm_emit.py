@@ -133,6 +133,51 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
     assert snapshot.get("degrade_count", 0) == 0
 
 
+@pytest.mark.parametrize("stage", [
+    "clip_finder", "boundaries", "packaging", "post_copy", "burned_captions",
+    "cover_frame", "cover_check", "private unknown step",
+])
+def test_current_pipeline_stage_survives_request_and_failure_telemetry(capture, stage):
+    from concurrent.futures import ThreadPoolExecutor
+    from backend.core import event_catalog, llm_usage
+
+    provider = _ProbeProvider()
+    with telem.track_run(), llm_usage.stage(stage):
+        # The same context propagation is used by parallel pipeline chunks.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(llm_usage.run_in_context(provider.call), "private prompt").result()
+        with pytest.raises(_StatusError) as caught:
+            provider.call("private subtitle", fail=True)
+        snapshot = telem.run_snapshot(error=caught.value)
+    events = [row["properties"] for row in capture if row["event"] == "llm_request_finished"]
+    expected = "other" if stage == "private unknown step" else stage
+    assert [event["stage"] for event in events] == [expected, expected]
+    # Existing task-level failure grouping is deliberately unchanged.
+    coarse = "render" if stage == "packaging" else "other"
+    assert events[1]["failure_stage"] == coarse
+    assert snapshot["failure_stage"] == coarse
+    assert "private" not in json.dumps(events)
+    assert "sk-secret" not in json.dumps(events)
+    for event in events:
+        assert event_catalog.validate_event("llm_request_finished", event) == []
+
+
+@pytest.mark.parametrize("stage", ["burned_captions", "cover_frame", "cover_check"])
+def test_vision_request_keeps_its_specific_stage(capture, stage):
+    from backend.core import llm_usage
+
+    with llm_usage.stage(stage):
+        telem.emit_vision_request(
+            config={"model": "qwen-vl", "base_url": "http://localhost:11434/v1"},
+            started=telem.time.monotonic(), error=_StatusError("private response", 503),
+        )
+    event = next(row["properties"] for row in capture if row["event"] == "llm_request_finished")
+    assert event["kind"] == "vision"
+    assert event["stage"] == stage
+    assert event["failure_stage"] == "other"
+    assert "private" not in json.dumps(event)
+
+
 @pytest.mark.parametrize("second_status,event_type,snapshot_type", [
     (503, "upstream_unavailable", "upstream_unavailable"),
     (418, "unknown", "unknown"),
