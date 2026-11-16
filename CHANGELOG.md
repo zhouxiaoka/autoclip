@@ -41,6 +41,8 @@ _（本周尚无改动）_
 
 ### 修复
 
+- 人物取景的本地扫描和等待组件安装不再消耗模型请求的制作时间预算，避免扫描结束后把尚有请求时间的任务误判为超时；已耗尽预算的任务仍会停止。
+
 - Windows / 桌面关主窗与托盘退出的「正在制作」判定与状态栏 keep-awake 对齐：除 `status=processing` 外，也认 `pending` 以及 `studio_generation_status∈{screening,production,rendering}`。制作中（含「制作中，已阻止休眠」/「制作中 · 查看进度」）关窗必弹「正在制作 / 后台继续 / 仍然退出」，不再在状态滞后窗口直接 `confirm_quit`。（Win e2e tip 25970f2c M3）
 
 - macOS 应用菜单「退出 AutoClip」与 Cmd+Q：用自定义 `MenuItem`（id `quit` + `CmdOrCtrl+Q`）替换 muda 预定义 Quit（`terminate:`，事件环销毁后无法 `prevent_exit`），经 `on_menu_event` 与托盘退出共用 `close-requested`；制作中弹出「正在制作 / 后台继续 / 仍然退出」，选后台继续则进程继续跑。文案随 `set_tray_language` 切换。`ExitRequested` 拦截仍保留作窗销毁等兜底。须 Mac 真机冒烟后再认定生效。（接 #556 假修复）

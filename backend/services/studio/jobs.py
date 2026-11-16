@@ -1045,6 +1045,15 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None, cue
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
     nobody to follow, `full_frame_pending` when the detector is not available yet.
     """
+    from backend.core.job_budget import ensure_clip_job_budget, pause_clip_job_budget
+    ensure_clip_job_budget()
+    # Detector installation, frame decoding and face tracking are local work, just like
+    # Whisper and encoding. Preserve the remaining request budget even on fallback.
+    with pause_clip_job_budget():
+        return _local_speaker_framing(value, video, window=window, wait_sec=wait_sec, scans=scans, cues=cues)
+
+
+def _local_speaker_framing(value, video, *, window, wait_sec, scans, cues):
     from backend.services.studio import framing
     deadline = monotonic() + wait_sec
     while not framing.is_installed() and framing.get_status().get('status') == 'installing' and monotonic() < deadline:
