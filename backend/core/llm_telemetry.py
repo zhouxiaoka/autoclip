@@ -179,7 +179,9 @@ class _LogSafeLLMError(AttributedError, RuntimeError):
 
 
 def log_safe_exception(error: Exception) -> Exception:
-    if isinstance(error, _LogSafeLLMError) or type(error).__name__ == "JobDurationExceeded":
+    from backend.core.job_budget import JobDurationExceeded
+    from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+    if isinstance(error, (_LogSafeLLMError, JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted)):
         return error
     from backend.core.llm_retry import retry_after_from_error
     from backend.core.upstream_errors import classify_exception, http_error_parts

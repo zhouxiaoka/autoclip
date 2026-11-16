@@ -6,8 +6,8 @@ Results keep chunk order. Local models (Ollama, LM Studio …) share this machin
 `AUTOCLIP_LLM_CONCURRENCY` overrides the pool size (1–8).
 
 A process-wide limiter halves itself after a 429 so later chunks (and later steps) back off
-together. One chunk raising does not cancel its siblings: every submitted item finishes, then
-the first error is re-raised.
+together. By default, every submitted item finishes before the first error is re-raised.
+With ``stop_on_error``, active calls drain but queued calls do not start after a failure.
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def _release() -> None:
         _lock.notify_all()
 
 
-def map_chunks(fn: Callable[[Any], T], items: Iterable[Any]) -> list[T]:
+def map_chunks(fn: Callable[[Any], T], items: Iterable[Any], *, stop_on_error: bool = False) -> list[T]:
     """`[fn(item) for item in items]`, run on a small pool; usage tracking follows each call."""
     items = list(items)
     count = min(effective_workers(), len(items))
@@ -108,20 +108,32 @@ def map_chunks(fn: Callable[[Any], T], items: Iterable[Any]) -> list[T]:
     wrapped = run_in_context(fn)
     results: list[T | None] = [None] * len(items)
     errors: list[BaseException | None] = [None] * len(items)
+    stopped = threading.Event()
+    first_error: list[Exception] = []
+    error_lock = threading.Lock()
 
     def run(index: int, item: Any) -> None:
+        if stop_on_error and stopped.is_set():
+            return
         _acquire()
         try:
+            if stop_on_error and stopped.is_set():
+                return
             results[index] = wrapped(item)
         except Exception as error:  # noqa: BLE001 - wait for siblings, then re-raise
             errors[index] = error
+            if stop_on_error:
+                with error_lock:
+                    if not first_error:
+                        first_error.append(error)
+                    stopped.set()
         finally:
             _release()
 
     with ThreadPoolExecutor(max_workers=count, thread_name_prefix='llm-chunk') as pool:
         pending = [pool.submit(run, index, item) for index, item in enumerate(items)]
         wait(pending, return_when=ALL_COMPLETED)
-    first = next((error for error in errors if error is not None), None)
+    first = first_error[0] if first_error else next((error for error in errors if error is not None), None)
     if first is not None:
         raise first
     return [item for item in results]  # type: ignore[misc]

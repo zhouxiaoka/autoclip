@@ -174,7 +174,8 @@ def model_matches(stamp: dict | None, prompt_files: dict | None = None) -> bool:
 
 def srt_reusable(video: Path, srt: Path | None, stamp: dict | None) -> bool:
     """True when input.srt exists and matches the stamped source (or legacy: srt exists, no stamp)."""
-    if not srt or not Path(srt).is_file():
+    from backend.utils.text_processor import TextProcessor
+    if not TextProcessor.has_usable_srt(srt):
         return False
     if stamp is None:
         # Legacy projects without a stamp: keep prior behavior (use existing srt).
