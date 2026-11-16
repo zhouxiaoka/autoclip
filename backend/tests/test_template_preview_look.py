@@ -344,7 +344,7 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
             'title_lines': ['黄仁勋：更闲的工作', '还是更有意义'],
             'accent_line': 0,
             'segments': [
-                {'from': 0, 'to': 0, 'text': '我认为对大多数人来说，AI会打开更多机会'},
+                {'from': 0, 'to': 0, 'text': '我认为对大多数人来说，这会打开更多机会'},
                 {'from': 1, 'to': 1, 'text': '黄仁勋说，经济会增长到 8 倍'},
             ],
             'speakers': [

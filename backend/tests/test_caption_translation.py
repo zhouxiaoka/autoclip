@@ -147,6 +147,19 @@ def test_long_sentence_cannot_be_accepted_as_one_character_from_another_row():
     assert captions._valid('Our company is for everyone.', '我们的公司是为了 all', 'zh', ()) is None
 
 
+@pytest.mark.parametrize('source,translation', [
+    ('Building companies is cool fun', '创办公司既酷又有趣的.fun'),
+    ('You can do amazing things', '你能做 amazing 的事情'),
+    ('They want', '他们想要更长远的满足感，我认为这样会很好。'),
+])
+def test_foreign_words_and_context_expansion_do_not_count_as_translated_rows(source, translation):
+    assert captions._valid(source, translation, 'zh', ()) is None
+
+
+def test_source_acronyms_and_names_remain_readable_in_chinese():
+    assert captions._valid('Sam builds AI tools for YC.', 'Sam为YC构建AI工具。', 'zh', ())
+
+
 def test_repair_instruction_echo_is_rejected_instead_of_cached_as_translation(monkeypatch):
     from backend.utils import llm_client
     echo = '只补齐本批未通过校验的 ID；勿复述已成功译文，保留数字和专名。'

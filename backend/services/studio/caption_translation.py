@@ -117,8 +117,16 @@ def _valid(source, text, audience, terms):
             words = re.findall(r'[A-Za-z]+', original)
             if len(words) >= 12 and len(CJK.findall(rest)) < len(words) / 3:
                 return None
+            if len(words) <= 4 and len(CJK.findall(rest)) > max(14, len(words) * 5):
+                return None  # a tiny fragment must not borrow its neighbours' whole sentences
             if re.search(r'(?<![A-Za-z])(?:and|because|which|who|that|the|all|we|they)(?![A-Za-z])', rest, re.I):
                 return None
+            for word in re.findall(r'[A-Za-z]+', rest):
+                # Keep grounded names/acronyms; ordinary untranslated English is not Chinese coverage.
+                present = re.search(r'(?<![A-Za-z])' + re.escape(word) + r'(?![A-Za-z])', source,
+                                    re.I if word.isupper() and len(word) > 1 else 0)
+                if not present or not word[0].isupper() or len(word) < 2:
+                    return None
     elif CJK.search(text) or KANA.search(text) or (any(c.isalpha() for c in source) and not LATIN.search(text)):
         return None
     # Preserve written figures. The model is asked to retain digits, avoiding ambiguous conversions.
