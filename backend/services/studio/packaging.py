@@ -56,7 +56,18 @@ def _protected_terms(draft: dict[str, Any], lines: list[dict[str, Any]], audienc
     names = [name for line in lines
              for name in re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z]+)+\b', str(line.get('text') or ''))
              if not any(word.lower() in non_names for word in name.split())]
-    return list(dict.fromkeys([*title_terms, *names]))
+    # Ground short acronyms in mixed-case speech; an all-caps transcript is not
+    # evidence that every word is a name. The translation adapter masks these too.
+    acronyms = [word for line in lines if not str(line.get('text') or '').isupper()
+                for word in re.findall(r'\b[A-Z]{2,8}\b', str(line.get('text') or ''))
+                if word.lower() not in non_names | {'for', 'with', 'not', 'all', 'are', 'was', 'were', 'its'}]
+    # ASR also lowercases initialisms. Restrict inference to short consonant-only
+    # tokens, excluding common vocalizations/ordinary words; never expand initials.
+    initials = [word for line in lines
+                for word in re.findall(r'\b[bcdfghjklmnpqrstvwxz]{2,5}\b', str(line.get('text') or ''))
+                if word not in {'hm', 'hmm', 'sh', 'shh', 'psst', 'tsk', 'nth', 'grr', 'brr', 'pfft'}
+                and len(set(word)) > 1]
+    return list(dict.fromkeys([*title_terms, *names, *acronyms, *initials]))
 
 
 def _check_preserved_terms(source: str, target: str, terms: list[str]) -> None:

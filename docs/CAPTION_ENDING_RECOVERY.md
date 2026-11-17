@@ -15,6 +15,8 @@ up to 30 seconds/600 characters, while explicit speaker and scene changes remain
 Proper names are extracted within source units, excluding discourse-word combinations;
 only names in the current unit enter its request. Reversible placeholders preserve their
 original spelling. Missing or invented placeholders fail validation before cache writes.
+Grounded uppercase acronyms and short lowercase consonant initialisms receive the same
+protection; all-caps dialogue and common vocalizations are excluded from that inference.
 
 Accepted rows survive later malformed replies, transport errors, step deadlines and decoration
 failure. Language, numbers, protected terms and conspicuously incomplete translations are

@@ -13,6 +13,27 @@ def test_names_are_not_invented_across_subtitle_rows_or_from_discourse_words():
     assert packaging._protected_terms({'title': 'An interview'}, rows, 'zh') == ['Dana K. Morgan']
 
 
+def test_grounded_acronyms_are_masked_without_protecting_uppercase_dialogue(monkeypatch):
+    from backend.utils import llm_client
+    lines = [{'text': 'We use AI at ABC.'}, {'text': 'WE WORK TOGETHER.'}]
+    terms = packaging._protected_terms({}, lines, 'zh')
+    assert terms == ['AI', 'ABC']
+    seen = []
+    def call(_prompt, data, **_kwargs):
+        seen.append(data)
+        return '我们在' + data['protected_terms'][1] + '使用' + data['protected_terms'][0] + '。'
+    monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
+    assert caption_translation.translate(lines[:1], 'zh', terms=terms) == {0: '我们在ABC使用AI。'}
+    assert 'ABC' not in seen[0]['text'] and 'AI' not in seen[0]['text']
+
+
+def test_lowercase_initials_survive_asr_without_protecting_ordinary_words():
+    lines = [{'text': 'We use an llm and ml, hmm, not my own system.'}]
+    assert packaging._protected_terms({}, lines, 'zh') == ['llm', 'ml']
+    text = '我们使用llm和ml。'
+    assert caption_translation._valid(lines[0]['text'], text, 'zh', ['llm', 'ml']) == text
+
+
 def test_only_names_in_the_current_unit_reach_the_real_request(monkeypatch):
     from backend.utils import llm_client
     seen = []
