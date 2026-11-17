@@ -750,6 +750,48 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
     return candidate
 
+@router.post('/{project_id}/retry-translation')
+def retry_translation(project_id: str, body: Draft, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    current = next((d for d in store.read(project_id)['drafts'] if d['id'] == body.id), None)
+    if current is None:
+        raise HTTPException(404, '草稿不存在')
+    if current['revision'] != body.revision:
+        raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
+    call(validate_draft, project_id, body)
+    from backend.services.studio import packaging
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    try:
+        return call(packaging.retry_translation, project_id, body)
+    except (JobStopped, ServiceRestarted, JobDurationExceeded) as error:
+        raise HTTPException(409, str(error)) from None
+
+
+class RetranslateCaptionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    draft: Draft
+    cue_index: int = Field(ge=0, lt=600, strict=True)
+
+
+@router.post('/{project_id}/retranslate-caption')
+def retranslate_caption(project_id: str, body: RetranslateCaptionRequest, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    current = next((d for d in store.read(project_id)['drafts'] if d['id'] == body.draft.id), None)
+    if current is None:
+        raise HTTPException(404, '草稿不存在')
+    if current['revision'] != body.draft.revision:
+        raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
+    call(validate_draft, project_id, body.draft)
+    from backend.services.studio import packaging
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    try:
+        return call(packaging.retry_translation, project_id, body.draft, cue_index=body.cue_index)
+    except (JobStopped, ServiceRestarted, JobDurationExceeded) as error:
+        raise HTTPException(409, str(error)) from None
+
+
 @router.get('/{project_id}/subtitles')
 def subtitles(project_id: str, db: Session = Depends(get_db)):
     """Subtitle cues in seconds, for the editor's styled preview overlay."""

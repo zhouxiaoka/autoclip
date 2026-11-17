@@ -68,7 +68,9 @@ def test_english_interview_filters_chinese_tags_and_nameplate_roles(root):
     lines=[{'start':0,'end':3,'text':'优秀的投资人让创始人自己飞翔'}]
     response={'title_lines':['Let founders fly'],'segments':[{'from':0,'to':0,'text':'Great investors let founders fly.'}],
               'speakers':[{'line':0,'name':'Sam','role':'首席执行官'}],'tags':[{'line':0,'text':'飞行教练'}]}
-    result=packaging.build_packaging({'title':'Sam'},lines,strategy,known_names='Sam',call=lambda *_:response)
+    def call(_prompt, data):
+        return {'lines': [{'id': 0, 'text': 'Great investors let founders fly.'}]} if data.get('task') == 'translate_captions' else response
+    result=packaging.build_packaging({'title':'Sam'},lines,strategy,known_names='Sam',call=call)
     assert result['template']=='interview_zh' and result['audience_language']=='en'
     assert not result['tags'] and result['speakers'][0]['role']==''
     assert all(not packaging.foreign_for('en',cue['text']) for cue in result['cues'])

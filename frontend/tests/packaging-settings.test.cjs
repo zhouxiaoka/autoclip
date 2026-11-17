@@ -20,7 +20,7 @@ test('this release edits the two title lines, the editor tags switch and the tem
  assert.match(settings,/interview_zh: \[\{ value: 'classic'/)
  assert.match(settings,/podcast_en: \[\{ value: 'pop'/)
  assert.doesNotMatch(settings,/cues:|speakers:|highlights:/)
- assert.match(panel,/draft\.packaging \? <PackagingSettings draft=\{draft\} patch=\{patch\} \/>/)
+ assert.match(panel,/draft\.packaging \? <PackagingSettings draft=\{draft\} patch=\{patch\} onRetryTranslation=\{onRetryTranslation\}/)
  assert.match(panel,/\{!draft\.packaging && <Row label=\{t\("字幕"\)\}/)
 })
 

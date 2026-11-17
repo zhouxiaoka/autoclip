@@ -30,12 +30,19 @@ def test_chinese_model_output_never_reaches_an_english_package():
 
     def chinese_titles_then_good(_prompt, payload):
         calls.append(payload)
-        if len(calls) == 1:  # captions still in Chinese: rejected and retried
-            return _response(segments=[{'from': 0, 'to': 1, 'text': '好的投资人像飞行教练'}])
+        if payload.get('task') == 'translate_captions':
+            return {'lines': [{'id': row['id'], 'text': '好的投资人像飞行教练' if len(calls) == 1 else 'Good investors let founders fly.'} for row in payload['lines']]}
         return _response(title_lines=['好的投资人', '像飞行教练'], speakers=[{'line': 0, 'name': 'Sam Altman', 'role': 'OpenAI 首席执行官'}])
     result = packaging.build_packaging(ZH_DRAFT, ZH_LINES, platform_strategy('tiktok'), known_names='Sam Altman', call=chinese_titles_then_good)
-    assert len(calls) == 2 and 'previous_error' in calls[1]
-    assert not _has_foreign({k: result[k] for k in ('title_lines', 'cues', 'speakers')}), result
+    # Adjacent Chinese half sentences form one source unit: translate, repair, decorate.
+    assert len(calls) == 3 and 'repair' in calls[1]
+    # Editor-only source_text remains Chinese; assert the actual rendered surface,
+    # including fallback, rather than incorrectly treating all metadata as captions.
+    from backend.services.studio.models import Packaging, Scene
+    from backend.services.studio.packaging_render import scene_ass
+    rendered = scene_ass(Packaging.model_validate(result), [Scene(id='s',start=0,end=6)], 0)
+    assert not _has_foreign(rendered), rendered
+    assert result['cues'][0]['source_text'] == ''.join(line['text'] for line in ZH_LINES)
     assert result['speakers'] == [{'at': 0.0, 'name': 'Sam Altman', 'role': ''}]
 
 

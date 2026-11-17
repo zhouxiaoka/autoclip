@@ -24,6 +24,13 @@ STREET_MARK = (0xD7, 0xFF, 0x3A)
 EDITORIAL_GOLD = (0xF2, 0xD9, 0x8C)
 
 
+def _phase_response(data, response):
+    if data.get('task') == 'translate_captions':
+        texts = {segment['from']: segment['text'] for segment in response['segments']}
+        return {'lines': [{'id': row['id'], 'text': texts[row['id']]} for row in data['lines']]}
+    return response
+
+
 def _paint(template, **kwargs):
     body = dict(version=2, template=template, audience_language='zh', title_lines=['标题'])
     body.update(kwargs)
@@ -328,7 +335,7 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
 
     lines = [
         {'start': 0.2, 'end': 2.0, 'text': 'I think for most people this opens more opportunities'},
-        {'start': 2.0, 'end': 6.0, 'text': 'Jensen says the economy grows 8 times'},
+        {'start': 2.0, 'end': 6.0, 'text': '>> Jensen says the economy grows 8 times'},
     ]
     draft = {'title': '黄仁勋', 'hook': ''}
 
@@ -337,7 +344,7 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
             'title_lines': ['黄仁勋：更闲的工作', '还是更有意义'],
             'accent_line': 0,
             'segments': [
-                {'from': 0, 'to': 0, 'text': '我认为对大多数人来说，AI会打开更多机会'},
+                {'from': 0, 'to': 0, 'text': '我认为对大多数人来说，这会打开更多机会'},
                 {'from': 1, 'to': 1, 'text': '黄仁勋说，经济会增长到 8 倍'},
             ],
             'speakers': [
@@ -359,12 +366,12 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
 
     def call(prompt, _data):
         prompts.append(prompt)
-        return reply()
+        return _phase_response(_data, reply())
 
     result = packaging_mod.build_packaging(
         draft, lines, platform_strategy('douyin'), known_names='黄仁勋 主持人 Jensen', call=call,
     )
-    assert 'marks' in prompts[0]
+    assert len(prompts) == 3 and 'marks' in prompts[-1]
     assert result['version'] == 1 and result['template'] == 'interview_zh'
     assert result['deck'] == 'Jensen Huang on the five-layer cake'
     assert [cue['emphasis'] for cue in result['cues']] == ['更多机会', '8 倍']
@@ -374,11 +381,11 @@ def test_packaging_parse_carries_one_phrase_and_the_current_speaker():
 
     bare = packaging_mod.build_packaging(
         draft, lines, platform_strategy('douyin'), known_names='黄仁勋 主持人 Jensen',
-        call=lambda _prompt, _data: reply(marks=[], deck=''),
+        call=lambda _prompt, _data: _phase_response(_data, reply(marks=[], deck='')),
     )
     again = packaging_mod.build_packaging(
         draft, lines, platform_strategy('douyin'), known_names='黄仁勋 主持人 Jensen',
-        call=lambda _prompt, _data: reply(marks=[], deck=''),
+        call=lambda _prompt, _data: _phase_response(_data, reply(marks=[], deck='')),
     )
     assert [cue['emphasis'] for cue in bare['cues']] == [cue['emphasis'] for cue in again['cues']]
     for cue in bare['cues']:
@@ -433,11 +440,11 @@ def test_chinese_audience_sees_the_guest_name_only_on_the_guest_line():
 
     lines = [
         {'start': 0.2, 'end': 2.0, 'text': 'I completely disagree with that'},
-        {'start': 2.0, 'end': 6.0, 'text': 'Jensen says the dream is still alive'},
+        {'start': 2.0, 'end': 6.0, 'text': '>> Jensen says the dream is still alive'},
     ]
 
     def call(_prompt, _data):
-        return {
+        return _phase_response(_data, {
             'title_lines': ['黄仁勋谈梦想'],
             'accent_line': 0,
             'segments': [
@@ -450,7 +457,7 @@ def test_chinese_audience_sees_the_guest_name_only_on_the_guest_line():
             'marks': [
                 {'line': 1, 'text': '美国梦', 'speaker': 'Jensen Huang'},
             ],
-        }
+        })
 
     result = packaging_mod.build_packaging(
         {'title': '黄仁勋', 'hook': ''}, lines, platform_strategy('douyin'),
@@ -481,14 +488,14 @@ def test_street_paints_the_listing_guest_and_not_the_cover_title():
     ]
 
     def call(_prompt, _data):
-        return {
+        return _phase_response(_data, {
             'title_lines': ['未来十二个月将是最佳'], 'accent_line': 0,
             'segments': [
                 {'from': 0, 'to': 0, 'text': '你说我们过去没有最好的那12个月'},
-                {'from': 1, 'to': 1, 'text': '研究我们落后于目标'},
+                {'from': 1, 'to': 1, 'text': '迄今最好的12个月'},
             ],
             'speakers': [], 'tags': [], 'highlights': [], 'marks': [],
-        }
+        })
 
     result = packaging_mod.build_packaging(
         {'title': '', 'hook': ''}, lines, platform_strategy('douyin'),
