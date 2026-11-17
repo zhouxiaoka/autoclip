@@ -258,3 +258,39 @@ def test_render_ffmpeg_wall_time_does_not_spend_clip_budget(isolated, monkeypatc
     assert slept == [1]
     assert depths and all(depth and depth >= 1 for depth in depths), depths
     assert clip_job_active() is False
+
+
+def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isolated, monkeypatch):
+    from backend.core import job_budget
+    from backend.services.studio import caption_translation
+    now = [100.0]
+    monkeypatch.setattr(job_budget.time, 'monotonic', lambda: now[0])
+    draft = {'id': 'd1', 'title': 'Title', 'scenes': [{'id': 's1', 'label': 'Scene', 'start': 0.0, 'end': 12.0}]}
+    _project('ondemand-step-budget')
+    store.write('ondemand-step-budget', {
+        'drafts': [draft], 'events': [], 'jobs': [],
+        'generation': {'status': 'rendering'},
+        'analysis': _running('rendering', 'run-od-step'),
+        'output_variants': [{'id': 'v1', 'draft_id': 'd1', 'strategy_id': 'douyin', 'status': 'preparing'}],
+    })
+    monkeypatch.setattr(jobs, 'source', lambda _: Path('video.mp4'))
+    monkeypatch.setattr(jobs, '_source_has_burned_subtitles', lambda *args: False)
+    monkeypatch.setattr(jobs, '_apply_framing', lambda _pid, value, *args: (value, None))
+    monkeypatch.setattr(jobs, '_packaging_inputs', lambda _pid, cache: cache.update(entries=[{
+        'start_time': '00:00:00,000', 'end_time': '00:00:12,000', 'text': 'Source words remain available'}], names=''))
+    monkeypatch.setattr(jobs, '_posts_for', lambda *args: {})
+    calls = []
+    def slow(*args):
+        calls.append(True)
+        while not job_budget.budget_expired():
+            now[0] += 30
+        raise JobDurationExceeded()
+    monkeypatch.setattr(caption_translation, '_request', slow)
+    dispatched = []
+    monkeypatch.setattr(jobs, '_dispatch_pending_variants', dispatched.append)
+    jobs._produce_on_demand('ondemand-step-budget', 'v1')
+    state = store.read('ondemand-step-budget')
+    assert state['output_variants'][0]['status'] == 'queued'
+    pack = state['drafts'][0]['packaging']
+    assert pack['fallback'] and pack['cues'][0]['text'] == 'Source words remain available'
+    assert dispatched == ['ondemand-step-budget'] and calls == [True]

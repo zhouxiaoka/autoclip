@@ -55,16 +55,16 @@ def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
 
-async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
+async def _stage_for_gate(video, first_chunk, ext, *, subtitle_bytes: bytes | None, route: str = 'studio', goal: str | None = 'auto'):
     """Stage the upload outside any project and run the one preflight on it, in the threadpool.
     Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
     from backend.services.studio import preflight
     from backend.api.v1 import transcription_gate
     staged = await stage_upload(video, first_chunk, ext)
     try:
-        subtitle = staged.with_suffix('.srt') if srt_available else None
+        subtitle = staged.with_suffix('.srt') if subtitle_bytes is not None else None
         if subtitle is not None:
-            subtitle.write_bytes(b'')  # the SRT is written into the project later; only its presence counts here
+            subtitle.write_bytes(subtitle_bytes)  # Preflight validates the same bytes later persisted in the project.
         try:
             await transcription_gate.run(preflight.ResolvedInputs(staged, subtitle, entry=route, goal=goal))
         finally:
@@ -279,7 +279,7 @@ async def import_visual(
     if video:
         # 1.5.7: block before creating a project when local Whisper is required but missing.
         try:
-            staged = await _stage_for_gate(video, first_chunk, ext, srt_available=subtitle_bytes is not None, goal=goal)
+            staged = await _stage_for_gate(video, first_chunk, ext, subtitle_bytes=subtitle_bytes, goal=goal)
         except HTTPException:
             await video.close()
             raise
@@ -749,6 +749,48 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
     return candidate
+
+@router.post('/{project_id}/retry-translation')
+def retry_translation(project_id: str, body: Draft, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    current = next((d for d in store.read(project_id)['drafts'] if d['id'] == body.id), None)
+    if current is None:
+        raise HTTPException(404, '草稿不存在')
+    if current['revision'] != body.revision:
+        raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
+    call(validate_draft, project_id, body)
+    from backend.services.studio import packaging
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    try:
+        return call(packaging.retry_translation, project_id, body)
+    except (JobStopped, ServiceRestarted, JobDurationExceeded) as error:
+        raise HTTPException(409, str(error)) from None
+
+
+class RetranslateCaptionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    draft: Draft
+    cue_index: int = Field(ge=0, lt=600, strict=True)
+
+
+@router.post('/{project_id}/retranslate-caption')
+def retranslate_caption(project_id: str, body: RetranslateCaptionRequest, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    current = next((d for d in store.read(project_id)['drafts'] if d['id'] == body.draft.id), None)
+    if current is None:
+        raise HTTPException(404, '草稿不存在')
+    if current['revision'] != body.draft.revision:
+        raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
+    call(validate_draft, project_id, body.draft)
+    from backend.services.studio import packaging
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    try:
+        return call(packaging.retry_translation, project_id, body.draft, cue_index=body.cue_index)
+    except (JobStopped, ServiceRestarted, JobDurationExceeded) as error:
+        raise HTTPException(409, str(error)) from None
+
 
 @router.get('/{project_id}/subtitles')
 def subtitles(project_id: str, db: Session = Depends(get_db)):

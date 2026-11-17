@@ -84,13 +84,11 @@ MORE_TIME_SCENES = [{'start': 1245.63, 'end': 1249.57}, {'start': 1227.17, 'end'
 
 
 def _more_time_packaging(segments):
-    from backend.services.platform_strategy import platform_strategy
     from backend.services.studio import packaging
     entries = [{'start_time': _srt(a), 'end_time': _srt(b), 'text': text} for a, b, text in MORE_TIME_ROWS]
     lines = packaging.draft_lines(entries, MORE_TIME_SCENES)
-    response = {'title_lines': ['黄仁勋：AI不会', '让你更清闲'], 'accent_line': 1, 'segments': segments, 'speakers': [], 'tags': []}
-    return lines, packaging.build_packaging({'title': 'More time', 'hook': ''}, lines, platform_strategy('xiaohongshu'),
-                                            call=lambda prompt, data: response)
+    # Legacy segment payloads still need correct cut mapping when read from old packages.
+    return lines, {'fallback': False, 'cues': packaging._segments(segments, lines, True)}
 
 
 def test_packaged_sentence_that_runs_backwards_is_split_on_its_subtitle_timing():

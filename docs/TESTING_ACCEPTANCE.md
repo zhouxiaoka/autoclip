@@ -49,6 +49,10 @@ runner 创建临时数据库、配置、日志和隐私关闭文件，清空继�
 
 当前通用 Ruff 的格式/未使用导入等存量问题仍以 advisory 报告；会造成运行错误的正确性规则已独立阻断。处理存量风格问题应分批提交，不在紧急补丁里混入大范围整理。
 
+macOS 没有 Windows Job Object / Linux PDEATHSIG 对应的硬杀父进程约束，现有 `test_pip_dies_when_backend_is_killed_hard` 在该平台的明确跳过不代表该能力通过。源码 gate 仅在同一轮 `test_pip_child_guard` 的 SIGTERM、主动取消、正常关闭清理三项均执行通过时，允许这一条及 Windows 汇总模块导入的同名用例跳过；缺依赖、其他理由、缺少或失败的替代清理证据仍阻断。Windows/Linux 的硬杀回归仍须真实执行，双平台安装包验收要求不变。
+
+本机预览回归需提供实际 Chrome 路径（macOS 可设置 `CHROME_BIN=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`）。wheel 安装测试在 POSIX 使用与 `python -m venv` 一致的符号链接解释器，避免复制可搬移解释器后丢失动态库；仍需离开源码树实际安装 wheel 并加载资源。损坏音频夹具先封装合法 MP4，再按音频包位置损坏尾部 payload，以保持容器可读并实际触发产品的全文件解码校验。
+
 Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/真实离线转写，以及三平台 SenseVoice 实际安装、模型下载与离线转写。原有这两套工作流只有 PR 路径触发，不能当成 tag 已验证；现在复用为构建的依赖，校验器核对目标构建中的实际 job。开发 Python 上的真实转写仍须由最终安装包产品矩阵补验。
 
 发版还必须通过 [服务商端到端门槛](PROVIDER_E2E_GATE.md)：`desktop-build.yml` 在 `candidate-gate` 之后调用 `provider-e2e-gate.yml`，Release Acceptance 把 `provider-e2e` 列为 required job。Linux 无界面后端跑固定素材；本地 mock（含 429 / 503 / 断线 / 杀后端）是必过项，应成功当次 ≥95%。PR / 分支 push 只跑 mock，不打真实服务商。夜间只跑 DeepSeek + Gemini 的 2–3 条；预发布 tag 把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实服务商只在 Environment `provider-e2e` 有 key 时运行；缺 `*_MODEL` 时用 `matrix.py` 的 live 默认模型，产品目录 `backend/presets/provider_presets.json` 不覆盖 live 默认型号（Gemini 为 `gemini-3.5-flash-lite`，聊天地址补 `/openai`；DashScope 为 `qwen-plus`）。未配置 key 则跳过并在汇总标明，不因此失败。Live 判定 fail-closed：任一服务商失败、缺/空/无法解析的报告、或条数少于计划矩阵必须红；滚动窗口（近 5 次、满 20 条后 ≥95%）是额外门槛，不能在样本不足时把当次失败判绿。应拦下组合必须在开始前 100% 拦下且 `billable_calls_before_failure = 0`。月度估费硬顶 ¥300，超了跳过 live 并告警。故障注入的期望类型用 `UpstreamErrorType`（见 [成功率共享契约](SUCCESS_RATE_CONTRACT.md)）。**fail-closed 已核对。88API 门槛地址为 `https://api.88api.ai/v1`、默认 `deepseek-v4-flash`；单探针已通过，完整发版仍走分层 live，不要只靠这一条探针放行。** 这不能代替双平台安装包真机验收。
@@ -89,6 +93,20 @@ Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `
 生产看板 02/03/04 已补入自动出片终态：交付、失败构成与示例后真实渲染都覆盖 `studio_generation_finished`。事件、设备、非空 flow 和非空 artifact 分开计数；自动生成没有逐文件 artifact ID 时不能把 variant 属性累计值当成去重文件数。历史失败码留空，partial 单列；看板修正不能回填旧事件，也不能证明新安装包的收数已通过。
 
 ## 5. 可校验的验收记录
+
+### 翻译与片尾的内容验收
+
+`Packaging.translated_rows / translation_total_rows` 统计本次源字幕的翻译单元覆盖：同一场景内相邻半句合为一句，完整句子按源时间分开。它不是原 SRT 行数、渲染屏数或语义正确率，不能跨翻译策略直接比较这个比例，也不改变出片事件的分母。`translation_status=complete` 只表示每个单元得到通过结构校验的译文；不能据此认定无漏译、误译或原转写正确。
+
+内容修复验收须冻结视频、原字幕 SHA-256、输入选段、平台、模型及其配置，在修复前后分别使用隔离目录，保存实际导出的 MP4 与完整解码、播放记录。核对共同源时间范围内的译文覆盖、数字/专名/否定/条件关系、原文未说的新增意思，以及最后一句实际语音是否说完、是否带入下一个问题。页面中的分页不能决定翻译边界；多个场景即使时间相邻也不能拼成一个翻译请求。字幕时码内按字符估算的切点必须和原音频核对，不得当作已取得逐词对齐。
+
+若原字幕有错词，保留原输入与离线音频核对结果；补做转写的收益与翻译代码收益分开记录。代表性素材、替代素材、原故障素材分别标明。素材不可得或实际成片仍有已知语义错误时保持内容验收未通过；测试和覆盖计数通过不能替代它。原媒体、字幕正文和原始服务日志不进入公开仓库。
+
+逐句校对验收还需覆盖：已完成译文也可修改；完全没有可渲染译文的源句可被选中并纠错；单句重译只失效所选缓存，失败保留已保存稿件与旧视频；并发迟到请求不能重新写回旧缓存或覆盖新编辑；保存、重启读取、补译其他句子与重新包装均保留人工修改。`untranslated_cues`、`source_text` 和 `source_id` 仅用于编辑，不是渲染文字；英文成片的语种断言检查实际 ASS/HTML 渲染结果。
+
+词级片尾对齐只能调整已经选定的句子。已有 ASR sidecar 必须匹配原 SRT 哈希；缺少时仅使用已安装的本地 Whisper 与已下载模型，子进程固定从当前源码/包目录启动，受项目取消与 45 秒总上限约束，不自动下载或上传音频。时间戳无效、文本不匹配、歧义、低置信或会越过下一词/邻段时保留原边界并提示复核。`Scene.caption_end` 绑定原行时间、文字哈希、字符终点和音频切点；改片尾或换原文后不复用旧锚点。原始转写时间估算、词级声学匹配、语义完整性和人工内容验收分别记录。
+
+语义复核目前仅做离线实验。构造对照、代理标注和本地小模型的漏判/误报不能作为线上正确率；人工纠错后覆盖完整，也不能计作模型自动翻译正确率。真实云服务验证与本地模型验证分开列明，不互相替代。
 
 ### 标签前的内部验收
 

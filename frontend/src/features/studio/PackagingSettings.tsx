@@ -1,6 +1,7 @@
 import { Switch } from 'antd'
+import CaptionCorrections from './CaptionCorrections'
 import { t } from '../../i18n'
-import { Row, Segmented } from '../../ui'
+import { Btn, Row, Segmented } from '../../ui'
 import { packagingLabel, packagingFallbackHint } from './packagingLabel'
 import type { Draft, Packaging } from './types'
 import { effectiveSubtitles } from './subtitleState'
@@ -15,7 +16,7 @@ const STYLES: Record<Packaging['template'], { value: NonNullable<Packaging['styl
  * Editing for automatic template packaging. This release only allows the two title lines and
  * the editor tags switch; captions, nameplates and tags themselves come from the template.
  */
-export default function PackagingSettings({ draft, patch }: { draft: Draft; patch: (changes: Partial<Draft>) => void }) {
+export default function PackagingSettings({ draft, patch, onRetryTranslation, onRetranslateCaption, onCaptionSeek, translating = false }: { draft: Draft; patch: (changes: Partial<Draft>) => void; onRetryTranslation?: () => void; onRetranslateCaption?: (index: number, packaging?: Draft['packaging']) => void; onCaptionSeek?: (start: number, end: number) => void; translating?: boolean }) {
   const packaging = draft.packaging
   if (!packaging) return null
   const fallbackHint = packagingFallbackHint(packaging, [], effectiveSubtitles(draft))
@@ -31,7 +32,12 @@ export default function PackagingSettings({ draft, patch }: { draft: Draft; patc
   return <>
     <Row stack label={t('模板')} hint={t('字幕、名牌和版式由模板按发布平台自动生成。')}>
       <span className="studio-muted">{packagingLabel(packaging)}{fallbackHint ? ` · ${fallbackHint}` : ''}</span>
+      {onRetryTranslation && effectiveSubtitles(draft) && packaging.source_language !== packaging.audience_language && packaging.translation_status !== 'not_required' && packaging.translation_status !== 'complete' && <>
+        <Btn size="sm" loading={translating} disabled={translating} onClick={onRetryTranslation}>{t('只重试字幕翻译')}</Btn>
+        <span className="studio-muted">{t('补译后请保存并重新导出，已有成片保留。')}</span>
+      </>}
     </Row>
+    {effectiveSubtitles(draft) && <CaptionCorrections draft={draft} patch={patch} onRetranslate={onRetranslateCaption} onSeek={onCaptionSeek} busy={translating} />}
     <Row stack label={t('样式')} hint={t('改变字幕与动效的风格，版式和配色保持一致。')}>
       <Segmented size="sm" ariaLabel={t('样式')} value={packaging.style ?? STYLES[packaging.template][0].value}
         options={STYLES[packaging.template].map(option => ({ value: option.value, label: t(option.label) }))}

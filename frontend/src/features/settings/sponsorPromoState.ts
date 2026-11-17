@@ -10,6 +10,7 @@ export interface PromoSnapshot {
   notices: Record<string, Record<string, string>>
   sequence?: number
   revision?: number
+  instance?: string
   pending?: boolean
   source?: string
 }

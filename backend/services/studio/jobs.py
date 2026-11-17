@@ -800,7 +800,11 @@ def _complete_thought_bounds(project_id, clips):
     except Exception:  # noqa: BLE001
         call = None
     with llm_usage.stage('boundaries'), llm_usage.timed('boundaries'):
-        return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
+        silences = boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None
+        bounds = boundaries.refine_clips(rows, clips, call, silences)
+        from backend.services.studio.ending_alignment import align_project
+        limits = [min(hi, original[1] + boundaries.MODEL_MAX_EXTEND) for original, (_, hi) in zip(clips, boundaries.neighbor_limits(clips))]
+        return align_project(project_id, rows, bounds, silences=silences, limits=limits)
 
 
 MAX_DRAFT_OVERLAP = 0.5  # share of the shorter clip two content drafts may have in common
@@ -864,15 +868,23 @@ def _content_drafts(project_id, plan, video, platforms=()):
             except (TypeError, ValueError):
                 win_start = win_end = None
         drafts = []
+        ending_reviews = {tuple(bound): getattr(bound, 'needs_review', True) for bound in bounds}
+        caption_ends = {tuple(bound): getattr(bound, 'caption_end', None) for bound in bounds}
         for clip, start, end in _distinct_ranges(picked, bounds):
+            ending_review = ending_reviews.get((start, end), True)
+            caption_end = caption_ends.get((start, end))
             # Transcript timestamps can run past the final video frame. Keep valid content
             # from that clip, and never let one invalid range discard the whole batch.
+            if end > source_duration:
+                ending_review = True
             end = min(end, source_duration)
             # T2: drop clips that fall entirely outside the requested source_window.
             if win_start is not None and win_end is not None:
                 if end <= win_start or start >= win_end:
                     continue
                 start = max(start, win_start)
+                if end > win_end:
+                    ending_review = True
                 end = min(end, win_end)
                 if end <= start:
                     continue
@@ -882,6 +894,7 @@ def _content_drafts(project_id, plan, video, platforms=()):
                     label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
                     start=start,
                     end=end,
+                    caption_end=caption_end if caption_end and abs(caption_end['audio_end'] - end) < .000001 else None,
                     evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
                 )
                 intelligence.validate_scenes([scene], source_duration)
@@ -891,6 +904,7 @@ def _content_drafts(project_id, plan, video, platforms=()):
                 id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
                 language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
                 subtitles=True,
+                ending_review_required=ending_review,
             ).model_dump(), SCORE_KEY: _score(clip)})
         if not drafts:
             raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
@@ -1045,6 +1059,15 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None, cue
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
     nobody to follow, `full_frame_pending` when the detector is not available yet.
     """
+    from backend.core.job_budget import ensure_clip_job_budget, pause_clip_job_budget
+    ensure_clip_job_budget()
+    # Detector installation, frame decoding and face tracking are local work, just like
+    # Whisper and encoding. Preserve the remaining request budget even on fallback.
+    with pause_clip_job_budget():
+        return _local_speaker_framing(value, video, window=window, wait_sec=wait_sec, scans=scans, cues=cues)
+
+
+def _local_speaker_framing(value, video, *, window, wait_sec, scans, cues):
     from backend.services.studio import framing
     deadline = monotonic() + wait_sec
     while not framing.is_installed() and framing.get_status().get('status') == 'installing' and monotonic() < deadline:
@@ -1163,25 +1186,39 @@ def _content_key(value):
 def _posts_for(project_id, items, cache):
     """{(content key, strategy id): post copy}: one model call per clip covering all its platforms, side by side."""
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+    from threading import Lock
     from backend.services.studio import packaging, post_copy
     _packaging_inputs(project_id, cache)
     clips = {}
     for strategy_id, value in items:
         clips.setdefault(_content_key(value), (value, []))[1].append(strategy_id)
+    completed = {}
+    completed_lock = Lock()
 
     def one(entry):
         key, (value, platforms) = entry
         lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
         title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
-        return key, post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        posts = post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        with completed_lock:
+            completed[key] = posts
 
     try:
-        with llm_usage.stage('post_copy'):
-            results = map_chunks(one, clips.items())
+        # Publishing descriptions are optional. A small model can keep streaming
+        # them indefinitely; do not spend the entire generation budget before
+        # any of the already prepared videos can enter rendering.
+        with clip_step_budget(post_copy.POST_COPY_BUDGET_SEC, reserve_seconds=30), llm_usage.stage('post_copy'):
+            map_chunks(one, clips.items(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # parent expiration remains a real job failure
+        logger.warning('Post copy step timed out; keeping completed copy and rendering prepared clips')
+    except (JobStopped, ProjectDeleted, ServiceRestarted):
+        raise
     except Exception as error:  # noqa: BLE001 - copy is never a blocker
         logger.warning('Post copy failed: %s', type(error).__name__)
-        return {}
-    return {(key, platform): post for key, by_platform in results for platform, post in by_platform.items()}
+    return {(key, platform): post for key, by_platform in completed.items() for platform, post in by_platform.items()}
 
 
 def _design_covers(project_id, draft, job_id):
@@ -1308,19 +1345,33 @@ def _packaging_inputs(project_id, cache):
 def _prefetch_packaging(project_id, items, burned, cache):
     """Run the packaging model calls of a batch side by side (one per distinct content and template).
 
-    Each call waits ~20 s on the model; done one after another they were ~8 minutes for 25 clips.
+    Keep completed packages when the optional phase expires; remaining drafts use
+    deterministic fallback captions so model formatting cannot block rendering.
     """
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)  # load shared inputs once, before the threads
     first = {}
     for strategy_id, value in items:
         strategy = _project_strategy(project_id, strategy_id)
-        key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
+        key = (tuple((scene['start'], scene['end'], json.dumps(scene.get('caption_end'), sort_keys=True)) for scene in value['scenes']), strategy.template, strategy.audience_language)
         first.setdefault(key, (strategy_id, value))
-    map_chunks(lambda item: _apply_packaging(project_id, item[1], item[0], burned, cache), first.values())
+    def one(item):
+        ensure_clip_job_budget()
+        return _apply_packaging(project_id, item[1], item[0], burned, cache)
+
+    try:
+        with clip_step_budget(packaging.PACKAGING_BUDGET_SEC, reserve_seconds=30):
+            map_chunks(one, first.values(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # expiration of the whole job is still terminal
+        logger.warning('Packaging step timed out; keeping completed packages and available source captions')
+        for strategy_id, value in first.values():
+            _apply_packaging(project_id, value, strategy_id, burned, cache, allow_model=False)
 
 
-def _apply_packaging(project_id, value, strategy_id, burned, cache):
+def _apply_packaging(project_id, value, strategy_id, burned, cache, *, allow_model=True):
     """Attach template packaging (title, captions, nameplates, tags) for vertical templates.
 
     One model call per scene set and template; every vertical platform of the same audience
@@ -1335,14 +1386,24 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
         return {key: item for key, item in value.items() if key != 'packaging'}  # never inherit another template's packaging
     from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)
-    key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
+    key = (tuple((scene['start'], scene['end'], json.dumps(scene.get('caption_end'), sort_keys=True)) for scene in value['scenes']), strategy.template, strategy.audience_language)
+    if any(c.get('manually_edited') for c in (value.get('packaging') or {}).get('cues', [])):
+        key = (*key, value.get('id'), json.dumps(value['packaging'], sort_keys=True))
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
         used = cache.setdefault('palettes', [])
+        from backend.services.studio.caption_translation import model_fingerprint
+        if 'translation_model_key' not in cache:
+            try:
+                cache['translation_model_key'] = model_fingerprint()
+            except (OSError, ValueError, TypeError, AttributeError):
+                cache['translation_model_key'] = ''  # optional cache must not block export
         with llm_usage.stage('packaging'):
             cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, burned_language=cache.get('burned_language'),
                                                    known_names=cache['names'],
-                                                   avoid_palettes=tuple(used[-2:]))
+                                                   translation_cache=store.directory(project_id) / 'metadata' / 'caption-translations',
+                                                   model_key=cache['translation_model_key'],
+                                                   avoid_palettes=tuple(used[-2:]), **({} if allow_model else {'allow_model': False}))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
     return {**value, 'packaging': cache[key]}
@@ -1359,11 +1420,14 @@ def _fit_platform_limit(project_id, value, strategy):
     if not limit or sum(s['end'] - s['start'] for s in scenes) <= limit:
         return value, None
     try:
-        from backend.services.publish_export import _load_srt_entries, to_seconds
-        ends = sorted(to_seconds(e['end_time']) for e in _load_srt_entries(project_id) if e.get('end_time'))
+        from backend.services.publish_export import _load_srt_entries
+        from backend.services.studio.boundaries import rows_from_entries, ends_sentence, punctuated
+        rows = rows_from_entries(_load_srt_entries(project_id))
+        has_punct = punctuated(rows)
+        ends = sorted(row[1] for i, row in enumerate(rows) if ends_sentence(rows, i, has_punct))
     except Exception:  # noqa: BLE001 - no subtitles: fall back to an exact cut
         ends = []
-    remaining, kept = float(limit), []
+    remaining, kept, ending_review = float(limit), [], True
     for scene in scenes:
         length = scene['end'] - scene['start']
         if length <= remaining:
@@ -1371,10 +1435,11 @@ def _fit_platform_limit(project_id, value, strategy):
             remaining -= length
             continue
         target = scene['start'] + remaining
-        boundary = [end for end in ends if scene['start'] + 1 < end <= target]
+        boundary = [end for end in ends if max(scene['start'] + 1, target - 25) < end <= target]
         kept.append({**scene, 'end': max(boundary) if boundary else target})
+        ending_review = not boundary
         break
-    return {**value, 'scenes': kept}, limit
+    return {**value, 'scenes': kept, 'ending_review_required': bool(ending_review)}, limit
 
 
 def _still_this_run(data, attempt_id, run_id) -> bool:
@@ -1827,6 +1892,7 @@ def _ensure_long_coverage(drafts, source_duration, min_sec):
     return [*drafts, {
         **template,
         'id': uuid.uuid4().hex,
+        'ending_review_required': True,
         'title': scene['label'],
         'scenes': [scene],
         SCORE_KEY: piece['score'],
@@ -1940,8 +2006,10 @@ def _produce_on_demand(project_id, variant_id):
         burned = _source_has_burned_subtitles(project_id, video)
         strategy_id = variant['strategy_id']
         value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
-        value = _apply_packaging(project_id, value, strategy_id, burned, {})
-        posts = _posts_for(project_id, [(strategy_id, value)], {})
+        packaging_cache = {}
+        _prefetch_packaging(project_id, [(strategy_id, value)], burned, packaging_cache)
+        value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+        posts = _posts_for(project_id, [(strategy_id, value)], packaging_cache)
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 

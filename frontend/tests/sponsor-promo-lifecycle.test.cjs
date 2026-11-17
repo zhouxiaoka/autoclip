@@ -277,3 +277,128 @@ test('StrictMode keeps one host, and a late old response cannot replace it or su
     globalThis.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT
   }
 })
+
+async function untilSequence(watch, sequence) {
+  const deadline = Date.now() + 2000
+  while (Date.now() < deadline && watch.readSponsorPromo()?.sequence !== sequence) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+}
+
+test('settings and the idle interval still accept a snapshot published after startup follow ends', async () => {
+  const saved = { provider: 'api88', api_key: 'fixture-key', base_url: 'https://api.88api.ai/v1' }
+  const before = JSON.stringify(saved)
+  let mode = 'startup'
+  const calls = []
+  const api = {
+    async get(_url, opts) {
+      const params = opts.params || {}
+      calls.push(params)
+      if (params.trigger === 'startup') {
+        return { data: view({ pending: false, revision: 5, sequence: 10, instance: 'boot-1', source: 'cache' }) }
+      }
+      if (params.trigger === 'resume') {
+        const sequence = mode === 'interval' ? 12 : 11
+        return { data: view({ pending: false, revision: 6, sequence, instance: 'boot-1', source: 'cache' }) }
+      }
+      return { data: view({ pending: true, revision: 5, sequence: mode === 'interval' ? 11 : 10, instance: 'boot-1', source: 'cache' }) }
+    },
+  }
+  const watch = loadWatch(api)
+  const stop = watch.startSponsorPromoWatch()
+  try {
+    await untilSequence(watch, 10)
+    assert.equal(watch.readSponsorPromo().sequence, 10)
+    assert.equal(calls.some(params => params.trigger === 'resume'), false)
+    mode = 'settings'
+    const settingsCalls = calls.length
+    await watch.refreshSponsorPromo('settings')
+    assert.equal(watch.readSponsorPromo().sequence, 11)
+    assert.ok(calls.slice(settingsCalls).filter(params => params.wait).length >= 2)
+    assert.equal(calls.slice(settingsCalls).some(params => params.trigger === 'resume'), true)
+    mode = 'interval'
+    const intervalCalls = calls.length
+    await watch.refreshSponsorPromo('interval')
+    assert.equal(watch.readSponsorPromo().sequence, 12)
+    assert.ok(calls.slice(intervalCalls).filter(params => params.wait).length >= 2)
+    assert.equal(calls.slice(intervalCalls).some(params => params.trigger === 'resume'), true)
+    assert.equal(JSON.stringify(saved), before)
+    assert.equal(JSON.stringify(watch.readSponsorPromo()).includes('fixture-key'), false)
+    assert.equal(JSON.stringify(watch.readSponsorPromo()).includes('api.88api.ai'), false)
+  } finally {
+    stop()
+  }
+})
+
+test('a pending settings read stops when the watch host is gone', async () => {
+  let calls = 0
+  const api = {
+    async get(_url, opts) {
+      calls += 1
+      const trigger = opts.params && opts.params.trigger
+      if (trigger === 'startup') {
+        return { data: view({ pending: false, sequence: 10, revision: 2, source: 'cache' }) }
+      }
+      return { data: view({ pending: true, sequence: 10, revision: 2, source: 'cache' }) }
+    },
+  }
+  const watch = loadWatch(api)
+  const stop = watch.startSponsorPromoWatch()
+  await untilSequence(watch, 10)
+  const pending = watch.refreshSponsorPromo('settings')
+  const started = Date.now()
+  while (calls < 4 && Date.now() - started < 2000) {
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.ok(calls >= 4)
+  stop()
+  await pending
+  const after = calls
+  await new Promise(resolve => setTimeout(resolve, 700))
+  assert.ok(calls - after < 3, `kept reading after dispose: ${calls - after}`)
+  assert.equal(watch.readSponsorPromo().sequence, 10)
+})
+
+test('a restarted publisher accepts a higher sequence with a lower revision and rejects an older one', async () => {
+  const saved = { provider: 'apimart', api_key: 'entered-key' }
+  const before = JSON.stringify(saved)
+  const script = [
+    { pending: false, revision: 5, sequence: 10, instance: 'proc-a', source: 'cache' },
+    { pending: false, revision: 1, sequence: 11, instance: 'proc-b', source: 'cache', default: 'api88', choices: ['api88', 'apimart', 'other'] },
+    { pending: false, revision: 8, sequence: 9, instance: 'proc-b', source: 'cache', default: 'apimart' },
+    { pending: false, revision: 0, sequence: 11, instance: 'proc-b', source: 'cache', default: 'apimart' },
+    { choices: ['evil', 'other'], default: 'other', pending: false, revision: 9, sequence: 12, instance: 'proc-b', source: 'cache' },
+  ]
+  let index = 0
+  const api = {
+    get() {
+      const body = script[Math.min(index, script.length - 1)]
+      index += 1
+      return Promise.resolve({ data: view(body) })
+    },
+  }
+  const watch = loadWatch(api)
+  const stop = watch.startSponsorPromoWatch()
+  try {
+    await untilSequence(watch, 10)
+    assert.equal(watch.readSponsorPromo().instance, 'proc-a')
+    await watch.refreshSponsorPromo('settings')
+    assert.equal(watch.readSponsorPromo().sequence, 11)
+    assert.equal(watch.readSponsorPromo().revision, 1)
+    assert.equal(watch.readSponsorPromo().instance, 'proc-b')
+    assert.equal(watch.readSponsorPromo().defaultChoice, 'api88')
+    await watch.refreshSponsorPromo('interval')
+    assert.equal(watch.readSponsorPromo().sequence, 11)
+    assert.equal(watch.readSponsorPromo().defaultChoice, 'api88')
+    await watch.refreshSponsorPromo('settings')
+    assert.equal(watch.readSponsorPromo().sequence, 11)
+    assert.equal(watch.readSponsorPromo().defaultChoice, 'api88')
+    assert.equal(watch.readSponsorPromo().instance, 'proc-b')
+    await watch.refreshSponsorPromo('interval')
+    assert.equal(watch.readSponsorPromo().sequence, 11)
+    assert.equal(watch.readSponsorPromo().defaultChoice, 'api88')
+    assert.equal(JSON.stringify(saved), before)
+  } finally {
+    stop()
+  }
+})

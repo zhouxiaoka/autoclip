@@ -21,8 +21,15 @@ import dataclasses
 import json
 import logging
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
+
+from backend.core.failure_attribution import ModelResponseInvalid
+from backend.core.job_budget import JobDurationExceeded, clip_job_read_timeout, promote_if_budget_spent
+from backend.core.llm_retry import backoff_seconds, classify_for_retry
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted, checkpoint
 
 from .quality import DurationProfile, profile_from_srt, refine_timeline, save_profile, save_report, select_clips, to_seconds, to_srt_time
 
@@ -181,6 +188,16 @@ def _platform_rule(platform_min_sec: float | None, platform_min_label: str) -> s
     )
 
 
+def _wait_before_retry(seconds: float, stopped: threading.Event) -> None:
+    """Observe user cancellation and the job cap even during a long Retry-After."""
+    deadline = time.monotonic() + seconds
+    while True:
+        checkpoint()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or stopped.wait(min(0.2, remaining)):
+            return
+
+
 def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, metadata_dir: Path | None = None,
                window: WindowSize | None = None, platform_min_sec: float | None = None,
                platform_min_label: str = '') -> list[dict[str, Any]]:
@@ -196,8 +213,11 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
     total = max(rows[-1]['end'] - rows[0]['start'], 1.0)
     window = window or window_size()
     spans = windows(rows, window)
+    stopped = threading.Event()
+    failures: list[Exception] = []
+    failure_lock = threading.Lock()
 
-    def one(span):
+    def run_window(span):
         first, last = span
         share = min(1.0, (rows[last]['end'] - rows[first]['start']) / total)
         count_lo, count_hi = _window_count(profile, share)
@@ -206,14 +226,44 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
                                long_rule=_platform_rule(platform_min_sec, platform_min_label))
         payload = {'rows': '\n'.join(f"{i}|{_clock(rows[i]['start'])}|{rows[i]['text']}" for i in range(first, last + 1))}
         for attempt in range(2):
+            if stopped.is_set():
+                raise failures[0]
+            checkpoint()
             try:
-                return _parse(call(prompt, payload), first, last, rows, profile)
-            except Exception as error:  # noqa: BLE001 - one retry with the reason, then this window is lost
-                logger.warning('Clip finder window %s-%s rejected (attempt %d): %s', first, last, attempt + 1, error)
-                payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按格式重新返回。'}
+                raw = call(prompt, payload)
+                try:
+                    return _parse(raw, first, last, rows, profile)
+                except ValueError as error:
+                    raise ModelResponseInvalid(str(error)) from error
+            except ModelResponseInvalid:
+                logger.warning('Clip finder window %s-%s has invalid output (attempt %d)', first, last, attempt + 1)
+                payload = {**payload, 'previous_error': '上一次返回不合格。请严格按格式、行号和中文标题要求重新返回。'}
+            except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+                raise
+            except Exception as error:
+                # HTTP/transport failures never become format repairs or legacy fallback.
+                # Keep the same error object so redacted request attribution survives.
+                promote_if_budget_spent(error)
+                info, _status, retry_after = classify_for_retry(error)
+                if not info.retryable or attempt == 1:
+                    raise
+                if info.error_type.value == 'rate_limited':
+                    from .concurrency import note_rate_limited
+                    note_rate_limited()
+                _wait_before_retry(clip_job_read_timeout(backoff_seconds(retry_after, attempt)), stopped)
         return None
 
-    results = map_chunks(one, spans)
+    def one(span):
+        try:
+            return run_window(span)
+        except Exception as error:
+            with failure_lock:
+                if not failures:
+                    failures.append(error)
+                stopped.set()
+            raise
+
+    results = map_chunks(one, spans, stop_on_error=True)
     if all(r is None for r in results):
         raise ClipFinderError('模型没有返回可用的片段')
     picked = _dedupe([clip for result in results if result for clip in result], rows)

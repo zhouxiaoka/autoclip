@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.models.base import Base
 from backend.models.project import Project, ProjectStatus
+from backend.models.task import Task, TaskStatus
 
 SRT = "1\n00:00:00,000 --> 00:00:05,000\n第一句\n\n2\n00:00:05,000 --> 00:00:10,000\n第二句\n"
 
@@ -30,7 +31,7 @@ class ProviderError(openai.APIStatusError):
 
 
 @pytest.fixture
-def pipeline(tmp_path, monkeypatch):
+def pipeline(tmp_path, monkeypatch, request):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.delenv('AUTOCLIP_LLM_CACHE_DIR', raising=False)
@@ -63,7 +64,8 @@ def pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, 'clear_progress', lambda pid: None)
     monkeypatch.setattr(mod, 'emit_progress', lambda *a, **k: None)
     monkeypatch.setattr(mod.SimplePipelineAdapter, '_prompt_files', lambda self, project_dir: {})
-    monkeypatch.setattr(mod.SimplePipelineAdapter, '_find_clips_in_one_pass', lambda *a: None)
+    if not getattr(request, 'param', False):
+        monkeypatch.setattr(mod.SimplePipelineAdapter, '_find_clips_in_one_pass', lambda *a: None)
     info = {'provider': 'dashscope', 'model': 'qwen-plus', 'available': True, 'display_name': '通义千问'}
     monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: SimpleNamespace(get_current_provider_info=lambda: info))
     video = tmp_path / 'source.mp4'
@@ -74,6 +76,39 @@ def pipeline(tmp_path, monkeypatch):
 
 def _outline_raises(mod, monkeypatch, error):
     monkeypatch.setattr(mod, 'run_step1_outline', lambda *a, **k: (_ for _ in ()).throw(error))
+
+
+@pytest.mark.parametrize('pipeline', [True], indirect=True)
+@pytest.mark.parametrize('status,kind', [(402, 'insufficient_quota'), (401, 'invalid_key'), (404, 'bad_endpoint')])
+def test_one_pass_permanent_failure_survives_task_persistence(pipeline, monkeypatch, status, kind):
+    from backend.core.llm_telemetry import log_safe_exception
+    from backend.core.sentry_setup import studio_failure_context
+    from backend.services.studio import jobs, intelligence
+    from backend.tasks import processing
+    mod, video = pipeline
+    calls = []
+    original = ProviderError('controlled failure', status)
+    original.body = {'error': {'code': kind, 'message': kind}}
+    error = log_safe_exception(original)
+    def request(*args):
+        calls.append(1)
+        raise error
+    monkeypatch.setattr(intelligence, 'text_json', request)
+    monkeypatch.setattr(mod, 'run_step1_outline', lambda *a, **k: pytest.fail('must not start legacy calls'))
+    with pytest.raises(RuntimeError) as caught:
+        jobs.run_content('p', video)
+    context = studio_failure_context(caught.value, 'production')
+    assert context['http_status'] == status
+    assert context['upstream_error_type'] == kind
+    assert calls == [1]
+    with processing.session_scope() as session:
+        task = session.query(Task).filter(Task.project_id == 'p').one()
+        assert task.status == TaskStatus.FAILED
+        assert task.result_data['http_status'] == status
+        assert task.result_data['attribution']['upstream_error_type'] == kind
+        # Studio owns the enclosing generation; a failed child must not prematurely
+        # overwrite its status before Studio records the final generation outcome.
+        assert session.get(Project, 'p').status == ProjectStatus.PROCESSING
 
 
 def _wrapped_500():

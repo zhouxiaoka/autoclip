@@ -390,6 +390,29 @@
       "ok",
       "exhausted",
       "unavailable"
+    ],
+    "llm_request_stage": [
+      "screening",
+      "dispatch",
+      "production",
+      "ingest",
+      "subtitle",
+      "analyze",
+      "vision",
+      "render",
+      "outline",
+      "timeline",
+      "scoring",
+      "title",
+      "clustering",
+      "other",
+      "clip_finder",
+      "boundaries",
+      "packaging",
+      "post_copy",
+      "burned_captions",
+      "cover_frame",
+      "cover_check"
     ]
   },
   "attribution": {
@@ -820,7 +843,8 @@
         "kind": "request_kind",
         "outcome": "request_outcome",
         "failure_stage": "failure_stage",
-        "upstream_error_type": "upstream_error_type"
+        "upstream_error_type": "upstream_error_type",
+        "stage": "llm_request_stage"
       },
       "optional_properties": {
         "prompt_tokens": {

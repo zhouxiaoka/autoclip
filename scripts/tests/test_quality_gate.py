@@ -12,6 +12,28 @@ import quality_gate
 
 
 class QualityGateTests(unittest.TestCase):
+    def test_macos_hard_kill_skip_requires_executed_cleanup_cases(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'tests.xml'
+            skip = '<testcase classname="backend.tests.test_pip_child_guard" name="test_pip_dies_when_backend_is_killed_hard"><skipped message="macOS has no Job Object / PDEATHSIG for kill -9"/></testcase>'
+            names = ('test_pip_dies_when_backend_gets_sigterm', 'test_shutdown_kills_every_live_pip',
+                     'test_cancel_kills_pip_and_reports_cancel')
+            passed = ''.join(f'<testcase classname="backend.tests.test_pip_child_guard" name="{name}"/>' for name in names)
+            with patch('quality_gate.sys.platform', 'darwin'):
+                path.write_text('<testsuite>' + skip + '</testsuite>')
+                self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
+                path.write_text('<testsuite>' + skip + passed + '</testsuite>')
+                self.assertTrue(quality_gate.pytest_skips(path)[0]['allowed'])
+                path.write_text('<testsuite>' + skip.replace('test_pip_child_guard', 'test_other') + passed + '</testsuite>')
+                self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
+                path.write_text('<testsuite>' + skip.replace('macOS has no Job Object / PDEATHSIG for kill -9', 'missing dependency') + passed + '</testsuite>')
+                self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
+                path.write_text('<testsuite>' + skip + passed.replace('name="test_pip_dies_when_backend_gets_sigterm"/>', 'name="test_pip_dies_when_backend_gets_sigterm"><failure/></testcase>') + '</testsuite>')
+                self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
+            path.write_text('<testsuite>' + skip + passed + '</testsuite>')
+            with patch('quality_gate.sys.platform', 'linux'):
+                self.assertFalse(quality_gate.pytest_skips(path)[0]['allowed'])
+
     def test_backend_checks_run_reload_in_order_and_the_unfiltered_directory(self):
         commands = {name: command for name, command, _ in quality_gate.checks('backend', sys.executable)}
         self.assertIn('backend/tests/test_llm_hot_reload.py', commands['llm_hot_reload_tests'])

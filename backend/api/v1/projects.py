@@ -45,10 +45,13 @@ async def _transcription_gate(video_path, srt_path) -> None:
     await transcription_gate.for_paths(video_path, srt_path)  # off the event loop
 
 
-async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
+async def _stage_for_gate(video_file: UploadFile, *, srt_file: Optional[UploadFile] = None):
     """Run the import gate; returns the staged upload path when the file had to be probed, else None."""
+    subtitle_bytes = await srt_file.read() if srt_file is not None else None
+    if srt_file is not None:
+        await srt_file.seek(0)  # The accepted upload is persisted later from these same bytes.
     return await stage_for_gate(video_file, b'', Path(video_file.filename or '').suffix.lower() or '.mp4',
-                                srt_available=has_srt, route='content')
+                                subtitle_bytes=subtitle_bytes, route='content')
 
 
 from .studio import stage_upload, _stage_for_gate as stage_for_gate  # noqa: E402
@@ -89,7 +92,7 @@ async def upload_files(
         )
         
         # 1.5.7: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
-        staged = await _stage_for_gate(video_file, has_srt=bool(srt_file))
+        staged = await _stage_for_gate(video_file, srt_file=srt_file)
 
         # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（ ）。
         try:

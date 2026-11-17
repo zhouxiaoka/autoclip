@@ -3,13 +3,15 @@ export type Goal = 'content' | 'highlight' | 'promo'
 export type Language = 'source' | 'zh' | 'en' | 'ja'
 export type SubtitleStyle = 'clean' | 'bold' | 'box' | 'accent'
 export const subtitleStyles: { value: SubtitleStyle; label: string }[] = [{ value: 'clean', label: '简洁描边' }, { value: 'bold', label: '粗体大字' }, { value: 'box', label: '底色字幕条' }, { value: 'accent', label: '醒目黄字' }]
+export interface CaptionCue { start: number; end: number; text: string; original: string; source_id?: string; source_text?: string; manually_edited?: boolean; emphasis?: string }
 export interface SubtitleCue { start: number; end: number; text: string }
 export interface FramingStatus { status: 'installed' | 'not_installed' | 'installing' | 'error'; progress: number; message: string; size_mb: number; cooldown_seconds?: number }
 export interface AutoFrameResult { window_fraction: number; scenes: { id: string; crop_x: number | null; crop_track: CropPoint[] | null; faces: number; samples: number; shots: number; fit_shots: number; switches: number }[] }
 export type FrameMode = 'crop' | 'fit'
 /** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. `ease` is how long the pan into this crop takes; 0 is a cut. */
 export interface CropPoint { start: number; crop_x: number; mode?: FrameMode; ease?: number }
-export interface Scene { framing_source?: 'auto' | 'manual' | null; framing_adjusted?: boolean; id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
+export interface Scene {
+  caption_end?: { row_start: number; row_end: number; text_sha256: string; offset: number; audio_end: number } | null; framing_source?: 'auto' | 'manual' | null; framing_adjusted?: boolean; id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
 /** Index of the track point covering `time` (absolute seconds), or -1 without a track. */
 export function shotIndexAt(scene: Scene | undefined, time: number): number {
   const track = scene?.crop_track || []
@@ -55,11 +57,15 @@ export interface CandidateList { duration: number; candidates: Candidate[]; warn
 export interface Packaging {
   version: 1; template: 'interview_zh' | 'podcast_en'; audience_language: 'zh' | 'en'; source_language: 'zh' | 'en' | 'other'
   title_lines: string[]; title_accent_line: number
-  cues: { start: number; end: number; text: string; original: string }[]
+  cues: CaptionCue[]
+  untranslated_cues?: CaptionCue[]
   speakers: { at: number; name: string; role: string }[]
   tags: { at: number; text: string }[]; tags_enabled: boolean; captions_enabled?: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
+  translation_status?: 'not_required' | 'complete' | 'partial' | 'source_fallback' | null
+  /** Source translation units; not rendered pages or a measure of semantic correctness. */
+  translated_rows?: number; translation_total_rows?: number
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
   mood?: 'calm' | 'serious' | 'bold' | 'warm' | 'playful' | null
   palette?: 'azure' | 'amber' | 'coral' | 'mint' | 'lemon' | 'rose' | 'lilac' | null
@@ -73,6 +79,7 @@ export interface Draft {
   parent_draft_id?: string | null; parent_revision?: number | null
   /** Automatic template packaging; kept as-is on save so edits never drop it. */
   packaging?: Packaging | null
+  ending_review_required?: boolean
 }
 export interface QaCheck { checker: 'avsync' | 'face' | 'loudness' | 'jitter' | 'ending'; outcome: 'pass' | 'fail' | 'skip'; bucket: string; duration_ms: number }
 export interface QaReport { schema_version: 1; mode: 'shadow'; duration_ms: number; checks: QaCheck[] }
@@ -130,6 +137,7 @@ export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh'
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
 export function draftDuration(draft: Draft) { return draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) }
 export function draftError(draft: Draft, sourceDuration?: number): string | null {
+  if (draft.packaging?.cues.some(cue => !cue.text.trim())) return '字幕不能为空'
   if (!draft.title.trim()) return '请填写成片标题'
   if (!draft.scenes.length) return '至少保留一个镜头'
   if (draft.scenes.length > 30) return '单条成片最多 30 个镜头'

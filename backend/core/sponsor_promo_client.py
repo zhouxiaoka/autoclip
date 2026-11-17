@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import threading
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -110,6 +111,9 @@ class SponsorPromoClient:
         self._lock = threading.Lock()
         self._inflight = False
         self._deferred = ""
+        # Revision is process-local. Instance changes on restart so a higher
+        # sequence is not dropped just because this counter went back to zero.
+        self._instance = uuid.uuid4().hex
         self._revision = 0
         self._waiters: list = []
         self._last_attempt: Optional[datetime] = None
@@ -126,6 +130,7 @@ class SponsorPromoClient:
         state, health = self._read_security()
         shown = self._shown(state, health)
         shown["revision"] = self._revision
+        shown["instance"] = self._instance
         shown["pending"] = self._inflight or bool(self._deferred)
         shown["enabled"] = self.config.enabled
         return shown
@@ -361,7 +366,7 @@ class SponsorPromoClient:
             text = path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return None, "missing"
-        except OSError:
+        except (OSError, UnicodeError):
             return None, "unreadable"
         try:
             raw = json.loads(text)

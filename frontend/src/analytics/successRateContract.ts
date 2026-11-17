@@ -43,6 +43,14 @@ export const FAILURE_STAGES = [
   'other',
 ] as const
 
+// Request-level detail; failure_stage keeps the existing run-level grouping.
+export const LLM_REQUEST_STAGES = [
+  'screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze',
+  'vision', 'render', 'outline', 'timeline', 'scoring', 'title', 'clustering',
+  'other', 'clip_finder', 'boundaries', 'packaging', 'post_copy', 'burned_captions',
+  'cover_frame', 'cover_check',
+] as const
+
 export const CRASH_EXITS = [
   'access_violation', 'stack_overflow', 'heap_corruption', 'abort',
   'sigsegv', 'sigkill', 'oom', 'nonzero_other', 'zero', 'unknown',

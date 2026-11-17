@@ -13,7 +13,7 @@
 | `llm_request_finished` | 后端 `core/llm_emit.py`（经 `llm_telemetry` 导出） | 每个 Provider.`call` 与 studio `vision_call` 的成功和失败 |
 | `studio_generation_finished` | 前端观察 + 后端写入 run 字段 | 自动出片终态 |
 | `studio_production_finished` | 前端观察 + 后端写入 run 字段 | 确认制作终态 |
-| `asr_readiness_checked` | 前端导入探针/提交；后端 inspect 入口 | 生成前转写是否就绪 |
+| `asr_readiness_checked` | 前端在状态变化时发；后端 inspect 入口仍每次受理导入发一次 | 生成前转写是否就绪 |
 | `provider_validation_finished` | 后端挂钩（线 B 调用） | 设置页接入校验结束 |
 
 `distinct_id` 与界面 PostHog 匿名 ID 相同（`PUT /settings/analytics-identity` → `analytics.json`）。Sentry 只设 `user.id`，不设 IP / email。
@@ -30,7 +30,7 @@
 | `model` | `[\w.\-:/]{1,64}`，不合规则省略 |
 | `base_url_host` | 只域名；环回/内网/`.local` → `local` |
 | `kind` | `text` / `vision` |
-| `stage` | 管线阶段或 `other`（契约 `FAILURE_STAGES`） |
+| `stage` | 请求的细分步骤或 `other`（契约 `LLM_REQUEST_STAGES`）；与 run 的 `failure_stage` 分开 |
 | `http_status` | 100–599 的整数，可空 |
 | `upstream_error_type` | 契约闭集：`invalid_key` / `insufficient_quota` / `permission_denied` / `model_not_found` / `bad_endpoint` / `rate_limited` / `upstream_unavailable` / `timeout` / `connection` / `output_truncated` / `unknown` |
 | `prompt_tokens` / `completion_tokens` / `reasoning_tokens` | 非负计数 |
@@ -63,6 +63,8 @@
 
 ### `asr_readiness_checked`
 
+桌面界面只在 `provider`、`code`、`has_subtitle`、`blocked` 相对上一次发生变化时发送。同一次打开里重复探针、重复提交且状态没变，不再各发一条。后端受理导入（API / MCP / 旧界面）仍按次发送。
+
 | 字段 | 规则 |
 | --- | --- |
 | `provider` | `whisper_local` / `sensevoice_local` / `cloud` |
@@ -82,6 +84,10 @@
 ## 查询
 
 见 `docs/analytics/release_validation.sql` 末尾「1.5.7 成功率埋点」。失败事件缺 `error_code` 或 `failure_stage` 视为收数缺陷，不是失败原因。
+
+请求阶段诊断使用 [`request_stage_diagnosis.sql`](request_stage_diagnosis.sql)，固定版本、环境和时间窗分别检查 `clip_finder` / `boundaries` / `packaging` / `post_copy` / `burned_captions` / `cover_frame` / `cover_check` 的次数与耗时。该查询按请求计数，不能当作出片成功率分母；当前请求事件没有 attempt ID，同设备时间窗不能证明精确归属。旧记录的 `other` / `render` 保留未知，不反推或回填。
+
+源码验收：通过真实 Provider 观察器和异步发送队列，验证成功、失败以及并行分块上下文保留请求步骤；任务失败归因保持原粗粒度；未知步骤、提示词、字幕和密钥不进入载荷。前后端请求枚举及事件目录必须一致。安装包验收：使用隔离 validation 构建，在真实文本和已授权视觉流程执行相应步骤，按上述 SQL 核查实际入库步骤；未执行步骤保持 pending，不能用源码测试代替收数。此次变更不代表线上看板已更新。
 
 S5：仅 AUTO 模式的视觉校验失败或初筛不可用时，方案保存 `degrade_reason=vision_unavailable_subtitle_fallback`，`studio_screen_finished` 与 `studio_generation_finished` 从该方案读取并按尝试去重。此字段只接受这个固定代码，不发送原因正文；不计入同服务商模型候选切换的 `degrade_count`。用户手动选择视觉仍阻断，不切换服务商。
 
