@@ -627,6 +627,49 @@ def test_one_part_is_retried_twice_and_a_due_plan_refreshes_without_a_new_ttl():
     assert upload._plan_expired({"expires_at": soon}) is False
 
 
+def test_http_400_is_permanent_and_presigned_urls_are_not_written_to_the_queue(data_dir):
+    calls = {"put": 0}
+
+    class Transport:
+        def put_part(self, url, data, headers):
+            calls["put"] += 1
+            raise upload.PermanentUploadError("http_400")
+
+    try:
+        upload._put_part_attempts(Transport(), "https://acct.r2.cloudflarestorage.com/bucket/key", b"abcd", {})
+    except upload.PermanentUploadError as exc:
+        assert str(exc) == "http_400"
+    else:
+        raise AssertionError("400 must not be retried as offline")
+    assert calls["put"] == 1
+
+    item = queue.enqueue({
+        "id": "c-url", "idempotency_key": "url", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": True, "disposition": "upload",
+        "save_local": False, "manifest": build_manifest(_receipt()), "attempts": 0, "upload": {},
+        "files": [],
+    })
+    grant = {
+        "object_id": "obj", "role": "excerpt", "bytes": 4, "already_complete": False,
+        "url": "https://acct.r2.cloudflarestorage.com/bucket/object?X-Amz-Signature=secret",
+        "headers": {"content-md5": "abcd"},
+        "parts": [{"number": 1, "offset": 0, "length": 4, "url": "https://acct.r2.cloudflarestorage.com/bucket/object?part=1&X-Amz-Signature=secret", "etag": "done"}],
+    }
+    live = queue.attach_remote_case(item["id"], case_id="remote", uploads=[grant], endpoint="https://127.0.0.1:9")
+    assert live["upload"]["objects"][0]["url"] == grant["url"]
+    stored = json.loads((data_dir / "diagnostics" / "queue.json").read_text())
+    text = json.dumps(stored)
+    assert "X-Amz-Signature" not in text
+    assert "r2.cloudflarestorage.com" not in text
+    resumed = queue.update(item["id"], upload={"case_id": "remote", "objects": [grant], "done": [{"number": 1, "etag": "done"}]})
+    assert resumed["upload"]["objects"][0]["parts"][0]["etag"] == "done"
+    text = (data_dir / "diagnostics" / "queue.json").read_text()
+    assert "X-Amz-Signature" not in text
+    reloaded = queue.get(item["id"])
+    assert "url" not in reloaded["upload"]["objects"][0]
+    assert reloaded["upload"]["done"] == [{"number": 1, "etag": "done"}]
+
+
 def test_multipart_request_sends_one_md5_per_part(tmp_path):
     import base64
     import hashlib

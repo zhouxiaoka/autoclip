@@ -120,10 +120,36 @@ def update(item_id: str, *, if_version: int | None = None, if_status: frozenset[
         if values.get("disposition") not in (None, found.get("disposition")):
             return None
         found["version"] = int(found.get("version") or 0) + 1
+        original_upload = values.get("upload") if isinstance(values.get("upload"), dict) else None
+        if original_upload is not None:
+            values = dict(values)
+            stored_upload = dict(original_upload)
+            stored_upload["objects"] = _without_upload_grants(original_upload.get("objects"))
+            values["upload"] = stored_upload
         found.update(values)
         found["disposition"] = found.get("disposition") or "upload"
         _save(items)
-        return dict(found)
+        returned = dict(found)
+        if original_upload is not None:
+            returned["upload"] = original_upload
+        return returned
+
+
+def _without_upload_grants(uploads) -> list:
+    """Keep part geometry. Presigned URLs and signed headers stay in memory for this process only."""
+    cleaned = []
+    for entry in uploads or []:
+        if not isinstance(entry, dict):
+            continue
+        parts = []
+        for part in entry.get("parts") or []:
+            if isinstance(part, dict):
+                parts.append({key: part.get(key) for key in ("number", "offset", "length")})
+        cleaned.append({
+            "object_id": entry.get("object_id"), "role": entry.get("role"), "bytes": entry.get("bytes"),
+            "already_complete": entry.get("already_complete"), "parts": parts,
+        })
+    return cleaned
 
 
 def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: str, expires_at: str = "") -> dict | None:
@@ -150,7 +176,8 @@ def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: s
             return dict(found)
         session = dict(found.get("upload") or {}) if isinstance(found.get("upload"), dict) else {}
         session["case_id"] = case_id
-        session["objects"] = uploads
+        session["objects"] = _without_upload_grants(uploads)
+        live_objects = uploads
         if expires_at:
             session["expires_at"] = expires_at
         found["refresh_plan"] = False
@@ -169,7 +196,11 @@ def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: s
         found["version"] = int(found.get("version") or 0) + 1
         found["updated_at"] = now_iso()
         _save(items)
-        return dict(found)
+        returned = dict(found)
+        live = dict(session)
+        live["objects"] = live_objects
+        returned["upload"] = live
+        return returned
 
 
 def capability_path(item_id: str) -> Path:

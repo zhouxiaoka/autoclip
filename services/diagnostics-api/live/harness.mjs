@@ -4,6 +4,7 @@
  * This file does not create buckets, deploy Workers, or read user media.
  */
 import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { lookup as dnsLookup } from 'node:dns'
 import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
@@ -18,8 +19,6 @@ export const INFLIGHT_CAP = 2147483648
 export const PART_BYTES = 8 * 1024 * 1024
 export const SMALL_BYTES = 64 * 1024
 export const STREAM_200_MIB = 200 * 1024 * 1024
-export const STAGING_INFLIGHT_CAP = INFLIGHT_CAP + 262144
-
 /** Headers the production signer actually puts on a PUT. Anything else is unsupported. */
 export const PRODUCTION_PUT_HEADERS = ['content-length', 'x-amz-checksum-sha256']
 export const UNSUPPORTED_CHECKSUM_HEADERS = [
@@ -79,8 +78,9 @@ export const REQUIRED_LIVE_CASES = [
   'missing-part',
   'stream-200-mib',
   'independent-sha256-readback-200mib',
-  'exact-2gib',
-  'independent-sha256-readback-2gib',
+  'original-max-plus-manifest',
+  'fitting-original-under-inflight',
+  'fitting-original-readback',
   'lost-create-cancel',
 ]
 
@@ -101,18 +101,28 @@ export function planUploads() {
     { id: 'wrong-etag', bytes: PART_BYTES * 2, uploads: true },
     { id: 'missing-part', bytes: PART_BYTES, uploads: true },
     { id: 'stream-200-mib', bytes: STREAM_200_MIB, uploads: true },
-    { id: 'exact-original-max', bytes: ORIGINAL_MAX, uploads: true },
+    { id: 'fitting-original-under-inflight', bytes: fittingOriginalBytes(manifestBytes), uploads: true },
   ]
   const total = uploads.filter((item) => item.uploads).reduce((sum, item) => sum + item.bytes, 0)
   return { manifestBytes, fit, uploads, total, withinBudget: total <= BUDGET_BYTES && fit > 0 }
 }
 
-export function exitCode(result) {
+const LIVE_DEFERRED_WHEN_SCOPED = ['stream-200-mib', 'independent-sha256-readback-200mib', 'fitting-original-under-inflight', 'fitting-original-readback']
+
+export function requiredCases(env = {}) {
+  if (env.AUTOCLIP_DIAGNOSTICS_LIVE_SCOPE === 'through-control') {
+    return REQUIRED_LIVE_CASES.filter((id) => !LIVE_DEFERRED_WHEN_SCOPED.includes(id))
+  }
+  return REQUIRED_LIVE_CASES
+}
+
+export function exitCode(result, env = {}) {
   if (!result || result.status === 'not-run' || result.status === 'armed-not-executed') return 0
   const results = result.results || []
+  const required = requiredCases(env)
   const ids = new Set(results.map((item) => item.id))
-  const missing = REQUIRED_LIVE_CASES.some((id) => !ids.has(id))
-  const failed = results.some((item) => item.pass === false || item.enforced === false || item.run === false)
+  const missing = required.some((id) => !ids.has(id))
+  const failed = results.some((item) => required.includes(item.id) && (item.pass === false || item.enforced === false || item.run === false))
   return missing || failed ? 1 : 0
 }
 
@@ -218,7 +228,10 @@ export async function sendPart(state, part, put, stage) {
         detail: redactText(error.message), at: new Date().toISOString(),
       })
       attempt += 1
-      if (!retryableTransport(error) || attempt >= PART_ATTEMPTS) throw error
+      if (!retryableTransport(error) || attempt >= PART_ATTEMPTS) {
+        error.counted = true
+        throw error
+      }
     }
   }
   throw new Error('part_attempts_exhausted')
@@ -326,33 +339,75 @@ export function hashResponseBody(body, byteLength) {
   })
 }
 
+function fixtureLookup(hostname, options, callback) {
+  if (typeof options === 'function') {
+    callback = options
+    options = {}
+  }
+  if (process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT && String(hostname).endsWith('.r2.cloudflarestorage.com')) {
+    if (options.all) callback(null, [{ address: '127.0.0.1', family: 4 }])
+    else callback(null, '127.0.0.1', 4)
+    return
+  }
+  dnsLookup(hostname, options, callback)
+}
+
+export function fixtureStorageUrl(url) {
+  const port = process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT
+  const endpoint = process.env.AUTOCLIP_DIAGNOSTICS_LIVE_ENDPOINT || ''
+  const target = new URL(url)
+  if (!port || !/^https:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(endpoint)) return target
+  if (!target.hostname.endsWith('.r2.cloudflarestorage.com')) return target
+  target.port = String(port)
+  return target
+}
+
 function allowedReadTarget(target) {
   if (target.username || target.password) return false
   if (target.protocol === 'https:' && target.hostname.endsWith('.r2.cloudflarestorage.com')) return true
   return target.protocol === 'http:' && (target.hostname === '127.0.0.1' || target.hostname === 'localhost')
 }
 
+function requestHead(transport, target, lookup) {
+  return new Promise((resolve, reject) => {
+    const req = transport.request({ protocol: target.protocol, hostname: target.hostname, port: target.port, path: `${target.pathname}${target.search}`, method: 'HEAD', lookup }, (res) => {
+      res.resume()
+      res.on('end', () => resolve({ status: res.statusCode || 0, contentLength: Number(res.headers['content-length']) }))
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
 export function hashGet(url, byteLength) {
-  const target = new URL(url)
+  const target = fixtureStorageUrl(url)
   if (!allowedReadTarget(target)) {
     return Promise.reject(new Error('read_url_rejected'))
   }
   const transport = target.protocol === 'http:' ? http : https
-  return new Promise((resolve, reject) => {
-    const req = transport.get(target, (res) => {
+  const lookup = process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT ? fixtureLookup : undefined
+  return requestHead(transport, target, lookup).then((head) => new Promise((resolve, reject) => {
+    if (head.status !== 200) {
+      resolve({ status: head.status, bytes: 0, sha256: '', headStatus: head.status, method: 'HEAD' })
+      return
+    }
+    const req = transport.get({ protocol: target.protocol, hostname: target.hostname, port: target.port, path: `${target.pathname}${target.search}`, lookup }, (res) => {
       if ((res.statusCode || 0) !== 200) {
         res.resume()
-        resolve({ status: res.statusCode || 0, bytes: 0, sha256: '' })
+        resolve({ status: res.statusCode || 0, bytes: 0, sha256: '', headStatus: head.status, headBytes: head.contentLength })
         return
       }
-      hashResponseBody(res, byteLength).then((hashed) => resolve({ status: 200, ...hashed })).catch(reject)
+      hashResponseBody(res, byteLength).then((hashed) => resolve({
+        status: 200, ...hashed, headStatus: head.status, headBytes: head.contentLength,
+        headMatchesBody: hashed.bytes === head.contentLength,
+      })).catch(reject)
     })
     req.on('error', () => reject(new Error('readback_failed')))
-  })
+  }))
 }
 
 export function putStream(url, headers, byteLength, corruptFirstByte = false, start = 0) {
-  const target = new URL(url)
+  const target = fixtureStorageUrl(url)
   if (target.protocol !== 'https:' || !target.hostname.endsWith('.r2.cloudflarestorage.com')) {
     return Promise.reject(new Error('upload_url_rejected'))
   }
@@ -362,7 +417,7 @@ export function putStream(url, headers, byteLength, corruptFirstByte = false, st
       error.bytesWritten = bytesWritten
       reject(error)
     }
-    const req = https.request(target, { method: 'PUT', headers }, (res) => {
+    const req = https.request({ protocol: target.protocol, hostname: target.hostname, port: target.port, path: `${target.pathname}${target.search}`, method: 'PUT', headers, lookup: process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT ? fixtureLookup : undefined }, (res) => {
       const chunks = []
       res.on('data', (chunk) => {
         if (chunks.reduce((sum, item) => sum + item.length, 0) < 512) chunks.push(chunk)
@@ -556,16 +611,73 @@ export async function executeLive(env = process.env, io = {}) {
       record('independent-readback', { pass: false, http: read.status, blocked: read.status !== 200 })
     } else {
       const hashed = await readHash(op(read).url, SMALL_BYTES)
-      record('independent-readback', { pass: hashed.sha256 === small.digest && hashed.bytes === SMALL_BYTES, bytes: hashed.bytes, complete: finished.status })
+      record('independent-readback', { pass: hashed.sha256 === small.digest && hashed.bytes === SMALL_BYTES && hashed.headMatchesBody === true, bytes: hashed.bytes, headBytes: hashed.headBytes, complete: finished.status })
     }
     const release = async (opened) => {
       if (!op(opened).case_id) return 0
       const response = await call(endpoint, `/v1/cases/${op(opened).case_id}`, 'DELETE', {}, { authorization: `Bearer ${op(opened).capability}` })
       return response.status
     }
+    async function streamCase(id, bytes, role) {
+      const opened = await openUpload(endpoint, bytes, role, undefined, call)
+      record(`${id}-create`, observed(opened.opened))
+      const readId = id === 'stream-200-mib' ? 'independent-sha256-readback-200mib' : id === 'fitting-original-under-inflight' ? 'fitting-original-readback' : `${id}-readback`
+      if (opened.opened.status !== 201) {
+        record(id, { pass: false, run: true })
+        record(readId, { run: false, pass: false, reason: 'not-run' })
+        return false
+      }
+      remember(opened.opened, opened.token, opened.key)
+      let planned = op(opened.opened).uploads[0]
+      const sent = []
+      for (const part of planned.parts || []) {
+        const expires = Date.parse(op(opened.opened).upload_expires_at)
+        if (Number.isFinite(expires) && expires - Date.now() < REFRESH_MARGIN_MS) {
+          const refreshed = await call(endpoint, '/v1/cases', 'POST', createBody(bytes, role, opened.digest, opened.token), { 'idempotency-key': opened.key })
+          record(`${id}-refresh`, { ...observed(refreshed), part: part.number })
+          if (op(refreshed)?.uploads?.[0]) {
+            op(opened.opened).uploads = op(refreshed).uploads
+            op(opened.opened).upload_expires_at = op(refreshed).upload_expires_at
+            planned = op(refreshed).uploads[0]
+          }
+        }
+        const current = (planned.parts || []).find((item) => item.number === part.number) || part
+        const response = await sendPart(state, current, rawPut, id)
+        sent.push({ partNumber: current.number, etag: response.etag, http: response.status, requestId: response.requestId, detail: response.detail })
+        if (response.status !== 200) break
+      }
+      const completed = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/complete`, 'POST', {
+        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
+      }, { authorization: `Bearer ${op(opened.opened).capability}` })
+      const again = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/complete`, 'POST', {
+        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
+      }, { authorization: `Bearer ${op(opened.opened).capability}` })
+      const uploaded = sent.length === (planned.parts || []).length && sent.every((part) => part.http === 200) && completed.status === 200 && again.status === 200
+      record(id, {
+        puts: sent.map((part) => part.http),
+        ...observed(completed),
+        retry: observed(again),
+        uploadedBytes: state.uploadedBytes,
+        pass: uploaded,
+      })
+      let hashedOk = false
+      if (!uploaded) record(readId, { run: false, pass: false, reason: 'not-run' })
+      else {
+        const read = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${op(opened.opened).capability}` })
+        if (read.status !== 200 || typeof op(read)?.url !== 'string') record(readId, { ...observed(read), pass: false })
+        else {
+          const hashed = await readHash(op(read).url, bytes)
+          hashedOk = hashed.sha256 === opened.digest && hashed.bytes === bytes && hashed.headMatchesBody === true
+          record(readId, { pass: hashedOk, bytes: hashed.bytes })
+        }
+      }
+      const released = await release(opened.opened)
+      record(`${id}-released`, { http: released, pass: released === 200 || released === 404 })
+      return uploaded && hashedOk
+    }
     const controlOk = await streamCase('control-16mib', PART_BYTES * 2, 'excerpt')
     if (!controlOk) {
-      for (const id of ['expired-url', 'expiry-refresh-resume-successful-parts', 'part-missing-md5', 'part-altered-md5', 'part-corrupt-body', 'wrong-etag', 'missing-part', 'lost-create-cancel', 'stream-200-mib', 'independent-sha256-readback-200mib', 'exact-2gib', 'independent-sha256-readback-2gib']) {
+      for (const id of REQUIRED_LIVE_CASES) {
         if (!results.some((item) => item.id === id)) record(id, { run: false, pass: false, reason: 'not-run' })
       }
     } else {
@@ -646,7 +758,8 @@ export async function executeLive(env = process.env, io = {}) {
       const completed = await call(endpoint, `/v1/cases/${op(missingPart.opened).case_id}/files/${planned.object_id}/complete`, 'POST', {
         parts: [{ partNumber: 1, etag: response.etag }],
       }, { authorization: `Bearer ${op(missingPart.opened).capability}` })
-      record('missing-part', { put: response.status, ...observed(completed), pass: response.status === 200 && observed(completed).error === 'missing_part' })
+      const absent = await call(endpoint, `/v1/cases/${op(missingPart.opened).case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${op(missingPart.opened).capability}` })
+      record('missing-part', { put: response.status, ...observed(completed), objectAbsent: absent.status === 404, pass: response.status === 200 && observed(completed).error === 'missing_part' && absent.status === 404 })
     }
     await release(missingPart.opened)
     const lostKey = idempotency()
@@ -674,75 +787,35 @@ export async function executeLive(env = process.env, io = {}) {
       pass: lost.status === 201 && cancelled.status === 200 && replay.status === 404,
       note: 'replay after delete is 404 and returns no upload plan; 410 is only the tombstone when create never landed',
     })
-    async function streamCase(id, bytes, role) {
-      const opened = await openUpload(endpoint, bytes, role, undefined, call)
-      record(`${id}-create`, observed(opened.opened))
-      const readId = id === 'stream-200-mib' ? 'independent-sha256-readback-200mib' : id === 'exact-2gib' ? 'independent-sha256-readback-2gib' : `${id}-readback`
-      if (opened.opened.status !== 201) {
-        record(id, { pass: false, run: true })
-        record(readId, { run: false, pass: false, reason: 'not-run' })
-        return false
-      }
-      remember(opened.opened, opened.token, opened.key)
-      let planned = op(opened.opened).uploads[0]
-      const sent = []
-      for (const part of planned.parts || []) {
-        const expires = Date.parse(op(opened.opened).upload_expires_at)
-        if (Number.isFinite(expires) && expires - Date.now() < REFRESH_MARGIN_MS) {
-          const refreshed = await call(endpoint, '/v1/cases', 'POST', createBody(bytes, role, opened.digest, opened.token), { 'idempotency-key': opened.key })
-          record(`${id}-refresh`, { ...observed(refreshed), part: part.number })
-          if (op(refreshed)?.uploads?.[0]) {
-            op(opened.opened).uploads = op(refreshed).uploads
-            op(opened.opened).upload_expires_at = op(refreshed).upload_expires_at
-            planned = op(refreshed).uploads[0]
-          }
-        }
-        const current = (planned.parts || []).find((item) => item.number === part.number) || part
-        const response = await sendPart(state, current, rawPut, id)
-        sent.push({ partNumber: current.number, etag: response.etag, http: response.status, requestId: response.requestId, detail: response.detail })
-        if (response.status !== 200) break
-      }
-      const completed = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/complete`, 'POST', {
-        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
-      }, { authorization: `Bearer ${op(opened.opened).capability}` })
-      const again = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/complete`, 'POST', {
-        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
-      }, { authorization: `Bearer ${op(opened.opened).capability}` })
-      const uploaded = sent.length === (planned.parts || []).length && sent.every((part) => part.http === 200) && completed.status === 200 && again.status === 200
-      record(id, {
-        puts: sent.map((part) => part.http),
-        ...observed(completed),
-        retry: observed(again),
-        uploadedBytes: state.uploadedBytes,
-        pass: uploaded,
-      })
-      let hashedOk = false
-      if (!uploaded) record(readId, { run: false, pass: false, reason: 'not-run' })
-      else {
-        const read = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${op(opened.opened).capability}` })
-        if (read.status !== 200 || typeof op(read)?.url !== 'string') record(readId, { ...observed(read), pass: false })
-        else {
-          const hashed = await readHash(op(read).url, bytes)
-          hashedOk = hashed.sha256 === opened.digest && hashed.bytes === bytes
-          record(readId, { pass: hashedOk, bytes: hashed.bytes })
-        }
-      }
-      const released = await release(opened.opened)
-      record(`${id}-released`, { http: released, pass: released === 200 || released === 404 })
-      return uploaded && hashedOk
+    const stopBeforeLarge = env.AUTOCLIP_DIAGNOSTICS_LIVE_SCOPE === 'through-control'
+    const excerptReady = stopBeforeLarge ? false : await streamCase('stream-200-mib', STREAM_200_MIB, 'excerpt')
+    if (stopBeforeLarge) {
+      record('stream-200-mib', { run: false, pass: false, reason: 'not-run' })
+      record('independent-sha256-readback-200mib', { run: false, pass: false, reason: 'not-run' })
     }
-    const excerptReady = await streamCase('stream-200-mib', STREAM_200_MIB, 'excerpt')
-    if (!excerptReady) {
-      record('exact-2gib', { run: false, pass: false, reason: 'not-run' })
-      record('independent-sha256-readback-2gib', { run: false, pass: false, reason: 'not-run' })
+    if (stopBeforeLarge || excerptReady) {
+      const rejected = await openUpload(endpoint, ORIGINAL_MAX, 'original', undefined, call)
+      remember(rejected.opened, rejected.token, rejected.key)
+      const rejectedPuts = Array.isArray(op(rejected.opened).uploads) ? op(rejected.opened).uploads.length : 0
+      record('original-max-plus-manifest', {
+        ...observed(rejected.opened), puts: rejectedPuts,
+        pass: rejected.opened.status === 413 && observed(rejected.opened).error === 'inflight_cap' && rejectedPuts === 0,
+        note: 'ORIGINAL_MAX plus its manifest does not fit the frozen in-flight cap. This is not an object-store size rejection.',
+      })
+      if (rejected.opened.status === 201) await release(rejected.opened)
     } else {
-      await streamCase('exact-2gib', ORIGINAL_MAX, 'original')
+      record('original-max-plus-manifest', { run: false, pass: false, reason: 'not-run' })
+    }
+    if (!stopBeforeLarge && excerptReady) await streamCase('fitting-original-under-inflight', fittingOriginalBytes(), 'original')
+    else {
+      record('fitting-original-under-inflight', { run: false, pass: false, reason: 'not-run' })
+      record('fitting-original-readback', { run: false, pass: false, reason: 'not-run' })
     }
     }
   } catch (error) {
     if (!error.counted && Number.isInteger(error.bytesWritten)) state.uploadedBytes += error.bytesWritten
     record('transport-failure', {
-      pass: false, run: true, errorCode: error.code || 'exception', detail: redactText(error.message),
+      pass: false, run: true, errorCode: error.cause?.code || error.code || 'exception', detail: redactText(error.cause?.message || error.message),
       bytesWritten: Number.isInteger(error.bytesWritten) ? error.bytesWritten : undefined,
       uploadedBytes: state.uploadedBytes,
     })
@@ -770,7 +843,7 @@ export async function executeLive(env = process.env, io = {}) {
     results, uploadedBytes: state.uploadedBytes, cleanup: evidence.state.cleanup,
     cases: created.map((item) => item.id), liveValidationClaimed: false, evidence: evidence.snapPath,
   }
-  outcome.status = exitCode(outcome) === 0 ? 'observed' : 'observed-failures'
+    outcome.status = exitCode(outcome, env) === 0 ? 'observed' : 'observed-failures'
   evidence.state.results = results
   evidence.commit()
   return outcome
@@ -791,7 +864,7 @@ if (process.argv[1] && process.argv[1].endsWith('harness.mjs')) {
     const result = await main()
     const text = `${JSON.stringify(result)}\n`
     process.stdout.write(text)
-    process.exitCode = exitCode(result)
+    process.exitCode = exitCode(result, process.env)
     if (process.exitCode !== 0) process.stderr.write(text)
   } catch (error) {
     const partial = { status: 'crashed', errorCode: error.code || 'exception', detail: redactText(error.message), liveValidationClaimed: false }

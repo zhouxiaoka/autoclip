@@ -32,6 +32,10 @@ class UploadAuthorizationExpired(Offline):
     pass
 
 
+class PermanentUploadError(Exception):
+    """A deterministic storage rejection. It must not be retried as an offline outage."""
+
+
 class Revoked(Exception):
     pass
 
@@ -155,6 +159,8 @@ class UrllibTransport:
         except urllib.error.HTTPError as exc:
             if exc.code in {401, 403}:
                 raise UploadAuthorizationExpired(f"http_{exc.code}") from exc
+            if exc.code == 400:
+                raise PermanentUploadError(f"http_{exc.code}") from exc
             raise Offline(f"http_{exc.code}") from exc
         except (OSError, urllib.error.URLError) as exc:
             raise Offline("offline") from exc
@@ -297,6 +303,45 @@ def _part_geometry(value: dict) -> list[tuple]:
     return [(part.get("number"), part.get("offset"), part.get("length")) for part in value.get("parts") or []]
 
 
+def _with_memory_grants(memory: dict, stored: dict | None) -> dict:
+    """Disk copies omit presigned URLs. This process keeps the grants it already received."""
+    if not isinstance(stored, dict):
+        return memory if isinstance(memory, dict) else {}
+    if not isinstance(memory, dict) or memory.get("case_id") != stored.get("case_id"):
+        return stored
+    previous = {entry.get("object_id"): entry for entry in memory.get("objects") or [] if isinstance(entry, dict)}
+    objects = []
+    for entry in stored.get("objects") or []:
+        if not isinstance(entry, dict):
+            objects.append(entry)
+            continue
+        old = previous.get(entry.get("object_id"))
+        if not isinstance(old, dict) or _part_geometry(old) != _part_geometry(entry):
+            objects.append(entry)
+            continue
+        merged = dict(entry)
+        if not merged.get("url") and old.get("url"):
+            merged["url"] = old["url"]
+            merged["headers"] = old.get("headers") or {}
+        old_parts = {part.get("number"): part for part in old.get("parts") or [] if isinstance(part, dict)}
+        parts = []
+        for part in merged.get("parts") or []:
+            if not isinstance(part, dict):
+                continue
+            prior = old_parts.get(part.get("number"))
+            if isinstance(prior, dict) and not part.get("url") and prior.get("url"):
+                part = {**part, "url": prior["url"], "headers": prior.get("headers") or {}}
+            parts.append(part)
+        merged["parts"] = parts
+        objects.append(merged)
+    restored = dict(stored)
+    restored["objects"] = objects
+    for key in ("done", "etags", "acked"):
+        if key not in restored and key in memory:
+            restored[key] = memory[key]
+    return restored
+
+
 def _upload_file(item: dict, row: dict) -> dict:
     body = {"role": row["role"], "bytes": row["size_bytes"], "sha256": row["sha256"], "content_type": row.get("content_type")}
     size = int(row["size_bytes"])
@@ -347,7 +392,7 @@ def _put_part_attempts(transport, url: str, payload: bytes, headers: dict) -> st
     for attempt in range(3):
         try:
             return transport.put_part(url, payload, headers)
-        except UploadAuthorizationExpired:
+        except (UploadAuthorizationExpired, PermanentUploadError):
             raise
         except Offline as exc:
             if str(exc) in {"http_401", "http_403"}:
@@ -447,7 +492,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             diverted = _divert(item, transport)
             if diverted is not None:
                 return diverted
-            session = item.get("upload") or session
+            session = _with_memory_grants(session, item.get("upload"))
             path = media.reroot(str(row.get("path") or ""), _roots(item))
             if path is None:
                 raise RuntimeError("path_rejected")
@@ -491,7 +536,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 if marker in (session.get("done") or []):
                     etags.append({"partNumber": part.get("number"), "etag": (session.get("etags") or {}).get(marker, "")})
                     continue
-                if _plan_due(session, now):
+                if _plan_due(session, now) or not part.get("url"):
                     refreshes = int(item.get("auth_refreshes") or 0) + 1
                     refreshed = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN,
                                              refresh_plan=True, auth_refreshes=refreshes,
@@ -576,6 +621,16 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             next_attempt_at=queue.schedule_retry(attempts, now), updated_at=queue.now_iso(),
         )
         return paused or _live(item_id, current)
+    except PermanentUploadError as exc:
+        current = _live(item_id, item)
+        diverted = _divert(current, transport)
+        if diverted is not None:
+            return diverted
+        failed = queue.update(
+            item_id, if_version=current.get("version"), if_status=queue.OPEN,
+            status="failed", error=str(exc)[:80], updated_at=queue.now_iso(),
+        )
+        return failed or _live(item_id, current)
     except (RuntimeError, TypeError, ValueError, OSError, media.MediaRejected) as exc:
         current = _live(item_id, item)
         diverted = _divert(current, transport)

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createHash } from 'node:crypto'
 import { handle, sweep, type Bucket, type MultipartUpload, type UploadedPart } from '../src/app.ts'
+import { adaptBucket } from '../src/index.ts'
 import { MemoryRepo } from '../src/memory.ts'
 import { PROPOSED_LIMITS, tryReserve } from '../src/quota.ts'
 import { canonicalPut, presignPut } from '../src/sign.ts'
@@ -477,10 +478,10 @@ test('an unrecognized complete failure stays retryable and names its phase', asy
   assert.equal(await bucket.get(stored.r2Key), null)
 })
 
-test('a held excerpt reservation makes a 2GiB create return inflight_cap until that case is released', async () => {
-  const stagingInflight = 2147483648 + 262144
+test('exact 2GiB plus the manifest stays over the frozen in-flight cap after the excerpt is released', async () => {
+  const frozen = 2147483648
   const { deps: value, repo } = deps()
-  value.limits = { ...value.limits, inflightCap: stagingInflight, landedCap: 4294967296 }
+  value.limits = { ...value.limits, inflightCap: frozen, landedCap: 4294967296 }
   const excerpt = 200 * 1024 * 1024
   const opened = await create(value, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
@@ -501,12 +502,32 @@ test('a held excerpt reservation makes a 2GiB create return inflight_cap until t
   }), value)
   assert.equal(removed.status, 200)
   assert.equal(repo.snapshot().reserved, 0)
-  const allowed = await create(value, {
+  const still = await create(value, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
     manifest: manifest(), files: [{ role: 'original', bytes: original, sha256: sha, part_md5s: Array.from({ length: 256 }, () => partMd5) }],
   }, 'd5'.repeat(32))
+  assert.equal(still.status, 413)
+  const manifestBytes = Buffer.byteLength(JSON.stringify(manifest()))
+  const fitting = frozen - manifestBytes
+  const partCount = Math.ceil(fitting / (8 * 1024 * 1024))
+  const allowed = await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'original', bytes: fitting, sha256: sha, part_md5s: Array.from({ length: partCount }, () => partMd5) }],
+  }, 'd6'.repeat(32))
   assert.equal(allowed.status, 201)
   assert.equal(PROPOSED_LIMITS.inflightCap, 2147483648)
+})
+
+test('listing follows every truncated page and does not stop after the first', async () => {
+  const pages = [
+    { objects: [{ key: 'cases/a' }], truncated: true, cursor: 'next' },
+    { objects: [{ key: 'cases/b' }], truncated: false, cursor: undefined },
+  ]
+  const bucket = {
+    list: async (options: { cursor?: string }) => pages[options.cursor ? 1 : 0],
+  }
+  const keys = await adaptBucket(bucket as never).list('cases/')
+  assert.deepEqual(keys, ['cases/a', 'cases/b'])
 })
 
 test('migration states the conditional reservation and does not name the media bucket', () => {

@@ -46,6 +46,27 @@ test('a long grant is not slept through, and a failed observation exits nonzero'
   assert.equal(multipartPartHeaders({ 'content-length': '1', 'content-md5': 'abc=' }), true)
 })
 
+test('the outer failure accounting does not add a part attempt that was already counted', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'diag-count-'))
+  const evidence = createEvidenceStore(dir)
+  const state = { uploadedBytes: 0, evidence, results: [] }
+  let caught
+  try {
+    await sendPart(state, { number: 1, length: 8, url: 'https://acct.r2.cloudflarestorage.com/b/k', headers: {} }, async () => {
+      const error = new Error('socket hang up')
+      error.code = 'ECONNRESET'
+      error.bytesWritten = 3
+      throw error
+    }, 'control-16mib')
+  } catch (error) {
+    caught = error
+  }
+  assert.equal(caught.counted, true)
+  assert.equal(state.uploadedBytes, 9)
+  if (!caught.counted && Number.isInteger(caught.bytesWritten)) state.uploadedBytes += caught.bytesWritten
+  assert.equal(state.uploadedBytes, 9)
+})
+
 test('a reset mid-upload keeps earlier evidence and does not pass the remaining cases', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'diag-evidence-'))
   const evidence = createEvidenceStore(dir)
@@ -125,8 +146,9 @@ test('a reset while the live script is running returns the earlier result and sk
   assert.equal(saved.includes('X-Amz-Signature'), false)
   assert.equal(result.results.find((item) => item.id === 'production-headers').pass, true)
   assert.equal(result.results.find((item) => item.id === 'transport-failure').errorCode, 'ECONNRESET')
-  assert.equal(result.results.find((item) => item.id === 'exact-2gib').reason, 'not-run')
-  assert.equal(result.results.find((item) => item.id === 'exact-2gib').pass, false)
+  assert.equal(result.results.find((item) => item.id === 'original-max-plus-manifest').reason, 'not-run')
+  assert.equal(result.results.find((item) => item.id === 'fitting-original-under-inflight').reason, 'not-run')
+  assert.equal(result.results.find((item) => item.id === 'fitting-original-under-inflight').pass, false)
   assert.equal(result.results.find((item) => item.id === 'lost-create-cancel').reason, 'not-run')
   assert.equal(result.liveValidationClaimed, false)
   assert.equal(result.uploadedBytes, 32 + 40)
@@ -137,6 +159,11 @@ test('readback uses the raw url and compares a real response body', async () => 
   const digest = createHash('sha256').update(payload).digest('hex')
   let gets = 0
   const objectServer = createServer((request, response) => {
+    if (request.url.startsWith('/object') && request.method === 'HEAD') {
+      response.setHeader('content-length', String(payload.length))
+      response.end()
+      return
+    }
     if (request.method === 'GET' && request.url.startsWith('/object')) {
       gets += 1
       response.end(payload)

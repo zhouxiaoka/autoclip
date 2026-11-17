@@ -9,6 +9,7 @@ export class SqliteD1 {
   db = new DatabaseSync(':memory:')
   beforeStatement: (sql: string) => void = () => {}
   afterStatement: (sql: string) => void = () => {}
+  clearChangesBetween = false
   beforeBatch: () => Promise<void> = async () => {}
   afterBatch: () => Promise<void> = async () => {}
   constructor(migrationCount = Infinity) {
@@ -40,7 +41,11 @@ export class SqliteD1 {
     this.db.exec('BEGIN IMMEDIATE')
     let results
     try {
-      results = statements.map((statement) => statement.execute())
+      results = statements.map((statement) => {
+        const result = statement.execute()
+        if (this.clearChangesBetween) this.db.prepare('UPDATE quota SET landed_bytes = landed_bytes WHERE 0').run()
+        return result
+      })
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')

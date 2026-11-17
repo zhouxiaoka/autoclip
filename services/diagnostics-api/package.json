@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test": "node --check live/harness.mjs && node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

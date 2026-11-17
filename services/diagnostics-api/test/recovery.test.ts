@@ -226,6 +226,26 @@ test('cancellation during failed-create cleanup cannot be forgotten by the retry
 })
 
 
+test('the rate window stops at the limit instead of counting past it', async () => {
+  const db = new SqliteD1()
+  const repo = new D1Repo(db as any, () => '2026-11-17T00:00:00Z')
+  for (let index = 0; index < 20; index += 1) assert.equal(await repo.hit('hour', 20), true)
+  assert.equal(await repo.hit('hour', 20), false)
+  const row = await db.prepare('SELECT hits FROM rate_windows WHERE bucket = ?1').bind('hour').first<{ hits: number }>()
+  assert.equal(row?.hits, 20)
+})
+
+test('zeroing changes() between statements still commits each predicate once', async () => {
+  const f = await ready()
+  const before = await f.repo.snapshot()
+  f.db.clearChangesBetween = true
+  assert.equal((await f.complete()).status, 200)
+  assert.deepEqual(await f.repo.snapshot(), { landed: before.landed + 6, reserved: 0 })
+  assert.equal((await f.complete()).status, 200)
+  assert.deepEqual(await f.repo.snapshot(), { landed: before.landed + 6, reserved: 0 })
+  assert.equal(readFileSync(new URL('../src/d1.ts', import.meta.url), 'utf8').includes('changes()'), false)
+})
+
 test('a manifest write arriving after cancellation is removed by the creating request', async () => {
   const f = fixture()
   const put = f.bucket.put.bind(f.bucket)

@@ -23,8 +23,7 @@
   ],
   "vars": {
     "LANDED_BYTES_CAP": "4294967296",
-    // Staging only: reviewed inflight cap plus MANIFEST_MAX, so one 2GiB object and its manifest can be reserved together. Production wrangler.jsonc stays 2147483648.
-    "INFLIGHT_BYTES_CAP": "2147745792",
+    "INFLIGHT_BYTES_CAP": "2147483648",
     "RETENTION_SECONDS": "1209600",
     "INCOMPLETE_SECONDS": "86400",
     "MANIFEST_MAX": "262144",

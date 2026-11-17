@@ -411,6 +411,12 @@ async function settleFile(deps: Deps, row: CaseRow, object: ObjectRow, actual: n
 
 async function rejectInvalid(deps: Deps, row: CaseRow, object: ObjectRow, failure: { phase: string; reason: string; actualBytes: number | null }): Promise<Response> {
   const body = { error: failure.reason, phase: failure.phase, expectedBytes: object.declaredBytes, actualBytes: failure.actualBytes }
+  if (object.uploadId) {
+    try { await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).abort() }
+    catch (error) {
+      if (!(error instanceof Error) || !/10024|NoSuchUpload|unknown_upload|does not exist/i.test(error.message)) throw error
+    }
+  }
   await deps.bucket.delete(object.r2Key)
   await failObject(deps, row, object)
   return json(409, body)
