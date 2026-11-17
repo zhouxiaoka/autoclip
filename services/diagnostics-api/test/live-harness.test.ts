@@ -108,6 +108,7 @@ test('a reset while the live script is running returns the earlier result and sk
     hashGet: async () => ({ sha256: 'absent', bytes: 0 }),
     putPart: async () => {
       puts += 1
+      if (puts === 4) return { status: 400, bytesWritten: 8, requestId: 'ray-put', detail: 'BadDigest' }
       if (puts >= 5) {
         const error = new Error('socket hang up')
         error.code = 'ECONNRESET'

@@ -113,7 +113,7 @@ function readBody(req: import('node:http').IncomingMessage): Promise<Buffer> {
   })
 }
 
-test('unmodified harness CLI completes the local HTTPS matrix through the fitting upload', { timeout: 600_000 }, async () => {
+async function runLive(rstMode: '' | 'signature' | 'digest') {
   const root = mkdtempSync(join(tmpdir(), 'autoclip-cli-'))
   const cert = join(root, 'cert.pem')
   const key = join(root, 'key.pem')
@@ -175,7 +175,10 @@ test('unmodified harness CLI completes the local HTTPS matrix through the fittin
         secretAccessKey: SECRET, accessKeyId: KEY_ID,
       })
       const objectKey = decodeURIComponent(url.pathname.replace(new RegExp(`^/${BUCKET}/`), ''))
-      if (!verdict.ok) { res.writeHead(403); res.end(verdict.reason); return }
+      if (!verdict.ok) {
+        if (rstMode === 'signature') { req.socket.destroy(); return }
+        res.writeHead(403); res.end(verdict.reason); return
+      }
       if (req.method === 'HEAD' || req.method === 'GET') {
         const stored = bucket.objects.get(objectKey)
         if (!stored) { res.writeHead(404); res.end(); return }
@@ -188,8 +191,10 @@ test('unmodified harness CLI completes the local HTTPS matrix through the fittin
       const body = await readBody(req)
       const md5 = createHash('md5').update(body).digest('base64')
       const checksum = createHash('sha256').update(body).digest('base64')
-      if (presented['content-md5'] && md5 !== presented['content-md5']) { res.writeHead(400); res.end('BadDigest'); return }
-      if (presented['x-amz-checksum-sha256'] && checksum !== presented['x-amz-checksum-sha256']) { res.writeHead(400); res.end('BadDigest'); return }
+      if ((presented['content-md5'] && md5 !== presented['content-md5']) || (presented['x-amz-checksum-sha256'] && checksum !== presented['x-amz-checksum-sha256'])) {
+        if (rstMode === 'digest') { req.socket.destroy(); return }
+        res.writeHead(400); res.end('BadDigest'); return
+      }
       if (body.length !== Number(presented['content-length'])) { res.writeHead(400); res.end('IncompleteBody'); return }
       const bytes = new Uint8Array(body)
       const uploadId = url.searchParams.get('uploadId')
@@ -232,6 +237,7 @@ test('unmodified harness CLI completes the local HTTPS matrix through the fittin
       AUTOCLIP_DIAGNOSTICS_LIVE_ENDPOINT: `https://127.0.0.1:${port}`,
       AUTOCLIP_DIAGNOSTICS_LIVE_BUCKET: BUCKET,
       AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT: String(port),
+      AUTOCLIP_DIAGNOSTICS_ADMIN_TOKEN: 'fixture-admin',
       AUTOCLIP_DIAGNOSTICS_EVIDENCE: evidence,
       NODE_EXTRA_CA_CERTS: cert,
     },
@@ -245,6 +251,20 @@ test('unmodified harness CLI completes the local HTTPS matrix through the fittin
   assert.equal(stderr.includes('ReferenceError'), false, stderr.slice(0, 500))
   const result = JSON.parse(stdout.trim().split('\n').at(-1) || '{}') as { results: { id: string; pass?: boolean; http?: number; error?: string; reason?: string }[] }
   const row = (id: string) => result.results.find((item) => item.id === id)
+  if (rstMode) {
+    const stopped = row(rstMode === 'signature' ? 'tampered-signature' : 'corrupt-body-signed-checksum')
+    assert.equal(stopped?.http, 0)
+    assert.equal(stopped?.pass, false)
+    assert.equal(row('stream-200-mib')?.reason, 'not-run')
+    assert.equal(row('fitting-original-under-inflight')?.reason, 'not-run')
+    assert.equal(row('control-16mib')?.reason, 'not-run')
+    assert.equal(code, 1)
+    const evidenceText = readFileSync(join(evidence, 'evidence.json'), 'utf8')
+    assert.equal(evidenceText.includes('X-Amz-Signature'), false)
+    assert.equal(Array.isArray(JSON.parse(evidenceText).cleanup), true)
+    rmSync(root, { recursive: true, force: true })
+    return
+  }
   assert.equal(row('independent-readback')?.pass, true, JSON.stringify(result.results?.slice(0, 12)))
   assert.equal(row('control-16mib')?.pass, true)
   assert.equal(row('control-16mib-readback')?.pass, true)
@@ -258,6 +278,9 @@ test('unmodified harness CLI completes the local HTTPS matrix through the fittin
   assert.equal(row('missing-part')?.pass, true)
   assert.equal(row('expired-url')?.pass, true)
   assert.equal(row('expiry-refresh-resume-successful-parts')?.pass, true)
+  assert.equal(row('pre-original-max-quota')?.reserved, 0)
+  assert.equal(row('pre-fitting-quota')?.reserved, 0)
+  assert.equal(row('original-max-plus-manifest')?.capDecision, 'inflight_cap')
   assert.equal(row('original-max-plus-manifest')?.pass, true, JSON.stringify({ max: row('original-max-plus-manifest'), transport: row('transport-failure') }))
   assert.equal(row('lost-create-cancel')?.pass, true)
   assert.equal(row('stream-200-mib')?.pass, true, JSON.stringify(row('stream-200-mib')))
@@ -270,4 +293,8 @@ test('unmodified harness CLI completes the local HTTPS matrix through the fittin
   assert.equal(evidenceText.includes('head_url'), false)
   assert.equal(code, 0, stdout.slice(0, 2000))
   rmSync(root, { recursive: true, force: true })
-})
+}
+
+test('unmodified harness CLI completes the local HTTPS matrix through the fitting upload', { timeout: 600_000 }, () => runLive(''))
+test('a signature reset stops the unmodified CLI before later cases', { timeout: 120_000 }, () => runLive('signature'))
+test('a digest reset stops the unmodified CLI before later cases', { timeout: 120_000 }, () => runLive('digest'))
