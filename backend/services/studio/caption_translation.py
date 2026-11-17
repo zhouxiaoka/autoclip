@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 MAX_ROWS = 1
 MAX_CHARS = 1100
 BATCH_SECONDS = 45
-POLICY_VERSION = 7
+POLICY_VERSION = 8
 _LOCK = threading.Lock()
 _ENGLISH_FUNCTION_WORDS = {'and', 'because', 'which', 'who', 'that', 'the', 'all', 'we', 'they'}
 PROMPT = (
@@ -30,6 +30,7 @@ PROMPT = (
     'The source is spontaneous speech: disregard repeated false starts and filler words, '
     'but never invent facts to explain a garbled phrase. '
     'Keep protected_terms in their exact original spelling; do not translate or transliterate them. '
+    'A repeated protected term may be referred to by a pronoun after its first mention. '
     'Never expand an abbreviation or add an explanation of a name. '
     'Keep figures as digits. Convert written magnitude units accurately between languages, '
     'preserving the unit, currency, and each side of any comparison or range. '
@@ -53,10 +54,15 @@ def _request(prompt, data):
     while prefix in source:
         prefix = '_' + prefix
     restored = {}
+    name_tokens = {}
     pattern = '|'.join(re.escape(term) for term in sorted(data['protected_terms'], key=len, reverse=True))
     def hide(match):
-        token = f'{prefix}{len(restored)}__'
-        restored[token] = match.group()
+        name = match.group()
+        if name in name_tokens:
+            return name_tokens[name]
+        token = f'{prefix}{len(name_tokens)}__'
+        restored[token] = name
+        name_tokens[name] = token
         return token
     masked = re.sub(r'(?<![A-Za-z0-9_])(?:' + pattern + r')(?![A-Za-z0-9_])', hide, source,
                     flags=re.I) if pattern else source
@@ -295,6 +301,10 @@ def _repair_hint(response, index, source, audience, terms):
             hint['reason'] = 'These words do not occur in the source. Do not expand names or abbreviations.'
         if untranslated:
             hint['untranslated_words'] = untranslated[:20]
+    else:
+        untranslated = sorted(set(re.findall(r'[㐀-鿿぀-ヿ]+', text)))
+        if untranslated:
+            hint['untranslated_words'] = [word[:30] for word in untranslated[:12]]
     return hint or None
 
 

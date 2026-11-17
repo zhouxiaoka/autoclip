@@ -36,6 +36,7 @@ ANSWER_STUB_SEC = 12        # an answer shorter than this after the question is 
 PAUSE_SEC = 0.6
 MAX_LEAD_SEC = 20      # how far a start may move back to reach its sentence start (a question's opening)
 MAX_TAIL_SEC = 25      # how far an end may move forward to finish its sentence
+UNVERIFIED_EDGE_SEC = 2.0  # tolerate nearby row timing without consuming additional unverified speech
 CONTEXT_BEFORE, CONTEXT_AFTER = 40, 35
 MODEL_MAX_EXTEND = 25  # finish this sentence; a long new answer needs editorial review
 
@@ -129,6 +130,11 @@ def _end_cut(rows: list[Row], last: int, end: float, has_punct: bool) -> tuple[i
     i = last
     while True:
         text = rows[i][2]
+        if (i > last and i + 1 == len(rows) and not TERMINAL.search(text) and not JA_END.search(text)
+                and rows[i][1] - end > UNVERIFIED_EDGE_SEC):
+            # An unpunctuated transcript may itself have stopped mid-topic. Reaching
+            # its last row is not evidence that the chosen sentence extends this far.
+            return None
         if ends_sentence(rows, i, has_punct):
             return i, len(text)
         inner = _inner_ends(text)
@@ -216,6 +222,10 @@ def _start_cut(rows: list[Row], first: int, start: float, has_punct: bool) -> tu
         i -= 1
         inner = _inner_ends(rows[i][2])
         if not inner and (i == 0 or ends_sentence(rows, i - 1, has_punct)):
+            if i == 0 and not has_punct and start - rows[i][0] > UNVERIFIED_EDGE_SEC:
+                # Without a sentence/pause boundary nearby, the start of the
+                # transcript may be a different introduction or preamble.
+                return first, 0
             return (i, 0) if start - rows[i][0] <= MAX_LEAD_SEC else (first, 0)
         if inner:
             offset = inner[-1] + (1 if rows[i][2][inner[-1]:inner[-1] + 1] == ' ' else 0)
@@ -380,7 +390,12 @@ def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[
     # Extension must first have a transcript-supported sentence ending; otherwise
     # the model can only choose an earlier completed thought from the selected span.
     supported = sentence_bounds(rows, start, end)
-    extension = supported[1] if not supported.needs_review else end
+    if not supported.needs_review:
+        extension = supported[1]
+    else:
+        # The model may finish the row already under the cut, within timing drift.
+        # It must not select subsequent rows on the strength of a distant EOF.
+        extension = rows[last][1] if rows[last][1] - end <= UNVERIFIED_EDGE_SEC else end
     latest = rows[last][1] if already_closed else min(end + MODEL_MAX_EXTEND, max(end, extension))
     candidates = [n for n, (_, r) in enumerate(window)
                   if end - MAX_TAIL_SEC <= r[1] <= latest

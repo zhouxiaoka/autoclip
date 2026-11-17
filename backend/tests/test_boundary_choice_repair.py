@@ -46,6 +46,27 @@ def test_open_service_request_cannot_displace_a_completed_answer():
     assert not boundaries.unfinished('Let me get the menu.')
 
 
+def test_unpunctuated_transcript_end_does_not_authorize_an_unrelated_extension():
+    rows = [
+        (0., 5., '先聊一个公告'),
+        (5., 10., '公告就说到这里'),
+        (10., 16., '今天的话题是咖啡怎么保存'),
+        (16., 20.4, '密封后放在阴凉处就可以了'),
+        (20.4, 24., '下面来看看烤箱怎么选'),
+        (24., 32., '需要先看烤箱的体积'),
+        (32., 41., '按照各自的空间挑选'),
+    ]
+    seen = []
+
+    def model(_, data):
+        seen.extend(data['end_candidates'])
+        return {'end_line': max(data['end_candidates'])}
+
+    result = boundaries.refine_with_model(rows, 10.1, 20.1, model)
+    assert result is not None and result[0] == 10. and result[1] == 20.4
+    assert seen and max(seen) == 3
+
+
 def test_sentence_cut_does_not_treat_a_name_initial_as_an_ending():
     text = 'I met Hunter S. Thompson. Then we talked.'
     offsets = boundaries._inner_ends(text)

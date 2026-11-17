@@ -58,7 +58,9 @@ def test_missing_or_corrupt_name_tokens_are_not_accepted(monkeypatch, response):
 def test_repeated_names_and_initials_are_restored_exactly(monkeypatch):
     from backend.utils import llm_client
     def call(_prompt, data, **_kwargs):
-        return data['protected_terms'][0] + '出演了' + data['protected_terms'][1] + '。'
+        assert len(data['protected_terms']) == 1
+        token = data['protected_terms'][0]
+        return token + '出演了' + token + '。'
     monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
     result = caption_translation.translate([{'text': 'Dana K. Morgan portrayed Dana K. Morgan.'}],
                                            'zh', terms=('Dana K. Morgan',))
@@ -76,6 +78,41 @@ def test_content_repair_explains_an_invented_abbreviation_expansion(monkeypatch)
     assert caption_translation.translate([{'text': 'We work at ABC.'}], 'zh') == {0: '我们在ABC工作。'}
     assert seen[1]['previous_error']['added_english_words'] == ['Alpha', 'Beta', 'Company']
     assert len(seen) == 2
+
+
+def test_an_acronym_can_be_pronominalized_after_its_first_mention(monkeypatch):
+    from backend.utils import llm_client
+
+    def call(_prompt, payload, **_kwargs):
+        return '我们用了' + payload['protected_terms'][0] + '，它表现很好。'
+
+    monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
+    assert caption_translation.translate([{'text': 'We used AI. AI worked well.'}], 'zh', terms=['AI']) == {
+        0: '我们用了AI，它表现很好。'}
+
+
+def test_an_alphanumeric_document_code_is_not_rejected_as_untranslated_english(monkeypatch):
+    from backend.utils import llm_client
+
+    def call(_prompt, payload, **_kwargs):
+        return '我们提交了' + (payload['protected_terms'] or ['S1'])[0] + '。'
+
+    monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
+    lines = [{'text': 'We filed the S1.'}]
+    terms = packaging._protected_terms({}, lines, 'zh')
+    assert caption_translation.translate(lines, 'zh', terms=terms) == {0: '我们提交了S1。'}
+
+
+def test_retry_points_out_chinese_text_left_in_an_english_translation():
+    source = '很多观众因此认识了这个很有魅力的演员。'
+
+    def call(_, payload):
+        fixed = payload.get('repair_hint', {}).get('untranslated_words') == ['演员']
+        return {'lines': [{'id': 0, 'text': 'Many viewers discovered this charismatic actor.'
+                          if fixed else 'Many viewers discovered this charismatic演员.'}]}
+
+    assert caption_translation.translate([{'text': source}], 'en', call=call) == {
+        0: 'Many viewers discovered this charismatic actor.'}
 
 
 @pytest.mark.parametrize('target', ['比例达到百分之十五、百分之二十和百分之二十五。', '比例达到15%、20%和25%。'])
