@@ -22,7 +22,7 @@ import { startWorkflowObserver } from './analytics/observer'
 
 const { Content } = Layout
 
-// HashRouter 下手动上报 pageview（init 时已关闭自动 pageview）
+// HashRouter 下手动上报 pageview（init 时已关闭自动 pageview）。桌面 webview 在 trackPageview 里跳过。
 function usePageviewTracking() {
   const location = useLocation()
   useEffect(() => {

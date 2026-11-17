@@ -13,7 +13,7 @@
 | `llm_request_finished` | 后端 `core/llm_emit.py`（经 `llm_telemetry` 导出） | 每个 Provider.`call` 与 studio `vision_call` 的成功和失败 |
 | `studio_generation_finished` | 前端观察 + 后端写入 run 字段 | 自动出片终态 |
 | `studio_production_finished` | 前端观察 + 后端写入 run 字段 | 确认制作终态 |
-| `asr_readiness_checked` | 前端导入探针/提交；后端 inspect 入口 | 生成前转写是否就绪 |
+| `asr_readiness_checked` | 前端在状态变化时发；后端 inspect 入口仍每次受理导入发一次 | 生成前转写是否就绪 |
 | `provider_validation_finished` | 后端挂钩（线 B 调用） | 设置页接入校验结束 |
 
 `distinct_id` 与界面 PostHog 匿名 ID 相同（`PUT /settings/analytics-identity` → `analytics.json`）。Sentry 只设 `user.id`，不设 IP / email。
@@ -62,6 +62,8 @@
 查询这些字段时以当前尝试为单位；同一项目重新生成不包含历史调用与 tokens。同一 generation 内，初筛和制作的独立 `track_run` 累加调用、prompt/completion/reasoning tokens 与降级次数，请求重试也计入调用数；进度重复写入或保存失败后重试不重复累计。`retry_count` 表示本次 run 内累加的重试次数（E2）：每次逻辑调用只计入相对上次峰值的增量，并行分块不会少算或多算。结果类失败 `invalid_response` / `timeline_empty` 最多再试 2 次（不含首次，合计最多 3 次尝试，见 `backend/core/result_retry.py`）；HTTP/传输类失败不在此重试。零调用 worker 显式写入 0，同一 generation 已累计的调用与 tokens 保留，新 generation 则从 0 开始。没有当前 run 时不回退到项目历史；项目成本报表 `llm_usage.summary(project_id)` 仍累计历史。回归验收：初筛 1 次成功加制作 2 次成功，保存 3 次调用、33 prompt tokens、12 completion tokens；制作改为 1 次失败后重试成功时，保存 3 次调用、22 prompt tokens、8 completion tokens。另验同一项目独立生成、零调用新生成及保存失败重试的计数隔离。
 
 ### `asr_readiness_checked`
+
+桌面界面只在 `provider`、`code`、`has_subtitle`、`blocked` 相对上一次发生变化时发送。同一次打开里重复探针、重复提交且状态没变，不再各发一条。后端受理导入（API / MCP / 旧界面）仍按次发送。
 
 | 字段 | 规则 |
 | --- | --- |
