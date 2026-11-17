@@ -11,7 +11,7 @@
     {
       "binding": "DIAGNOSTICS_DB",
       "database_name": "autoclip-diagnostics-validation-meta",
-      "database_id": "3b9da920-588d-493d-ac00-cfdeab985dd1",
+      "database_id": "REPLACE_WITH_NEW_D1_ID",
       "migrations_dir": "migrations"
     }
   ],

@@ -9,7 +9,7 @@ export interface ObjectRow {
   actualBytes: number | null
   sha256: string
   uploadId: string | null
-  partPlan: { number: number; offset: number; length: number }[]
+  partPlan: { number: number; offset: number; length: number; contentMd5?: string }[]
   state: 'reserved' | 'complete' | 'aborted'
   createdAt: string
   updatedAt: string

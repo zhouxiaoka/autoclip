@@ -250,9 +250,10 @@ function partPlanFrom(value: unknown): ObjectRow['partPlan'] {
     if (!Array.isArray(parsed)) return []
     return parsed.flatMap((part) => {
       if (!part || typeof part !== 'object') return []
-      const row = part as { number?: unknown; offset?: unknown; length?: unknown }
+      const row = part as { number?: unknown; offset?: unknown; length?: unknown; contentMd5?: unknown }
       if (typeof row.number !== 'number' || typeof row.offset !== 'number' || typeof row.length !== 'number') return []
-      return [{ number: row.number, offset: row.offset, length: row.length }]
+      const contentMd5 = typeof row.contentMd5 === 'string' && /^[A-Za-z0-9+/]{22}==$/.test(row.contentMd5) ? row.contentMd5 : undefined
+      return [{ number: row.number, offset: row.offset, length: row.length, contentMd5 }]
     })
   } catch {
     return []

@@ -1,6 +1,7 @@
 """Task-scoped media selection. Paths come from the project directory, never from the caller."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import subprocess
 from pathlib import Path
@@ -68,6 +69,29 @@ def _subtitle(root: Path) -> Path | None:
         if found is not None:
             return found
     return None
+
+
+def part_md5s(path: Path, size: int, part_bytes: int) -> list[str]:
+    """Base64 MD5 of each part. One part is kept in memory at a time."""
+    if size <= part_bytes:
+        return []
+    digests = []
+    offset = 0
+    while offset < size:
+        length = min(part_bytes, size - offset)
+        digest = hashlib.md5()
+        remaining = length
+        with path.open("rb") as handle:
+            handle.seek(offset)
+            while remaining:
+                chunk = handle.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    raise MediaRejected("short_read")
+                digest.update(chunk)
+                remaining -= len(chunk)
+        digests.append(base64.b64encode(digest.digest()).decode("ascii"))
+        offset += length
+    return digests
 
 
 def sha256_file(path: Path, *, limit: int) -> tuple[str, int]:

@@ -26,7 +26,7 @@ export interface Bucket {
 }
 
 export interface Signer {
-  sign(input: { key: string; contentLength: number; sha256Hex?: string; uploadId?: string; partNumber?: number }): Promise<{ url: string; headers: Record<string, string> }>
+  sign(input: { key: string; contentLength: number; sha256Hex?: string; contentMd5Base64?: string; uploadId?: string; partNumber?: number; expiresSeconds?: number }): Promise<{ url: string; headers: Record<string, string> }>
   signGet?(key: string): Promise<string>
 }
 
@@ -121,9 +121,9 @@ function admin(request: Request, deps: Deps, next: () => Response | Promise<Resp
   return next()
 }
 
-type UploadFile = { role: string; bytes: number; sha256: string; content_type?: string }
+type UploadFile = { role: string; bytes: number; sha256: string; content_type?: string; part_md5s?: string[] }
 
-type ObjectMeta = { kind: 'size'; size: number } | { kind: 'missing' } | { kind: 'transient' }
+type ObjectMeta = { kind: 'size'; size: number } | { kind: 'missing' } | { kind: 'transient'; detail?: string }
 
 /** Object length comes from metadata. The body is not read, and a size is not a hash. */
 async function metadataSize(bucket: Bucket, key: string): Promise<ObjectMeta> {
@@ -132,30 +132,47 @@ async function metadataSize(bucket: Bucket, key: string): Promise<ObjectMeta> {
     if (!head) return { kind: 'missing' }
     if (typeof head.size !== 'number' || !Number.isSafeInteger(head.size) || head.size < 0) return { kind: 'transient' }
     return { kind: 'size', size: head.size }
-  } catch {
-    return { kind: 'transient' }
+  } catch (error) {
+    return { kind: 'transient', detail: safeDetail(error) }
   }
+}
+
+function safeDetail(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : ''
+  if (!message || /https?:|authorization|bearer|x-amz-|secret|signature/i.test(message)) return undefined
+  const clean = message.replace(/[^\x20-\x7e]/g, '').slice(0, 160)
+  return clean || undefined
+}
+
+function unavailable(phase: 'head' | 'complete' | 'verify' | 'commit', error?: unknown): Response {
+  const detail = typeof error === 'string' ? error : safeDetail(error)
+  return json(503, detail ? { error: 'unavailable', phase, detail } : { error: 'unavailable', phase })
 }
 
 function invalidAssembly(error: unknown): boolean {
   const message = error instanceof Error ? error.message : ''
-  return message === 'etag_mismatch' || message === 'missing_part'
+  return message === 'etag_mismatch' || message === 'missing_part' ||
+    /InvalidPart|InvalidPartOrder|EntityTooSmall|specified parts could not be found/i.test(message)
 }
 
-async function signParts(deps: Deps, object: ObjectRow, digest?: string): Promise<{ number: number; offset: number; length: number; url: string; headers: Record<string, string> }[]> {
+async function signParts(deps: Deps, object: ObjectRow, digest?: string, expiresSeconds?: number): Promise<{ number: number; offset: number; length: number; url: string; headers: Record<string, string> }[]> {
   if (!object.partPlan.length) throw new Error('incomplete_plan')
   const multipart = object.partPlan.length > 1
   if (multipart && !object.uploadId) throw new Error('incomplete_plan')
   const signed = []
   for (const part of object.partPlan) {
+    if (multipart && !part.contentMd5) throw new Error('incomplete_plan')
     const signature = await deps.signer!.sign({
       key: object.r2Key,
       contentLength: part.length,
       sha256Hex: multipart ? undefined : digest,
+      contentMd5Base64: part.contentMd5,
       uploadId: multipart ? object.uploadId ?? undefined : undefined,
       partNumber: multipart ? part.number : undefined,
+      expiresSeconds,
     })
     if (signature.headers['content-length'] !== String(part.length)) throw new Error('signer_length_mismatch')
+    if (multipart && signature.headers['content-md5'] !== part.contentMd5) throw new Error('signer_length_mismatch')
     signed.push({ number: part.number, offset: part.offset, length: part.length, url: signature.url, headers: signature.headers })
   }
   return signed
@@ -169,7 +186,14 @@ async function rotateCapability(deps: Deps, row: CaseRow): Promise<string> {
   return capability
 }
 
-async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[], recoveryToken?: string): Promise<Response> {
+function requestedTtl(body: Record<string, unknown>, deps: Deps): number | undefined {
+  if (body.part_ttl_seconds === undefined) return undefined
+  const asked = body.part_ttl_seconds
+  if (typeof asked !== 'number' || !Number.isSafeInteger(asked) || asked < 1 || asked > deps.limits.partTtl) return Number.NaN
+  return asked
+}
+
+async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[], recoveryToken?: string, expiresSeconds?: number): Promise<Response> {
   if (['deleted', 'deleting'].includes(existing.state)) return json(404, { error: 'not_found' })
   if (existing.state === 'creation_cleanup') return json(503, { error: 'creation_pending' })
   if (existing.state === 'failed') return json(409, { error: 'incomplete_plan' })
@@ -202,7 +226,10 @@ async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[], re
       continue
     }
     if (object.state !== 'reserved') return json(409, { error: 'incomplete_plan' })
-    const signed = await signParts(deps, object, file.sha256)
+    if (object.partPlan.length > 1 && file.part_md5s?.some((digest, index) => digest !== object.partPlan[index]?.contentMd5)) {
+      return json(409, { error: 'incomplete_plan' })
+    }
+    const signed = await signParts(deps, object, file.sha256, expiresSeconds)
     uploads.push({
       object_id: object.objectId, role: object.role, parts: signed,
       url: signed.length === 1 ? signed[0]!.url : undefined,
@@ -219,7 +246,7 @@ async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[], re
     capability,
     existing: true,
     expires_at: existing.expiresAt,
-    upload_expires_at: new Date(deps.now().getTime() + deps.limits.partTtl * 1000).toISOString(),
+    upload_expires_at: new Date(deps.now().getTime() + (expiresSeconds || deps.limits.partTtl) * 1000).toISOString(),
     uploads,
     approval: 'pending',
   })
@@ -238,7 +265,7 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     return json(422, { error: 'purpose' })
   }
   const manifest = body.manifest
-  const problems = [...manifestProblems(manifest, deps.limits.manifestMax), ...fileProblems(body.files, deps.limits)]
+  const problems = [...manifestProblems(manifest, deps.limits.manifestMax), ...fileProblems(body.files, { ...deps.limits, partBytes: deps.partBytes })]
   if (problems.length) return json(422, { error: 'rejected', reasons: [...new Set(problems)] })
   const files = (body.files as UploadFile[]) || []
   const idempotency = request.headers.get('idempotency-key') || ''
@@ -246,6 +273,8 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
   const recoveryToken = typeof body.recovery_token === 'string' ? body.recovery_token : ''
   if (recoveryToken && !/^[A-Za-z0-9_-]{43,128}$/.test(recoveryToken)) return json(422, { error: 'recovery_token' })
   const recoveryHash = recoveryToken ? await sha256Hex(encoder.encode(recoveryToken)) : ''
+  const ttl = requestedTtl(body, deps)
+  if (Number.isNaN(ttl)) return json(422, { error: 'part_ttl' })
   const manifestBytes = encoder.encode(JSON.stringify(manifest)).byteLength
   const manifestHash = await sha256Hex(encoder.encode(JSON.stringify(manifest)))
   let existing = await deps.repo.findByIdempotency(idempotency)
@@ -256,7 +285,7 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
       await deps.repo.forgetFailedCreation(existing.caseId)
       existing = await deps.repo.findByIdempotency(idempotency)
     }
-    if (existing) return replayCase(deps, existing, files, recoveryToken)
+    if (existing) return replayCase(deps, existing, files, recoveryToken, ttl)
   }
   const ip = request.headers.get('cf-connecting-ip') || 'local'
   const hour = deps.now().toISOString().slice(0, 13)
@@ -301,7 +330,10 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
       if ((await deps.repo.getCase(caseId))?.state !== 'creating') throw new Error('cancelled')
       const objectId = crypto.randomUUID()
       const key = `cases/${caseId}/${file.role}`
-      const parts = partPlan(file.bytes, deps.partBytes)
+      const planned = partPlan(file.bytes, deps.partBytes)
+      const parts = planned.map((part, index) => (
+        planned.length > 1 ? { ...part, contentMd5: file.part_md5s?.[index] } : part
+      ))
       const multipart = parts.length > 1
       const upload = multipart ? await deps.bucket.createMultipartUpload(key) : null
       if (upload) opened.push(upload)
@@ -310,7 +342,7 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
         sha256: file.sha256, uploadId: upload?.uploadId ?? null, partPlan: parts, state: 'reserved', createdAt, updatedAt: createdAt,
       }
       await deps.repo.saveObject(row)
-      const signed = await signParts(deps, row, file.sha256)
+      const signed = await signParts(deps, row, file.sha256, ttl)
       uploads.push({
         object_id: objectId, role: file.role, parts: signed,
         url: signed.length === 1 ? signed[0]!.url : undefined,
@@ -333,7 +365,7 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     case_id: caseId,
     capability,
     expires_at: expires,
-    upload_expires_at: new Date(deps.now().getTime() + deps.limits.partTtl * 1000).toISOString(),
+    upload_expires_at: new Date(deps.now().getTime() + (ttl || deps.limits.partTtl) * 1000).toISOString(),
     uploads,
     checksum_note: 'Completion checks object metadata size only. It does not read the body and does not verify a content hash.',
     approval: 'pending',
@@ -363,8 +395,8 @@ async function settleFile(deps: Deps, row: CaseRow, object: ObjectRow, actual: n
       await deps.bucket.delete(object.r2Key)
       return json(404, { error: 'not_found' })
     }
-  } catch {
-    return json(503, { error: 'unavailable' })
+  } catch (error) {
+    return unavailable('commit', error)
   }
   return json(200, { ok: true, bytes: actual, integrity: 'metadata_size' })
 }
@@ -394,7 +426,7 @@ async function completeFile(caseId: string, objectId: string, request: Request, 
   const object = await deps.repo.getObject(objectId)
   if (!object || object.caseId !== caseId || object.state === 'aborted') return json(404, { error: 'object' })
   const existing = await metadataSize(deps.bucket, object.r2Key)
-  if (existing.kind === 'transient') return json(503, { error: 'unavailable' })
+  if (existing.kind === 'transient') return unavailable('head', existing.detail)
   if (existing.kind === 'size' && existing.size === object.declaredBytes) return settleFile(deps, row, object, existing.size)
   if (existing.kind === 'size') {
     if (object.state === 'complete') return json(409, { error: 'byte_mismatch' })
@@ -408,17 +440,17 @@ async function completeFile(caseId: string, objectId: string, request: Request, 
     await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).complete(parts)
   } catch (error) {
     const after = await metadataSize(deps.bucket, object.r2Key)
-    if (after.kind === 'transient') return json(503, { error: 'unavailable' })
+    if (after.kind === 'transient') return unavailable('complete', after.detail || error)
     if (after.kind === 'size' && after.size === object.declaredBytes) return settleFile(deps, row, object, after.size)
     if (after.kind === 'size') return rejectInvalid(deps, row, object)
     if (invalidAssembly(error)) return rejectInvalid(deps, row, object)
-    return json(503, { error: 'unavailable' })
+    return unavailable('complete', error)
   }
   const verified = await metadataSize(deps.bucket, object.r2Key)
-  if (verified.kind === 'transient') return json(503, { error: 'unavailable' })
+  if (verified.kind === 'transient') return unavailable('verify', verified.detail)
   if (verified.kind === 'size' && verified.size === object.declaredBytes) return settleFile(deps, row, object, verified.size)
   if (verified.kind === 'size') return rejectInvalid(deps, row, object)
-  return json(503, { error: 'unavailable' })
+  return unavailable('verify')
 }
 
 async function failObject(deps: Deps, row: CaseRow, object: ObjectRow): Promise<void> {

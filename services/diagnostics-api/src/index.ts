@@ -42,7 +42,8 @@ function signer(env: Env, bucketName: string): Signer | null {
         key: input.key,
         contentLength: input.contentLength,
         checksumSha256Base64: input.sha256Hex ? sha256Base64(input.sha256Hex) : undefined,
-        expiresSeconds: Number(env.PART_TTL_SECONDS || 900),
+        contentMd5Base64: input.contentMd5Base64,
+        expiresSeconds: input.expiresSeconds || Number(env.PART_TTL_SECONDS || 900),
         uploadId: input.uploadId,
         partNumber: input.partNumber,
       })

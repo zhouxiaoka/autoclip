@@ -604,3 +604,19 @@ def test_incomplete_plan_is_not_marked_uploaded(data_dir, tmp_path):
     result = upload.pump_once(Transport())
     assert result[0]["status"] == "failed"
     assert result[0]["error"] == "RuntimeError"
+
+
+def test_multipart_request_sends_one_md5_per_part(tmp_path):
+    import base64
+    import hashlib
+
+    payload = b"abcdefghij"
+    path = tmp_path / "clip.bin"
+    path.write_bytes(payload)
+    digests = media.part_md5s(path, len(payload), 4)
+    assert digests == [
+        base64.b64encode(hashlib.md5(payload[0:4]).digest()).decode("ascii"),
+        base64.b64encode(hashlib.md5(payload[4:8]).digest()).decode("ascii"),
+        base64.b64encode(hashlib.md5(payload[8:10]).digest()).decode("ascii"),
+    ]
+    assert media.part_md5s(path, len(payload), 16) == []

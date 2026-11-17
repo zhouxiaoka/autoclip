@@ -34,7 +34,9 @@ function walk(value: unknown, problems: string[]): void {
   }
 }
 
-export function fileProblems(files: unknown, limits: { subtitleMax: number; excerptMax: number; originalMax: number }): string[] {
+const MD5_64 = /^[A-Za-z0-9+/]{22}==$/
+
+export function fileProblems(files: unknown, limits: { subtitleMax: number; excerptMax: number; originalMax: number; partBytes: number }): string[] {
   if (!Array.isArray(files)) return ['files']
   const problems: string[] = []
   const roles = new Set<string>()
@@ -49,6 +51,11 @@ export function fileProblems(files: unknown, limits: { subtitleMax: number; exce
     const cap = role === 'subtitle' ? limits.subtitleMax : role === 'excerpt' ? limits.excerptMax : limits.originalMax
     if (typeof bytes !== 'number' || !Number.isSafeInteger(bytes) || bytes < 0 || bytes > cap) problems.push('size')
     if (typeof row.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.sha256)) problems.push('checksum')
+    if (typeof bytes === 'number' && Number.isSafeInteger(bytes) && bytes > limits.partBytes) {
+      const parts = Math.ceil(bytes / limits.partBytes)
+      const digests = row.part_md5s
+      if (!Array.isArray(digests) || digests.length !== parts || digests.some((item) => typeof item !== 'string' || !MD5_64.test(item))) problems.push('part_md5')
+    }
   }
   return problems
 }

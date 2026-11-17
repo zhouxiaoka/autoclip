@@ -106,6 +106,9 @@ def _export_local(item: dict) -> str:
     return str(dest)
 
 
+PART_BYTES = 8 * 1024 * 1024
+
+
 class UrllibTransport:
     """Used only when an endpoint is configured. Tests inject their own transport."""
 
@@ -294,6 +297,17 @@ def _part_geometry(value: dict) -> list[tuple]:
     return [(part.get("number"), part.get("offset"), part.get("length")) for part in value.get("parts") or []]
 
 
+def _upload_file(item: dict, row: dict) -> dict:
+    body = {"role": row["role"], "bytes": row["size_bytes"], "sha256": row["sha256"], "content_type": row.get("content_type")}
+    size = int(row["size_bytes"])
+    if size > PART_BYTES:
+        path = media.reroot(str(row.get("path") or ""), _roots(item))
+        if path is None:
+            raise RuntimeError("path_rejected")
+        body["part_md5s"] = media.part_md5s(path, size, PART_BYTES)
+    return body
+
+
 def _plan_expired(session: dict, now: datetime | None = None) -> bool:
     raw = session.get("expires_at")
     if not isinstance(raw, str) or not raw:
@@ -359,11 +373,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 "consent_version": item.get("consent_version"),
                 "purpose": "troubleshooting_and_product_improvement",
                 "not_for_training": True,
-                "files": [
-                    {"role": row["role"], "bytes": row["size_bytes"], "sha256": row["sha256"],
-                     "content_type": row.get("content_type")}
-                    for row in item.get("files") or []
-                ],
+                "files": [_upload_file(item, row) for row in item.get("files") or []],
             }
             created = transport.create_case(base, body, item["idempotency_key"])
             if session.get("case_id"):

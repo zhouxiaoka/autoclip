@@ -9,6 +9,8 @@ import { canonicalPut, presignPut } from '../src/sign.ts'
 
 const sha = 'ab'.repeat(32)
 const idem = 'cd'.repeat(32)
+const partMd5 = createHash('md5').update('part').digest('base64')
+const twoPartMd5 = [partMd5, partMd5]
 
 function manifest(extra: Record<string, unknown> = {}) {
   return {
@@ -38,6 +40,7 @@ class LocalBucket implements Bucket {
   bodyReads = 0
   forbidBody = false
   throwNextExistingHead = false
+  completeError: Error | null = null
 
   async put(key: string, body: Uint8Array): Promise<void> { this.objects.set(key, body) }
   async head(key: string) {
@@ -75,6 +78,7 @@ class LocalBucket implements Bucket {
       },
       abort: async () => { this.uploads.delete(uploadId) },
       complete: async (uploadedParts: UploadedPart[]) => {
+        if (this.completeError) throw this.completeError
         this.completeAttempts += 1
         const upload = this.uploads.get(uploadId)
         if (!upload || upload.key !== key) throw new Error('unknown_upload')
@@ -112,9 +116,11 @@ function deps(over: Partial<Parameters<typeof handle>[1]> = {}) {
   const value = {
     repo, bucket, limits: { ...PROPOSED_LIMITS, ratePerHour: 20 }, now: () => new Date('2026-11-16T00:00:00Z'),
     signer: {
-      async sign(input: { key: string; contentLength: number }) {
+      async sign(input: { key: string; contentLength: number; contentMd5Base64?: string }) {
         signed.push(input)
-        return { url: `https://account.r2.cloudflarestorage.com/autoclip-diagnostics/${input.key}?X-Amz-Expires=900`, headers: { 'content-length': String(input.contentLength) } }
+        const headers: Record<string, string> = { 'content-length': String(input.contentLength) }
+        if (input.contentMd5Base64) headers['content-md5'] = input.contentMd5Base64
+        return { url: `https://account.r2.cloudflarestorage.com/autoclip-diagnostics/${input.key}?X-Amz-Expires=900`, headers }
       },
     },
     adminToken: 'admin-secret', bucketName: 'autoclip-diagnostics', partBytes: 8 * 1024 * 1024,
@@ -272,7 +278,7 @@ test('multipart completion assembles the readable object and a bad etag leaves n
   const { deps: value, bucket, repo } = deps({ partBytes: 4 })
   const created = await (await create(value, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
-    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha }],
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha, part_md5s: twoPartMd5 }],
   })).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
   const stored = [...repo.objects.values()][0]!
   assert.ok(stored.uploadId)
@@ -286,7 +292,7 @@ test('multipart completion assembles the readable object and a bad etag leaves n
   const { deps: again, bucket: goodBucket, repo: goodRepo } = deps({ partBytes: 4 })
   const secondCase = await (await create(again, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
-    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha }],
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha, part_md5s: twoPartMd5 }],
   }, 'ee'.repeat(32))).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
   const good = [...goodRepo.objects.values()][0]!
   const upload = goodBucket.resumeMultipartUpload(good.r2Key, good.uploadId!)
@@ -346,7 +352,7 @@ test('completion uses metadata size for a large object and does not read its bod
   const declared = 200 * 1024 * 1024
   const response = await create(value, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
-    manifest: manifest(), files: [{ role: 'excerpt', bytes: declared, sha256: sha }],
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: declared, sha256: sha, part_md5s: Array.from({ length: 25 }, () => partMd5) }],
   })
   assert.equal(response.status, 201)
   const created = await response.json() as { case_id: string; capability: string; uploads: { object_id: string }[]; checksum_note: string }
@@ -385,7 +391,7 @@ test('assembly then a transient head or commit failure retries without deleting 
   const { deps: value, bucket, repo } = deps({ partBytes: 4 })
   const created = await (await create(value, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
-    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha }],
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha, part_md5s: twoPartMd5 }],
   })).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
   const stored = [...repo.objects.values()][0]!
   const upload = bucket.resumeMultipartUpload(stored.r2Key, stored.uploadId!)
@@ -395,6 +401,7 @@ test('assembly then a transient head or commit failure retries without deleting 
   bucket.throwNextExistingHead = true
   const paused = await handleRequest(value, created, parts)
   assert.equal(paused.status, 503)
+  assert.equal((await paused.json() as { phase?: string }).phase, 'verify')
   assert.equal(bucket.completeAttempts, 1)
   assert.equal((await repo.getObject(stored.objectId))?.state, 'reserved')
   const body = await bucket.get(stored.r2Key)
@@ -414,7 +421,7 @@ test('assembly then a transient head or commit failure retries without deleting 
   const again = deps({ partBytes: 4 })
   const second = await (await create(again.deps, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
-    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha }],
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha, part_md5s: twoPartMd5 }],
   }, 'b2'.repeat(32))).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
   const row = [...again.repo.objects.values()][0]!
   const handle = again.bucket.resumeMultipartUpload(row.r2Key, row.uploadId!)
@@ -445,12 +452,62 @@ test('assembly then a transient head or commit failure retries without deleting 
   assert.equal(again.repo.snapshot().landed, landed)
 })
 
+test('an unrecognized complete failure stays retryable and names its phase', async () => {
+  const { deps: value, bucket, repo } = deps({ partBytes: 4 })
+  const created = await (await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha, part_md5s: twoPartMd5 }],
+  })).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
+  const stored = [...repo.objects.values()][0]!
+  bucket.completeError = new Error('storage backend unavailable')
+  const response = await handleRequest(value, created, { parts: [{ partNumber: 1, etag: 'a' }, { partNumber: 2, etag: 'b' }] })
+  assert.equal(response.status, 503)
+  const body = await response.json() as { phase?: string; detail?: string }
+  assert.equal(body.phase, 'complete')
+  assert.equal(body.detail, 'storage backend unavailable')
+  assert.equal((await repo.getObject(stored.objectId))?.state, 'reserved')
+  assert.equal(await bucket.get(stored.r2Key), null)
+})
+
+test('a held excerpt reservation makes a 2GiB create return inflight_cap until that case is released', async () => {
+  const stagingInflight = 2147483648 + 262144
+  const { deps: value, repo } = deps()
+  value.limits = { ...value.limits, inflightCap: stagingInflight, landedCap: 4294967296 }
+  const excerpt = 200 * 1024 * 1024
+  const opened = await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: excerpt, sha256: sha, part_md5s: Array.from({ length: 25 }, () => partMd5) }],
+  })
+  assert.equal(opened.status, 201)
+  const created = await opened.json() as { case_id: string; capability: string }
+  assert.equal(repo.snapshot().reserved, excerpt)
+  const original = 2147483648
+  const blocked = await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'original', bytes: original, sha256: sha, part_md5s: Array.from({ length: 256 }, () => partMd5) }],
+  }, 'd4'.repeat(32))
+  assert.equal(blocked.status, 413)
+  assert.equal((await blocked.json() as { error: string }).error, 'inflight_cap')
+  const removed = await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}`, {
+    method: 'DELETE', headers: { authorization: `Bearer ${created.capability}` },
+  }), value)
+  assert.equal(removed.status, 200)
+  assert.equal(repo.snapshot().reserved, 0)
+  const allowed = await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'original', bytes: original, sha256: sha, part_md5s: Array.from({ length: 256 }, () => partMd5) }],
+  }, 'd5'.repeat(32))
+  assert.equal(allowed.status, 201)
+  assert.equal(PROPOSED_LIMITS.inflightCap, 2147483648)
+})
+
 test('migration states the conditional reservation and does not name the media bucket', () => {
   const sql = readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8')
   const reserve = readFileSync(new URL('../src/d1.ts', import.meta.url), 'utf8')
   const config = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
   assert.match(reserve, /landed_bytes \+ reserved_bytes \+ \?1 <= \?3/)
   assert.match(config, /"bucket_name": "autoclip-diagnostics"/)
+  assert.match(config, /"INFLIGHT_BYTES_CAP": "2147483648"/)
   assert.doesNotMatch(config, /"bucket_name": "autoclip-media"/)
   assert.doesNotMatch(sql, /autoclip-media/)
   const source = readFileSync(new URL('../src/app.ts', import.meta.url), 'utf8')

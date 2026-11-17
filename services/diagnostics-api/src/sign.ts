@@ -8,6 +8,7 @@ export interface SignInput {
   key: string
   contentLength: number
   checksumSha256Base64?: string
+  contentMd5Base64?: string
   expiresSeconds: number
   now?: Date
   uploadId?: string
@@ -57,9 +58,11 @@ export function canonicalPut(input: SignInput, now = input.now ?? new Date()): {
   const host = `${input.accountId}.r2.cloudflarestorage.com`
   const { stamp, date } = amzDate(now)
   const credential = `${input.accessKeyId}/${date}/auto/s3/aws4_request`
-  const signed = input.checksumSha256Base64
-    ? 'content-length;host;x-amz-checksum-sha256'
-    : 'content-length;host'
+  const names = ['content-length', 'host']
+  if (input.contentMd5Base64) names.push('content-md5')
+  if (input.checksumSha256Base64) names.push('x-amz-checksum-sha256')
+  names.sort()
+  const signed = names.join(';')
   const query: [string, string][] = [
     ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
     ['X-Amz-Credential', credential],
@@ -73,6 +76,7 @@ export function canonicalPut(input: SignInput, now = input.now ?? new Date()): {
   encoded.sort((left, right) => byteCompare(left[0], right[0]) || byteCompare(left[1], right[1]))
   const canonicalQuery = encoded.map(([key, value]) => `${key}=${value}`).join('&')
   const headerLines = [`content-length:${input.contentLength}`, `host:${host}`]
+  if (input.contentMd5Base64) headerLines.push(`content-md5:${input.contentMd5Base64}`)
   if (input.checksumSha256Base64) headerLines.push(`x-amz-checksum-sha256:${input.checksumSha256Base64}`)
   headerLines.sort()
   const canonical = [
@@ -101,6 +105,7 @@ export async function presignPut(input: SignInput): Promise<{ url: string; heade
   const stringToSign = `AWS4-HMAC-SHA256\n${amzDate(now).stamp}\n${date}/auto/s3/aws4_request\n${hex(hash)}`
   const signature = hex(await hmac(signingKey, stringToSign))
   const headers: Record<string, string> = { 'content-length': String(input.contentLength) }
+  if (input.contentMd5Base64) headers['content-md5'] = input.contentMd5Base64
   if (input.checksumSha256Base64) headers['x-amz-checksum-sha256'] = input.checksumSha256Base64
   return { url: `${url}&X-Amz-Signature=${signature}`, headers }
 }
