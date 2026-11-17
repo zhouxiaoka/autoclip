@@ -228,7 +228,7 @@ test('unmodified harness CLI completes the local HTTPS control matrix', async ()
     req.end('x')
   })
   assert.equal(reset, 'ECONNRESET')
-  const child = spawn(process.execPath, ['live/harness.mjs', '--execute'], {
+  const child = spawn(process.execPath, [process.env.AUTOCLIP_DIAGNOSTICS_HARNESS_ENTRY || 'live/harness.mjs', '--execute'], {
     cwd: join(import.meta.dirname, '..'),
     env: {
       ...process.env,
