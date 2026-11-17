@@ -419,6 +419,9 @@ export function initAnalytics(): void {
     ...(id && ANONYMOUS_ID.test(id) ? { bootstrap: { distinctID: id, isIdentifiedID: false } } : {}),
     // 未登录前不创建 person profile，保持匿名；登录后通过 identify 关联（见 ROADMAP Phase 1）
     person_profiles: 'identified_only',
+    // posthog-js 1.447 keeps the legacy capture defaults only when `defaults` is omitted.
+    // Do not set defaults to 2025-05-24 or later: that turns capture_pageview into
+    // history_change and enables newer rageclick / session-recording behavior.
     // Business events are explicit; DOM text may contain filenames or subtitles.
     autocapture: false,
     capture_performance: false,
@@ -427,7 +430,7 @@ export function initAnalytics(): void {
     // Flag requests exist only while analytics is on. Opt-out never initializes the SDK,
     // and turning analytics off pauses any reload that was already started.
     advanced_disable_flags: false,
-    // HashRouter 下手动上报 pageview（见 trackPageview）
+    // HashRouter 下手动上报 pageview（见 trackPageview）。桌面 webview 在那里跳过。
     capture_pageview: false,
     capture_pageleave: false,
     property_denylist: ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer'],
@@ -475,8 +478,22 @@ export function setAnalyticsEnabled(enabled: boolean): void {
   } catch { /* analytics cannot break settings */ }
 }
 
-/** 上报一次 pageview（在路由变化时调用）。 */
+/** Desktop shell. The marketing site does not run inside this webview. */
+export function isDesktopWebview(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    if ('__TAURI_INTERNALS__' in window || '__TAURI__' in window) return true
+    const loc = window.location
+    if (!loc) return false
+    return loc.protocol === 'tauri:' || loc.hostname === 'tauri.localhost'
+  } catch {
+    return false
+  }
+}
+
+/** 上报一次 pageview（浏览器路由变化时调用）。桌面 webview 的 HashRouter 跳转不是漏斗，不上报。 */
 export function trackPageview(path: string): void {
+  if (isDesktopWebview()) return
   captureBusinessEvent('$pageview', { route: routeName(path) })
 }
 
