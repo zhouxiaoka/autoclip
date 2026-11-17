@@ -183,6 +183,44 @@ test('matching bytes land once and a repeated idempotency key does not reserve a
   assert.equal(repo.snapshot().landed, landedAfterManifest + 40)
 })
 
+test('a read url is issued only for the owned object and contains no signing secret', async () => {
+  const issued: string[] = []
+  const base = deps()
+  base.deps.signer = {
+    async sign(input) {
+      base.signed.push(input)
+      return { url: 'https://account.r2.cloudflarestorage.com/autoclip-diagnostics/x', headers: { 'content-length': String(input.contentLength) } }
+    },
+    async signGet(key) {
+      issued.push(key)
+      return `https://account.r2.cloudflarestorage.com/autoclip-diagnostics/${key}?X-Amz-Signature=abc`
+    },
+  }
+  const created = await (await create(base.deps, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true, manifest: manifest(),
+    files: [{ role: 'excerpt', bytes: 40, sha256: sha }],
+  })).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
+  base.bucket.objects.set(base.signed[0]!.key, new Uint8Array(40))
+  await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}/files/${created.uploads[0]!.object_id}/complete`, {
+    method: 'POST', headers: { authorization: `Bearer ${created.capability}` }, body: '{}',
+  }), base.deps)
+  const denied = await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}/files/${created.uploads[0]!.object_id}/read-url`, { method: 'POST' }), base.deps)
+  assert.equal(denied.status, 404)
+  const allowed = await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}/files/${created.uploads[0]!.object_id}/read-url`, {
+    method: 'POST', headers: { authorization: `Bearer ${created.capability}` },
+  }), base.deps)
+  const body = await allowed.json() as { url: string; expires_in: number }
+  assert.equal(allowed.status, 200)
+  assert.equal(body.expires_in, 120)
+  assert.equal(body.url.includes('secret'), false)
+  assert.deepEqual(issued, [base.signed[0]!.key])
+  base.deps.signer = { async sign() { return { url: 'https://account.r2.cloudflarestorage.com/x', headers: {} } } }
+  const unconfigured = await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}/files/${created.uploads[0]!.object_id}/read-url`, {
+    method: 'POST', headers: { authorization: `Bearer ${created.capability}` },
+  }), base.deps)
+  assert.equal(unconfigured.status, 503)
+})
+
 test('delete requires the case capability and releases landed bytes', async () => {
   const { deps: value, repo } = deps()
   const created = await (await create(value, { purpose: 'troubleshooting_and_product_improvement', not_for_training: true, manifest: manifest(), files: [] })).json() as { case_id: string; capability: string }

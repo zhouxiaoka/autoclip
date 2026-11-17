@@ -46,4 +46,4 @@ python -m pytest -c backend/pytest.ini -o addopts= backend/tests/test_diagnostic
 
 回归执行生产 D1 SQL，覆盖逐条写入失败和真实事务回滚；另用真实 Python HTTP 客户端对接本机 Worker handler / SQLite，复现创建丢响应和上传授权失效。测试只用合成字节，没有连接真实 R2/D1，不能代替部署前的预签名、校验头与 multipart 验证。
 
-不要运行 `wrangler deploy`，也不要按这份模板去创建桶或数据库，除非 Charlie 明确授权。
+真实对象存储验证的开关、配额和凭据要求见 `live/README.md`。那个脚本默认不联网。不要运行 `wrangler deploy`，也不要按这份模板去创建桶或数据库，除非 Charlie 明确授权。

@@ -105,6 +105,50 @@ export async function presignPut(input: SignInput): Promise<{ url: string; heade
   return { url: `${url}&X-Amz-Signature=${signature}`, headers }
 }
 
+/** Short-lived GET for one object. No session token parameter exists on this signer. */
+export async function presignGet(input: {
+  accountId: string
+  accessKeyId: string
+  secretAccessKey: string
+  bucket: string
+  key: string
+  expiresSeconds: number
+  now?: Date
+}): Promise<string> {
+  if (input.bucket === 'autoclip-media') throw new Error('refusing_media_bucket')
+  const now = input.now ?? new Date()
+  const host = `${input.accountId}.r2.cloudflarestorage.com`
+  const { stamp, date } = amzDate(now)
+  const credential = `${input.accessKeyId}/${date}/auto/s3/aws4_request`
+  const signed = 'host'
+  const query: [string, string][] = [
+    ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential', credential],
+    ['X-Amz-Date', stamp],
+    ['X-Amz-Expires', String(input.expiresSeconds)],
+    ['X-Amz-SignedHeaders', signed],
+  ]
+  const encoded = query.map(([key, value]) => [awsEncode(key), awsEncode(value)] as [string, string])
+  encoded.sort((left, right) => byteCompare(left[0], right[0]) || byteCompare(left[1], right[1]))
+  const canonicalQuery = encoded.map(([key, value]) => `${key}=${value}`).join('&')
+  const canonical = [
+    'GET',
+    `/${encodePath(input.bucket)}/${encodePath(input.key)}`,
+    canonicalQuery,
+    `host:${host}\n`,
+    signed,
+    'UNSIGNED-PAYLOAD',
+  ].join('\n')
+  const secret = new TextEncoder().encode(`AWS4${input.secretAccessKey}`)
+  const dateKey = await hmac(secret, date)
+  const regionKey = await hmac(dateKey, 'auto')
+  const serviceKey = await hmac(regionKey, 's3')
+  const signingKey = await hmac(serviceKey, 'aws4_request')
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical))
+  const signature = hex(await hmac(signingKey, `AWS4-HMAC-SHA256\n${stamp}\n${date}/auto/s3/aws4_request\n${hex(hash)}`))
+  return `https://${host}/${encodePath(input.bucket)}/${encodePath(input.key)}?${canonicalQuery}&X-Amz-Signature=${signature}`
+}
+
 export function sha256Base64(hexDigest: string): string {
   const bytes = new Uint8Array(hexDigest.match(/.{2}/g)!.map((pair) => Number.parseInt(pair, 16)))
   let binary = ''

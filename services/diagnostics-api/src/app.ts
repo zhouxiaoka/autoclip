@@ -27,6 +27,7 @@ export interface Bucket {
 
 export interface Signer {
   sign(input: { key: string; contentLength: number; sha256Hex?: string; uploadId?: string; partNumber?: number }): Promise<{ url: string; headers: Record<string, string> }>
+  signGet?(key: string): Promise<string>
 }
 
 export interface Deps {
@@ -102,6 +103,8 @@ export async function handle(request: Request, deps: Deps): Promise<Response> {
   if (request.method === 'POST' && abort) return abortCase(abort[1]!, request, deps)
   const complete = url.pathname.match(/^\/v1\/cases\/([^/]+)\/files\/([^/]+)\/complete$/)
   if (request.method === 'POST' && complete) return completeFile(complete[1]!, complete[2]!, request, deps)
+  const readUrl = url.pathname.match(/^\/v1\/cases\/([^/]+)\/files\/([^/]+)\/read-url$/)
+  if (request.method === 'POST' && readUrl) return readObjectUrl(readUrl[1]!, readUrl[2]!, request, deps)
   const remove = url.pathname.match(/^\/v1\/cases\/([^/]+)$/)
   if (request.method === 'DELETE' && remove) return deleteCase(remove[1]!, request, deps)
   if (request.method === 'GET' && url.pathname === '/admin/quota') {
@@ -370,6 +373,19 @@ async function rejectInvalid(deps: Deps, row: CaseRow, object: ObjectRow): Promi
   await deps.bucket.delete(object.r2Key)
   await failObject(deps, row, object)
   return json(409, { error: 'byte_mismatch' })
+}
+
+async function readObjectUrl(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {
+  const row = await authorized(deps.repo, caseId, request)
+  if (!row || row.state === 'deleted') return json(404, { error: 'not_found' })
+  const object = await deps.repo.getObject(objectId)
+  if (!object || object.caseId !== caseId || object.state === 'aborted') return json(404, { error: 'object' })
+  const meta = await metadataSize(deps.bucket, object.r2Key)
+  if (meta.kind === 'transient') return json(503, { error: 'unavailable' })
+  if (meta.kind !== 'size' || meta.size !== object.declaredBytes) return json(404, { error: 'object' })
+  if (!deps.signer?.signGet) return json(503, { error: 'upload_signing_unconfigured' })
+  const url = await deps.signer.signGet(object.r2Key)
+  return json(200, { url, expires_in: 120, bytes: meta.size })
 }
 
 async function completeFile(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {
