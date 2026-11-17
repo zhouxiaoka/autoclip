@@ -7,6 +7,7 @@ import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
+import { trialResultFromConnection } from './trialRunResult'
 import TrialRunPanel from './TrialRunPanel'
 import {
   catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
@@ -208,16 +209,16 @@ export default function ProviderDetail({
                   )}
                 </div>
                 {status === 'failed' && (
-                  <p className="ac-note ac-note--error" role="alert">{validationCopy(connection.validation_error_type)}</p>
+                  <p className="ac-note ac-note--error" role="alert">{validationCopy(connection.validation_error_type, connection.validation_hint_key)}</p>
                 )}
                 {status === 'transient' && (
-                  <p className="ac-note" role="status">{validationCopy(connection.validation_error_type)}</p>
+                  <p className="ac-note" role="status">{validationCopy(connection.validation_error_type, connection.validation_hint_key)}</p>
                 )}
                 {m.testWarning?.id === connection.id && status !== 'failed' && (
                   <p className="ac-note" role="status">{m.testWarning.text}</p>
                 )}
                 <TrialRunPanel
-                  result={(m.lastTrialByConnection || {})[connection.id]}
+                  result={(m.lastTrialByConnection || {})[connection.id] || trialResultFromConnection(connection)}
                   trialStatus={connection.trial_status}
                 />
               </div>

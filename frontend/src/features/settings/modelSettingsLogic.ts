@@ -105,6 +105,7 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
         base_url: url,
         validation_status: ok ? 'ok' : result.result === 'transient' || isRetryableUpstreamError(result.error_type || '') ? 'transient' : 'failed',
         validation_error_type: ok ? '' : (result.error_type || 'unknown'),
+        validation_hint_key: ok ? '' : (result.hint_key || ''),
         // 1.5.9 3B/N3: successful test clears the lock; real insufficient_quota stamps it.
         ...(ok
           ? { quota_exhausted_at: null }
@@ -119,6 +120,7 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
           trial_avg_ms: result.trial_avg_ms ?? null,
           trial_estimate_requests: result.trial_estimate_requests ?? null,
           trial_estimate_minutes: result.trial_estimate_minutes ?? null,
+          trial_answer: result.trial_answer || '',
         } : {}),
       }
     }),
@@ -240,6 +242,17 @@ export function persistableConnection(c: Connection, active: Set<string | undefi
   if (c.api_key || c.has_key) return true
   if (PROVIDERS[c.provider as ProviderKey]?.local) return true
   return presetKey(c) === 'compatible' && !!c.base_url.trim()
+}
+
+/** A probe that started for another model must not stamp this connection. */
+export function probeStillCurrent(
+  settings: ModelSettings | null | undefined,
+  role: Role,
+  connectionId: string,
+  model: string,
+): boolean {
+  const binding = settings?.[role]
+  return !!binding && binding.connection_id === connectionId && binding.model === model
 }
 
 /** One access check per active connection; shared credentials are checked only once. */

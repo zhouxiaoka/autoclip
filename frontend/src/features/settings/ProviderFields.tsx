@@ -116,7 +116,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
         }} />
     </Row>}
     {showHint && <p className="ac-note">{keyHintCopy(liveHint)}</p>}
-    {shownError && <p className={transient ? 'ac-note' : 'ac-note ac-note--error'} role={transient ? 'status' : 'alert'}>{validationCopy(shownError)}</p>}
+    {shownError && <p className={transient ? 'ac-note' : 'ac-note ac-note--error'} role={transient ? 'status' : 'alert'}>{validationCopy(shownError, connection.validation_hint_key)}</p>}
     {failed && keyLink && KEY_ERRORS.has(errorType) && <p className="ac-note">
       <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a>
     </p>}

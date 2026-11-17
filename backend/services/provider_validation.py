@@ -57,6 +57,13 @@ LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama
 # D2: selected name absent from a successful /models list. Non-blocking; also the i18n key.
 MODEL_NOT_LISTED_WARNING = '这个模型名不在服务器的模型列表里。请改选列表中已有的模型，否则后面生成时可能会失败。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
+# Visible answer missing. Reasoning text is never promoted to the answer.
+NO_FINAL_ANSWER_HINT = '模型只返回了思考过程，没有最终回答。请换一个会直接作答的模型。'
+# Local /models succeeded, but the chat probe timed out or returned no visible answer.
+# The endpoint stays connected so sibling models remain selectable.
+LOCAL_MODEL_NOT_READY_HINT = '本机服务有响应，但这个模型在限时内没有给出回答。其他已列出的模型仍可选用，生成也不会因这次快速测试被整条连接拦住。'
+_LENGTH_FINISH = frozenset({'length', 'max_tokens', 'max_output_tokens'})
+_REASONING_KEYS = ('reasoning_content', 'reasoning', 'thinking')
 
 # Local capability miss: an image/T2I id bound to the analysis (or vision) slot.
 IMAGE_MODEL_IN_ANALYSIS = 'image_model_in_analysis'
@@ -109,6 +116,9 @@ class ValidationResult:
     trial_estimate_requests: Optional[int] = None
     trial_estimate_minutes: Optional[float] = None
     trial_passed: Optional[bool] = None
+    # Why the trial answer light is not a plain format pass/fail.
+    # '' | ok | format | no_answer | transport | context | rate
+    trial_answer: str = ''
     # Capability miss that is not an UpstreamErrorType (vision_unsupported / image_model_in_analysis).
     # Carried as error_code while error_type stays 'unknown' so sanitize + known_validation_type keep it.
     capability_error_code: str = ''
@@ -150,6 +160,7 @@ class ValidationResult:
             'trial_estimate_requests': self.trial_estimate_requests,
             'trial_estimate_minutes': self.trial_estimate_minutes,
             'trial_passed': self.trial_passed,
+            'trial_answer': self.trial_answer,
         }
 
 
@@ -259,6 +270,33 @@ def _completion_text(message: Any) -> str:
     return ''
 
 
+def _reasoning_text(message: Any) -> str:
+    """Hidden reasoning channel. Never a substitute for the visible answer."""
+    if not isinstance(message, dict):
+        return ''
+    for key in _REASONING_KEYS:
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ''
+
+
+def _finish_reason(choice: Any) -> str:
+    if not isinstance(choice, dict):
+        return ''
+    reason = choice.get('finish_reason') or choice.get('finishReason') or ''
+    return str(reason or '').strip().lower()
+
+
+def _choice_message(payload: Any) -> tuple[Any, Any]:
+    if not isinstance(payload, dict):
+        return None, None
+    choices = payload.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return None, None
+    return choices[0], choices[0].get('message')
+
+
 def _non_stream_completion(payload: Any) -> bool:
     """A chat completion with a non-empty answer, not an SSE stream, error object, or blank 2xx."""
     if not isinstance(payload, dict) or payload.get('error'):
@@ -314,8 +352,17 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     if not _non_stream_completion(parsed):
         # Some gateways return HTTP 200 with an error envelope and no choices.
         classified = _classify(None, text[:4000])
-        if classified.error_type is UpstreamErrorType.UNKNOWN:
-            classified = _as_type(UpstreamErrorType.UNKNOWN)
+        if classified.error_type is not UpstreamErrorType.UNKNOWN:
+            return _with_detail(classified, status, upstream_code=symbolic_error_code(parsed) or upstream)
+        choice, message = _choice_message(parsed)
+        # Reasoning text is not parsed and is not the answer. A length finish with
+        # no visible content is the same miss. A blank body with neither stays unknown.
+        if _reasoning_text(message) or _finish_reason(choice) in _LENGTH_FINISH:
+            classified = ClassifiedUpstreamError(
+                error_type=UpstreamErrorType.UNKNOWN,
+                retryable=False,
+                hint_key=NO_FINAL_ANSWER_HINT,
+            )
         return _with_detail(classified, status, upstream_code=symbolic_error_code(parsed) or upstream)
     return None
 
@@ -468,10 +515,37 @@ def _validate_resolved(
         warning = MODEL_NOT_LISTED_WARNING
     probe_error = _probe(base, api_key, selected)
     if probe_error:
+        if _local_model_not_ready(
+            probe_error, provider=resolved.provider, base=base,
+            list_known=list_known, selected=selected, models=models,
+        ):
+            # The model list proved the service is up. A cold load or an empty
+            # visible answer must not mark every model on this endpoint disconnected.
+            return _ok(base, hint, models, **extras, warning=LOCAL_MODEL_NOT_READY_HINT)
         return _failed(probe_error, base, hint, models, **extras,
                        http_status=getattr(probe_error, 'http_status', None),
                        network_kind=getattr(probe_error, 'network_kind', ''))
     return _ok(base, hint, models, **extras, warning=warning)
+
+
+def _local_model_not_ready(
+    probe_error: ClassifiedUpstreamError, *, provider: str, base: str,
+    list_known: bool, selected: str, models: list[str],
+) -> bool:
+    """Listed loopback model whose chat probe timed out or returned no visible answer.
+
+    Remote compatible gateways keep a real failure. Only Ollama, LM Studio, and
+    loopback addresses are exempt, and only when ``/models`` already listed the id.
+    """
+    local = (provider or '').strip().lower() in {'ollama', 'lmstudio'} or _is_loopback_url(base)
+    if not local or not list_known or selected not in models:
+        return False
+    kind = probe_error.error_type
+    if kind is UpstreamErrorType.TIMEOUT:
+        return True
+    status = getattr(probe_error, 'http_status', None)
+    # Any HTTP 200 that is not a real upstream class: empty content, reasoning-only, or a non-completion.
+    return status == 200 and kind is UpstreamErrorType.UNKNOWN
 
 
 def resolve_fetch_base(connection: ai_models.Connection) -> tuple[str, Optional[ClassifiedUpstreamError]]:
@@ -636,10 +710,12 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
                 response = client.post(url, json=payload, headers=headers)
     except httpx.TimeoutException:
         return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
-                'rate_limited': False, 'context_error': False, 'json_ok': False, 'status': None}
+                'rate_limited': False, 'context_error': False, 'json_ok': False,
+                'no_answer': False, 'status': None}
     except httpx.RequestError:
         return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
-                'rate_limited': False, 'context_error': False, 'json_ok': False, 'status': None}
+                'rate_limited': False, 'context_error': False, 'json_ok': False,
+                'no_answer': False, 'status': None}
     ms = int((time.monotonic() - started) * 1000)
     status = response.status_code
     text = response.text or ''
@@ -647,21 +723,29 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     context_error = _is_context_error(status, text[:4000])
     if status >= 400:
         return {'ms': ms, 'ok_http': False, 'rate_limited': rate_limited,
-                'context_error': context_error, 'json_ok': False, 'status': status}
+                'context_error': context_error, 'json_ok': False, 'no_answer': False, 'status': status}
     content = ''
+    reasoning = ''
+    finish = ''
     try:
         parsed = response.json()
-        choices = parsed.get('choices') if isinstance(parsed, dict) else None
-        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-            content = _completion_text(choices[0].get('message'))
+        choice, message = _choice_message(parsed)
+        content = _completion_text(message)
+        # Reasoning is inspected only to classify "no visible answer". It is not parsed as JSON.
+        reasoning = _reasoning_text(message)
+        finish = _finish_reason(choice)
     except Exception:  # noqa: BLE001
-        content = text
+        content = ''
+    no_answer = not content
     return {
         'ms': ms,
         'ok_http': True,
         'rate_limited': rate_limited,
         'context_error': context_error,
-        'json_ok': _parse_trial_json(content),
+        'json_ok': False if no_answer else _parse_trial_json(content),
+        'no_answer': no_answer,
+        'had_reasoning': bool(reasoning),
+        'finish_reason': finish,
         'status': status,
     }
 
@@ -694,24 +778,35 @@ def trial_run(
             sleeper(TRIAL_GAP_SEC)
     latencies = [a['ms'] for a in attempts]
     avg_ms = int(round(sum(latencies) / max(1, len(latencies))))
-    context_ok = all(not a['context_error'] and a['ok_http'] for a in attempts)
+    # Context means the window was exceeded, not "any HTTP failure".
+    context_ok = not any(a['context_error'] for a in attempts)
     rate_limited = any(a['rate_limited'] for a in attempts)
-    json_ok = all(a['json_ok'] for a in attempts)
+    visible = [a for a in attempts if a['ok_http'] and not a.get('no_answer')]
+    json_ok: bool | None
+    if not visible:
+        json_ok = None
+    else:
+        json_ok = all(a['json_ok'] for a in visible)
+    if any(a['context_error'] for a in attempts):
+        answer = 'context'
+    elif rate_limited:
+        answer = 'rate'
+    elif any(not a['ok_http'] for a in attempts):
+        answer = 'transport'
+    elif any(a['ok_http'] and not a.get('no_answer') and not a['json_ok'] for a in attempts):
+        answer = 'format'
+    elif any(a.get('no_answer') for a in attempts):
+        answer = 'no_answer'
+    else:
+        answer = 'ok'
+    trial_passed = bool(context_ok and json_ok is True and not rate_limited and answer == 'ok')
     n, minutes = _trial_estimate(avg_ms)
-    passed = bool(context_ok and json_ok and not rate_limited)
-    # Rate limit is a warning (⚠), not a hard fail for trial_passed yellow badge —
-    # spec: any ✗ shows yellow. Rate ⚠ counts as not fully passed.
-    trial_passed = bool(context_ok and json_ok and not rate_limited)
-    # If rate limited but JSON+context ok → still "not fully passed" (yellow).
-    if context_ok and json_ok and rate_limited:
-        trial_passed = False
-    if not context_ok or not json_ok:
-        trial_passed = False
     return {
         'probe_kind': 'trial',
         'trial_context_ok': context_ok,
         'trial_rate_limited': rate_limited,
         'trial_json_ok': json_ok,
+        'trial_answer': answer,
         'trial_avg_ms': avg_ms,
         'trial_estimate_requests': n,
         'trial_estimate_minutes': minutes,
@@ -737,10 +832,10 @@ def validate_connection_with_probe(
         # Address / key / kind already failed — skip the expensive trial.
         # image_model_in_analysis leaves trial_* unset (no fake three lights).
         if result.capability_error_code != IMAGE_MODEL_IN_ANALYSIS:
+            # The trial never ran. Do not paint context/format failures for an address,
+            # key, timeout, or empty-answer probe.
             result.trial_passed = False
-            result.trial_context_ok = False
-            result.trial_json_ok = False
-            result.trial_rate_limited = False
+            result.trial_answer = ''
         return result
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']
@@ -753,5 +848,6 @@ def validate_connection_with_probe(
     result.trial_estimate_requests = trial['trial_estimate_requests']
     result.trial_estimate_minutes = trial['trial_estimate_minutes']
     result.trial_passed = trial['trial_passed']
+    result.trial_answer = trial.get('trial_answer') or ''
     # Trial failures do not flip ok/result — save stays allowed (yellow badge only).
     return result

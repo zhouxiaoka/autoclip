@@ -6,6 +6,7 @@ import api, { speechApi } from '../../services/api'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { mainConnection, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import TrialRunPanel from './TrialRunPanel'
+import { trialResultFromConnection } from './trialRunResult'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
@@ -124,7 +125,7 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
             {m.testWarning?.id === connection.id && (
               <p className="ac-note" role="status">{m.testWarning.text}</p>
             )}
-            <TrialRunPanel result={m.lastTrialByConnection[connection.id]} trialStatus={connection.trial_status} />
+            <TrialRunPanel result={m.lastTrialByConnection[connection.id] || trialResultFromConnection(connection)} trialStatus={connection.trial_status} />
           </Row>
         : <Row label={t('settings.providers.use_for_analysis')} hint={t('settings.providers.use_for_analysis_hint')}>
             <Btn size="sm" onClick={() => m.assignAnalysisConnection(connection)}>{t('settings.providers.use_for_analysis')}</Btn>

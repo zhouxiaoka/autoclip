@@ -104,6 +104,49 @@ test('applyValidation persists trial_* on connection for F5', () => {
   assert.equal(row.validation_status === 'failed', false)
 })
 
+test('reasoning-only and transport trials are not context or format failures', () => {
+  const noAnswer = trial.trialLines({
+    ok: true,
+    probe_kind: 'trial',
+    trial_context_ok: true,
+    trial_rate_limited: false,
+    trial_json_ok: null,
+    trial_answer: 'no_answer',
+  })
+  assert.equal(noAnswer[0].label, '上下文 ✓')
+  assert.equal(noAnswer.some(line => line.label === '输出格式 ✗'), false)
+  assert.equal(noAnswer[2].label, '模型只返回了思考过程，没有最终回答。请换一个会直接作答的模型。')
+
+  const transport = trial.trialLines({
+    ok: true,
+    probe_kind: 'trial',
+    trial_context_ok: true,
+    trial_rate_limited: false,
+    trial_json_ok: null,
+    trial_answer: 'transport',
+  })
+  assert.equal(transport.length, 1)
+  assert.equal(transport[0].label, '模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。')
+  assert.equal(transport.some(line => line.label === '上下文 ✗' || line.label === '输出格式 ✗'), false)
+})
+
+test('probeStillCurrent ignores a probe for a model the user already left', () => {
+  const { loadTs } = require('./load-ts.cjs')
+  const providers = { PROVIDERS: { compatible: { name: '自定义' }, ollama: { name: 'Ollama', local: {} } } }
+  const logic = loadTs('modelSettingsLogic.ts', {
+    './providers': providers,
+    './modelDefaults': loadTs('modelDefaults.ts'),
+    './providerAccess': loadTs('providerAccess.ts', { '../../i18n': { t: x => x }, './providers': providers }),
+    './providerUrl': loadTs('providerUrl.ts'),
+  })
+  const settings = {
+    analysis: { connection_id: 'ollama', model: 'qwen2.5:7b', capability: 'auto' },
+    vision: null, cover: null, transcription: null,
+  }
+  assert.equal(logic.probeStillCurrent(settings, 'analysis', 'ollama', 'qwen2.5:7b'), true)
+  assert.equal(logic.probeStillCurrent(settings, 'analysis', 'ollama', 'qwen2.5-coder:14b'), false)
+})
+
 test('trialLines empty when ok is false even if probe_kind is trial', () => {
   assert.deepEqual(plain(trial.trialLines({
     ok: false,

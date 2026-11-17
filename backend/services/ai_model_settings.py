@@ -95,6 +95,8 @@ class Connection(BaseModel):
     image_base_url: str = ''
     validation_status: Literal['ok', 'failed', 'unchecked', 'transient'] = 'unchecked'
     validation_error_type: str = ''
+    # Fixed catalog sentence for the last failed check. Empty when the type's own sentence is enough.
+    validation_hint_key: str = ''
     # 1.5.9 3B: ISO timestamp when insufficient_quota last hit; cleared on a successful connection test.
     quota_exhausted_at: str | None = None
     # F2 trial-run card state (F5 import area reads the same fields).
@@ -105,6 +107,8 @@ class Connection(BaseModel):
     trial_avg_ms: int | None = None
     trial_estimate_requests: int | None = None
     trial_estimate_minutes: float | None = None
+    # ok | format | no_answer | transport | context | rate | '' (not run / not classified)
+    trial_answer: str = ''
     # None = omitted (legacy file or old client). Inferred after validation.
     base_url_source: Source | None = None
     preset_version: int = Field(default=0, ge=0)
@@ -195,6 +199,26 @@ class Connection(BaseModel):
         from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
         text = (value or '').strip()
         if text and text not in UPSTREAM_ERROR_TYPES:
+            return ''
+        return text
+
+    @field_validator('validation_hint_key')
+    @classmethod
+    def known_validation_hint(cls, value):
+        text = (value or '').strip()
+        if not text:
+            return ''
+        from backend.core.upstream_errors import HINT_KEYS
+        from backend.services.provider_validation import LOCAL_MODEL_NOT_READY_HINT, NO_FINAL_ANSWER_HINT
+        if text in HINT_KEYS.values() or text in {LOCAL_MODEL_NOT_READY_HINT, NO_FINAL_ANSWER_HINT}:
+            return text
+        return ''
+
+    @field_validator('trial_answer')
+    @classmethod
+    def known_trial_answer(cls, value):
+        text = (value or '').strip()
+        if text not in {'', 'ok', 'format', 'no_answer', 'transport', 'context', 'rate'}:
             return ''
         return text
 
