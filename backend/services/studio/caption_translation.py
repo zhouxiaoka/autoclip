@@ -100,26 +100,48 @@ def _read(path):
         return {}
 
 
-def _save(path, values):
-    if path is None or not values:
-        return
-    # A failed cache write must not discard good captions or prevent export.
+def _write_cache(path, values):
     temporary = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as file:
+            json.dump(values, file, ensure_ascii=False)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _snapshot(path, force_ids):
+    with _LOCK:
+        values = _read(path)
+        epochs = dict(values['_epochs']) if isinstance(values.get('_epochs'), dict) else {}
+        if force_ids:
+            for index in force_ids:
+                values.pop(str(index), None)
+                epochs[str(index)] = uuid.uuid4().hex
+            values['_epochs'] = epochs
+            # Invalidation must be durable before a paid call. A failed write cannot
+            # silently reuse a translation the user explicitly asked to replace.
+            if path is not None:
+                _write_cache(path, values)
+        return values, epochs
+
+
+def _save(path, values, epochs):
+    if path is None or not values:
+        return
+    try:
         with _LOCK:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            merged = {**_read(path), **{str(k): v for k, v in values.items()}}
-            with temporary.open('x', encoding='utf-8') as file:
-                os.chmod(temporary, 0o600)
-                json.dump(merged, file, ensure_ascii=False)
-            os.replace(temporary, path)
+            current = _read(path)
+            current_epochs = current['_epochs'] if isinstance(current.get('_epochs'), dict) else {}
+            for index, value in values.items():
+                key = str(index)
+                if current_epochs.get(key) == epochs.get(key):
+                    current[key] = value
+            _write_cache(path, current)
     except OSError:
         logger.warning('Caption translation cache could not be saved')
-    finally:
-        try:
-            temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def _valid(source, text, audience, terms):
@@ -250,11 +272,16 @@ def _repair_hint(response, index, source, audience, terms):
 
 
 def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = None,
-              model_key='', allow_model=True):
+              model_key='', allow_model=True, only_ids=None, force_ids=()):
     """Return accepted id→text. Cache reuse revalidates content, language and protected terms."""
     path = cache_dir / (_cache_key(lines, audience, terms, model_key) + '.json') if cache_dir and model_key else None
+    selected = set(range(len(lines))) if only_ids is None else set(only_ids)
+    forced = set(force_ids)
+    if not forced <= selected or any(type(i) is not int or not 0 <= i < len(lines) for i in selected):
+        raise ValueError('invalid caption selection')
+    cached, epochs = _snapshot(path, forced)
     found = {}
-    for key, value in _read(path).items():
+    for key, value in cached.items():
         if not key.isdigit() or not 0 <= int(key) < len(lines):
             continue
         index = int(key)
@@ -265,7 +292,7 @@ def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = 
         return found
     if call is None:
         call = _request
-    for batch in _batches([i for i in range(len(lines)) if i not in found and len(lines[i]['text']) <= MAX_CHARS], lines):
+    for batch in _batches([i for i in range(len(lines)) if i in selected and i not in found and len(lines[i]['text']) <= MAX_CHARS], lines):
         pending = list(batch)
         repair_hint = None
         for attempt in range(2):
@@ -307,7 +334,7 @@ def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = 
                 return found
             accepted = _accepted(response, set(pending), lines, audience, terms)
             found.update(accepted)
-            _save(path, accepted)
+            _save(path, accepted, epochs)
             pending = [i for i in pending if i not in found]
             if not pending:
                 break

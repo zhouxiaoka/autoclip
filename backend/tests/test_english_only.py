@@ -36,7 +36,13 @@ def test_chinese_model_output_never_reaches_an_english_package():
     result = packaging.build_packaging(ZH_DRAFT, ZH_LINES, platform_strategy('tiktok'), known_names='Sam Altman', call=chinese_titles_then_good)
     # Adjacent Chinese half sentences form one source unit: translate, repair, decorate.
     assert len(calls) == 3 and 'repair' in calls[1]
-    assert not _has_foreign({k: result[k] for k in ('title_lines', 'cues', 'speakers')}), result
+    # Editor-only source_text remains Chinese; assert the actual rendered surface,
+    # including fallback, rather than incorrectly treating all metadata as captions.
+    from backend.services.studio.models import Packaging, Scene
+    from backend.services.studio.packaging_render import scene_ass
+    rendered = scene_ass(Packaging.model_validate(result), [Scene(id='s',start=0,end=6)], 0)
+    assert not _has_foreign(rendered), rendered
+    assert result['cues'][0]['source_text'] == ''.join(line['text'] for line in ZH_LINES)
     assert result['speakers'] == [{'at': 0.0, 'name': 'Sam Altman', 'role': ''}]
 
 

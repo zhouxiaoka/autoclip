@@ -45,9 +45,11 @@ Row = tuple[float, float, str]
 
 class ClipBounds(tuple):
     """Keep the existing (start, end) API while carrying an unresolved-ending warning."""
-    def __new__(cls, start, end, *, needs_review=False):
+    def __new__(cls, start, end, *, needs_review=False, end_anchor=None, word_aligned=False):
         value = super().__new__(cls, (start, end))
         value.needs_review = needs_review
+        value.end_anchor = end_anchor
+        value.word_aligned = word_aligned
         return value
 
 
@@ -261,7 +263,7 @@ def sentence_bounds(rows: list[Row], start: float, end: float, silences: 'Silenc
         estimate = rows[e_row][1] if e_off >= len(rows[e_row][2]) else _time_at(rows[e_row], e_off)
         new_end = _snap_end(rows, e_row, e_off, estimate, min_end, silences) or new_end
         new_start = _snap_start(new_start, silences, inner=s_off > 0)
-    return ClipBounds(round(new_start, 3), round(new_end, 3))
+    return ClipBounds(round(new_start, 3), round(new_end, 3), end_anchor=(e_row, e_off))
 
 
 SilenceFinder = Callable[[float, float], list[tuple[float, float]]]
@@ -430,7 +432,7 @@ def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[
         new_start = _snap_start(new_start, silences, inner=s_off > 0)
     if new_start < start - CONTEXT_BEFORE or not original * .6 <= aligned_end - new_start <= original + MODEL_MAX_EXTEND + 15:
         return None
-    return ClipBounds(round(new_start, 3), round(aligned_end, 3))
+    return ClipBounds(round(new_start, 3), round(aligned_end, 3), end_anchor=(e_row, len(rows[e_row][2])))
 
 
 def neighbor_limits(clips: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -468,9 +470,9 @@ def refine_clips(rows: list[Row], clips: list[tuple[float, float]], call: Callab
             raise
         except Exception as error:  # noqa: BLE001 - boundary polish never blocks output
             logger.warning('Boundary refinement fell back: %s', type(error).__name__)
-            return ClipBounds(*fallback, needs_review=True)
+            return ClipBounds(*fallback, needs_review=True, end_anchor=getattr(fallback, "end_anchor", None))
         if refined is None:
-            return ClipBounds(*fallback, needs_review=True)
+            return ClipBounds(*fallback, needs_review=True, end_anchor=getattr(fallback, "end_anchor", None))
         if refined[0] < lo or refined[1] > hi:
             logger.info('Boundary refinement crossed a neighbouring clip; keeping sentence bounds')
             return fallback

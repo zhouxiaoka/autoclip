@@ -8,13 +8,15 @@ never blocked on packaging.
 from __future__ import annotations
 
 import logging
+import hashlib
+import json
 import re
 from collections.abc import Callable
 from typing import Any
 
 from backend.core.job_budget import JobDurationExceeded
 from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
-from backend.services.studio.models import Packaging
+from backend.services.studio.models import Packaging, PackagingCue
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +171,19 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
     from backend.pipeline.quality import to_seconds
     lines = []
     for scene_index, scene in enumerate(scenes):
+        anchor = scene.get('caption_end')
+        anchor_index = None
+        if anchor and abs(scene['end'] - anchor['audio_end']) < .000001:
+            matches = [i for i, entry in enumerate(entries)
+                       if abs(to_seconds(entry['start_time']) - anchor['row_start']) < .000001
+                       and abs(to_seconds(entry['end_time']) - anchor['row_end']) < .000001
+                       and hashlib.sha256(str(entry.get('text') or '').strip().encode()).hexdigest() == anchor['text_sha256']
+                       and 0 < anchor['offset'] <= len(str(entry.get('text') or '').strip())]
+            if len(matches) == 1:
+                anchor_index = matches[0]
         for entry_index, entry in enumerate(entries):
+            if anchor_index is not None and entry_index > anchor_index:
+                continue
             start, end = to_seconds(entry['start_time']), to_seconds(entry['end_time'])
             text = str(entry.get('text') or '').strip()
             if not text or end <= scene['start'] or start >= scene['end']:
@@ -179,8 +193,11 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
             from backend.services.studio.boundaries import _inner_ends, _time_at, _cut_window, ROW_END_TOLERANCE
             # A real pause can lie just after a too-early ASR timestamp. That small
             # audio tail must not pull the next row's whole, unspoken sentence in.
-            if 0 < scene['end'] - start <= ROW_END_TOLERANCE + 1e-6 and scene['end'] < end:
+            if entry_index != anchor_index and 0 < scene['end'] - start <= ROW_END_TOLERANCE + 1e-6 and scene['end'] < end:
                 continue
+            anchored = entry_index == anchor_index
+            if anchored:
+                text, end = text[:anchor['offset']].strip(), scene['end']
             row = (start, end, text)
             points = [(offset, _time_at(row, offset)) for offset in _inner_ends(text)]
             def nearest_cut(at):
@@ -416,7 +433,7 @@ def _stamp_cues(payload: dict) -> dict:
             continue
         text = str(cue.get('text') or '')
         phrase = _accept_phrase(str(cue.get('emphasis') or ''), text) or key_phrase(text, str(cue.get('original') or ''))
-        speaker = _speaker_name(text, cue.get('start') or 0, str(cue.get('speaker') or '').strip(), speakers)
+        speaker = str(cue.get('speaker') or '') if cue.get('manually_edited') else _speaker_name(text, cue.get('start') or 0, str(cue.get('speaker') or '').strip(), speakers)
         cues.append({**cue, 'emphasis': phrase, 'speaker': speaker})
     payload = {**payload, 'cues': cues}
     return Packaging.model_validate(payload).model_dump()
@@ -479,9 +496,18 @@ def _translated_packaging(draft, lines, base, fallback, burned, known_names, cal
     from backend.services.studio.caption_units import translation_units
     lines = translation_units(lines)
     audience = base['audience_language']
+    previous = draft.get('packaging') or {}
+    old_cues = [PackagingCue.model_validate(c) for c in previous.get('cues', [])] if previous.get('audience_language') == audience else []
+    manual = _manual_translations(lines, old_cues)
     translated = translate(lines, audience, terms=_protected_terms(draft, lines, audience), call=call,
-                           cache_dir=translation_cache, model_key=model_key, allow_model=allow_model)
+                           cache_dir=translation_cache, model_key=model_key, allow_model=allow_model,
+                           only_ids=set(range(len(lines))) - manual.keys())
+    translated.update(manual)
     facts, cues = _translation_content(lines, translated, audience, burned)
+    for cue in cues:
+        old = next((c for c in old_cues if c.manually_edited and (c.source_id == cue['source_id'] or not c.source_id and c.start == cue['start'] and c.end == cue['end'])), None)
+        if old is not None:
+            cue.update(old.model_dump(), source_id=cue['source_id'], source_text=cue['source_text'])
     complete = facts['translation_status'] == 'complete'
     result = {**fallback, **facts, 'cues': cues}
     if not allow_model or not complete:
@@ -522,10 +548,32 @@ def _translated_packaging(draft, lines, base, fallback, burned, known_names, cal
     return _stamp_cues(result)
 
 
+def source_unit_id(line):
+    identity = [round(line['start'], 6), round(line['end'], 6), line['text']]
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+
+
+def _manual_translations(lines, cues):
+    retained = {}
+    for cue in cues:
+        if not cue.manually_edited:
+            continue
+        matches = [i for i, line in enumerate(lines)
+                   if (cue.source_id == source_unit_id(line) if cue.source_id else
+                       abs(cue.start - line['start']) < .000001 and abs(cue.end - line['end']) < .000001)]
+        if len(matches) != 1:
+            raise ValueError('原字幕或选段已变化，请核对人工修改后再重试')
+        retained[matches[0]] = cue.text
+    return retained
+
+
 def _translation_content(lines, translated, audience, burned):
     complete = bool(lines) and len(translated) == len(lines)
     facts = {'translation_status': 'complete' if complete else 'partial' if translated else 'source_fallback',
-             'translated_rows': len(translated), 'translation_total_rows': len(lines)}
+             'translated_rows': len(translated), 'translation_total_rows': len(lines),
+             'untranslated_cues': [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600],
+                                   'source_id': source_unit_id(l), 'source_text': l['text']}
+                                  for i, l in enumerate(lines) if i not in translated]}
     cues = []
     for i, line in enumerate(lines):
         text = translated.get(i)
@@ -535,11 +583,12 @@ def _translation_content(lines, translated, audience, burned):
             if burned or foreign_for(audience, line['text']):
                 continue
             text = line['text'][:600]
-        cues.append({'start': line['start'], 'end': line['end'], 'text': text, 'original': original})
+        cues.append({'start': line['start'], 'end': line['end'], 'text': text, 'original': original,
+                     'source_id': source_unit_id(line), 'source_text': line['text']})
     return facts, cues
 
 
-def retry_translation(project_id, draft):
+def retry_translation(project_id, draft, *, cue_index=None):
     """Return a caption-only editor suggestion. Never save a draft, select scenes or render a file."""
     from backend.core import llm_usage, project_cancellation
     from backend.core.job_budget import bound_clip_job, clip_step_budget, ensure_clip_job_budget
@@ -553,7 +602,22 @@ def retry_translation(project_id, draft):
     lines = translation_units(draft_lines(_load_srt_entries(project_id), [scene.model_dump() for scene in draft.scenes]))
     if not lines:
         raise ValueError('原素材没有可用字幕，本次未烧录字幕')
-    kwargs = {'terms': _protected_terms(draft.model_dump(), lines, draft.packaging.audience_language),
+    manual = _manual_translations(lines, draft.packaging.cues)
+    selected = None
+    if cue_index is not None:
+        if not 0 <= cue_index < len(draft.packaging.cues):
+            raise ValueError('字幕句子不存在')
+        cue = draft.packaging.cues[cue_index]
+        matches = [i for i, line in enumerate(lines)
+                   if (cue.source_id == source_unit_id(line) if cue.source_id else
+                       abs(cue.start - line['start']) < .000001 and abs(cue.end - line['end']) < .000001)]
+        if len(matches) != 1:
+            raise ValueError('原字幕或选段已变化，请核对人工修改后再重试')
+        selected = matches[0]
+        manual.pop(selected, None)
+    kwargs = {'only_ids': {selected} if selected is not None else set(range(len(lines))) - manual.keys(),
+              'force_ids': {selected} if selected is not None else set(),
+              'terms': _protected_terms(draft.model_dump(), lines, draft.packaging.audience_language),
               'cache_dir': store.directory(project_id) / 'metadata' / 'caption-translations',
               'model_key': caption_translation.model_fingerprint()}
     with project_cancellation.bind(project_id), bound_clip_job(seconds=180), llm_usage.tracking(project_id), llm_usage.stage('packaging'):
@@ -562,9 +626,30 @@ def retry_translation(project_id, draft):
                 translated = caption_translation.translate(lines, draft.packaging.audience_language, **kwargs)
         except JobDurationExceeded:
             ensure_clip_job_budget()
-            translated = caption_translation.translate(lines, draft.packaging.audience_language, allow_model=False, **kwargs)
+            translated = caption_translation.translate(lines, draft.packaging.audience_language, allow_model=False, **{**kwargs, 'force_ids': ()})
         project_cancellation.checkpoint(project_id)
+    if selected is not None:
+        # Return just the requested replacement. Failed retranslation preserves the
+        # existing draft/video, but its known-bad cache entry remains invalidated.
+        if selected not in translated:
+            raise ValueError('此句重译未完成，原有字幕已保留，请稍后重试')
+        cues = [cue.model_dump() for cue in draft.packaging.cues]
+        cues[cue_index].update(text=translated[selected], manually_edited=False,
+                              source_id=source_unit_id(lines[selected]), source_text=lines[selected]['text'], emphasis='')
+        value = {**draft.packaging.model_dump(), 'cues': cues}
+        missing = [c.model_dump() for c in draft.packaging.untranslated_cues if c.source_id != cues[cue_index]['source_id']]
+        if len(missing) != len(draft.packaging.untranslated_cues):
+            count = len(lines) - len(missing)
+            value.update(untranslated_cues=missing, translated_rows=count, translation_total_rows=len(lines),
+                         translation_status='complete' if not missing else 'partial')
+        return Packaging.model_validate(value)
+    translated.update(manual)
     facts, cues = _translation_content(lines, translated, draft.packaging.audience_language, draft.packaging.burned_captions)
+    for cue in cues:
+        for i in manual:
+            if cue['source_id'] == source_unit_id(lines[i]):
+                old = next(c for c in draft.packaging.cues if c.manually_edited and (c.source_id == cue['source_id'] or not c.source_id and c.start == cue['start'] and c.end == cue['end']))
+                cue.update(old.model_dump(), source_id=cue['source_id'], source_text=cue['source_text'])
     return Packaging.model_validate({**draft.packaging.model_dump(), **facts, 'cues': cues})
 
 

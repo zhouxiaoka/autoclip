@@ -800,7 +800,11 @@ def _complete_thought_bounds(project_id, clips):
     except Exception:  # noqa: BLE001
         call = None
     with llm_usage.stage('boundaries'), llm_usage.timed('boundaries'):
-        return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
+        silences = boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None
+        bounds = boundaries.refine_clips(rows, clips, call, silences)
+        from backend.services.studio.ending_alignment import align_project
+        limits = [min(hi, original[1] + boundaries.MODEL_MAX_EXTEND) for original, (_, hi) in zip(clips, boundaries.neighbor_limits(clips))]
+        return align_project(project_id, rows, bounds, silences=silences, limits=limits)
 
 
 MAX_DRAFT_OVERLAP = 0.5  # share of the shorter clip two content drafts may have in common
@@ -865,8 +869,10 @@ def _content_drafts(project_id, plan, video, platforms=()):
                 win_start = win_end = None
         drafts = []
         ending_reviews = {tuple(bound): getattr(bound, 'needs_review', True) for bound in bounds}
+        caption_ends = {tuple(bound): getattr(bound, 'caption_end', None) for bound in bounds}
         for clip, start, end in _distinct_ranges(picked, bounds):
             ending_review = ending_reviews.get((start, end), True)
+            caption_end = caption_ends.get((start, end))
             # Transcript timestamps can run past the final video frame. Keep valid content
             # from that clip, and never let one invalid range discard the whole batch.
             if end > source_duration:
@@ -888,6 +894,7 @@ def _content_drafts(project_id, plan, video, platforms=()):
                     label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
                     start=start,
                     end=end,
+                    caption_end=caption_end if caption_end and abs(caption_end['audio_end'] - end) < .000001 else None,
                     evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
                 )
                 intelligence.validate_scenes([scene], source_duration)
@@ -1348,7 +1355,7 @@ def _prefetch_packaging(project_id, items, burned, cache):
     first = {}
     for strategy_id, value in items:
         strategy = _project_strategy(project_id, strategy_id)
-        key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
+        key = (tuple((scene['start'], scene['end'], json.dumps(scene.get('caption_end'), sort_keys=True)) for scene in value['scenes']), strategy.template, strategy.audience_language)
         first.setdefault(key, (strategy_id, value))
     def one(item):
         ensure_clip_job_budget()
@@ -1379,7 +1386,9 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache, *, allow_mod
         return {key: item for key, item in value.items() if key != 'packaging'}  # never inherit another template's packaging
     from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)
-    key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
+    key = (tuple((scene['start'], scene['end'], json.dumps(scene.get('caption_end'), sort_keys=True)) for scene in value['scenes']), strategy.template, strategy.audience_language)
+    if any(c.get('manually_edited') for c in (value.get('packaging') or {}).get('cues', [])):
+        key = (*key, value.get('id'), json.dumps(value['packaging'], sort_keys=True))
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
         used = cache.setdefault('palettes', [])

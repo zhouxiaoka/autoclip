@@ -1,4 +1,5 @@
 import { Switch } from 'antd'
+import CaptionCorrections from './CaptionCorrections'
 import { t } from '../../i18n'
 import { Btn, Row, Segmented } from '../../ui'
 import { packagingLabel, packagingFallbackHint } from './packagingLabel'
@@ -15,7 +16,7 @@ const STYLES: Record<Packaging['template'], { value: NonNullable<Packaging['styl
  * Editing for automatic template packaging. This release only allows the two title lines and
  * the editor tags switch; captions, nameplates and tags themselves come from the template.
  */
-export default function PackagingSettings({ draft, patch, onRetryTranslation, translating = false }: { draft: Draft; patch: (changes: Partial<Draft>) => void; onRetryTranslation?: () => void; translating?: boolean }) {
+export default function PackagingSettings({ draft, patch, onRetryTranslation, onRetranslateCaption, onCaptionSeek, translating = false }: { draft: Draft; patch: (changes: Partial<Draft>) => void; onRetryTranslation?: () => void; onRetranslateCaption?: (index: number, packaging?: Draft['packaging']) => void; onCaptionSeek?: (start: number, end: number) => void; translating?: boolean }) {
   const packaging = draft.packaging
   if (!packaging) return null
   const fallbackHint = packagingFallbackHint(packaging, [], effectiveSubtitles(draft))
@@ -36,6 +37,7 @@ export default function PackagingSettings({ draft, patch, onRetryTranslation, tr
         <span className="studio-muted">{t('补译后请保存并重新导出，已有成片保留。')}</span>
       </>}
     </Row>
+    {effectiveSubtitles(draft) && <CaptionCorrections draft={draft} patch={patch} onRetranslate={onRetranslateCaption} onSeek={onCaptionSeek} busy={translating} />}
     <Row stack label={t('样式')} hint={t('改变字幕与动效的风格，版式和配色保持一致。')}>
       <Segmented size="sm" ariaLabel={t('样式')} value={packaging.style ?? STYLES[packaging.template][0].value}
         options={STYLES[packaging.template].map(option => ({ value: option.value, label: t(option.label) }))}
