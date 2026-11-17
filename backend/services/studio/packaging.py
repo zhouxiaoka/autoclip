@@ -47,7 +47,15 @@ def _protected_terms(draft: dict[str, Any], lines: list[dict[str, Any]], audienc
     # Keep explicitly spelled multi-word names (including a middle initial) instead
     # of letting a translator expand the initial or guess a different person's name.
     # Single capitalized words may just be ASR sentence starts, so do not infer them.
-    names = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z]+)+\b', source)
+    # Joining different rows here can invent a name from sentence starts ("So" +
+    # "Mostly"). Only protect names actually spelled within one source unit.
+    non_names = {'so', 'mostly', 'but', 'and', 'then', 'well', 'yes', 'no', 'um', 'uh',
+                 'we', 'you', 'they', 'he', 'she', 'it', 'the', 'this', 'that', 'these',
+                 'those', 'there', 'here', 'what', 'why', 'how', 'when', 'where',
+                 'which', 'who', 'really', 'maybe', 'actually'}
+    names = [name for line in lines
+             for name in re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z]+)+\b', str(line.get('text') or ''))
+             if not any(word.lower() in non_names for word in name.split())]
     return list(dict.fromkeys([*title_terms, *names]))
 
 

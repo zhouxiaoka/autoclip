@@ -8,13 +8,9 @@ from __future__ import annotations
 import re
 
 MAX_CHARS = 600
-MAX_SECONDS = 24
+MAX_SECONDS = 30
 _END = re.compile(r'[。！？]+["”」』]?|[.!?…]+["”」』]?(?=\s|$)')
 _ABBREVIATION = re.compile(r'(?:\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc)|\b[A-Z])\.$', re.I)
-_DEPENDENT = re.compile(r'\b(?:not|never|no|any|every|some|is|are|was|were|be|been|being|'
-                        r'who|which|that|because|although|unless|if|when|while|and|or|but|'
-                        r'the|a|an|of|to|for|with|without|from|in|at|than|even like|can do now)\s*[,;:]?$', re.I)
-_ZH_DEPENDENT = re.compile(r'(?:因为|如果|虽然|为了|但是|还是|非常|的|就|和|或|从|把|被|让)\s*[，、：；]?$')
 
 
 def sentence_offsets(text):
@@ -73,20 +69,21 @@ def translation_units(lines):
                 text = previous['text']
                 gap = part['start'] - previous['end']
                 closed = len(text) in set(sentence_offsets(text))
-                dependent = bool(_DEPENDENT.search(text) or _ZH_DEPENDENT.search(text))
                 # Short sentences in one source paragraph share referents/word senses
                 # (e.g. "cool" after an acting anecdote). Translate that whole passage;
                 # never pass separate neighbouring facts as context-only instructions.
                 short_passage = (row.get('_entry') is not None and previous_entry == row['_entry']
-                                 and part['end'] - previous['start'] <= 12
-                                 and len(text) + len(part['text']) < 260)
+                                 and part['end'] - previous['start'] <= MAX_SECONDS
+                                 and len(text) + len(part['text']) < MAX_CHARS)
                 joiner = '' if re.search(r'[\u3400-\u9fff]$', text) and re.match(r'[\u3400-\u9fff]', part['text']) else ' '
                 if (previous_scene == row.get('_scene') and (not closed or short_passage)
                         and not part['text'].lstrip().startswith('>>')
-                        and -.05 <= gap <= (1.5 if dependent else .6)
+                        # A brief breath does not complete an unpunctuated clause.
+                        and -.05 <= gap <= 2.
                         and part['end'] - previous['start'] <= MAX_SECONDS
                         and len(text) + len(joiner) + len(part['text']) <= MAX_CHARS):
                     previous.update(end=part['end'], text=text + joiner + part['text'])
+                    previous_entry = row.get('_entry')
                     continue
             units.append(dict(part))
             previous_scene = row.get('_scene')

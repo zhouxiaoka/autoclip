@@ -18,9 +18,8 @@ def test_paragraph_sentences_are_not_split_into_display_sized_translation_fragme
     entries = [{'start_time': '00:00:00,000', 'end_time': '00:00:20,000', 'text': text}]
     rows = packaging.draft_lines(entries, [{'start': 0., 'end': 20.}])
     units = translation_units(rows)
-    assert [u['text'] for u in units] == [text[:text.index('.') + 1], 'It helps a great deal.']
+    assert [u['text'] for u in units] == [text]
     assert units[0]['start'] == 0 and units[-1]['end'] == 20
-    assert units[0]['end'] <= units[1]['start']
 
 
 def test_speaker_changes_and_noncontiguous_scenes_are_not_merged():
