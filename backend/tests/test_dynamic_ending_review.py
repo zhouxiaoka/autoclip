@@ -24,7 +24,8 @@ def test_early_model_cut_is_reviewed_against_the_nearby_conclusion():
             assert payload['lines'][2]['start'] == 21.24
             return {'end_line': 1, 'next_topic_line': 3}
         assert payload['end_candidates'] == [1, 2]
-        assert payload['selected_end_line'] == 1
+        assert payload['task'] == 'review_ending_candidates'
+        assert 'selected_end_line' not in payload
         return {'end_line': 2, 'next_topic_line': 3, 'later_is_part_of_answer': True}
 
     result = boundaries.refine_with_model(ROWS, 0., 24.5, select)
@@ -73,7 +74,7 @@ def test_an_explicit_speaker_turn_does_not_trigger_extension_review():
 ])
 def test_inconclusive_or_invalid_review_keeps_original_with_warning(answer):
     def select(_, payload):
-        if 'selected_end_line' not in payload:
+        if payload.get('task') != 'review_ending_candidates':
             return {'end_line': 1, 'next_topic_line': 3}
         if isinstance(answer, Exception):
             raise answer
@@ -95,10 +96,20 @@ def test_repair_and_ambiguity_share_one_extra_model_request():
     assert len(seen) == 2
 
 
+def test_earlier_cut_is_flagged_when_model_disagrees_about_the_topic_break():
+    def select(_, payload):
+        if payload.get('task') != 'review_ending_candidates':
+            return {'end_line': 1, 'next_topic_line': 3}
+        return {'end_line': 1, 'next_topic_line': 2, 'later_is_part_of_answer': False}
+
+    result = boundaries.refine_with_model(ROWS, 0., 24.5, select)
+    assert result.end_anchor[0] == 1 and result.needs_review
+
+
 @pytest.mark.parametrize('error', [JobStopped, JobDurationExceeded])
 def test_extra_model_call_preserves_cancellation_and_parent_deadlines(error):
     def select(_, payload):
-        if 'selected_end_line' not in payload:
+        if payload.get('task') != 'review_ending_candidates':
             return {'end_line': 1, 'next_topic_line': 3}
         raise error()
 
