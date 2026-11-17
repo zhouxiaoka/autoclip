@@ -8,7 +8,7 @@ import shutil
 import threading
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -25,6 +25,10 @@ _STARTED = False
 
 
 class Offline(Exception):
+    pass
+
+
+class UploadAuthorizationExpired(Offline):
     pass
 
 
@@ -106,12 +110,17 @@ class UrllibTransport:
     """Used only when an endpoint is configured. Tests inject their own transport."""
 
     def create_case(self, base: str, body: dict, idempotency_key: str) -> dict:
-        return self._json(base + "/v1/cases", body, {"Idempotency-Key": idempotency_key})
+        return self._json(base + "/v1/cases", body, {"Idempotency-Key": idempotency_key}, allowed_base=base)
+
+    def cancel_creation(self, base: str, idempotency_key: str, recovery_token: str) -> dict:
+        return self._json(base + "/v1/cases/cancel", {
+            "idempotency_key": idempotency_key, "recovery_token": recovery_token,
+        }, {}, allowed_base=base)
 
     def complete(self, base: str, case_id: str, capability: str, body: dict) -> dict:
         return self._json(
             f"{base}/v1/cases/{case_id}/files/{body['object_id']}/complete",
-            body, {"Authorization": f"Bearer {capability}"},
+            body, {"Authorization": f"Bearer {capability}"}, allowed_base=base,
         )
 
     def abort(self, base: str, case_id: str, capability: str) -> None:
@@ -141,14 +150,16 @@ class UrllibTransport:
             with urllib.request.urlopen(request, timeout=120) as response:
                 return response.headers.get("ETag") or response.headers.get("Etag") or ""
         except urllib.error.HTTPError as exc:
+            if exc.code in {401, 403}:
+                raise UploadAuthorizationExpired(f"http_{exc.code}") from exc
             raise Offline(f"http_{exc.code}") from exc
         except (OSError, urllib.error.URLError) as exc:
             raise Offline("offline") from exc
 
-    def _json(self, url: str, body: dict, headers: dict) -> dict:
+    def _json(self, url: str, body: dict, headers: dict, *, allowed_base: str = "") -> dict:
         parsed = urlparse(url)
         host = (parsed.hostname or "").lower()
-        configured = urlparse(endpoint()).hostname
+        configured = urlparse(allowed_base or endpoint()).hostname
         if host not in {"127.0.0.1", "localhost", "::1"} and host != (configured or "").lower():
             raise Offline("endpoint_host_rejected")
         payload = json.dumps(body).encode("utf-8")
@@ -192,14 +203,30 @@ def finish_delete(item: dict, transport) -> dict:
     stored_endpoint = current.get("cleanup_endpoint")
     base = stored_endpoint if isinstance(stored_endpoint, str) and stored_endpoint else (endpoint() or "")
     if current.get("inflight_create") is True and not case_id:
-        held = queue.update(
-            item_id, if_version=current.get("version"), if_status={"delete_pending"},
-            status="delete_pending", error="delete_wait", updated_at=queue.now_iso(),
-        )
-        return held or current
-    if not base or not case_id or not capability or _local_only(current):
+        # An interrupted create may have committed remotely. Cancel by its
+        # durable request identity, never by replaying the media-bearing create.
+        secret = queue.recovery_token(item_id)
+        cancel = getattr(transport, "cancel_creation", None)
+        if not base or not secret or not callable(cancel):
+            held = queue.update(item_id, if_version=current.get("version"), if_status={"delete_pending"},
+                                error="delete_wait", updated_at=queue.now_iso())
+            return held or current
+        try:
+            response = cancel(base, current["idempotency_key"], secret)
+            if not isinstance(response, dict) or response.get("deleted") is not True:
+                raise Offline("delete_unconfirmed")
+        except (Offline, OSError, RuntimeError, ValueError, TypeError):
+            kept = queue.update(item_id, if_version=current.get("version"), if_status={"delete_pending"},
+                                error="delete_retry", updated_at=queue.now_iso())
+            return kept or _live(item_id, current)
+        done = queue.update(item_id, if_version=current.get("version"), if_status={"delete_pending"},
+                            status="deleted", inflight_create=False, error="", updated_at=queue.now_iso())
+        return done or _live(item_id, current)
+    if _local_only(current) or (not case_id and not current.get("inflight_create")):
         done = queue.update(item_id, if_version=current.get("version"), if_status={"delete_pending"}, status="deleted", error="")
         return done or _live(item_id, current)
+    if not base or not capability:
+        return current  # An unknown credential/endpoint is not proof of remote erasure.
     try:
         transport.delete(base, case_id, capability)
     except (Offline, OSError, RuntimeError, ValueError, TypeError):
@@ -248,7 +275,8 @@ def _bind_created(item_id: str, created: dict, base: str) -> dict:
     uploads = created.get("uploads") if isinstance(created, dict) and isinstance(created.get("uploads"), list) else []
     if not isinstance(case_id, str) or not case_id:
         return _live(item_id, {})
-    attached = queue.attach_remote_case(item_id, case_id=case_id, uploads=uploads, endpoint=base)
+    attached = queue.attach_remote_case(item_id, case_id=case_id, uploads=uploads, endpoint=base,
+                                        expires_at=str(created.get("upload_expires_at") or ""))
     return attached or _live(item_id, {})
 
 
@@ -262,6 +290,23 @@ def _cleanup_bound(item: dict, transport) -> dict:
     return finish_delete(item, transport)
 
 
+def _part_geometry(value: dict) -> list[tuple]:
+    return [(part.get("number"), part.get("offset"), part.get("length")) for part in value.get("parts") or []]
+
+
+def _plan_expired(session: dict, now: datetime | None = None) -> bool:
+    raw = session.get("expires_at")
+    if not isinstance(raw, str) or not raw:
+        return False
+    try:
+        expires = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        return expires <= (now or datetime.now(timezone.utc))
+    except ValueError:
+        return True
+
+
 def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
     """One attempt. Does not touch the generation attempt that produced the failure."""
     item_id = item["id"]
@@ -272,13 +317,15 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
     try:
         _still_authorized(item)
     except Revoked:
+        if item.get("inflight_create") or item.get("case_id") or (item.get("upload") or {}).get("case_id"):
+            return _cleanup_bound(item, transport)
         cancelled = queue.update(item_id, if_version=item.get("version"), status="cancelled", error="revoked", updated_at=queue.now_iso())
         return cancelled or _live(item_id, item)
     problems = validate_manifest(item.get("manifest") or {})
     if problems:
         failed = queue.update(item_id, if_version=item.get("version"), status="failed", error="manifest_rejected", updated_at=queue.now_iso())
         return failed or _live(item_id, item)
-    base = endpoint()
+    base = item.get("cleanup_endpoint") or endpoint()
     if not base:
         if item.get("explicit"):
             return _save_only(item)
@@ -296,10 +343,11 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             return diverted
         _still_authorized(item)
         session = item.get("upload") if isinstance(item.get("upload"), dict) else {}
-        if not session.get("case_id"):
+        if not session.get("case_id") or item.get("refresh_plan") or _plan_expired(session, now):
+            recovery = queue.recovery_token(item_id, create=True)
             marked = queue.update(
                 item_id, if_version=item.get("version"), if_status=queue.OPEN,
-                inflight_create=True, cleanup_endpoint=base, status="uploading", updated_at=queue.now_iso(),
+                inflight_create=not bool(session.get("case_id")), cleanup_endpoint=base, status="uploading", updated_at=queue.now_iso(),
             )
             if marked is None:
                 live = _live(item_id, item)
@@ -307,6 +355,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             item = marked
             body = {
                 "manifest": item["manifest"],
+                "recovery_token": recovery,
                 "consent_version": item.get("consent_version"),
                 "purpose": "troubleshooting_and_product_improvement",
                 "not_for_training": True,
@@ -317,6 +366,17 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 ],
             }
             created = transport.create_case(base, body, item["idempotency_key"])
+            if session.get("case_id"):
+                if not isinstance(created, dict) or created.get("case_id") != session["case_id"]:
+                    raise RuntimeError("refresh_case_mismatch")
+                previous = {entry.get("role"): entry for entry in session.get("objects") or []}
+                for entry in created.get("uploads") or []:
+                    old = previous.get(entry.get("role")) or {}
+                    if old.get("object_id") != entry.get("object_id"):
+                        raise RuntimeError("refresh_object_mismatch")
+                    if not entry.get("already_complete"):
+                        if _part_geometry(old) != _part_geometry(entry):
+                            raise RuntimeError("refresh_parts_mismatch")
             item = _bind_created(item_id, created, base)
             if item.get("status") in {"delete_pending", "deleted", "cancelled"}:
                 return finish_delete(item, transport)
@@ -355,7 +415,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 if obj.get("bytes") != size:
                     raise RuntimeError("ack_mismatch")
                 session.setdefault("acked", []).append(row["role"])
-                stored = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN, upload=session, updated_at=queue.now_iso())
+                stored = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN, upload=session, auth_refreshes=0, updated_at=queue.now_iso())
                 if stored is None:
                     return _divert(_live(item_id, item), transport) or _live(item_id, item)
                 item = stored
@@ -384,19 +444,34 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 if marker in (session.get("done") or []):
                     etags.append({"partNumber": part.get("number"), "etag": (session.get("etags") or {}).get(marker, "")})
                     continue
+                if _plan_expired(session):
+                    refreshes = int(item.get("auth_refreshes") or 0) + 1
+                    refreshed = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN,
+                                             refresh_plan=True, auth_refreshes=refreshes,
+                                             status="failed" if refreshes >= 3 else "queued",
+                                             error="expired_grant", updated_at=queue.now_iso())
+                    return refreshed or _live(item_id, item)
                 payload = media.read_range(path, int(part["offset"]), int(part["length"]))
                 headers = dict(part.get("headers") or {})
                 headers["Content-Length"] = str(part["length"])
                 url = part.get("url")
                 if not isinstance(url, str):
                     raise TypeError("missing_upload_url")
-                etag = transport.put_part(url, payload, headers) or ""
+                try:
+                    etag = transport.put_part(url, payload, headers) or ""
+                except UploadAuthorizationExpired:
+                    raise
+                except Offline as exc:
+                    # Keep custom transports compatible with the public HTTP error contract.
+                    if str(exc) in {"http_401", "http_403"}:
+                        raise UploadAuthorizationExpired(str(exc)) from exc
+                    raise
                 if len(parts) > 1 and not etag:
                     raise RuntimeError("missing_etag")
                 session.setdefault("done", []).append(marker)
                 session.setdefault("etags", {})[marker] = etag
                 etags.append({"partNumber": part.get("number"), "etag": etag})
-                stored = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN, upload=session, updated_at=queue.now_iso())
+                stored = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN, upload=session, auth_refreshes=0, updated_at=queue.now_iso())
                 if stored is None:
                     return _divert(_live(item_id, item), transport) or _live(item_id, item)
                 item = stored
@@ -427,9 +502,9 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         current = _live(item_id, item)
         capability = queue.read_capability(item_id)
         case_id = (current.get("upload") or {}).get("case_id")
-        if case_id and capability and endpoint():
+        if case_id and capability and base:
             try:
-                transport.delete(endpoint(), case_id, capability)
+                transport.delete(base, case_id, capability)
             except (Offline, OSError, RuntimeError, ValueError, TypeError):
                 logger.warning("diagnostics delete after revoke failed")
                 pending = queue.update(item_id, status="delete_pending", error="delete_retry", updated_at=queue.now_iso())
@@ -438,11 +513,19 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             return erased or _live(item_id, current)
         cancelled = queue.update(item_id, if_version=current.get("version"), status="cancelled", error="revoked", updated_at=queue.now_iso())
         return cancelled or _live(item_id, current)
+    except UploadAuthorizationExpired as exc:
+        current = _live(item_id, item)
+        diverted = _divert(current, transport)
+        if diverted is not None:
+            return diverted
+        refreshes = int(current.get("auth_refreshes") or 0) + 1
+        paused = queue.update(item_id, if_version=current.get("version"), if_status=queue.OPEN,
+                              status="failed" if refreshes >= 3 else "queued", refresh_plan=True,
+                              auth_refreshes=refreshes, error=str(exc), updated_at=queue.now_iso())
+        return paused or _live(item_id, current)
     except Offline as exc:
         current = _live(item_id, item)
-        if current.get("inflight_create") is True and not (current.get("case_id") or (current.get("upload") or {}).get("case_id")):
-            cleared = queue.update(item_id, if_version=current.get("version"), inflight_create=False, updated_at=queue.now_iso())
-            current = cleared or current
+        # Keep inflight_create durable: a timeout cannot tell whether the server committed.
         diverted = _divert(current, transport)
         if diverted is not None:
             return diverted

@@ -26,10 +26,24 @@ Worker **不会**把整个对象再读一遍做哈希（免费层 CPU / 内存�
 
 服务端不根据客户端提供的 URL 去拉取，也不解压归档包。
 
+## 创建恢复与删除
+
+客户端在第一次创建请求前，把随机恢复凭据写入本机独立的 0600 文件；队列、导出包和 manifest 不含它。创建响应丢失或应用退出后，`POST /v1/cases/cancel` 用原幂等键和凭据清理，不重新发送 manifest 或素材。服务端只保存凭据哈希；取消先到时保存不含内容的取消记录，阻止迟到的创建请求重新上传。此取消记录长期保留，不随 14 天素材保留期删除；未知请求的取消接口有速率限制。
+
+D1 的身份认领与配额预留、文件完成与配额转移、最终删除与配额释放均使用事务。删除先写 `deleting`，远端清理暂时失败时由重试/cron 继续；完成、刷新和旧快照不能覆盖删除。`0002_recovery.sql` 增加恢复字段和取消记录，并按持久化对象状态修复旧版分步写入遗留的配额差异，不改变素材和凭据。
+
+上传计划返回独立的 `upload_expires_at`。客户端在到期或 PUT 返回 401/403 后按同一请求刷新，保留原 object ID、分片布局和已完成分片的 ETag。新协议的凭据在刷新时保持稳定，刷新响应丢失也能继续删除；持续鉴权失败最多刷新两次，第三次失败终止。
+
 ## 本地测试
 
+需要 Node 22.22+（内置 SQLite）和项目测试依赖。在仓库根目录运行：
+
 ```bash
-node --experimental-strip-types --test services/diagnostics-api/test/*.test.ts
+npm ci --prefix services/diagnostics-api
+python scripts/quality_gate.py --group diagnostics --report /absolute/local/path/diagnostics.json
+python -m pytest -c backend/pytest.ini -o addopts= backend/tests/test_diagnostics_upload.py backend/tests/test_diagnostics_recovery.py
 ```
+
+回归执行生产 D1 SQL，覆盖逐条写入失败和真实事务回滚；另用真实 Python HTTP 客户端对接本机 Worker handler / SQLite，复现创建丢响应和上传授权失效。测试只用合成字节，没有连接真实 R2/D1，不能代替部署前的预签名、校验头与 multipart 验证。
 
 不要运行 `wrangler deploy`，也不要按这份模板去创建桶或数据库，除非 Charlie 明确授权。

@@ -1,17 +1,24 @@
-import type { CaseRow, CommitResult, ObjectRow } from './memory.ts'
+import type { CaseRow, CommitResult, ObjectRow, OpenResult } from './memory.ts'
 import { tryReserve, type Limits, type QuotaState } from './quota.ts'
 
-interface Prepared {
-  bind(...values: unknown[]): { first: <T>() => Promise<T | null>; run: () => Promise<{ meta?: { changes?: number } }>; all: <T>() => Promise<{ results: T[] }> }
+interface Result { meta?: { changes?: number }; results?: Record<string, unknown>[] }
+export interface Prepared {
+  bind(...values: unknown[]): Prepared
+  first<T>(): Promise<T | null>
+  run(): Promise<Result>
+  all<T>(): Promise<{ results: T[] }>
 }
 
 export interface D1 {
   prepare(sql: string): Prepared
+  batch(statements: Prepared[]): Promise<Result[]>
 }
 
 /** Durable quota. reserve() uses the same predicate as tryReserve and a conditional UPDATE. */
 export class D1Repo {
-  constructor(private readonly db: D1, private readonly now: () => string) {}
+  private readonly db: D1
+  private readonly now: () => string
+  constructor(db: D1, now: () => string) { this.db = db; this.now = now }
 
   async reserve(bytes: number, limits: Pick<Limits, 'landedCap' | 'inflightCap'>): Promise<{ ok: true } | { ok: false; reason: string }> {
     const current = await this.snapshot()
@@ -71,7 +78,7 @@ export class D1Repo {
     await this.db.prepare(
       `INSERT INTO cases (case_id, idempotency_key, manifest_sha256, state, capability_sha256, consent_version, manifest_bytes, reserved_bytes, landed_bytes, created_at, expires_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-       ON CONFLICT (case_id) DO UPDATE SET state = ?4, capability_sha256 = ?5, reserved_bytes = ?8, landed_bytes = ?9, updated_at = ?12`,
+       ON CONFLICT (case_id) DO UPDATE SET state = ?4, capability_sha256 = ?5, reserved_bytes = ?8, landed_bytes = ?9, updated_at = ?12 WHERE cases.state NOT IN ('deleted', 'deleting', 'creation_cleanup')`,
     ).bind(row.caseId, row.idempotencyKey, row.manifestSha256, row.state, row.capabilitySha256, row.consentVersion, row.manifestBytes, row.reservedBytes, row.landedBytes, row.createdAt, row.expiresAt, row.updatedAt).run()
   }
 
@@ -83,8 +90,8 @@ export class D1Repo {
   async saveObject(row: ObjectRow): Promise<void> {
     await this.db.prepare(
       `INSERT INTO objects (object_id, case_id, role, r2_key, declared_bytes, actual_bytes, sha256, upload_id, part_plan, state, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-       ON CONFLICT (object_id) DO UPDATE SET actual_bytes = ?6, state = ?10, updated_at = ?12`,
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, CASE WHEN EXISTS (SELECT 1 FROM cases WHERE case_id = ?2 AND state IN ('deleting', 'deleted')) THEN 'aborted' ELSE ?10 END, ?11, ?12)
+       ON CONFLICT (object_id) DO UPDATE SET actual_bytes = CASE WHEN objects.state IN ('complete', 'aborted') THEN objects.actual_bytes ELSE ?6 END, state = CASE WHEN objects.state IN ('complete', 'aborted') THEN objects.state ELSE ?10 END, upload_id = COALESCE(?8, objects.upload_id), updated_at = ?12`,
     ).bind(
       row.objectId, row.caseId, row.role, row.r2Key, row.declaredBytes, row.actualBytes, row.sha256,
       row.uploadId, JSON.stringify(row.partPlan), row.state, row.createdAt, row.updatedAt,
@@ -101,53 +108,128 @@ export class D1Repo {
     return rows.results.map(caseFrom)
   }
 
+  /** D1 batch is one transaction. No successful object marker escapes without its accounting. */
   async commitFile(caseId: string, objectId: string, actualBytes: number, now: string): Promise<CommitResult> {
-    const object = await this.getObject(objectId)
-    const row = await this.getCase(caseId)
-    if (!object || object.caseId !== caseId || !row || row.state === 'deleted') return { committed: false, reason: 'gone' }
-    if (object.state === 'complete') return { committed: false, already: true }
-    if (object.state !== 'reserved') return { committed: false, reason: 'gone' }
-    const result = await this.db.prepare(
-      `UPDATE objects SET actual_bytes = ?1, state = 'complete', updated_at = ?2
-       WHERE object_id = ?3 AND case_id = ?4 AND state = 'reserved'`,
-    ).bind(actualBytes, now, objectId, caseId).run()
-    if ((result.meta?.changes ?? 0) !== 1) {
-      const again = await this.getObject(objectId)
-      if (again?.state === 'complete') return { committed: false, already: true }
-      return { committed: false, reason: 'gone' }
-    }
-    const revert = () => this.db.prepare(
-      `UPDATE objects SET actual_bytes = NULL, state = 'reserved', updated_at = ?1 WHERE object_id = ?2 AND state = 'complete'`,
-    ).bind(now, objectId).run().then(() => undefined, () => undefined)
-    try {
-      await this.land(object.declaredBytes)
-    } catch (error) {
-      await revert()
-      throw error
-    }
-    try {
-      row.reservedBytes = Math.max(0, row.reservedBytes - object.declaredBytes)
-      row.landedBytes += object.declaredBytes
-      const pending = (await this.objectsFor(caseId)).filter((item) => item.state === 'reserved')
-      if (!pending.length) row.state = 'complete'
-      row.updatedAt = now
-      await this.saveCase(row)
-    } catch (error) {
-      await this.unland(object.declaredBytes).then(() => undefined, () => undefined)
-      await revert()
-      throw error
-    }
-    return { committed: true }
+    const results = await this.db.batch([
+      this.db.prepare(`UPDATE objects SET actual_bytes = ?1, state = 'complete', updated_at = ?2
+        WHERE object_id = ?3 AND case_id = ?4 AND state = 'reserved' AND declared_bytes = ?1
+        AND EXISTS (SELECT 1 FROM cases WHERE case_id = ?4 AND state IN ('open', 'complete', 'failed'))`
+      ).bind(actualBytes, now, objectId, caseId),
+      this.db.prepare(`UPDATE quota SET reserved_bytes = reserved_bytes - ?1, landed_bytes = landed_bytes + ?1,
+        updated_at = ?2 WHERE id = 1 AND changes() = 1`).bind(actualBytes, now),
+      this.db.prepare(`UPDATE cases SET reserved_bytes = reserved_bytes - ?1, landed_bytes = landed_bytes + ?1,
+        state = CASE WHEN state = 'failed' THEN 'failed'
+          WHEN EXISTS (SELECT 1 FROM objects WHERE case_id = ?3 AND state = 'reserved') THEN 'open' ELSE 'complete' END,
+        updated_at = ?2 WHERE case_id = ?3 AND changes() = 1`).bind(actualBytes, now, caseId),
+    ])
+    if (results[0]?.meta?.changes === 1) return { committed: true }
+    const object = await this.getObject(objectId), row = await this.getCase(caseId)
+    if (object?.caseId === caseId && object.state === 'complete' && object.actualBytes === actualBytes && row &&
+        ['open', 'complete', 'failed'].includes(row.state)) return { committed: false, already: true }
+    return { committed: false, reason: 'gone' }
+  }
+
+  async openCase(row: CaseRow, limits: Pick<Limits, 'landedCap' | 'inflightCap'>): Promise<OpenResult> {
+    const result = await this.db.batch([
+      this.db.prepare(`UPDATE quota SET reserved_bytes = reserved_bytes + ?1, updated_at = ?2
+        WHERE id = 1 AND landed_bytes + reserved_bytes + ?1 <= ?3 AND reserved_bytes + ?1 <= ?4
+        AND NOT EXISTS (SELECT 1 FROM cases WHERE idempotency_key = ?5)
+        AND NOT EXISTS (SELECT 1 FROM creation_cancellations WHERE idempotency_key = ?5 AND recovery_sha256 = ?6)`
+      ).bind(row.reservedBytes, row.createdAt, limits.landedCap, limits.inflightCap, row.idempotencyKey, row.recoverySha256 || ''),
+      this.db.prepare(`INSERT INTO cases (case_id, idempotency_key, manifest_sha256, state, capability_sha256,
+        consent_version, manifest_bytes, reserved_bytes, landed_bytes, created_at, expires_at, updated_at, recovery_sha256)
+        SELECT ?1, ?2, ?3, 'creating', ?4, ?5, ?6, ?7, 0, ?8, ?9, ?8, ?10 WHERE changes() = 1`
+      ).bind(row.caseId, row.idempotencyKey, row.manifestSha256, row.capabilitySha256, row.consentVersion,
+        row.manifestBytes, row.reservedBytes, row.createdAt, row.expiresAt, row.recoverySha256 || ''),
+    ])
+    if (result[0]?.meta?.changes === 1) return { ok: true }
+    const cancelled = await this.db.prepare(`SELECT 1 FROM creation_cancellations WHERE idempotency_key = ?1 AND recovery_sha256 = ?2`
+    ).bind(row.idempotencyKey, row.recoverySha256 || '').first()
+    if (cancelled) return { ok: false, reason: 'cancelled' }
+    if (await this.findByIdempotency(row.idempotencyKey)) return { ok: false, reason: 'existing' }
+    const decision = tryReserve(await this.snapshot(), row.reservedBytes, limits)
+    return decision.ok ? { ok: false, reason: 'retry' } : decision
+  }
+
+  async finishCreation(caseId: string, now: string): Promise<boolean> {
+    const results = await this.db.batch([
+      this.db.prepare(`UPDATE quota SET reserved_bytes = reserved_bytes - (SELECT manifest_bytes FROM cases WHERE case_id = ?1),
+        landed_bytes = landed_bytes + (SELECT manifest_bytes FROM cases WHERE case_id = ?1), updated_at = ?2
+        WHERE id = 1 AND EXISTS (SELECT 1 FROM cases WHERE case_id = ?1 AND state = 'creating')`).bind(caseId, now),
+      this.db.prepare(`UPDATE cases SET reserved_bytes = reserved_bytes - manifest_bytes, landed_bytes = manifest_bytes,
+        state = CASE WHEN reserved_bytes > manifest_bytes THEN 'open' ELSE 'complete' END, updated_at = ?2
+        WHERE case_id = ?1 AND state = 'creating' AND changes() = 1`).bind(caseId, now),
+    ])
+    return results[1]?.meta?.changes === 1
+  }
+
+  async cancelCreation(key: string, recoveryHash: string, now: string): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(`INSERT INTO creation_cancellations (idempotency_key, recovery_sha256, created_at)
+        VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING`).bind(key, recoveryHash, now),
+      this.db.prepare(`UPDATE cases SET state = 'deleting', updated_at = ?3
+        WHERE idempotency_key = ?1 AND recovery_sha256 = ?2 AND state != 'deleted'`).bind(key, recoveryHash, now),
+    ])
+  }
+
+  async beginDelete(caseId: string, now: string): Promise<CaseRow | null> {
+    await this.db.prepare(`UPDATE cases SET state = 'deleting', updated_at = ?2 WHERE case_id = ?1 AND state != 'deleted'`).bind(caseId, now).run()
+    return this.getCase(caseId)
+  }
+
+  async beginCreationCleanup(caseId: string, now: string): Promise<boolean> {
+    const result = await this.db.prepare(`UPDATE cases SET state = 'creation_cleanup', updated_at = ?2
+      WHERE case_id = ?1 AND state IN ('creating', 'creation_cleanup')`).bind(caseId, now).run()
+    return result.meta?.changes === 1
+  }
+
+  async forgetFailedCreation(caseId: string): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(`DELETE FROM objects WHERE case_id = ?1 AND EXISTS (SELECT 1 FROM cases
+        WHERE case_id = ?1 AND state = 'failed' AND reserved_bytes = 0 AND landed_bytes = 0
+        AND NOT EXISTS (SELECT 1 FROM creation_cancellations WHERE idempotency_key = cases.idempotency_key AND recovery_sha256 = cases.recovery_sha256))`).bind(caseId),
+      this.db.prepare(`DELETE FROM cases WHERE case_id = ?1 AND state = 'failed' AND reserved_bytes = 0 AND landed_bytes = 0
+        AND NOT EXISTS (SELECT 1 FROM creation_cancellations WHERE idempotency_key = cases.idempotency_key AND recovery_sha256 = cases.recovery_sha256)`).bind(caseId),
+    ])
+  }
+
+  async finishDelete(caseId: string, now: string, creationFailure = false): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(`UPDATE quota SET
+        reserved_bytes = MAX(0, reserved_bytes - (SELECT reserved_bytes FROM cases WHERE case_id = ?1)),
+        landed_bytes = MAX(0, landed_bytes - (SELECT landed_bytes FROM cases WHERE case_id = ?1)), updated_at = ?2
+        WHERE id = 1 AND EXISTS (SELECT 1 FROM cases WHERE case_id = ?1 AND state = ?3)`).bind(caseId, now, creationFailure ? 'creation_cleanup' : 'deleting'),
+      this.db.prepare(`UPDATE objects SET state = 'aborted', updated_at = ?2 WHERE case_id = ?1
+        AND EXISTS (SELECT 1 FROM cases WHERE case_id = ?1 AND state = ?3)`).bind(caseId, now, creationFailure ? 'creation_cleanup' : 'deleting'),
+      this.db.prepare(`UPDATE cases SET state = ?4, reserved_bytes = 0, landed_bytes = 0,
+        updated_at = ?2 WHERE case_id = ?1 AND state = ?3`).bind(caseId, now, creationFailure ? 'creation_cleanup' : 'deleting', creationFailure ? 'failed' : 'deleted'),
+    ])
+  }
+
+  async rotateCapability(caseId: string, hash: string, now: string): Promise<boolean> {
+    const result = await this.db.prepare(`UPDATE cases SET capability_sha256 = ?2, updated_at = ?3
+      WHERE case_id = ?1 AND state IN ('open', 'complete')`).bind(caseId, hash, now).run()
+    return result.meta?.changes === 1
+  }
+
+  async failFile(caseId: string, objectId: string, now: string): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(`UPDATE quota SET reserved_bytes = reserved_bytes - (SELECT declared_bytes FROM objects WHERE object_id = ?2),
+        updated_at = ?3 WHERE id = 1 AND EXISTS (SELECT 1 FROM objects JOIN cases USING (case_id)
+        WHERE object_id = ?2 AND case_id = ?1 AND objects.state = 'reserved' AND cases.state IN ('open', 'failed'))`
+      ).bind(caseId, objectId, now),
+      this.db.prepare(`UPDATE cases SET reserved_bytes = reserved_bytes - (SELECT declared_bytes FROM objects WHERE object_id = ?2),
+        state = 'failed', updated_at = ?3 WHERE case_id = ?1 AND changes() = 1`).bind(caseId, objectId, now),
+      this.db.prepare(`UPDATE objects SET state = 'aborted', updated_at = ?2 WHERE object_id = ?1 AND changes() = 1`).bind(objectId, now),
+    ])
   }
 
   async reconcile(): Promise<QuotaState> {
-    const sums = await this.db.prepare(
-      `SELECT COALESCE(SUM(landed_bytes), 0) AS landed, COALESCE(SUM(reserved_bytes), 0) AS reserved FROM cases WHERE state != 'deleted'`,
-    ).bind().first<{ landed: number; reserved: number }>()
-    await this.db.prepare(
-      `UPDATE quota SET landed_bytes = ?1, reserved_bytes = ?2, updated_at = ?3 WHERE id = 1`,
-    ).bind(sums?.landed ?? 0, sums?.reserved ?? 0, this.now()).run()
-    return { landed: sums?.landed ?? 0, reserved: sums?.reserved ?? 0 }
+    await this.db.prepare(`UPDATE quota SET
+      landed_bytes = (SELECT COALESCE(SUM(landed_bytes), 0) FROM cases WHERE state != 'deleted'),
+      reserved_bytes = (SELECT COALESCE(SUM(reserved_bytes), 0) FROM cases WHERE state != 'deleted'), updated_at = ?1 WHERE id = 1`
+    ).bind(this.now()).run()
+    return this.snapshot()
   }
 }
 
@@ -155,6 +237,7 @@ function caseFrom(row: Record<string, unknown>): CaseRow {
   return {
     caseId: String(row.case_id), idempotencyKey: String(row.idempotency_key), manifestSha256: String(row.manifest_sha256),
     state: row.state as CaseRow['state'], capabilitySha256: String(row.capability_sha256), consentVersion: String(row.consent_version),
+    recoverySha256: String(row.recovery_sha256 || ''),
     manifestBytes: Number(row.manifest_bytes), reservedBytes: Number(row.reserved_bytes), landedBytes: Number(row.landed_bytes),
     createdAt: String(row.created_at), expiresAt: String(row.expires_at), updatedAt: String(row.updated_at),
   }

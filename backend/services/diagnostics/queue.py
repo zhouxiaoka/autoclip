@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -82,11 +83,11 @@ def enqueue(item: dict) -> dict:
             existing = next((row for row in items if row.get("idempotency_key") == key), None)
             if existing:
                 return existing
-        active = [row for row in items if row.get("status") not in TERMINAL]
+        active = [row for row in items if row.get("status") not in TERMINAL or row.get("inflight_create") is True]
         if len(active) >= MAX_ITEMS:
             item = {**item, "status": "failed", "error": "queue_full"}
             return item
-        room = [row for row in items if row.get("status") in TERMINAL]
+        room = [row for row in items if row.get("status") in TERMINAL and row.get("inflight_create") is not True]
         terminal_budget = MAX_ITEMS - len(active) - 1
         keep_terminal = room[-terminal_budget:] if terminal_budget > 0 else []
         items = keep_terminal + active
@@ -125,7 +126,7 @@ def update(item_id: str, *, if_version: int | None = None, if_status: frozenset[
         return dict(found)
 
 
-def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: str) -> dict | None:
+def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: str, expires_at: str = "") -> dict | None:
     """Record a remote case that a create call already produced.
 
     A premature ``deleted`` or ``cancelled`` mark cannot drop this identity.
@@ -150,6 +151,9 @@ def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: s
         session = dict(found.get("upload") or {}) if isinstance(found.get("upload"), dict) else {}
         session["case_id"] = case_id
         session["objects"] = uploads
+        if expires_at:
+            session["expires_at"] = expires_at
+        found["refresh_plan"] = False
         session.setdefault("done", [])
         session.setdefault("acked", [])
         found["upload"] = session
@@ -174,12 +178,13 @@ def capability_path(item_id: str) -> Path:
     return get_data_directory() / "diagnostics" / "capabilities" / item_id
 
 
-def write_capability(item_id: str, secret: str) -> None:
-    """The secret lives outside the queue file, mode 0600, and is never copied into an export."""
-    path = capability_path(item_id)
+def _write_secret(path: Path, secret: str) -> None:
+    """Secrets live outside the queue and exports, with owner-only permissions."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(secret, encoding="utf-8")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(secret)
     try:
         os.chmod(tmp, 0o600)
     except OSError:
@@ -189,6 +194,25 @@ def write_capability(item_id: str, secret: str) -> None:
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def write_capability(item_id: str, secret: str) -> None:
+    _write_secret(capability_path(item_id), secret)
+
+
+def recovery_token(item_id: str, *, create: bool = False) -> str:
+    # Use the same validated ID, but a separate credential file. The recovery
+    # token must survive a lost response (before the remote capability is known).
+    path = capability_path(item_id).parent.parent / "recovery" / item_id
+    with _LOCK:
+        try:
+            value = path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            value = ""
+        if not value and create:
+            value = secrets.token_urlsafe(32)
+            _write_secret(path, value)
+        return value
 
 
 def read_capability(item_id: str) -> str:
@@ -204,7 +228,7 @@ def cancel_before(epoch: int) -> list[dict]:
         items = _load()
         changed = []
         for row in items:
-            if row.get("status") in TERMINAL or row.get("status") == "delete_pending":
+            if (row.get("status") in TERMINAL and not row.get("inflight_create")) or row.get("status") == "delete_pending":
                 continue
             if isinstance(row.get("epoch"), int) and row["epoch"] < epoch:
                 row["version"] = int(row.get("version") or 0) + 1

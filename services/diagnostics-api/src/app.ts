@@ -97,6 +97,7 @@ function partPlan(size: number, partBytes: number): { number: number; offset: nu
 export async function handle(request: Request, deps: Deps): Promise<Response> {
   const url = new URL(request.url)
   if (request.method === 'POST' && url.pathname === '/v1/cases') return createCase(request, deps)
+  if (request.method === 'POST' && url.pathname === '/v1/cases/cancel') return cancelCreation(request, deps)
   const abort = url.pathname.match(/^\/v1\/cases\/([^/]+)\/abort$/)
   if (request.method === 'POST' && abort) return abortCase(abort[1]!, request, deps)
   const complete = url.pathname.match(/^\/v1\/cases\/([^/]+)\/files\/([^/]+)\/complete$/)
@@ -107,7 +108,7 @@ export async function handle(request: Request, deps: Deps): Promise<Response> {
     return admin(request, deps, async () => json(200, { ...(await Promise.resolve(deps.repo.snapshot())), approval: 'pending' }))
   }
   if (request.method === 'POST' && url.pathname === '/admin/reconcile') {
-    return admin(request, deps, async () => json(200, { quota: deps.repo.reconcile(), approval: 'pending' }))
+    return admin(request, deps, async () => json(200, { quota: await deps.repo.reconcile(), approval: 'pending' }))
   }
   return json(404, { error: 'not_found' })
 }
@@ -159,17 +160,30 @@ async function signParts(deps: Deps, object: ObjectRow, digest?: string): Promis
 
 async function rotateCapability(deps: Deps, row: CaseRow): Promise<string> {
   const capability = token()
-  row.capabilitySha256 = await sha256Hex(encoder.encode(capability))
-  row.updatedAt = deps.now().toISOString()
-  await deps.repo.saveCase(row)
+  if (!await deps.repo.rotateCapability(row.caseId, await sha256Hex(encoder.encode(capability)), deps.now().toISOString())) {
+    throw new Error('case_deleted')
+  }
   return capability
 }
 
-async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[]): Promise<Response> {
-  if (existing.state === 'deleted') return json(404, { error: 'not_found' })
+async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[], recoveryToken?: string): Promise<Response> {
+  if (['deleted', 'deleting'].includes(existing.state)) return json(404, { error: 'not_found' })
+  if (existing.state === 'creation_cleanup') return json(503, { error: 'creation_pending' })
   if (existing.state === 'failed') return json(409, { error: 'incomplete_plan' })
   if (files.length && !deps.signer) return json(503, { error: 'upload_signing_unconfigured' })
   const objects = await deps.repo.objectsFor(existing.caseId)
+  if (existing.state === 'creating') {
+    const manifest = await metadataSize(deps.bucket, `cases/${existing.caseId}/manifest.json`)
+    const bytes = objects.reduce((total, object) => total + object.declaredBytes, existing.manifestBytes)
+    if (manifest.kind !== 'size' || manifest.size !== existing.manifestBytes || bytes !== existing.reservedBytes ||
+        objects.length !== files.length || objects.some((object) => !object.partPlan.length || (object.partPlan.length > 1 && !object.uploadId))) {
+      return json(503, { error: 'creation_pending' })
+    }
+    await deps.repo.finishCreation(existing.caseId, deps.now().toISOString())
+    const resumed = await deps.repo.getCase(existing.caseId)
+    if (!resumed || !['open', 'complete'].includes(resumed.state)) return json(404, { error: 'not_found' })
+    existing = resumed
+  }
   const byRole = new Map(objects.map((object) => [object.role, object]))
   const uploads = []
   for (const file of files) {
@@ -192,12 +206,17 @@ async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[]): P
       headers: signed.length === 1 ? signed[0]!.headers : undefined,
     })
   }
-  const capability = await rotateCapability(deps, existing)
+  const current = await deps.repo.getCase(existing.caseId)
+  if (!current || !['open', 'complete'].includes(current.state)) return json(404, { error: 'not_found' })
+  // New clients persist this credential before create. Replays must not invalidate
+  // it when their response is lost. Legacy clients retain the original rotation.
+  const capability = existing.recoverySha256 && recoveryToken ? recoveryToken : await rotateCapability(deps, existing)
   return json(200, {
     case_id: existing.caseId,
     capability,
     existing: true,
     expires_at: existing.expiresAt,
+    upload_expires_at: new Date(deps.now().getTime() + deps.limits.partTtl * 1000).toISOString(),
     uploads,
     approval: 'pending',
   })
@@ -221,12 +240,20 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
   const files = (body.files as UploadFile[]) || []
   const idempotency = request.headers.get('idempotency-key') || ''
   if (!/^[a-f0-9]{64}$/.test(idempotency)) return json(422, { error: 'idempotency_key' })
+  const recoveryToken = typeof body.recovery_token === 'string' ? body.recovery_token : ''
+  if (recoveryToken && !/^[A-Za-z0-9_-]{43,128}$/.test(recoveryToken)) return json(422, { error: 'recovery_token' })
+  const recoveryHash = recoveryToken ? await sha256Hex(encoder.encode(recoveryToken)) : ''
   const manifestBytes = encoder.encode(JSON.stringify(manifest)).byteLength
   const manifestHash = await sha256Hex(encoder.encode(JSON.stringify(manifest)))
-  const existing = await deps.repo.findByIdempotency(idempotency)
+  let existing = await deps.repo.findByIdempotency(idempotency)
   if (existing) {
     if (existing.manifestSha256 !== manifestHash) return json(409, { error: 'idempotency_conflict' })
-    return replayCase(deps, existing, files)
+    if (existing.recoverySha256 && existing.recoverySha256 !== recoveryHash) return json(403, { error: 'unauthorized' })
+    if (existing.state === 'failed' && existing.reservedBytes === 0 && existing.landedBytes === 0) {
+      await deps.repo.forgetFailedCreation(existing.caseId)
+      existing = await deps.repo.findByIdempotency(idempotency)
+    }
+    if (existing) return replayCase(deps, existing, files, recoveryToken)
   }
   const ip = request.headers.get('cf-connecting-ip') || 'local'
   const hour = deps.now().toISOString().slice(0, 13)
@@ -235,13 +262,24 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
   if (files.length && !deps.signer) return json(503, { error: 'upload_signing_unconfigured' })
   if (deps.bucketName === 'autoclip-media') return json(500, { error: 'refusing_media_bucket' })
   const total = manifestBytes + files.reduce((sum, file) => sum + file.bytes, 0)
-  const reserved = await deps.repo.reserve(total, deps.limits)
-  if (!reserved.ok) return json(413, { error: reserved.reason })
   const caseId = crypto.randomUUID()
-  const capability = token()
+  const capability = recoveryToken || token()
   const capabilitySha256 = await sha256Hex(encoder.encode(capability))
   const createdAt = deps.now().toISOString()
   const expires = new Date(deps.now().getTime() + deps.limits.retentionSeconds * 1000).toISOString()
+  const row: CaseRow = {
+    caseId, idempotencyKey: idempotency, manifestSha256: manifestHash, state: 'creating',
+    capabilitySha256, recoverySha256: recoveryHash, consentVersion: String(body.consent_version || ''), manifestBytes,
+    reservedBytes: total, landedBytes: 0, createdAt, expiresAt: expires, updatedAt: createdAt,
+  }
+  // Claim identity and reservation together before writing any object. A cancel
+  // that arrives first records a tombstone; a cancel that arrives later finds this row.
+  const reserved = await deps.repo.openCase(row, deps.limits)
+  if (!reserved.ok) {
+    if (reserved.reason === 'cancelled') return json(410, { error: 'cancelled' })
+    if (reserved.reason === 'existing' || reserved.reason === 'retry') return json(503, { error: 'creation_pending' })
+    return json(413, { error: reserved.reason })
+  }
   const manifestKey = `cases/${caseId}/manifest.json`
   try {
     const bytes = encoder.encode(JSON.stringify(manifest))
@@ -250,16 +288,14 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     const stored = await metadataSize(deps.bucket, manifestKey)
     if (stored.kind !== 'size' || stored.size !== manifestBytes) throw new Error('manifest_size')
   } catch {
-    await deps.bucket.delete(manifestKey)
-    await deps.repo.release(total)
+    await purgeCase(deps, row, true)
     return json(500, { error: 'manifest_store_failed' })
   }
-  await deps.repo.land(manifestBytes)
-  const fileBytes = total - manifestBytes
   const uploads = []
   const opened: MultipartUpload[] = []
   try {
     for (const file of files) {
+      if ((await deps.repo.getCase(caseId))?.state !== 'creating') throw new Error('cancelled')
       const objectId = crypto.randomUUID()
       const key = `cases/${caseId}/${file.role}`
       const parts = partPlan(file.bytes, deps.partBytes)
@@ -270,8 +306,8 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
         objectId, caseId, role: file.role, r2Key: key, declaredBytes: file.bytes, actualBytes: null,
         sha256: file.sha256, uploadId: upload?.uploadId ?? null, partPlan: parts, state: 'reserved', createdAt, updatedAt: createdAt,
       }
-      const signed = await signParts(deps, row, file.sha256)
       await deps.repo.saveObject(row)
+      const signed = await signParts(deps, row, file.sha256)
       uploads.push({
         object_id: objectId, role: file.role, parts: signed,
         url: signed.length === 1 ? signed[0]!.url : undefined,
@@ -282,21 +318,19 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     for (const upload of opened) {
       try { await upload.abort() } catch { /* the upload may not exist */ }
     }
-    await deps.bucket.delete(manifestKey)
-    await deps.repo.unland(manifestBytes)
-    await deps.repo.release(fileBytes)
+    await purgeCase(deps, row, true)
     return json(500, { error: 'signing_failed' })
   }
-  const row: CaseRow = {
-    caseId, idempotencyKey: idempotency, manifestSha256: manifestHash, state: files.length ? 'open' : 'complete',
-    capabilitySha256, consentVersion: String(body.consent_version || ''), manifestBytes,
-    reservedBytes: fileBytes, landedBytes: manifestBytes, createdAt, expiresAt: expires, updatedAt: createdAt,
+  if (!await deps.repo.finishCreation(caseId, deps.now().toISOString()) &&
+      !['open', 'complete'].includes((await deps.repo.getCase(caseId))?.state || '')) {
+    await purgeCase(deps, row)
+    return json(410, { error: 'cancelled' })
   }
-  await deps.repo.saveCase(row)
   return json(201, {
     case_id: caseId,
     capability,
     expires_at: expires,
+    upload_expires_at: new Date(deps.now().getTime() + deps.limits.partTtl * 1000).toISOString(),
     uploads,
     checksum_note: 'Completion checks object metadata size only. It does not read the body and does not verify a content hash.',
     approval: 'pending',
@@ -322,7 +356,10 @@ async function settleFile(deps: Deps, row: CaseRow, object: ObjectRow, actual: n
   if (row.state === 'deleted') return json(404, { error: 'not_found' })
   try {
     const result = await deps.repo.commitFile(row.caseId, object.objectId, actual, deps.now().toISOString())
-    if ('reason' in result) return json(404, { error: 'not_found' })
+    if ('reason' in result) {
+      await deps.bucket.delete(object.r2Key)
+      return json(404, { error: 'not_found' })
+    }
   } catch {
     return json(503, { error: 'unavailable' })
   }
@@ -337,7 +374,7 @@ async function rejectInvalid(deps: Deps, row: CaseRow, object: ObjectRow): Promi
 
 async function completeFile(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {
   const row = await authorized(deps.repo, caseId, request)
-  if (!row || row.state === 'deleted') return json(404, { error: 'not_found' })
+  if (!row || !['open', 'complete', 'failed'].includes(row.state)) return json(404, { error: 'not_found' })
   const object = await deps.repo.getObject(objectId)
   if (!object || object.caseId !== caseId || object.state === 'aborted') return json(404, { error: 'object' })
   const existing = await metadataSize(deps.bucket, object.r2Key)
@@ -369,14 +406,7 @@ async function completeFile(caseId: string, objectId: string, request: Request, 
 }
 
 async function failObject(deps: Deps, row: CaseRow, object: ObjectRow): Promise<void> {
-  await deps.repo.release(object.declaredBytes)
-  object.state = 'aborted'
-  object.updatedAt = deps.now().toISOString()
-  await deps.repo.saveObject(object)
-  row.reservedBytes = Math.max(0, row.reservedBytes - object.declaredBytes)
-  row.state = 'failed'
-  row.updatedAt = object.updatedAt
-  await deps.repo.saveCase(row)
+  await deps.repo.failFile(row.caseId, object.objectId, deps.now().toISOString())
 }
 
 async function abortCase(caseId: string, request: Request, deps: Deps): Promise<Response> {
@@ -390,23 +420,60 @@ async function deleteCase(caseId: string, request: Request, deps: Deps): Promise
   return json(200, { deleted: true })
 }
 
-async function purgeCase(deps: Deps, row: CaseRow): Promise<void> {
+/** Cancel does not replay create and never uploads a manifest or media. */
+async function cancelCreation(request: Request, deps: Deps): Promise<Response> {
+  let body: { idempotency_key?: unknown; recovery_token?: unknown }
+  try {
+    const raw = await request.text()
+    if (raw.length > 512) return json(413, { error: 'too_large' })
+    body = JSON.parse(raw)
+  } catch { return json(400, { error: 'bad_json' }) }
+  if (!body || typeof body.idempotency_key !== 'string' || !/^[a-f0-9]{64}$/.test(body.idempotency_key) ||
+      typeof body.recovery_token !== 'string' || !/^[A-Za-z0-9_-]{43,128}$/.test(body.recovery_token)) return json(422, { error: 'recovery_token' })
+  const hash = await sha256Hex(encoder.encode(body.recovery_token))
+  const existing = await deps.repo.findByIdempotency(body.idempotency_key)
+  if (existing && !timingSafeEqual(existing.recoverySha256 || '', hash)) return json(403, { error: 'unauthorized' })
+  if (!existing) {
+    const ip = request.headers.get('cf-connecting-ip') || 'local'
+    const rateBucket = await sha256Hex(encoder.encode(`cancel:${ip}:${deps.now().toISOString().slice(0, 13)}`))
+    if (!await deps.repo.hit(rateBucket, deps.limits.ratePerHour)) return json(429, { error: 'rate_limited' })
+  }
+  await deps.repo.cancelCreation(body.idempotency_key, hash, deps.now().toISOString())
+  const row = await deps.repo.findByIdempotency(body.idempotency_key)
+  if (row) {
+    if (!timingSafeEqual(row.recoverySha256 || '', hash)) return json(403, { error: 'unauthorized' })
+    await purgeCase(deps, row)
+  }
+  return json(200, { deleted: true })
+}
+
+async function purgeCase(deps: Deps, row: CaseRow, creationFailure = false): Promise<void> {
+  // Persist the deletion fence before any network operation. Failures leave it
+  // retryable, and completion/refresh can no longer revive the case.
+  if (creationFailure) {
+    if (!await deps.repo.beginCreationCleanup(row.caseId, deps.now().toISOString())) {
+      // Cancellation can finish while an earlier storage write is still in flight.
+      // Remove its late result too, without resetting the cancellation tombstone.
+      const current = await deps.repo.getCase(row.caseId)
+      if (current && ['deleting', 'deleted'].includes(current.state)) await purgeCase(deps, current)
+      return
+    }
+  } else {
+    await deps.repo.cancelCreation(row.idempotencyKey, row.recoverySha256 || '', deps.now().toISOString())
+    await deps.repo.beginDelete(row.caseId, deps.now().toISOString())
+  }
   for (const object of await deps.repo.objectsFor(row.caseId)) {
-    if (object.uploadId && object.state === 'reserved') {
-      try { await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).abort() } catch { /* already finished */ }
+    if (object.uploadId) {
+      try { await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).abort() }
+      catch (error) {
+        if (!(error instanceof Error) || !/10024|NoSuchUpload|unknown_upload|does not exist/i.test(error.message)) throw error
+      }
     }
     await deps.bucket.delete(object.r2Key)
-    if (object.state === 'reserved') await deps.repo.release(object.declaredBytes)
-    object.state = 'aborted'
-    await deps.repo.saveObject(object)
   }
   await deps.bucket.delete(`cases/${row.caseId}/manifest.json`)
-  if (row.landedBytes) await deps.repo.unland(row.landedBytes)
-  row.landedBytes = 0
-  row.reservedBytes = 0
-  row.state = 'deleted'
-  row.updatedAt = deps.now().toISOString()
-  await deps.repo.saveCase(row)
+  await deps.repo.finishDelete(row.caseId, deps.now().toISOString(), creationFailure)
+  if (creationFailure) await deps.repo.forgetFailedCreation(row.caseId)
 }
 
 export async function sweep(deps: Deps): Promise<{ aborted: number; expired: number; orphans: string[] }> {
@@ -415,10 +482,11 @@ export async function sweep(deps: Deps): Promise<{ aborted: number; expired: num
   let expired = 0
   for (const row of await deps.repo.allCases()) {
     if (row.state === 'deleted') continue
+    if (row.state === 'creation_cleanup') { await purgeCase(deps, row, true); continue }
     const ageSeconds = (now - Date.parse(row.createdAt)) / 1000
     const expiredCase = Date.parse(row.expiresAt) <= now
-    const incomplete = row.state === 'open' && ageSeconds >= deps.limits.incompleteSeconds
-    if (expiredCase || incomplete) {
+    const incomplete = ['open', 'creating'].includes(row.state) && ageSeconds >= deps.limits.incompleteSeconds
+    if (expiredCase || incomplete || row.state === 'deleting') {
       await purgeCase(deps, row)
       if (incomplete && !expiredCase) aborted += 1
       else expired += 1

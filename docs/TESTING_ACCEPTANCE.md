@@ -27,7 +27,7 @@
 
 ## 3. 源码检查：一个入口
 
-在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci`（必装：后端测试 `test_success_rate.py` 会调用 node 和 `frontend/node_modules/typescript`，缺了直接失败，不会 skip）；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
+在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci` 与诊断服务 `npm ci --prefix services/diagnostics-api`（服务 SQL 回归使用 Node 22.22+ 内置 SQLite；必装：后端测试 `test_success_rate.py` 会调用 node 和 `frontend/node_modules/typescript`，缺了直接失败，不会 skip）；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
 
 ```bash
 python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
@@ -40,6 +40,7 @@ python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
 | contracts | 版本一致、八语 README/链接、发布验收校验器的负例回归、审查轮次文件名和注释、目录外的错误码 |
 | backend | 媒体测试依赖就绪、Python 正确性 lint（E9/F63/F7/F82）、全部后端 pytest、离线剪辑质量约束 |
 | frontend | ESLint、TypeScript、全部前端测试、生产构建（禁止测试时上传 sourcemap） |
+| diagnostics | 诊断 Worker 类型检查、生产 D1 SQL 事务/回滚、创建丢响应清理和刷新协议回归（无云端调用） |
 | CI 额外项 | Windows IOCP/进程树/桌面编译、真实 YuNet 并发检测与 SenseVoice 状态文件、安装 wheel 的取景/字体、源码启动与停止、Docker 生产/开发链路 |
 
 runner 创建临时数据库、配置、日志和隐私关闭文件，清空继承的供应商凭据与监控 DSN/公开采集 key，并隔离 Redis 地址。测试须使用 mock 或本机协议 fixture，禁止调用付费模型；真实模型调用移到产品验收，先明确素材、供应商、模型和费用预算。runner 会保留失败状态，不会被后续成功覆盖。缺依赖也算失败；退出码非零就不能宣称通过。

@@ -19,8 +19,9 @@ export interface CaseRow {
   caseId: string
   idempotencyKey: string
   manifestSha256: string
-  state: 'open' | 'complete' | 'failed' | 'deleted'
+  state: 'creating' | 'creation_cleanup' | 'open' | 'complete' | 'failed' | 'deleting' | 'deleted'
   capabilitySha256: string
+  recoverySha256?: string
   consentVersion: string
   manifestBytes: number
   reservedBytes: number
@@ -30,7 +31,18 @@ export interface CaseRow {
   updatedAt: string
 }
 
+export type OpenResult = { ok: true } | { ok: false; reason: string }
+
 export interface Repo {
+  openCase(row: CaseRow, limits: Pick<Limits, 'landedCap' | 'inflightCap'>): Promise<OpenResult>
+  finishCreation(caseId: string, now: string): Promise<boolean>
+  cancelCreation(key: string, recoveryHash: string, now: string): Promise<void>
+  beginDelete(caseId: string, now: string): Promise<CaseRow | null>
+  beginCreationCleanup(caseId: string, now: string): Promise<boolean>
+  forgetFailedCreation(caseId: string): Promise<void>
+  finishDelete(caseId: string, now: string, creationFailure?: boolean): Promise<void>
+  rotateCapability(caseId: string, hash: string, now: string): Promise<boolean>
+  failFile(caseId: string, objectId: string, now: string): Promise<void>
   reserve(bytes: number, limits: Pick<Limits, 'landedCap' | 'inflightCap'>): Promise<{ ok: true } | { ok: false; reason: string }>
   release(bytes: number): Promise<void>
   land(bytes: number): Promise<void>
@@ -58,6 +70,7 @@ export class MemoryRepo {
   cases = new Map<string, CaseRow>()
   objects = new Map<string, ObjectRow>()
   rates = new Map<string, number>()
+  cancellations = new Set<string>()
   private chain: Promise<void> = Promise.resolve()
 
   private exclusive<T>(fn: () => T): Promise<T> {
@@ -107,32 +120,132 @@ export class MemoryRepo {
   }
 
   findByIdempotency(key: string): Promise<CaseRow | null> {
-    return Promise.resolve([...this.cases.values()].find((row) => row.idempotencyKey === key) ?? null)
+    return Promise.resolve(structuredClone([...this.cases.values()].find((row) => row.idempotencyKey === key) ?? null))
   }
 
   getCase(id: string): Promise<CaseRow | null> {
-    return Promise.resolve(this.cases.get(id) ?? null)
+    return Promise.resolve(structuredClone(this.cases.get(id) ?? null))
   }
 
   saveCase(row: CaseRow): Promise<void> {
-    this.cases.set(row.caseId, row)
+    const existing = this.cases.get(row.caseId)
+    if (!existing || !['deleting', 'deleted', 'creation_cleanup'].includes(existing.state)) this.cases.set(row.caseId, structuredClone(row))
     return Promise.resolve()
   }
 
   getObject(id: string): Promise<ObjectRow | null> {
-    return Promise.resolve(this.objects.get(id) ?? null)
+    return Promise.resolve(structuredClone(this.objects.get(id) ?? null))
   }
 
   saveObject(row: ObjectRow): Promise<void> {
-    this.objects.set(row.objectId, row)
+    const existing = this.objects.get(row.objectId)
+    const state = this.cases.get(row.caseId)?.state
+    this.objects.set(row.objectId, { ...structuredClone(row),
+      actualBytes: existing?.state === 'complete' ? existing.actualBytes : row.actualBytes,
+      state: existing?.state === 'aborted' || state === 'deleting' || state === 'deleted' ? 'aborted' : existing?.state === 'complete' ? 'complete' : row.state })
     return Promise.resolve()
+  }
+
+  openCase(row: CaseRow, limits: Pick<Limits, 'landedCap' | 'inflightCap'>): Promise<OpenResult> {
+    return this.exclusive(() => {
+      if (this.cancellations.has(`${row.idempotencyKey}:${row.recoverySha256 || ''}`)) return { ok: false, reason: 'cancelled' }
+      if ([...this.cases.values()].some((item) => item.idempotencyKey === row.idempotencyKey)) return { ok: false, reason: 'existing' }
+      const decision = tryReserve(this.quota, row.reservedBytes, limits)
+      if (!decision.ok) return decision
+      this.quota.reserved += row.reservedBytes
+      this.cases.set(row.caseId, structuredClone(row))
+      return { ok: true }
+    })
+  }
+
+  finishCreation(caseId: string, now: string): Promise<boolean> {
+    return this.exclusive(() => {
+      const row = this.cases.get(caseId)
+      if (!row || row.state !== 'creating') return false
+      row.reservedBytes -= row.manifestBytes
+      row.landedBytes += row.manifestBytes
+      this.quota.reserved -= row.manifestBytes
+      this.quota.landed += row.manifestBytes
+      row.state = row.reservedBytes ? 'open' : 'complete'
+      row.updatedAt = now
+      return true
+    })
+  }
+
+  cancelCreation(key: string, recoveryHash: string, now: string): Promise<void> {
+    return this.exclusive(() => {
+      this.cancellations.add(`${key}:${recoveryHash}`)
+      const row = [...this.cases.values()].find((item) => item.idempotencyKey === key && item.recoverySha256 === recoveryHash)
+      if (row && row.state !== 'deleted') { row.state = 'deleting'; row.updatedAt = now }
+    })
+  }
+
+  beginDelete(caseId: string, now: string): Promise<CaseRow | null> {
+    return this.exclusive(() => {
+      const row = this.cases.get(caseId)
+      if (row && row.state !== 'deleted') { row.state = 'deleting'; row.updatedAt = now }
+      return structuredClone(row ?? null)
+    })
+  }
+
+  beginCreationCleanup(caseId: string, now: string): Promise<boolean> {
+    return this.exclusive(() => {
+      const row = this.cases.get(caseId)
+      if (!row || !['creating', 'creation_cleanup'].includes(row.state)) return false
+      row.state = 'creation_cleanup'; row.updatedAt = now
+      return true
+    })
+  }
+
+  forgetFailedCreation(caseId: string): Promise<void> {
+    return this.exclusive(() => {
+      const row = this.cases.get(caseId)
+      if (!row || row.state !== 'failed' || row.reservedBytes || row.landedBytes ||
+          this.cancellations.has(`${row.idempotencyKey}:${row.recoverySha256 || ''}`)) return
+      for (const object of this.objects.values()) if (object.caseId === caseId) this.objects.delete(object.objectId)
+      this.cases.delete(caseId)
+    })
+  }
+
+  finishDelete(caseId: string, now: string, creationFailure = false): Promise<void> {
+    return this.exclusive(() => {
+      const row = this.cases.get(caseId)
+      if (!row || row.state !== (creationFailure ? 'creation_cleanup' : 'deleting')) return
+      this.quota.reserved = Math.max(0, this.quota.reserved - row.reservedBytes)
+      this.quota.landed = Math.max(0, this.quota.landed - row.landedBytes)
+      for (const object of this.objects.values()) if (object.caseId === caseId) { object.state = 'aborted'; object.updatedAt = now }
+      row.reservedBytes = row.landedBytes = 0
+      row.state = creationFailure ? 'failed' : 'deleted'
+      row.updatedAt = now
+    })
+  }
+
+  rotateCapability(caseId: string, hash: string, now: string): Promise<boolean> {
+    return this.exclusive(() => {
+      const row = this.cases.get(caseId)
+      if (!row || !['open', 'complete'].includes(row.state)) return false
+      row.capabilitySha256 = hash
+      row.updatedAt = now
+      return true
+    })
+  }
+
+  failFile(caseId: string, objectId: string, now: string): Promise<void> {
+    return this.exclusive(() => {
+      const object = this.objects.get(objectId), row = this.cases.get(caseId)
+      if (!row || !object || object.caseId !== caseId || object.state !== 'reserved' || !['open', 'failed'].includes(row.state)) return
+      object.state = 'aborted'; object.updatedAt = now
+      row.reservedBytes -= object.declaredBytes
+      this.quota.reserved -= object.declaredBytes
+      row.state = 'failed'; row.updatedAt = now
+    })
   }
 
   commitFile(caseId: string, objectId: string, actualBytes: number, now: string): Promise<CommitResult> {
     return this.exclusive(() => {
       const object = this.objects.get(objectId)
       const row = this.cases.get(caseId)
-      if (!object || object.caseId !== caseId || !row || row.state === 'deleted') return { committed: false, reason: 'gone' }
+      if (!object || object.caseId !== caseId || !row || !['open', 'complete', 'failed'].includes(row.state)) return { committed: false, reason: 'gone' }
       if (object.state === 'complete') return { committed: false, already: true }
       if (object.state !== 'reserved') return { committed: false, reason: 'gone' }
       object.state = 'complete'
@@ -145,18 +258,18 @@ export class MemoryRepo {
       row.reservedBytes = Math.max(0, row.reservedBytes - object.declaredBytes)
       row.landedBytes += object.declaredBytes
       const pending = [...this.objects.values()].some((item) => item.caseId === caseId && item.state === 'reserved')
-      if (!pending) row.state = 'complete'
+      if (!pending && row.state !== 'failed') row.state = 'complete'
       row.updatedAt = now
       return { committed: true }
     })
   }
 
   objectsFor(caseId: string): Promise<ObjectRow[]> {
-    return Promise.resolve([...this.objects.values()].filter((row) => row.caseId === caseId))
+    return Promise.resolve(structuredClone([...this.objects.values()].filter((row) => row.caseId === caseId)))
   }
 
   allCases(): Promise<CaseRow[]> {
-    return Promise.resolve([...this.cases.values()])
+    return Promise.resolve(structuredClone([...this.cases.values()]))
   }
 
   reconcile(): QuotaState {
