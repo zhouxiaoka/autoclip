@@ -20,6 +20,8 @@ export interface AppliedSponsorPromo {
   statuses: Record<string, string>
   sequence?: number
   revision?: number
+  /** Process epoch of the publisher. A restart mints a new one and resets revision. */
+  instance?: string
   pending?: boolean
   source?: string
 }
@@ -98,6 +100,7 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     statuses,
     sequence: typeof record.sequence === 'number' ? record.sequence : undefined,
     revision: typeof record.revision === 'number' ? record.revision : undefined,
+    instance: typeof record.instance === 'string' && record.instance ? record.instance : undefined,
     pending: record.pending === true,
     source: typeof record.source === 'string' ? record.source : undefined,
   }
@@ -164,6 +167,7 @@ export async function loadSponsorPromo(trigger: 'startup' | 'settings' | 'interv
     let body = await readPromotion({ trigger })
     let applied = body ? applySponsorPromo(body) : null
     let rounds = 0
+    // Two short reads. A generation can accept after this returns; the watcher keeps following.
     while (body?.pending === true && rounds < 2) {
       rounds += 1
       body = await readPromotion({ after: Number(body.revision || 0), wait: 2 })
