@@ -61,7 +61,7 @@ def _protected_terms(draft: dict[str, Any], lines: list[dict[str, Any]], audienc
     # Ground short acronyms in mixed-case speech; an all-caps transcript is not
     # evidence that every word is a name. The translation adapter masks these too.
     acronyms = [word for line in lines if not str(line.get('text') or '').isupper()
-                for word in re.findall(r'\b[A-Z]{2,8}\b', str(line.get('text') or ''))
+                for word in re.findall(r'\b(?:[A-Z]{2,8}|[A-Z]{1,5}[0-9]{1,4})\b', str(line.get('text') or ''))
                 if word.lower() not in non_names | {'for', 'with', 'not', 'all', 'are', 'was', 'were', 'its'}]
     # ASR also lowercases initialisms. Restrict inference to short consonant-only
     # tokens, excluding common vocalizations/ordinary words; never expand initials.

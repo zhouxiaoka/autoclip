@@ -27,6 +27,62 @@ def test_unfinished_negation_and_complete_negative_answer_are_distinguished():
     assert not boundaries.unfinished('Absolutely not.')
 
 
+def test_open_service_request_cannot_displace_a_completed_answer():
+    rows = [
+        (0., 6., 'Here the server brings the menu.'),
+        (6., 7., 'Let me get'),
+        (7., 11., 'The prices at this place are pretty good.'),
+    ]
+    seen = []
+
+    def model(_, data):
+        seen.extend(data['end_candidates'])
+        return {'end_line': 0}
+
+    result = boundaries.refine_with_model(rows, 0., 6.9, model)
+    assert result is not None and result[1] == 6.
+    assert 1 not in seen
+    assert boundaries.unfinished('Let me get')
+    assert not boundaries.unfinished('Let me get the menu.')
+
+
+def test_unpunctuated_transcript_end_does_not_authorize_an_unrelated_extension():
+    rows = [
+        (0., 5., '先聊一个公告'),
+        (5., 10., '公告就说到这里'),
+        (10., 16., '今天的话题是咖啡怎么保存'),
+        (16., 20.4, '密封后放在阴凉处就可以了'),
+        (20.4, 24., '下面来看看烤箱怎么选'),
+        (24., 32., '需要先看烤箱的体积'),
+        (32., 41., '按照各自的空间挑选'),
+    ]
+    seen = []
+
+    def model(_, data):
+        seen.extend(data['end_candidates'])
+        return {'end_line': max(data['end_candidates'])}
+
+    result = boundaries.refine_with_model(rows, 10.1, 20.1, model)
+    assert result is not None and result[0] == 10. and result[1] == 20.4
+    assert seen and max(seen) == 3
+
+
+def test_foreign_interruption_does_not_authorize_extension_into_the_next_topic():
+    rows = [
+        (0., 4., '说说这里怎么点餐'),
+        (4., 8., '店员先拿菜单过来'),
+        (8., 9., 'Let me get'),
+        (9., 13., '接下来说说这家店的价格'),
+        (13., 18., '这里的面包也还挺便宜'),
+        (19., 23., '下次再来看看别的店'),
+    ]
+    selected = boundaries.refine_with_model(
+        rows, 0., 7.95, lambda _, data: {'end_line': max(data['end_candidates'])}
+    )
+    assert selected == (0., 8.)
+    assert selected.end_anchor == (1, len(rows[1][2]))
+
+
 def test_sentence_cut_does_not_treat_a_name_initial_as_an_ending():
     text = 'I met Hunter S. Thompson. Then we talked.'
     offsets = boundaries._inner_ends(text)
