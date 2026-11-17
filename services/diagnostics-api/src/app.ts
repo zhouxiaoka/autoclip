@@ -28,6 +28,7 @@ export interface Bucket {
 export interface Signer {
   sign(input: { key: string; contentLength: number; sha256Hex?: string; contentMd5Base64?: string; uploadId?: string; partNumber?: number; expiresSeconds?: number }): Promise<{ url: string; headers: Record<string, string> }>
   signGet?(key: string): Promise<string>
+  signHead?(key: string): Promise<string>
 }
 
 export interface Deps {
@@ -430,9 +431,10 @@ async function readObjectUrl(caseId: string, objectId: string, request: Request,
   const meta = await metadataSize(deps.bucket, object.r2Key)
   if (meta.kind === 'transient') return json(503, { error: 'unavailable' })
   if (meta.kind !== 'size' || meta.size !== object.declaredBytes) return json(404, { error: 'object' })
-  if (!deps.signer?.signGet) return json(503, { error: 'upload_signing_unconfigured' })
+  if (!deps.signer?.signGet || !deps.signer?.signHead) return json(503, { error: 'upload_signing_unconfigured' })
   const url = await deps.signer.signGet(object.r2Key)
-  return json(200, { url, expires_in: 120, bytes: meta.size })
+  const headUrl = await deps.signer.signHead(object.r2Key)
+  return json(200, { url, head_url: headUrl, expires_in: 120, bytes: meta.size })
 }
 
 async function completeFile(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {

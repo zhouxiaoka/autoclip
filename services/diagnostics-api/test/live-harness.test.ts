@@ -159,9 +159,14 @@ test('readback uses the raw url and compares a real response body', async () => 
   const digest = createHash('sha256').update(payload).digest('hex')
   let gets = 0
   const objectServer = createServer((request, response) => {
-    if (request.url.startsWith('/object') && request.method === 'HEAD') {
+    if (request.url.startsWith('/head') && request.method === 'HEAD') {
       response.setHeader('content-length', String(payload.length))
       response.end()
+      return
+    }
+    if (request.method === 'HEAD') {
+      response.statusCode = 403
+      response.end('method')
       return
     }
     if (request.method === 'GET' && request.url.startsWith('/object')) {
@@ -176,7 +181,11 @@ test('readback uses the raw url and compares a real response body', async () => 
   const objectPort = objectServer.address().port
   const api = createServer((request, response) => {
     response.setHeader('content-type', 'application/json')
-    response.end(JSON.stringify({ url: `http://127.0.0.1:${objectPort}/object?X-Amz-Signature=secret`, capability: 'super-secret-capability' }))
+    response.end(JSON.stringify({
+      url: `http://127.0.0.1:${objectPort}/object?X-Amz-Signature=secret`,
+      head_url: `http://127.0.0.1:${objectPort}/head?X-Amz-Signature=secret`,
+      capability: 'super-secret-capability',
+    }))
   })
   await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve))
   const apiPort = api.address().port
@@ -184,10 +193,12 @@ test('readback uses the raw url and compares a real response body', async () => 
     const read = await worker(`http://127.0.0.1:${apiPort}`, '/read-url', 'POST', {})
     assert.equal(read.raw.url.includes('X-Amz-Signature=secret'), true)
     assert.equal(read.body.url, undefined)
-    const hashed = await hashGet(read.raw.url, payload.length)
+    const hashed = await hashGet(read.raw.url, payload.length, read.raw.head_url)
     assert.equal(gets, 1)
     assert.equal(hashed.sha256, digest)
     assert.equal(hashed.bytes, payload.length)
+    assert.equal(hashed.headStatus, 200)
+    assert.equal(hashed.headMatchesBody, true)
     const saved = JSON.stringify(sanitizePublic(read))
     assert.equal(saved.includes('X-Amz-Signature'), false)
     assert.equal(saved.includes('super-secret'), false)

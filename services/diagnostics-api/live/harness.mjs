@@ -150,7 +150,7 @@ export function redactText(value) {
   return String(value || '').replace(/https?:\/\/\S+/gi, '[url]').slice(0, 240)
 }
 
-const HIDDEN_FIELDS = new Set(['url', 'authorization', 'capability', 'recovery_token', 'recoveryToken', 'secret', 'headers', 'token', 'idempotency_key', 'idempotencyKey'])
+const HIDDEN_FIELDS = new Set(['url', 'head_url', 'authorization', 'capability', 'recovery_token', 'recoveryToken', 'secret', 'headers', 'token', 'idempotency_key', 'idempotencyKey'])
 
 export function sanitize(value) {
   if (Array.isArray(value)) return value.map((item) => sanitize(item))
@@ -368,9 +368,22 @@ function allowedReadTarget(target) {
   return target.protocol === 'http:' && (target.hostname === '127.0.0.1' || target.hostname === 'localhost')
 }
 
-function requestHead(transport, target, lookup) {
+function requestOptions(target, method, headers = {}) {
+  const signedHost = process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT ? { host: target.hostname } : {}
+  return {
+    protocol: target.protocol,
+    hostname: target.hostname,
+    port: target.port,
+    path: `${target.pathname}${target.search}`,
+    method,
+    lookup: process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT ? fixtureLookup : undefined,
+    headers: { ...headers, ...signedHost },
+  }
+}
+
+function requestHead(transport, target) {
   return new Promise((resolve, reject) => {
-    const req = transport.request({ protocol: target.protocol, hostname: target.hostname, port: target.port, path: `${target.pathname}${target.search}`, method: 'HEAD', lookup }, (res) => {
+    const req = transport.request(requestOptions(target, 'HEAD'), (res) => {
       res.resume()
       res.on('end', () => resolve({ status: res.statusCode || 0, contentLength: Number(res.headers['content-length']) }))
     })
@@ -379,19 +392,22 @@ function requestHead(transport, target, lookup) {
   })
 }
 
-export function hashGet(url, byteLength) {
+export function hashGet(url, byteLength, headUrl) {
   const target = fixtureStorageUrl(url)
   if (!allowedReadTarget(target)) {
     return Promise.reject(new Error('read_url_rejected'))
   }
   const transport = target.protocol === 'http:' ? http : https
-  const lookup = process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT ? fixtureLookup : undefined
-  return requestHead(transport, target, lookup).then((head) => new Promise((resolve, reject) => {
+  const headTarget = typeof headUrl === 'string' ? fixtureStorageUrl(headUrl) : null
+  if (!headTarget || !allowedReadTarget(headTarget)) {
+    return Promise.resolve({ status: 0, bytes: 0, sha256: '', headStatus: 0, headMatchesBody: false, method: 'HEAD', reason: 'head_url_missing' })
+  }
+  return requestHead(headTarget.protocol === 'http:' ? http : https, headTarget).then((head) => new Promise((resolve, reject) => {
     if (head.status !== 200) {
       resolve({ status: head.status, bytes: 0, sha256: '', headStatus: head.status, method: 'HEAD' })
       return
     }
-    const req = transport.get({ protocol: target.protocol, hostname: target.hostname, port: target.port, path: `${target.pathname}${target.search}`, lookup }, (res) => {
+    const req = transport.get(requestOptions(target, 'GET'), (res) => {
       if ((res.statusCode || 0) !== 200) {
         res.resume()
         resolve({ status: res.statusCode || 0, bytes: 0, sha256: '', headStatus: head.status, headBytes: head.contentLength })
@@ -417,7 +433,7 @@ export function putStream(url, headers, byteLength, corruptFirstByte = false, st
       error.bytesWritten = bytesWritten
       reject(error)
     }
-    const req = https.request({ protocol: target.protocol, hostname: target.hostname, port: target.port, path: `${target.pathname}${target.search}`, method: 'PUT', headers, lookup: process.env.AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT ? fixtureLookup : undefined }, (res) => {
+    const req = https.request(requestOptions(target, 'PUT', headers), (res) => {
       const chunks = []
       res.on('data', (chunk) => {
         if (chunks.reduce((sum, item) => sum + item.length, 0) < 512) chunks.push(chunk)
@@ -610,8 +626,8 @@ export async function executeLive(env = process.env, io = {}) {
     if (read.status !== 200 || typeof op(read)?.url !== 'string') {
       record('independent-readback', { pass: false, http: read.status, blocked: read.status !== 200 })
     } else {
-      const hashed = await readHash(op(read).url, SMALL_BYTES)
-      record('independent-readback', { pass: hashed.sha256 === small.digest && hashed.bytes === SMALL_BYTES && hashed.headMatchesBody === true, bytes: hashed.bytes, headBytes: hashed.headBytes, complete: finished.status })
+      const hashed = await readHash(op(read).url, SMALL_BYTES, op(read).head_url)
+      record('independent-readback', { pass: hashed.sha256 === small.digest && hashed.bytes === SMALL_BYTES && hashed.headMatchesBody === true, bytes: hashed.bytes, headBytes: hashed.headBytes, headStatus: hashed.headStatus, complete: finished.status })
     }
     const release = async (opened) => {
       if (!op(opened).case_id) return 0
@@ -664,11 +680,11 @@ export async function executeLive(env = process.env, io = {}) {
       if (!uploaded) record(readId, { run: false, pass: false, reason: 'not-run' })
       else {
         const read = await call(endpoint, `/v1/cases/${op(opened.opened).case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${op(opened.opened).capability}` })
-        if (read.status !== 200 || typeof op(read)?.url !== 'string') record(readId, { ...observed(read), pass: false })
+        if (read.status !== 200 || typeof op(read)?.url !== 'string' || typeof op(read)?.head_url !== 'string') record(readId, { ...observed(read), pass: false })
         else {
-          const hashed = await readHash(op(read).url, bytes)
-          hashedOk = hashed.sha256 === opened.digest && hashed.bytes === bytes && hashed.headMatchesBody === true
-          record(readId, { pass: hashedOk, bytes: hashed.bytes })
+          const hashed = await readHash(op(read).url, bytes, op(read).head_url)
+          hashedOk = hashed.sha256 === opened.digest && hashed.bytes === bytes && hashed.headMatchesBody === true && hashed.headStatus === 200
+          record(readId, { pass: hashedOk, bytes: hashed.bytes, headStatus: hashed.headStatus, headBytes: hashed.headBytes })
         }
       }
       const released = await release(opened.opened)

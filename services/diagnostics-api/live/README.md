@@ -14,7 +14,7 @@ Do not touch `autoclip-media`. Do not enable a public bucket, custom domain, or 
 
 Signed headers on a single-part URL are `content-length` and `x-amz-checksum-sha256` (base64 of the declared 32-byte SHA-256). Multipart part URLs sign `content-length`, `content-md5`, and `host`. The client sends that MD5 with the part body. A missing or altered `content-md5` is an authorization failure. A body that does not match the signed MD5 is a payload failure. Completion still checks object size only.
 
-`presignGet` signs `GET` with header `host` only. It exists so a case capability can obtain one short-lived read URL. It is not a credential dump.
+`presignGet` signs `GET` with header `host` only. `presignHead` signs `HEAD` the same way. The two URLs are not interchangeable: a HEAD request that presents the GET signature fails signature verification. The read endpoint returns both `url` and `head_url`. Neither is a credential dump, and neither ETag is a SHA-256.
 
 Session tokens are unsupported. `SignInput` has no session-token field, and neither presign function writes `X-Amz-Security-Token`. Do not use R2 temporary credentials whose response includes a session token; this signer cannot send it.
 
@@ -42,7 +42,9 @@ Run this on the parent executor, not on the agent VM. Do not print the token val
 4. After the Worker script exists, `PUT /accounts/3f71ee831844494b715377dd40a5cd47/workers/scripts/autoclip-diagnostics-validation-api/secrets` twice, type `secret_text`, names `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. `R2_ACCOUNT_ID` is the plain text account id `3f71ee831844494b715377dd40a5cd47`.
 5. Drop the token value and the secret from the process. Return only the token id so it can be revoked with `DELETE /accounts/3f71ee831844494b715377dd40a5cd47/tokens/{token_id}`.
 
-`main` and `executeLive` do not read those secrets. `signedSinglePut` and the harness `presignGet` export can sign if a caller passes the secrets in. After complete, the execute path asks `POST /v1/cases/{case_id}/files/{object_id}/read-url` with the case capability and streams the returned URL. The URL is not written to the result or to `queue.json`.
+`main` and `executeLive` do not read those secrets. `signedSinglePut` and the harness `presignGet` export can sign if a caller passes the secrets in. After complete, the execute path asks `POST /v1/cases/{case_id}/files/{object_id}/read-url` with the case capability. It sends HEAD to `head_url` and GET to `url`, then compares the HEAD content-length with the streamed GET hash. Neither URL is written to the result or to `queue.json`.
+
+The local HTTPS fixture recomputes SigV4 itself. It does not treat “a signature query parameter is present” as authorization, and it does not call the production signer to check a request. A GET URL used as HEAD is 403. A changed signed header is 403. A body that does not match the unchanged signed checksum or content-md5 is 400. The fixture’s multipart ETag is a SHA-256 of that part so the local adapter can compare what it stored; that is not how R2 identifies a part, and it is not the content conclusion. The content conclusion remains the streamed GET hash. The fixture is not R2, not production D1, and it does not prove account quota or live error text.
 
 ## Apply schema, then upload the bundle
 

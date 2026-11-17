@@ -110,8 +110,7 @@ export async function presignPut(input: SignInput): Promise<{ url: string; heade
   return { url: `${url}&X-Amz-Signature=${signature}`, headers }
 }
 
-/** Short-lived GET for one object. No session token parameter exists on this signer. */
-export async function presignGet(input: {
+export interface ReadSignInput {
   accountId: string
   accessKeyId: string
   secretAccessKey: string
@@ -119,7 +118,10 @@ export async function presignGet(input: {
   key: string
   expiresSeconds: number
   now?: Date
-}): Promise<string> {
+}
+
+/** One signed read. GET and HEAD are different canonical methods and cannot share a URL. */
+async function presignRead(method: 'GET' | 'HEAD', input: ReadSignInput): Promise<string> {
   if (input.bucket === 'autoclip-media') throw new Error('refusing_media_bucket')
   const now = input.now ?? new Date()
   const host = `${input.accountId}.r2.cloudflarestorage.com`
@@ -137,7 +139,7 @@ export async function presignGet(input: {
   encoded.sort((left, right) => byteCompare(left[0], right[0]) || byteCompare(left[1], right[1]))
   const canonicalQuery = encoded.map(([key, value]) => `${key}=${value}`).join('&')
   const canonical = [
-    'GET',
+    method,
     `/${encodePath(input.bucket)}/${encodePath(input.key)}`,
     canonicalQuery,
     `host:${host}\n`,
@@ -152,6 +154,16 @@ export async function presignGet(input: {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical))
   const signature = hex(await hmac(signingKey, `AWS4-HMAC-SHA256\n${stamp}\n${date}/auto/s3/aws4_request\n${hex(hash)}`))
   return `https://${host}/${encodePath(input.bucket)}/${encodePath(input.key)}?${canonicalQuery}&X-Amz-Signature=${signature}`
+}
+
+/** Short-lived GET for one object. No session token parameter exists on this signer. */
+export function presignGet(input: ReadSignInput): Promise<string> {
+  return presignRead('GET', input)
+}
+
+/** Short-lived HEAD for the same object. The signature is not valid for GET. */
+export function presignHead(input: ReadSignInput): Promise<string> {
+  return presignRead('HEAD', input)
 }
 
 export function sha256Base64(hexDigest: string): string {

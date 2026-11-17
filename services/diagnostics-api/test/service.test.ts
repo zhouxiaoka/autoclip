@@ -202,6 +202,10 @@ test('a read url is issued only for the owned object and contains no signing sec
       issued.push(key)
       return `https://account.r2.cloudflarestorage.com/autoclip-diagnostics/${key}?X-Amz-Signature=abc`
     },
+    async signHead(key) {
+      issued.push(`head:${key}`)
+      return `https://account.r2.cloudflarestorage.com/autoclip-diagnostics/${key}?X-Amz-Signature=head`
+    },
   }
   const created = await (await create(base.deps, {
     purpose: 'troubleshooting_and_product_improvement', not_for_training: true, manifest: manifest(),
@@ -216,11 +220,13 @@ test('a read url is issued only for the owned object and contains no signing sec
   const allowed = await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}/files/${created.uploads[0]!.object_id}/read-url`, {
     method: 'POST', headers: { authorization: `Bearer ${created.capability}` },
   }), base.deps)
-  const body = await allowed.json() as { url: string; expires_in: number }
+  const body = await allowed.json() as { url: string; head_url: string; expires_in: number }
   assert.equal(allowed.status, 200)
   assert.equal(body.expires_in, 120)
   assert.equal(body.url.includes('secret'), false)
-  assert.deepEqual(issued, [base.signed[0]!.key])
+  assert.notEqual(body.head_url, body.url)
+  assert.equal(body.head_url.includes('secret'), false)
+  assert.deepEqual(issued, [base.signed[0]!.key, `head:${base.signed[0]!.key}`])
   base.deps.signer = { async sign() { return { url: 'https://account.r2.cloudflarestorage.com/x', headers: {} } } }
   const unconfigured = await handle(new Request(`https://diagnostics.example/v1/cases/${created.case_id}/files/${created.uploads[0]!.object_id}/read-url`, {
     method: 'POST', headers: { authorization: `Bearer ${created.capability}` },

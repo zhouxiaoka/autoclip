@@ -7,7 +7,7 @@ import type { R2Bucket, R2MultipartUpload, R2UploadedPart } from '@cloudflare/wo
 import { handle, sweep, type Bucket, type Deps, type MultipartUpload, type Signer } from './app.ts'
 import { D1Repo, type D1 } from './d1.ts'
 import { limitsFrom } from './quota.ts'
-import { presignGet, presignPut, sha256Base64 } from './sign.ts'
+import { presignGet, presignHead, presignPut, sha256Base64 } from './sign.ts'
 
 interface Env {
   DIAGNOSTICS_BUCKET: R2Bucket
@@ -50,6 +50,16 @@ function signer(env: Env, bucketName: string): Signer | null {
     },
     signGet(key) {
       return presignGet({
+        accountId: env.R2_ACCOUNT_ID!,
+        accessKeyId: env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
+        bucket: bucketName,
+        key,
+        expiresSeconds: 120,
+      })
+    },
+    signHead(key) {
+      return presignHead({
         accountId: env.R2_ACCOUNT_ID!,
         accessKeyId: env.R2_ACCESS_KEY_ID!,
         secretAccessKey: env.R2_SECRET_ACCESS_KEY!,

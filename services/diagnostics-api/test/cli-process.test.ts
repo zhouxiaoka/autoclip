@@ -6,14 +6,15 @@ import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import https from 'node:https'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createReadStream, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { handle, type Bucket, type MultipartUpload, type UploadedPart } from '../src/app.ts'
 import { MemoryRepo } from '../src/memory.ts'
 import { PROPOSED_LIMITS } from '../src/quota.ts'
-import { presignGet, presignPut, sha256Base64 } from '../src/sign.ts'
+import { presignGet, presignHead, presignPut, sha256Base64 } from '../src/sign.ts'
+import { verifySigV4 } from './sigv4-check.mjs'
 
 const ACCOUNT = 'fixture'
 const BUCKET = 'autoclip-diagnostics'
@@ -25,14 +26,29 @@ function etagOf(bytes: Uint8Array): string {
 }
 
 class FixtureBucket implements Bucket {
-  objects = new Map<string, Uint8Array>()
-  private uploads = new Map<string, { key: string; parts: Map<number, Uint8Array> }>()
-  async put(key: string, body: Uint8Array): Promise<void> { this.objects.set(key, body) }
-  async head(key: string) {
-    const body = this.objects.get(key)
-    return body ? { size: body.byteLength } : null
+  objects = new Map<string, { path: string; size: number }>()
+  private uploads = new Map<string, { key: string; parts: Map<number, { path: string; size: number; etag: string }> }>()
+  private directory: string
+  constructor(directory: string) {
+    this.directory = directory
+    mkdirSync(join(directory, 'objects'), { recursive: true })
+    mkdirSync(join(directory, 'parts'), { recursive: true })
   }
-  async delete(key: string) { this.objects.delete(key) }
+  private objectPath(key: string) { return join(this.directory, 'objects', encodeURIComponent(key)) }
+  async put(key: string, body: Uint8Array): Promise<void> {
+    const path = this.objectPath(key)
+    writeFileSync(path, body)
+    this.objects.set(key, { path, size: body.byteLength })
+  }
+  async head(key: string) {
+    const stored = this.objects.get(key)
+    return stored ? { size: stored.size } : null
+  }
+  async delete(key: string) {
+    const stored = this.objects.get(key)
+    if (stored) { try { unlinkSync(stored.path) } catch { /* already gone */ } }
+    this.objects.delete(key)
+  }
   async createMultipartUpload(key: string): Promise<MultipartUpload> {
     const uploadId = `up-${this.uploads.size + 1}`
     this.uploads.set(uploadId, { key, parts: new Map() })
@@ -44,62 +60,48 @@ class FixtureBucket implements Bucket {
       uploadPart: async (partNumber, value) => {
         const upload = this.uploads.get(uploadId)
         if (!upload || upload.key !== key) throw new Error('unknown_upload')
-        upload.parts.set(partNumber, value)
-        return { partNumber, etag: etagOf(value) }
+        const path = join(this.directory, 'parts', `${uploadId}-${partNumber}`)
+        writeFileSync(path, value)
+        const etag = etagOf(value)
+        upload.parts.set(partNumber, { path, size: value.byteLength, etag })
+        return { partNumber, etag }
       },
-      abort: async () => { this.uploads.delete(uploadId) },
+      abort: async () => {
+        const upload = this.uploads.get(uploadId)
+        for (const part of upload?.parts.values() || []) { try { unlinkSync(part.path) } catch { /* already gone */ } }
+        this.uploads.delete(uploadId)
+      },
       complete: async (uploadedParts: UploadedPart[]) => {
         const upload = this.uploads.get(uploadId)
         if (!upload || upload.key !== key) throw new Error('unknown_upload')
         const ordered = [...uploadedParts].sort((left, right) => left.partNumber - right.partNumber)
-        const chunks: Uint8Array[] = []
         let expect = 1
+        const files = []
         for (const part of ordered) {
           if (part.partNumber !== expect) throw new Error('missing_part')
           const stored = upload.parts.get(part.partNumber)
-          if (!stored || etagOf(stored) !== part.etag) throw new Error('etag_mismatch')
-          chunks.push(stored)
+          if (!stored || stored.etag !== part.etag) throw new Error('etag_mismatch')
+          files.push(stored)
           expect += 1
         }
         if (upload.parts.size !== ordered.length) throw new Error('missing_part')
-        const size = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
-        const body = new Uint8Array(size)
-        let offset = 0
-        for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength }
-        this.objects.set(key, body)
+        const path = this.objectPath(key)
+        const hash = createHash('sha256')
+        let size = 0
+        for (const file of files) {
+          const bytes = readFileSync(file.path)
+          hash.update(bytes)
+          writeFileSync(path, bytes, { flag: size === 0 ? 'w' : 'a' })
+          size += bytes.length
+        }
+        for (const file of files) { try { unlinkSync(file.path) } catch { /* already gone */ } }
+        this.objects.set(key, { path, size })
         this.uploads.delete(uploadId)
-        return { size, httpEtag: etagOf(body) }
+        return { size, httpEtag: hash.digest('hex') }
       },
     }
   }
   async list() { return [...this.objects.keys()] }
-}
-
-export function storageDecision(input: {
-  issued: boolean
-  expired: boolean
-  expectedHeaders: Record<string, string>
-  gotHeaders: Record<string, string>
-  bodyMd5: string
-  bodyChecksum: string
-  bodyLength: number
-}): { status: number; body: string } {
-  if (!input.issued || input.expired) return { status: 403, body: 'AccessDenied' }
-  for (const [name, expected] of Object.entries(input.expectedHeaders)) {
-    if (input.gotHeaders[name] !== expected) return { status: 403, body: 'SignatureDoesNotMatch' }
-  }
-  if (input.expectedHeaders['content-md5'] && input.bodyMd5 !== input.expectedHeaders['content-md5']) return { status: 400, body: 'BadDigest' }
-  if (input.expectedHeaders['x-amz-checksum-sha256'] && input.bodyChecksum !== input.expectedHeaders['x-amz-checksum-sha256']) return { status: 400, body: 'BadDigest' }
-  if (input.bodyLength !== Number(input.expectedHeaders['content-length'])) return { status: 400, body: 'IncompleteBody' }
-  return { status: 200, body: '' }
-}
-
-function expired(url: URL): boolean {
-  const stamp = url.searchParams.get('X-Amz-Date') || ''
-  const seconds = Number(url.searchParams.get('X-Amz-Expires'))
-  if (!/^\d{8}T\d{6}Z$/.test(stamp) || !Number.isFinite(seconds)) return true
-  const iso = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`
-  return Date.now() > Date.parse(iso) + seconds * 1000
 }
 
 function readBody(req: import('node:http').IncomingMessage): Promise<Buffer> {
@@ -111,26 +113,17 @@ function readBody(req: import('node:http').IncomingMessage): Promise<Buffer> {
   })
 }
 
-test('storage decisions reject a bad signature, a changed header, and a corrupt body separately', () => {
-  const headers = { 'content-length': '4', 'content-md5': 'abcd' }
-  assert.equal(storageDecision({ issued: false, expired: false, expectedHeaders: headers, gotHeaders: headers, bodyMd5: 'abcd', bodyChecksum: '', bodyLength: 4 }).status, 403)
-  assert.equal(storageDecision({ issued: true, expired: false, expectedHeaders: headers, gotHeaders: { ...headers, 'content-md5': 'zzzz' }, bodyMd5: 'abcd', bodyChecksum: '', bodyLength: 4 }).status, 403)
-  assert.equal(storageDecision({ issued: true, expired: false, expectedHeaders: headers, gotHeaders: headers, bodyMd5: 'nope', bodyChecksum: '', bodyLength: 4 }).status, 400)
-  assert.equal(storageDecision({ issued: true, expired: false, expectedHeaders: headers, gotHeaders: headers, bodyMd5: 'abcd', bodyChecksum: '', bodyLength: 4 }).status, 200)
-})
-
-test('unmodified harness CLI completes the local HTTPS control matrix', async () => {
+test('unmodified harness CLI completes the local HTTPS matrix through the fitting upload', { timeout: 600_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'autoclip-cli-'))
   const cert = join(root, 'cert.pem')
   const key = join(root, 'key.pem')
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-keyout', key, '-out', cert, '-days', '1', '-nodes',
     '-subj', '/CN=fixture.r2.cloudflarestorage.com',
     '-addext', 'subjectAltName=DNS:fixture.r2.cloudflarestorage.com,IP:127.0.0.1'])
-  const issued = new Map<string, { headers: Record<string, string>; key: string; uploadId?: string; partNumber?: number }>()
-  const bucket = new FixtureBucket()
+  const bucket = new FixtureBucket(root)
   const signer = {
     async sign(input: { key: string; contentLength: number; sha256Hex?: string; contentMd5Base64?: string; uploadId?: string; partNumber?: number; expiresSeconds?: number }) {
-      const signed = await presignPut({
+      return presignPut({
         accountId: ACCOUNT, accessKeyId: KEY_ID, secretAccessKey: SECRET, bucket: BUCKET,
         key: input.key, contentLength: input.contentLength,
         checksumSha256Base64: input.sha256Hex ? sha256Base64(input.sha256Hex) : undefined,
@@ -138,14 +131,12 @@ test('unmodified harness CLI completes the local HTTPS control matrix', async ()
         expiresSeconds: input.expiresSeconds || 900,
         uploadId: input.uploadId, partNumber: input.partNumber,
       })
-      const signature = new URL(signed.url).searchParams.get('X-Amz-Signature') || ''
-      issued.set(signature, { headers: signed.headers, key: input.key, uploadId: input.uploadId, partNumber: input.partNumber })
-      return signed
     },
-    async signGet(objectKey: string) {
-      const url = await presignGet({ accountId: ACCOUNT, accessKeyId: KEY_ID, secretAccessKey: SECRET, bucket: BUCKET, key: objectKey, expiresSeconds: 120 })
-      issued.set(new URL(url).searchParams.get('X-Amz-Signature') || '', { headers: {}, key: objectKey })
-      return url
+    signGet(objectKey: string) {
+      return presignGet({ accountId: ACCOUNT, accessKeyId: KEY_ID, secretAccessKey: SECRET, bucket: BUCKET, key: objectKey, expiresSeconds: 120 })
+    },
+    signHead(objectKey: string) {
+      return presignHead({ accountId: ACCOUNT, accessKeyId: KEY_ID, secretAccessKey: SECRET, bucket: BUCKET, key: objectKey, expiresSeconds: 120 })
     },
   }
   const deps = {
@@ -172,39 +163,43 @@ test('unmodified harness CLI completes the local HTTPS control matrix', async ()
         res.end(payload)
         return
       }
-      const url = new URL(req.url || '/', `https://${host}`)
-      const signature = url.searchParams.get('X-Amz-Signature') || ''
-      const grant = issued.get(signature)
+      const hostname = host.replace(/:\d+$/, '')
+      const url = new URL(req.url || '/', `https://${hostname}`)
+      const presented: Record<string, string> = { host: host }
+      for (const name of ['content-length', 'content-md5', 'x-amz-checksum-sha256']) {
+        const value = req.headers[name]
+        if (typeof value === 'string') presented[name] = value
+      }
+      const verdict = verifySigV4({
+        method: req.method, url: url.toString(), headers: presented,
+        secretAccessKey: SECRET, accessKeyId: KEY_ID,
+      })
       const objectKey = decodeURIComponent(url.pathname.replace(new RegExp(`^/${BUCKET}/`), ''))
+      if (!verdict.ok) { res.writeHead(403); res.end(verdict.reason); return }
       if (req.method === 'HEAD' || req.method === 'GET') {
-        if (!grant || expired(url) || grant.key !== objectKey) { res.writeHead(403); res.end('AccessDenied'); return }
         const stored = bucket.objects.get(objectKey)
         if (!stored) { res.writeHead(404); res.end(); return }
-        res.writeHead(200, { 'content-length': String(stored.byteLength), etag: `"${etagOf(stored)}"` })
-        res.end(req.method === 'HEAD' ? undefined : Buffer.from(stored))
+        res.writeHead(200, { 'content-length': String(stored.size) })
+        if (req.method === 'HEAD') { res.end(); return }
+        createReadStream(stored.path).pipe(res)
         return
       }
       if (req.method !== 'PUT') { res.writeHead(405); res.end(); return }
       const body = await readBody(req)
-      const got: Record<string, string> = {}
-      for (const name of ['content-length', 'content-md5', 'x-amz-checksum-sha256']) {
-        const value = req.headers[name]
-        if (typeof value === 'string') got[name] = value
-      }
-      const decision = storageDecision({
-        issued: Boolean(grant), expired: expired(url), expectedHeaders: grant?.headers || {},
-        gotHeaders: got, bodyLength: body.length,
-        bodyMd5: createHash('md5').update(body).digest('base64'),
-        bodyChecksum: createHash('sha256').update(body).digest('base64'),
-      })
-      if (decision.status !== 200 || !grant) { res.writeHead(decision.status); res.end(decision.body); return }
+      const md5 = createHash('md5').update(body).digest('base64')
+      const checksum = createHash('sha256').update(body).digest('base64')
+      if (presented['content-md5'] && md5 !== presented['content-md5']) { res.writeHead(400); res.end('BadDigest'); return }
+      if (presented['x-amz-checksum-sha256'] && checksum !== presented['x-amz-checksum-sha256']) { res.writeHead(400); res.end('BadDigest'); return }
+      if (body.length !== Number(presented['content-length'])) { res.writeHead(400); res.end('IncompleteBody'); return }
       const bytes = new Uint8Array(body)
+      const uploadId = url.searchParams.get('uploadId')
+      const partNumber = Number(url.searchParams.get('partNumber'))
       let etag = etagOf(bytes)
-      if (grant.uploadId && grant.partNumber) {
-        const uploaded = await bucket.resumeMultipartUpload(grant.key, grant.uploadId).uploadPart(grant.partNumber, bytes)
+      if (uploadId && Number.isInteger(partNumber)) {
+        const uploaded = await bucket.resumeMultipartUpload(objectKey, uploadId).uploadPart(partNumber, bytes)
         etag = uploaded.etag
       } else {
-        await bucket.put(grant.key, bytes)
+        await bucket.put(objectKey, bytes)
       }
       res.writeHead(200, { etag: `"${etag}"`, 'cf-ray': 'fixture-put' })
       res.end()
@@ -237,7 +232,6 @@ test('unmodified harness CLI completes the local HTTPS control matrix', async ()
       AUTOCLIP_DIAGNOSTICS_LIVE_ENDPOINT: `https://127.0.0.1:${port}`,
       AUTOCLIP_DIAGNOSTICS_LIVE_BUCKET: BUCKET,
       AUTOCLIP_DIAGNOSTICS_FIXTURE_PORT: String(port),
-      AUTOCLIP_DIAGNOSTICS_LIVE_SCOPE: 'through-control',
       AUTOCLIP_DIAGNOSTICS_EVIDENCE: evidence,
       NODE_EXTRA_CA_CERTS: cert,
     },
@@ -264,9 +258,16 @@ test('unmodified harness CLI completes the local HTTPS control matrix', async ()
   assert.equal(row('missing-part')?.pass, true)
   assert.equal(row('expired-url')?.pass, true)
   assert.equal(row('expiry-refresh-resume-successful-parts')?.pass, true)
-  assert.equal(row('original-max-plus-manifest')?.pass, true, JSON.stringify({ max: row('original-max-plus-manifest'), transport: row('transport-failure'), log: serverLog.filter((line) => line.startsWith('POST') || line.startsWith('api 413') || line.startsWith('api 422') || line.startsWith('api 429') || line.startsWith('api 500')) }))
+  assert.equal(row('original-max-plus-manifest')?.pass, true, JSON.stringify({ max: row('original-max-plus-manifest'), transport: row('transport-failure') }))
   assert.equal(row('lost-create-cancel')?.pass, true)
-  assert.equal(row('stream-200-mib')?.reason, 'not-run')
+  assert.equal(row('stream-200-mib')?.pass, true, JSON.stringify(row('stream-200-mib')))
+  assert.equal(row('independent-sha256-readback-200mib')?.pass, true)
+  assert.equal(row('fitting-original-under-inflight')?.pass, true, JSON.stringify(row('fitting-original-under-inflight')))
+  assert.equal(row('fitting-original-readback')?.pass, true, JSON.stringify(row('fitting-original-readback')))
+  assert.equal(row('independent-readback')?.headStatus, 200)
+  const evidenceText = readFileSync(join(evidence, 'evidence.json'), 'utf8')
+  assert.equal(evidenceText.includes('X-Amz-Signature'), false)
+  assert.equal(evidenceText.includes('head_url'), false)
   assert.equal(code, 0, stdout.slice(0, 2000))
   rmSync(root, { recursive: true, force: true })
 })
