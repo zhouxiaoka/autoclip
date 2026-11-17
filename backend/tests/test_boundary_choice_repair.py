@@ -67,6 +67,22 @@ def test_unpunctuated_transcript_end_does_not_authorize_an_unrelated_extension()
     assert seen and max(seen) == 3
 
 
+def test_foreign_interruption_does_not_authorize_extension_into_the_next_topic():
+    rows = [
+        (0., 4., '说说这里怎么点餐'),
+        (4., 8., '店员先拿菜单过来'),
+        (8., 9., 'Let me get'),
+        (9., 13., '接下来说说这家店的价格'),
+        (13., 18., '这里的面包也还挺便宜'),
+        (19., 23., '下次再来看看别的店'),
+    ]
+    selected = boundaries.refine_with_model(
+        rows, 0., 7.95, lambda _, data: {'end_line': max(data['end_candidates'])}
+    )
+    assert selected == (0., 8.)
+    assert selected.end_anchor == (1, len(rows[1][2]))
+
+
 def test_sentence_cut_does_not_treat_a_name_initial_as_an_ending():
     text = 'I met Hunter S. Thompson. Then we talked.'
     offsets = boundaries._inner_ends(text)

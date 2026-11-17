@@ -59,6 +59,7 @@ _DANGLING = re.compile(
     r'the|a|an|of|to|for|with|without|from|in|at|than|such as|seems like|which is like|'
     r'um|uh|not|never|even like|that well|like well)\s*[,.!?…]*$', re.I)
 _OPEN_REQUEST = re.compile(r"\b(?:let me|let us|let's)\s+(?:get|give|show|put|bring)\s*[,.!?…]*$", re.I)
+_HAN = re.compile(r'[㐀-鿿]')
 
 
 def unfinished(text: str) -> bool:
@@ -130,6 +131,12 @@ def _end_cut(rows: list[Row], last: int, end: float, has_punct: bool) -> tuple[i
     i = last
     while True:
         text = rows[i][2]
+        # A brief, unfinished English interjection between Chinese utterances
+        # is not evidence that the preceding Chinese sentence continues.
+        if (0 < i < len(rows) - 1 and _OPEN_REQUEST.fullmatch(text) and
+                _HAN.search(rows[i - 1][2]) and _HAN.search(rows[i + 1][2]) and
+                not unfinished(rows[i - 1][2])):
+            return i - 1, len(rows[i - 1][2])
         if (i > last and i + 1 == len(rows) and not TERMINAL.search(text) and not JA_END.search(text)
                 and rows[i][1] - end > UNVERIFIED_EDGE_SEC):
             # An unpunctuated transcript may itself have stopped mid-topic. Reaching
