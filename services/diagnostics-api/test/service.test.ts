@@ -287,6 +287,11 @@ test('multipart completion assembles the readable object and a bad etag leaves n
   const second = await handle.uploadPart(2, Uint8Array.from([5, 6]))
   const bad = await handleRequest(value, created, { parts: [{ partNumber: 1, etag: 'not-the-etag' }, second] })
   assert.equal(bad.status, 409)
+  const badBody = await bad.json() as { error: string; phase: string; expectedBytes: number; actualBytes: number | null }
+  assert.equal(badBody.error, 'etag_mismatch')
+  assert.equal(badBody.phase, 'complete')
+  assert.equal(badBody.expectedBytes, 6)
+  assert.equal(badBody.actualBytes, null)
   assert.equal(await bucket.get(stored.r2Key), null)
 
   const { deps: again, bucket: goodBucket, repo: goodRepo } = deps({ partBytes: 4 })
@@ -298,7 +303,10 @@ test('multipart completion assembles the readable object and a bad etag leaves n
   const upload = goodBucket.resumeMultipartUpload(good.r2Key, good.uploadId!)
   const partA = await upload.uploadPart(1, Uint8Array.from([1, 2, 3, 4]))
   const partB = await upload.uploadPart(2, Uint8Array.from([5, 6]))
-  const done = await handleRequest(again, secondCase, { parts: [partA, partB] })
+  const done = await handleRequest(again, secondCase, { parts: [
+    { partNumber: partA.partNumber, etag: `"${partA.etag}"` },
+    { partNumber: partB.partNumber, etag: `"${partB.etag}"` },
+  ] })
   assert.equal(done.status, 200)
   assert.equal((await done.json() as { bytes: number }).bytes, 6)
   const readable = await goodBucket.get(good.r2Key)

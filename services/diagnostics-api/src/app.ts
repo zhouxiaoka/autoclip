@@ -149,10 +149,18 @@ function unavailable(phase: 'head' | 'complete' | 'verify' | 'commit', error?: u
   return json(503, detail ? { error: 'unavailable', phase, detail } : { error: 'unavailable', phase })
 }
 
-function invalidAssembly(error: unknown): boolean {
+/** S3 UploadPart returns an HTTP ETag in quotes. R2UploadedPart.etag is the unquoted value uploadPart() returns. */
+export function bindingEtag(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1)
+  return trimmed
+}
+
+function assemblyReason(error: unknown): 'etag_mismatch' | 'missing_part' | null {
   const message = error instanceof Error ? error.message : ''
-  return message === 'etag_mismatch' || message === 'missing_part' ||
-    /InvalidPart|InvalidPartOrder|EntityTooSmall|specified parts could not be found/i.test(message)
+  if (message === 'missing_part' || /InvalidPartOrder|missing_part/i.test(message)) return 'missing_part'
+  if (message === 'etag_mismatch' || /InvalidPart|specified parts could not be found|entity tag/i.test(message)) return 'etag_mismatch'
+  return null
 }
 
 async function signParts(deps: Deps, object: ObjectRow, digest?: string, expiresSeconds?: number): Promise<{ number: number; offset: number; length: number; url: string; headers: Record<string, string> }[]> {
@@ -379,7 +387,7 @@ async function partsFrom(request: Request): Promise<UploadedPart[] | null> {
     const parts: UploadedPart[] = []
     for (const part of body.parts) {
       if (typeof part?.partNumber !== 'number' || typeof part.etag !== 'string' || !part.etag) return null
-      parts.push({ partNumber: part.partNumber, etag: part.etag })
+      parts.push({ partNumber: part.partNumber, etag: bindingEtag(part.etag) })
     }
     return parts
   } catch {
@@ -401,10 +409,11 @@ async function settleFile(deps: Deps, row: CaseRow, object: ObjectRow, actual: n
   return json(200, { ok: true, bytes: actual, integrity: 'metadata_size' })
 }
 
-async function rejectInvalid(deps: Deps, row: CaseRow, object: ObjectRow): Promise<Response> {
+async function rejectInvalid(deps: Deps, row: CaseRow, object: ObjectRow, failure: { phase: string; reason: string; actualBytes: number | null }): Promise<Response> {
+  const body = { error: failure.reason, phase: failure.phase, expectedBytes: object.declaredBytes, actualBytes: failure.actualBytes }
   await deps.bucket.delete(object.r2Key)
   await failObject(deps, row, object)
-  return json(409, { error: 'byte_mismatch' })
+  return json(409, body)
 }
 
 async function readObjectUrl(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {
@@ -429,27 +438,33 @@ async function completeFile(caseId: string, objectId: string, request: Request, 
   if (existing.kind === 'transient') return unavailable('head', existing.detail)
   if (existing.kind === 'size' && existing.size === object.declaredBytes) return settleFile(deps, row, object, existing.size)
   if (existing.kind === 'size') {
-    if (object.state === 'complete') return json(409, { error: 'byte_mismatch' })
-    return rejectInvalid(deps, row, object)
+    if (object.state === 'complete') return json(409, { error: 'size_mismatch', phase: 'head', expectedBytes: object.declaredBytes, actualBytes: existing.size })
+    return rejectInvalid(deps, row, object, { phase: 'head', reason: 'size_mismatch', actualBytes: existing.size })
   }
-  if (object.state === 'complete') return json(409, { error: 'byte_mismatch' })
-  if (!object.uploadId) return rejectInvalid(deps, row, object)
+  if (object.state === 'complete') return json(409, { error: 'size_mismatch', phase: 'head', expectedBytes: object.declaredBytes, actualBytes: null })
+  if (!object.uploadId) return rejectInvalid(deps, row, object, { phase: 'complete', reason: 'missing_part', actualBytes: null })
   const parts = await partsFrom(request)
   if (!parts?.length) return json(409, { error: 'incomplete_plan' })
+  const expectedNumbers = object.partPlan.map((part) => part.number).sort((left, right) => left - right)
+  const gotNumbers = parts.map((part) => part.partNumber).sort((left, right) => left - right)
+  if (expectedNumbers.length !== gotNumbers.length || expectedNumbers.some((number, index) => number !== gotNumbers[index])) {
+    return rejectInvalid(deps, row, object, { phase: 'complete', reason: 'missing_part', actualBytes: null })
+  }
   try {
     await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).complete(parts)
   } catch (error) {
     const after = await metadataSize(deps.bucket, object.r2Key)
     if (after.kind === 'transient') return unavailable('complete', after.detail || error)
     if (after.kind === 'size' && after.size === object.declaredBytes) return settleFile(deps, row, object, after.size)
-    if (after.kind === 'size') return rejectInvalid(deps, row, object)
-    if (invalidAssembly(error)) return rejectInvalid(deps, row, object)
+    if (after.kind === 'size') return rejectInvalid(deps, row, object, { phase: 'complete', reason: 'size_mismatch', actualBytes: after.size })
+    const reason = assemblyReason(error)
+    if (reason) return rejectInvalid(deps, row, object, { phase: 'complete', reason, actualBytes: null })
     return unavailable('complete', error)
   }
   const verified = await metadataSize(deps.bucket, object.r2Key)
   if (verified.kind === 'transient') return unavailable('verify', verified.detail)
   if (verified.kind === 'size' && verified.size === object.declaredBytes) return settleFile(deps, row, object, verified.size)
-  if (verified.kind === 'size') return rejectInvalid(deps, row, object)
+  if (verified.kind === 'size') return rejectInvalid(deps, row, object, { phase: 'verify', reason: 'size_mismatch', actualBytes: verified.size })
   return unavailable('verify')
 }
 

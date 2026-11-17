@@ -48,6 +48,8 @@ The harness does not read those secrets. After complete it asks `POST /v1/cases/
 
 Apply `migrations/0001_init.sql`, then `migrations/0002_recovery.sql`, to the new D1 id. Put that id in `metadata.json` before upload. The compiled Worker does not contain a database id. Do not apply `0002` twice. The previous validation database was deleted.
 
+A 16MiB two-part control must complete and its streamed GET hash must match before the negative cases, the 200MiB object, or the 2GiB object. The Worker converts a quoted HTTP ETag into the unquoted `R2UploadedPart.etag` before `complete()`. A 409 names `etag_mismatch`, `missing_part`, or `size_mismatch` and includes `expectedBytes` and `actualBytes`. Those numbers are captured before the object is deleted. An HTTP 0 result is `transportUnverified`, not an integrity result. The readback GET uses the response kept in memory; the evidence copy does not contain the URL.
+
 The harness appends redacted events to `events.jsonl` and rewrites `evidence.json` after each step. A dropped connection still leaves those files, writes the same JSON to stdout and stderr, and exits nonzero. Bytes counted are bytes handed to the socket, not a server-acked total. A part may be retried twice. The next write is refused when it would pass 3GiB. 200MiB must complete and its streamed hash must match before any 2GiB PUT starts. The 900 second part TTL is unchanged. Large uploads refresh part URLs when less than 60 seconds remain. That is not a claim that the second run's connection reset was caused by the TTL.
 
 Upload `worker.mjs` as module `index.js` with `metadata.json`. Set the cron `17 * * * *` with the schedules API. Do not attach `autoclip-media`.

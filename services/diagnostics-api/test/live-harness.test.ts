@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { presignGet, presignPut } from '../src/sign.ts'
-import { armed, assertStagingTarget, createEvidenceStore, executeLive, exitCode, main, multipartPartHeaders, planUploads, productionHeaders, sendPart, waitForExpiry, BUDGET_BYTES, REQUIRED_LIVE_CASES } from '../live/harness.mjs'
+import { armed, assertStagingTarget, createEvidenceStore, executeLive, exitCode, hashGet, main, multipartPartHeaders, planUploads, productionHeaders, sendPart, waitForExpiry, worker, BUDGET_BYTES, REQUIRED_LIVE_CASES } from '../live/harness.mjs'
 
 const secret = { accountId: 'acc', accessKeyId: 'key', secretAccessKey: 'secret', bucket: 'autoclip-diagnostics-validation', key: 'cases/a/excerpt', contentLength: 64, expiresSeconds: 900, now: new Date('2026-11-17T00:00:00Z') }
 
@@ -129,6 +131,48 @@ test('a reset while the live script is running returns the earlier result and sk
   assert.equal(result.liveValidationClaimed, false)
   assert.equal(result.uploadedBytes, 32 + 40)
 })
+
+test('readback uses the raw url and compares a real response body', async () => {
+  const payload = Buffer.from('abc')
+  const digest = createHash('sha256').update(payload).digest('hex')
+  let gets = 0
+  const objectServer = createServer((request, response) => {
+    if (request.method === 'GET' && request.url.startsWith('/object')) {
+      gets += 1
+      response.end(payload)
+      return
+    }
+    response.statusCode = 404
+    response.end()
+  })
+  await new Promise((resolve) => objectServer.listen(0, '127.0.0.1', resolve))
+  const objectPort = objectServer.address().port
+  const api = createServer((request, response) => {
+    response.setHeader('content-type', 'application/json')
+    response.end(JSON.stringify({ url: `http://127.0.0.1:${objectPort}/object?X-Amz-Signature=secret`, capability: 'super-secret-capability' }))
+  })
+  await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve))
+  const apiPort = api.address().port
+  try {
+    const read = await worker(`http://127.0.0.1:${apiPort}`, '/read-url', 'POST', {})
+    assert.equal(read.raw.url.includes('X-Amz-Signature=secret'), true)
+    assert.equal(read.body.url, undefined)
+    const hashed = await hashGet(read.raw.url, payload.length)
+    assert.equal(gets, 1)
+    assert.equal(hashed.sha256, digest)
+    assert.equal(hashed.bytes, payload.length)
+    const saved = JSON.stringify(sanitizePublic(read))
+    assert.equal(saved.includes('X-Amz-Signature'), false)
+    assert.equal(saved.includes('super-secret'), false)
+  } finally {
+    objectServer.close()
+    api.close()
+  }
+})
+
+function sanitizePublic(response) {
+  return JSON.parse(JSON.stringify(response.body))
+}
 
 test('the upload plan stays inside 3GiB and refuses the media bucket', () => {
   const planned = planUploads({})
