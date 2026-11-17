@@ -46,7 +46,9 @@ The harness does not read those secrets. After complete it asks `POST /v1/cases/
 
 ## Apply schema, then upload the bundle
 
-Apply `migrations/0001_init.sql`, then `migrations/0002_recovery.sql`, to database `3b9da920-588d-493d-ac00-cfdeab985dd1`. The database currently has no tables. Do not apply `0002` twice.
+Apply `migrations/0001_init.sql`, then `migrations/0002_recovery.sql`, to the new D1 id. Put that id in `metadata.json` before upload. The compiled Worker does not contain a database id. Do not apply `0002` twice. The previous validation database was deleted.
+
+The harness appends redacted events to `events.jsonl` and rewrites `evidence.json` after each step. A dropped connection still leaves those files, writes the same JSON to stdout and stderr, and exits nonzero. Bytes counted are bytes handed to the socket, not a server-acked total. A part may be retried twice. The next write is refused when it would pass 3GiB. 200MiB must complete and its streamed hash must match before any 2GiB PUT starts. The 900 second part TTL is unchanged. Large uploads refresh part URLs when less than 60 seconds remain. That is not a claim that the second run's connection reset was caused by the TTL.
 
 Upload `worker.mjs` as module `index.js` with `metadata.json`. Set the cron `17 * * * *` with the schedules API. Do not attach `autoclip-media`.
 

@@ -4,7 +4,10 @@
  * This file does not create buckets, deploy Workers, or read user media.
  */
 import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs'
 import https from 'node:https'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { awsEncode, presignPut } from '../src/sign.ts'
 
 export const FORBIDDEN_BUCKET = 'autoclip-media'
@@ -80,6 +83,9 @@ export const REQUIRED_LIVE_CASES = [
 
 export const EXPIRY_TTL_SECONDS = 2
 export const MAX_EXPIRY_WAIT_MS = 20_000
+export const PART_PUT_TIMEOUT_MS = 120_000
+export const REFRESH_MARGIN_MS = 60_000
+export const PART_ATTEMPTS = 3
 
 export function planUploads() {
   const manifestBytes = manifestByteLength()
@@ -128,6 +134,90 @@ export function multipartPartHeaders(headers) {
 
 export function redactText(value) {
   return String(value || '').replace(/https?:\/\/\S+/gi, '[url]').slice(0, 240)
+}
+
+const HIDDEN_FIELDS = new Set(['url', 'authorization', 'capability', 'recovery_token', 'recoveryToken', 'secret', 'headers', 'token', 'idempotency_key', 'idempotencyKey'])
+
+export function sanitize(value) {
+  if (Array.isArray(value)) return value.map((item) => sanitize(item))
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [key, item] of Object.entries(value)) {
+      if (HIDDEN_FIELDS.has(key)) continue
+      out[key] = sanitize(item)
+    }
+    return out
+  }
+  return typeof value === 'string' ? redactText(value) : value
+}
+
+export function createEvidenceStore(directory) {
+  mkdirSync(directory, { recursive: true })
+  const logPath = join(directory, 'events.jsonl')
+  const snapPath = join(directory, 'evidence.json')
+  const state = { events: [], results: [], uploadedBytes: 0, cleanup: [], liveValidationClaimed: false }
+  function commit() {
+    const tmp = `${snapPath}.tmp`
+    const fd = openSync(tmp, 'w')
+    writeSync(fd, JSON.stringify(sanitize(state)))
+    fsyncSync(fd)
+    closeSync(fd)
+    renameSync(tmp, snapPath)
+  }
+  return {
+    state,
+    snapPath,
+    logPath,
+    append(event) {
+      const safe = sanitize(event)
+      state.events.push(safe)
+      if (Number.isInteger(event.uploadedBytes)) state.uploadedBytes = event.uploadedBytes
+      const fd = openSync(logPath, 'a')
+      writeSync(fd, `${JSON.stringify(safe)}\n`)
+      fsyncSync(fd)
+      closeSync(fd)
+      commit()
+    },
+    commit,
+  }
+}
+
+export function retryableTransport(error) {
+  const code = error?.code || ''
+  return ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EPIPE'].includes(code) || /socket hang up/i.test(error?.message || '')
+}
+
+export async function sendPart(state, part, put, stage) {
+  let attempt = 0
+  while (attempt < PART_ATTEMPTS) {
+    if (state.uploadedBytes + part.length > BUDGET_BYTES) {
+      const error = new Error('budget_exceeded')
+      error.code = 'BUDGET'
+      throw error
+    }
+    try {
+      const response = await put(part.url, part.headers, part.length, part.corrupt === true, part.offset || 0)
+      const bytesWritten = Number.isInteger(response?.bytesWritten) ? response.bytesWritten : part.length
+      state.uploadedBytes += bytesWritten
+      await state.evidence.append({
+        kind: 'put', stage, part: part.number, attempt, http: response?.status || 0,
+        bytesWritten, uploadedBytes: state.uploadedBytes, requestId: response?.requestId || undefined,
+        errorCode: response?.errorCode, detail: response?.detail, at: new Date().toISOString(),
+      })
+      return response
+    } catch (error) {
+      const bytesWritten = Number.isInteger(error.bytesWritten) ? error.bytesWritten : 0
+      state.uploadedBytes += bytesWritten
+      await state.evidence.append({
+        kind: 'put', stage, part: part.number, attempt, http: 0, bytesWritten,
+        uploadedBytes: state.uploadedBytes, errorCode: error.code || 'exception',
+        detail: redactText(error.message), at: new Date().toISOString(),
+      })
+      attempt += 1
+      if (!retryableTransport(error) || attempt >= PART_ATTEMPTS) throw error
+    }
+  }
+  throw new Error('part_attempts_exhausted')
 }
 
 export function assertStagingTarget(env = process.env) {
@@ -256,6 +346,11 @@ export function putStream(url, headers, byteLength, corruptFirstByte = false, st
     return Promise.reject(new Error('upload_url_rejected'))
   }
   return new Promise((resolve, reject) => {
+    let bytesWritten = 0
+    const fail = (error) => {
+      error.bytesWritten = bytesWritten
+      reject(error)
+    }
     const req = https.request(target, { method: 'PUT', headers }, (res) => {
       const chunks = []
       res.on('data', (chunk) => {
@@ -265,10 +360,16 @@ export function putStream(url, headers, byteLength, corruptFirstByte = false, st
         status: res.statusCode || 0,
         etag: String(res.headers.etag || ''),
         requestId: String(res.headers['cf-ray'] || ''),
+        bytesWritten,
         detail: (res.statusCode || 0) === 200 ? undefined : redactText(Buffer.concat(chunks).toString('utf8')),
       }))
     })
-    req.on('error', reject)
+    req.setTimeout(PART_PUT_TIMEOUT_MS, () => {
+      const error = new Error('timeout')
+      error.code = 'ETIMEDOUT'
+      req.destroy(error)
+    })
+    req.on('error', fail)
     const chunk = 1024 * 1024
     let offset = start
     const end = start + byteLength
@@ -279,6 +380,7 @@ export function putStream(url, headers, byteLength, corruptFirstByte = false, st
         for (let index = 0; index < size; index += 1) buffer[index] = patternByte(offset + index)
         if (corruptFirstByte && offset === start) buffer[0] ^= 0xff
         offset += size
+        bytesWritten += size
         if (!req.write(buffer)) {
           req.once('drain', write)
           return
@@ -341,11 +443,11 @@ function createBody(bytes, role, digest, token, partTtl) {
   return body
 }
 
-async function openUpload(endpoint, bytes, role, partTtl) {
+async function openUpload(endpoint, bytes, role, partTtl, call = worker) {
   const digest = hashPattern(bytes)
   const token = recoveryToken()
   const key = idempotency()
-  const opened = await worker(endpoint, '/v1/cases', 'POST', createBody(bytes, role, digest, token, partTtl), { 'idempotency-key': key })
+  const opened = await call(endpoint, '/v1/cases', 'POST', createBody(bytes, role, digest, token, partTtl), { 'idempotency-key': key })
   return { opened, token, key, digest, bytes, role, partTtl }
 }
 
@@ -360,19 +462,55 @@ function observed(response) {
   }
 }
 
-export async function executeLive(env = process.env) {
+export async function executeLive(env = process.env, io = {}) {
   const { endpoint } = assertStagingTarget(env)
   const created = []
   const results = []
-  const record = (id, result) => results.push({ id, ...result })
+  const rawPut = io.putPart || putStream
+  const transmit = async (...args) => {
+    const length = args[2] || 0
+    if (state.uploadedBytes + length > BUDGET_BYTES) {
+      const error = new Error('budget_exceeded')
+      error.code = 'BUDGET'
+      throw error
+    }
+    try {
+      const response = await rawPut(...args)
+      const bytesWritten = Number.isInteger(response?.bytesWritten) ? response.bytesWritten : length
+      state.uploadedBytes += bytesWritten
+      evidence.append({ kind: 'put', http: response?.status || 0, bytesWritten, uploadedBytes: state.uploadedBytes, requestId: response?.requestId, detail: response?.detail, at: new Date().toISOString() })
+      return response
+    } catch (error) {
+      const bytesWritten = Number.isInteger(error.bytesWritten) ? error.bytesWritten : 0
+      state.uploadedBytes += bytesWritten
+      error.counted = true
+      evidence.append({ kind: 'put', http: 0, bytesWritten, uploadedBytes: state.uploadedBytes, errorCode: error.code || 'exception', detail: redactText(error.message), at: new Date().toISOString() })
+      throw error
+    }
+  }
+  const put = transmit
+  const call = io.worker || worker
+  const readHash = io.hashGet || hashGet
+  const evidence = io.evidence || createEvidenceStore(env.AUTOCLIP_DIAGNOSTICS_EVIDENCE || join(tmpdir(), 'autoclip-diagnostics-evidence'))
+  const state = { uploadedBytes: 0, evidence, results }
+  const record = (id, result) => {
+    const row = sanitize({ id, ...result })
+    results.push(row)
+    evidence.state.results = results
+    evidence.state.uploadedBytes = state.uploadedBytes
+    evidence.append({ kind: 'result', ...row, uploadedBytes: state.uploadedBytes })
+  }
   const remember = (opened, token, key) => {
     if (opened.body?.case_id && opened.body?.capability) {
       created.push({ id: opened.body.case_id, capability: opened.body.capability, token, key })
     }
   }
   try {
-    const small = await openUpload(endpoint, SMALL_BYTES, 'excerpt')
-    if (small.opened.status !== 201) return { status: 'blocked', step: 'create', http: small.opened.status }
+    const small = await openUpload(endpoint, SMALL_BYTES, 'excerpt', undefined, call)
+    if (small.opened.status !== 201) {
+      record('valid-put', { ...observed(small.opened), pass: false, run: true })
+      throw Object.assign(new Error('create_failed'), { code: 'CREATE' })
+    }
     remember(small.opened, small.token, small.key)
     const upload = small.opened.body.uploads[0]
     const headerNames = Object.keys(upload.headers || {}).map((name) => name.toLowerCase())
@@ -382,33 +520,33 @@ export async function executeLive(env = process.env) {
       unsupportedPresent: headerNames.filter((name) => UNSUPPORTED_CHECKSUM_HEADERS.includes(name)),
     })
     const flipped = upload.url.slice(0, -1) + (upload.url.endsWith('0') ? '1' : '0')
-    const rejected = await putStream(flipped, upload.headers, SMALL_BYTES, false).catch((error) => ({ status: 0, error: error.message }))
+    const rejected = await put(flipped, upload.headers, SMALL_BYTES, false).catch((error) => ({ status: 0, error: error.message }))
     record('tampered-signature', { http: rejected.status, pass: rejected.status === 403 })
     const omittedHeaders = { ...upload.headers }
     delete omittedHeaders['x-amz-checksum-sha256']
-    const omitted = await putStream(upload.url, omittedHeaders, SMALL_BYTES, false).catch((error) => ({ status: 0, error: error.message }))
+    const omitted = await put(upload.url, omittedHeaders, SMALL_BYTES, false).catch((error) => ({ status: 0, error: error.message }))
     record('missing-signed-checksum-header', { http: omitted.status, pass: omitted.status === 403, note: 'signed-header absence is authorization, not payload proof' })
-    const altered = await putStream(upload.url, { ...upload.headers, 'x-amz-checksum-sha256': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }, SMALL_BYTES, false).catch((error) => ({ status: 0, error: error.message }))
+    const altered = await put(upload.url, { ...upload.headers, 'x-amz-checksum-sha256': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }, SMALL_BYTES, false).catch((error) => ({ status: 0, error: error.message }))
     record('altered-checksum-header', { http: altered.status, requestId: altered.requestId, pass: altered.status === 403, note: 'changed signed header is authorization' })
-    const corrupt = await putStream(upload.url, upload.headers, SMALL_BYTES, true).catch((error) => ({ status: 0, error: error.message }))
+    const corrupt = await put(upload.url, upload.headers, SMALL_BYTES, true).catch((error) => ({ status: 0, error: error.message }))
     record('corrupt-body-signed-checksum', { http: corrupt.status, requestId: corrupt.requestId, detail: corrupt.detail, enforced: corrupt.status === 400, pass: corrupt.status === 400 })
-    const good = await putStream(upload.url, upload.headers, SMALL_BYTES, false)
+    const good = await put(upload.url, upload.headers, SMALL_BYTES, false)
     record('valid-put', { http: good.status, pass: good.status === 200 })
     record('session-token', { supported: false, detail: 'signer has no X-Amz-Security-Token input' })
-    const finished = await worker(endpoint, `/v1/cases/${small.opened.body.case_id}/files/${upload.object_id}/complete`, 'POST', {}, { authorization: `Bearer ${small.opened.body.capability}` })
-    const read = await worker(endpoint, `/v1/cases/${small.opened.body.case_id}/files/${upload.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${small.opened.body.capability}` })
+    const finished = await call(endpoint, `/v1/cases/${small.opened.body.case_id}/files/${upload.object_id}/complete`, 'POST', {}, { authorization: `Bearer ${small.opened.body.capability}` })
+    const read = await call(endpoint, `/v1/cases/${small.opened.body.case_id}/files/${upload.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${small.opened.body.capability}` })
     if (read.status !== 200 || typeof read.body?.url !== 'string') {
       record('independent-readback', { pass: false, http: read.status, blocked: read.status !== 200 })
     } else {
-      const hashed = await hashGet(read.body.url, SMALL_BYTES)
+      const hashed = await readHash(read.body.url, SMALL_BYTES)
       record('independent-readback', { pass: hashed.sha256 === small.digest && hashed.bytes === SMALL_BYTES, bytes: hashed.bytes, complete: finished.status })
     }
     const release = async (opened) => {
       if (!opened?.body?.case_id) return 0
-      const response = await worker(endpoint, `/v1/cases/${opened.body.case_id}`, 'DELETE', {}, { authorization: `Bearer ${opened.body.capability}` })
+      const response = await call(endpoint, `/v1/cases/${opened.body.case_id}`, 'DELETE', {}, { authorization: `Bearer ${opened.body.capability}` })
       return response.status
     }
-    const expiry = await openUpload(endpoint, PART_BYTES * 2, 'excerpt', EXPIRY_TTL_SECONDS)
+    const expiry = await openUpload(endpoint, PART_BYTES * 2, 'excerpt', EXPIRY_TTL_SECONDS, call)
     remember(expiry.opened, expiry.token, expiry.key)
     if (expiry.opened.status !== 201) {
       record('expired-url', { ...observed(expiry.opened), pass: false })
@@ -417,14 +555,14 @@ export async function executeLive(env = process.env) {
       const planned = expiry.opened.body.uploads[0]
       const first = planned.parts[0]
       const second = planned.parts[1]
-      const kept = await putStream(first.url, first.headers, first.length, false, first.offset || 0)
+      const kept = await put(first.url, first.headers, first.length, false, first.offset || 0)
       const waited = await waitForExpiry(expiry.opened.body.upload_expires_at)
-      const stale = waited.ok ? await putStream(second.url, second.headers, second.length, false, second.offset || 0).catch((error) => ({ status: 0, detail: error.message })) : { status: 0 }
+      const stale = waited.ok ? await put(second.url, second.headers, second.length, false, second.offset || 0).catch((error) => ({ status: 0, detail: error.message })) : { status: 0 }
       record('expired-url', { http: stale.status, requestId: stale.requestId, waited: waited.ok, pass: waited.ok && stale.status === 403 })
-      const refreshed = await worker(endpoint, '/v1/cases', 'POST', createBody(expiry.bytes, expiry.role, expiry.digest, expiry.token), { 'idempotency-key': expiry.key })
+      const refreshed = await call(endpoint, '/v1/cases', 'POST', createBody(expiry.bytes, expiry.role, expiry.digest, expiry.token), { 'idempotency-key': expiry.key })
       const fresh = refreshed.body?.uploads?.[0]?.parts?.[1]
-      const resumed = fresh ? await putStream(fresh.url, fresh.headers, fresh.length, false, fresh.offset || 0) : { status: 0 }
-      const completed = await worker(endpoint, `/v1/cases/${expiry.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
+      const resumed = fresh ? await put(fresh.url, fresh.headers, fresh.length, false, fresh.offset || 0) : { status: 0 }
+      const completed = await call(endpoint, `/v1/cases/${expiry.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
         parts: [{ partNumber: 1, etag: kept.etag }, { partNumber: 2, etag: resumed.etag }],
       }, { authorization: `Bearer ${expiry.opened.body.capability}` })
       record('expiry-refresh-resume-successful-parts', {
@@ -433,7 +571,7 @@ export async function executeLive(env = process.env) {
       })
     }
     await release(expiry.opened)
-    const negative = await openUpload(endpoint, PART_BYTES * 2, 'excerpt')
+    const negative = await openUpload(endpoint, PART_BYTES * 2, 'excerpt', undefined, call)
     remember(negative.opened, negative.token, negative.key)
     if (negative.opened.status !== 201) {
       record('part-missing-md5', { ...observed(negative.opened), pass: false })
@@ -444,94 +582,49 @@ export async function executeLive(env = process.env) {
       record('multipart-part-headers', { pass: planned.parts.every((part) => multipartPartHeaders(part.headers)) })
       const first = planned.parts[0]
       const second = planned.parts[1]
-      await putStream(first.url, first.headers, first.length, false, first.offset || 0)
+      await put(first.url, first.headers, first.length, false, first.offset || 0)
       const withoutMd5 = { ...second.headers }
       delete withoutMd5['content-md5']
-      const missing = await putStream(second.url, withoutMd5, second.length, false, second.offset || 0).catch((error) => ({ status: 0, detail: error.message }))
+      const missing = await put(second.url, withoutMd5, second.length, false, second.offset || 0).catch((error) => ({ status: 0, detail: error.message }))
       record('part-missing-md5', { http: missing.status, requestId: missing.requestId, pass: missing.status === 403, note: 'missing signed content-md5 is authorization' })
-      const alteredMd5 = await putStream(second.url, { ...second.headers, 'content-md5': 'AAAAAAAAAAAAAAAAAAAAAA==' }, second.length, false, second.offset || 0).catch((error) => ({ status: 0, detail: error.message }))
+      const alteredMd5 = await put(second.url, { ...second.headers, 'content-md5': 'AAAAAAAAAAAAAAAAAAAAAA==' }, second.length, false, second.offset || 0).catch((error) => ({ status: 0, detail: error.message }))
       record('part-altered-md5', { http: alteredMd5.status, requestId: alteredMd5.requestId, pass: alteredMd5.status === 403, note: 'changed signed content-md5 is authorization' })
-      const corruptPart = await putStream(second.url, second.headers, second.length, true, second.offset || 0).catch((error) => ({ status: 0, detail: error.message }))
+      const corruptPart = await put(second.url, second.headers, second.length, true, second.offset || 0).catch((error) => ({ status: 0, detail: error.message }))
       record('part-corrupt-body', { http: corruptPart.status, requestId: corruptPart.requestId, detail: corruptPart.detail, enforced: corruptPart.status === 400, pass: corruptPart.status === 400 })
     }
     await release(negative.opened)
-    const wrong = await openUpload(endpoint, PART_BYTES * 2, 'excerpt')
+    const wrong = await openUpload(endpoint, PART_BYTES * 2, 'excerpt', undefined, call)
     remember(wrong.opened, wrong.token, wrong.key)
     if (wrong.opened.status !== 201) record('wrong-etag', { ...observed(wrong.opened), pass: false })
     else {
       const planned = wrong.opened.body.uploads[0]
       const sent = []
       for (const part of planned.parts) {
-        const response = await putStream(part.url, part.headers, part.length, false, part.offset || 0)
+        const response = await put(part.url, part.headers, part.length, false, part.offset || 0)
         sent.push({ partNumber: part.number, etag: response.etag, http: response.status })
       }
       const bad = sent.map((part, index) => ({ partNumber: part.partNumber, etag: index === 1 ? '"00000000000000000000000000000000"' : part.etag }))
-      const completed = await worker(endpoint, `/v1/cases/${wrong.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', { parts: bad }, { authorization: `Bearer ${wrong.opened.body.capability}` })
-      const absent = await worker(endpoint, `/v1/cases/${wrong.opened.body.case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${wrong.opened.body.capability}` })
+      const completed = await call(endpoint, `/v1/cases/${wrong.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', { parts: bad }, { authorization: `Bearer ${wrong.opened.body.capability}` })
+      const absent = await call(endpoint, `/v1/cases/${wrong.opened.body.case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${wrong.opened.body.capability}` })
       record('wrong-etag', { puts: sent.map((part) => part.http), ...observed(completed), objectAbsent: absent.status === 404, pass: sent.every((part) => part.http === 200) && completed.status === 409 && absent.status === 404 })
     }
     await release(wrong.opened)
-    const missingPart = await openUpload(endpoint, PART_BYTES * 2, 'excerpt')
+    const missingPart = await openUpload(endpoint, PART_BYTES * 2, 'excerpt', undefined, call)
     remember(missingPart.opened, missingPart.token, missingPart.key)
     if (missingPart.opened.status !== 201) record('missing-part', { ...observed(missingPart.opened), pass: false })
     else {
       const planned = missingPart.opened.body.uploads[0]
       const first = planned.parts[0]
-      const response = await putStream(first.url, first.headers, first.length, false, first.offset || 0)
-      const completed = await worker(endpoint, `/v1/cases/${missingPart.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
+      const response = await put(first.url, first.headers, first.length, false, first.offset || 0)
+      const completed = await call(endpoint, `/v1/cases/${missingPart.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
         parts: [{ partNumber: 1, etag: response.etag }],
       }, { authorization: `Bearer ${missingPart.opened.body.capability}` })
       record('missing-part', { put: response.status, ...observed(completed), pass: response.status === 200 && completed.status === 409 })
     }
     await release(missingPart.opened)
-    const streamCase = async (id, bytes, role) => {
-      const opened = await openUpload(endpoint, bytes, role)
-      record(`${id}-create`, observed(opened.opened))
-      if (opened.opened.status !== 201) {
-        record(id, { pass: false, run: true })
-        record(id === 'stream-200-mib' ? 'independent-sha256-readback-200mib' : 'independent-sha256-readback-2gib', { run: false, pass: false })
-        return false
-      }
-      remember(opened.opened, opened.token, opened.key)
-      const planned = opened.opened.body.uploads[0]
-      const sent = []
-      for (const part of planned.parts) {
-        const response = await putStream(part.url, part.headers, part.length, false, part.offset || 0)
-        sent.push({ partNumber: part.number, etag: response.etag, http: response.status, requestId: response.requestId, detail: response.detail })
-      }
-      const completed = await worker(endpoint, `/v1/cases/${opened.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
-        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
-      }, { authorization: `Bearer ${opened.opened.body.capability}` })
-      const again = await worker(endpoint, `/v1/cases/${opened.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
-        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
-      }, { authorization: `Bearer ${opened.opened.body.capability}` })
-      const uploaded = sent.every((part) => part.http === 200) && completed.status === 200 && again.status === 200
-      record(id, {
-        puts: sent.map((part) => part.http),
-        ...observed(completed),
-        retry: observed(again),
-        pass: uploaded,
-      })
-      const readId = id === 'stream-200-mib' ? 'independent-sha256-readback-200mib' : 'independent-sha256-readback-2gib'
-      if (!uploaded) record(readId, { run: false, pass: false })
-      else {
-        const read = await worker(endpoint, `/v1/cases/${opened.opened.body.case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${opened.opened.body.capability}` })
-        if (read.status !== 200 || typeof read.body?.url !== 'string') record(readId, { ...observed(read), pass: false })
-        else {
-          const hashed = await hashGet(read.body.url, bytes)
-          record(readId, { pass: hashed.sha256 === opened.digest && hashed.bytes === bytes, bytes: hashed.bytes })
-        }
-      }
-      const released = await release(opened.opened)
-      record(`${id}-released`, { http: released, pass: released === 200 || released === 404 })
-      return released === 200 || released === 404
-    }
-    const releasedExcerpt = await streamCase('stream-200-mib', STREAM_200_MIB, 'excerpt')
-    if (!releasedExcerpt) record('exact-2gib', { run: false, pass: false, detail: 'excerpt reservation was not released' })
-    else await streamCase('exact-2gib', ORIGINAL_MAX, 'original')
     const lostKey = idempotency()
     const lostToken = recoveryToken()
-    const lost = await worker(endpoint, '/v1/cases', 'POST', {
+    const lost = await call(endpoint, '/v1/cases', 'POST', {
       purpose: 'troubleshooting_and_product_improvement',
       not_for_training: true,
       consent_version: '2026-11-16.1',
@@ -539,8 +632,8 @@ export async function executeLive(env = process.env) {
       manifest: manifestDocument(),
       files: [],
     }, { 'idempotency-key': lostKey })
-    const cancelled = await worker(endpoint, '/v1/cases/cancel', 'POST', { idempotency_key: lostKey, recovery_token: lostToken })
-    const replay = await worker(endpoint, '/v1/cases', 'POST', {
+    const cancelled = await call(endpoint, '/v1/cases/cancel', 'POST', { idempotency_key: lostKey, recovery_token: lostToken })
+    const replay = await call(endpoint, '/v1/cases', 'POST', {
       purpose: 'troubleshooting_and_product_improvement',
       not_for_training: true,
       consent_version: '2026-11-16.1',
@@ -554,16 +647,105 @@ export async function executeLive(env = process.env) {
       pass: lost.status === 201 && cancelled.status === 200 && replay.status === 404,
       note: 'replay after delete is 404 and returns no upload plan; 410 is only the tombstone when create never landed',
     })
+    const streamCase = async (id, bytes, role) => {
+      const opened = await openUpload(endpoint, bytes, role, undefined, call)
+      record(`${id}-create`, observed(opened.opened))
+      const readId = id === 'stream-200-mib' ? 'independent-sha256-readback-200mib' : 'independent-sha256-readback-2gib'
+      if (opened.opened.status !== 201) {
+        record(id, { pass: false, run: true })
+        record(readId, { run: false, pass: false, reason: 'not-run' })
+        return false
+      }
+      remember(opened.opened, opened.token, opened.key)
+      let planned = opened.opened.body.uploads[0]
+      const sent = []
+      for (const part of planned.parts || []) {
+        const expires = Date.parse(opened.opened.body.upload_expires_at)
+        if (Number.isFinite(expires) && expires - Date.now() < REFRESH_MARGIN_MS) {
+          const refreshed = await call(endpoint, '/v1/cases', 'POST', createBody(bytes, role, opened.digest, opened.token), { 'idempotency-key': opened.key })
+          record(`${id}-refresh`, { ...observed(refreshed), part: part.number })
+          if (refreshed.body?.uploads?.[0]) {
+            opened.opened.body.uploads = refreshed.body.uploads
+            opened.opened.body.upload_expires_at = refreshed.body.upload_expires_at
+            planned = refreshed.body.uploads[0]
+          }
+        }
+        const current = (planned.parts || []).find((item) => item.number === part.number) || part
+        const response = await sendPart(state, current, rawPut, id)
+        sent.push({ partNumber: current.number, etag: response.etag, http: response.status, requestId: response.requestId, detail: response.detail })
+        if (response.status !== 200) break
+      }
+      const completed = await call(endpoint, `/v1/cases/${opened.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
+        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
+      }, { authorization: `Bearer ${opened.opened.body.capability}` })
+      const again = await call(endpoint, `/v1/cases/${opened.opened.body.case_id}/files/${planned.object_id}/complete`, 'POST', {
+        parts: sent.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
+      }, { authorization: `Bearer ${opened.opened.body.capability}` })
+      const uploaded = sent.length === (planned.parts || []).length && sent.every((part) => part.http === 200) && completed.status === 200 && again.status === 200
+      record(id, {
+        puts: sent.map((part) => part.http),
+        ...observed(completed),
+        retry: observed(again),
+        uploadedBytes: state.uploadedBytes,
+        pass: uploaded,
+      })
+      let hashedOk = false
+      if (!uploaded) record(readId, { run: false, pass: false, reason: 'not-run' })
+      else {
+        const read = await call(endpoint, `/v1/cases/${opened.opened.body.case_id}/files/${planned.object_id}/read-url`, 'POST', {}, { authorization: `Bearer ${opened.opened.body.capability}` })
+        if (read.status !== 200 || typeof read.body?.url !== 'string') record(readId, { ...observed(read), pass: false })
+        else {
+          const hashed = await readHash(read.body.url, bytes)
+          hashedOk = hashed.sha256 === opened.digest && hashed.bytes === bytes
+          record(readId, { pass: hashedOk, bytes: hashed.bytes })
+        }
+      }
+      const released = await release(opened.opened)
+      record(`${id}-released`, { http: released, pass: released === 200 || released === 404 })
+      return uploaded && hashedOk
+    }
+    const excerptReady = await streamCase('stream-200-mib', STREAM_200_MIB, 'excerpt')
+    if (!excerptReady) {
+      record('exact-2gib', { run: false, pass: false, reason: 'not-run' })
+      record('independent-sha256-readback-2gib', { run: false, pass: false, reason: 'not-run' })
+    } else {
+      await streamCase('exact-2gib', ORIGINAL_MAX, 'original')
+    }
+  } catch (error) {
+    if (!error.counted && Number.isInteger(error.bytesWritten)) state.uploadedBytes += error.bytesWritten
+    record('transport-failure', {
+      pass: false, run: true, errorCode: error.code || 'exception', detail: redactText(error.message),
+      bytesWritten: Number.isInteger(error.bytesWritten) ? error.bytesWritten : undefined,
+      uploadedBytes: state.uploadedBytes,
+    })
     for (const id of REQUIRED_LIVE_CASES) {
-      if (!results.some((item) => item.id === id)) record(id, { run: false, pass: false })
+      if (!results.some((item) => item.id === id)) record(id, { run: false, pass: false, reason: 'not-run' })
     }
-    const outcome = { results, cases: created.map((item) => item.id), liveValidationClaimed: false }
-    return { status: exitCode(outcome) === 0 ? 'observed' : 'observed-failures', ...outcome }
   } finally {
+    const cleanup = []
     for (const item of created) {
-      await worker(endpoint, `/v1/cases/${item.id}`, 'DELETE', {}, { authorization: `Bearer ${item.capability}` }).catch(() => undefined)
+      try {
+        const response = await call(endpoint, `/v1/cases/${item.id}`, 'DELETE', {}, { authorization: `Bearer ${item.capability}` })
+        cleanup.push({ http: response.status })
+      } catch (error) {
+        cleanup.push({ errorCode: error.code || 'cleanup_failed', detail: redactText(error.message) })
+      }
     }
+    evidence.state.cleanup = cleanup
+    evidence.state.uploadedBytes = state.uploadedBytes
+    evidence.commit()
   }
+  for (const id of REQUIRED_LIVE_CASES) {
+    if (!results.some((item) => item.id === id)) record(id, { run: false, pass: false, reason: 'not-run' })
+  }
+  const outcome = {
+    results, uploadedBytes: state.uploadedBytes, cleanup: evidence.state.cleanup,
+    cases: created.map((item) => item.id), liveValidationClaimed: false, evidence: evidence.snapPath,
+  }
+  outcome.status = exitCode(outcome) === 0 ? 'observed' : 'observed-failures'
+  evidence.state.results = results
+  evidence.commit()
+  return outcome
 }
 
 export async function main(env = process.env, argv = process.argv) {
@@ -577,9 +759,19 @@ export async function main(env = process.env, argv = process.argv) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('harness.mjs')) {
-  const result = await main()
-  process.stdout.write(`${JSON.stringify(result)}\n`)
-  process.exitCode = exitCode(result)
+  try {
+    const result = await main()
+    const text = `${JSON.stringify(result)}\n`
+    process.stdout.write(text)
+    process.stderr.write(text)
+    process.exitCode = exitCode(result)
+  } catch (error) {
+    const partial = { status: 'crashed', errorCode: error.code || 'exception', detail: redactText(error.message), liveValidationClaimed: false }
+    const text = `${JSON.stringify(partial)}\n`
+    process.stdout.write(text)
+    process.stderr.write(text)
+    process.exitCode = 1
+  }
 }
 
 export { recoveryToken }

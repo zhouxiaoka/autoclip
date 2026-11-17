@@ -8,7 +8,7 @@ import shutil
 import threading
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -308,17 +308,54 @@ def _upload_file(item: dict, row: dict) -> dict:
     return body
 
 
-def _plan_expired(session: dict, now: datetime | None = None) -> bool:
+def _expires_at(session: dict):
     raw = session.get("expires_at")
     if not isinstance(raw, str) or not raw:
-        return False
+        return None
     try:
         expires = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        return expires <= (now or datetime.now(timezone.utc))
     except ValueError:
+        return "invalid"
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return expires
+
+
+def _plan_expired(session: dict, now: datetime | None = None) -> bool:
+    expires = _expires_at(session)
+    if expires is None:
+        return False
+    if expires == "invalid":
         return True
+    return expires <= (now or datetime.now(timezone.utc))
+
+
+def _plan_due(session: dict, now: datetime | None = None, margin_seconds: int = 60) -> bool:
+    """Refresh before the signed part URLs lapse. This does not extend the server TTL."""
+    expires = _expires_at(session)
+    if expires is None:
+        return False
+    if expires == "invalid":
+        return True
+    current = now or datetime.now(timezone.utc)
+    return expires <= current + timedelta(seconds=margin_seconds)
+
+
+def _put_part_attempts(transport, url: str, payload: bytes, headers: dict) -> str:
+    """Retry one part at most twice. Earlier parts stay stored by the caller."""
+    last = None
+    for attempt in range(3):
+        try:
+            return transport.put_part(url, payload, headers)
+        except UploadAuthorizationExpired:
+            raise
+        except Offline as exc:
+            if str(exc) in {"http_401", "http_403"}:
+                raise UploadAuthorizationExpired(str(exc)) from exc
+            last = exc
+            if attempt == 2:
+                raise
+    raise last
 
 
 def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
@@ -454,7 +491,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 if marker in (session.get("done") or []):
                     etags.append({"partNumber": part.get("number"), "etag": (session.get("etags") or {}).get(marker, "")})
                     continue
-                if _plan_expired(session):
+                if _plan_due(session, now):
                     refreshes = int(item.get("auth_refreshes") or 0) + 1
                     refreshed = queue.update(item_id, if_version=item.get("version"), if_status=queue.OPEN,
                                              refresh_plan=True, auth_refreshes=refreshes,
@@ -467,15 +504,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 url = part.get("url")
                 if not isinstance(url, str):
                     raise TypeError("missing_upload_url")
-                try:
-                    etag = transport.put_part(url, payload, headers) or ""
-                except UploadAuthorizationExpired:
-                    raise
-                except Offline as exc:
-                    # Keep custom transports compatible with the public HTTP error contract.
-                    if str(exc) in {"http_401", "http_403"}:
-                        raise UploadAuthorizationExpired(str(exc)) from exc
-                    raise
+                etag = _put_part_attempts(transport, url, payload, headers) or ""
                 if len(parts) > 1 and not etag:
                     raise RuntimeError("missing_etag")
                 session.setdefault("done", []).append(marker)

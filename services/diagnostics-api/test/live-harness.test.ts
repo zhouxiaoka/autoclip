@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 import { presignGet, presignPut } from '../src/sign.ts'
-import { armed, assertStagingTarget, exitCode, main, multipartPartHeaders, planUploads, productionHeaders, waitForExpiry, BUDGET_BYTES, REQUIRED_LIVE_CASES } from '../live/harness.mjs'
+import { armed, assertStagingTarget, createEvidenceStore, executeLive, exitCode, main, multipartPartHeaders, planUploads, productionHeaders, sendPart, waitForExpiry, BUDGET_BYTES, REQUIRED_LIVE_CASES } from '../live/harness.mjs'
 
 const secret = { accountId: 'acc', accessKeyId: 'key', secretAccessKey: 'secret', bucket: 'autoclip-diagnostics-validation', key: 'cases/a/excerpt', contentLength: 64, expiresSeconds: 900, now: new Date('2026-11-17T00:00:00Z') }
 
@@ -39,6 +42,92 @@ test('a long grant is not slept through, and a failed observation exits nonzero'
   assert.equal(exitCode({ status: 'observed-failures', results: [{ id: 'tampered-signature', pass: false }] }), 1)
   assert.equal(REQUIRED_LIVE_CASES.includes('wrong-etag'), true)
   assert.equal(multipartPartHeaders({ 'content-length': '1', 'content-md5': 'abc=' }), true)
+})
+
+test('a reset mid-upload keeps earlier evidence and does not pass the remaining cases', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'diag-evidence-'))
+  const evidence = createEvidenceStore(dir)
+  const state = { uploadedBytes: 0, evidence, results: [] }
+  state.record = (id, result) => state.results.push({ id, ...result })
+  let calls = 0
+  await assert.rejects(() => sendPart(state, { number: 4, length: 8, url: 'https://acct.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret', headers: { authorization: 'Bearer secret' } }, async () => {
+    calls += 1
+    const error = new Error('socket hang up')
+    error.code = 'ECONNRESET'
+    error.bytesWritten = 3
+    throw error
+  }, 'exact-2gib'))
+  assert.equal(calls, 3)
+  assert.equal(state.uploadedBytes, 9)
+  state.results.push({ id: 'valid-put', pass: true, http: 200 })
+  evidence.state.results = [{ id: 'valid-put', pass: true }, { id: 'exact-2gib', run: false, pass: false, reason: 'not-run' }]
+  evidence.commit()
+  const saved = readFileSync(evidence.snapPath, 'utf8')
+  assert.equal(saved.includes('X-Amz-Signature'), false)
+  assert.equal(saved.includes('Bearer'), false)
+  assert.equal(saved.includes('https://'), false)
+  const parsed = JSON.parse(saved)
+  assert.equal(parsed.uploadedBytes, 9)
+  assert.equal(parsed.results.find((item) => item.id === 'valid-put').pass, true)
+  assert.equal(parsed.results.find((item) => item.id === 'exact-2gib').pass, false)
+  assert.equal(parsed.results.find((item) => item.id === 'exact-2gib').reason, 'not-run')
+})
+
+test('a reset while the live script is running returns the earlier result and skips 2GiB', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'diag-live-'))
+  const evidence = createEvidenceStore(dir)
+  let puts = 0
+  const result = await executeLive({
+    AUTOCLIP_DIAGNOSTICS_LIVE_ENDPOINT: 'https://example.workers.dev',
+    AUTOCLIP_DIAGNOSTICS_LIVE_BUCKET: 'autoclip-diagnostics-validation',
+  }, {
+    evidence,
+    hashGet: async () => ({ sha256: 'absent', bytes: 0 }),
+    putPart: async () => {
+      puts += 1
+      if (puts >= 5) {
+        const error = new Error('socket hang up')
+        error.code = 'ECONNRESET'
+        error.bytesWritten = 40
+        throw error
+      }
+      return { status: 403, bytesWritten: 8, requestId: 'ray-put' }
+    },
+    worker: async (_endpoint, path, method) => {
+      if (method === 'DELETE') return { status: 200, body: { deleted: true } }
+      if (String(path).endsWith('/cancel')) return { status: 200, body: {} }
+      if (String(path).endsWith('/complete')) return { status: 200, body: { ok: true, phase: 'commit' }, requestId: 'ray-complete' }
+      if (String(path).endsWith('/read-url')) return { status: 200, body: { url: 'https://acct.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret' }, requestId: 'ray-read' }
+      return {
+        status: 201,
+        requestId: 'ray-create',
+        body: {
+          case_id: 'case-1',
+          capability: 'super-secret-capability',
+          upload_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          uploads: [{
+            object_id: 'object-1',
+            url: 'https://acct.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret',
+            headers: { 'content-length': '65536', 'x-amz-checksum-sha256': 'aa' },
+            parts: [
+              { number: 1, offset: 0, length: 8, headers: { 'content-length': '8', 'content-md5': 'AAAAAAAAAAAAAAAAAAAAAA==' } },
+              { number: 2, offset: 8, length: 8, headers: { 'content-length': '8', 'content-md5': 'AAAAAAAAAAAAAAAAAAAAAA==' } },
+            ],
+          }],
+        },
+      }
+    },
+  })
+  const saved = readFileSync(evidence.snapPath, 'utf8')
+  assert.equal(saved.includes('super-secret-capability'), false)
+  assert.equal(saved.includes('X-Amz-Signature'), false)
+  assert.equal(result.results.find((item) => item.id === 'production-headers').pass, true)
+  assert.equal(result.results.find((item) => item.id === 'transport-failure').errorCode, 'ECONNRESET')
+  assert.equal(result.results.find((item) => item.id === 'exact-2gib').reason, 'not-run')
+  assert.equal(result.results.find((item) => item.id === 'exact-2gib').pass, false)
+  assert.equal(result.results.find((item) => item.id === 'lost-create-cancel').reason, 'not-run')
+  assert.equal(result.liveValidationClaimed, false)
+  assert.equal(result.uploadedBytes, 32 + 40)
 })
 
 test('the upload plan stays inside 3GiB and refuses the media bucket', () => {

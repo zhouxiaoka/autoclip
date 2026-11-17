@@ -606,6 +606,27 @@ def test_incomplete_plan_is_not_marked_uploaded(data_dir, tmp_path):
     assert result[0]["error"] == "RuntimeError"
 
 
+def test_one_part_is_retried_twice_and_a_due_plan_refreshes_without_a_new_ttl():
+    from datetime import datetime, timedelta, timezone
+
+    calls = {"put": 0}
+
+    class Transport:
+        def put_part(self, url, data, headers):
+            calls["put"] += 1
+            if calls["put"] < 3:
+                raise upload.Offline("offline")
+            return "etag-kept"
+
+    assert upload._put_part_attempts(Transport(), "https://acct.r2.cloudflarestorage.com/bucket/key", b"abcd", {}) == "etag-kept"
+    assert calls["put"] == 3
+    soon = (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat()
+    assert upload._plan_due({"expires_at": soon}) is True
+    later = (datetime.now(timezone.utc) + timedelta(seconds=600)).isoformat()
+    assert upload._plan_due({"expires_at": later}) is False
+    assert upload._plan_expired({"expires_at": soon}) is False
+
+
 def test_multipart_request_sends_one_md5_per_part(tmp_path):
     import base64
     import hashlib
