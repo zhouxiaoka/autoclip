@@ -763,8 +763,8 @@ if (process.argv[1] && process.argv[1].endsWith('harness.mjs')) {
     const result = await main()
     const text = `${JSON.stringify(result)}\n`
     process.stdout.write(text)
-    process.stderr.write(text)
     process.exitCode = exitCode(result)
+    if (process.exitCode !== 0) process.stderr.write(text)
   } catch (error) {
     const partial = { status: 'crashed', errorCode: error.code || 'exception', detail: redactText(error.message), liveValidationClaimed: false }
     const text = `${JSON.stringify(partial)}\n`
