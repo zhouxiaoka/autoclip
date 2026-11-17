@@ -268,6 +268,7 @@ SilenceFinder = Callable[[float, float], list[tuple[float, float]]]
 MATCH_SEC = 1.3          # a sentence end estimated inside a row may be off by this much either way
 MIN_CHAR_SEC = 0.03      # speech takes at least this long per character (bounds an estimate's drift)
 BREATH_SEC = 0.5         # a pause this long is a clear breath between statements
+ROW_END_TOLERANCE = 0.25  # bounded ASR timestamp drift, only with observed audio silence
 
 
 def _cut_window(rows: list[Row], row: int, offset: int, estimate: float) -> tuple[float, float]:
@@ -275,7 +276,10 @@ def _cut_window(rows: list[Row], row: int, offset: int, estimate: float) -> tupl
     s, e, text = rows[row]
     if offset >= len(text):
         nxt = rows[row + 1][0] if row + 1 < len(rows) else e + 0.9
-        return e - 0.4, max(e, nxt)
+        # Adjacent ASR rows can meet before the final phoneme has ended. Allow a
+        # nearby *observed pause* to correct that small timestamp error; never add
+        # padding blindly or search far enough to select a later sentence.
+        return e - 0.4, max(e + ROW_END_TOLERANCE, nxt)
     before, after = len(text[:offset].replace(' ', '')), len(text[offset:].replace(' ', ''))
     return max(s + before * MIN_CHAR_SEC, estimate - MATCH_SEC), min(e - after * MIN_CHAR_SEC, estimate + MATCH_SEC)
 

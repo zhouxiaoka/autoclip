@@ -64,6 +64,8 @@ allow retreat to the first completed answer when the duration constraints permit
 The existing start alignment remains deterministic. Silence detection only adjusts within the
 chosen ending's window and cannot select a later sentence. Platform duration caps also use
 sentence endings; an unavoidable hard cut or unverified long-form extension is marked for review.
+For adjacent ASR rows, a real audio pause can correct up to 250 ms of early row-end timing;
+this tolerance does not add unconditional padding or permit a later topic's pause.
 When a sentence cut falls inside an SRT row, its caption text is trimmed at the same nearby
 sentence boundary before translation, so unspoken text is not burned into the ending.
 

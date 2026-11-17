@@ -176,7 +176,11 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
                 continue
             # Sentence refinement can cut inside a multi-sentence SRT row. Keep its
             # text on the same boundary, rather than translating the unspoken next sentence.
-            from backend.services.studio.boundaries import _inner_ends, _time_at, _cut_window
+            from backend.services.studio.boundaries import _inner_ends, _time_at, _cut_window, ROW_END_TOLERANCE
+            # A real pause can lie just after a too-early ASR timestamp. That small
+            # audio tail must not pull the next row's whole, unspoken sentence in.
+            if 0 < scene['end'] - start <= ROW_END_TOLERANCE + 1e-6 and scene['end'] < end:
+                continue
             row = (start, end, text)
             points = [(offset, _time_at(row, offset)) for offset in _inner_ends(text)]
             def nearest_cut(at):

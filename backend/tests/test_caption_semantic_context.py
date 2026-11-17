@@ -136,3 +136,21 @@ def test_model_cannot_cut_before_a_self_question_and_discard_its_conclusion():
             (60., 65., 'might worry because')]
     result = boundaries.refine_with_model(rows, 0., 58., lambda _, data: {'end_line': data['end_candidates'][0]})
     assert result is not None and result[1] >= 52.
+
+
+def test_audio_pause_can_finish_a_word_just_after_an_adjacent_asr_timestamp():
+    rows = [(0., 10., 'The full answer ends here.'), (10., 15., 'The next topic begins.')]
+    result = boundaries._snap_end(rows, 0, len(rows[0][2]), 10., 6., lambda *_: [(10.08, 10.38)])
+    assert result is not None and 10.08 < result <= 10.25
+
+
+def test_audio_timestamp_tolerance_does_not_reach_a_later_topic_pause():
+    rows = [(0., 10., 'The full answer ends here.'), (10., 15., 'The next topic begins.')]
+    assert boundaries._snap_end(rows, 0, len(rows[0][2]), 10., 6., lambda *_: [(10.4, 10.8)]) is None
+
+
+def test_audio_tail_does_not_translate_the_next_unspoken_subtitle_row():
+    entries = [{'start_time': '00:00:00,000', 'end_time': '00:00:10,000', 'text': 'The answer is complete.'},
+               {'start_time': '00:00:10,000', 'end_time': '00:00:13,000', 'text': 'The next topic starts here.'}]
+    rows = packaging.draft_lines(entries, [{'start': 0., 'end': 10.23}])
+    assert [row['text'] for row in rows] == ['The answer is complete.']
