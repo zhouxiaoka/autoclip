@@ -60,6 +60,10 @@ def _request(prompt, data):
     payload = {'protected_terms': list(restored), 'text': masked}
     if data.get('repair'):
         prompt += '上次译文不合格。请直接翻译 text 的内容，保留数字和专名；不要复述这些规则。'
+        if data.get('repair_hint'):
+            payload['previous_error'] = data['repair_hint']
+            prompt += ('previous_error 列出上次的具体问题。不要扩写缩写或添加英文解释；'
+                       '不要把错误列表里的词加入译文。只输出修正后的译文。')
     text = LLMClient().call(prompt, payload, max_tokens=600)
     if any(token not in text for token in restored):
         raise ValueError('translation omitted a protected token')
@@ -225,6 +229,26 @@ def _batches(ids, lines):
         yield batch
 
 
+def _repair_hint(response, index, source, audience, terms):
+    """Explain a rejected cue without logging it or resending another cue's text."""
+    raw = response.get('lines') if isinstance(response, dict) else None
+    if not isinstance(raw, list):
+        return None
+    matches = [row for row in raw if isinstance(row, dict) and type(row.get('id')) is int and row['id'] == index]
+    if len(matches) != 1 or not isinstance(matches[0].get('text'), str):
+        return None
+    text = matches[0]['text'][:600]
+    if audience == 'zh':
+        for term in terms:
+            text = re.sub(re.escape(term), '', text, flags=re.I)
+        added = sorted({word for word in re.findall(r'[A-Za-z]+', text)
+                        if not re.search(r'(?<![A-Za-z])' + re.escape(word) + r'(?![A-Za-z])', source, re.I)})
+        if added:
+            return {'added_english_words': added[:20],
+                    'reason': 'These words do not occur in the source. Do not expand names or abbreviations.'}
+    return None
+
+
 def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = None,
               model_key='', allow_model=True):
     """Return accepted id→text. Cache reuse revalidates content, language and protected terms."""
@@ -243,6 +267,7 @@ def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = 
         call = _request
     for batch in _batches([i for i in range(len(lines)) if i not in found and len(lines[i]['text']) <= MAX_CHARS], lines):
         pending = list(batch)
+        repair_hint = None
         for attempt in range(2):
             checkpoint()
             ensure_clip_job_budget()
@@ -255,6 +280,8 @@ def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = 
             }
             if attempt:
                 payload['repair'] = '只补齐本批未通过校验的 ID；勿复述已成功译文，保留数字和专名。'
+                if repair_hint:
+                    payload['repair_hint'] = repair_hint
             step_expired = False
             try:
                 with clip_step_budget(BATCH_SECONDS):
@@ -284,4 +311,5 @@ def translate(lines, audience, *, terms=(), call=None, cache_dir: Path | None = 
             pending = [i for i in pending if i not in found]
             if not pending:
                 break
+            repair_hint = _repair_hint(response, pending[0], lines[pending[0]]['text'], audience, terms)
     return found

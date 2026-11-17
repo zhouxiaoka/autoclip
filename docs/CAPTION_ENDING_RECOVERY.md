@@ -21,6 +21,8 @@ failure. Language, numbers, protected terms and conspicuously incomplete transla
 checked, including newly repeated whole paragraphs. There is at most one content-repair attempt per missing unit; transport failures do
 not trigger content retries. Responses that echo repair instructions are rejected, and oversized
 rows fall back rather than consuming an unbounded request. Each request inherits the job deadline and has a 45-second cap.
+When the rejected response invented English words by expanding a source abbreviation, the
+single repair receives that concrete error instead of only a generic retry instruction.
 The existing 300-second packaging budget still reserves time for export.
 Equivalent small Chinese numerals (for example, Arabic 15 and Chinese fifteen) are accepted;
 changed values and suffixes inside larger numbers are not. This checks numeric presence,

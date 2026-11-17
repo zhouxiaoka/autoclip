@@ -44,6 +44,19 @@ def test_repeated_names_and_initials_are_restored_exactly(monkeypatch):
     assert result == {0: 'Dana K. Morgan出演了Dana K. Morgan。'}
 
 
+def test_content_repair_explains_an_invented_abbreviation_expansion(monkeypatch):
+    from backend.utils import llm_client
+    seen = []
+    def call(_prompt, data, **_kwargs):
+        seen.append(data)
+        return ('我们在ABC（Alpha Beta Company）工作。' if len(seen) == 1
+                else '我们在ABC工作。')
+    monkeypatch.setattr(llm_client, 'get_llm_manager', lambda: SimpleNamespace(call=call))
+    assert caption_translation.translate([{'text': 'We work at ABC.'}], 'zh') == {0: '我们在ABC工作。'}
+    assert seen[1]['previous_error']['added_english_words'] == ['Alpha', 'Beta', 'Company']
+    assert len(seen) == 2
+
+
 @pytest.mark.parametrize('target', ['比例达到百分之十五、百分之二十和百分之二十五。', '比例达到15%、20%和25%。'])
 def test_equivalent_written_numbers_do_not_erase_a_valid_translation(target):
     source = 'The proportions reached 15, 20 and 25 percent.'
