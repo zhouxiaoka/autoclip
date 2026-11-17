@@ -27,6 +27,25 @@ def test_unfinished_negation_and_complete_negative_answer_are_distinguished():
     assert not boundaries.unfinished('Absolutely not.')
 
 
+def test_open_service_request_cannot_displace_a_completed_answer():
+    rows = [
+        (0., 6., 'Here the server brings the menu.'),
+        (6., 7., 'Let me get'),
+        (7., 11., 'The prices at this place are pretty good.'),
+    ]
+    seen = []
+
+    def model(_, data):
+        seen.extend(data['end_candidates'])
+        return {'end_line': 0}
+
+    result = boundaries.refine_with_model(rows, 0., 6.9, model)
+    assert result is not None and result[1] == 6.
+    assert 1 not in seen
+    assert boundaries.unfinished('Let me get')
+    assert not boundaries.unfinished('Let me get the menu.')
+
+
 def test_sentence_cut_does_not_treat_a_name_initial_as_an_ending():
     text = 'I met Hunter S. Thompson. Then we talked.'
     offsets = boundaries._inner_ends(text)

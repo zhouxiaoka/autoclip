@@ -57,6 +57,7 @@ _DANGLING = re.compile(
     r'\b(?:because|although|unless|whether|which|who|whose|and|or|but|if|when|while|'
     r'the|a|an|of|to|for|with|without|from|in|at|than|such as|seems like|which is like|'
     r'um|uh|not|never|even like|that well|like well)\s*[,.!?…]*$', re.I)
+_OPEN_REQUEST = re.compile(r"\b(?:let me|let us|let's)\s+(?:get|give|show|put|bring)\s*[,.!?…]*$", re.I)
 
 
 def unfinished(text: str) -> bool:
@@ -70,7 +71,7 @@ def unfinished(text: str) -> bool:
     # A stand-alone conditional opener is not a finished answer, even after a breath.
     condition = re.match(r'^(?:(?:But|And|So)\s+)?(?:if|unless|although)\b', text, re.I)
     open_condition = condition and not re.search(r'[,;.!?。？！]|\bthen\b', text, re.I)
-    return bool(_DANGLING.search(text) or copula or open_condition
+    return bool(_DANGLING.search(text) or _OPEN_REQUEST.search(text) or copula or open_condition
                 or re.fullmatch(r'(?:I|we|you|they)[,.!?…]*', text, re.I))
 
 
