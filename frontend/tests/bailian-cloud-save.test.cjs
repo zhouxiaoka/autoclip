@@ -24,7 +24,14 @@ function settingsHook(initial, transport) {
     '../../i18n': { t: text => text },
     '../studio/api': { errorText: () => 'redacted' },
     '../studio/settingsReturn': { notifySettingsSaved() {} },
-    '../../analytics/experience': { beginExperience: () => () => {}, trackProviderValidation() {} },
+    '../../analytics/experience': {
+      beginExperience: () => () => {},
+      beginDebouncedEditDiscovery: () => () => {},
+      claimModelSettingsLoad: () => true,
+      trackProviderValidation() {},
+      connectionSignature: value => JSON.stringify((value?.connections || []).map(c => [c.id, c.provider, c.base_url, c.api_key ?? '', c.image_base_url])),
+      shouldReportModelDiscovery: (trigger, current, loaded) => trigger !== 'edit' || current !== loaded,
+    },
     './modelSettingsApi': {
       modelSettingsApi: {
         get: async () => structuredClone(initial),

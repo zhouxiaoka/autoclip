@@ -3,7 +3,7 @@ import { codeFromRequestError, codeFromResult, safeHttpStatus } from '../../anal
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { errorText } from '../studio/api'
-import { beginExperience, trackProviderValidation, type Placement } from '../../analytics/experience'
+import { beginDebouncedEditDiscovery, beginExperience, claimModelSettingsLoad, connectionSignature, shouldReportModelDiscovery, trackProviderValidation, type Placement } from '../../analytics/experience'
 import { hintKeyForUpstreamError, isRetryableUpstreamError, telemetryProvider } from '../../analytics/successRateContract'
 import { type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
@@ -78,6 +78,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   listsRef.current = lists
   settingsRef.current = settings
   const savedRef = useRef<ModelSettings | null>(null)
+  // Signature of the last loaded or saved document. The post-load rediscovery is not an edit.
+  const loadedSignature = useRef<string | null>(null)
   const summary = (value: ModelSettings) => ({
     placement, provider: telemetryProvider(logic.mainConnection(value)?.provider),
     changed_connections: JSON.stringify(savedRef.current?.connections) !== JSON.stringify(value.connections), mode: value.saved ? 'update' : 'initial', analysis_mode: value.analysis_mode,
@@ -99,7 +101,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
 
   const discover = async (connection: Connection, refresh = false, trigger: 'load' | 'edit' | 'provider_change' | 'manual' = 'manual') => {
     if (connection.provider === 'compatible' && !connection.base_url) return
-    const finish = beginExperience('model_discovery', { placement, provider: telemetryProvider(connection.provider), trigger })
+    const reported = { placement, provider: telemetryProvider(connection.provider), trigger }
+    const finish: (outcome: 'completed' | 'failed' | 'blocked', extra?: Record<string, unknown>, error?: unknown) => void =
+      shouldReportModelDiscovery(trigger, connectionSignature(settingsRef.current), loadedSignature.current)
+        ? (trigger === 'edit' ? beginDebouncedEditDiscovery(reported) : beginExperience('model_discovery', reported))
+        : () => {}
     const version = (versions.current[connection.id] || 0) + 1
     versions.current[connection.id] = version
     setBusy(old => ({ ...old, [connection.id]: true }))
@@ -121,12 +127,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   }
 
   const load = async () => {
-    const finish = beginExperience('model_settings_load', { placement })
     setError('')
     try {
       const value = logic.prepareLoaded(await modelSettingsApi.get())
       if (!alive.current) return
-      finish('completed')
+      // Remounts and repeat reads of the same document are not another load.
+      if (claimModelSettingsLoad(placement, value)) beginExperience('model_settings_load', { placement })('completed')
+      loadedSignature.current = connectionSignature(value)
       savedRef.current = value
       autoCover.current = !value.saved
       setSettings(value)
@@ -138,11 +145,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         return next
       })
       value.connections.forEach(c => { void discover(c, false, 'load') })
-    } catch (e) { if (alive.current) { finish('failed', {}, e); setError(errorText(e)) } }
+    } catch (e) { if (alive.current) { beginExperience('model_settings_load', { placement })('failed', {}, e); setError(errorText(e)) } }
   }
   useEffect(() => { alive.current = true; void load(); return () => { alive.current = false } }, [])
 
-  const signature = JSON.stringify(settings?.connections.map(c => [c.id, c.provider, c.base_url, c.api_key, c.image_base_url]))
+  const signature = connectionSignature(settings)
+  // Product discovery stays on this timer. Edit analytics wait out the burst separately,
+  // and a rediscovery of the loaded document does not count as an edit.
   useEffect(() => {
     if (!settings) return
     const timer = window.setTimeout(() => settings.connections.forEach(c => { void discover(c, false, 'edit') }), 650)
@@ -382,6 +391,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       const toast = saveToast(noticed)
       const value = await modelSettingsApi.save(logic.forSave(next))
       setSettings(value); setDirty(false); autoCover.current = false
+      loadedSignature.current = connectionSignature(value)
       finish('completed')
       savedRef.current = value
       if (toast.kind === 'invalid') message.error(`${t('settings.key_guide.invalid_saved')} ${validationCopy(toast.errorType)}`.trim())
