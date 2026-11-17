@@ -167,21 +167,15 @@ def set_consent(*, diagnostics: bool, media: bool, full_original: bool, informed
 
 
 def _abort_remote(items: list[dict], transport) -> None:
-    base = upload.endpoint()
-    if not base or transport is None:
-        transport = upload.UrllibTransport() if base else None
+    if transport is None and upload.endpoint():
+        transport = upload.UrllibTransport()
     if transport is None:
         return
     for item in items:
-        session = item.get("upload") if isinstance(item.get("upload"), dict) else {}
-        case_id = session.get("case_id") or item.get("case_id")
-        capability = session.get("capability")
-        if case_id and capability:
-            try:
-                transport.abort(base, case_id, capability)
-            except (OSError, RuntimeError, ValueError, TypeError):
-                logger.warning("diagnostics abort failed")
-                continue
+        if item.get("status") != "delete_pending":
+            continue
+        current = queue.get(str(item.get("id") or "")) or item
+        upload.finish_delete(current, transport)
 
 
 def delete_local(item_id: str, *, transport=None) -> dict:

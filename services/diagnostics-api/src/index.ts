@@ -70,11 +70,6 @@ export function adaptBucket(bucket: R2Bucket): Bucket {
       const head = await bucket.head(key)
       return head ? { size: head.size } : null
     },
-    get: async (key) => {
-      const object = await bucket.get(key)
-      if (!object) return null
-      return { size: object.size, arrayBuffer: () => object.arrayBuffer() }
-    },
     delete: (key) => bucket.delete(key),
     createMultipartUpload: async (key) => wrapUpload(await bucket.createMultipartUpload(key)),
     resumeMultipartUpload: (key, uploadId) => wrapUpload(bucket.resumeMultipartUpload(key, uploadId)),

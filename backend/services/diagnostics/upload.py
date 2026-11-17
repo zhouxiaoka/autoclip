@@ -189,7 +189,14 @@ def finish_delete(item: dict, transport) -> dict:
             return current
     case_id = (current.get("upload") or {}).get("case_id") or current.get("case_id")
     capability = queue.read_capability(item_id)
-    base = endpoint()
+    stored_endpoint = current.get("cleanup_endpoint")
+    base = stored_endpoint if isinstance(stored_endpoint, str) and stored_endpoint else (endpoint() or "")
+    if current.get("inflight_create") is True and not case_id:
+        held = queue.update(
+            item_id, if_version=current.get("version"), if_status={"delete_pending"},
+            status="delete_pending", error="delete_wait", updated_at=queue.now_iso(),
+        )
+        return held or current
     if not base or not case_id or not capability or _local_only(current):
         done = queue.update(item_id, if_version=current.get("version"), if_status={"delete_pending"}, status="deleted", error="")
         return done or _live(item_id, current)
@@ -234,16 +241,25 @@ def _remember_capability(item_id: str, created: dict) -> None:
         queue.write_capability(item_id, secret)
 
 
-def _delete_created(item_id: str, created: dict, base: str, transport) -> None:
-    case_id = created.get("case_id")
-    capability = created.get("capability") or queue.read_capability(item_id)
-    if not case_id or not capability:
-        return
-    try:
-        transport.delete(base, case_id, capability)
-    except (Offline, OSError, RuntimeError, ValueError, TypeError):
-        logger.warning("diagnostics delete after revoke failed")
-        queue.update(item_id, status="delete_pending", error="delete_retry", updated_at=queue.now_iso())
+def _bind_created(item_id: str, created: dict, base: str) -> dict:
+    """Persist the remote identity before any cleanup attempt."""
+    _remember_capability(item_id, created if isinstance(created, dict) else {})
+    case_id = created.get("case_id") if isinstance(created, dict) else None
+    uploads = created.get("uploads") if isinstance(created, dict) and isinstance(created.get("uploads"), list) else []
+    if not isinstance(case_id, str) or not case_id:
+        return _live(item_id, {})
+    attached = queue.attach_remote_case(item_id, case_id=case_id, uploads=uploads, endpoint=base)
+    return attached or _live(item_id, {})
+
+
+def _cleanup_bound(item: dict, transport) -> dict:
+    if item.get("status") != "delete_pending":
+        moved = queue.update(
+            item["id"], if_version=item.get("version"),
+            status="delete_pending", error="delete_retry", updated_at=queue.now_iso(),
+        )
+        item = moved or _live(item["id"], item)
+    return finish_delete(item, transport)
 
 
 def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
@@ -281,6 +297,14 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         _still_authorized(item)
         session = item.get("upload") if isinstance(item.get("upload"), dict) else {}
         if not session.get("case_id"):
+            marked = queue.update(
+                item_id, if_version=item.get("version"), if_status=queue.OPEN,
+                inflight_create=True, cleanup_endpoint=base, status="uploading", updated_at=queue.now_iso(),
+            )
+            if marked is None:
+                live = _live(item_id, item)
+                return _divert(live, transport) or live
+            item = marked
             body = {
                 "manifest": item["manifest"],
                 "consent_version": item.get("consent_version"),
@@ -293,46 +317,19 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
                 ],
             }
             created = transport.create_case(base, body, item["idempotency_key"])
-            item = _live(item_id, item)
-            diverted = _divert(item, transport)
-            if diverted is not None:
-                _remember_capability(item_id, created)
-                case_id = created.get("case_id")
-                capability = created.get("capability") or queue.read_capability(item_id)
-                if case_id and capability:
-                    try:
-                        transport.delete(base, case_id, capability)
-                    except (Offline, OSError, RuntimeError, ValueError, TypeError):
-                        logger.warning("diagnostics delete after revoke failed")
-                        queue.update(item_id, status="delete_pending", error="delete_retry", updated_at=queue.now_iso())
-                return _live(item_id, diverted)
-            objects = created.get("uploads") or []
+            item = _bind_created(item_id, created, base)
+            if item.get("status") in {"delete_pending", "deleted", "cancelled"}:
+                return finish_delete(item, transport)
+            try:
+                _still_authorized(item)
+            except Revoked:
+                return _cleanup_bound(item, transport)
+            objects = (item.get("upload") or {}).get("objects") or []
             selected = {row.get("role") for row in item.get("files") or []}
             planned = {entry.get("role") for entry in objects if isinstance(entry, dict)}
             if selected - planned:
                 raise RuntimeError("incomplete_plan")
-            _remember_capability(item_id, created)
-            session = {
-                "case_id": created.get("case_id"),
-                "objects": objects,
-                "done": [],
-                "acked": [],
-            }
-            stored = queue.update(
-                item_id, if_version=item.get("version"), if_status=queue.OPEN,
-                upload=session, case_id=created.get("case_id"), status="uploading", updated_at=queue.now_iso(),
-            )
-            if stored is None:
-                live = _live(item_id, item)
-                diverted = _divert(live, transport)
-                if diverted is not None:
-                    _remember_capability(item_id, created)
-                    _delete_created(item_id, created, base, transport)
-                    return diverted
-                return live
-            item = stored
-            session = item["upload"]
-            _still_authorized(item)
+            session = item.get("upload") if isinstance(item.get("upload"), dict) else {}
         capability = queue.read_capability(item_id)
         if not capability:
             raise RuntimeError("missing_capability")
@@ -443,6 +440,9 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         return cancelled or _live(item_id, current)
     except Offline as exc:
         current = _live(item_id, item)
+        if current.get("inflight_create") is True and not (current.get("case_id") or (current.get("upload") or {}).get("case_id")):
+            cleared = queue.update(item_id, if_version=current.get("version"), inflight_create=False, updated_at=queue.now_iso())
+            current = cleared or current
         diverted = _divert(current, transport)
         if diverted is not None:
             return diverted

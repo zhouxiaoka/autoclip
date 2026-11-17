@@ -16,14 +16,8 @@ export interface MultipartUpload {
   complete(uploadedParts: UploadedPart[]): Promise<{ size: number; httpEtag: string }>
 }
 
-export interface StoredObject {
-  size: number
-  arrayBuffer(): Promise<ArrayBuffer>
-}
-
 export interface Bucket {
   put(key: string, body: Uint8Array): Promise<void>
-  get(key: string): Promise<StoredObject | null>
   head(key: string): Promise<{ size: number } | null>
   delete(key: string): Promise<void>
   createMultipartUpload(key: string): Promise<MultipartUpload>
@@ -125,12 +119,23 @@ function admin(request: Request, deps: Deps, next: () => Response | Promise<Resp
 
 type UploadFile = { role: string; bytes: number; sha256: string; content_type?: string }
 
-async function readableSize(bucket: Bucket, key: string): Promise<number> {
-  const stored = await bucket.get(key)
-  if (!stored) return -1
-  const bytes = new Uint8Array(await stored.arrayBuffer())
-  if (bytes.byteLength !== stored.size) return -1
-  return bytes.byteLength
+type ObjectMeta = { kind: 'size'; size: number } | { kind: 'missing' } | { kind: 'transient' }
+
+/** Object length comes from metadata. The body is not read, and a size is not a hash. */
+async function metadataSize(bucket: Bucket, key: string): Promise<ObjectMeta> {
+  try {
+    const head = await bucket.head(key)
+    if (!head) return { kind: 'missing' }
+    if (typeof head.size !== 'number' || !Number.isSafeInteger(head.size) || head.size < 0) return { kind: 'transient' }
+    return { kind: 'size', size: head.size }
+  } catch {
+    return { kind: 'transient' }
+  }
+}
+
+function invalidAssembly(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : ''
+  return message === 'etag_mismatch' || message === 'missing_part'
 }
 
 async function signParts(deps: Deps, object: ObjectRow, digest?: string): Promise<{ number: number; offset: number; length: number; url: string; headers: Record<string, string> }[]> {
@@ -173,9 +178,10 @@ async function replayCase(deps: Deps, existing: CaseRow, files: UploadFile[]): P
       return json(409, { error: 'incomplete_plan' })
     }
     if (object.state === 'complete') {
-      const size = await readableSize(deps.bucket, object.r2Key)
-      if (size !== object.declaredBytes) return json(409, { error: 'incomplete_plan' })
-      uploads.push({ object_id: object.objectId, role: object.role, parts: [], already_complete: true, bytes: size })
+      const size = await metadataSize(deps.bucket, object.r2Key)
+      if (size.kind === 'transient') return json(503, { error: 'unavailable' })
+      if (size.kind !== 'size' || size.size !== object.declaredBytes) return json(409, { error: 'incomplete_plan' })
+      uploads.push({ object_id: object.objectId, role: object.role, parts: [], already_complete: true, bytes: size.size })
       continue
     }
     if (object.state !== 'reserved') return json(409, { error: 'incomplete_plan' })
@@ -241,8 +247,8 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     const bytes = encoder.encode(JSON.stringify(manifest))
     if (bytes.byteLength !== manifestBytes) throw new Error('manifest_size')
     await deps.bucket.put(manifestKey, bytes)
-    const stored = await readableSize(deps.bucket, manifestKey)
-    if (stored !== manifestBytes) throw new Error('manifest_size')
+    const stored = await metadataSize(deps.bucket, manifestKey)
+    if (stored.kind !== 'size' || stored.size !== manifestBytes) throw new Error('manifest_size')
   } catch {
     await deps.bucket.delete(manifestKey)
     await deps.repo.release(total)
@@ -292,7 +298,7 @@ async function createCase(request: Request, deps: Deps): Promise<Response> {
     capability,
     expires_at: expires,
     uploads,
-    checksum_note: 'Completion reads the assembled object and checks its byte length. A whole-object cryptographic rehash is not done inside the Worker.',
+    checksum_note: 'Completion checks object metadata size only. It does not read the body and does not verify a content hash.',
     approval: 'pending',
   })
 }
@@ -312,55 +318,54 @@ async function partsFrom(request: Request): Promise<UploadedPart[] | null> {
   }
 }
 
+async function settleFile(deps: Deps, row: CaseRow, object: ObjectRow, actual: number): Promise<Response> {
+  if (row.state === 'deleted') return json(404, { error: 'not_found' })
+  try {
+    const result = await deps.repo.commitFile(row.caseId, object.objectId, actual, deps.now().toISOString())
+    if ('reason' in result) return json(404, { error: 'not_found' })
+  } catch {
+    return json(503, { error: 'unavailable' })
+  }
+  return json(200, { ok: true, bytes: actual, integrity: 'metadata_size' })
+}
+
+async function rejectInvalid(deps: Deps, row: CaseRow, object: ObjectRow): Promise<Response> {
+  await deps.bucket.delete(object.r2Key)
+  await failObject(deps, row, object)
+  return json(409, { error: 'byte_mismatch' })
+}
+
 async function completeFile(caseId: string, objectId: string, request: Request, deps: Deps): Promise<Response> {
   const row = await authorized(deps.repo, caseId, request)
   if (!row || row.state === 'deleted') return json(404, { error: 'not_found' })
   const object = await deps.repo.getObject(objectId)
-  if (!object || object.caseId !== caseId) return json(404, { error: 'object' })
-  if (object.state === 'complete') {
-    const size = await readableSize(deps.bucket, object.r2Key)
-    if (size !== object.declaredBytes) return json(409, { error: 'byte_mismatch' })
-    return json(200, { ok: true, bytes: size })
+  if (!object || object.caseId !== caseId || object.state === 'aborted') return json(404, { error: 'object' })
+  const existing = await metadataSize(deps.bucket, object.r2Key)
+  if (existing.kind === 'transient') return json(503, { error: 'unavailable' })
+  if (existing.kind === 'size' && existing.size === object.declaredBytes) return settleFile(deps, row, object, existing.size)
+  if (existing.kind === 'size') {
+    if (object.state === 'complete') return json(409, { error: 'byte_mismatch' })
+    return rejectInvalid(deps, row, object)
   }
-  if (object.state !== 'reserved') return json(404, { error: 'object' })
-  let actual = 0
-  if (object.uploadId) {
-    const parts = await partsFrom(request)
-    if (!parts?.length) return json(409, { error: 'incomplete_plan' })
-    try {
-      await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).complete(parts)
-    } catch {
-      try { await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).abort() } catch { /* already gone */ }
-      await deps.bucket.delete(object.r2Key)
-      await failObject(deps, row, object)
-      return json(409, { error: 'byte_mismatch' })
-    }
-    actual = await readableSize(deps.bucket, object.r2Key)
-    if (actual !== object.declaredBytes) {
-      await deps.bucket.delete(object.r2Key)
-      await failObject(deps, row, object)
-      return json(409, { error: 'byte_mismatch' })
-    }
-  } else {
-    actual = await readableSize(deps.bucket, object.r2Key)
-    if (actual !== object.declaredBytes) {
-      await deps.bucket.delete(object.r2Key)
-      await failObject(deps, row, object)
-      return json(409, { error: 'byte_mismatch' })
-    }
+  if (object.state === 'complete') return json(409, { error: 'byte_mismatch' })
+  if (!object.uploadId) return rejectInvalid(deps, row, object)
+  const parts = await partsFrom(request)
+  if (!parts?.length) return json(409, { error: 'incomplete_plan' })
+  try {
+    await deps.bucket.resumeMultipartUpload(object.r2Key, object.uploadId).complete(parts)
+  } catch (error) {
+    const after = await metadataSize(deps.bucket, object.r2Key)
+    if (after.kind === 'transient') return json(503, { error: 'unavailable' })
+    if (after.kind === 'size' && after.size === object.declaredBytes) return settleFile(deps, row, object, after.size)
+    if (after.kind === 'size') return rejectInvalid(deps, row, object)
+    if (invalidAssembly(error)) return rejectInvalid(deps, row, object)
+    return json(503, { error: 'unavailable' })
   }
-  object.actualBytes = actual
-  object.state = 'complete'
-  object.updatedAt = deps.now().toISOString()
-  await deps.repo.saveObject(object)
-  await deps.repo.land(object.declaredBytes)
-  row.reservedBytes = Math.max(0, row.reservedBytes - object.declaredBytes)
-  row.landedBytes += object.declaredBytes
-  const pending = (await deps.repo.objectsFor(caseId)).filter((item) => item.state === 'reserved')
-  if (!pending.length) row.state = 'complete'
-  row.updatedAt = object.updatedAt
-  await deps.repo.saveCase(row)
-  return json(200, { ok: true, bytes: actual })
+  const verified = await metadataSize(deps.bucket, object.r2Key)
+  if (verified.kind === 'transient') return json(503, { error: 'unavailable' })
+  if (verified.kind === 'size' && verified.size === object.declaredBytes) return settleFile(deps, row, object, verified.size)
+  if (verified.kind === 'size') return rejectInvalid(deps, row, object)
+  return json(503, { error: 'unavailable' })
 }
 
 async function failObject(deps: Deps, row: CaseRow, object: ObjectRow): Promise<void> {

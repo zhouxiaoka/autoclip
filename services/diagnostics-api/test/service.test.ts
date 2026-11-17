@@ -32,14 +32,27 @@ function etagOf(bytes: Uint8Array): string {
 
 class LocalBucket implements Bucket {
   objects = new Map<string, Uint8Array>()
+  overlay = new Map<string, number>()
   private uploads = new Map<string, { key: string; parts: Map<number, Uint8Array> }>()
+  completeAttempts = 0
+  bodyReads = 0
+  forbidBody = false
+  throwNextExistingHead = false
 
   async put(key: string, body: Uint8Array): Promise<void> { this.objects.set(key, body) }
   async head(key: string) {
+    const present = this.objects.has(key) || this.overlay.has(key)
+    if (present && this.throwNextExistingHead) {
+      this.throwNextExistingHead = false
+      throw new Error('head_unavailable')
+    }
+    if (this.overlay.has(key)) return { size: this.overlay.get(key)! }
     const body = this.objects.get(key)
     return body ? { size: body.byteLength } : null
   }
   async get(key: string) {
+    this.bodyReads += 1
+    if (this.forbidBody) throw new Error('full_body_forbidden')
     const body = this.objects.get(key)
     if (!body) return null
     return { size: body.byteLength, arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) }
@@ -62,6 +75,7 @@ class LocalBucket implements Bucket {
       },
       abort: async () => { this.uploads.delete(uploadId) },
       complete: async (uploadedParts: UploadedPart[]) => {
+        this.completeAttempts += 1
         const upload = this.uploads.get(uploadId)
         if (!upload || upload.key !== key) throw new Error('unknown_upload')
         const ordered = [...uploadedParts].sort((left, right) => left.partNumber - right.partNumber)
@@ -288,6 +302,111 @@ function handleRequest(depsValue: Parameters<typeof handle>[1], created: { case_
   }), depsValue)
 }
 
+test('completion uses metadata size for a large object and does not read its body', async () => {
+  const { deps: value, bucket, repo } = deps()
+  bucket.forbidBody = true
+  const declared = 200 * 1024 * 1024
+  const response = await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: declared, sha256: sha }],
+  })
+  assert.equal(response.status, 201)
+  const created = await response.json() as { case_id: string; capability: string; uploads: { object_id: string }[]; checksum_note: string }
+  assert.match(created.checksum_note, /does not read the body/)
+  assert.match(created.checksum_note, /does not verify a content hash/)
+  const object = [...repo.objects.values()][0]!
+  bucket.overlay.set(object.r2Key, declared)
+  const done = await handleRequest(value, created, {})
+  assert.equal(done.status, 200)
+  const payload = await done.json() as { bytes: number; integrity: string }
+  assert.equal(payload.bytes, declared)
+  assert.equal(payload.integrity, 'metadata_size')
+  assert.equal(bucket.bodyReads, 0)
+
+  const huge = deps({
+    partBytes: 3 * 1024 * 1024 * 1024,
+    limits: { ...PROPOSED_LIMITS, ratePerHour: 20, landedCap: 5 * 1024 * 1024 * 1024, inflightCap: 3 * 1024 * 1024 * 1024 },
+  })
+  huge.bucket.forbidBody = true
+  const original = 2 * 1024 * 1024 * 1024
+  const opened = await create(huge.deps, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'original', bytes: original, sha256: sha }],
+  }, 'a1'.repeat(32))
+  assert.equal(opened.status, 201)
+  const hugeCase = await opened.json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
+  const hugeObject = [...huge.repo.objects.values()][0]!
+  huge.bucket.overlay.set(hugeObject.r2Key, original)
+  const finished = await handleRequest(huge.deps, hugeCase, {})
+  assert.equal(finished.status, 200)
+  assert.equal((await finished.json() as { bytes: number }).bytes, original)
+  assert.equal(huge.bucket.bodyReads, 0)
+})
+
+test('assembly then a transient head or commit failure retries without deleting the object', async () => {
+  const { deps: value, bucket, repo } = deps({ partBytes: 4 })
+  const created = await (await create(value, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha }],
+  })).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
+  const stored = [...repo.objects.values()][0]!
+  const upload = bucket.resumeMultipartUpload(stored.r2Key, stored.uploadId!)
+  const partA = await upload.uploadPart(1, Uint8Array.from([1, 2, 3, 4]))
+  const partB = await upload.uploadPart(2, Uint8Array.from([5, 6]))
+  const parts = { parts: [partA, partB] }
+  bucket.throwNextExistingHead = true
+  const paused = await handleRequest(value, created, parts)
+  assert.equal(paused.status, 503)
+  assert.equal(bucket.completeAttempts, 1)
+  assert.equal((await repo.getObject(stored.objectId))?.state, 'reserved')
+  const body = await bucket.get(stored.r2Key)
+  assert.deepEqual([...(new Uint8Array(await body!.arrayBuffer()))], [1, 2, 3, 4, 5, 6])
+  const before = repo.snapshot()
+  const resumed = await handleRequest(value, created, parts)
+  assert.equal(resumed.status, 200)
+  assert.equal((await resumed.json() as { bytes: number }).bytes, 6)
+  assert.equal(bucket.completeAttempts, 1)
+  assert.equal(repo.snapshot().landed, before.landed + 6)
+  assert.equal(repo.snapshot().reserved, 0)
+  const repeated = await handleRequest(value, created, parts)
+  assert.equal(repeated.status, 200)
+  assert.equal(repo.snapshot().landed, before.landed + 6)
+  assert.deepEqual([...(new Uint8Array(await (await bucket.get(stored.r2Key))!.arrayBuffer()))], [1, 2, 3, 4, 5, 6])
+
+  const again = deps({ partBytes: 4 })
+  const second = await (await create(again.deps, {
+    purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+    manifest: manifest(), files: [{ role: 'excerpt', bytes: 6, sha256: sha }],
+  }, 'b2'.repeat(32))).json() as { case_id: string; capability: string; uploads: { object_id: string }[] }
+  const row = [...again.repo.objects.values()][0]!
+  const handle = again.bucket.resumeMultipartUpload(row.r2Key, row.uploadId!)
+  const left = await handle.uploadPart(1, Uint8Array.from([1, 2, 3, 4]))
+  const right = await handle.uploadPart(2, Uint8Array.from([5, 6]))
+  const real = again.repo.commitFile.bind(again.repo)
+  let bombs = 1
+  again.repo.commitFile = async (...args) => {
+    if (bombs > 0) { bombs -= 1; throw new Error('d1_unavailable') }
+    return real(...args)
+  }
+  const failedCommit = await handleRequest(again.deps, second, { parts: [left, right] })
+  assert.equal(failedCommit.status, 503)
+  assert.equal(again.bucket.completeAttempts, 1)
+  assert.notEqual(await again.bucket.get(row.r2Key), null)
+  assert.equal((await again.repo.getObject(row.objectId))?.state, 'reserved')
+  const recovered = await handleRequest(again.deps, second, { parts: [left, right] })
+  assert.equal(recovered.status, 200)
+  assert.equal(again.bucket.completeAttempts, 1)
+  const landed = again.repo.snapshot().landed
+  const caseRow = await again.repo.getCase(second.case_id)
+  assert.ok(caseRow)
+  caseRow!.state = 'deleted'
+  await again.repo.saveCase(caseRow!)
+  const removed = await handleRequest(again.deps, second, { parts: [left, right] })
+  assert.equal(removed.status, 404)
+  assert.notEqual(await again.bucket.get(row.r2Key), null)
+  assert.equal(again.repo.snapshot().landed, landed)
+})
+
 test('migration states the conditional reservation and does not name the media bucket', () => {
   const sql = readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8')
   const reserve = readFileSync(new URL('../src/d1.ts', import.meta.url), 'utf8')
@@ -298,4 +417,8 @@ test('migration states the conditional reservation and does not name the media b
   assert.doesNotMatch(sql, /autoclip-media/)
   const source = readFileSync(new URL('../src/app.ts', import.meta.url), 'utf8')
   assert.doesNotMatch(source, /fetch\(/)
+  const adapter = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8')
+  assert.match(adapter, /head\.size/)
+  assert.doesNotMatch(adapter, /arrayBuffer/)
+  assert.doesNotMatch(source, /bucket\.get\(|stored\.arrayBuffer|object\.arrayBuffer/)
 })

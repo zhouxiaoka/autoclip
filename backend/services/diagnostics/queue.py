@@ -125,6 +125,49 @@ def update(item_id: str, *, if_version: int | None = None, if_status: frozenset[
         return dict(found)
 
 
+def attach_remote_case(item_id: str, *, case_id: str, uploads: list, endpoint: str) -> dict | None:
+    """Record a remote case that a create call already produced.
+
+    A premature ``deleted`` or ``cancelled`` mark cannot drop this identity.
+    The generic status guard stays in place; this is the only writer that may
+    reopen cleanup for that in-flight create. Confirmed deletion of the same
+    case, and an uploaded row, are left unchanged.
+    """
+    if not case_id:
+        return None
+    with _LOCK:
+        items = _load()
+        found = next((row for row in items if row.get("id") == item_id), None)
+        if found is None:
+            return None
+        existing = found.get("case_id") or (found.get("upload") or {}).get("case_id")
+        if isinstance(existing, str) and existing and existing != case_id:
+            return dict(found)
+        if found.get("status") == "deleted" and existing == case_id:
+            return dict(found)
+        if found.get("status") == "uploaded":
+            return dict(found)
+        session = dict(found.get("upload") or {}) if isinstance(found.get("upload"), dict) else {}
+        session["case_id"] = case_id
+        session["objects"] = uploads
+        session.setdefault("done", [])
+        session.setdefault("acked", [])
+        found["upload"] = session
+        found["case_id"] = case_id
+        if isinstance(endpoint, str) and endpoint and not found.get("cleanup_endpoint"):
+            found["cleanup_endpoint"] = endpoint
+        found["inflight_create"] = False
+        if found.get("status") in {"deleted", "cancelled", "delete_pending"}:
+            found["status"] = "delete_pending"
+            found["error"] = "delete_retry"
+        elif found.get("status") in OPEN or found.get("status") == "uploading":
+            found["status"] = "uploading"
+        found["version"] = int(found.get("version") or 0) + 1
+        found["updated_at"] = now_iso()
+        _save(items)
+        return dict(found)
+
+
 def capability_path(item_id: str) -> Path:
     if not _ID.fullmatch(item_id):
         raise ValueError("capability_id")
@@ -165,7 +208,9 @@ def cancel_before(epoch: int) -> list[dict]:
                 continue
             if isinstance(row.get("epoch"), int) and row["epoch"] < epoch:
                 row["version"] = int(row.get("version") or 0) + 1
-                remote = bool((row.get("upload") or {}).get("case_id") or row.get("case_id"))
+                remote = bool(
+                    (row.get("upload") or {}).get("case_id") or row.get("case_id") or row.get("inflight_create") is True
+                )
                 row["status"] = "delete_pending" if remote else "cancelled"
                 row["error"] = "revoked"
                 row["updated_at"] = now_iso()

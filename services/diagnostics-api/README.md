@@ -20,7 +20,7 @@
 
 大文件不能穿过 Worker（请求体远小于 2GB）。客户端直传 R2。R2 绑定本身不会签发预签名 URL，所以 Worker 用**仅存在于 Worker secret** 的 S3 API 令牌签名。开源客户端里没有这块静态凭证。
 
-签名前先在 D1 里做条件更新：`landed + reserved + new <= landed cap` 且 `reserved + new <= inflight cap`，`changes = 1` 才继续。每个 PUT 的 `Content-Length` 写进 SigV4 规范请求，URL 约 900 秒过期，不能拿去传另一种大小。完成时用客户端交回的 part ETag 调用 multipart complete，再读取组装后的对象并核对字节长度；对不上就删除对象并释放预留，不计入落地。不在 Worker 里做整对象重哈希。不完整的 multipart 由 cron 在 1 天后 abort。
+签名前先在 D1 里做条件更新：`landed + reserved + new <= landed cap` 且 `reserved + new <= inflight cap`，`changes = 1` 才继续。每个 PUT 的 `Content-Length` 写进 SigV4 规范请求，URL 约 900 秒过期，不能拿去传另一种大小。完成时先看对象元数据里的长度，不把对象正文读进 Worker。长度对得上就记账一次；临时的元数据或数据库错误保持原对象可重试，只有确认长度不对或分片标识无效才删除。不对正文做哈希。不完整的 multipart 由 cron 在 1 天后 abort。
 
 Worker **不会**把整个对象再读一遍做哈希（免费层 CPU / 内存不够）。单段上传会把调用方声明的 SHA-256 签进 `x-amz-checksum-sha256`。这依赖 R2 真的执行被签名的校验头。本仓库没有对真实桶做过这项验证。尺寸上限不依赖这项校验。
 

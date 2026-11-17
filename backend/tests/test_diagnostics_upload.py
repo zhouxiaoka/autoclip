@@ -5,6 +5,7 @@ import importlib.util
 import json
 import logging
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -421,6 +422,125 @@ def test_lost_create_response_replays_the_plan_and_uploads_every_byte(data_dir, 
     assert transport.completed[0]["bytes"] == len(payload)
     assert "second-secret" not in queue.queue_path().read_text(encoding="utf-8")
     assert queue.read_capability("c-lost") == "second-secret"
+
+
+def _remote_case_item(item_id: str, key: str) -> None:
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    queue.enqueue({
+        "id": item_id, "idempotency_key": key, "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": True, "disposition": "upload",
+        "save_local": False, "manifest": build_manifest(_receipt()), "attempts": 0, "upload": {},
+        "files": [], "version": 1,
+    })
+
+
+def test_delete_during_create_keeps_a_retryable_cleanup_across_restart(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    endpoint = tmp_path / "diagnostics" / "endpoint.json"
+    endpoint.write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    _remote_case_item("c-late", "late-key")
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Transport:
+        def __init__(self):
+            self.deletes = []
+            self.allow = False
+
+        def create_case(self, base, body, key):
+            entered.set()
+            assert release.wait(3)
+            return {"case_id": "remote-case", "capability": "late-secret", "uploads": []}
+
+        def delete(self, base, case_id, capability):
+            self.deletes.append((case_id, capability, base))
+            if not self.allow:
+                raise upload.Offline("timeout")
+
+        def put_part(self, *args, **kwargs):
+            raise AssertionError("put after delete")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("complete after delete")
+
+    transport = Transport()
+    worker = threading.Thread(target=lambda: upload.pump_once(transport))
+    worker.start()
+    assert entered.wait(3)
+    service.delete_local("c-late", transport=transport)
+    release.set()
+    worker.join(3)
+    assert not worker.is_alive()
+    item = queue.get("c-late")
+    assert item["status"] == "delete_pending"
+    assert item["case_id"] == "remote-case"
+    assert item["cleanup_endpoint"] == "http://127.0.0.1:9"
+    assert queue.read_capability("c-late") == "late-secret"
+    assert "late-secret" not in queue.queue_path().read_text(encoding="utf-8")
+    assert len(transport.deletes) == 1
+    assert transport.deletes[0] == ("remote-case", "late-secret", "http://127.0.0.1:9")
+    assert queue.update("c-late", status="uploaded", if_status=queue.OPEN) is None
+    parked = queue.enqueue({
+        "id": "c-park", "idempotency_key": "park", "status": "queued", "epoch": 1,
+        "manifest": build_manifest(_receipt()), "files": [], "explicit": True, "version": 1,
+    })
+    assert queue.update(parked["id"], status="deleted")["status"] == "deleted"
+    assert queue.update(parked["id"], status="delete_pending") is None
+    endpoint.write_text(json.dumps({"endpoint": "http://127.0.0.1:1"}), encoding="utf-8")
+    transport.allow = True
+    upload.pump_once(transport)
+    assert queue.get("c-late")["status"] == "deleted"
+    assert len(transport.deletes) == 2
+    assert transport.deletes[1][2] == "http://127.0.0.1:9"
+    assert queue.read_capability("c-late") == "late-secret"
+    assert queue.get("c-late")["status"] != "uploaded"
+
+
+def test_revocation_during_create_retries_cleanup_when_the_delete_times_out(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    _remote_case_item("c-revoke", "revoke-key")
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Transport:
+        def __init__(self):
+            self.deletes = 0
+            self.allow = False
+
+        def create_case(self, base, body, key):
+            entered.set()
+            assert release.wait(3)
+            return {"case_id": "remote-revoke", "capability": "revoke-secret", "uploads": []}
+
+        def delete(self, base, case_id, capability):
+            self.deletes += 1
+            if not self.allow:
+                raise upload.Offline("timeout")
+
+        def put_part(self, *args, **kwargs):
+            raise AssertionError("put")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("complete")
+
+    transport = Transport()
+    worker = threading.Thread(target=lambda: upload.pump_once(transport))
+    worker.start()
+    assert entered.wait(3)
+    service.set_consent(diagnostics=False, media=False, full_original=False, informed=True, transport=transport)
+    release.set()
+    worker.join(3)
+    assert not worker.is_alive()
+    item = queue.get("c-revoke")
+    assert item["status"] == "delete_pending"
+    assert item["case_id"] == "remote-revoke"
+    assert queue.read_capability("c-revoke") == "revoke-secret"
+    assert item["status"] != "uploaded"
+    transport.allow = True
+    upload.pump_once(transport)
+    assert queue.get("c-revoke")["status"] == "deleted"
+    assert transport.deletes == 2
 
 
 def test_preview_without_attempt_id_maps_the_failure_and_submit_uses_it(data_dir):

@@ -45,7 +45,13 @@ export interface Repo {
   objectsFor(caseId: string): Promise<ObjectRow[]>
   allCases(): Promise<CaseRow[]>
   reconcile(): QuotaState | Promise<QuotaState>
+  commitFile(caseId: string, objectId: string, actualBytes: number, now: string): Promise<CommitResult>
 }
+
+export type CommitResult =
+  | { committed: true }
+  | { committed: false; already: true }
+  | { committed: false; reason: 'gone' }
 
 export class MemoryRepo {
   quota: QuotaState = { landed: 0, reserved: 0 }
@@ -120,6 +126,29 @@ export class MemoryRepo {
   saveObject(row: ObjectRow): Promise<void> {
     this.objects.set(row.objectId, row)
     return Promise.resolve()
+  }
+
+  commitFile(caseId: string, objectId: string, actualBytes: number, now: string): Promise<CommitResult> {
+    return this.exclusive(() => {
+      const object = this.objects.get(objectId)
+      const row = this.cases.get(caseId)
+      if (!object || object.caseId !== caseId || !row || row.state === 'deleted') return { committed: false, reason: 'gone' }
+      if (object.state === 'complete') return { committed: false, already: true }
+      if (object.state !== 'reserved') return { committed: false, reason: 'gone' }
+      object.state = 'complete'
+      object.actualBytes = actualBytes
+      object.updatedAt = now
+      this.quota = {
+        reserved: Math.max(0, this.quota.reserved - object.declaredBytes),
+        landed: this.quota.landed + object.declaredBytes,
+      }
+      row.reservedBytes = Math.max(0, row.reservedBytes - object.declaredBytes)
+      row.landedBytes += object.declaredBytes
+      const pending = [...this.objects.values()].some((item) => item.caseId === caseId && item.state === 'reserved')
+      if (!pending) row.state = 'complete'
+      row.updatedAt = now
+      return { committed: true }
+    })
   }
 
   objectsFor(caseId: string): Promise<ObjectRow[]> {

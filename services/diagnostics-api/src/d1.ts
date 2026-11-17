@@ -1,4 +1,4 @@
-import type { CaseRow, ObjectRow } from './memory.ts'
+import type { CaseRow, CommitResult, ObjectRow } from './memory.ts'
 import { tryReserve, type Limits, type QuotaState } from './quota.ts'
 
 interface Prepared {
@@ -99,6 +99,45 @@ export class D1Repo {
   async allCases(): Promise<CaseRow[]> {
     const rows = await this.db.prepare(`SELECT * FROM cases`).bind().all<Record<string, unknown>>()
     return rows.results.map(caseFrom)
+  }
+
+  async commitFile(caseId: string, objectId: string, actualBytes: number, now: string): Promise<CommitResult> {
+    const object = await this.getObject(objectId)
+    const row = await this.getCase(caseId)
+    if (!object || object.caseId !== caseId || !row || row.state === 'deleted') return { committed: false, reason: 'gone' }
+    if (object.state === 'complete') return { committed: false, already: true }
+    if (object.state !== 'reserved') return { committed: false, reason: 'gone' }
+    const result = await this.db.prepare(
+      `UPDATE objects SET actual_bytes = ?1, state = 'complete', updated_at = ?2
+       WHERE object_id = ?3 AND case_id = ?4 AND state = 'reserved'`,
+    ).bind(actualBytes, now, objectId, caseId).run()
+    if ((result.meta?.changes ?? 0) !== 1) {
+      const again = await this.getObject(objectId)
+      if (again?.state === 'complete') return { committed: false, already: true }
+      return { committed: false, reason: 'gone' }
+    }
+    const revert = () => this.db.prepare(
+      `UPDATE objects SET actual_bytes = NULL, state = 'reserved', updated_at = ?1 WHERE object_id = ?2 AND state = 'complete'`,
+    ).bind(now, objectId).run().then(() => undefined, () => undefined)
+    try {
+      await this.land(object.declaredBytes)
+    } catch (error) {
+      await revert()
+      throw error
+    }
+    try {
+      row.reservedBytes = Math.max(0, row.reservedBytes - object.declaredBytes)
+      row.landedBytes += object.declaredBytes
+      const pending = (await this.objectsFor(caseId)).filter((item) => item.state === 'reserved')
+      if (!pending.length) row.state = 'complete'
+      row.updatedAt = now
+      await this.saveCase(row)
+    } catch (error) {
+      await this.unland(object.declaredBytes).then(() => undefined, () => undefined)
+      await revert()
+      throw error
+    }
+    return { committed: true }
   }
 
   async reconcile(): Promise<QuotaState> {
