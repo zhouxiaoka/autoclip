@@ -67,7 +67,8 @@ class ResolvedInputs:
 
     @property
     def srt_available(self) -> bool:
-        return bool(self.subtitle and Path(self.subtitle).is_file())
+        from backend.utils.text_processor import TextProcessor
+        return TextProcessor.has_usable_srt(self.subtitle)
 
 
 @dataclass(frozen=True)

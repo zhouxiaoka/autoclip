@@ -12,9 +12,13 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from backend.core.job_budget import JobDurationExceeded
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
 from backend.services.studio.models import Packaging
 
 logger = logging.getLogger(__name__)
+
+PACKAGING_BUDGET_SEC = 300
 
 CJK = re.compile(r'[㐀-鿿]')
 KANA = re.compile(r'[぀-ヿ]')
@@ -374,7 +378,7 @@ def _stamp_cues(payload: dict) -> dict:
 
 def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy, *, burned: bool = False,
                     burned_language: str | None = None, known_names: str = '', call: Callable[[str, dict], dict] | None = None,
-                    avoid_palettes: tuple[str, ...] = ()) -> dict[str, Any]:
+                    avoid_palettes: tuple[str, ...] = (), allow_model: bool = True) -> dict[str, Any]:
     """Packaging dict for `Draft.packaging`; never raises for model problems."""
     template, audience = strategy.template, strategy.audience_language
     src = source_language([line['text'] for line in lines])
@@ -390,7 +394,9 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     fallback_title = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
-    if not lines:
+    if not lines or not allow_model:
+        if translate and not burned:
+            fallback['cues'] = source_cues(lines, audience)
         return _stamp_cues(fallback)
     if call is None:
         from backend.services.studio.intelligence import text_json as call
@@ -401,21 +407,25 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
                'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
     # Short ASR rows make the segment contract easy to break once; a second try with the reason
     # usually fixes it, and losing the whole package (captions included) costs far more.
+    can_translate = True
     for attempt in range(2):
         try:
             result = call(PROMPT, payload)
             return _stamp_cues(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes, captions))
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise
         except (ValueError, TypeError) as error:
             logger.warning('Packaging response rejected (attempt %d): %s', attempt + 1, error)
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
         except Exception as error:  # noqa: BLE001 - packaging must never block output
             logger.warning('Packaging fell back: %s', type(error).__name__)
+            can_translate = False
             break
     if translate:
         # Last resort for foreign-language audiences: plain line-by-line translation, so the
         # version still gets captions in its own language instead of none (or the source's).
-        fallback['cues'] = _translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
-                                             protected_terms=_protected_terms(draft, lines, audience))
+        fallback['cues'] = (_translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
+                                              protected_terms=_protected_terms(draft, lines, audience)) if can_translate else [])
         if not fallback['cues'] and not burned:
             # A rejected model response must not turn an English interview into a captionless
             # video. Keep readable source rows and disclose the loss of translation in the UI.
@@ -454,6 +464,8 @@ def _translated_rows(lines: list[dict[str, Any]], audience: str, call, *, keep_o
             _check_preserved_terms(line['text'], _clean(row)[:600], protected_terms or [])
         return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600],
                  'original': l['text'][:900] if keep_original else ''} for l, r in zip(lines, rows)]
+    except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+        raise
     except Exception as error:  # noqa: BLE001
         logger.warning('Row translation failed: %s', type(error).__name__)
         return []

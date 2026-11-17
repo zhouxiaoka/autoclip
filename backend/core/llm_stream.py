@@ -240,6 +240,7 @@ def collect_sse(lines: Any) -> CollectedChat:
     else:
         if buffer:
             emit(buffer)
+    _guard(state)  # a deadline-induced EOF must not turn partial content into success
     return CollectedChat(content, usage, finish, model)
 
 
@@ -442,7 +443,7 @@ def budget_watch(response: Any) -> Iterator[None]:
     def run() -> None:
         while not stop.is_set():
             if ctx.run(budget_expired):
-                _close(response)
+                _abort_stream(response)
                 return
             if stop.wait(0.25):
                 return
@@ -516,6 +517,7 @@ def _consume_chunks(response: Any) -> CollectedChat:
         if not started and exception_rejects_stream(error):
             raise StreamRejected(error) from error
         raise
+    _guard(state)
     return CollectedChat(content, usage, finish, model)
 
 
@@ -738,6 +740,28 @@ def _http_error(status: int, body: Any) -> RuntimeError:
     error.status_code = status  # type: ignore[attr-defined]
     error.body = body  # type: ignore[attr-defined]
     return error
+
+
+def _abort_stream(obj: Any) -> None:
+    """Wake a blocked HTTP/1 SDK read before closing its response.
+
+    Closing a socket from the watchdog thread need not interrupt a recv already
+    running in another thread. HTTPX exposes its transport stream in response
+    extensions. Shutdown is safe for an in-flight HTTP/1 connection; never do it
+    to HTTP/2, whose connection may carry unrelated requests.
+    """
+    try:
+        import socket
+        raw = getattr(obj, 'response', obj)
+        extensions = getattr(raw, 'extensions', {})
+        if extensions.get('http_version') in (b'HTTP/1.0', b'HTTP/1.1'):
+            network = extensions.get('network_stream')
+            sock = network.get_extra_info('socket') if network is not None else None
+            if sock is not None:
+                sock.shutdown(socket.SHUT_RDWR)
+    except Exception:  # noqa: BLE001 - unknown SDKs retain their normal close path
+        pass
+    _close(obj)
 
 
 def _close(obj: Any) -> None:

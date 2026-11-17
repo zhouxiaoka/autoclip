@@ -28,6 +28,61 @@ class Fail(Exception):
     """与 onnxruntime 的异常类名一致。"""
 
 
+@pytest.mark.parametrize('kind', ['cancel', 'restart', 'budget'])
+def test_stop_during_whisper_is_not_a_runtime_failure_or_gpu_retry(tmp_path, monkeypatch, kind):
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    error = {'cancel': JobStopped(), 'restart': ServiceRestarted(), 'budget': JobDurationExceeded()}[kind]
+    calls = []
+    monkeypatch.setenv('AUTOCLIP_WHISPER_DEVICE', 'cuda')
+    class FakeModel:
+        def __init__(self, *a, **k):
+            calls.append('load')
+        def transcribe(self, *a, **k):
+            calls.append('transcribe')
+            raise error
+    _install_fake_whisper(monkeypatch, FakeModel)
+    video = tmp_path / 'clip.mp4'
+    video.write_bytes(b'video')
+    output = tmp_path / 'clip.srt'
+    with pytest.raises(type(error)) as caught:
+        _recognizer()._generate_subtitle_whisper_local(video, output, SpeechRecognitionConfig())
+    assert caught.value is error
+    assert calls == ['load', 'transcribe']
+    assert not output.exists()
+
+
+@pytest.mark.parametrize('kind', ['cancel', 'restart', 'budget'])
+def test_transcription_progress_preserves_stop_signals(kind):
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    from backend.utils.transcription_progress import report, reporting
+    error = {'cancel': JobStopped(), 'restart': ServiceRestarted(), 'budget': JobDurationExceeded()}[kind]
+    def stopped(_fraction):
+        raise error
+    with reporting(stopped), pytest.raises(type(error)) as caught:
+        report(1, 10)
+    assert caught.value is error
+
+
+@pytest.mark.parametrize('kind', ['cancel', 'restart', 'budget'])
+def test_model_download_preserves_stop_signals(tmp_path, monkeypatch, kind):
+    from backend.core.project_cancellation import JobStopped, ServiceRestarted
+    from backend.core.job_budget import JobDurationExceeded
+    from backend.services import whisper_model_manager
+    error = {'cancel': JobStopped(), 'restart': ServiceRestarted(), 'budget': JobDurationExceeded()}[kind]
+    _install_fake_whisper(monkeypatch, lambda *a, **k: pytest.fail('do not load after stopping download'))
+    def stopped(_name):
+        raise error
+    manager = SimpleNamespace(model_configs={'base': {}}, get_local_model_path=lambda _: None, ensure_downloaded=stopped)
+    monkeypatch.setattr(whisper_model_manager, 'get_model_manager', lambda: manager)
+    video = tmp_path / 'clip.mp4'
+    video.write_bytes(b'video')
+    with pytest.raises(type(error)) as caught:
+        _recognizer()._generate_subtitle_whisper_local(video, tmp_path / 'out.srt', SpeechRecognitionConfig(model='base'))
+    assert caught.value is error
+
+
 def test_default_backend_is_cpu_int8(monkeypatch):
     monkeypatch.delenv("AUTOCLIP_WHISPER_DEVICE", raising=False)
     assert resolve_local_whisper_backend() == ("cpu", "int8")

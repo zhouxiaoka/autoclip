@@ -160,6 +160,13 @@ def normalize_failure_stage(value: Any) -> str | None:
     return mapped if mapped in schema.FAILURE_STAGES else None
 
 
+def normalize_request_stage(value: Any) -> str | None:
+    # Preserve current pipeline steps before applying the older coarse aliases.
+    if isinstance(value, str) and value in schema.LLM_REQUEST_STAGES:
+        return value
+    return normalize_failure_stage(value)
+
+
 def classify_run_upstream(error: BaseException | None, http_status: int | None = None) -> str | None:
     """Run-level / Sentry tag. Skip unknown and timeout/connection without HTTP.
 
@@ -375,7 +382,7 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
     except Exception as error:
         request_finished(
             provider=name, model=model, base_url=base_url, kind="text",
-            stage=_current_stage(), http_status=_http_status(error), error=error,
+            stage=_current_request_stage(), http_status=_http_status(error), error=error,
             retries=current_retry_count(), duration_ms=_elapsed_ms(started),
             outcome="error", failure_stage=_current_stage() or "analyze", identity=identity,
         )
@@ -384,7 +391,7 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
     prompt_tokens, completion_tokens, reasoning_tokens = _tokens_from_usage(usage)
     request_finished(
         provider=name, model=model, base_url=base_url, kind="text",
-        stage=_current_stage(), http_status=200,
+        stage=_current_request_stage(), http_status=200,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         reasoning_tokens=reasoning_tokens, retries=current_retry_count(),
         duration_ms=_elapsed_ms(started), outcome="success",
@@ -421,7 +428,7 @@ def emit_vision_request(
             model=config.get("model"),
             base_url=config.get("base_url"),
             kind="vision",
-            stage=_current_stage() or "vision",
+            stage=_current_request_stage() or "vision",
             error=error,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -704,7 +711,7 @@ def _request_properties(
         "model": _safe_model(model or ctx.get("model")),
         "base_url": base_url or ctx.get("base_url"),
         "kind": kind if kind in schema.REQUEST_KINDS else (ctx.get("kind") or "text"),
-        "stage": normalize_failure_stage(stage or _current_stage()) or "other",
+        "stage": normalize_request_stage(stage or _current_request_stage()) or "other",
         "http_status": status,
         "upstream_error_type": upstream,
         "prompt_tokens": prompt_tokens,
@@ -912,6 +919,14 @@ def _post_event(event: str, properties: dict[str, Any], *, envelope: dict[str, A
     except (OSError, TypeError, ValueError, urllib.error.URLError):
         logger.warning("%s was not delivered", event)
         return False
+
+
+def _current_request_stage() -> str:
+    try:
+        from backend.core import llm_usage
+        return normalize_request_stage(llm_usage._stage.get()) or "other"
+    except Exception:  # noqa: BLE001 - never let diagnostics block the request
+        return "other"
 
 
 def _current_stage() -> str:

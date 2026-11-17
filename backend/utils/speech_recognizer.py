@@ -660,6 +660,9 @@ class SpeechRecognizer:
                                        config: SpeechRecognitionConfig) -> Path:
         """使用本地 faster-whisper 生成字幕（桌面按需安装的运行时）。"""
         from backend.services import whisper_runtime
+        from backend.core.job_budget import JobDurationExceeded
+        from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+        stop_errors = (JobStopped, ProjectDeleted, ServiceRestarted, JobDurationExceeded)
 
         if not whisper_runtime.is_installed():
             raise SpeechRecognitionError(
@@ -701,6 +704,8 @@ class SpeechRecognizer:
                     from backend.core.job_budget import pause_clip_job_budget
                     with pause_clip_job_budget():
                         cached_model = manager.ensure_downloaded(config.model)
+                except stop_errors:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     # 每个下载源的失败原因只进日志；界面文案不带异常名和原文（RC156 #11）。
                     logger.warning("Whisper 模型 %s 下载失败: %s: %s", config.model, type(exc).__name__, exc)
@@ -798,6 +803,8 @@ class SpeechRecognizer:
             def transcribe_with_vad_fallback(model):
                 try:
                     return transcribe(model, vad_filter=True)
+                except stop_errors:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     if not vad_backend_failed(exc):
                         raise
@@ -809,6 +816,8 @@ class SpeechRecognizer:
 
             try:
                 model = load_model(device, compute_type)
+            except stop_errors:
+                raise
             except Exception as exc:  # noqa: BLE001
                 if device == "cpu":
                     raise
@@ -820,6 +829,8 @@ class SpeechRecognizer:
                 from backend.core.job_budget import pause_clip_job_budget
                 with pause_clip_job_budget():
                     segments, _info = transcribe_with_vad_fallback(model)
+            except stop_errors:
+                raise
             except RuntimeError as exc:
                 if device == "cpu":
                     raise
@@ -850,16 +861,13 @@ class SpeechRecognizer:
             logger.info(f"本地 faster-whisper 字幕生成成功: {output_path}")
             return output_path
 
-        except SpeechRecognitionError:
+        except (SpeechRecognitionError, *stop_errors):
             raise
         except ModuleNotFoundError as e:
             raise SpeechRecognitionError(
                 f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 默认模型 → 语音转字幕」重新安装 Whisper。"
             )
         except Exception as e:  # noqa: BLE001
-            from backend.core.project_cancellation import ProjectDeleted
-            if isinstance(e, ProjectDeleted):
-                raise
             # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。
             # 这里已经变成给客户端的 SpeechRecognitionError，进程继续跑。
             logger.warning("本地 faster-whisper 生成字幕失败: %s: %s", type(e).__name__, e)

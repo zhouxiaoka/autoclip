@@ -1045,6 +1045,15 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None, cue
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
     nobody to follow, `full_frame_pending` when the detector is not available yet.
     """
+    from backend.core.job_budget import ensure_clip_job_budget, pause_clip_job_budget
+    ensure_clip_job_budget()
+    # Detector installation, frame decoding and face tracking are local work, just like
+    # Whisper and encoding. Preserve the remaining request budget even on fallback.
+    with pause_clip_job_budget():
+        return _local_speaker_framing(value, video, window=window, wait_sec=wait_sec, scans=scans, cues=cues)
+
+
+def _local_speaker_framing(value, video, *, window, wait_sec, scans, cues):
     from backend.services.studio import framing
     deadline = monotonic() + wait_sec
     while not framing.is_installed() and framing.get_status().get('status') == 'installing' and monotonic() < deadline:
@@ -1163,25 +1172,39 @@ def _content_key(value):
 def _posts_for(project_id, items, cache):
     """{(content key, strategy id): post copy}: one model call per clip covering all its platforms, side by side."""
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+    from threading import Lock
     from backend.services.studio import packaging, post_copy
     _packaging_inputs(project_id, cache)
     clips = {}
     for strategy_id, value in items:
         clips.setdefault(_content_key(value), (value, []))[1].append(strategy_id)
+    completed = {}
+    completed_lock = Lock()
 
     def one(entry):
         key, (value, platforms) = entry
         lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
         title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
-        return key, post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        posts = post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        with completed_lock:
+            completed[key] = posts
 
     try:
-        with llm_usage.stage('post_copy'):
-            results = map_chunks(one, clips.items())
+        # Publishing descriptions are optional. A small model can keep streaming
+        # them indefinitely; do not spend the entire generation budget before
+        # any of the already prepared videos can enter rendering.
+        with clip_step_budget(post_copy.POST_COPY_BUDGET_SEC, reserve_seconds=30), llm_usage.stage('post_copy'):
+            map_chunks(one, clips.items(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # parent expiration remains a real job failure
+        logger.warning('Post copy step timed out; keeping completed copy and rendering prepared clips')
+    except (JobStopped, ProjectDeleted, ServiceRestarted):
+        raise
     except Exception as error:  # noqa: BLE001 - copy is never a blocker
         logger.warning('Post copy failed: %s', type(error).__name__)
-        return {}
-    return {(key, platform): post for key, by_platform in results for platform, post in by_platform.items()}
+    return {(key, platform): post for key, by_platform in completed.items() for platform, post in by_platform.items()}
 
 
 def _design_covers(project_id, draft, job_id):
@@ -1308,19 +1331,33 @@ def _packaging_inputs(project_id, cache):
 def _prefetch_packaging(project_id, items, burned, cache):
     """Run the packaging model calls of a batch side by side (one per distinct content and template).
 
-    Each call waits ~20 s on the model; done one after another they were ~8 minutes for 25 clips.
+    Keep completed packages when the optional phase expires; remaining drafts use
+    deterministic fallback captions so model formatting cannot block rendering.
     """
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)  # load shared inputs once, before the threads
     first = {}
     for strategy_id, value in items:
         strategy = _project_strategy(project_id, strategy_id)
         key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
         first.setdefault(key, (strategy_id, value))
-    map_chunks(lambda item: _apply_packaging(project_id, item[1], item[0], burned, cache), first.values())
+    def one(item):
+        ensure_clip_job_budget()
+        return _apply_packaging(project_id, item[1], item[0], burned, cache)
+
+    try:
+        with clip_step_budget(packaging.PACKAGING_BUDGET_SEC, reserve_seconds=30):
+            map_chunks(one, first.values(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # expiration of the whole job is still terminal
+        logger.warning('Packaging step timed out; keeping completed packages and available source captions')
+        for strategy_id, value in first.values():
+            _apply_packaging(project_id, value, strategy_id, burned, cache, allow_model=False)
 
 
-def _apply_packaging(project_id, value, strategy_id, burned, cache):
+def _apply_packaging(project_id, value, strategy_id, burned, cache, *, allow_model=True):
     """Attach template packaging (title, captions, nameplates, tags) for vertical templates.
 
     One model call per scene set and template; every vertical platform of the same audience
@@ -1342,7 +1379,7 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
         with llm_usage.stage('packaging'):
             cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, burned_language=cache.get('burned_language'),
                                                    known_names=cache['names'],
-                                                   avoid_palettes=tuple(used[-2:]))
+                                                   avoid_palettes=tuple(used[-2:]), **({} if allow_model else {'allow_model': False}))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
     return {**value, 'packaging': cache[key]}
@@ -1940,8 +1977,10 @@ def _produce_on_demand(project_id, variant_id):
         burned = _source_has_burned_subtitles(project_id, video)
         strategy_id = variant['strategy_id']
         value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
-        value = _apply_packaging(project_id, value, strategy_id, burned, {})
-        posts = _posts_for(project_id, [(strategy_id, value)], {})
+        packaging_cache = {}
+        _prefetch_packaging(project_id, [(strategy_id, value)], burned, packaging_cache)
+        value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+        posts = _posts_for(project_id, [(strategy_id, value)], packaging_cache)
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 

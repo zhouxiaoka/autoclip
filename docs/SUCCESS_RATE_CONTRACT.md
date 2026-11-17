@@ -43,6 +43,8 @@ new-api 令牌额度用尽与 key 写错都可能是 401「无效的令牌」。
 - `asr_readiness_checked`：provider（whisper_local / sensevoice_local / cloud）、code、has_subtitle、blocked
 - `provider_validation_finished`：provider、base_url_host、result（success/failed/skipped）、upstream_error_type
 
+请求 `stage` 使用独立的 `LLM_REQUEST_STAGES` 白名单，保留 `clip_finder`、`boundaries`、`packaging`、`post_copy`、`burned_captions`、`cover_frame`、`cover_check`。既有 `FAILURE_STAGES` 和 run/Sentry 的粗粒度归因保持不变。未知阶段仍为 `other`，不能把自由文本或素材内容放进枚举。新枚举为 schema 1 的增量；历史 `other` 或 `render` 无法据此还原细分阶段。
+
 run 级（后续挂到现有 `studio_generation_finished` / `studio_production_finished` 与 Sentry tag，**不改事件名**）：
 
 provider、model、base_url_host、http_status（400–599）、upstream_error_type、failure_stage、llm_calls、tokens、retry_count、degrade_count、billable_calls_before_failure

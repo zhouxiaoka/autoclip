@@ -11,6 +11,7 @@ from backend.core.job_budget import (
     bound_clip_job,
     budget_expired,
     clip_job_read_timeout,
+    clip_step_budget,
     ensure_clip_job_budget,
     pause_clip_job_budget,
     suspend_clip_job_budget,
@@ -82,6 +83,20 @@ def test_read_timeout_shrinks_to_the_time_left():
     with bound_clip_job(0):
         with pytest.raises(JobDurationExceeded):
             clip_job_read_timeout(600)
+
+
+def test_step_deadline_closes_a_stream_then_restores_the_parent():
+    import threading
+    from backend.core.llm_stream import budget_watch
+
+    closed = threading.Event()
+    response = type('Response', (), {'close': lambda self: closed.set()})()
+    with bound_clip_job(10):
+        with clip_step_budget(0.02), budget_watch(response):
+            assert closed.wait(2), 'stream watchdog did not inherit the step deadline'
+        ensure_clip_job_budget()
+        assert clip_job_read_timeout(600) > 0
+    assert budget_expired() is False
 
 
 def test_duration_cap_is_a_timeout_the_user_can_read_and_is_not_retried():

@@ -49,14 +49,27 @@ def checks(group: str, python: str):
 def pytest_skips(path: Path):
     """Only an external opt-in probe, a foreign-platform test, and the optional hub comparison may skip."""
     rows = []
-    for case in ET.parse(path).iter('testcase'):
+    cases = list(ET.parse(path).iter('testcase'))
+    # The hard-kill guarantee is provided by Windows Job Objects / Linux
+    # PDEATHSIG. macOS must still execute all supported cleanup paths in this run.
+    cleanup = {'test_pip_dies_when_backend_gets_sigterm', 'test_shutdown_kills_every_live_pip',
+               'test_cancel_kills_pip_and_reports_cancel'}
+    covered = {case.get('name') for case in cases
+               if case.get('classname', '').split('.')[-1] == 'test_pip_child_guard'
+               and not any(case.find(tag) is not None for tag in ('skipped', 'failure', 'error'))}
+    for case in cases:
         if case.find('skipped') is None:
             continue
         name = case.get('name', '').split('[', 1)[0]
         module = case.get('classname', '')
         allowed = (module.endswith('test_upload_post_publisher') and name == 'test_live_upload_post_rejects_unknown_key') or (
             module.endswith('test_windows_asyncio') and name == 'test_windows_real_reset_and_subprocess' and os.name != 'nt') or (
-            module.endswith('test_whisper_snapshot_repair') and name == 'test_real_hub_copy_layout_does_not_replace_an_existing_file')
+            module.endswith('test_whisper_snapshot_repair') and name == 'test_real_hub_copy_layout_does_not_replace_an_existing_file') or (
+            sys.platform == 'darwin'
+            and module.split('.')[-1] in {'test_pip_child_guard', 'test_framing_concurrency'}
+            and name == 'test_pip_dies_when_backend_is_killed_hard'
+            and case.find('skipped').get('message') == 'macOS has no Job Object / PDEATHSIG for kill -9'
+            and cleanup <= covered)
         rows.append({'test': name, 'allowed': allowed})
     return rows
 
