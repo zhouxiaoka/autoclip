@@ -2172,7 +2172,6 @@
   "诊断设置没有保存，请重试。": "No se guardó el ajuste de diagnóstico. Inténtalo de nuevo.",
   "收起详情": "Ocultar detalles",
   "保存选择": "Guardar elección",
-  "任务失败时，会自动发送一小段视频帮助改善体验，可在设置中关闭。": "Si una tarea falla, se envía automáticamente un trozo corto del vídeo para mejorar la experiencia. Puedes desactivarlo en Ajustes.",
-  "任务失败时，会自动发送错误信息帮助改善体验，不会发送视频，可在设置中关闭。": "Si una tarea falla, se envía automáticamente la información del error para mejorar la experiencia. No se envía el vídeo. Puedes desactivarlo en Ajustes.",
-  "这次不会自动发送内容。可以在设置中打开。": "Esta vez no se envía nada automáticamente. Puedes activarlo en Ajustes."
+  "这次不会自动发送内容。可以在设置中打开。": "Esta vez no se envía nada automáticamente. Puedes activarlo en Ajustes.",
+  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "Recogemos la información de este error para mejorar la experiencia. Puedes desactivarlo en Ajustes."
 }

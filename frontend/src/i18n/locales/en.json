@@ -2172,7 +2172,6 @@
   "诊断设置没有保存，请重试。": "The diagnostic setting was not saved. Please try again.",
   "收起详情": "Hide details",
   "保存选择": "Save choice",
-  "任务失败时，会自动发送一小段视频帮助改善体验，可在设置中关闭。": "If a task fails, a short bit of the video is sent automatically to improve the experience. You can turn this off in Settings.",
-  "任务失败时，会自动发送错误信息帮助改善体验，不会发送视频，可在设置中关闭。": "If a task fails, error information is sent automatically to improve the experience. The video is not sent. You can turn this off in Settings.",
-  "这次不会自动发送内容。可以在设置中打开。": "Nothing is sent automatically this time. You can turn it on in Settings."
+  "这次不会自动发送内容。可以在设置中打开。": "Nothing is sent automatically this time. You can turn it on in Settings.",
+  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "We collect this error information to improve the experience. You can turn this off in Settings."
 }

@@ -6,11 +6,10 @@ export const FAILURE_HINT_MS = 7000
 export const FAILURE_HINT_MAX_MS = 20000
 
 export type TaskOrigin = 'file' | 'link' | 'unknown'
-export type HintKind = 'excerpt' | 'errors' | 'off'
+export type HintKind = 'on' | 'off'
 
 export const HINT_COPY: Record<HintKind, string> = {
-  excerpt: '任务失败时，会自动发送一小段视频帮助改善体验，可在设置中关闭。',
-  errors: '任务失败时，会自动发送错误信息帮助改善体验，不会发送视频，可在设置中关闭。',
+  on: '我们会收集本次错误信息，帮助改善体验，可在设置中关闭。',
   off: '这次不会自动发送内容。可以在设置中打开。',
 }
 
@@ -21,6 +20,24 @@ function taggedOrigin(value: object | null | undefined): 'file' | 'link' | undef
   if (!value || !('input_origin' in value)) return undefined
   const origin = (value as { input_origin?: unknown }).input_origin
   return origin === 'file' || origin === 'link' ? origin : undefined
+}
+
+const FAILED = new Set(['failed', 'error'])
+
+/** A project that is already failed on first sight is history. Only a live flip arms the hint. */
+export function nextLiveFailure<T extends { id: string; status?: string | null }>(
+  previous: Record<string, string>,
+  projects: T[],
+): { previous: Record<string, string>; failed: T | null } {
+  const next = { ...previous }
+  let failed: T | null = null
+  for (const project of projects) {
+    const status = typeof project.status === 'string' ? project.status : ''
+    const before = previous[project.id]
+    if (before && !FAILED.has(before) && FAILED.has(status)) failed = project
+    if (status) next[project.id] = status
+  }
+  return { previous: next, failed }
 }
 
 export function taskOrigin(project: {
@@ -40,11 +57,10 @@ export function taskOrigin(project: {
   return 'unknown'
 }
 
-/** Local files with excerpt allowed mention the clip. Links, unknown origins, and OFF never claim a video upload. */
-export function hintKind(origin: TaskOrigin, consent: ConsentLike): HintKind {
+/** The short hint never mentions video. An explicit off choice must not claim that anything is collected. */
+export function hintKind(_origin: TaskOrigin, consent: ConsentLike): HintKind {
   if (consent.unreadable || consent.diagnostics !== true) return 'off'
-  if (origin === 'file' && consent.media === true) return 'excerpt'
-  return 'errors'
+  return 'on'
 }
 
 export function hintSeen(storage: Pick<Storage, 'getItem'>): boolean {

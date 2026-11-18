@@ -26,6 +26,7 @@ import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import DiagnosticsDialog from '../features/diagnostics/DiagnosticsDialog'
 import FailureHint from '../features/diagnostics/FailureHint'
+import { nextLiveFailure } from '../features/diagnostics/failureHint'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { flagAssigned } from '../analytics/flags'
@@ -50,6 +51,14 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadVersion = useRef(0)
+  const seenStatus = useRef<Record<string, string>>({})
+  const [liveFailure, setLiveFailure] = useState(false)
+  useEffect(() => {
+    if (!currentProject?.id) return
+    const step = nextLiveFailure(seenStatus.current, [currentProject])
+    seenStatus.current = step.previous
+    if (step.failed) setLiveFailure(true)
+  }, [currentProject])
   const exampleView = useRef('')
   const exampleVisible = !loading && !error && currentProject?.id === id && !!(currentProject?.settings?.example || currentProject?.processing_config?.example)
   useEffect(() => {
@@ -378,7 +387,7 @@ const ProjectDetailPage: React.FC = () => {
         </div>
       </header>
 
-      {isFailed && !isVisual && <FailureHint active project={currentProject} />}
+      {liveFailure && <FailureHint active project={currentProject} />}
       {isCompleted || isVisual ? (
         <StudioResults key={currentProject.id} project={currentProject} onCreateCollection={() => setShowCreateCollection(true)} onReload={loadProject}>
           {sortedCollections.map(collection => <CollectionCard key={collection.id} collection={collection} clips={clips}

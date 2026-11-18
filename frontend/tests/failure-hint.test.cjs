@@ -27,22 +27,17 @@ test('the startup card and the import prompt are gone', () => {
   assert.doesNotMatch(viewSource, /已发送|成功发送/)
 })
 
-test('wording follows origin and an explicit off choice', () => {
+test('the short hint does not mention media, and an explicit off choice does not claim collection', () => {
   const on = { diagnostics: true, media: true }
-  assert.equal(hint.hintKind('file', on), 'excerpt')
-  assert.equal(hint.hintKind('link', on), 'errors')
-  assert.equal(hint.hintKind('unknown', on), 'errors')
-  assert.equal(hint.hintKind('file', { diagnostics: true, media: false }), 'errors')
+  for (const origin of ['file', 'link', 'unknown']) assert.equal(hint.hintKind(origin, on), 'on')
+  assert.equal(hint.hintKind('file', { diagnostics: true, media: false }), 'on')
   assert.equal(hint.hintKind('file', { diagnostics: false, media: true }), 'off')
   assert.equal(hint.hintKind('link', { diagnostics: false, media: false }), 'off')
   assert.equal(hint.hintKind('file', { diagnostics: true, media: true, unreadable: true }), 'off')
-  assert.match(hint.HINT_COPY.excerpt, /一小段视频/)
-  assert.match(hint.HINT_COPY.errors, /不会发送视频/)
+  assert.equal(hint.HINT_COPY.on, '我们会收集本次错误信息，帮助改善体验，可在设置中关闭。')
+  assert.doesNotMatch(hint.HINT_COPY.on, /视频|片段|原片|已发送|成功/)
   assert.match(hint.HINT_COPY.off, /不会自动发送/)
-  assert.doesNotMatch(hint.HINT_COPY.off, /一小段视频|不会发送视频/)
-  assert.equal(hint.taskOrigin({ source_file: '/tmp/a.mp4' }), 'file')
-  assert.equal(hint.taskOrigin({ source_url: 'https://example.com/v' }), 'link')
-  assert.equal(hint.taskOrigin({ source_url: 'https://example.com/v', source_file: '/tmp/a.mp4' }), 'unknown')
+  assert.doesNotMatch(hint.HINT_COPY.off, /会收集|视频/)
 })
 
 test('the first failure is remembered across a restart and does not repeat', () => {
@@ -57,6 +52,26 @@ test('the first failure is remembered across a restart and does not repeat', () 
   const restarted = hint.createHintGate(storage)
   assert.equal(restarted.claim(), false)
   assert.equal(memory.get(hint.FAILURE_HINT_KEY), '1')
+})
+
+test('a failure already on screen is history; only a live flip arms the hint', () => {
+  const home = fs.readFileSync(path.join(root, 'frontend/src/pages/HomePage.tsx'), 'utf8')
+  const detail = fs.readFileSync(path.join(root, 'frontend/src/pages/ProjectDetailPage.tsx'), 'utf8')
+  const importer = fs.readFileSync(path.join(root, 'frontend/src/features/studio/CreativeImport.tsx'), 'utf8')
+  assert.match(home, /nextLiveFailure/)
+  assert.match(home, /<FailureHint/)
+  assert.match(detail, /nextLiveFailure/)
+  assert.doesNotMatch(importer, /FailureHint/)
+  assert.match(importer, /navigate\(`\/project\/\$\{result\.project_id\}`\)/)
+  let previous = {}
+  let step = hint.nextLiveFailure(previous, [{ id: 'old', status: 'failed', source_file: 'a.mp4' }])
+  assert.equal(step.failed, null)
+  previous = step.previous
+  step = hint.nextLiveFailure(previous, [{ id: 'old', status: 'failed', source_file: 'a.mp4' }])
+  assert.equal(step.failed, null)
+  step = hint.nextLiveFailure({}, [{ id: 'live', status: 'processing', source_file: 'b.mp4' }])
+  step = hint.nextLiveFailure(step.previous, [{ id: 'live', status: 'failed', source_file: 'b.mp4' }])
+  assert.equal(step.failed.id, 'live')
 })
 
 test('the hint dismisses itself and pauses while hovered', () => {
