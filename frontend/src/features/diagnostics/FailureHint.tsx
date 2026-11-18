@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { t } from '../../i18n'
 import { useTranslation } from 'react-i18next'
@@ -28,7 +27,9 @@ export default function FailureHint({ active, project }: { active: boolean; proj
   useEffect(() => {
     if (!active) return
     let live = true
-    diagnosticsApi.consent()
+    const read = diagnosticsApi.consent
+    if (typeof read !== 'function') return
+    read()
       .then((grant) => {
         if (!live || !claimFailureHint()) return
         setKind(hintKind(taskOrigin(project), grant))
@@ -55,7 +56,7 @@ export default function FailureHint({ active, project }: { active: boolean; proj
 
   if (!kind || typeof document === 'undefined') return null
 
-  return createPortal(
+  return (
     <div
       ref={root}
       className="ac-failure-hint"
@@ -72,7 +73,6 @@ export default function FailureHint({ active, project }: { active: boolean; proj
         className="ac-failure-hint-link"
         onClick={() => navigate('/settings?section=diagnostics')}
       >{t('设置')}</button>
-    </div>,
-    document.body,
+    </div>
   )
 }

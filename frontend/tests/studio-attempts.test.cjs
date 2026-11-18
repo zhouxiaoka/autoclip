@@ -360,6 +360,7 @@ async function mount(server, override = {}) {
     'features/studio/OutputVariantCard': { __esModule: true, default: empty }, 'features/studio/PlatformPicker': { __esModule: true, default: empty },
     'features/studio/noticeRuntime': { clearCompletionBadge: async () => {}, subscribeCompletionNotice: () => () => {}, noteWorkspaceCompletion() {} },
     'features/studio/overrides': { followOutputLeave: () => () => {} },
+    'features/diagnostics/FailureHint': { __esModule: true, default: () => null },
     'analytics/flags': { flagEnabled: () => false, flagAssigned: () => false },
     'analytics/studio': { trackLegacyEntry() {} },
     'analytics/posthog': { captureBusinessEvent: (event, props) => { events.push({ event, props }); return true }, isAnalyticsEnabled: () => true, onAnalyticsPreferenceChange() {} },

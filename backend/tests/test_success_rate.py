@@ -664,7 +664,9 @@ def _posted(monkeypatch):
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get('event'), str):
+            posted.append(body)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
