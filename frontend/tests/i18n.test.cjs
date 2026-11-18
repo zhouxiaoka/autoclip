@@ -137,6 +137,60 @@ test('feedback dialog discloses developer delivery in every locale', () => {
   assert.ok(catalogs.en[key].includes('GitHub Issue'))
 })
 
+test('reverted caption-correction copy stays out while diagnostics copy stays in every locale', () => {
+  const kept = [
+    '帮助改进 AutoClip',
+    '失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。关闭后会停掉尚未完成的上传。',
+    '允许附带失败任务的片段',
+    '在已开启改进诊断后，可额外上传该任务开头的短片段。短片段可能复现不了片尾才出现的超时。默认仍然关闭。',
+    '允许附带完整原片',
+    '需要单独同意。完整原片体积大，只在你明确允许后才会上传，并且受大小上限约束。',
+    '提交诊断',
+    '看看将要发送的内容。素材默认不包含，需要逐项勾选。用于排查和改进，不会用于训练模型。',
+    '短片段（从片头截取，可能复现不了片尾的超时）',
+    '完整原片（单独同意）',
+    '字幕文本（默认不发送）',
+    '保存到本机',
+    '没有配置上传地址，已改为保存到本机。',
+    '诊断已排队',
+    '诊断没有提交',
+    '已取消上传',
+    '删除已上传的诊断',
+    '以后的失败也自动发送脱敏诊断',
+    '只对打开这项之后的新失败生效，不会补传以前的失败。',
+    '关闭改进后，新的失败不会再自动上传。',
+    '我将对照清单再提交',
+    '这次失败没有可关联的尝试编号，仍然可以写下反馈。',
+    '将随诊断一起发送的字段',
+    '不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。',
+    '诊断设置没有保存，请重试。',
+  ]
+  const removed = [
+    '字幕翻译尚未完成，请检查后再发布',
+    '字幕翻译已完成，使用简化包装',
+    '片尾完整性需要复核，请预览最后一段',
+    '只重试字幕翻译',
+    '补译后请保存并重新导出，已有成片保留。',
+    '逐句校对',
+    '译文覆盖完整不代表意思正确。修改后请保存并重新导出。',
+    '选择字幕句子',
+    '原句',
+    '修改此句字幕',
+    '字幕不能为空',
+    '人工修改将随草稿保存，补译其他句子时保留。',
+    '试听原句',
+    '重译此句',
+    '草稿已修改，未应用迟到的翻译结果，请重试',
+    '原字幕或选段已变化，请核对人工修改后再重试',
+    '字幕句子不存在',
+    '此句重译未完成，原有字幕已保留，请稍后重试',
+  ]
+  for (const lang of langs) {
+    for (const key of kept) assert.ok(Object.hasOwn(catalogs[lang], key) && catalogs[lang][key].trim(), `${lang}: ${key}`)
+    for (const key of removed) assert.equal(Object.hasOwn(catalogs[lang], key), false, `${lang}: ${key}`)
+  }
+})
+
 test('feedback disclosure tells every locale that send goes through PostHog', () => {
   const keys = [
     '已收到。这句话会先到 PostHog，再公开出现在 GitHub。',
