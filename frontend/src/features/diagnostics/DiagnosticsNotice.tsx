@@ -101,8 +101,8 @@ export default function DiagnosticsNotice() {
   return createPortal(
     <aside className="ac-diagnostics-notice" role="region" aria-labelledby="ac-diagnostics-notice-title">
       <button type="button" className="ac-diagnostics-notice-x" aria-label={t('关闭')} onClick={dismiss}>×</button>
-      <h3 id="ac-diagnostics-notice-title">{t('失败诊断会自动发送')}</h3>
-      <p>{t('失败后会自动发送脱敏诊断和本地视频的压缩短片段，用来提高出片成功率，不会用来训练。链接导入只发送清洗后的链接，不发送下载的视频。可以现在关闭，也可以稍后在设置里改。')}</p>
+      <h3 id="ac-diagnostics-notice-title">{t('一起让 AutoClip 更好用')}</h3>
+      <p>{t('任务失败时，我们会自动发送错误信息，帮助改善产品体验，内容不用于任何训练和其他途径，你可以随时在设置中关闭。')}</p>
       {loadError && (
         <p className="ac-note">
           {t('已保存的诊断选择读不出来。在你确认前不会上传。')}
