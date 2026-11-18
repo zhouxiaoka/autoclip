@@ -2208,6 +2208,7 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function resolveFailureCause(',
              'export function presentFailure(',
              'function fixableSecondary(',
+             'export function briefReason(',
              'function reasonFor(',
              'function primaryFor(',
              'export function connectionUsableForSwitch(',

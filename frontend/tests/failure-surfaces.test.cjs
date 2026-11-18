@@ -150,10 +150,10 @@ test('the same stage conflict renders 制作 on the list and the detail', () => 
     error_message: error, error_code: 'provider_error',
     processing_config: { failure_stage: 'render', studio_generation_status: 'failed', preserved_result_count: 0 },
   })
-  for (const html of [card.html, detail.html]) {
-    assert.match(html, /制作：渲染失败/)
-    assert.doesNotMatch(html, /筛选：/)
-  }
+  assert.match(card.html, /这次没有做完，可以重试。/)
+  assert.doesNotMatch(card.html, /制作：|筛选：/)
+  assert.match(detail.html, /制作：渲染失败/)
+  assert.doesNotMatch(detail.html, /筛选：/)
   assert.ok(labels(card.buttons).includes('重试'))
   assert.ok(labels(detail.buttons).includes('重试'))
 })
@@ -213,9 +213,11 @@ test('a same-run receipt secondary quota is the primary on both, and another run
     error_message: RATE, error_code: 'rate_limited',
     processing_config: { failure_stage: 'render', upstream_error_type: 'rate_limited', preserved_result_count: 0, studio_generation_status: 'failed' },
   })
+  assert.match(other.card.html, /请求太频繁，请稍后再试。/)
+  assert.doesNotMatch(other.card.html, /制作：|筛选：/)
+  assert.match(other.detail.html, /制作：/)
+  assert.doesNotMatch(other.detail.html, /筛选：/)
   for (const side of [other.card, other.detail]) {
-    assert.match(side.html, /制作：/)
-    assert.doesNotMatch(side.html, /筛选：/)
     assert.doesNotMatch(side.html, /API Key 无效/)
     assert.ok(labels(side.buttons).includes('重试'))
     assert.equal(labels(side.buttons).includes('去设置'), false)
@@ -266,7 +268,8 @@ test('a chosen connection failure without a stage does not borrow the analysis d
     error_message: download, error_code: 'connection',
     processing_config: { failure_stage: 'download', studio_generation_status: 'failed', preserved_result_count: 0 },
   }, 2)
-  assert.match(explicit.card.html, /下载：/)
+  assert.match(explicit.card.html, /下载时网络中断了。/)
+  assert.doesNotMatch(explicit.card.html, /下载：/)
   assert.match(explicit.detail.html, /下载：/)
   assert.deepEqual(cta(explicit.card.buttons), ['重试'])
   assert.deepEqual(cta(explicit.detail.buttons), ['重试'])
