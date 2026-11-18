@@ -47,7 +47,7 @@ def _receipt(**extra):
 
 def test_privacy_copy_exists_in_all_eight_locales():
     key = "帮助改进 AutoClip"
-    purpose = "失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。关闭后会停掉尚未完成的上传。"
+    purpose = "失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未打开此开关时不会发送。关闭后会停掉尚未完成的上传。"
     for lang in ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr"):
         data = json.loads((ROOT / "frontend/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
         assert data[key]
@@ -139,12 +139,23 @@ def test_historical_failure_is_not_queued_and_a_later_one_is(data_dir, monkeypat
     monkeypatch.setattr(store, "write", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("studio write")))
     observe.schedule_new_failures("proj", {"attempts": [{"attempt_id": TOKEN, "state": "open"}]}, {"attempts": [later]})
     observe.deliver_pending()
-    upload.pump_once()
+    class Transport:
+        def __init__(self):
+            self.calls = []
+
+        def create_case(self, base, body, key):
+            self.calls.append((base, body, key))
+            raise upload.Offline("offline")
+
+    transport = Transport()
+    upload.pump_once(transport)
     rows = queue.list_items()
     assert len(rows) == 1
     assert rows[0]["attempt_id"] == TOKEN
-    assert rows[0]["status"] == "needs_endpoint"
+    assert rows[0]["status"] == "offline"
     assert rows[0]["files"] == []
+    assert transport.calls[0][0] == upload.DEFAULT_ENDPOINT
+    assert transport.calls[0][1]["files"] == []
     assert granted.diagnostics is True
 
 
@@ -202,6 +213,116 @@ def test_offline_retry_and_idempotent_enqueue(data_dir, tmp_path):
     assert queue.list_items()[0]["status"] == "offline"
     upload.pump_once(transport)
     assert transport.creates == 1  # backoff has not elapsed
+
+
+def test_opt_in_off_does_not_contact_the_default_worker(data_dir):
+    assert consent.load().diagnostics is False
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+
+    class Transport:
+        def create_case(self, *args, **kwargs):
+            raise AssertionError("opt-in off contacted the worker")
+
+        def delete(self, *args, **kwargs):
+            raise AssertionError("opt-in off deleted a case")
+
+        def put_part(self, *args, **kwargs):
+            raise AssertionError("opt-in off uploaded media")
+
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    upload.pump_once(Transport())
+    assert queue.list_items() == []
+
+
+def test_media_toggle_stays_off_when_diagnostics_are_on(data_dir):
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "raw").mkdir(parents=True)
+    (root / "raw" / "input.mp4").write_bytes(b"clip-bytes")
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued is not None
+    assert queued["files"] == []
+
+
+def test_endpoint_precedence_is_env_then_file_then_builtin(data_dir, monkeypatch):
+    monkeypatch.delenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", raising=False)
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    file = data_dir / "diagnostics" / "endpoint.json"
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text("{", encoding="utf-8")
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    file.write_text(json.dumps({"endpoint": "  "}), encoding="utf-8")
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    file.write_text(json.dumps({"endpoint": "https://file.example/diag/"}), encoding="utf-8")
+    assert upload.endpoint() == "https://file.example/diag"
+    monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "  ")
+    assert upload.endpoint() == "https://file.example/diag"
+    monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "https://env.example/diag/")
+    assert upload.endpoint() == "https://env.example/diag"
+
+
+def test_worker_requests_send_autoclip_user_agent_not_urllib_default(monkeypatch):
+    from backend.core.event_catalog import app_version
+
+    seen = []
+
+    class Response:
+        status = 200
+        headers = {}
+
+        def read(self):
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def capture(request, timeout=None, context=None):
+        assert context is None
+        seen.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr(upload.urllib.request, "urlopen", capture)
+    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.9")
+    transport = upload.UrllibTransport()
+    base = "http://127.0.0.1:9"
+    transport.create_case(base, {"manifest": {}}, "idem")
+    transport.cancel_creation(base, "idem", "recovery")
+    transport.complete(base, "case", "cap", {"object_id": "obj", "bytes": 1})
+    transport.delete(base, "case", "cap")
+    transport.put_part("http://127.0.0.1/part", b"abcd", {"Content-Length": "4", "content-md5": "abc"})
+    expected = f"AutoClip/{app_version()} diagnostics"
+    assert expected == "AutoClip/1.5.9 diagnostics"
+    assert len(seen) == 5
+    for request, _timeout in seen[:4]:
+        agent = request.get_header("User-agent")
+        assert agent == expected
+        assert not str(agent).startswith("Python-urllib/")
+        assert all("Python-urllib" not in value for _name, value in request.header_items())
+    put, _timeout = seen[4]
+    assert put.get_header("User-agent") is None
+    names = [name.lower() for name, _value in put.header_items()]
+    assert "user-agent" not in names
+    assert put.get_method() == "PUT"
+
+
+def test_blank_endpoint_override_still_waits_without_a_network_call(data_dir, monkeypatch):
+    monkeypatch.setattr(upload, "endpoint", lambda: "")
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    queue.enqueue({
+        "id": "c-empty", "idempotency_key": "empty", "status": "queued", "epoch": consent.load().epoch,
+        "manifest": build_manifest(_receipt()), "files": [], "explicit": False,
+    })
+
+    class Transport:
+        def create_case(self, *args, **kwargs):
+            raise AssertionError("blank endpoint contacted the worker")
+
+    upload.pump_once(Transport())
+    assert queue.get("c-empty")["status"] == "needs_endpoint"
 
 
 def test_explicit_submit_without_endpoint_saves_locally_and_does_not_touch_attempt(data_dir):

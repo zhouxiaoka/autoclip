@@ -1,6 +1,6 @@
 /**
- * Worker entry. No resources are created by this file.
- * Bindings (proposed, not provisioned): DIAGNOSTICS_BUCKET, DIAGNOSTICS_DB.
+ * Worker entry. This file does not create Cloudflare resources.
+ * Bindings: DIAGNOSTICS_BUCKET (autoclip-diagnostics), DIAGNOSTICS_DB (autoclip-diagnostics-meta).
  * Object-storage signing secrets stay in Worker secrets, never in the desktop client.
  */
 import type { R2Bucket, R2MultipartUpload, R2UploadedPart } from '@cloudflare/workers-types'

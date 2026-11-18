@@ -288,7 +288,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
-        <Row label={t("帮助改进 AutoClip")} hint={t("失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。关闭后会停掉尚未完成的上传。")}>
+        <Row label={t("帮助改进 AutoClip")} hint={t("失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未打开此开关时不会发送。关闭后会停掉尚未完成的上传。")}>
           <Switch checked={helpDiagnostics} onChange={(enabled) => void saveDiagnostics(enabled, enabled ? helpMedia : false, enabled && helpMedia ? helpOriginal : false)} />
         </Row>
         <Row label={t("允许附带失败任务的片段")} hint={t("在已开启改进诊断后，可额外上传该任务开头的短片段。短片段可能复现不了片尾才出现的超时。默认仍然关闭。")}>
