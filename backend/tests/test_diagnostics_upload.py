@@ -564,6 +564,7 @@ def test_save_local_never_touches_the_network_when_an_endpoint_exists(data_dir, 
     video = root / "raw" / "input.mp4"
     video.write_bytes(b"clip-bytes")
     (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    source.record_input_origin(project, "file")
     calls = {"n": 0}
 
     class Transport:
@@ -981,6 +982,15 @@ def test_source_link_keeps_the_video_id_and_drops_secrets():
     assert source.sanitize_source_link(raw) == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLpublic"
     assert source.sanitize_source_link("file:///tmp/private.mp4") is None
     assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc") == "https://www.youtube.com/watch?v=abc"
+    secret_query = "https://www.youtube.com/watch?v=abc&api-key=1&x-api-key=2&x-auth=3&sign=4&%2574oken=5"
+    assert source.sanitize_source_link(secret_query) == "https://www.youtube.com/watch?v=abc"
+    assert source.sanitize_source_link("https://cdn.example/watch/%2FUsers%2Falice?v=abc") is None
+    assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc&next=%2FUsers%2Falice") == "https://www.youtube.com/watch?v=abc"
+    assert source.sanitize_source_link("https://cdn.example/sk-live/watch?v=abc") is None
+    assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc&note=sk-live") == "https://www.youtube.com/watch?v=abc"
+    assert source.sanitize_source_link("https://www.youtube.com:99999/watch?v=abc") is None
+    contradictory = source.classify_metadata({"input_origin": "file", "source_url": "https://www.youtube.com/watch?v=abc"})
+    assert contradictory.origin == "unknown"
     legacy_link = source.classify_metadata({"source_url": "https://youtu.be/A_156w0aYtU"})
     legacy_file = source.classify_metadata({"source_url": None, "via": "cli"})
     assert legacy_link.origin == "link" and legacy_link.source_url.startswith("https://youtu.be/")
@@ -1093,6 +1103,71 @@ def test_queued_link_media_is_blocked_before_put(data_dir, tmp_path):
     assert stored["manifest"]["source_link"] == "https://www.bilibili.com/video/BV1qheu6kEFV/"
     assert "token" not in stored["manifest"]["source_link"]
     assert "cached-link-video" not in json.dumps(stored)
+
+
+def test_invalid_link_is_omitted_and_the_diagnostic_still_queues(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com:99999/watch?v=abc")
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("invalid link must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert "source_link" not in queued["manifest"]
+    assert queued["manifest"]["attempt"]["error_code"] == "timeout"
+    assert "99999" not in json.dumps(queued["manifest"])
+
+
+def test_contradictory_file_origin_does_not_upload_media(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    folder = data_dir / "projects" / "proj" / "metadata"
+    folder.mkdir(parents=True)
+    (folder / "input_origin.json").write_text(
+        json.dumps({"origin": "file", "source_url": "https://www.youtube.com/watch?v=abc"}),
+        encoding="utf-8",
+    )
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("contradictory origin must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert "source_link" not in queued["manifest"]
+
+
+def test_unknown_origin_submit_does_not_transcode(data_dir, monkeypatch):
+    root = data_dir / "projects" / "proj"
+    (root / "metadata").mkdir(parents=True)
+    (root / "raw").mkdir()
+    (root / "raw" / "input.mp4").write_bytes(b"local-video")
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("unknown origin must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    service.submit("proj", TOKEN, roles=["excerpt"], informed=True)
+    stored = queue.list_items()[0]
+    assert stored["files"] == []
+    assert stored["manifest"]["attempt"]["error_code"] == "timeout"
+
+
+def test_preview_includes_the_sanitized_source_link(data_dir):
+    root = data_dir / "projects" / "proj"
+    (root / "metadata").mkdir(parents=True)
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com/watch?v=abc&api-key=secret")
+    shown = service.preview("proj", TOKEN)
+    assert shown["manifest"]["source_link"] == "https://www.youtube.com/watch?v=abc"
 
 
 def test_link_is_not_uploaded_before_notice_or_when_diagnostics_are_off(data_dir):

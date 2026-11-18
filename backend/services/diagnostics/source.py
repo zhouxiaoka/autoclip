@@ -7,15 +7,15 @@ import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from backend.services.studio import store
 
 _ORIGIN_NAME = "input_origin.json"
-_SECRET_PARAM = re.compile(
-    r"token|secret|signature|password|passwd|credential|cookie|apikey|api_key|(^|_)(key|sig|sid|pwd|auth)($|_)",
-    re.IGNORECASE,
-)
+_SECRET_PARTS = frozenset({
+    "token", "secret", "signature", "sign", "password", "passwd", "pwd",
+    "credential", "cookie", "apikey", "key", "sig", "sid", "auth",
+})
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,8 @@ def classify_metadata(meta: dict | None) -> InputSource:
     origin = meta.get("input_origin")
     url = meta.get("source_url")
     if origin == "file":
+        if _http_url(url):
+            return InputSource("unknown")
         return InputSource("file")
     if origin == "link":
         return InputSource("link", url if isinstance(url, str) else None)
@@ -84,8 +86,53 @@ def classify_metadata(meta: dict | None) -> InputSource:
     return InputSource("unknown")
 
 
+def _http_url(value: object) -> bool:
+    return isinstance(value, str) and value.strip().lower().startswith(("http://", "https://"))
+
+
+def _decode_bounded(value: str, rounds: int = 3) -> str:
+    current = value
+    for _ in range(rounds):
+        try:
+            decoded = unquote(current)
+        except Exception:
+            break
+        if decoded == current or len(decoded) > 2000:
+            break
+        current = decoded
+    return current
+
+
+def _name_parts(name: str) -> list[str]:
+    folded = _decode_bounded(name).lower().replace("-", "_")
+    return [part for part in re.split(r"[^a-z0-9_]+", folded) if part]
+
+
+def _secret_name(name: str) -> bool:
+    parts: list[str] = []
+    for piece in _name_parts(name):
+        parts.extend(part for part in piece.split("_") if part)
+    return any(part in _SECRET_PARTS for part in parts)
+
+
+def _unsafe_text(value: str) -> bool:
+    samples = {value, _decode_bounded(value)}
+    for sample in samples:
+        folded = sample.lower().replace("\\", "/")
+        if "sk-" in folded or "/users/" in folded:
+            return True
+    return False
+
+
 def sanitize_source_link(value: str | None) -> str | None:
-    """Keep a public video URL. Drop userinfo, fragments, and secret query parameters. Never fetch it."""
+    """Keep a public video URL. Drop secrets. Never fetch the URL and never log the raw value."""
+    try:
+        return _sanitize_source_link(value)
+    except Exception:
+        return None
+
+
+def _sanitize_source_link(value: str | None) -> str | None:
     if not isinstance(value, str):
         return None
     raw = value.strip()
@@ -97,25 +144,28 @@ def sanitize_source_link(value: str | None) -> str | None:
     parts = urlsplit(raw)
     if parts.scheme.lower() not in {"http", "https"} or not parts.hostname:
         return None
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    if _unsafe_text(parts.path):
+        return None
     kept = []
     for key, item in parse_qsl(parts.query, keep_blank_values=False):
-        if _SECRET_PARAM.search(key) or "sk-" in item.lower() or any(char in item for char in "\r\n"):
+        if _secret_name(key) or _unsafe_text(item) or any(char in item for char in "\r\n"):
             continue
         if len(key) > 40 or len(item) > 200:
             continue
         kept.append((key, item))
     host = parts.hostname
     netloc = f"[{host}]" if ":" in host else host
-    if parts.port:
-        netloc = f"{netloc}:{parts.port}"
+    if port:
+        netloc = f"{netloc}:{port}"
     cleaned = urlunsplit((parts.scheme.lower(), netloc, parts.path, urlencode(kept), ""))
     if (
         not cleaned
         or len(cleaned) > 300
-        or "\\" in cleaned
-        or "/Users/" in cleaned
-        or "/users/" in cleaned
-        or "sk-" in cleaned.lower()
+        or _unsafe_text(cleaned)
         or "@" in urlsplit(cleaned).netloc
     ):
         return None
@@ -139,6 +189,8 @@ def _sidecar(project_id: str) -> InputSource | None | str:
         return "invalid"
     origin = payload.get("origin")
     if origin not in {"link", "file"}:
+        return "invalid"
+    if origin == "file" and _http_url(payload.get("source_url")):
         return "invalid"
     url = payload.get("source_url") if origin == "link" and isinstance(payload.get("source_url"), str) else None
     return InputSource(origin, url)

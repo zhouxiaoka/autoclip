@@ -73,7 +73,10 @@ def _log_text(project_id: str) -> str:
 
 def preview(project_id: str, attempt_id: str, *, probe=None) -> dict:
     receipt = _receipt(_state(project_id), attempt_id)
-    manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
+    _origin, source_link = _input_for_diagnostics(project_id)
+    manifest = build_manifest(
+        receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
+    )
     consent = load()
     view = consent.public()
     view["endpoint_configured"] = bool(upload.endpoint())
@@ -119,7 +122,7 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
             diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True,
         )
     origin, source_link = _input_for_diagnostics(project_id)
-    if origin == "link":
+    if origin != "file":
         wanted = []
     receipt = _receipt(_state(project_id), attempt_id)
     manifest = build_manifest(

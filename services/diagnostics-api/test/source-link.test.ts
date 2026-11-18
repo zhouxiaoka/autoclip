@@ -21,8 +21,23 @@ function manifest(extra: Record<string, unknown> = {}) {
 test('a sanitized public video link is accepted and a secret query is not', () => {
   const clean = manifest({ source_link: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLpublic' })
   assert.deepEqual(manifestProblems(clean, 262144), [])
-  const dirty = manifest({ source_link: 'https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ&token=abc#frag' })
-  assert.ok(manifestProblems(dirty, 262144).includes('source_link'))
-  const fileUrl = manifest({ source_link: 'file:///tmp/private.mp4' })
-  assert.ok(manifestProblems(fileUrl, 262144).includes('source_link'))
+  const keptId = manifest({ source_link: 'https://www.youtube.com/watch?v=abc' })
+  assert.deepEqual(manifestProblems(keptId, 262144), [])
+  const dirty = [
+    'https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ&token=abc#frag',
+    'https://www.youtube.com/watch?v=abc&api-key=1',
+    'https://www.youtube.com/watch?v=abc&x-api-key=1',
+    'https://www.youtube.com/watch?v=abc&x-auth=1',
+    'https://www.youtube.com/watch?v=abc&sign=1',
+    'https://www.youtube.com/watch?v=abc&%2574oken=1',
+    'https://cdn.example/watch/%2FUsers%2Falice?v=abc',
+    'https://www.youtube.com/watch?v=abc&next=%2FUsers%2Falice',
+    'https://cdn.example/sk-live/watch?v=abc',
+    'https://www.youtube.com/watch?v=abc&note=sk-live',
+    'file:///tmp/private.mp4',
+    'https://www.youtube.com:99999/watch?v=abc',
+  ]
+  for (const source_link of dirty) {
+    assert.ok(manifestProblems(manifest({ source_link }), 262144).includes('source_link'), source_link)
+  }
 })

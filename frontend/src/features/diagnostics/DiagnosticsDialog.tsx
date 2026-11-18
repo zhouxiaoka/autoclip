@@ -87,6 +87,7 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
             {attempt.error_code && <span>{attempt.error_code}</span>}
             {attempt.failure_stage && <span>{attempt.failure_stage}</span>}
             {typeof attempt.sequence === 'number' && <span>{`#${attempt.sequence}`}</span>}
+            {preview?.manifest.source_link && <span>{preview.manifest.source_link}</span>}
           </div>
         )}
         <p className="ac-note">{t('不含 API 密钥、字幕正文、项目名或个人路径。自动发送的是脱敏诊断；完整原片和短片段可以单独关闭。')}</p>

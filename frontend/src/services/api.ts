@@ -355,7 +355,7 @@ export interface DiagnosticsConsent {
 }
 
 export interface DiagnosticsPreview {
-  manifest: { attempt?: { error_code?: string; failure_stage?: string; attempt_id?: string; sequence?: number }; run?: { provider?: string; model?: string; duration_ms?: number } }
+  manifest: { source_link?: string; attempt?: { error_code?: string; failure_stage?: string; attempt_id?: string; sequence?: number }; run?: { provider?: string; model?: string; duration_ms?: number } }
   files: { role: string; size_bytes?: number; duration_sec?: number; rejected?: string; limitation?: string }[]
   consent: DiagnosticsConsent
   excerpt_limitation: string
