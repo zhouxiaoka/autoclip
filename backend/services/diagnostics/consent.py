@@ -1,4 +1,4 @@
-"""Local diagnostics consent. Default off. This is not analytics and not model training."""
+"""Local diagnostics consent. Unset defaults on. This is not analytics and not model training."""
 from __future__ import annotations
 
 import json
@@ -31,6 +31,9 @@ class Consent:
     text_version: str
     diagnostics_at: str | None
     updated_at: str | None
+    notice_seen: bool = False
+    persisted: bool = False
+    unreadable: bool = False
 
     def public(self) -> dict:
         return {
@@ -43,12 +46,20 @@ class Consent:
             "not_for_training": True,
             "diagnostics_at": self.diagnostics_at,
             "updated_at": self.updated_at,
+            "notice_seen": self.notice_seen,
+            "unreadable": self.unreadable,
             "endpoint_configured": False,
         }
 
 
-def _blank() -> Consent:
-    return Consent(False, False, False, 0, CONSENT_TEXT_VERSION, None, None)
+def _unset() -> Consent:
+    """No saved choice. The product default is on, but nothing is sent until the notice is confirmed."""
+    return Consent(True, True, True, 0, CONSENT_TEXT_VERSION, None, None, False, False, False)
+
+
+def _unreadable() -> Consent:
+    """A present file that cannot be read is not treated as a fresh opt-in."""
+    return Consent(False, False, False, 0, CONSENT_TEXT_VERSION, None, None, False, True, True)
 
 
 def _parse(raw: dict) -> Consent:
@@ -60,21 +71,36 @@ def _parse(raw: dict) -> Consent:
     at = raw.get("diagnostics_at") if isinstance(raw.get("diagnostics_at"), str) else None
     updated = raw.get("updated_at") if isinstance(raw.get("updated_at"), str) else None
     version = raw.get("text_version") if isinstance(raw.get("text_version"), str) else ""
-    return Consent(diagnostics, media, full, epoch, version or CONSENT_TEXT_VERSION, at, updated)
+    # Files written before notice_seen existed are explicit saved choices.
+    notice_seen = raw.get("notice_seen") is True if "notice_seen" in raw else True
+    return Consent(
+        diagnostics, media, full, epoch, version or CONSENT_TEXT_VERSION, at, updated,
+        notice_seen, True, False,
+    )
 
 
 def load() -> Consent:
+    file = consent_path()
+    if not file.exists():
+        return _unset()
     try:
-        raw = json.loads(consent_path().read_text(encoding="utf-8"))
+        raw = json.loads(file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return _blank()
-    return _parse(raw) if isinstance(raw, dict) else _blank()
+        return _unreadable()
+    return _parse(raw) if isinstance(raw, dict) else _unreadable()
+
+
+def _stored(consent: Consent) -> dict:
+    payload = consent.public()
+    payload.pop("endpoint_configured", None)
+    payload.pop("unreadable", None)
+    return payload
 
 
 def _atomic(consent: Consent) -> None:
     file = consent_path()
     file.parent.mkdir(parents=True, exist_ok=True)
-    payload = {k: v for k, v in consent.public().items() if k != "endpoint_configured"}
+    payload = _stored(consent)
     tmp = file.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -89,7 +115,7 @@ def _atomic(consent: Consent) -> None:
 
 
 def update(*, diagnostics: bool, media: bool, full_original: bool, informed: bool) -> Consent:
-    """Any newly true scope requires informed consent. Narrowing or a new grant bumps epoch."""
+    """A saved choice is explicit. Turning the main switch on or off changes the epoch."""
     diagnostics = bool(diagnostics)
     media = bool(media) and diagnostics
     full_original = bool(full_original) and media
@@ -97,24 +123,20 @@ def update(*, diagnostics: bool, media: bool, full_original: bool, informed: boo
         raise PermissionError("informed_required")
     with _LOCK:
         current = load()
-        fresh_text = diagnostics and current.text_version != CONSENT_TEXT_VERSION
-        narrowed = (
-            (current.diagnostics and not diagnostics)
-            or (current.media and not media)
-            or (current.full_original and not full_original)
-        )
-        widened = (
-            (diagnostics and not current.diagnostics)
-            or (media and not current.media)
-            or (full_original and not current.full_original)
-            or fresh_text
-        )
-        epoch = current.epoch + (1 if narrowed or widened else 0)
-        diagnostics_at = current.diagnostics_at
-        if diagnostics and (not current.diagnostics or fresh_text):
+        if not current.persisted or current.unreadable:
+            nxt = Consent(
+                diagnostics, media, full_original, 1, CONSENT_TEXT_VERSION,
+                _now() if diagnostics else None, _now(), True, True, False,
+            )
+            _atomic(nxt)
+            return nxt
+        epoch = current.epoch + (1 if current.diagnostics != diagnostics else 0)
+        diagnostics_at = None if not diagnostics else current.diagnostics_at
+        if diagnostics and not current.diagnostics:
             diagnostics_at = _now()
         nxt = Consent(
-            diagnostics, media, full_original, epoch, CONSENT_TEXT_VERSION, diagnostics_at, _now(),
+            diagnostics, media, full_original, epoch, CONSENT_TEXT_VERSION,
+            diagnostics_at, _now(), True, True, False,
         )
         _atomic(nxt)
         return nxt

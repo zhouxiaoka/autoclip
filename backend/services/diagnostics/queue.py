@@ -5,6 +5,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -251,6 +252,73 @@ def read_capability(item_id: str) -> str:
         return capability_path(item_id).read_text(encoding="utf-8").strip()
     except (OSError, ValueError):
         return ""
+
+
+def cancel_with_roles(roles: set[str]) -> list[dict]:
+    """Stop queued work that still carries a media role the user just turned off."""
+    with _LOCK:
+        items = _load()
+        changed = []
+        for row in items:
+            if (row.get("status") in TERMINAL and not row.get("inflight_create")) or row.get("status") == "delete_pending":
+                continue
+            present = {entry.get("role") for entry in (row.get("files") or []) if isinstance(entry, dict)}
+            if not present.intersection(roles):
+                continue
+            row["version"] = int(row.get("version") or 0) + 1
+            remote = bool(
+                (row.get("upload") or {}).get("case_id") or row.get("case_id") or row.get("inflight_create") is True
+            )
+            row["status"] = "delete_pending" if remote else "cancelled"
+            row["error"] = "revoked"
+            row["updated_at"] = now_iso()
+            changed.append(dict(row))
+        if changed:
+            _save(items)
+        return changed
+
+
+def _owned(kind: str, item_id: str) -> Path | None:
+    if not _ID.fullmatch(item_id) or kind not in {"excerpts", "exports", "capabilities", "recovery"}:
+        return None
+    base = (get_data_directory() / "diagnostics" / kind).resolve()
+    target = base / item_id
+    if target.is_symlink():
+        target.unlink()
+        return None
+    if not target.exists():
+        return None
+    resolved = target.resolve()
+    if resolved.parent != base or resolved.name != item_id:
+        return None
+    return resolved
+
+
+def release_local_residue(item: dict) -> None:
+    """Remove this case's diagnostic copies and, once remote cleanup is done, its secrets.
+
+    Project media outside diagnostics/ is never touched. A delete that still has to
+    retry keeps the capability and recovery token.
+    """
+    status = item.get("status")
+    if status not in {"deleted", "cancelled", "delete_pending", "uploaded"}:
+        return
+    item_id = str(item.get("id") or "")
+    excerpt = _owned("excerpts", item_id)
+    if excerpt is not None:
+        shutil.rmtree(excerpt)
+    remote = bool(
+        (item.get("upload") or {}).get("case_id") or item.get("case_id") or item.get("inflight_create") is True
+    )
+    if status in {"delete_pending", "uploaded"} or (status == "cancelled" and remote):
+        return
+    export = _owned("exports", item_id)
+    if export is not None:
+        shutil.rmtree(export)
+    for kind in ("capabilities", "recovery"):
+        secret = _owned(kind, item_id)
+        if secret is not None and secret.is_file():
+            secret.unlink()
 
 
 def cancel_before(epoch: int) -> list[dict]:

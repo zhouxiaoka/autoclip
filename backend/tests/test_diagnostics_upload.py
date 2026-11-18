@@ -47,13 +47,22 @@ def _receipt(**extra):
 
 def test_privacy_copy_exists_in_all_eight_locales():
     key = "帮助改进 AutoClip"
-    purpose = "失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未打开此开关时不会发送。关闭后会停掉尚未完成的上传。"
+    purpose = "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。默认还会附带这次失败的完整原片。关掉完整原片后，如果片段开关还开着，就只上传片头短片段。关闭总开关会停掉并取消尚未完成的上传。"
+    notice = "从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。"
+    media_scope = "默认会带上这次失败任务的完整原片。完整原片可能包含私人内容。关掉完整原片后，如果片段开关还开着，就只上传片头约 60 秒的短片段，片尾的问题可能不在里面。字幕正文不会自动上传。"
+    retention = "这些内容在服务端保留 14 天。你可以在这条说明里关闭总开关或单独关闭素材，也可以稍后删除已经上传的诊断。关闭总开关会取消还没完成的上传。"
     for lang in ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr"):
         data = json.loads((ROOT / "frontend/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
         assert data[key]
         assert data[purpose]
+        assert data[notice]
+        assert data[media_scope]
+        assert data[retention]
+        assert "未打开此开关时不会发送" not in purpose
+        assert "默认关闭" not in purpose
         if lang != "zh":
             assert data[purpose] != purpose
+            assert data[notice] != notice
 
 
 def test_manifest_drops_secrets_paths_names_and_transcript(data_dir):
@@ -112,11 +121,13 @@ def test_symlink_and_escape_are_rejected(data_dir, tmp_path):
 
 
 def test_consent_defaults_off_and_narrowing_cancels_queued_work(data_dir):
-    assert consent.load().diagnostics is False
+    unset = consent.load()
+    assert unset.diagnostics is True and unset.media is True and unset.full_original is True
+    assert unset.notice_seen is False and unset.diagnostics_at is None
     with pytest.raises(PermissionError):
         consent.update(diagnostics=True, media=True, full_original=True, informed=False)
     granted = consent.update(diagnostics=True, media=False, full_original=False, informed=True)
-    assert granted.epoch == 1 and granted.diagnostics_at
+    assert granted.epoch == 1 and granted.diagnostics_at and granted.notice_seen is True
     item = queue.enqueue({
         "id": "c-1", "idempotency_key": "k1", "status": "queued", "epoch": granted.epoch,
         "manifest": build_manifest(_receipt()), "files": [], "explicit": False,
@@ -216,18 +227,18 @@ def test_offline_retry_and_idempotent_enqueue(data_dir, tmp_path):
 
 
 def test_opt_in_off_does_not_contact_the_default_worker(data_dir):
-    assert consent.load().diagnostics is False
     assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    assert consent.load().notice_seen is False
 
     class Transport:
         def create_case(self, *args, **kwargs):
-            raise AssertionError("opt-in off contacted the worker")
+            raise AssertionError("notice not confirmed contacted the worker")
 
         def delete(self, *args, **kwargs):
-            raise AssertionError("opt-in off deleted a case")
+            raise AssertionError("notice not confirmed deleted a case")
 
         def put_part(self, *args, **kwargs):
-            raise AssertionError("opt-in off uploaded media")
+            raise AssertionError("notice not confirmed uploaded media")
 
     assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
     upload.pump_once(Transport())
@@ -243,6 +254,133 @@ def test_media_toggle_stays_off_when_diagnostics_are_on(data_dir):
     queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
     assert queued is not None
     assert queued["files"] == []
+    assert (root / "raw" / "input.mp4").read_bytes() == b"clip-bytes"
+
+
+def test_unreadable_consent_is_not_treated_as_default_on(data_dir):
+    consent.consent_path().parent.mkdir(parents=True, exist_ok=True)
+    consent.consent_path().write_text("{", encoding="utf-8")
+    grant = consent.load()
+    assert grant.unreadable is True
+    assert grant.diagnostics is False and grant.media is False and grant.full_original is False
+    assert grant.notice_seen is False
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+
+
+def test_explicit_off_for_every_scope_survives_reload(data_dir):
+    consent.update(diagnostics=False, media=False, full_original=False, informed=True)
+    again = consent.load()
+    assert again.diagnostics is False and again.media is False and again.full_original is False
+    assert again.notice_seen is True
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    raw = {
+        "diagnostics": True, "media": False, "full_original": False, "epoch": 3,
+        "text_version": "2026-11-16.1", "diagnostics_at": "2026-11-16T00:00:00+00:00",
+        "updated_at": "2026-11-16T00:00:00+00:00",
+    }
+    consent.consent_path().write_text(json.dumps(raw), encoding="utf-8")
+    kept = consent.load()
+    assert kept.diagnostics is True and kept.media is False and kept.full_original is False
+    assert kept.notice_seen is True
+    raw["diagnostics"] = False
+    raw["media"] = False
+    raw["full_original"] = False
+    consent.consent_path().write_text(json.dumps(raw), encoding="utf-8")
+    assert consent.load().diagnostics is False
+
+
+def test_confirmed_default_asks_for_the_original_and_not_subtitles(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    seen = {}
+
+    def fake(project_id, roles, excerpt_dir, cut=None):
+        seen["roles"] = list(roles)
+        return []
+
+    monkeypatch.setattr(media, "materialize", fake)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued is not None
+    assert seen["roles"] == ["original"]
+    assert "subtitle" not in seen["roles"]
+
+
+def test_master_off_cancels_queued_work_and_media_off_cancels_only_that_scope(data_dir):
+    granted = consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    manifest = build_manifest(_receipt())
+    queue.enqueue({
+        "id": "c-plain", "idempotency_key": "plain", "status": "queued", "epoch": granted.epoch,
+        "manifest": manifest, "files": [], "explicit": False,
+    })
+    queue.enqueue({
+        "id": "c-film", "idempotency_key": "film", "status": "queued", "epoch": granted.epoch,
+        "manifest": manifest, "explicit": True,
+        "files": [{"role": "original", "path": "raw/input.mp4", "size_bytes": 4, "sha256": "ab", "content_type": "video/mp4"}],
+    })
+    queue.enqueue({
+        "id": "c-clip", "idempotency_key": "clip", "status": "queued", "epoch": granted.epoch,
+        "manifest": manifest, "explicit": True,
+        "files": [{"role": "excerpt", "path": "excerpt.mp4", "size_bytes": 4, "sha256": "ab", "content_type": "video/mp4"}],
+    })
+    service.set_consent(diagnostics=True, media=True, full_original=False, informed=True)
+    assert queue.get("c-plain")["status"] == "queued"
+    assert queue.get("c-film")["status"] == "cancelled"
+    assert queue.get("c-clip")["status"] == "queued"
+    service.set_consent(diagnostics=True, media=False, full_original=False, informed=True)
+    assert queue.get("c-plain")["status"] == "queued"
+    assert queue.get("c-clip")["status"] == "cancelled"
+    service.set_consent(diagnostics=False, media=False, full_original=False, informed=True)
+    assert queue.get("c-plain")["status"] == "cancelled"
+
+
+def test_confirmed_delete_removes_diagnostic_copies_and_keeps_secrets_while_retrying(data_dir, tmp_path):
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    from backend.services.studio import store
+    original = store.directory("proj") / "raw" / "input.mp4"
+    original.parent.mkdir(parents=True)
+    original.write_bytes(b"original-bytes")
+    item_id = "c-clean"
+    excerpt = data_dir / "diagnostics" / "excerpts" / item_id / "excerpt.mp4"
+    excerpt.parent.mkdir(parents=True)
+    excerpt.write_bytes(b"excerpt-bytes")
+    queue.write_capability(item_id, "cap-secret")
+    queue.recovery_token(item_id, create=True)
+    outside = tmp_path / "linked.mp4"
+    outside.write_bytes(b"do-not-follow")
+    link = data_dir / "diagnostics" / "excerpts" / "c-link"
+    link.symlink_to(outside)
+    queue.release_local_residue({"id": "c-link", "status": "deleted"})
+    queue.enqueue({
+        "id": item_id, "idempotency_key": "clean", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "explicit": True, "manifest": build_manifest(_receipt()), "attempts": 0,
+        "upload": {}, "files": [], "case_id": "remote-clean",
+    })
+
+    class Transport:
+        def __init__(self):
+            self.allow = False
+
+        def delete(self, base, case_id, capability):
+            if not self.allow:
+                raise upload.Offline("timeout")
+
+    transport = Transport()
+    (data_dir / "diagnostics").mkdir(exist_ok=True)
+    (data_dir / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    first = upload.finish_delete(queue.get(item_id), transport)
+    assert first["status"] == "delete_pending"
+    assert not excerpt.exists()
+    assert queue.read_capability(item_id) == "cap-secret"
+    assert queue.recovery_token(item_id) != ""
+    assert original.read_bytes() == b"original-bytes"
+    assert outside.read_bytes() == b"do-not-follow"
+    assert not link.exists()
+    transport.allow = True
+    second = upload.finish_delete(queue.get(item_id), transport)
+    assert second["status"] == "deleted"
+    assert queue.read_capability(item_id) == ""
+    assert queue.recovery_token(item_id) == ""
+    assert original.read_bytes() == b"original-bytes"
+    assert outside.read_bytes() == b"do-not-follow"
 
 
 def test_endpoint_precedence_is_env_then_file_then_builtin(data_dir, monkeypatch):
@@ -613,7 +751,7 @@ def test_delete_during_create_keeps_a_retryable_cleanup_across_restart(data_dir,
     assert queue.get("c-late")["status"] == "deleted"
     assert len(transport.deletes) == 2
     assert transport.deletes[1][2] == "http://127.0.0.1:9"
-    assert queue.read_capability("c-late") == "late-secret"
+    assert queue.read_capability("c-late") == ""
     assert queue.get("c-late")["status"] != "uploaded"
 
 

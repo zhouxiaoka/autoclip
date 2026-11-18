@@ -105,6 +105,8 @@ def _roots(item: dict) -> list[Path]:
 
 def _still_authorized(item: dict) -> None:
     consent = load_consent()
+    if not consent.notice_seen:
+        raise Revoked()
     if not isinstance(item.get("epoch"), int) or item["epoch"] != consent.epoch:
         raise Revoked()
     roles = {row.get("role") for row in item.get("files") or []}
@@ -222,7 +224,19 @@ def _local_only(item: dict) -> bool:
     return item.get("disposition") == "local" or item.get("save_local") is True
 
 
+def _released(item: dict | None) -> dict | None:
+    if isinstance(item, dict):
+        queue.release_local_residue(item)
+    return item
+
+
 def finish_delete(item: dict, transport) -> dict:
+    result = _finish_delete(item, transport)
+    released = _released(result)
+    return released if isinstance(released, dict) else result
+
+
+def _finish_delete(item: dict, transport) -> dict:
     """Remote erasure is confirmed only by a successful delete. Failures stay retryable."""
     item_id = item["id"]
     current = _live(item_id, item)
@@ -442,7 +456,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         if item.get("inflight_create") or item.get("case_id") or (item.get("upload") or {}).get("case_id"):
             return _cleanup_bound(item, transport)
         cancelled = queue.update(item_id, if_version=item.get("version"), status="cancelled", error="revoked", updated_at=queue.now_iso())
-        return cancelled or _live(item_id, item)
+        return _released(cancelled or _live(item_id, item)) or _live(item_id, item)
     problems = validate_manifest(item.get("manifest") or {})
     if problems:
         failed = queue.update(item_id, if_version=item.get("version"), status="failed", error="manifest_rejected", updated_at=queue.now_iso())
@@ -607,7 +621,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             item_id, if_version=item.get("version"), if_status=queue.OPEN,
             status="uploaded", error="", updated_at=queue.now_iso(),
         )
-        return uploaded or _live(item_id, item)
+        return _released(uploaded or _live(item_id, item)) or _live(item_id, item)
     except Revoked:
         current = _live(item_id, item)
         capability = queue.read_capability(item_id)
@@ -618,11 +632,11 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             except (Offline, OSError, RuntimeError, ValueError, TypeError):
                 logger.warning("diagnostics delete after revoke failed")
                 pending = queue.update(item_id, status="delete_pending", error="delete_retry", updated_at=queue.now_iso())
-                return pending or _live(item_id, current)
+                return _released(pending or _live(item_id, current)) or _live(item_id, current)
             erased = queue.update(item_id, if_version=current.get("version"), status="deleted", error="", updated_at=queue.now_iso())
-            return erased or _live(item_id, current)
+            return _released(erased or _live(item_id, current)) or _live(item_id, current)
         cancelled = queue.update(item_id, if_version=current.get("version"), status="cancelled", error="revoked", updated_at=queue.now_iso())
-        return cancelled or _live(item_id, current)
+        return _released(cancelled or _live(item_id, current)) or _live(item_id, current)
     except UploadAuthorizationExpired as exc:
         current = _live(item_id, item)
         diverted = _divert(current, transport)

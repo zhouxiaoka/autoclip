@@ -120,12 +120,14 @@ def test_process_exit_before_response_keeps_cleanup_retryable_after_restart(item
     transport = Restarted()
     service.delete_local(item["id"], transport=transport)
     assert queue.get(item["id"])["status"] == "delete_pending"
+    recovery = tmp_path / "diagnostics/recovery/c-recovery"
+    if os.name != "nt":
+        assert recovery.stat().st_mode & 0o777 == 0o600
     upload.pump_once(transport)
     assert server["remote"] is False
     assert transport.creates == 0 and transport.puts == 0 and transport.cancels == 2
     assert queue.get(item["id"])["status"] == "deleted"
-    if os.name != "nt":
-        assert (tmp_path / "diagnostics/recovery/c-recovery").stat().st_mode & 0o777 == 0o600
+    assert not recovery.exists()
 
 
 def test_expired_part_grant_refreshes_same_objects_and_keeps_completed_parts(item):

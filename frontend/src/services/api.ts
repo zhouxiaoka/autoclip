@@ -350,6 +350,8 @@ export interface DiagnosticsConsent {
   not_for_training: boolean
   diagnostics_at: string | null
   endpoint_configured: boolean
+  notice_seen?: boolean
+  unreadable?: boolean
 }
 
 export interface DiagnosticsPreview {

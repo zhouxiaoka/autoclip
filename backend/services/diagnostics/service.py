@@ -157,12 +157,29 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
     return _public_item(stored)
 
 
+def _release_changed(items: list[dict]) -> None:
+    for item in items:
+        current = queue.get(str(item.get("id") or "")) or item
+        queue.release_local_residue(current)
+
+
 def set_consent(*, diagnostics: bool, media: bool, full_original: bool, informed: bool, transport=None) -> Consent:
     previous = load()
     consent = update(diagnostics=diagnostics, media=media, full_original=full_original, informed=informed)
-    if consent.epoch != previous.epoch:
-        cancelled = queue.cancel_before(consent.epoch)
-        _abort_remote(cancelled, transport)
+    changed: list[dict] = []
+    if previous.persisted and previous.notice_seen and previous.diagnostics and not consent.diagnostics:
+        changed = queue.cancel_before(consent.epoch)
+    elif previous.persisted and previous.notice_seen and consent.diagnostics:
+        roles: set[str] = set()
+        if previous.full_original and not consent.full_original:
+            roles.add("original")
+        if previous.media and not consent.media:
+            roles.update({"excerpt", "subtitle"})
+        if roles:
+            changed = queue.cancel_with_roles(roles)
+    if changed:
+        _abort_remote(changed, transport)
+        _release_changed(changed)
     return consent
 
 
@@ -204,7 +221,7 @@ def _public_item(item: dict) -> dict:
 
 def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | None:
     consent = load()
-    if not consent.diagnostics or not consent.diagnostics_at:
+    if not consent.notice_seen or not consent.diagnostics or not consent.diagnostics_at:
         return None
     finished = receipt.get("finished_at")
     if not isinstance(finished, str):

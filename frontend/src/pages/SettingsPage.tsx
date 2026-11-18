@@ -130,9 +130,9 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
-  const [helpDiagnostics, setHelpDiagnostics] = useState(false)
-  const [helpMedia, setHelpMedia] = useState(false)
-  const [helpOriginal, setHelpOriginal] = useState(false)
+  const [helpDiagnostics, setHelpDiagnostics] = useState<boolean | null>(null)
+  const [helpMedia, setHelpMedia] = useState(true)
+  const [helpOriginal, setHelpOriginal] = useState(true)
   const crashPreferenceChanged = useRef(false)
   const [version, setVersion] = useState('')
   const appUpdate = useAppUpdate()
@@ -166,13 +166,22 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
             setHelpOriginal(grant.full_original)
           }
         } catch {
-          /* 诊断同意只存在本机；读不到就保持关闭 */
+          /* 读不到已保存的选择时不把它写成关闭 */
         }
       } catch (err) {
         console.error('检查自动启动状态失败:', err)
       }
     })()
-    return () => { active = false }
+    const refreshDiagnostics = () => {
+      diagnosticsApi.consent().then((grant) => {
+        if (!active) return
+        setHelpDiagnostics(grant.diagnostics)
+        setHelpMedia(grant.media)
+        setHelpOriginal(grant.full_original)
+      }).catch(() => { /* 读不到已保存的选择时不把它写成关闭 */ })
+    }
+    window.addEventListener('autoclip-diagnostics-consent', refreshDiagnostics)
+    return () => { active = false; window.removeEventListener('autoclip-diagnostics-consent', refreshDiagnostics) }
   }, [])
 
   const toggleAutostart = async (enabled: boolean) => {
@@ -288,15 +297,17 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
-        <Row label={t("帮助改进 AutoClip")} hint={t("失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未打开此开关时不会发送。关闭后会停掉尚未完成的上传。")}>
+        {helpDiagnostics !== null && <>
+        <Row label={t("帮助改进 AutoClip")} hint={t("失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。默认还会附带这次失败的完整原片。关掉完整原片后，如果片段开关还开着，就只上传片头短片段。关闭总开关会停掉并取消尚未完成的上传。")}>
           <Switch checked={helpDiagnostics} onChange={(enabled) => void saveDiagnostics(enabled, enabled ? helpMedia : false, enabled && helpMedia ? helpOriginal : false)} />
         </Row>
-        <Row label={t("允许附带失败任务的片段")} hint={t("在已开启改进诊断后，可额外上传该任务开头的短片段。短片段可能复现不了片尾才出现的超时。默认仍然关闭。")}>
+        <Row label={t("允许附带失败任务的片段")} hint={t("默认打开。只在关闭完整原片之后才会改上传片头短片段。短片段可能复现不了片尾的超时。可以单独关闭。")}>
           <Switch checked={helpMedia} disabled={!helpDiagnostics} onChange={(enabled) => void saveDiagnostics(true, enabled, enabled ? helpOriginal : false)} />
         </Row>
-        <Row label={t("允许附带完整原片")} hint={t("需要单独同意。完整原片体积大，只在你明确允许后才会上传，并且受大小上限约束。")}>
+        <Row label={t("允许附带完整原片")} hint={t("默认打开。失败任务的完整原片可能包含私人内容，只用于排查和改进，不用于训练。可以单独关闭。关闭后，未完成的原片上传会取消。")}>
           <Switch checked={helpOriginal} disabled={!helpDiagnostics || !helpMedia} onChange={(enabled) => void saveDiagnostics(true, true, enabled)} />
         </Row>
+        </>}
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
         <ImportPreferenceSettings />

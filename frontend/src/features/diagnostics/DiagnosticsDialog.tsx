@@ -88,7 +88,7 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
             {typeof attempt.sequence === 'number' && <span>{`#${attempt.sequence}`}</span>}
           </div>
         )}
-        <p className="ac-note">{t('不含 API 密钥、字幕正文、项目名或个人路径。未打开此开关时不会发送。')}</p>
+        <p className="ac-note">{t('不含 API 密钥、字幕正文、项目名或个人路径。自动发送的是脱敏诊断；完整原片和短片段可以单独关闭。')}</p>
         <label className="ac-note"><input type="checkbox" checked={roles.includes('excerpt')} disabled={!available.has('excerpt')} onChange={() => toggle('excerpt')} /> {t('短片段（从片头截取，可能复现不了片尾的超时）')}</label>
         <label className="ac-note"><input type="checkbox" checked={roles.includes('original')} disabled={!available.has('original')} onChange={() => toggle('original')} /> {t('完整原片（单独同意）')}</label>
         <label className="ac-note"><input type="checkbox" checked={roles.includes('subtitle')} disabled={!available.has('subtitle')} onChange={() => toggle('subtitle')} /> {t('字幕文本（默认不发送）')}</label>
