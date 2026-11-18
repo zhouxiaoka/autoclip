@@ -25,6 +25,7 @@ import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import DiagnosticsDialog from '../features/diagnostics/DiagnosticsDialog'
+import FailureHint from '../features/diagnostics/FailureHint'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { flagAssigned } from '../analytics/flags'
@@ -377,6 +378,7 @@ const ProjectDetailPage: React.FC = () => {
         </div>
       </header>
 
+      {isFailed && !isVisual && <FailureHint active project={currentProject} />}
       {isCompleted || isVisual ? (
         <StudioResults key={currentProject.id} project={currentProject} onCreateCollection={() => setShowCreateCollection(true)} onReload={loadProject}>
           {sortedCollections.map(collection => <CollectionCard key={collection.id} collection={collection} clips={clips}

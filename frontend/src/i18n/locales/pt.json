@@ -2137,7 +2137,6 @@
   "该服务商当前暂停服务。已保存的接口和密钥保持不变。": "Este provedor está pausado. O endpoint e a chave salvos permanecem.",
   "帮助改进 AutoClip": "Ajudar a melhorar o AutoClip",
   "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。本地视频默认会压缩并上传短片段。完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。": "Depois de uma falha, um diagnóstico já filtrado é enviado automaticamente, apenas para investigar e melhorar o produto. Não serve para treinar modelos. Instalações novas começam com isto ligado, e você pode desligar. Não inclui chaves de API, texto de legendas, nomes de projeto nem caminhos pessoais. Um vídeo local inclui por padrão um trecho comprimido. O original completo fica desligado até você ligá-lo. Um link de vídeo envia só o link limpo, não o vídeo baixado. Os diagnósticos enviados são apagados automaticamente após 14 dias. Desligar o interruptor principal interrompe e cancela envios que ainda não terminaram.",
-  "一起让 AutoClip 更好用": "Vamos deixar o AutoClip melhor juntos",
   "从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。": "A partir desta versão, uma instalação nova envia automaticamente um diagnóstico já filtrado depois de uma falha, só para investigar e melhorar o produto. Não serve para treinar modelos. Isto não é um registro de que você aceitou antes; você pode desligar agora.",
   "本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。": "Em um vídeo local, um trecho comprimido perto da falha é enviado por padrão. Sem um horário da falha, usam-se cerca dos primeiros 60 segundos. O trecho pode ter conteúdo privado. O original completo fica desligado até você ligá-lo. Se a tarefa veio de um link, só o link limpo é enviado, não o vídeo baixado. O texto das legendas não é enviado automaticamente.",
   "已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。": "Os diagnósticos enviados são apagados automaticamente após 14 dias. Neste aviso você pode desligar o interruptor principal ou os de mídia. Desligar o interruptor principal cancela envios que ainda não terminaram.",
@@ -2171,7 +2170,9 @@
   "将随诊断一起发送的字段": "Campos enviados com o diagnóstico",
   "不含 API 密钥、字幕正文、项目名或个人路径。自动发送的是脱敏诊断；完整原片和短片段可以单独关闭。": "Sem chaves de API, texto de legendas, nomes de projeto ou caminhos pessoais. O envio automático é um diagnóstico já filtrado; o original completo e o trecho curto podem ser desligados separadamente.",
   "诊断设置没有保存，请重试。": "A configuração de diagnóstico não foi salva. Tente de novo.",
-  "任务失败时，我们会自动发送错误信息，帮助改善产品体验，内容不用于任何训练和其他途径，你可以随时在设置中关闭。": "Quando uma tarefa falha, enviamos automaticamente as informações do erro para melhorar a experiência do produto. Elas não são usadas para treinar nem para qualquer outra finalidade, e você pode desligar isso quando quiser nas configurações.",
   "收起详情": "Ocultar detalhes",
-  "保存选择": "Salvar escolha"
+  "保存选择": "Salvar escolha",
+  "任务失败时，会自动发送一小段视频帮助改善体验，可在设置中关闭。": "Se uma tarefa falhar, um trecho curto do vídeo é enviado automaticamente para melhorar a experiência. Você pode desligar isso nas configurações.",
+  "任务失败时，会自动发送错误信息帮助改善体验，不会发送视频，可在设置中关闭。": "Se uma tarefa falhar, as informações do erro são enviadas automaticamente para melhorar a experiência. O vídeo não é enviado. Você pode desligar isso nas configurações.",
+  "这次不会自动发送内容。可以在设置中打开。": "Desta vez nada é enviado automaticamente. Você pode ligar isso nas configurações."
 }

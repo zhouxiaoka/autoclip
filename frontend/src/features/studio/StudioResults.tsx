@@ -32,6 +32,7 @@ import { clearCompletionBadge, subscribeCompletionNotice, type NoticeKind } from
 import { noticeCopy } from './completionNotice'
 import { dismissMorePlatformBanner, hasSuccessHistory, morePlatformBannerSeen, stashReuseImport, suggestAnotherPlatform } from './platformMemory'
 import { followOutputLeave } from './overrides'
+import FailureHint from '../diagnostics/FailureHint'
 
 import './studio.css'
 import './quick-output.css'
@@ -61,6 +62,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const automatic = !!workspace.generation?.auto_start
   const hideLegacy = legacyEntrypointsHidden(flagEnabled('hide_legacy_entrypoints'), managed || automatic)
   const noteLegacy = (action: 'plan_adjust' | 'collection' | 'export_confirm') => trackLegacyEntry({ legacy_action: action }, flagAssigned('hide_legacy_entrypoints'))
+  const taskFailed = workspace.analysis?.status === 'failed' || workspace.generation?.status === 'failed'
   const failedCode = workspace.analysis?.error_code || workspace.generation?.error_code
   const sourceUnusable = workspace.analysis?.status === 'failed' && sourceFailure(failedCode)
   const cookieRecovery = workspace.analysis?.status === 'failed' && browserCookieRecovery(failedCode, workspace.analysis?.error)
@@ -228,6 +230,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
     navigate('/')
   }
   return <div className="studio-results">
+    <FailureHint active={taskFailed} project={project} />
     {doneNote && <p className="studio-done-note" role="status">{t(noticeCopy(doneNote))}</p>}
     {showMorePlatform && genDone && <div className="studio-more-platform" role="status" data-testid="t1-more-platform">
       <p className="studio-muted">{morePlatformId === 'xiaohongshu' ? t('也可以再做一个小红书版本') : morePlatformId === 'youtube_shorts' ? t('也可以再做一个 Shorts 版本') : t('也可以再做一个{{platform}}版本', { platform: morePlatformLabel })}</p>

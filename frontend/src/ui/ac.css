@@ -209,35 +209,19 @@
 .ac-update-percent { font-family: var(--ac-font-mono); font-size: 12px; color: var(--ac-muted); min-width: 36px; text-align: right; }
 .ac-update-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
-.ac-diagnostics-notice {
-  position: fixed; right: 16px; bottom: 16px; z-index: 30;
-  width: min(360px, calc(100vw - 32px)); max-height: min(70vh, 520px); overflow: auto;
-  background: var(--ac-card); color: var(--ac-ink); border: 1px solid var(--ac-line); border-radius: 16px;
-  box-shadow: var(--ac-shadow); padding: 16px 16px 14px;
-  animation: ac-rise var(--ac-t-short, 200ms) ease-out;
+.ac-failure-hint {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40;
+  width: min(440px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 14px;
+  background: var(--ac-card); color: var(--ac-ink); border: 1px solid var(--ac-line); border-radius: 12px;
+  box-shadow: var(--ac-shadow); font-size: 13px; line-height: 1.45;
 }
-.ac-diagnostics-notice h3 { margin: 0 28px 0 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
-.ac-diagnostics-notice p { margin: 8px 0 0; font-size: 13px; color: var(--ac-sub); line-height: 1.5; }
-.ac-diagnostics-notice-x {
-  position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border: 0; border-radius: 999px;
-  background: transparent; color: var(--ac-muted); cursor: pointer; font-size: 18px; line-height: 1;
+.ac-failure-hint-link {
+  flex: 0 0 auto; border: 0; background: transparent; padding: 0; cursor: pointer;
+  color: var(--ac-sub); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px;
 }
-.ac-diagnostics-notice-x:hover { color: var(--ac-ink); background: var(--ac-line-2); }
-.ac-diagnostics-notice-details { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.ac-diagnostics-notice-details label { display: flex; align-items: center; gap: 8px; }
-.ac-diagnostics-notice-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-.ac-diagnostics-notice .ac-btn--cta { min-width: 72px; }
-.ac-diagnostics-notice .ac-btn--quiet {
-  background: var(--ac-line-2); color: var(--ac-sub); border-color: transparent;
-}
-.ac-diagnostics-notice .ac-btn--quiet:hover { color: var(--ac-ink); border-color: transparent; }
-.ac-diagnostics-notice-more {
-  border: 0; background: transparent; padding: 0; color: var(--ac-sub); cursor: pointer; font: inherit; font-size: 13px;
-}
-.ac-diagnostics-notice-more:hover { color: var(--ac-ink); }
-@media (max-width: 640px) {
-  .ac-diagnostics-notice { left: 12px; right: 12px; bottom: 12px; width: auto; }
-}
+.ac-failure-hint-link:hover, .ac-failure-hint-link:focus-visible { color: var(--ac-ink); }
 
 /* ---- inline status row (dot + label), used in failed/complete states ---- */
 .ac-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ac-sub); }
