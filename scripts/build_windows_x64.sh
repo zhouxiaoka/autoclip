@@ -82,6 +82,7 @@ build_frontend
 # Tauri merges tauri.windows.conf.json on top of tauri.conf.json here, which
 # declares resources/{python,backend,ffmpeg} and restricts targets to nsis.
 echo "==> Building Tauri application (this takes a few minutes)"
+clean_shipped_bundles
 (cd src-tauri && cargo tauri build --bundles nsis)
 
 # CI has Visual C++ installed; inspect the actual exe before it can hide missing DLLs.
