@@ -373,3 +373,11 @@ class ConfirmPlan(BaseModel):
         if len(set(self.goals)) != len(self.goals):
             raise UserFacingError('制作类型不能重复')
         return self
+
+def import_project_data(name, options, *, url=None, browser=None):
+    from backend.schemas.project import ProjectCreate, ProjectType
+    return ProjectCreate(name=name, project_type=ProjectType.DEFAULT, source_url=url, settings={
+        'creative': {'goal': options.goal}, 'smart_import': options.model_dump(),
+        'import_staging': not options.auto_start, 'creative_browser': browser,
+        'platforms': options.platforms, 'brand_outro_enabled': options.branding.outro_enabled,
+    })

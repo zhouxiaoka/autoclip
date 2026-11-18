@@ -52,7 +52,7 @@ export function canonOutcome(value: unknown): string | undefined {
 
 export function projectProperties(project: { settings?: Record<string, unknown>; processing_config?: Record<string, unknown>; material_origin?: unknown; example_version?: unknown }): Properties {
   const settings = project.processing_config || project.settings
-  const origin = project.material_origin || (settings ? settings.example === true ? 'sample' : 'user' : 'unknown')
+  const origin = project.material_origin || (settings ? settings.import_source === 'obs' ? 'obs' : settings.example === true ? 'sample' : 'user' : 'unknown')
   return safeStudioProperties({ material_origin: origin, example_version: project.example_version || settings?.example_version })
 }
 
@@ -62,7 +62,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   const out: Properties = { studio_schema_version: 2 }
   const enums: Record<string, string[]> = {
     strategy_id: ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'],
-    material_origin: ['sample', 'user', 'unknown'], layout: ['crop', 'fit', 'blur', 'window'],
+    material_origin: ['sample', 'user', 'obs', 'unknown'], layout: ['crop', 'fit', 'blur', 'window'],
     generation_reason: ['content_complete', 'platform_append', 'platform_ineligible'],
     trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select', 'paste', 'drop', 'radar', 'watch', 'initial', 'retry', 'variant_retry', 'append_platform'], framing_outcome: ['framed', 'no_detection'],
     framing_status: ['installed', 'installing', 'failed', 'missing', 'not_installed', 'error'],
@@ -192,7 +192,7 @@ export interface TaskSnapshot {
 }
 
 export interface StudioSnapshot {
-  material_origin?: 'sample' | 'user' | 'unknown'
+  material_origin?: 'sample' | 'user' | 'obs' | 'unknown'
   example_version?: number
   attempts?: AttemptReceipt[]
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]

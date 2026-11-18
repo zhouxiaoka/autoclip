@@ -69,6 +69,11 @@ def create_app(mode: str = "web") -> FastAPI:
     
     # 设置应用状态
     app.state.mode = mode
+    if mode == "desktop":
+        from backend.api.v1.obs import router as obs_router
+        from backend.services.obs.listener import Monitor
+        app.state.obs = Monitor()
+        app.include_router(obs_router, prefix="/api/v1/obs")
     
     # 来源守卫在内、CORS 在外：预检由 CORS 应答，其他网页的写请求由守卫拦下。
     # 以前是 allow_origins=["*"] + allow_credentials，任意网页都能读设置里的 API Key。
@@ -132,6 +137,7 @@ def create_app(mode: str = "web") -> FastAPI:
         
         # 根据模式进行不同的初始化
         if mode == "desktop":
+            app.state.obs.start()
             logger.info("桌面模式：使用本地队列和 SQLite")
         else:
             logger.info("Web 模式：使用 Redis/Celery")
@@ -142,6 +148,8 @@ def create_app(mode: str = "web") -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown_event():
         logger.info("正在关闭 AutoClip API 服务...")
+        if mode == "desktop":
+            await app.state.obs.stop()
         from backend.services import child_guard
         child_guard.kill_all()
         logger.info("WebSocket 网关服务已禁用")

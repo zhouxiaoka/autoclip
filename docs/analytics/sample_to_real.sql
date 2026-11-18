@@ -16,7 +16,7 @@ WITH sample_cohort AS (
     WHERE event = 'studio_export_finished'
       AND properties.studio_schema_version = 2
       AND properties.analytics_environment = 'production'
-      AND properties.material_origin = 'user'
+      AND properties.material_origin IN ('user', 'obs')
       AND properties.outcome IN ('completed', 'success')
       AND timestamp >= now() - INTERVAL 14 DAY
 )

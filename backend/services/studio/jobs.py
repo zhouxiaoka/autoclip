@@ -1186,6 +1186,9 @@ def _posts_for(project_id, items, cache):
 
 def _design_covers(project_id, draft, job_id):
     """Design the cover of every variant this render belongs to; never fails the render."""
+    from backend.services.obs.billing import is_obs
+    if is_obs(project_id):
+        return
     from backend.services.studio import publish_kit
     state = store.read(project_id)
     targets = [item for item in state.get('output_variants', []) if item.get('render_job_id') == job_id]

@@ -17,7 +17,6 @@ from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
 from backend.models.clip import Clip
-from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
@@ -297,7 +296,8 @@ async def import_visual(
             branding={'outro_enabled': brand_outro_enabled},
             source_window=source_window,
         )
-        project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+        from backend.services.studio.models import import_project_data
+        project = ProjectService(db).create_project(import_project_data(name.strip() or '智能剪辑', prefs, url=url, browser=browser))
     except BaseException:
         if staged is not None:
             staged.unlink(missing_ok=True)
@@ -399,7 +399,9 @@ def workspace(project_id: str, db: Session = Depends(get_db)):
     from backend.services.studio import pipeline_resume
     data = attempts.public_workspace(call(store.recover, project_id))
     resume_point = pipeline_resume.resume_point_for_project(project_id)
-    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+    config = project.processing_config or {}
+    origin = 'obs' if config.get('import_source') == 'obs' else 'sample' if config.get('example') else 'user'
+    return {**data, 'resume_point': resume_point, 'material_origin': origin, 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):

@@ -198,6 +198,7 @@
       "upload"
     ],
     "material_origin": [
+      "obs",
       "sample",
       "user",
       "unknown"
@@ -966,6 +967,7 @@
         ]
       },
       "enums": {
+        "material_origin": "material_origin",
         "outcome": "studio_outcome",
         "trigger": "attempt_trigger",
         "config_source": "config_source",
@@ -1122,6 +1124,7 @@
         ]
       },
       "enums": {
+        "material_origin": "material_origin",
         "outcome": "studio_outcome",
         "config_source": "config_source",
         "attribution_source": "attribution_source",

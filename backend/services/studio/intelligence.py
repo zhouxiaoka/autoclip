@@ -158,6 +158,9 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
         def once(body):
             timeout = clip_job_read_timeout(float(config.get('timeout', 180)))
+            from backend.services.obs import billing
+            if billing.is_obs():
+                return billing.chat('vision', base, body, key, timeout)
             with urllib.request.urlopen(request(body), timeout=timeout) as response:
                 return read_completion_response(response)
 
