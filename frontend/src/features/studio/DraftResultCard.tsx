@@ -6,8 +6,6 @@ import { Btn, fmtDuration } from '../../ui'
 import { studioApi } from './api'
 import { Draft, RenderJob, draftDuration, languages } from './types'
 import { draftExportState, ExportStatus } from './draftExportState'
-import { packagingFallbackHint } from './packagingLabel'
-import { effectiveSubtitles } from './subtitleState'
 
 const statusLabels: Record<ExportStatus, string> = {
   draft: '草稿 · 待导出', queued: '排队中', rendering: '正在导出',
@@ -23,7 +21,6 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const state = draftExportState(draft, jobs)
   const label = t(statusLabels[state.status])
   const completed = state.completed
-  const packagingHint = draft.packaging ? packagingFallbackHint(draft.packaging, completed?.result?.warnings, effectiveSubtitles(draft)) : ''
   const thumbnail = studioApi.thumbnail(projectId, draft.id, draft.revision, completed?.job_id)
   const [failedThumbnail, setFailedThumbnail] = useState('')
   return <article className="ac-card">
@@ -40,8 +37,6 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
       </div>
       <p className="studio-output-hint">{completed ? t('当前 V{{revision}} 成片画面', { revision: draft.revision }) : t('原片缩略图 · 包装效果以导出为准')}</p>
       <div className="ac-card-desc">{draft.hook||draft.scenes[0].evidence||t('保留原声与完整事件')}</div>
-      {packagingHint && <p className="studio-output-hint">{packagingHint}</p>}
-      {draft.ending_review_required && <p className="studio-output-hint">{t('片尾完整性需要复核，请预览最后一段')}</p>}
       {state.status==='failed' && <p className="studio-output-hint studio-error">{state.failure?.error || t('请重试导出，原草稿已保留')}</p>}
       {state.status==='ready' && state.failure && <p className="studio-output-hint">{t('本版曾有导出失败，已完成文件仍可下载。')}</p>}
       {state.previous && !completed && <button className="studio-link studio-output-hint" onClick={onHistory}>{t('查看已导出的 V{{revision}} 旧版', { revision: state.previous.revision })}</button>}
