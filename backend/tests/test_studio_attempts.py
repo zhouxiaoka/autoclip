@@ -308,7 +308,9 @@ def env__r25_419_receipt_chain_duckdb(tmp_path, monkeypatch):
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get('event'), str):
+            posted.append(body)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
@@ -454,7 +456,9 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get('event'), str):
+            posted.append(body)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)

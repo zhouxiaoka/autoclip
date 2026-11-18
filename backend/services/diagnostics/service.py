@@ -116,8 +116,8 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
         raise DiagnosticsError("subtitle_required", 422)
     consent = load()
     if also_enable_background:
-        if not consent.notice_seen or not consent.persisted or consent.unreadable:
-            raise DiagnosticsError("notice_required", 422)
+        if consent.unreadable:
+            raise DiagnosticsError("consent_unreadable", 422)
         _previous, consent = commit(
             diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True,
         )
@@ -180,9 +180,9 @@ def set_consent(*, diagnostics: bool, media: bool, full_original: bool, informed
         diagnostics=diagnostics, media=media, full_original=full_original, informed=informed,
     )
     changed: list[dict] = []
-    if previous.persisted and previous.notice_seen and previous.diagnostics and not consent.diagnostics:
+    if previous.diagnostics and not consent.diagnostics:
         changed = queue.cancel_before(consent.epoch)
-    elif previous.persisted and previous.notice_seen and consent.diagnostics:
+    elif consent.diagnostics:
         roles: set[str] = set()
         if previous.full_original and not consent.full_original:
             roles.add("original")
@@ -241,20 +241,21 @@ def _input_for_diagnostics(project_id: str) -> tuple[str, str | None]:
 
 def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | None:
     consent = load()
-    if not consent.notice_seen or not consent.diagnostics or not consent.diagnostics_at:
+    if not consent.diagnostics or consent.unreadable:
         return None
     finished = receipt.get("finished_at")
     if not isinstance(finished, str):
         return None
-    from datetime import datetime, timezone
-    def parse(value: str) -> datetime:
-        parsed = datetime.fromisoformat(value)
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    try:
-        if parse(finished) < parse(consent.diagnostics_at):
+    if consent.persisted and consent.diagnostics_at:
+        from datetime import datetime, timezone
+        def parse(value: str) -> datetime:
+            parsed = datetime.fromisoformat(value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        try:
+            if parse(finished) < parse(consent.diagnostics_at):
+                return None
+        except ValueError:
             return None
-    except ValueError:
-        return None
     origin, source_link = _input_for_diagnostics(project_id)
     roles: list[str] = []
     if origin == "file":

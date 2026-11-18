@@ -24,11 +24,18 @@ def _project(tmp_path, monkeypatch):
     (tmp_path / 'analytics.json').write_text('{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}', encoding='utf-8')
 
 
+def _remember(posted, req):
+    """Telemetry assertions only see PostHog events. A diagnostics upload has no event name."""
+    body = json.loads(req.data.decode())
+    if isinstance(body, dict) and isinstance(body.get('event'), str):
+        posted.append(body)
+
+
 def _capture(monkeypatch):
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        _remember(posted, req)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
@@ -142,7 +149,7 @@ def test_stuck_post_does_not_hold_the_studio_lock(tmp_path, monkeypatch):
     entered, release_send = threading.Event(), threading.Event()
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        _remember(posted, req)
         entered.set()
         assert release_send.wait(5)
         raise OSError('tests do not send')
@@ -270,7 +277,7 @@ def test_offline_settle_replays_once_after_restart(tmp_path, monkeypatch):
     posted = []
 
     def online(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        _remember(posted, req)
         return _Response()
 
     monkeypatch.setattr('urllib.request.urlopen', online)
@@ -309,7 +316,7 @@ def test_queued_terminal_keeps_the_settle_time(tmp_path, monkeypatch):
     }]}), encoding='utf-8')
 
     def online(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        _remember(posted, req)
         return _Response()
 
     monkeypatch.setattr('urllib.request.urlopen', online)
@@ -405,7 +412,7 @@ def test_request_timeout_and_rate_limit_stay_queued(tmp_path, monkeypatch, statu
     posted = []
 
     def online(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        _remember(posted, req)
         return _Response()
 
     monkeypatch.setattr('urllib.request.urlopen', online)
@@ -450,7 +457,7 @@ def test_server_error_retries_with_backoff_then_stays_queued(tmp_path, monkeypat
     posted = []
 
     def online(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        _remember(posted, req)
         return _Response()
 
     monkeypatch.setattr('urllib.request.urlopen', online)

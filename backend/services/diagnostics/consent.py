@@ -53,7 +53,7 @@ class Consent:
 
 
 def _unset() -> Consent:
-    """No saved choice. The product default is on, but nothing is sent until the notice is confirmed."""
+    """No saved choice. Diagnostics and excerpts upload by default; the notice is only a disclosure."""
     return Consent(True, True, False, 0, CONSENT_TEXT_VERSION, None, None, False, False, False)
 
 
@@ -130,8 +130,10 @@ def commit(*, diagnostics: bool, media: bool, full_original: bool, informed: boo
     with _LOCK:
         current = load()
         if not current.persisted or current.unreadable:
+            master_changed = current.diagnostics != diagnostics
+            epoch = current.epoch + 1 if master_changed else current.epoch
             nxt = Consent(
-                diagnostics, media, full_original, 1, CONSENT_TEXT_VERSION,
+                diagnostics, media, full_original, epoch, CONSENT_TEXT_VERSION,
                 _now() if diagnostics else None, _now(), True, True, False,
             )
             _atomic(nxt)

@@ -15,6 +15,9 @@ from copy import deepcopy
 
 
 def main():
+    # This process prints one receipt and exits. A background diagnostics writer
+    # would still be creating files while the temporary directory is removed.
+    os.environ['AUTOCLIP_DIAGNOSTICS_SYNC'] = '1'
     payload = json.loads(sys.stdin.read())
     with tempfile.TemporaryDirectory() as root:
         os.environ['AUTOCLIP_DATA_DIR'] = root

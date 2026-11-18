@@ -129,7 +129,7 @@ def test_consent_defaults_off_and_narrowing_cancels_queued_work(data_dir):
     with pytest.raises(PermissionError):
         consent.update(diagnostics=True, media=True, full_original=True, informed=False)
     granted = consent.update(diagnostics=True, media=False, full_original=False, informed=True)
-    assert granted.epoch == 1 and granted.diagnostics_at and granted.notice_seen is True
+    assert granted.epoch == 0 and granted.diagnostics_at and granted.notice_seen is True
     item = queue.enqueue({
         "id": "c-1", "idempotency_key": "k1", "status": "queued", "epoch": granted.epoch,
         "manifest": build_manifest(_receipt()), "files": [], "explicit": False,
@@ -137,7 +137,7 @@ def test_consent_defaults_off_and_narrowing_cancels_queued_work(data_dir):
     assert item["status"] == "queued"
     service.set_consent(diagnostics=False, media=False, full_original=False, informed=True)
     assert queue.list_items()[0]["status"] == "cancelled"
-    assert consent.load().epoch == 2
+    assert consent.load().epoch == 1
 
 
 def test_historical_failure_is_not_queued_and_a_later_one_is(data_dir, monkeypatch):
@@ -192,7 +192,7 @@ def test_revocation_during_authorize_aborts_and_does_not_upload_bytes(data_dir, 
 
     built = build_manifest(_receipt())
     queue.enqueue({
-        "id": "c-race", "idempotency_key": "race", "status": "queued", "epoch": 1,
+        "id": "c-race", "idempotency_key": "race", "status": "queued", "epoch": consent.load().epoch,
         "manifest": built, "files": [], "explicit": False, "attempts": 0, "upload": {},
     })
     upload.pump_once(Transport())
@@ -228,23 +228,33 @@ def test_offline_retry_and_idempotent_enqueue(data_dir, tmp_path):
     assert transport.creates == 1  # backoff has not elapsed
 
 
-def test_opt_in_off_does_not_contact_the_default_worker(data_dir):
-    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
-    assert consent.load().notice_seen is False
+def test_new_install_uploads_without_acknowledgement_and_explicit_off_does_not(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    assert consent.load().persisted is False and consent.load().diagnostics is True
 
     class Transport:
-        def create_case(self, *args, **kwargs):
-            raise AssertionError("notice not confirmed contacted the worker")
+        def __init__(self):
+            self.creates = 0
 
-        def delete(self, *args, **kwargs):
-            raise AssertionError("notice not confirmed deleted a case")
+        def create_case(self, base, body, key):
+            self.creates += 1
+            return {"case_id": "remote", "capability": "cap", "uploads": []}
 
         def put_part(self, *args, **kwargs):
-            raise AssertionError("notice not confirmed uploaded media")
+            raise AssertionError("manifest-only upload has no media")
 
-    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
-    upload.pump_once(Transport())
-    assert queue.list_items() == []
+        def complete(self, *args, **kwargs):
+            raise AssertionError("manifest-only upload has no media")
+
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued is not None and queued["files"] == []
+    assert not consent.consent_path().exists()
+    transport = Transport()
+    upload.pump_once(transport)
+    assert transport.creates == 1
+    consent.update(diagnostics=False, media=False, full_original=False, informed=True)
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-02T00:00:00+00:00", attempt_id="t-" + "ef" * 16)) is None
 
 
 def test_media_toggle_stays_off_when_diagnostics_are_on(data_dir):
@@ -303,17 +313,15 @@ def test_pre_159_consent_without_notice_seen_keeps_explicit_false(data_dir):
     assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
 
 
-def test_background_checkbox_before_notice_does_not_grant_media(data_dir):
+def test_background_checkbox_keeps_original_off(data_dir):
     from backend.services.studio import store
     root = store.directory("proj")
     (root / "metadata").mkdir(parents=True)
     (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
-    with pytest.raises(service.DiagnosticsError) as caught:
-        service.submit("proj", TOKEN, roles=[], informed=True, also_enable_background=True)
-    assert caught.value.reason == "notice_required"
-    assert consent.load().notice_seen is False
-    assert consent.load().persisted is False
-    assert not consent.consent_path().exists()
+    service.submit("proj", TOKEN, roles=[], informed=True, also_enable_background=True)
+    grant = consent.load()
+    assert grant.diagnostics is True and grant.media is True and grant.full_original is False
+    assert grant.persisted is True
 
 
 def test_confirmed_default_asks_for_the_original_and_not_subtitles(data_dir, monkeypatch):
@@ -1170,15 +1178,19 @@ def test_preview_includes_the_sanitized_source_link(data_dir):
     assert shown["manifest"]["source_link"] == "https://www.youtube.com/watch?v=abc"
 
 
-def test_link_is_not_uploaded_before_notice_or_when_diagnostics_are_off(data_dir):
-    source.record_input_origin("proj", "link", source_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
-    assert queue.list_items() == []
-    consent.update(diagnostics=False, media=False, full_original=False, informed=True)
-    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
-    assert queue.list_items() == []
-    blob = (data_dir / "diagnostics" / "queue.json").read_text(encoding="utf-8") if (data_dir / "diagnostics" / "queue.json").exists() else ""
-    assert "youtube.com" not in blob
+def test_unset_link_sends_the_url_only_and_explicit_off_stops(data_dir):
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ&token=secret")
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert queued["manifest"]["source_link"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert "downloaded-video" not in json.dumps(queued)
+    assert not consent.consent_path().exists()
+    service.set_consent(diagnostics=False, media=False, full_original=False, informed=True)
+    assert queue.get(queued["id"])["status"] == "cancelled"
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-02T00:00:00+00:00", attempt_id="t-" + "ef" * 16)) is None
 
 
 def test_unset_consent_is_excerpt_on_and_original_off():

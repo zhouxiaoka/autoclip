@@ -105,8 +105,6 @@ def _roots(item: dict) -> list[Path]:
 
 def _still_authorized(item: dict) -> None:
     consent = load_consent()
-    if not consent.notice_seen:
-        raise Revoked()
     if not isinstance(item.get("epoch"), int) or item["epoch"] != consent.epoch:
         raise Revoked()
     roles = {row.get("role") for row in item.get("files") or []}

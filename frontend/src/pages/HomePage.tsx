@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Layout, 
   Typography, 
@@ -27,6 +27,8 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
 import { apiConfigManager } from '../utils/apiConfig'
+import FailureHint from '../features/diagnostics/FailureHint'
+import { nextLiveFailure } from '../features/diagnostics/failureHint'
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -49,6 +51,13 @@ export default function HomePage() {
   const [setupRequest, setSetupRequest] = useState(0)
   const [exampleBusy, setExampleBusy] = useState(false)
   const [aiSettings, setAiSettings] = useState<ModelSettings | null>(null)
+  const seenStatus = useRef<Record<string, string>>({})
+  const [liveFailure, setLiveFailure] = useState<Project | null>(null)
+  useEffect(() => {
+    const step = nextLiveFailure(seenStatus.current, projects)
+    seenStatus.current = step.previous
+    if (step.failed) setLiveFailure(step.failed)
+  }, [projects])
 
   // 使用项目轮询Hook
   useProjectPolling({
@@ -218,6 +227,7 @@ export default function HomePage() {
     }}>
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
+          {liveFailure && <FailureHint active project={liveFailure} />}
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
           <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} />
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}

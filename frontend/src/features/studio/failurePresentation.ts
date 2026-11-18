@@ -30,6 +30,8 @@ export type FailureView = {
   status: string
   step: FailureStep | null
   reason: string
+  /** One short sentence for the project card. The full reason stays on the diagnose panel. */
+  brief: string
   outcome: string
   primary: PrimaryAction | null
   technical: { requests: number | null; successes: number | null } | null
@@ -134,6 +136,47 @@ function fixableSecondary(input: PresentInput): PrimaryAction | null {
   return null
 }
 
+const CARD_BRIEFS = {
+  timeout: '响应超时了，可以重试。',
+  job_budget: '制作时间太长，已经停止。',
+  connection: '网络中断了，可以重试。',
+  download: '下载时网络中断了。',
+  service_restarted: '应用刚重启，这次制作中断了。',
+  insufficient_quota: '额度用完了，请检查余额。',
+  rate_limited: '请求太频繁，请稍后再试。',
+  auth: '密钥或权限有问题，请到设置里检查。',
+  llm_not_configured: '还没有配好模型，请到设置里检查。',
+  source: '这个视频没法用。',
+  interrupted: '制作中断了，可以重试。',
+  timeline: '当前模型没能排出时间线。',
+  unknown: '这次没有做完，可以重试。',
+} as const
+
+const AUTH_CODES = new Set(['authentication', 'invalid_key', 'llm_auth_invalid', 'permission_denied'])
+const INTERRUPTED_CODES = new Set(['unexpected', 'timeline_empty', 'transcription_empty'])
+
+/** Card sentence. A long vendor message never becomes the card text, even when it has no line break. */
+export function briefReason(input: PresentInput): string {
+  if (weakLocalTimelineFailure(input.error, input.error_code)) return CARD_BRIEFS.timeline
+  if (isKnownBudgetFailure(input.error_code, input.error)) return CARD_BRIEFS.job_budget
+  const code = input.error_code || ''
+  const upstream = input.upstream_error_type || ''
+  const stage = input.failure_stage || ''
+  if ((code === 'connection' || upstream === 'connection' || upstream === 'timeout' || code === 'timeout') && (stage === 'ingest' || stage === 'download')) {
+    return CARD_BRIEFS.download
+  }
+  if (code === 'insufficient_quota' || upstream === 'insufficient_quota') return CARD_BRIEFS.insufficient_quota
+  if (AUTH_CODES.has(code) || AUTH_CODES.has(upstream) || upstream === 'invalid_key') return CARD_BRIEFS.auth
+  if (code === 'llm_not_configured') return CARD_BRIEFS.llm_not_configured
+  if (code === 'timeout' || upstream === 'timeout') return CARD_BRIEFS.timeout
+  if (code === 'connection' || upstream === 'connection') return CARD_BRIEFS.connection
+  if (code === 'service_restarted' || upstream === 'service_restarted') return CARD_BRIEFS.service_restarted
+  if (code === 'rate_limited' || upstream === 'rate_limited') return CARD_BRIEFS.rate_limited
+  if (SOURCE_CODES.has(code) || code === 'source_blocked') return CARD_BRIEFS.source
+  if (INTERRUPTED_CODES.has(code)) return CARD_BRIEFS.interrupted
+  return CARD_BRIEFS.unknown
+}
+
 function reasonFor(input: PresentInput): string {
   if (weakLocalTimelineFailure(input.error, input.error_code)) return '当前本地模型无法返回可用时间线'
   if (isKnownBudgetFailure(input.error_code, input.error)) return JOB_BUDGET_REASON
@@ -202,6 +245,7 @@ export function presentFailure(input: PresentInput): FailureView {
     status: SOURCE_CODES.has(input.error_code || '') || input.error_code === 'source_blocked' ? '这个素材无法使用' : FAILURE_STATUS,
     step: failureStep(input.failure_stage, input.phase, input.error_code),
     reason: reasonFor(input),
+    brief: briefReason(input),
     outcome: preserved > 0 ? KEPT_RESULT_OUTCOME : NO_RESULT_OUTCOME,
     primary: primaryFor(input, preserved),
     technical: Number.isFinite(requests) && requests > 0 ? { requests, successes: Number.isFinite(successes) ? successes : null } : null,

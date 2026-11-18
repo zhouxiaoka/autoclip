@@ -74,6 +74,21 @@ test('X1 diagnose panel shows four readiness rows, the failure, one suggestion a
   assert.match(html, /换模型重试/)
   assert.match(html, /用示例视频试一次/)
   assert.match(html, /同一类错误已经连续出现/)
+  assert.equal(html.includes('studio-error-raw'), false)
+  const vendor = 'Traceback (most recent call last):\n' + 'provider internal '.repeat(30)
+  const detailed = renderToStaticMarkup(React.createElement(panel.default, {
+    open: true,
+    onClose() {},
+    info: { error_code: 'timeout', failure_stage: 'analyze', error: vendor },
+    reason: '模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。',
+    onSettings() {},
+    readiness: null,
+  }))
+  assert.match(detailed, /分析：模型响应超时/)
+  assert.match(detailed, /studio-error-raw">Traceback \(most recent call last\):/)
+  assert.equal((detailed.match(/provider internal/g) || []).length, 30)
+  assert.equal(panel.detailBeyond('模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。', vendor).includes('Traceback'), true)
+  assert.equal(panel.detailBeyond(vendor, vendor), '')
   const source = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/DiagnosePanel.tsx'), 'utf8')
   assert.match(source, /openExample/)
   assert.match(source, /trackDiagnoseOpened/)
