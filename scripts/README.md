@@ -56,7 +56,7 @@ Tauri 合并，不影响 macOS。
 
 ### 两个脚本共同做了什么（`lib/desktop_build_common.sh`）
 
-1. 下载便携 Python 运行时（python-build-standalone，缓存在 `build/pbs-cache/`；国内镜像优先，自动回退）
+1. 下载便携 Python 运行时（python-build-standalone，版本和 sha256 在 `lib/desktop_download_pins.env`，缓存在 `build/pbs-cache/`；国内镜像优先，自动回退；命中缓存后仍校验 sha256）
 2. 用便携 Python 安装 `requirements.txt` 的全部依赖
 3. 拷贝后端源码到 `src-tauri/resources/backend/`（排除缓存 / tests / 运行数据；用 Python `shutil` 实现，Windows 没有 rsync）
 4. **依赖完整性检查**：AST 扫描后端所有第三方 import，缺任何一个就让构建失败
@@ -77,14 +77,14 @@ Tauri 合并，不影响 macOS。
 
 ### 前置依赖
 
-- Node.js 18+、Rust、cargo-tauri (`cargo install tauri-cli`)
+- Node.js 18+、Rust、与 `lib/desktop_toolchain.env` 相同版本的 cargo-tauri（本地可 `cargo install tauri-cli --locked --version <该版本>`）。Desktop Build 不在 runner 上编译 CLI，只安装该文件里的官方 zip 并用 `lib/tauri_cli_checksums.env` 校验
 - macOS：`aarch64-apple-darwin` target；Windows：MSVC 工具链 + VS Build Tools
 - 系统 **不需要** 预装 Python / ffmpeg —— 脚本会自带便携版
 
 ### 环境变量
 
 - `PIP_INDEX_URL`：pip 源，默认清华镜像；CI 里设为 `https://pypi.org/simple`
-- `PBS_VERSION` / `PBS_PYTHON_VERSION`：覆盖便携 Python 版本（默认见 `lib/desktop_build_common.sh`）
+- `PBS_VERSION` / `PBS_PYTHON_VERSION`：必须与 `lib/desktop_download_pins.env` 一致，不能改成未登记校验和的运行时
 - `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：updater 签名。不设则跳过 `.sig`
 - `VITE_PUBLIC_SENTRY_DSN` / `SENTRY_DSN`：崩溃上报。不设则 no-op。说明见 `docs/UPDATES_AND_SENTRY.md`
 

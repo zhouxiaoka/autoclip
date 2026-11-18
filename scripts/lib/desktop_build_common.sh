@@ -13,8 +13,6 @@
 
 set -e
 
-PBS_VERSION="${PBS_VERSION:-20260510}"
-PBS_PYTHON_VERSION="${PBS_PYTHON_VERSION:-3.13.13}"
 RESOURCES_DIR="src-tauri/resources"
 PYTHON_DIR="$RESOURCES_DIR/python"
 BACKEND_DEST="$RESOURCES_DIR/backend"
@@ -82,20 +80,35 @@ download_with_mirrors() {
 # ---------------------------------------------------------------------------
 # steps
 # ---------------------------------------------------------------------------
+clean_shipped_bundles() {
+    # Drop installer/DMG bytes restored by the Rust target cache. Cargo still
+    # reuses the compiled dependencies in target/; only the shipped bundle goes.
+    rm -rf src-tauri/target/release/bundle
+}
+
 check_build_tools() {
     echo "==> Checking build environment"
-    local cmd
+    # shellcheck source=desktop_pins.sh
+    source "$PROJECT_ROOT/scripts/lib/desktop_pins.sh"
+    load_desktop_pins "$PROJECT_ROOT"
+    local cmd output
     for cmd in node cargo curl tar; do
         if ! command -v "$cmd" &> /dev/null; then
             echo "ERROR: $cmd not installed"; exit 1
         fi
     done
-    if ! command -v tauri &> /dev/null && ! command -v cargo-tauri &> /dev/null; then
-        if ! cargo tauri --version &> /dev/null; then
-            echo "ERROR: tauri CLI not installed (run: cargo install tauri-cli)"; exit 1
-        fi
+    if command -v cargo-tauri >/dev/null 2>&1; then
+        output="$(cargo-tauri --version 2>&1)"
+    elif command -v tauri >/dev/null 2>&1; then
+        output="$(tauri --version 2>&1)"
+    elif output="$(cargo tauri --version 2>&1)"; then
+        :
+    else
+        echo "ERROR: tauri-cli ${TAURI_CLI_VERSION} is not installed (CI uses scripts/install_tauri_cli.sh)" >&2
+        exit 1
     fi
-    echo "OK"
+    assert_tauri_cli_output "$TAURI_CLI_VERSION" "$output"
+    echo "OK (tauri-cli ${TAURI_CLI_VERSION})"
 }
 
 # Downloads the PBS "install_only" tarball for $PBS_TRIPLE (with CN-friendly
@@ -103,16 +116,40 @@ check_build_tools() {
 prepare_portable_python() {
     : "${PBS_TRIPLE:?PBS_TRIPLE must be set}"
     : "${PORTABLE_PY_REL:?PORTABLE_PY_REL must be set}"
+    local requested_version="${PBS_VERSION-}"
+    local requested_python="${PBS_PYTHON_VERSION-}"
+    # shellcheck source=desktop_pins.sh
+    source "$PROJECT_ROOT/scripts/lib/desktop_pins.sh"
+    load_desktop_pins "$PROJECT_ROOT"
+    if [ -n "$requested_version" ] && [ "$requested_version" != "$PBS_VERSION" ]; then
+        echo "ERROR: PBS_VERSION=$requested_version does not match pinned $PBS_VERSION" >&2
+        exit 1
+    fi
+    if [ -n "$requested_python" ] && [ "$requested_python" != "$PBS_PYTHON_VERSION" ]; then
+        echo "ERROR: PBS_PYTHON_VERSION=$requested_python does not match pinned $PBS_PYTHON_VERSION" >&2
+        exit 1
+    fi
     local tarball="cpython-${PBS_PYTHON_VERSION}+${PBS_VERSION}-${PBS_TRIPLE}-install_only.tar.gz"
     local cache="build/pbs-cache/${tarball}"
     local release="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/${tarball}"
+    local expected
+    expected="$(pbs_sha256_for_triple "$PBS_TRIPLE")"
 
     echo "==> Preparing portable Python runtime (${PBS_TRIPLE})"
-    # install_only tarballs are 25-50MB; anything smaller is a partial download.
-    download_with_mirrors "$cache" 20000000 \
-        "https://ghproxy.com/${release}" \
-        "https://mirror.ghproxy.com/${release}" \
-        "${release}"
+    if [ -f "$cache" ] && ! verify_sha256_file "$cache" "$expected"; then
+        echo "  Cached portable Python failed sha256, redownloading"
+    fi
+    if [ ! -f "$cache" ]; then
+        # install_only tarballs are 25-50MB; anything smaller is a partial download.
+        download_with_mirrors "$cache" 20000000 \
+            "https://ghproxy.com/${release}" \
+            "https://mirror.ghproxy.com/${release}" \
+            "${release}"
+    fi
+    if ! verify_sha256_file "$cache" "$expected"; then
+        echo "ERROR: portable Python tarball failed sha256 for ${PBS_TRIPLE}" >&2
+        exit 1
+    fi
 
     rm -rf "$PYTHON_DIR"
     mkdir -p "$RESOURCES_DIR"
