@@ -1,6 +1,10 @@
 import allowlist from '../../../backend/services/diagnostics/allowlist.json' with { type: 'json' }
 
 const SECRET = /sk-|bearer\s|api[_-]?key\s*[:=]|authorization\s*[:=]|password\s*[:=]|\/Users\/|\\Users\\|https?:\/\/\S+\?/i
+const SECRET_PARTS = new Set([
+  'token', 'secret', 'signature', 'sign', 'password', 'passwd', 'pwd',
+  'credential', 'cookie', 'apikey', 'key', 'sig', 'sid', 'auth',
+])
 
 export function manifestProblems(manifest: unknown, maxBytes: number): string[] {
   const problems: string[] = []
@@ -15,8 +19,62 @@ export function manifestProblems(manifest: unknown, maxBytes: number): string[] 
   const encoded = new TextEncoder().encode(JSON.stringify(record))
   if (encoded.byteLength > maxBytes) problems.push('too_large')
   walk(record, problems)
-  if (SECRET.test(JSON.stringify(record))) problems.push('secret_or_path')
+  if ('source_link' in record && !sourceLinkOk(record.source_link)) problems.push('source_link')
+  const scanned = { ...record }
+  delete scanned.source_link
+  if (SECRET.test(JSON.stringify(scanned))) problems.push('secret_or_path')
   return problems
+}
+
+function decodeBounded(value: string): string {
+  let current = value
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(current.replace(/\+/g, '%20'))
+      if (next === current || next.length > 2000) break
+      current = next
+    } catch {
+      break
+    }
+  }
+  return current
+}
+
+function secretName(name: string): boolean {
+  const folded = decodeBounded(name).toLowerCase().replace(/-/g, '_')
+  const parts = folded.split(/[^a-z0-9_]+/).flatMap((piece) => piece.split('_')).filter(Boolean)
+  return parts.some((part) => SECRET_PARTS.has(part))
+}
+
+function unsafeText(value: string): boolean {
+  for (const sample of [value, decodeBounded(value)]) {
+    const folded = sample.toLowerCase().replace(/\\/g, '/')
+    if (folded.includes('sk-') || folded.includes('/users/')) return true
+  }
+  return false
+}
+
+function sourceLinkOk(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 300 || /\s/.test(value)) return false
+  if (/^(file|data|javascript|blob):/i.test(value)) return false
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  if (url.username || url.password || url.hash) return false
+  if (url.port && (Number(url.port) < 1 || Number(url.port) > 65535)) return false
+  if (unsafeText(url.pathname)) return false
+  const search = url.search.startsWith('?') ? url.search.slice(1) : url.search
+  for (const pair of search.split('&').filter(Boolean)) {
+    const eq = pair.indexOf('=')
+    const key = eq === -1 ? pair : pair.slice(0, eq)
+    const item = eq === -1 ? '' : pair.slice(eq + 1)
+    if (secretName(key) || unsafeText(item)) return false
+  }
+  return !unsafeText(value)
 }
 
 function walk(value: unknown, problems: string[]): void {

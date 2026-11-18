@@ -160,23 +160,71 @@ def resolve_role(project_id: str, role: str) -> Path:
     return found
 
 
+EXCERPT_CLIENT_MAX = 41943040
+EXCERPT_TIMEOUT_SEC = 180
+EXCERPT_DEFAULT_SEC = 60.0
+EXCERPT_MAX_SEC = 180.0
+EXCERPT_PAD_SEC = 15.0
+EXCERPT_SCALE = "scale='min(1280,iw)':-2"
+
+
+def excerpt_span(receipt: dict | None) -> tuple[float, float]:
+    """60s around a known failure time, otherwise the first minute. Never longer than 180s."""
+    summary = receipt.get("summary") if isinstance(receipt, dict) and isinstance(receipt.get("summary"), dict) else {}
+    raw = receipt.get("media_time_sec") if isinstance(receipt, dict) else None
+    if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+        raw = summary.get("media_time_sec") if isinstance(summary, dict) else None
+    if not isinstance(raw, (int, float)) or isinstance(raw, bool) or raw < 0 or raw != raw:
+        return 0.0, EXCERPT_DEFAULT_SEC
+    start = max(0.0, float(raw) - EXCERPT_PAD_SEC)
+    return start, EXCERPT_DEFAULT_SEC
+
+
+def excerpt_ffmpeg_command(ffmpeg: str, source: Path, dest: Path, start_sec: float, duration_sec: float) -> list[str]:
+    """Same slice shape as video_processor.extract_clip, with the diagnostics quality target."""
+    return [
+        ffmpeg, "-hide_banner", "-nostdin", "-y",
+        "-ss", f"{start_sec:.3f}",
+        "-i", str(source),
+        "-t", f"{duration_sec:.3f}",
+        "-vf", EXCERPT_SCALE,
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "28",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "96k",
+        "-movflags", "+faststart",
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        str(dest),
+    ]
+
+
+def cut_for_receipt(receipt: dict | None):
+    start, duration = excerpt_span(receipt)
+
+    def cut(source: Path, dest: Path) -> Path:
+        return default_cut(source, dest, start_sec=start, duration_sec=duration)
+
+    return cut
+
+
 def default_cut(source: Path, dest: Path, *, start_sec: float = 0, duration_sec: float = 60) -> Path:
-    """Copy the first minute. Late timeouts may not appear in this excerpt."""
-    if start_sec < 0 or duration_sec <= 0 or duration_sec > 180:
+    """Re-encode a short window. A failure time is placed 15s into a 60s clip."""
+    if start_sec < 0 or duration_sec <= 0 or duration_sec > EXCERPT_MAX_SEC:
         raise MediaRejected("excerpt_window")
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.is_symlink() or (dest.exists() and not dest.is_file()):
         raise MediaRejected("excerpt_dest")
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    command = excerpt_ffmpeg_command(get_ffmpeg_path(), source, dest, start_sec, duration_sec)
     try:
-        subprocess.run(
-            [get_ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-ss", str(start_sec),
-             "-t", str(duration_sec), "-i", str(source), "-c", "copy", str(dest)],
-            check=True, capture_output=True, timeout=120,
-        )
+        subprocess.run(command, check=True, capture_output=True, timeout=EXCERPT_TIMEOUT_SEC)
     except (OSError, subprocess.SubprocessError) as exc:
+        dest.unlink(missing_ok=True)
         raise MediaRejected("excerpt_unavailable") from exc
-    if not dest.is_file() or dest.is_symlink() or dest.stat().st_size > ROLE_MAX_BYTES["excerpt"]:
+    if not dest.is_file() or dest.is_symlink() or dest.stat().st_size > EXCERPT_CLIENT_MAX:
         dest.unlink(missing_ok=True)
         raise MediaRejected("excerpt_unavailable")
     return dest
@@ -198,7 +246,8 @@ def materialize(project_id: str, roles: list[str], *, excerpt_dir: Path, cut=Non
             if contained is None:
                 raise MediaRejected("excerpt_escaped")
             facts = describe(contained, role="excerpt")
-            if facts["size_bytes"] > ROLE_MAX_BYTES["excerpt"]:
+            if facts["size_bytes"] > EXCERPT_CLIENT_MAX:
+                contained.unlink(missing_ok=True)
                 raise MediaRejected("too_large")
             files.append({**facts, "path": str(contained), "content_type": "video/mp4"})
             continue

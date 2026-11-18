@@ -6,6 +6,7 @@ import os
 import threading
 
 from backend.services.diagnostics.consent import load
+from backend.services.diagnostics import media
 from backend.services.diagnostics.service import DiagnosticsError, background_enqueue
 
 logger = logging.getLogger(__name__)
@@ -33,11 +34,25 @@ def schedule_new_failures(project_id: str, previous: dict | None, data: dict) ->
             continue
         if prior.get(row.get("attempt_id")) != "open":
             continue
-        snaps.append({"project_id": project_id, "receipt": {key: row.get(key) for key in _KEYS}})
+        receipt = {key: row.get(key) for key in _KEYS}
+        moment = _media_time(row)
+        if moment is not None:
+            receipt["media_time_sec"] = moment
+        snaps.append({"project_id": project_id, "receipt": receipt})
     if not snaps:
         return
     with _LOCK:
         _PENDING.extend(snaps)
+
+
+def _media_time(row: dict) -> float | None:
+    raw = row.get("media_time_sec")
+    if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+        summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+        raw = summary.get("media_time_sec")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw < 0 or raw != raw:
+        return None
+    return float(raw)
 
 
 def deliver_pending() -> None:
@@ -55,6 +70,8 @@ def deliver_pending() -> None:
 def _enqueue_all(snaps: list[dict]) -> None:
     for snap in snaps:
         try:
-            background_enqueue(snap["project_id"], snap["receipt"])
+            background_enqueue(
+                snap["project_id"], snap["receipt"], cut=media.cut_for_receipt(snap["receipt"]),
+            )
         except (DiagnosticsError, OSError, RuntimeError, ValueError, TypeError):
             logger.warning("diagnostics enqueue skipped")

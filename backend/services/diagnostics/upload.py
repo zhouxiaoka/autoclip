@@ -1,4 +1,8 @@
-"""Upload pump. No endpoint means no network. Revocation is checked before every authorization."""
+"""Upload pump. Consent is checked before every authorization.
+
+The built-in Worker is used when neither the environment nor endpoint.json
+sets an address. Opt-in stays off until the user enables it.
+"""
 from __future__ import annotations
 
 import json
@@ -12,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from backend.core.event_catalog import app_version
 from backend.core.path_utils import get_data_directory
 from backend.services.diagnostics import media, queue
 from backend.services.diagnostics.consent import load as load_consent
@@ -40,7 +45,24 @@ class Revoked(Exception):
     pass
 
 
+DEFAULT_ENDPOINT = "https://autoclip-diagnostics-api.autoclip-val-3f71ee83.workers.dev"
+
+
+def diagnostics_user_agent() -> str:
+    return f"AutoClip/{app_version()} diagnostics"
+
+
+def _worker_headers(extra: dict | None = None) -> dict[str, str]:
+    """Worker JSON calls identify the app. Presigned object-storage requests keep their signed headers."""
+    headers = {"Content-Type": "application/json"}
+    if extra:
+        headers.update(extra)
+    headers["User-Agent"] = diagnostics_user_agent()
+    return headers
+
+
 def endpoint() -> str:
+    """env AUTOCLIP_DIAGNOSTICS_ENDPOINT, then endpoint.json, then the built-in Worker."""
     env = os.getenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "").strip()
     if env:
         return env.rstrip("/")
@@ -48,9 +70,11 @@ def endpoint() -> str:
     try:
         raw = json.loads(file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return ""
+        return DEFAULT_ENDPOINT
     value = raw.get("endpoint") if isinstance(raw, dict) else ""
-    return value.strip().rstrip("/") if isinstance(value, str) else ""
+    if isinstance(value, str) and value.strip():
+        return value.strip().rstrip("/")
+    return DEFAULT_ENDPOINT
 
 
 def allowed_upload_url(url: str) -> bool:
@@ -81,6 +105,8 @@ def _roots(item: dict) -> list[Path]:
 
 def _still_authorized(item: dict) -> None:
     consent = load_consent()
+    if not consent.notice_seen:
+        raise Revoked()
     if not isinstance(item.get("epoch"), int) or item["epoch"] != consent.epoch:
         raise Revoked()
     roles = {row.get("role") for row in item.get("files") or []}
@@ -136,7 +162,7 @@ class UrllibTransport:
     def delete(self, base: str, case_id: str, capability: str) -> None:
         request = urllib.request.Request(
             f"{base}/v1/cases/{case_id}", data=b"{}", method="DELETE",
-            headers={"Authorization": f"Bearer {capability}", "Content-Type": "application/json"},
+            headers=_worker_headers({"Authorization": f"Bearer {capability}"}),
         )
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
@@ -150,6 +176,8 @@ class UrllibTransport:
             raise Offline("offline") from exc
 
     def put_part(self, url: str, data: bytes, headers: dict) -> str:
+        # Presigned object-storage URLs sign content-length, host, and checksum or content-md5.
+        # User-Agent is not one of those headers. Leave the signed set unchanged.
         if not allowed_upload_url(url):
             raise Offline("upload_url_rejected")
         request = urllib.request.Request(url, data=data, method="PUT", headers=headers)
@@ -174,7 +202,7 @@ class UrllibTransport:
         payload = json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
             url, data=payload, method="POST",
-            headers={"Content-Type": "application/json", **headers},
+            headers=_worker_headers(headers),
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -196,7 +224,19 @@ def _local_only(item: dict) -> bool:
     return item.get("disposition") == "local" or item.get("save_local") is True
 
 
+def _released(item: dict | None) -> dict | None:
+    if isinstance(item, dict):
+        queue.release_local_residue(item)
+    return item
+
+
 def finish_delete(item: dict, transport) -> dict:
+    result = _finish_delete(item, transport)
+    released = _released(result)
+    return released if isinstance(released, dict) else result
+
+
+def _finish_delete(item: dict, transport) -> dict:
     """Remote erasure is confirmed only by a successful delete. Failures stay retryable."""
     item_id = item["id"]
     current = _live(item_id, item)
@@ -403,6 +443,34 @@ def _put_part_attempts(transport, url: str, payload: bytes, headers: dict) -> st
     raise last
 
 
+def _drop_blocked_media(item: dict) -> dict:
+    """A link, or an origin we cannot prove, must not upload a downloaded video."""
+    from backend.services.diagnostics.source import classify, sanitize_source_link
+    decision = classify(str(item.get("project_id") or ""))
+    if decision.origin == "file":
+        return item
+    changes: dict = {}
+    if item.get("files"):
+        changes["files"] = []
+    manifest = item.get("manifest") if isinstance(item.get("manifest"), dict) else {}
+    if decision.origin == "link" and not manifest.get("source_link"):
+        link = sanitize_source_link(decision.source_url)
+        if link:
+            updated = dict(manifest)
+            updated["source_link"] = link
+            if not validate_manifest(updated):
+                changes["manifest"] = updated
+    if not changes:
+        return {**item, "files": []} if item.get("files") else item
+    stored = queue.update(
+        item["id"], if_version=item.get("version"), updated_at=queue.now_iso(), **changes,
+    )
+    if stored is None:
+        live = _live(item["id"], item)
+        return {**live, "files": []}
+    return stored
+
+
 def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
     """One attempt. Does not touch the generation attempt that produced the failure."""
     item_id = item["id"]
@@ -416,7 +484,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         if item.get("inflight_create") or item.get("case_id") or (item.get("upload") or {}).get("case_id"):
             return _cleanup_bound(item, transport)
         cancelled = queue.update(item_id, if_version=item.get("version"), status="cancelled", error="revoked", updated_at=queue.now_iso())
-        return cancelled or _live(item_id, item)
+        return _released(cancelled or _live(item_id, item)) or _live(item_id, item)
     problems = validate_manifest(item.get("manifest") or {})
     if problems:
         failed = queue.update(item_id, if_version=item.get("version"), status="failed", error="manifest_rejected", updated_at=queue.now_iso())
@@ -438,6 +506,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         if diverted is not None:
             return diverted
         _still_authorized(item)
+        item = _drop_blocked_media(item)
         session = item.get("upload") if isinstance(item.get("upload"), dict) else {}
         if not session.get("case_id") or item.get("refresh_plan") or _plan_expired(session, now):
             recovery = queue.recovery_token(item_id, create=True)
@@ -581,7 +650,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             item_id, if_version=item.get("version"), if_status=queue.OPEN,
             status="uploaded", error="", updated_at=queue.now_iso(),
         )
-        return uploaded or _live(item_id, item)
+        return _released(uploaded or _live(item_id, item)) or _live(item_id, item)
     except Revoked:
         current = _live(item_id, item)
         capability = queue.read_capability(item_id)
@@ -592,11 +661,11 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
             except (Offline, OSError, RuntimeError, ValueError, TypeError):
                 logger.warning("diagnostics delete after revoke failed")
                 pending = queue.update(item_id, status="delete_pending", error="delete_retry", updated_at=queue.now_iso())
-                return pending or _live(item_id, current)
+                return _released(pending or _live(item_id, current)) or _live(item_id, current)
             erased = queue.update(item_id, if_version=current.get("version"), status="deleted", error="", updated_at=queue.now_iso())
-            return erased or _live(item_id, current)
+            return _released(erased or _live(item_id, current)) or _live(item_id, current)
         cancelled = queue.update(item_id, if_version=current.get("version"), status="cancelled", error="revoked", updated_at=queue.now_iso())
-        return cancelled or _live(item_id, current)
+        return _released(cancelled or _live(item_id, current)) or _live(item_id, current)
     except UploadAuthorizationExpired as exc:
         current = _live(item_id, item)
         diverted = _divert(current, transport)

@@ -130,8 +130,9 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
-  const [helpDiagnostics, setHelpDiagnostics] = useState(false)
-  const [helpMedia, setHelpMedia] = useState(false)
+  const [helpDiagnostics, setHelpDiagnostics] = useState<boolean | null>(null)
+  const [helpError, setHelpError] = useState(false)
+  const [helpMedia, setHelpMedia] = useState(true)
   const [helpOriginal, setHelpOriginal] = useState(false)
   const crashPreferenceChanged = useRef(false)
   const [version, setVersion] = useState('')
@@ -161,18 +162,30 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         try {
           const grant = await diagnosticsApi.consent()
           if (active) {
+            setHelpError(false)
             setHelpDiagnostics(grant.diagnostics)
             setHelpMedia(grant.media)
             setHelpOriginal(grant.full_original)
           }
         } catch {
-          /* 诊断同意只存在本机；读不到就保持关闭 */
+          if (active) setHelpError(true)
         }
       } catch (err) {
         console.error('检查自动启动状态失败:', err)
       }
     })()
-    return () => { active = false }
+    const refreshDiagnostics = () => {
+      diagnosticsApi.consent().then((grant) => {
+        if (!active) return
+        setHelpError(false)
+        setHelpDiagnostics(grant.diagnostics)
+        setHelpMedia(grant.media)
+        setHelpOriginal(grant.full_original)
+      }).catch(() => { if (active) setHelpError(true) })
+    }
+    if (typeof window === 'undefined') return () => { active = false }
+    window.addEventListener('autoclip-diagnostics-consent', refreshDiagnostics)
+    return () => { active = false; window.removeEventListener('autoclip-diagnostics-consent', refreshDiagnostics) }
   }, [])
 
   const toggleAutostart = async (enabled: boolean) => {
@@ -204,6 +217,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
       const saved = await diagnosticsApi.setConsent({
         diagnostics, media, full_original: fullOriginal, informed: true,
       })
+      setHelpError(false)
       setHelpDiagnostics(saved.diagnostics)
       setHelpMedia(saved.media)
       setHelpOriginal(saved.full_original)
@@ -288,15 +302,31 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
-        <Row label={t("帮助改进 AutoClip")} hint={t("失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。关闭后会停掉尚未完成的上传。")}>
+        {helpError && <>
+          <p className="ac-note">{t('诊断设置没有读出来。在确认前不会按默认打开上传。')}</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn size="sm" onClick={() => {
+              diagnosticsApi.consent().then((grant) => {
+                setHelpError(false)
+                setHelpDiagnostics(grant.diagnostics)
+                setHelpMedia(grant.media)
+                setHelpOriginal(grant.full_original)
+              }).catch(() => setHelpError(true))
+            }}>{t('重新读取')}</Btn>
+            <Btn size="sm" onClick={() => void saveDiagnostics(false, false, false)}>{t('关闭自动发送')}</Btn>
+          </div>
+        </>}
+        {!helpError && helpDiagnostics !== null && <>
+        <Row label={t("帮助改进 AutoClip")} hint={t("失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。本地视频默认会压缩并上传短片段。完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。")}>
           <Switch checked={helpDiagnostics} onChange={(enabled) => void saveDiagnostics(enabled, enabled ? helpMedia : false, enabled && helpMedia ? helpOriginal : false)} />
         </Row>
-        <Row label={t("允许附带失败任务的片段")} hint={t("在已开启改进诊断后，可额外上传该任务开头的短片段。短片段可能复现不了片尾才出现的超时。默认仍然关闭。")}>
+        <Row label={t("允许附带失败任务的片段")} hint={t("默认打开，只对本地视频文件生效。失败后上传一段重新压缩的短视频，最长约 60 秒，画面不超过 720p。有失败时间时会围着那个时间截取。视频链接不上传视频。可以单独关闭。")}>
           <Switch checked={helpMedia} disabled={!helpDiagnostics} onChange={(enabled) => void saveDiagnostics(true, enabled, enabled ? helpOriginal : false)} />
         </Row>
-        <Row label={t("允许附带完整原片")} hint={t("需要单独同意。完整原片体积大，只在你明确允许后才会上传，并且受大小上限约束。")}>
+        <Row label={t("允许附带完整原片")} hint={t("默认关闭。打开后才上传未压缩的完整原片。原片可能包含私人内容，只用于排查和改进，不用于训练。关闭后，未完成的原片上传会取消。")}>
           <Switch checked={helpOriginal} disabled={!helpDiagnostics || !helpMedia} onChange={(enabled) => void saveDiagnostics(true, true, enabled)} />
         </Row>
+        </>}
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
         <ImportPreferenceSettings />

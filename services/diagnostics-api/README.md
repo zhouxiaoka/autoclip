@@ -1,16 +1,14 @@
 # autoclip-diagnostics-api
 
-私有诊断上传的 Worker 模板。**还没有创建** Cloudflare 资源，桌面端上传地址默认为空，空地址不会上传。
+私有诊断上传的 Worker。生产资源已经创建，桌面端内置这个地址。没有保存过选择时，诊断和素材开关按打开处理，但要等用户确认首次说明之后才会自动上传。已经保存的关闭保持关闭。
 
-提议中的名字（未创建，也未购买域名）：
-
-| 资源 | 名字 | 绑定 |
+| 资源 | 名字 | 标识 |
 |---|---|---|
-| Worker | `autoclip-diagnostics-api` | — |
-| R2（私有） | `autoclip-diagnostics` | `DIAGNOSTICS_BUCKET` |
-| D1 | `autoclip-diagnostics-meta` | `DIAGNOSTICS_DB` |
+| Worker | `autoclip-diagnostics-api` | `https://autoclip-diagnostics-api.autoclip-val-3f71ee83.workers.dev` |
+| R2（私有） | `autoclip-diagnostics` | 绑定 `DIAGNOSTICS_BUCKET` |
+| D1 | `autoclip-diagnostics-meta` | 绑定 `DIAGNOSTICS_DB`，id `91ac62f9-8b47-4f88-af93-08c2706caace` |
 
-不引用、不修改现有的 `autoclip-media` 桶。以后若用 `workers.dev`，也不要买域名。生产部署、预算和真实 URL 都要 Charlie 另批。`wrangler.jsonc` 里的上限是**提议**，`QUOTA_APPROVAL=pending`。
+不引用、不修改现有的 `autoclip-media` 桶。继续用 `workers.dev`，不另买域名。`wrangler.jsonc` 里的体积上限是已部署的值。`QUOTA_APPROVAL` 仍是 `pending`，它不是密钥；账号免费层的 10GB·月仍然不是硬性花费上限。
 
 ## 配额不是账单封顶
 
@@ -46,4 +44,4 @@ python -m pytest -c backend/pytest.ini -o addopts= backend/tests/test_diagnostic
 
 回归执行生产 D1 SQL，覆盖逐条写入失败和真实事务回滚；另用真实 Python HTTP 客户端对接本机 Worker handler / SQLite，复现创建丢响应和上传授权失效。测试只用合成字节，没有连接真实 R2/D1，不能代替部署前的预签名、校验头与 multipart 验证。
 
-真实对象存储验证的开关、配额和凭据要求见 `live/README.md`。那个脚本默认不联网。不要运行 `wrangler deploy`，也不要按这份模板去创建桶或数据库，除非 Charlie 明确授权。
+真实对象存储验证的开关、配额和凭据要求见 `live/README.md`。那个脚本默认不联网。不要运行 `wrangler deploy`，除非 Charlie 明确授权。生产 D1 id 和 Worker 地址已经写在 `wrangler.jsonc` 里，这里没有密钥。

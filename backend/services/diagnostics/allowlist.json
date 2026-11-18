@@ -1,7 +1,7 @@
 {
   "schema": "autoclip.support_manifest/1",
   "purpose": "troubleshooting_and_product_improvement",
-  "consent_text_version": "2026-11-16.1",
+  "consent_text_version": "2026-11-18.1",
   "manifest_keys": [
     "schema",
     "purpose",
@@ -12,7 +12,8 @@
     "run",
     "media_facts",
     "log_lines",
-    "limits"
+    "limits",
+    "source_link"
   ],
   "runtime_keys": ["app_version", "os", "arch", "runtime"],
   "attempt_keys": [

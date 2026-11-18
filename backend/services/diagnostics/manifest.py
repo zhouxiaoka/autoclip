@@ -190,7 +190,7 @@ def media_facts(raw: dict | None) -> dict:
 
 
 def build_manifest(receipt: dict, *, summary: dict | None = None, media: dict | None = None,
-                   log_text: str = "", project_id: str | None = None) -> dict:
+                   log_text: str = "", project_id: str | None = None, source_link: str | None = None) -> dict:
     summary = summary if summary is not None else (receipt.get("summary") if isinstance(receipt.get("summary"), dict) else {})
     manifest = {
         "schema": SCHEMA,
@@ -215,7 +215,12 @@ def build_manifest(receipt: dict, *, summary: dict | None = None, media: dict | 
             "approval": "pending",
         },
     }
+    if isinstance(source_link, str) and source_link:
+        manifest["source_link"] = source_link
     problems = validate_manifest(manifest)
+    if problems and "source_link" in manifest:
+        manifest.pop("source_link", None)
+        problems = validate_manifest(manifest)
     if problems:
         raise ValueError("manifest_rejected")
     return manifest
@@ -237,6 +242,13 @@ def validate_manifest(manifest: dict) -> list[str]:
     if len(blob.encode("utf-8")) > ROLE_MAX_BYTES["manifest"]:
         problems.append("too_large")
     _walk(manifest, problems)
+    from backend.services.diagnostics.source import sanitize_source_link
+    link = manifest.get("source_link") if isinstance(manifest, dict) else None
+    if isinstance(manifest, dict) and "source_link" in manifest and sanitize_source_link(link if isinstance(link, str) else None) != link:
+        problems.append("source_link")
+    scanned = dict(manifest) if isinstance(manifest, dict) else {}
+    scanned.pop("source_link", None)
+    blob = json.dumps(scanned, ensure_ascii=False, sort_keys=True)
     if re.search(r"sk-|Bearer |api[_-]?key\s*[:=]|/[Uu]sers/|\\\\Users\\\\|https?://\S+\?", blob):
         problems.append("secret_or_path")
     return problems

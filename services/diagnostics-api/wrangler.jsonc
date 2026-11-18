@@ -6,14 +6,14 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
-  // Proposed names only. Do not create these resources until Charlie approves the budget.
-  // Do not attach any other product bucket.
+  // Live production resources. Do not attach any other product bucket.
+  // Worker: https://autoclip-diagnostics-api.autoclip-val-3f71ee83.workers.dev
   "triggers": { "crons": ["17 * * * *"] },
   "d1_databases": [
     {
       "binding": "DIAGNOSTICS_DB",
       "database_name": "autoclip-diagnostics-meta",
-      "database_id": "REPLACE_AFTER_CREATE",
+      "database_id": "91ac62f9-8b47-4f88-af93-08c2706caace",
       "migrations_dir": "migrations"
     }
   ],

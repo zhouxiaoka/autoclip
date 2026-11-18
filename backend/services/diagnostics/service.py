@@ -8,7 +8,7 @@ import os
 
 from backend.core.path_utils import get_data_directory, get_log_file_path
 from backend.services.diagnostics import media, queue, upload
-from backend.services.diagnostics.consent import Consent, load, update
+from backend.services.diagnostics.consent import Consent, commit, load
 from backend.services.diagnostics.manifest import build_manifest, validate_manifest
 from backend.services.diagnostics.redact import sanitized_log_file
 from backend.services.studio import store
@@ -73,7 +73,10 @@ def _log_text(project_id: str) -> str:
 
 def preview(project_id: str, attempt_id: str, *, probe=None) -> dict:
     receipt = _receipt(_state(project_id), attempt_id)
-    manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
+    _origin, source_link = _input_for_diagnostics(project_id)
+    manifest = build_manifest(
+        receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
+    )
     consent = load()
     view = consent.public()
     view["endpoint_configured"] = bool(upload.endpoint())
@@ -113,9 +116,18 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
         raise DiagnosticsError("subtitle_required", 422)
     consent = load()
     if also_enable_background:
-        consent = update(diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True)
+        if not consent.notice_seen or not consent.persisted or consent.unreadable:
+            raise DiagnosticsError("notice_required", 422)
+        _previous, consent = commit(
+            diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True,
+        )
+    origin, source_link = _input_for_diagnostics(project_id)
+    if origin != "file":
+        wanted = []
     receipt = _receipt(_state(project_id), attempt_id)
-    manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
+    manifest = build_manifest(
+        receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
+    )
     if validate_manifest(manifest):
         raise DiagnosticsError("manifest_rejected", 422)
     item_id = queue.new_id()
@@ -157,12 +169,30 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
     return _public_item(stored)
 
 
+def _release_changed(items: list[dict]) -> None:
+    for item in items:
+        current = queue.get(str(item.get("id") or "")) or item
+        queue.release_local_residue(current)
+
+
 def set_consent(*, diagnostics: bool, media: bool, full_original: bool, informed: bool, transport=None) -> Consent:
-    previous = load()
-    consent = update(diagnostics=diagnostics, media=media, full_original=full_original, informed=informed)
-    if consent.epoch != previous.epoch:
-        cancelled = queue.cancel_before(consent.epoch)
-        _abort_remote(cancelled, transport)
+    previous, consent = commit(
+        diagnostics=diagnostics, media=media, full_original=full_original, informed=informed,
+    )
+    changed: list[dict] = []
+    if previous.persisted and previous.notice_seen and previous.diagnostics and not consent.diagnostics:
+        changed = queue.cancel_before(consent.epoch)
+    elif previous.persisted and previous.notice_seen and consent.diagnostics:
+        roles: set[str] = set()
+        if previous.full_original and not consent.full_original:
+            roles.add("original")
+        if previous.media and not consent.media:
+            roles.update({"excerpt", "subtitle"})
+        if roles:
+            changed = queue.cancel_with_roles(roles)
+    if changed:
+        _abort_remote(changed, transport)
+        _release_changed(changed)
     return consent
 
 
@@ -202,9 +232,16 @@ def _public_item(item: dict) -> dict:
     }
 
 
+def _input_for_diagnostics(project_id: str) -> tuple[str, str | None]:
+    from backend.services.diagnostics.source import classify, sanitize_source_link
+    decision = classify(project_id)
+    link = sanitize_source_link(decision.source_url) if decision.origin == "link" else None
+    return decision.origin, link
+
+
 def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | None:
     consent = load()
-    if not consent.diagnostics or not consent.diagnostics_at:
+    if not consent.notice_seen or not consent.diagnostics or not consent.diagnostics_at:
         return None
     finished = receipt.get("finished_at")
     if not isinstance(finished, str):
@@ -218,17 +255,29 @@ def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | No
             return None
     except ValueError:
         return None
+    origin, source_link = _input_for_diagnostics(project_id)
     roles: list[str] = []
-    if consent.full_original:
-        roles.append("original")
-    elif consent.media:
-        roles.append("excerpt")
-    manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
+    if origin == "file":
+        if consent.full_original:
+            roles.append("original")
+        elif consent.media:
+            roles.append("excerpt")
+    manifest = build_manifest(
+        receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
+    )
     item_id = queue.new_id()
     files = []
     if roles:
         excerpt_dir = get_data_directory() / "diagnostics" / "excerpts" / item_id
-        files = media.materialize(project_id, roles, excerpt_dir=excerpt_dir, cut=cut)
+        try:
+            files = media.materialize(
+                project_id, roles, excerpt_dir=excerpt_dir,
+                cut=cut if cut is not None else media.cut_for_receipt(receipt),
+            )
+        except media.MediaRejected:
+            logger.warning("diagnostics media skipped")
+            files = []
+            roles = []
     item = {
         "id": item_id,
         "idempotency_key": _key(str(receipt.get("attempt_id")), roles, manifest, False),

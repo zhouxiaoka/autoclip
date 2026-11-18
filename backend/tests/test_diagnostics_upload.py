@@ -18,6 +18,7 @@ from backend.services.diagnostics import (
     observe,
     queue,
     service,
+    source,
     upload,
 )
 from backend.services.diagnostics.manifest import build_manifest
@@ -47,13 +48,23 @@ def _receipt(**extra):
 
 def test_privacy_copy_exists_in_all_eight_locales():
     key = "帮助改进 AutoClip"
-    purpose = "失败后在后台上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。默认关闭。不含 API 密钥、字幕正文、项目名或个人路径。未配置上传地址时不会发送。关闭后会停掉尚未完成的上传。"
+    purpose = "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。本地视频默认会压缩并上传短片段。完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。"
+    notice = "从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。"
+    media_scope = "本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。"
+    retention = "已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。"
     for lang in ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr"):
         data = json.loads((ROOT / "frontend/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
         assert data[key]
         assert data[purpose]
+        assert data[notice]
+        assert data[media_scope]
+        assert data[retention]
+        assert "未打开此开关时不会发送" not in purpose
+        assert "新安装默认关闭" not in purpose
+        assert "完整原片默认关闭" in purpose
         if lang != "zh":
             assert data[purpose] != purpose
+            assert data[notice] != notice
 
 
 def test_manifest_drops_secrets_paths_names_and_transcript(data_dir):
@@ -112,11 +123,13 @@ def test_symlink_and_escape_are_rejected(data_dir, tmp_path):
 
 
 def test_consent_defaults_off_and_narrowing_cancels_queued_work(data_dir):
-    assert consent.load().diagnostics is False
+    unset = consent.load()
+    assert unset.diagnostics is True and unset.media is True and unset.full_original is False
+    assert unset.notice_seen is False and unset.diagnostics_at is None
     with pytest.raises(PermissionError):
         consent.update(diagnostics=True, media=True, full_original=True, informed=False)
     granted = consent.update(diagnostics=True, media=False, full_original=False, informed=True)
-    assert granted.epoch == 1 and granted.diagnostics_at
+    assert granted.epoch == 1 and granted.diagnostics_at and granted.notice_seen is True
     item = queue.enqueue({
         "id": "c-1", "idempotency_key": "k1", "status": "queued", "epoch": granted.epoch,
         "manifest": build_manifest(_receipt()), "files": [], "explicit": False,
@@ -139,12 +152,23 @@ def test_historical_failure_is_not_queued_and_a_later_one_is(data_dir, monkeypat
     monkeypatch.setattr(store, "write", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("studio write")))
     observe.schedule_new_failures("proj", {"attempts": [{"attempt_id": TOKEN, "state": "open"}]}, {"attempts": [later]})
     observe.deliver_pending()
-    upload.pump_once()
+    class Transport:
+        def __init__(self):
+            self.calls = []
+
+        def create_case(self, base, body, key):
+            self.calls.append((base, body, key))
+            raise upload.Offline("offline")
+
+    transport = Transport()
+    upload.pump_once(transport)
     rows = queue.list_items()
     assert len(rows) == 1
     assert rows[0]["attempt_id"] == TOKEN
-    assert rows[0]["status"] == "needs_endpoint"
+    assert rows[0]["status"] == "offline"
     assert rows[0]["files"] == []
+    assert transport.calls[0][0] == upload.DEFAULT_ENDPOINT
+    assert transport.calls[0][1]["files"] == []
     assert granted.diagnostics is True
 
 
@@ -202,6 +226,269 @@ def test_offline_retry_and_idempotent_enqueue(data_dir, tmp_path):
     assert queue.list_items()[0]["status"] == "offline"
     upload.pump_once(transport)
     assert transport.creates == 1  # backoff has not elapsed
+
+
+def test_opt_in_off_does_not_contact_the_default_worker(data_dir):
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    assert consent.load().notice_seen is False
+
+    class Transport:
+        def create_case(self, *args, **kwargs):
+            raise AssertionError("notice not confirmed contacted the worker")
+
+        def delete(self, *args, **kwargs):
+            raise AssertionError("notice not confirmed deleted a case")
+
+        def put_part(self, *args, **kwargs):
+            raise AssertionError("notice not confirmed uploaded media")
+
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    upload.pump_once(Transport())
+    assert queue.list_items() == []
+
+
+def test_media_toggle_stays_off_when_diagnostics_are_on(data_dir):
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "raw").mkdir(parents=True)
+    (root / "raw" / "input.mp4").write_bytes(b"clip-bytes")
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued is not None
+    assert queued["files"] == []
+    assert (root / "raw" / "input.mp4").read_bytes() == b"clip-bytes"
+
+
+def test_unreadable_consent_is_not_treated_as_default_on(data_dir):
+    consent.consent_path().parent.mkdir(parents=True, exist_ok=True)
+    consent.consent_path().write_text("{", encoding="utf-8")
+    grant = consent.load()
+    assert grant.unreadable is True
+    assert grant.diagnostics is False and grant.media is False and grant.full_original is False
+    assert grant.notice_seen is False
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+
+
+def test_explicit_off_for_every_scope_survives_reload(data_dir):
+    consent.update(diagnostics=False, media=False, full_original=False, informed=True)
+    again = consent.load()
+    assert again.diagnostics is False and again.media is False and again.full_original is False
+    assert again.notice_seen is True
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    raw = {
+        "diagnostics": True, "media": False, "full_original": False, "epoch": 3,
+        "text_version": "2026-11-16.1", "diagnostics_at": "2026-11-16T00:00:00+00:00",
+        "updated_at": "2026-11-16T00:00:00+00:00",
+    }
+    consent.consent_path().write_text(json.dumps(raw), encoding="utf-8")
+    kept = consent.load()
+    assert kept.diagnostics is True and kept.media is False and kept.full_original is False
+    assert kept.notice_seen is True
+    raw["diagnostics"] = False
+    raw["media"] = False
+    raw["full_original"] = False
+    consent.consent_path().write_text(json.dumps(raw), encoding="utf-8")
+    assert consent.load().diagnostics is False
+
+
+def test_pre_159_consent_without_notice_seen_keeps_explicit_false(data_dir):
+    consent.consent_path().parent.mkdir(parents=True, exist_ok=True)
+    consent.consent_path().write_text(json.dumps({
+        "diagnostics": False, "media": False, "full_original": False, "epoch": 2,
+        "text_version": "2026-11-16.1", "updated_at": "2026-11-16T00:00:00+00:00",
+    }), encoding="utf-8")
+    grant = consent.load()
+    assert grant.notice_seen is True
+    assert grant.diagnostics is False and grant.media is False and grant.full_original is False
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+
+
+def test_background_checkbox_before_notice_does_not_grant_media(data_dir):
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "metadata").mkdir(parents=True)
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    with pytest.raises(service.DiagnosticsError) as caught:
+        service.submit("proj", TOKEN, roles=[], informed=True, also_enable_background=True)
+    assert caught.value.reason == "notice_required"
+    assert consent.load().notice_seen is False
+    assert consent.load().persisted is False
+    assert not consent.consent_path().exists()
+
+
+def test_confirmed_default_asks_for_the_original_and_not_subtitles(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    seen = {}
+
+    def fake(project_id, roles, excerpt_dir, cut=None):
+        seen["roles"] = list(roles)
+        return []
+
+    monkeypatch.setattr(media, "materialize", fake)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued is not None
+    assert seen["roles"] == ["original"]
+    assert "subtitle" not in seen["roles"]
+
+
+def test_master_off_cancels_queued_work_and_media_off_cancels_only_that_scope(data_dir):
+    granted = consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    manifest = build_manifest(_receipt())
+    queue.enqueue({
+        "id": "c-plain", "idempotency_key": "plain", "status": "queued", "epoch": granted.epoch,
+        "manifest": manifest, "files": [], "explicit": False,
+    })
+    queue.enqueue({
+        "id": "c-film", "idempotency_key": "film", "status": "queued", "epoch": granted.epoch,
+        "manifest": manifest, "explicit": True,
+        "files": [{"role": "original", "path": "raw/input.mp4", "size_bytes": 4, "sha256": "ab", "content_type": "video/mp4"}],
+    })
+    queue.enqueue({
+        "id": "c-clip", "idempotency_key": "clip", "status": "queued", "epoch": granted.epoch,
+        "manifest": manifest, "explicit": True,
+        "files": [{"role": "excerpt", "path": "excerpt.mp4", "size_bytes": 4, "sha256": "ab", "content_type": "video/mp4"}],
+    })
+    service.set_consent(diagnostics=True, media=True, full_original=False, informed=True)
+    assert queue.get("c-plain")["status"] == "queued"
+    assert queue.get("c-film")["status"] == "cancelled"
+    assert queue.get("c-clip")["status"] == "queued"
+    service.set_consent(diagnostics=True, media=False, full_original=False, informed=True)
+    assert queue.get("c-plain")["status"] == "queued"
+    assert queue.get("c-clip")["status"] == "cancelled"
+    service.set_consent(diagnostics=False, media=False, full_original=False, informed=True)
+    assert queue.get("c-plain")["status"] == "cancelled"
+
+
+def test_confirmed_delete_removes_diagnostic_copies_and_keeps_secrets_while_retrying(data_dir, tmp_path):
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    from backend.services.studio import store
+    original = store.directory("proj") / "raw" / "input.mp4"
+    original.parent.mkdir(parents=True)
+    original.write_bytes(b"original-bytes")
+    item_id = "c-clean"
+    excerpt = data_dir / "diagnostics" / "excerpts" / item_id / "excerpt.mp4"
+    excerpt.parent.mkdir(parents=True)
+    excerpt.write_bytes(b"excerpt-bytes")
+    queue.write_capability(item_id, "cap-secret")
+    queue.recovery_token(item_id, create=True)
+    outside = tmp_path / "linked.mp4"
+    outside.write_bytes(b"do-not-follow")
+    link = data_dir / "diagnostics" / "excerpts" / "c-link"
+    link.symlink_to(outside)
+    queue.release_local_residue({"id": "c-link", "status": "deleted"})
+    queue.enqueue({
+        "id": item_id, "idempotency_key": "clean", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "explicit": True, "manifest": build_manifest(_receipt()), "attempts": 0,
+        "upload": {}, "files": [], "case_id": "remote-clean",
+    })
+
+    class Transport:
+        def __init__(self):
+            self.allow = False
+
+        def delete(self, base, case_id, capability):
+            if not self.allow:
+                raise upload.Offline("timeout")
+
+    transport = Transport()
+    (data_dir / "diagnostics").mkdir(exist_ok=True)
+    (data_dir / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    first = upload.finish_delete(queue.get(item_id), transport)
+    assert first["status"] == "delete_pending"
+    assert not excerpt.exists()
+    assert queue.read_capability(item_id) == "cap-secret"
+    assert queue.recovery_token(item_id) != ""
+    assert original.read_bytes() == b"original-bytes"
+    assert outside.read_bytes() == b"do-not-follow"
+    assert not link.exists()
+    transport.allow = True
+    second = upload.finish_delete(queue.get(item_id), transport)
+    assert second["status"] == "deleted"
+    assert queue.read_capability(item_id) == ""
+    assert queue.recovery_token(item_id) == ""
+    assert original.read_bytes() == b"original-bytes"
+    assert outside.read_bytes() == b"do-not-follow"
+
+
+def test_endpoint_precedence_is_env_then_file_then_builtin(data_dir, monkeypatch):
+    monkeypatch.delenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", raising=False)
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    file = data_dir / "diagnostics" / "endpoint.json"
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text("{", encoding="utf-8")
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    file.write_text(json.dumps({"endpoint": "  "}), encoding="utf-8")
+    assert upload.endpoint() == upload.DEFAULT_ENDPOINT
+    file.write_text(json.dumps({"endpoint": "https://file.example/diag/"}), encoding="utf-8")
+    assert upload.endpoint() == "https://file.example/diag"
+    monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "  ")
+    assert upload.endpoint() == "https://file.example/diag"
+    monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "https://env.example/diag/")
+    assert upload.endpoint() == "https://env.example/diag"
+
+
+def test_worker_requests_send_autoclip_user_agent_not_urllib_default(monkeypatch):
+    from backend.core.event_catalog import app_version
+
+    seen = []
+
+    class Response:
+        status = 200
+        headers = {}
+
+        def read(self):
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def capture(request, timeout=None, context=None):
+        assert context is None
+        seen.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr(upload.urllib.request, "urlopen", capture)
+    monkeypatch.setenv("AUTOCLIP_APP_VERSION", "1.5.9")
+    transport = upload.UrllibTransport()
+    base = "http://127.0.0.1:9"
+    transport.create_case(base, {"manifest": {}}, "idem")
+    transport.cancel_creation(base, "idem", "recovery")
+    transport.complete(base, "case", "cap", {"object_id": "obj", "bytes": 1})
+    transport.delete(base, "case", "cap")
+    transport.put_part("http://127.0.0.1/part", b"abcd", {"Content-Length": "4", "content-md5": "abc"})
+    expected = f"AutoClip/{app_version()} diagnostics"
+    assert expected == "AutoClip/1.5.9 diagnostics"
+    assert len(seen) == 5
+    for request, _timeout in seen[:4]:
+        agent = request.get_header("User-agent")
+        assert agent == expected
+        assert not str(agent).startswith("Python-urllib/")
+        assert all("Python-urllib" not in value for _name, value in request.header_items())
+    put, _timeout = seen[4]
+    assert put.get_header("User-agent") is None
+    names = [name.lower() for name, _value in put.header_items()]
+    assert "user-agent" not in names
+    assert put.get_method() == "PUT"
+
+
+def test_blank_endpoint_override_still_waits_without_a_network_call(data_dir, monkeypatch):
+    monkeypatch.setattr(upload, "endpoint", lambda: "")
+    consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    queue.enqueue({
+        "id": "c-empty", "idempotency_key": "empty", "status": "queued", "epoch": consent.load().epoch,
+        "manifest": build_manifest(_receipt()), "files": [], "explicit": False,
+    })
+
+    class Transport:
+        def create_case(self, *args, **kwargs):
+            raise AssertionError("blank endpoint contacted the worker")
+
+    upload.pump_once(Transport())
+    assert queue.get("c-empty")["status"] == "needs_endpoint"
 
 
 def test_explicit_submit_without_endpoint_saves_locally_and_does_not_touch_attempt(data_dir):
@@ -277,6 +564,7 @@ def test_save_local_never_touches_the_network_when_an_endpoint_exists(data_dir, 
     video = root / "raw" / "input.mp4"
     video.write_bytes(b"clip-bytes")
     (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    source.record_input_origin(project, "file")
     calls = {"n": 0}
 
     class Transport:
@@ -315,6 +603,7 @@ def test_delete_during_upload_is_not_overwritten_and_stays_retryable(data_dir, t
     (tmp_path / "diagnostics").mkdir()
     (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("proj", "file")
     built = build_manifest(_receipt())
     from backend.services.studio import store
     root = store.directory("proj")
@@ -370,6 +659,7 @@ def test_lost_create_response_replays_the_plan_and_uploads_every_byte(data_dir, 
     (tmp_path / "diagnostics").mkdir()
     (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("proj", "file")
     payload = b"hello-media"
     from backend.services.studio import store
     root = store.directory("proj")
@@ -492,7 +782,7 @@ def test_delete_during_create_keeps_a_retryable_cleanup_across_restart(data_dir,
     assert queue.get("c-late")["status"] == "deleted"
     assert len(transport.deletes) == 2
     assert transport.deletes[1][2] == "http://127.0.0.1:9"
-    assert queue.read_capability("c-late") == "late-secret"
+    assert queue.read_capability("c-late") == ""
     assert queue.get("c-late")["status"] != "uploaded"
 
 
@@ -575,6 +865,7 @@ def test_incomplete_plan_is_not_marked_uploaded(data_dir, tmp_path):
     (tmp_path / "diagnostics").mkdir()
     (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("proj", "file")
     from backend.services.studio import store
     root = store.directory("proj")
     (root / "raw").mkdir(parents=True)
@@ -684,3 +975,348 @@ def test_multipart_request_sends_one_md5_per_part(tmp_path):
         base64.b64encode(hashlib.md5(payload[8:10]).digest()).decode("ascii"),
     ]
     assert media.part_md5s(path, len(payload), 16) == []
+
+
+def test_source_link_keeps_the_video_id_and_drops_secrets():
+    raw = "https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLpublic&token=abc&signature=dead#frag"
+    assert source.sanitize_source_link(raw) == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLpublic"
+    assert source.sanitize_source_link("file:///tmp/private.mp4") is None
+    assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc") == "https://www.youtube.com/watch?v=abc"
+    secret_query = "https://www.youtube.com/watch?v=abc&api-key=1&x-api-key=2&x-auth=3&sign=4&%2574oken=5"
+    assert source.sanitize_source_link(secret_query) == "https://www.youtube.com/watch?v=abc"
+    assert source.sanitize_source_link("https://cdn.example/watch/%2FUsers%2Falice?v=abc") is None
+    assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc&next=%2FUsers%2Falice") == "https://www.youtube.com/watch?v=abc"
+    assert source.sanitize_source_link("https://cdn.example/sk-live/watch?v=abc") is None
+    assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc&note=sk-live") == "https://www.youtube.com/watch?v=abc"
+    assert source.sanitize_source_link("https://www.youtube.com:99999/watch?v=abc") is None
+    contradictory = source.classify_metadata({"input_origin": "file", "source_url": "https://www.youtube.com/watch?v=abc"})
+    assert contradictory.origin == "unknown"
+    legacy_link = source.classify_metadata({"source_url": "https://youtu.be/A_156w0aYtU"})
+    legacy_file = source.classify_metadata({"source_url": None, "via": "cli"})
+    assert legacy_link.origin == "link" and legacy_link.source_url.startswith("https://youtu.be/")
+    assert legacy_file.origin == "file"
+    assert source.classify_metadata({}).origin == "unknown"
+    assert source.classify_metadata(None).origin == "unknown"
+
+
+def test_link_input_sends_the_url_and_does_not_transcode_or_upload_media(data_dir, tmp_path, monkeypatch):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    source.record_input_origin(
+        "proj", "link",
+        source_url="https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ&token=abc#t=1",
+    )
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("link input must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert queued["manifest"]["source_link"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert "downloaded-video" not in json.dumps(queued)
+    assert "token" not in queued["manifest"]["source_link"]
+    assert "pass" not in queued["manifest"]["source_link"]
+
+    class Transport:
+        def __init__(self):
+            self.files = None
+            self.puts = 0
+
+        def create_case(self, base, body, key):
+            self.files = body["files"]
+            return {"case_id": "remote", "capability": "cap", "uploads": []}
+
+        def put_part(self, *args, **kwargs):
+            self.puts += 1
+            raise AssertionError("link input must not upload media")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("no media part to complete")
+
+    transport = Transport()
+    upload.pump_once(transport)
+    assert transport.files == []
+    assert transport.puts == 0
+    assert queue.list_items()[0]["status"] == "uploaded"
+
+
+def test_unknown_origin_does_not_auto_upload_a_downloaded_file(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("unknown origin must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert "source_link" not in queued["manifest"]
+
+
+def test_queued_link_media_is_blocked_before_put(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    source.record_input_origin("proj", "link", source_url="https://www.bilibili.com/video/BV1qheu6kEFV/?token=secret")
+    media_file = data_dir / "projects" / "proj" / "raw" / "input.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"cached-link-video")
+    queue.enqueue({
+        "id": "c-old-link", "idempotency_key": "old-link", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": False, "disposition": "upload",
+        "save_local": False, "manifest": build_manifest(_receipt()), "attempts": 0, "upload": {},
+        "files": [{
+            "role": "original", "path": str(media_file), "size_bytes": len(b"cached-link-video"),
+            "sha256": __import__("hashlib").sha256(b"cached-link-video").hexdigest(), "content_type": "video/mp4",
+        }],
+    })
+
+    class Transport:
+        def __init__(self):
+            self.files = None
+            self.puts = 0
+
+        def create_case(self, base, body, key):
+            self.files = body["files"]
+            return {"case_id": "remote", "capability": "cap", "uploads": []}
+
+        def put_part(self, *args, **kwargs):
+            self.puts += 1
+            raise AssertionError("queued link video must not be uploaded")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("no media part to complete")
+
+    transport = Transport()
+    upload.pump_once(transport)
+    stored = queue.get("c-old-link")
+    assert transport.files == []
+    assert transport.puts == 0
+    assert stored["files"] == []
+    assert stored["manifest"]["source_link"] == "https://www.bilibili.com/video/BV1qheu6kEFV/"
+    assert "token" not in stored["manifest"]["source_link"]
+    assert "cached-link-video" not in json.dumps(stored)
+
+
+def test_invalid_link_is_omitted_and_the_diagnostic_still_queues(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com:99999/watch?v=abc")
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("invalid link must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert "source_link" not in queued["manifest"]
+    assert queued["manifest"]["attempt"]["error_code"] == "timeout"
+    assert "99999" not in json.dumps(queued["manifest"])
+
+
+def test_contradictory_file_origin_does_not_upload_media(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    folder = data_dir / "projects" / "proj" / "metadata"
+    folder.mkdir(parents=True)
+    (folder / "input_origin.json").write_text(
+        json.dumps({"origin": "file", "source_url": "https://www.youtube.com/watch?v=abc"}),
+        encoding="utf-8",
+    )
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("contradictory origin must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert "source_link" not in queued["manifest"]
+
+
+def test_unknown_origin_submit_does_not_transcode(data_dir, monkeypatch):
+    root = data_dir / "projects" / "proj"
+    (root / "metadata").mkdir(parents=True)
+    (root / "raw").mkdir()
+    (root / "raw" / "input.mp4").write_bytes(b"local-video")
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("unknown origin must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    service.submit("proj", TOKEN, roles=["excerpt"], informed=True)
+    stored = queue.list_items()[0]
+    assert stored["files"] == []
+    assert stored["manifest"]["attempt"]["error_code"] == "timeout"
+
+
+def test_preview_includes_the_sanitized_source_link(data_dir):
+    root = data_dir / "projects" / "proj"
+    (root / "metadata").mkdir(parents=True)
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com/watch?v=abc&api-key=secret")
+    shown = service.preview("proj", TOKEN)
+    assert shown["manifest"]["source_link"] == "https://www.youtube.com/watch?v=abc"
+
+
+def test_link_is_not_uploaded_before_notice_or_when_diagnostics_are_off(data_dir):
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    assert queue.list_items() == []
+    consent.update(diagnostics=False, media=False, full_original=False, informed=True)
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    assert queue.list_items() == []
+    blob = (data_dir / "diagnostics" / "queue.json").read_text(encoding="utf-8") if (data_dir / "diagnostics" / "queue.json").exists() else ""
+    assert "youtube.com" not in blob
+
+
+def test_unset_consent_is_excerpt_on_and_original_off():
+    grant = consent._unset()
+    assert grant.diagnostics is True and grant.media is True and grant.full_original is False
+    assert grant.notice_seen is False and grant.persisted is False
+
+
+def test_excerpt_span_uses_failure_time_or_the_first_minute():
+    assert media.excerpt_span({"media_time_sec": 100}) == (85.0, 60.0)
+    assert media.excerpt_span({"summary": {"media_time_sec": 40}}) == (25.0, 60.0)
+    assert media.excerpt_span({}) == (0.0, 60.0)
+    assert media.excerpt_span({"media_time_sec": 5}) == (0.0, 60.0)
+    with pytest.raises(media.MediaRejected) as caught:
+        media.default_cut(Path("/missing-source"), Path("/missing-dest"), duration_sec=181)
+    assert caught.value.reason == "excerpt_window"
+
+
+def test_default_cut_reencodes_with_the_diagnostics_preset(tmp_path, monkeypatch):
+    source = tmp_path / "in.mp4"
+    source.write_bytes(b"v")
+    dest = tmp_path / "out" / "excerpt.mp4"
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = list(cmd)
+        seen["timeout"] = kwargs.get("timeout")
+        Path(cmd[-1]).write_bytes(b"ok")
+        return media.subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(media.subprocess, "run", fake_run)
+    monkeypatch.setattr("backend.utils.ffmpeg_utils.get_ffmpeg_path", lambda: "ffmpeg")
+    media.default_cut(source, dest)
+    cmd = seen["cmd"]
+    assert "copy" not in cmd
+    assert seen["timeout"] == 180
+    assert cmd[cmd.index("-ss") + 1] == "0.000"
+    assert cmd[cmd.index("-t") + 1] == "60.000"
+    assert cmd[cmd.index("-vf") + 1] == "scale='min(1280,iw)':-2"
+    assert cmd[cmd.index("-vf") + 2:-1] == [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-map", "0:v:0", "-map", "0:a:0?",
+    ]
+
+
+def test_excerpt_over_40mb_is_discarded(tmp_path, monkeypatch):
+    source = tmp_path / "in.mp4"
+    source.write_bytes(b"v")
+    dest = tmp_path / "excerpt.mp4"
+
+    def fake_run(cmd, **kwargs):
+        Path(cmd[-1]).write_bytes(b"x" * (media.EXCERPT_CLIENT_MAX + 1))
+        return media.subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(media.subprocess, "run", fake_run)
+    monkeypatch.setattr("backend.utils.ffmpeg_utils.get_ffmpeg_path", lambda: "ffmpeg")
+    with pytest.raises(media.MediaRejected) as caught:
+        media.default_cut(source, dest)
+    assert caught.value.reason == "excerpt_unavailable"
+    assert not dest.exists()
+    assert media.EXCERPT_CLIENT_MAX == 41943040
+
+
+def test_confirmed_default_uploads_a_compressed_excerpt(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
+    consent.update(diagnostics=True, media=True, full_original=False, informed=True)
+    seen = {}
+
+    def fake(project_id, roles, *, excerpt_dir, cut=None):
+        seen["roles"] = list(roles)
+        return []
+
+    monkeypatch.setattr(media, "materialize", fake)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert seen["roles"] == ["excerpt"]
+    assert queued["files"] == []
+
+
+def test_transcode_failure_keeps_the_manifest_and_skips_the_original(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
+    consent.update(diagnostics=True, media=True, full_original=False, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"full-original-bytes")
+
+    def boom(*args, **kwargs):
+        raise media.MediaRejected("excerpt_unavailable")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert queued["manifest"]["attempt"]["error_code"] == "timeout"
+    blob = json.dumps(queued)
+    assert "full-original-bytes" not in blob
+    assert "input.mp4" not in blob
+    assert "original" not in {row.get("role") for row in queued["files"]}
+
+
+def test_enabled_original_is_uploaded_without_transcode(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"abcd")
+    called = {"cut": False}
+
+    def boom(*args, **kwargs):
+        called["cut"] = True
+        raise AssertionError("original must not be transcoded")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert called["cut"] is False
+    assert queued["files"][0]["role"] == "original"
+    assert queued["files"][0]["path"].endswith("input.mp4")
+
+
+def test_observe_cuts_around_the_failure_time(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
+    consent.update(diagnostics=True, media=True, full_original=False, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"v")
+    seen = {}
+
+    def record(source, dest, *, start_sec=0, duration_sec=60):
+        seen["span"] = (start_sec, duration_sec)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"clip")
+        return dest
+
+    monkeypatch.setattr(media, "default_cut", record)
+    row = _receipt(finished_at="2999-01-01T00:00:00+00:00", media_time_sec=100)
+    observe.schedule_new_failures(
+        "proj", {"attempts": [{"attempt_id": TOKEN, "state": "open"}]}, {"attempts": [row]},
+    )
+    observe.deliver_pending()
+    assert seen["span"] == (85.0, 60.0)
+    stored = queue.list_items()[0]
+    assert stored["files"][0]["role"] == "excerpt"
+    assert "media_time_sec" not in json.dumps(stored["manifest"])

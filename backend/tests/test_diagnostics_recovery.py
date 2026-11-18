@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.services.diagnostics import consent, queue, service, upload
+from backend.services.diagnostics import consent, queue, service, source, upload
 from backend.services.diagnostics.manifest import build_manifest
 from backend.services.studio import store
 
@@ -22,6 +22,7 @@ def item(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_SYNC", "1")
     monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "http://127.0.0.1:9")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("recovery", "file")
     path = store.directory("recovery") / "raw" / "input.mp4"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"abcdef")
@@ -120,12 +121,14 @@ def test_process_exit_before_response_keeps_cleanup_retryable_after_restart(item
     transport = Restarted()
     service.delete_local(item["id"], transport=transport)
     assert queue.get(item["id"])["status"] == "delete_pending"
+    recovery = tmp_path / "diagnostics/recovery/c-recovery"
+    if os.name != "nt":
+        assert recovery.stat().st_mode & 0o777 == 0o600
     upload.pump_once(transport)
     assert server["remote"] is False
     assert transport.creates == 0 and transport.puts == 0 and transport.cancels == 2
     assert queue.get(item["id"])["status"] == "deleted"
-    if os.name != "nt":
-        assert (tmp_path / "diagnostics/recovery/c-recovery").stat().st_mode & 0o777 == 0o600
+    assert not recovery.exists()
 
 
 def test_expired_part_grant_refreshes_same_objects_and_keeps_completed_parts(item):

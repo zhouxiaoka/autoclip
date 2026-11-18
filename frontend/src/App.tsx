@@ -11,6 +11,7 @@ import StudioEditor from './features/studio/StudioEditor'
 import SettingsPage from './pages/SettingsPage'
 import SettingsReturnListener from './features/studio/SettingsReturnListener'
 import KeyGuidePrompt from './features/settings/KeyGuidePrompt'
+import DiagnosticsNotice from './features/diagnostics/DiagnosticsNotice'
 import QuitGuard from './features/studio/quitGuard'
 import KeepAwakeGuard from './features/studio/KeepAwakeGuard'
 import { startKeyGuideWatch } from './features/settings/keyGuideWatch'
@@ -52,6 +53,7 @@ function App() {
         <SponsorPromoHost />
         <SettingsReturnListener />
         <KeyGuidePrompt />
+        <DiagnosticsNotice />
         <QuitGuard />
         <KeepAwakeGuard />
         <Content>

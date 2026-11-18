@@ -23,6 +23,25 @@ from ..schemas.task import TaskStatus
 logger = logging.getLogger(__name__)
 
 
+def _input_metadata(source_url):
+    """Record link versus local file without changing how the video is imported."""
+    if isinstance(source_url, str) and source_url.strip():
+        return {"source_url": source_url.strip(), "input_origin": "link"}
+    return {"source_url": None, "input_origin": "file"}
+
+
+def _remember_input_origin(project) -> None:
+    meta = getattr(project, "project_metadata", None) or {}
+    origin = meta.get("input_origin")
+    if origin not in {"link", "file"}:
+        return
+    try:
+        from backend.services.diagnostics.source import record_input_origin
+        record_input_origin(str(project.id), origin, source_url=meta.get("source_url"))
+    except Exception:  # noqa: BLE001 - a diagnostics note must not block project creation
+        logger.warning("input origin was not recorded", exc_info=True)
+
+
 class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectResponse]):
     """Project service with business logic."""
     
@@ -44,10 +63,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             "status": "pending",  # 默认状态为 pending
             "video_path": project_dict.get("source_file"),  # Map source_file to video_path
             "processing_config": project_dict.get("settings", {}),  # Map settings to processing_config
-            "project_metadata": {"source_url": project_dict.get("source_url")}  # Map source_url to metadata
+            "project_metadata": _input_metadata(project_dict.get("source_url"))
         }
         
-        return self.create(**orm_data)
+        project = self.create(**orm_data)
+        _remember_input_origin(project)
+        return project
     
     def update_project(self, project_id: str, project_data: ProjectUpdate) -> Optional[Project]:
         """Update a project with business logic."""
