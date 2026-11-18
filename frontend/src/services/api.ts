@@ -351,6 +351,7 @@ export interface DiagnosticsConsent {
   diagnostics_at: string | null
   endpoint_configured: boolean
   notice_seen?: boolean
+  persisted?: boolean
   unreadable?: boolean
 }
 

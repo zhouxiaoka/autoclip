@@ -2170,5 +2170,8 @@
   "这次失败没有可关联的尝试编号，仍然可以写下反馈。": "Cet échec n’a pas d’identifiant de tentative. Vous pouvez quand même écrire un retour.",
   "将随诊断一起发送的字段": "Champs envoyés avec le diagnostic",
   "不含 API 密钥、字幕正文、项目名或个人路径。自动发送的是脱敏诊断；完整原片和短片段可以单独关闭。": "Pas de clés API, de texte de sous-titres, de noms de projet ni de chemins personnels. L’envoi automatique est un diagnostic déjà filtré ; l’original complet et le court extrait peuvent être désactivés séparément.",
-  "诊断设置没有保存，请重试。": "Le réglage de diagnostic n’a pas été enregistré. Réessayez."
+  "诊断设置没有保存，请重试。": "Le réglage de diagnostic n’a pas été enregistré. Réessayez.",
+  "失败后会自动发送脱敏诊断和本地视频的压缩短片段，用来提高出片成功率，不会用来训练。链接导入只发送清洗后的链接，不发送下载的视频。可以现在关闭，也可以稍后在设置里改。": "Après un échec, un diagnostic filtré et un extrait compressé de la vidéo locale sont envoyés automatiquement pour améliorer le taux de réussite, pas pour entraîner des modèles. Un lien n’envoie que le lien nettoyé, pas la vidéo téléchargée. Vous pouvez désactiver ceci maintenant ou plus tard dans les réglages.",
+  "收起详情": "Masquer les détails",
+  "保存选择": "Enregistrer le choix"
 }

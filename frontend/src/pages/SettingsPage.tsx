@@ -38,6 +38,7 @@ const SECTION_ALIASES: Record<string, { section: SectionKey; anchor?: string }> 
   vision: { section: 'ai', anchor: 'ai-defaults-vision' },
   speech: { section: 'ai', anchor: 'ai-defaults-transcription' },
   cover: { section: 'ai', anchor: 'ai-defaults-cover' },
+  diagnostics: { section: 'app', anchor: 'diagnostics-settings' },
 }
 
 // Calm Premium settings — left nav + setting rows (see DESIGN.md → App Layer)
@@ -60,6 +61,12 @@ const SettingsPage: React.FC = () => {
     trackExperience('settings_section_viewed', { section: active, entry_source: location.state?.settingsEntry === 'home_setup' ? 'home_setup' : 'direct' })
   }, [active])
   useEffect(() => { setActive(initialSection) }, [initialSection])
+  useEffect(() => {
+    const anchor = SECTION_ALIASES[requested]?.anchor
+    if (!anchor || SECTION_ALIASES[requested]?.section !== active) return
+    const timer = window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }), 0)
+    return () => window.clearTimeout(timer)
+  }, [requested, active])
   return (
     <div className="ac-page">
       <header>
@@ -302,6 +309,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
+        <div id="diagnostics-settings">
         {helpError && <>
           <p className="ac-note">{t('诊断设置没有读出来。在确认前不会按默认打开上传。')}</p>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -327,6 +335,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           <Switch checked={helpOriginal} disabled={!helpDiagnostics || !helpMedia} onChange={(enabled) => void saveDiagnostics(true, true, enabled)} />
         </Row>
         </>}
+        </div>
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
         <ImportPreferenceSettings />

@@ -1,58 +1,85 @@
-import { useEffect, useState } from 'react'
-import { Switch, message } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
+import { message } from 'antd'
 import { t } from '../../i18n'
 import { useTranslation } from 'react-i18next'
-import { Btn, Dialog } from '../../ui'
+import { Btn } from '../../ui'
 import { diagnosticsApi } from '../../services/api'
 
-/** Shown before any default upload. Closing it does not count as a choice. */
+/** X or Esc hides the card for this page session and does not record a choice. */
+let dismissedThisSession = false
+
+type Preference = { diagnostics: boolean; media: boolean; fullOriginal: boolean }
+
+/** Disclosure only. Uploads already follow the saved or default preference. */
 export default function DiagnosticsNotice() {
   useTranslation()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [unreadable, setUnreadable] = useState(false)
   const [loadError, setLoadError] = useState(false)
-  const [diagnostics, setDiagnostics] = useState(true)
-  const [media, setMedia] = useState(true)
-  const [fullOriginal, setFullOriginal] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
+  const preference = useRef<Preference | null>(null)
 
   useEffect(() => {
+    if (dismissedThisSession) return
     let active = true
     diagnosticsApi.consent()
       .then((grant) => {
-        if (!active) return
-        if (grant.notice_seen) {
+        if (!active || dismissedThisSession) return
+        if (grant.notice_seen || grant.persisted) {
           setOpen(false)
           return
         }
         setLoadError(false)
-        setUnreadable(grant.unreadable === true)
         const on = grant.unreadable !== true
-        setDiagnostics(on && grant.diagnostics)
-        setMedia(on && grant.media)
-        setFullOriginal(on && grant.full_original)
+        preference.current = {
+          diagnostics: on && grant.diagnostics,
+          media: on && grant.media,
+          fullOriginal: on && grant.full_original,
+        }
         setOpen(true)
       })
       .catch(() => {
-        if (!active) return
+        if (!active || dismissedThisSession) return
+        preference.current = null
         setLoadError(true)
-        setUnreadable(true)
-        setDiagnostics(false)
-        setMedia(false)
-        setFullOriginal(false)
         setOpen(true)
       })
     return () => { active = false }
   }, [reloadToken])
 
-  const save = async (nextDiagnostics: boolean, nextMedia: boolean, nextOriginal: boolean) => {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const target = event.target
+      if (target instanceof Element && target.closest("input, textarea, [contenteditable='true'], [role='dialog'][aria-modal='true']")) return
+      dismissedThisSession = true
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  const dismiss = () => {
+    dismissedThisSession = true
+    setOpen(false)
+  }
+
+  const allow = async () => {
+    const current = preference.current
+    if (!current || loadError) {
+      dismiss()
+      return
+    }
     setBusy(true)
     try {
       await diagnosticsApi.setConsent({
-        diagnostics: nextDiagnostics,
-        media: nextMedia,
-        full_original: nextOriginal,
+        diagnostics: current.diagnostics,
+        media: current.diagnostics && current.media,
+        full_original: current.diagnostics && current.media && current.fullOriginal,
         informed: true,
       })
       window.dispatchEvent(new Event('autoclip-diagnostics-consent'))
@@ -64,28 +91,30 @@ export default function DiagnosticsNotice() {
     }
   }
 
-  return (
-    <Dialog
-      open={open}
-      onClose={() => {}}
-      title={t('失败诊断会自动发送')}
-      description={t('从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。')}
-      footer={
-        <div className="right">
-          {loadError && <Btn size="sm" disabled={busy} onClick={() => setReloadToken((value) => value + 1)}>{t('重新读取')}</Btn>}
-          <Btn size="sm" disabled={busy} onClick={() => void save(false, false, false)}>{t('全部关闭')}</Btn>
-          <Btn size="sm" variant="cta" loading={busy} onClick={() => void save(diagnostics, diagnostics && media, diagnostics && media && fullOriginal)}>{t('知道了，按当前选择继续')}</Btn>
-        </div>
-      }
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {unreadable && <p className="ac-note">{t('已保存的诊断选择读不出来。在你确认前不会上传。')}</p>}
-        <p className="ac-note">{t('本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。')}</p>
-        <p className="ac-note">{t('已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。')}</p>
-        <label className="ac-note"><Switch checked={diagnostics} onChange={setDiagnostics} /> {t('帮助改进 AutoClip')}</label>
-        <label className="ac-note"><Switch checked={media} disabled={!diagnostics} onChange={setMedia} /> {t('允许附带失败任务的片段')}</label>
-        <label className="ac-note"><Switch checked={fullOriginal} disabled={!diagnostics || !media} onChange={setFullOriginal} /> {t('允许附带完整原片')}</label>
+  const openSettings = () => {
+    dismiss()
+    navigate('/settings?section=diagnostics')
+  }
+
+  if (!open || typeof document === 'undefined') return null
+
+  return createPortal(
+    <aside className="ac-diagnostics-notice" role="region" aria-labelledby="ac-diagnostics-notice-title">
+      <button type="button" className="ac-diagnostics-notice-x" aria-label={t('关闭')} onClick={dismiss}>×</button>
+      <h3 id="ac-diagnostics-notice-title">{t('失败诊断会自动发送')}</h3>
+      <p>{t('失败后会自动发送脱敏诊断和本地视频的压缩短片段，用来提高出片成功率，不会用来训练。链接导入只发送清洗后的链接，不发送下载的视频。可以现在关闭，也可以稍后在设置里改。')}</p>
+      {loadError && (
+        <p className="ac-note">
+          {t('已保存的诊断选择读不出来。在你确认前不会上传。')}
+          {' '}
+          <button type="button" className="ac-diagnostics-notice-more" onClick={() => setReloadToken((value) => value + 1)}>{t('重新读取')}</button>
+        </p>
+      )}
+      <div className="ac-diagnostics-notice-actions">
+        <Btn size="sm" variant="cta" loading={busy} onClick={() => void allow()}>{t('允许')}</Btn>
+        <Btn size="sm" className="ac-btn--quiet" disabled={busy} onClick={openSettings}>{t('设置')}</Btn>
       </div>
-    </Dialog>
+    </aside>,
+    document.body,
   )
 }
