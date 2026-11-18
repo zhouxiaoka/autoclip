@@ -473,10 +473,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           )}
           {normalizedStatus === 'failed' && (
             <div className="ac-failure-summary" role="alert">
-              <StatusDot tone="error" label={t(failureView.status)} />
-              <p className="ac-failure-reason">{failureView.step ? <>{t(failureView.step)}：{t(failureView.reason)}</> : t(failureView.reason)}</p>
+              <StatusDot tone="error" label={t(failureView.status === '这个素材无法使用' ? '这个素材无法使用' : '处理失败')} />
+              <p className="ac-failure-reason">{t(failureView.brief)}</p>
               {weakLocalTimeline && replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
-              <p className="ac-failure-outcome">{t(failureView.outcome, { count: preservedCount })}</p>
+              {preservedCount > 0 && <p className="ac-failure-outcome">{t(failureView.outcome, { count: preservedCount })}</p>}
               {failureView.primary && <Btn variant="cta" size="sm" loading={isRetrying} onClick={() => {
                 const selectable = Boolean(switchOptions && switchOptions.length)
                 const action: PrimaryAction = weakLocalTimeline && selectable
@@ -485,7 +485,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 void runPrimary(action)
               }}>{t(weakLocalTimeline && switchOptions && switchOptions.length ? '切换并重试' : failureView.primary.label)}</Btn>}
               <div className="ac-failure-weak">
-                <Btn variant="text" size="sm" onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn>
+                <Btn variant="text" size="sm" onClick={() => setDiagnoseOpen(true)}>{t('查看详情')}</Btn>
                 <Btn variant="text" size="sm" onClick={() => setDiagnosticsOpen(true)}>{t('提交诊断')}</Btn>
                 <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t('反馈')}</Btn>
               </div>

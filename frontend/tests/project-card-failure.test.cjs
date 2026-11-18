@@ -75,7 +75,7 @@ test('#428 home card with a replacement stays on the card and offers switch-and-
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, to => visited.push(to), { replacement: { displayName: 'DeepSeek' }, onSwitchAndRetry: id => switched.push(id) })
   assert.match(html, /失败/)
-  assert.match(html, /当前本地模型无法返回可用时间线/)
+  assert.match(html, /当前模型没能排出时间线。/)
   assert.match(html, /建议换用/)
   assert.match(html, /<strong>DeepSeek<\/strong>/)
   assert.doesNotMatch(html, /82|话题|字幕块|自动重试|经常无法/)
@@ -113,7 +113,7 @@ test('#428 home card without a replacement offers configure, and does not open t
     project: { error_code: 'invalid_response' },
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, to => visited.push(to))
-  assert.match(html, /当前本地模型无法返回可用时间线/)
+  assert.match(html, /当前模型没能排出时间线。/)
   assert.doesNotMatch(html, /82|话题|字幕块/)
   assert.equal(buttons['切换并重试'], undefined)
   buttons['去配置模型']()
@@ -159,20 +159,22 @@ test('a quota failure is not rewritten into an invalid-key prompt', () => {
   const html = renderCard('failed', messages.insufficient_quota, null, {
     project: { error_code: 'llm_auth_invalid', upstream_error_type: 'insufficient_quota' },
   })
-  assert.match(html, /充值或更换令牌/)
+  assert.match(html, /额度用完了，请检查余额。/)
+  assert.doesNotMatch(html, /充值或更换令牌/)
   assert.doesNotMatch(html, /API Key 无效/)
 })
 
 test('failed project shows the persisted reason even after progress state is lost', () => {
   const html = renderCard('error', 'Whisper 模型文件缺失或不完整。')
   assert.match(html, /role="alert"/)
-  assert.match(html, /Whisper 模型文件缺失或不完整。/)
+  assert.match(html, /这次没有做完，可以重试。/)
+  assert.doesNotMatch(html, /Whisper 模型文件缺失或不完整。/)
 })
 
 test('progress failure remains visible before project refresh and is escaped', () => {
   const html = renderCard('failed', null, 'failed <script>alert(1)</script>')
-  assert.match(html, /failed &lt;script&gt;/)
-  assert.doesNotMatch(html, /<script>/)
+  assert.match(html, /这次没有做完，可以重试。/)
+  assert.doesNotMatch(html, /failed &lt;script&gt;|<script>/)
 })
 
 test('successful retry does not show a stale failure', () => {
@@ -189,7 +191,8 @@ test('restart-interrupted automatic project shows its reason and regenerates fro
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, (to) => visited.push(to))
   assert.match(html, /role="alert"/)
-  assert.ok(html.includes(restart))
+  assert.match(html, /应用刚重启，这次制作中断了。/)
+  assert.equal(html.includes(restart), false)
   assert.match(html, />重试制作</)
   assert.equal(buttons['重新生成'], undefined)
   await buttons['重试制作']()
@@ -276,28 +279,33 @@ test('failed card with empty/bare message still shows step-level human copy (#49
     assert.match(html, /role="alert"/, String(error))
     assert.doesNotMatch(html, /<p class="ac-failure-reason"><\/p>/, String(error))
     assert.doesNotMatch(html, /<p class="ac-failure-reason">错误<\/p>/, String(error))
-    if (code === 'service_restarted') assert.ok(html.includes(messages.service_restarted))
+    if (code === 'service_restarted') assert.ok(html.includes('应用刚重启，这次制作中断了。'))
+    assert.equal(html.includes(messages.service_restarted || '___'), false)
   }
 })
 
-test('failed card with catalog message keeps step prefix without rewriting the reason', () => {
+test('failed card shows one short reason and keeps the long catalog text off the card', () => {
   const messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8'))
   const html = renderCard('failed', messages.timeout, null, {
     project: { error_code: 'timeout', processing_config: { failure_stage: 'highlight' } },
   })
-  assert.match(html, /分析：/)
-  assert.ok(html.includes(messages.timeout))
+  assert.match(html, /响应超时了，可以重试。/)
+  assert.match(html, /查看详情/)
+  assert.doesNotMatch(html, /分析：/)
+  assert.equal(html.includes(messages.timeout), false)
 })
 
 
-test('failed card keeps the step and does not show a billable-call charge line', () => {
+test('failed card keeps one primary action and does not show a billable-call charge line', () => {
   const html = renderCard('failed', '错误', null, {
     project: {
       error_code: 'provider_error',
       processing_config: { billable_calls_before_failure: 3, failure_stage: 'analyze' },
     },
   })
-  assert.match(html, /分析：/)
+  assert.match(html, /这次没有做完，可以重试。/)
+  assert.doesNotMatch(html, /分析：/)
   assert.doesNotMatch(html, /本次已消耗/)
   assert.doesNotMatch(html, /ac-project-billing/)
+  assert.doesNotMatch(html, /本次没有可用成果/)
 })

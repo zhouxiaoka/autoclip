@@ -2173,5 +2173,18 @@
   "收起详情": "Hide details",
   "保存选择": "Save choice",
   "这次不会自动发送内容。可以在设置中打开。": "Nothing is sent automatically this time. You can turn it on in Settings.",
-  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "We collect this error information to improve the experience. You can turn this off in Settings."
+  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "We collect this error information to improve the experience. You can turn this off in Settings.",
+  "响应超时了，可以重试。": "The response timed out. You can try again.",
+  "制作时间太长，已经停止。": "This took too long and has stopped.",
+  "网络中断了，可以重试。": "The network dropped. You can try again.",
+  "下载时网络中断了。": "The download was interrupted.",
+  "应用刚重启，这次制作中断了。": "The app restarted, so this run stopped.",
+  "额度用完了，请检查余额。": "The quota is used up. Check the balance.",
+  "请求太频繁，请稍后再试。": "Too many requests. Try again in a little while.",
+  "密钥或权限有问题，请到设置里检查。": "The key or permission needs a look in Settings.",
+  "还没有配好模型，请到设置里检查。": "No model is ready yet. Check Settings.",
+  "这个视频没法用。": "This video can’t be used.",
+  "制作中断了，可以重试。": "The run stopped. You can try again.",
+  "当前模型没能排出时间线。": "This model couldn’t build a timeline.",
+  "这次没有做完，可以重试。": "This one didn’t finish. You can try again."
 }

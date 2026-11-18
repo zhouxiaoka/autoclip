@@ -2173,5 +2173,18 @@
   "收起详情": "Ocultar detalles",
   "保存选择": "Guardar elección",
   "这次不会自动发送内容。可以在设置中打开。": "Esta vez no se envía nada automáticamente. Puedes activarlo en Ajustes.",
-  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "Recogemos la información de este error para mejorar la experiencia. Puedes desactivarlo en Ajustes."
+  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "Recogemos la información de este error para mejorar la experiencia. Puedes desactivarlo en Ajustes.",
+  "响应超时了，可以重试。": "La respuesta tardó demasiado. Puedes intentarlo de nuevo.",
+  "制作时间太长，已经停止。": "Tardó demasiado y se detuvo.",
+  "网络中断了，可以重试。": "Se cortó la red. Puedes intentarlo de nuevo.",
+  "下载时网络中断了。": "La descarga se interrumpió.",
+  "应用刚重启，这次制作中断了。": "La app se reinició y esta vez se interrumpió.",
+  "额度用完了，请检查余额。": "Se agotó la cuota. Revisa el saldo.",
+  "请求太频繁，请稍后再试。": "Demasiadas solicitudes. Inténtalo más tarde.",
+  "密钥或权限有问题，请到设置里检查。": "Hay un problema con la clave o el permiso. Revísalo en Ajustes.",
+  "还没有配好模型，请到设置里检查。": "Aún no hay un modelo listo. Revísalo en Ajustes.",
+  "这个视频没法用。": "Este vídeo no se puede usar.",
+  "制作中断了，可以重试。": "La producción se interrumpió. Puedes intentarlo de nuevo.",
+  "当前模型没能排出时间线。": "Este modelo no pudo armar la línea de tiempo.",
+  "这次没有做完，可以重试。": "Esta vez no terminó. Puedes intentarlo de nuevo."
 }

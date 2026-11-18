@@ -20,6 +20,14 @@ const CHECKS = [
 
 export type ReadinessRow = { key: string; tone: 'ok' | 'error' | 'muted'; name: string; status: string }
 
+/** Raw vendor or stack text for the detail panel. The card already shows a short sentence. */
+export function detailBeyond(shown: string | null | undefined, raw: string | null | undefined): string {
+  const full = (raw || '').trim()
+  const brief = (shown || '').trim()
+  if (!full || full === brief || brief.includes(full)) return ''
+  return full
+}
+
 /** Four readiness rows CreativeImport already probes: analysis, transcription, visual, ffmpeg. */
 export function readinessRows(report?: ImportReadiness | null): ReadinessRow[] {
   return CHECKS.map(([key, name]) => {
@@ -46,6 +54,7 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
   const diagnosis = pageSuggestedAction(info)
   const suggestion = diagnosis.action
   const card = presentedFailure(info, reason)
+  const rawDetail = detailBeyond(card.reason, info.error)
   const report = readiness !== undefined ? readiness : fetched
 
   useEffect(() => {
@@ -99,6 +108,7 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
       </div>
       <p className="studio-muted">{t('上次失败')}</p>
       <p className="studio-error">{card.step ? <>{t(card.step)}：{t(card.reason)}</> : t(card.reason)}</p>
+      {rawDetail && <pre className="studio-error-raw">{rawDetail}</pre>}
       {(() => {
         const technical = technicalCountText(presentFailure({ llm_calls: info.llm_calls, billable_calls_before_failure: info.billable_calls_before_failure }))
         return technical ? <p className="studio-muted">{t(technical, { requests: info.llm_calls, successes: info.billable_calls_before_failure })}</p> : null

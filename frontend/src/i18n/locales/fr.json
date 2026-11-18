@@ -2173,5 +2173,18 @@
   "收起详情": "Masquer les détails",
   "保存选择": "Enregistrer le choix",
   "这次不会自动发送内容。可以在设置中打开。": "Rien n’est envoyé automatiquement cette fois. Vous pouvez l’activer dans les réglages.",
-  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "Nous recueillons les informations de cette erreur pour améliorer l’expérience. Vous pouvez le désactiver dans les réglages."
+  "我们会收集本次错误信息，帮助改善体验，可在设置中关闭。": "Nous recueillons les informations de cette erreur pour améliorer l’expérience. Vous pouvez le désactiver dans les réglages.",
+  "响应超时了，可以重试。": "La réponse a expiré. Vous pouvez réessayer.",
+  "制作时间太长，已经停止。": "Cela a duré trop longtemps et s’est arrêté.",
+  "网络中断了，可以重试。": "Le réseau a été coupé. Vous pouvez réessayer.",
+  "下载时网络中断了。": "Le téléchargement a été interrompu.",
+  "应用刚重启，这次制作中断了。": "L’application a redémarré, cette fois-ci s’est interrompue.",
+  "额度用完了，请检查余额。": "Le quota est épuisé. Vérifiez le solde.",
+  "请求太频繁，请稍后再试。": "Trop de demandes. Réessayez un peu plus tard.",
+  "密钥或权限有问题，请到设置里检查。": "La clé ou l’autorisation pose problème. Vérifiez dans les réglages.",
+  "还没有配好模型，请到设置里检查。": "Aucun modèle n’est prêt. Vérifiez dans les réglages.",
+  "这个视频没法用。": "Cette vidéo ne peut pas être utilisée.",
+  "制作中断了，可以重试。": "La production s’est interrompue. Vous pouvez réessayer.",
+  "当前模型没能排出时间线。": "Ce modèle n’a pas pu construire le découpage.",
+  "这次没有做完，可以重试。": "Cette fois-ci n’est pas allée au bout. Vous pouvez réessayer."
 }

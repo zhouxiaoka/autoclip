@@ -74,6 +74,33 @@ test('kept results lead with viewing them, and a download connection does not op
   assert.equal(download.primary.label, '重试')
 })
 
+test('the card sentence stays short when the stored error is a long vendor message', () => {
+  const vendor = 'Traceback (most recent call last): provider returned ' + 'x'.repeat(400) + ' sk-secret'
+  const cases = [
+    { error: vendor, error_code: 'timeout', failure_stage: 'analyze', brief: '响应超时了，可以重试。' },
+    { error: vendor, error_code: 'job_budget', failure_stage: 'production', brief: '制作时间太长，已经停止。' },
+    { error: vendor, error_code: 'connection', failure_stage: 'download', brief: '下载时网络中断了。' },
+    { error: vendor, error_code: 'connection', failure_stage: 'render', brief: '网络中断了，可以重试。' },
+    { error: vendor, error_code: 'service_restarted', failure_stage: 'production', brief: '应用刚重启，这次制作中断了。' },
+    { error: vendor, error_code: 'llm_auth_invalid', upstream_error_type: 'invalid_key', brief: '密钥或权限有问题，请到设置里检查。' },
+    { error: vendor, error_code: 'insufficient_quota', upstream_error_type: 'insufficient_quota', brief: '额度用完了，请检查余额。' },
+    { error: vendor, error_code: 'rate_limited', brief: '请求太频繁，请稍后再试。' },
+    { error: vendor, error_code: 'unexpected', brief: '制作中断了，可以重试。' },
+  ]
+  for (const item of cases) {
+    const view = presentFailure({ ...item, preservedCount: 0 })
+    assert.equal(view.brief, item.brief)
+    assert.equal(view.brief.length < 40, true)
+    assert.equal(view.brief.includes('sk-secret'), false)
+    assert.equal(view.reason.startsWith('Traceback'), false)
+    assert.notEqual(view.reason, vendor.slice(0, view.reason.length))
+    assert.equal(view.primary !== null, true)
+  }
+  const kept = presentFailure({ error: vendor, error_code: 'timeout', preservedCount: 2 })
+  assert.equal(kept.primary.id, 'view_results')
+  assert.equal(kept.outcome, '已保留 {{count}} 条成片')
+})
+
 test('a receipt for this run wins over a placeholder generation', () => {
   const resolved = resolveFailureCause({
     analysis: { error_code: 'job_budget', failure_stage: 'analyze', phase: 'production', llm_calls: 9 },

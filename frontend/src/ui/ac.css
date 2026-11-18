@@ -450,7 +450,7 @@
 .ac-project-recovery { display: flex; gap: 2px; flex-wrap: wrap; }
 .ac-project-card:focus-within .ac-card-actions { opacity: 1; }
 .ac-failure-summary { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.ac-failure-reason { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ac-ink); }
+.ac-failure-reason { margin: 0; width: 100%; padding: 8px 10px; border: 1px dashed var(--ac-line); border-radius: 10px; font-size: 13px; line-height: 1.5; color: var(--ac-ink); }
 .ac-failure-outcome { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--ac-sub); }
 .ac-failure-weak { display: flex; flex-wrap: wrap; gap: 4px; }
 
