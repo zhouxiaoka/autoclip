@@ -8,7 +8,7 @@ import os
 
 from backend.core.path_utils import get_data_directory, get_log_file_path
 from backend.services.diagnostics import media, queue, upload
-from backend.services.diagnostics.consent import Consent, load, update
+from backend.services.diagnostics.consent import Consent, commit, load
 from backend.services.diagnostics.manifest import build_manifest, validate_manifest
 from backend.services.diagnostics.redact import sanitized_log_file
 from backend.services.studio import store
@@ -113,7 +113,11 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
         raise DiagnosticsError("subtitle_required", 422)
     consent = load()
     if also_enable_background:
-        consent = update(diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True)
+        if not consent.notice_seen or not consent.persisted or consent.unreadable:
+            raise DiagnosticsError("notice_required", 422)
+        _previous, consent = commit(
+            diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True,
+        )
     receipt = _receipt(_state(project_id), attempt_id)
     manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
     if validate_manifest(manifest):
@@ -164,8 +168,9 @@ def _release_changed(items: list[dict]) -> None:
 
 
 def set_consent(*, diagnostics: bool, media: bool, full_original: bool, informed: bool, transport=None) -> Consent:
-    previous = load()
-    consent = update(diagnostics=diagnostics, media=media, full_original=full_original, informed=informed)
+    previous, consent = commit(
+        diagnostics=diagnostics, media=media, full_original=full_original, informed=informed,
+    )
     changed: list[dict] = []
     if previous.persisted and previous.notice_seen and previous.diagnostics and not consent.diagnostics:
         changed = queue.cancel_before(consent.epoch)
@@ -245,7 +250,15 @@ def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | No
     files = []
     if roles:
         excerpt_dir = get_data_directory() / "diagnostics" / "excerpts" / item_id
-        files = media.materialize(project_id, roles, excerpt_dir=excerpt_dir, cut=cut)
+        try:
+            files = media.materialize(
+                project_id, roles, excerpt_dir=excerpt_dir,
+                cut=cut if cut is not None else media.cut_for_receipt(receipt),
+            )
+        except media.MediaRejected:
+            logger.warning("diagnostics media skipped")
+            files = []
+            roles = []
     item = {
         "id": item_id,
         "idempotency_key": _key(str(receipt.get("attempt_id")), roles, manifest, False),

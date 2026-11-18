@@ -47,10 +47,10 @@ def _receipt(**extra):
 
 def test_privacy_copy_exists_in_all_eight_locales():
     key = "帮助改进 AutoClip"
-    purpose = "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。默认还会附带这次失败的完整原片。关掉完整原片后，如果片段开关还开着，就只上传片头短片段。关闭总开关会停掉并取消尚未完成的上传。"
+    purpose = "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。默认会压缩并上传短片段。完整原片默认关闭。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。"
     notice = "从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。"
-    media_scope = "默认会带上这次失败任务的完整原片。完整原片可能包含私人内容。关掉完整原片后，如果片段开关还开着，就只上传片头约 60 秒的短片段，片尾的问题可能不在里面。字幕正文不会自动上传。"
-    retention = "这些内容在服务端保留 14 天。你可以在这条说明里关闭总开关或单独关闭素材，也可以稍后删除已经上传的诊断。关闭总开关会取消还没完成的上传。"
+    media_scope = "默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容，片尾的问题可能不在里面。完整原片默认不上传，需要你打开开关。字幕正文不会自动上传。"
+    retention = "已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。"
     for lang in ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr"):
         data = json.loads((ROOT / "frontend/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
         assert data[key]
@@ -59,7 +59,8 @@ def test_privacy_copy_exists_in_all_eight_locales():
         assert data[media_scope]
         assert data[retention]
         assert "未打开此开关时不会发送" not in purpose
-        assert "默认关闭" not in purpose
+        assert "新安装默认关闭" not in purpose
+        assert "完整原片默认关闭" in purpose
         if lang != "zh":
             assert data[purpose] != purpose
             assert data[notice] != notice
@@ -122,7 +123,7 @@ def test_symlink_and_escape_are_rejected(data_dir, tmp_path):
 
 def test_consent_defaults_off_and_narrowing_cancels_queued_work(data_dir):
     unset = consent.load()
-    assert unset.diagnostics is True and unset.media is True and unset.full_original is True
+    assert unset.diagnostics is True and unset.media is True and unset.full_original is False
     assert unset.notice_seen is False and unset.diagnostics_at is None
     with pytest.raises(PermissionError):
         consent.update(diagnostics=True, media=True, full_original=True, informed=False)
@@ -287,6 +288,31 @@ def test_explicit_off_for_every_scope_survives_reload(data_dir):
     raw["full_original"] = False
     consent.consent_path().write_text(json.dumps(raw), encoding="utf-8")
     assert consent.load().diagnostics is False
+
+
+def test_pre_159_consent_without_notice_seen_keeps_explicit_false(data_dir):
+    consent.consent_path().parent.mkdir(parents=True, exist_ok=True)
+    consent.consent_path().write_text(json.dumps({
+        "diagnostics": False, "media": False, "full_original": False, "epoch": 2,
+        "text_version": "2026-11-16.1", "updated_at": "2026-11-16T00:00:00+00:00",
+    }), encoding="utf-8")
+    grant = consent.load()
+    assert grant.notice_seen is True
+    assert grant.diagnostics is False and grant.media is False and grant.full_original is False
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+
+
+def test_background_checkbox_before_notice_does_not_grant_media(data_dir):
+    from backend.services.studio import store
+    root = store.directory("proj")
+    (root / "metadata").mkdir(parents=True)
+    (root / "metadata" / "studio.json").write_text(json.dumps({"attempts": [_receipt()]}), encoding="utf-8")
+    with pytest.raises(service.DiagnosticsError) as caught:
+        service.submit("proj", TOKEN, roles=[], informed=True, also_enable_background=True)
+    assert caught.value.reason == "notice_required"
+    assert consent.load().notice_seen is False
+    assert consent.load().persisted is False
+    assert not consent.consent_path().exists()
 
 
 def test_confirmed_default_asks_for_the_original_and_not_subtitles(data_dir, monkeypatch):
@@ -943,3 +969,140 @@ def test_multipart_request_sends_one_md5_per_part(tmp_path):
         base64.b64encode(hashlib.md5(payload[8:10]).digest()).decode("ascii"),
     ]
     assert media.part_md5s(path, len(payload), 16) == []
+
+
+def test_unset_consent_is_excerpt_on_and_original_off():
+    grant = consent._unset()
+    assert grant.diagnostics is True and grant.media is True and grant.full_original is False
+    assert grant.notice_seen is False and grant.persisted is False
+
+
+def test_excerpt_span_uses_failure_time_or_the_first_minute():
+    assert media.excerpt_span({"media_time_sec": 100}) == (85.0, 60.0)
+    assert media.excerpt_span({"summary": {"media_time_sec": 40}}) == (25.0, 60.0)
+    assert media.excerpt_span({}) == (0.0, 60.0)
+    assert media.excerpt_span({"media_time_sec": 5}) == (0.0, 60.0)
+    with pytest.raises(media.MediaRejected) as caught:
+        media.default_cut(Path("/missing-source"), Path("/missing-dest"), duration_sec=181)
+    assert caught.value.reason == "excerpt_window"
+
+
+def test_default_cut_reencodes_with_the_diagnostics_preset(tmp_path, monkeypatch):
+    source = tmp_path / "in.mp4"
+    source.write_bytes(b"v")
+    dest = tmp_path / "out" / "excerpt.mp4"
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = list(cmd)
+        seen["timeout"] = kwargs.get("timeout")
+        Path(cmd[-1]).write_bytes(b"ok")
+        return media.subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(media.subprocess, "run", fake_run)
+    monkeypatch.setattr("backend.utils.ffmpeg_utils.get_ffmpeg_path", lambda: "ffmpeg")
+    media.default_cut(source, dest)
+    cmd = seen["cmd"]
+    assert "copy" not in cmd
+    assert seen["timeout"] == 180
+    assert cmd[cmd.index("-ss") + 1] == "0.000"
+    assert cmd[cmd.index("-t") + 1] == "60.000"
+    assert cmd[cmd.index("-vf") + 1] == "scale='min(1280,iw)':-2"
+    assert cmd[cmd.index("-vf") + 2:-1] == [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-map", "0:v:0", "-map", "0:a:0?",
+    ]
+
+
+def test_excerpt_over_40mb_is_discarded(tmp_path, monkeypatch):
+    source = tmp_path / "in.mp4"
+    source.write_bytes(b"v")
+    dest = tmp_path / "excerpt.mp4"
+
+    def fake_run(cmd, **kwargs):
+        Path(cmd[-1]).write_bytes(b"x" * (media.EXCERPT_CLIENT_MAX + 1))
+        return media.subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(media.subprocess, "run", fake_run)
+    monkeypatch.setattr("backend.utils.ffmpeg_utils.get_ffmpeg_path", lambda: "ffmpeg")
+    with pytest.raises(media.MediaRejected) as caught:
+        media.default_cut(source, dest)
+    assert caught.value.reason == "excerpt_unavailable"
+    assert not dest.exists()
+    assert media.EXCERPT_CLIENT_MAX == 41943040
+
+
+def test_confirmed_default_uploads_a_compressed_excerpt(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=False, informed=True)
+    seen = {}
+
+    def fake(project_id, roles, *, excerpt_dir, cut=None):
+        seen["roles"] = list(roles)
+        return []
+
+    monkeypatch.setattr(media, "materialize", fake)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert seen["roles"] == ["excerpt"]
+    assert queued["files"] == []
+
+
+def test_transcode_failure_keeps_the_manifest_and_skips_the_original(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=False, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"full-original-bytes")
+
+    def boom(*args, **kwargs):
+        raise media.MediaRejected("excerpt_unavailable")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert queued["manifest"]["attempt"]["error_code"] == "timeout"
+    blob = json.dumps(queued)
+    assert "full-original-bytes" not in blob
+    assert "input.mp4" not in blob
+    assert "original" not in {row.get("role") for row in queued["files"]}
+
+
+def test_enabled_original_is_uploaded_without_transcode(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"abcd")
+    called = {"cut": False}
+
+    def boom(*args, **kwargs):
+        called["cut"] = True
+        raise AssertionError("original must not be transcoded")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert called["cut"] is False
+    assert queued["files"][0]["role"] == "original"
+    assert queued["files"][0]["path"].endswith("input.mp4")
+
+
+def test_observe_cuts_around_the_failure_time(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=False, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"v")
+    seen = {}
+
+    def record(source, dest, *, start_sec=0, duration_sec=60):
+        seen["span"] = (start_sec, duration_sec)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"clip")
+        return dest
+
+    monkeypatch.setattr(media, "default_cut", record)
+    row = _receipt(finished_at="2999-01-01T00:00:00+00:00", media_time_sec=100)
+    observe.schedule_new_failures(
+        "proj", {"attempts": [{"attempt_id": TOKEN, "state": "open"}]}, {"attempts": [row]},
+    )
+    observe.deliver_pending()
+    assert seen["span"] == (85.0, 60.0)
+    stored = queue.list_items()[0]
+    assert stored["files"][0]["role"] == "excerpt"
+    assert "media_time_sec" not in json.dumps(stored["manifest"])

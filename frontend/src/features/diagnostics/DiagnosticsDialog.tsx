@@ -54,8 +54,9 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
       setResult(value)
       if (value.status === 'saved_local') message.success(t('已保存到本机。'))
       else message.success(t('诊断已排队'))
-    } catch {
-      message.error(t('诊断没有提交'))
+    } catch (error) {
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail === 'notice_required' ? t('请先在启动说明里确认是否自动发送。') : t('诊断没有提交'))
     } finally {
       setBusy(false)
     }
@@ -69,7 +70,7 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
       open={open}
       onClose={onClose}
       title={t('提交诊断')}
-      description={t('看看将要发送的内容。素材默认不包含，需要逐项勾选。用于排查和改进，不会用于训练模型。')}
+      description={t('看看将要发送的内容。这一次的素材需要逐项勾选，不会自动带上。确认说明之后的自动发送会压缩并上传短片段；完整原片默认关闭，要在设置里打开。已上传的诊断会在 14 天后自动删除。用于排查和改进，不会用于训练模型。')}
       footer={
         <div className="right">
           <Btn size="sm" onClick={onClose}>{t('关闭')}</Btn>
@@ -89,8 +90,8 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
           </div>
         )}
         <p className="ac-note">{t('不含 API 密钥、字幕正文、项目名或个人路径。自动发送的是脱敏诊断；完整原片和短片段可以单独关闭。')}</p>
-        <label className="ac-note"><input type="checkbox" checked={roles.includes('excerpt')} disabled={!available.has('excerpt')} onChange={() => toggle('excerpt')} /> {t('短片段（从片头截取，可能复现不了片尾的超时）')}</label>
-        <label className="ac-note"><input type="checkbox" checked={roles.includes('original')} disabled={!available.has('original')} onChange={() => toggle('original')} /> {t('完整原片（单独同意）')}</label>
+        <label className="ac-note"><input type="checkbox" checked={roles.includes('excerpt')} disabled={!available.has('excerpt')} onChange={() => toggle('excerpt')} /> {t('短片段（压缩后约 60 秒，有失败时间就围着它截取）')}</label>
+        <label className="ac-note"><input type="checkbox" checked={roles.includes('original')} disabled={!available.has('original')} onChange={() => toggle('original')} /> {t('完整原片（这一次需要勾选）')}</label>
         <label className="ac-note"><input type="checkbox" checked={roles.includes('subtitle')} disabled={!available.has('subtitle')} onChange={() => toggle('subtitle')} /> {t('字幕文本（默认不发送）')}</label>
         <label className="ac-note"><input type="checkbox" checked={background} onChange={(event) => setBackground(event.target.checked)} /> {t('以后的失败也自动发送脱敏诊断')}</label>
         <p className="ac-note">{t('只对打开这项之后的新失败生效，不会补传以前的失败。')}</p>

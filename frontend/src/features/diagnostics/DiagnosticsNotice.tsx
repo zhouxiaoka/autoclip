@@ -10,16 +10,23 @@ export default function DiagnosticsNotice() {
   useTranslation()
   const [open, setOpen] = useState(false)
   const [unreadable, setUnreadable] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [diagnostics, setDiagnostics] = useState(true)
   const [media, setMedia] = useState(true)
-  const [fullOriginal, setFullOriginal] = useState(true)
+  const [fullOriginal, setFullOriginal] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     let active = true
     diagnosticsApi.consent()
       .then((grant) => {
-        if (!active || grant.notice_seen) return
+        if (!active) return
+        if (grant.notice_seen) {
+          setOpen(false)
+          return
+        }
+        setLoadError(false)
         setUnreadable(grant.unreadable === true)
         const on = grant.unreadable !== true
         setDiagnostics(on && grant.diagnostics)
@@ -27,9 +34,17 @@ export default function DiagnosticsNotice() {
         setFullOriginal(on && grant.full_original)
         setOpen(true)
       })
-      .catch(() => { /* no choice is written when the saved state cannot be read */ })
+      .catch(() => {
+        if (!active) return
+        setLoadError(true)
+        setUnreadable(true)
+        setDiagnostics(false)
+        setMedia(false)
+        setFullOriginal(false)
+        setOpen(true)
+      })
     return () => { active = false }
-  }, [])
+  }, [reloadToken])
 
   const save = async (nextDiagnostics: boolean, nextMedia: boolean, nextOriginal: boolean) => {
     setBusy(true)
@@ -57,6 +72,7 @@ export default function DiagnosticsNotice() {
       description={t('从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。')}
       footer={
         <div className="right">
+          {loadError && <Btn size="sm" disabled={busy} onClick={() => setReloadToken((value) => value + 1)}>{t('重新读取')}</Btn>}
           <Btn size="sm" disabled={busy} onClick={() => void save(false, false, false)}>{t('全部关闭')}</Btn>
           <Btn size="sm" variant="cta" loading={busy} onClick={() => void save(diagnostics, diagnostics && media, diagnostics && media && fullOriginal)}>{t('知道了，按当前选择继续')}</Btn>
         </div>
@@ -64,8 +80,8 @@ export default function DiagnosticsNotice() {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {unreadable && <p className="ac-note">{t('已保存的诊断选择读不出来。在你确认前不会上传。')}</p>}
-        <p className="ac-note">{t('默认会带上这次失败任务的完整原片。完整原片可能包含私人内容。关掉完整原片后，如果片段开关还开着，就只上传片头约 60 秒的短片段，片尾的问题可能不在里面。字幕正文不会自动上传。')}</p>
-        <p className="ac-note">{t('这些内容在服务端保留 14 天。你可以在这条说明里关闭总开关或单独关闭素材，也可以稍后删除已经上传的诊断。关闭总开关会取消还没完成的上传。')}</p>
+        <p className="ac-note">{t('默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容，片尾的问题可能不在里面。完整原片默认不上传，需要你打开开关。字幕正文不会自动上传。')}</p>
+        <p className="ac-note">{t('已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。')}</p>
         <label className="ac-note"><Switch checked={diagnostics} onChange={setDiagnostics} /> {t('帮助改进 AutoClip')}</label>
         <label className="ac-note"><Switch checked={media} disabled={!diagnostics} onChange={setMedia} /> {t('允许附带失败任务的片段')}</label>
         <label className="ac-note"><Switch checked={fullOriginal} disabled={!diagnostics || !media} onChange={setFullOriginal} /> {t('允许附带完整原片')}</label>

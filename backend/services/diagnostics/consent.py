@@ -54,7 +54,7 @@ class Consent:
 
 def _unset() -> Consent:
     """No saved choice. The product default is on, but nothing is sent until the notice is confirmed."""
-    return Consent(True, True, True, 0, CONSENT_TEXT_VERSION, None, None, False, False, False)
+    return Consent(True, True, False, 0, CONSENT_TEXT_VERSION, None, None, False, False, False)
 
 
 def _unreadable() -> Consent:
@@ -116,6 +116,12 @@ def _atomic(consent: Consent) -> None:
 
 def update(*, diagnostics: bool, media: bool, full_original: bool, informed: bool) -> Consent:
     """A saved choice is explicit. Turning the main switch on or off changes the epoch."""
+    _previous, nxt = commit(diagnostics=diagnostics, media=media, full_original=full_original, informed=informed)
+    return nxt
+
+
+def commit(*, diagnostics: bool, media: bool, full_original: bool, informed: bool) -> tuple[Consent, Consent]:
+    """Read and write the choice under one lock. The first value is the state before the write."""
     diagnostics = bool(diagnostics)
     media = bool(media) and diagnostics
     full_original = bool(full_original) and media
@@ -129,7 +135,7 @@ def update(*, diagnostics: bool, media: bool, full_original: bool, informed: boo
                 _now() if diagnostics else None, _now(), True, True, False,
             )
             _atomic(nxt)
-            return nxt
+            return current, nxt
         epoch = current.epoch + (1 if current.diagnostics != diagnostics else 0)
         diagnostics_at = None if not diagnostics else current.diagnostics_at
         if diagnostics and not current.diagnostics:
@@ -139,4 +145,4 @@ def update(*, diagnostics: bool, media: bool, full_original: bool, informed: boo
             diagnostics_at, _now(), True, True, False,
         )
         _atomic(nxt)
-        return nxt
+        return current, nxt
