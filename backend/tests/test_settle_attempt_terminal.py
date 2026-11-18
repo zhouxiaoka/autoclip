@@ -251,7 +251,7 @@ def test_offline_settle_replays_once_after_restart(tmp_path, monkeypatch):
     seen = []
 
     def offline(req, timeout=0):
-        seen.append(json.loads(req.data.decode()))
+        _remember(seen, req)
         if len(seen) == 1:
             time.sleep(1.2)
         raise OSError('offline')
@@ -359,7 +359,7 @@ def test_rejected_terminal_is_dropped_without_retry(tmp_path, monkeypatch):
     calls = []
 
     def rejected(req, timeout=0):
-        calls.append(json.loads(req.data.decode()))
+        _remember(calls, req)
         raise HTTPError(req.full_url, 400, 'bad', {}, io.BytesIO(b''))
 
     monkeypatch.setattr('urllib.request.urlopen', rejected)
@@ -393,7 +393,7 @@ def test_request_timeout_and_rate_limit_stay_queued(tmp_path, monkeypatch, statu
     calls = []
 
     def limited(req, timeout=0):
-        calls.append(json.loads(req.data.decode()))
+        _remember(calls, req)
         raise HTTPError(req.full_url, status, 'later', {}, io.BytesIO(b''))
 
     monkeypatch.setattr('urllib.request.urlopen', limited)
@@ -438,7 +438,7 @@ def test_server_error_retries_with_backoff_then_stays_queued(tmp_path, monkeypat
     calls = []
 
     def unavailable(req, timeout=0):
-        calls.append(json.loads(req.data.decode()))
+        _remember(calls, req)
         raise HTTPError(req.full_url, 500, 'unavailable', {}, io.BytesIO(b''))
 
     monkeypatch.setattr('urllib.request.urlopen', unavailable)
