@@ -32,15 +32,3 @@ test('bilingual label respects captions_enabled (r12 #23): same packaging on/off
  assert.equal(m.exports.packagingLabel({...p,captions_enabled:true}),'访谈式 · 中英字幕')
  assert.equal(m.exports.packagingLabel({...p,captions_enabled:false}),'访谈式')
 })
-
-test('partial translation is disclosed independently from decoration fallback',()=>{
- const p={...pack,fallback:false,cues:[{text:'已译内容',original:'Source sentence'}],translation_status:'partial'}
- assert.equal(m.exports.packagingLabel(p),'访谈式')
- assert.equal(m.exports.packagingFallbackHint(p),'字幕翻译尚未完成，请检查后再发布')
- assert.equal(m.exports.packagingFallbackHint({...p,translation_status:'source_fallback'}),'字幕翻译尚未完成，请检查后再发布')
- assert.equal(m.exports.packagingFallbackHint({...p,captions_enabled:false}),'')
- assert.equal(m.exports.packagingFallbackHint(p,[],false),'')
- assert.equal(m.exports.packagingLabel({...p,translation_status:'complete'}),'访谈式 · 中英字幕')
- assert.equal(m.exports.packagingFallbackHint({...p,fallback:true,translation_status:'complete'}),'字幕翻译已完成，使用简化包装')
- assert.equal(m.exports.packagingFallbackHint({...p,translation_status:'complete'}),'')
-})

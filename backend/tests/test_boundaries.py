@@ -69,8 +69,8 @@ def test_extension_is_bounded():
 
 
 def test_model_can_finish_the_answer_but_not_pick_another_clip():
-    finish = lambda *_: {'start_line': 1, 'end_line': 4}      # finish the actual unfinished sentence
-    assert b.refine_with_model(ROWS, 104.0, 118.0, finish) == (104.0, 120.0)
+    finish = lambda *_: {'start_line': 1, 'end_line': 6}      # window ids: row 0 is id 0
+    assert b.refine_with_model(ROWS, 104.0, 116.0, finish) == (104.0, 128.4)
     wander = lambda *_: {'start_line': 6, 'end_line': 6}      # a single unrelated row
     assert b.refine_with_model(ROWS, 104.0, 124.0, wander) is None
     broken = lambda *_: {'start_line': 'x'}
@@ -94,12 +94,12 @@ def test_end_snaps_into_the_real_pause_instead_of_the_estimate():
     assert 6.1 < end <= 6.35  # inside the pause, before the next sentence starts at 6.5
 
 
-def test_a_later_breath_cannot_move_the_semantic_end_into_another_sentence():
-    # Audio alignment must not extend the selected sentence into the next point.
+def test_an_end_without_a_pause_finishes_the_next_sentence_that_has_a_breath():
+    # "…is here." runs straight into "Second point…": no pause there, so end after the next breath.
     rows = [(0.0, 5.0, 'First point is here.'), (5.0, 10.0, 'Second point follows.'), (10.0, 14.0, 'And the conclusion.')]
     pauses = lambda lo, hi: [(7.0, 7.2), (10.0, 10.9)]  # a hitch mid-sentence, then a clear breath
     _, end = b.sentence_bounds(rows, 0.0, 5.0, pauses)
-    assert end == 5.0
+    assert 10.0 < end < 10.9
 
 
 def test_a_pause_after_the_rest_of_the_row_is_not_taken_for_the_sentence_end():
@@ -111,12 +111,12 @@ def test_a_pause_after_the_rest_of_the_row_is_not_taken_for_the_sentence_end():
     assert 3230.07 < end < 3230.47
 
 
-def test_a_long_pause_after_the_next_clause_cannot_override_the_selected_ending():
+def test_a_long_pause_just_after_extends_to_finish_the_passage():
     rows = [(0.0, 4.0, 'The more you do, the more they attack you.'), (4.0, 6.0, 'State of the world. It will just escalate'),
             (10.0, 13.0, 'One thing I noticed about ideas.')]
     pauses = lambda lo, hi: [(4.9, 5.2), (6.1, 9.9)]  # after "world.", then the passage ends
     _, end = b.sentence_bounds(rows, 0.0, 5.0, pauses)
-    assert 4.9 < end <= 5.2
+    assert 6.1 < end < 6.5
 
 
 def test_start_begins_after_the_pause_before_the_first_word():
@@ -166,25 +166,23 @@ def merge_everything(_prompt, payload):
 
 def test_model_refinement_cannot_merge_neighbouring_clips():
     clips = [(0.0, 28.0), (30.0, 58.0)]
-    # An out-of-range answer can be repaired to an in-budget candidate. The neighbour
-    # guard still rejects that candidate when it would consume the adjacent clip.
-    refined = b.refine_with_model(SENTENCES, *clips[0], merge_everything)
-    assert refined is None or refined[1] <= clips[0][1] + b.MODEL_MAX_EXTEND
+    # Each clip alone accepts the merged span: this is what produced the duplicate drafts.
+    assert b.refine_with_model(SENTENCES, *clips[0], merge_everything) == b.refine_with_model(SENTENCES, *clips[1], merge_everything)
     (a_start, a_end), (b_start, b_end) = b.refine_clips(SENTENCES, clips, merge_everything)
     assert a_end <= b_start
-    assert 0 <= a_start < a_end <= 28.0 and 30.0 <= b_start < b_end <= 58.0
+    assert [(a_start, a_end), (b_start, b_end)] == [b.sentence_bounds(SENTENCES, *clip) for clip in clips]
 
 
-def test_finished_sentence_is_not_extended_into_the_gap_and_order_does_not_matter():
+def test_model_refinement_inside_the_gap_is_kept_and_order_does_not_matter():
     clips = [(30.0, 40.0), (0.0, 10.0)]  # unsorted on purpose
 
     def finish_to_gap(_prompt, payload):
         texts = [line['text'] for line in payload['lines']]
-        if texts[payload['end_line']] == 'Sentence 8.':
-            return {'end_line': texts.index('Sentence 26.')}
-        return {'end_line': payload['end_line']}
+        if payload['start_line'] == texts.index('Sentence 0.'):
+            return {'start_line': payload['start_line'], 'end_line': texts.index('Sentence 26.')}
+        return {'start_line': payload['start_line'], 'end_line': payload['end_line']}
 
     refined = b.refine_clips(SENTENCES, clips, finish_to_gap)
-    assert refined[1] == b.sentence_bounds(SENTENCES, 0.0, 10.0)
+    assert refined[1] == b.sentence_bounds(SENTENCES, 0.0, 28.0)
     assert refined[1][1] <= 30.0
     assert b.neighbor_limits(clips) == [(10.0, float('inf')), (float('-inf'), 30.0)]

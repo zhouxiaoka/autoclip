@@ -26,16 +26,6 @@ class CropPoint(BaseModel):
     ease: float = Field(default=0, ge=0, le=2)
 
 
-class CaptionEnd(BaseModel):
-    """Bind selected text to its acoustic cut; stale scene edits ignore this anchor."""
-    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
-    row_start: float = Field(ge=0)
-    row_end: float = Field(gt=0)
-    text_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
-    offset: int = Field(gt=0, strict=True)
-    audio_end: float = Field(gt=0)
-
-
 class Scene(BaseModel):
     framing_source: Literal["auto", "manual"] | None = None
     framing_adjusted: bool = False
@@ -45,7 +35,6 @@ class Scene(BaseModel):
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     evidence: str = Field(default='', max_length=1000)
-    caption_end: CaptionEnd | None = None
     # Per-scene horizontal framing for the crop layout (0 = left, 1 = right); None follows the draft.
     crop_x: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
     # Speaker-following framing: piecewise-constant crop_x over the scene. Empty/None = static crop_x.
@@ -68,10 +57,6 @@ class PackagingCue(BaseModel):
     end: float = Field(gt=0)
     text: str = Field(min_length=1, max_length=600)
     original: str = Field(default='', max_length=900)
-    # Source identity is independent of translated wording and display pagination.
-    source_id: str = Field(default='', pattern=r'^(?:[a-f0-9]{64})?$')
-    source_text: str = Field(default='', max_length=1100)
-    manually_edited: bool = False
     emphasis: str = Field(default='', max_length=30)
     speaker: str = Field(default='', max_length=40)
 
@@ -133,8 +118,6 @@ class Packaging(BaseModel):
     title_lines: list[str] = Field(default_factory=list, max_length=2)
     title_accent_line: int = Field(default=1, ge=0, le=1)
     cues: list[PackagingCue] = Field(default_factory=list, max_length=600)
-    # Editable missing source units; never rendered until corrected or translated.
-    untranslated_cues: list[PackagingCue] = Field(default_factory=list, max_length=600)
     speakers: list[PackagingSpeaker] = Field(default_factory=list, max_length=8)
     tags: list[PackagingMark] = Field(default_factory=list, max_length=8)
     tags_enabled: bool = True
@@ -145,12 +128,6 @@ class Packaging(BaseModel):
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
-    # None for legacy projects: never infer translation completion from a playable file.
-    translation_status: Literal['not_required', 'complete', 'partial', 'source_fallback'] | None = None
-    # Coverage of source translation units (joined utterances), not original SRT rows,
-    # rendered subtitle pages, semantic correctness or generation success.
-    translated_rows: int = Field(default=0, ge=0)
-    translation_total_rows: int = Field(default=0, ge=0)
     # Visual style inside the classic templates; None = the golden default (classic / pop).
     style: Literal['classic', 'boxed', 'spotlight', 'pop', 'cinematic'] | None = None
     # Content mood chosen by the model; it picks the palette and style (packaging.choose_look).
@@ -216,7 +193,6 @@ class Draft(BaseModel):
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
     packaging: Packaging | None = None
-    ending_review_required: bool = False
     # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
     # an English version of a source with Chinese captions in the picture.
     caption_mask: tuple[float, float] | None = None
