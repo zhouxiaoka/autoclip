@@ -53,7 +53,7 @@ def diagnostics_user_agent() -> str:
 
 
 def _worker_headers(extra: dict | None = None) -> dict[str, str]:
-    """Worker JSON calls identify the app. Presigned R2 requests keep their signed headers."""
+    """Worker JSON calls identify the app. Presigned object-storage requests keep their signed headers."""
     headers = {"Content-Type": "application/json"}
     if extra:
         headers.update(extra)
@@ -176,7 +176,7 @@ class UrllibTransport:
             raise Offline("offline") from exc
 
     def put_part(self, url: str, data: bytes, headers: dict) -> str:
-        # Presigned R2 URLs sign content-length, host, and checksum or content-md5.
+        # Presigned object-storage URLs sign content-length, host, and checksum or content-md5.
         # User-Agent is not one of those headers. Leave the signed set unchanged.
         if not allowed_upload_url(url):
             raise Offline("upload_url_rejected")
