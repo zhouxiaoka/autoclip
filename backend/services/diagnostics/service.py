@@ -118,8 +118,13 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
         _previous, consent = commit(
             diagnostics=True, media=consent.media, full_original=consent.full_original, informed=True,
         )
+    origin, source_link = _input_for_diagnostics(project_id)
+    if origin == "link":
+        wanted = []
     receipt = _receipt(_state(project_id), attempt_id)
-    manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
+    manifest = build_manifest(
+        receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
+    )
     if validate_manifest(manifest):
         raise DiagnosticsError("manifest_rejected", 422)
     item_id = queue.new_id()
@@ -224,6 +229,13 @@ def _public_item(item: dict) -> dict:
     }
 
 
+def _input_for_diagnostics(project_id: str) -> tuple[str, str | None]:
+    from backend.services.diagnostics.source import classify, sanitize_source_link
+    decision = classify(project_id)
+    link = sanitize_source_link(decision.source_url) if decision.origin == "link" else None
+    return decision.origin, link
+
+
 def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | None:
     consent = load()
     if not consent.notice_seen or not consent.diagnostics or not consent.diagnostics_at:
@@ -240,12 +252,16 @@ def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | No
             return None
     except ValueError:
         return None
+    origin, source_link = _input_for_diagnostics(project_id)
     roles: list[str] = []
-    if consent.full_original:
-        roles.append("original")
-    elif consent.media:
-        roles.append("excerpt")
-    manifest = build_manifest(receipt, log_text=_log_text(project_id), project_id=project_id)
+    if origin == "file":
+        if consent.full_original:
+            roles.append("original")
+        elif consent.media:
+            roles.append("excerpt")
+    manifest = build_manifest(
+        receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
+    )
     item_id = queue.new_id()
     files = []
     if roles:

@@ -80,7 +80,7 @@ export default function DiagnosticsNotice() {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {unreadable && <p className="ac-note">{t('已保存的诊断选择读不出来。在你确认前不会上传。')}</p>}
-        <p className="ac-note">{t('默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容，片尾的问题可能不在里面。完整原片默认不上传，需要你打开开关。字幕正文不会自动上传。')}</p>
+        <p className="ac-note">{t('本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。')}</p>
         <p className="ac-note">{t('已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。')}</p>
         <label className="ac-note"><Switch checked={diagnostics} onChange={setDiagnostics} /> {t('帮助改进 AutoClip')}</label>
         <label className="ac-note"><Switch checked={media} disabled={!diagnostics} onChange={setMedia} /> {t('允许附带失败任务的片段')}</label>

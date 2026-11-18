@@ -317,10 +317,10 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           </div>
         </>}
         {!helpError && helpDiagnostics !== null && <>
-        <Row label={t("帮助改进 AutoClip")} hint={t("失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。默认会压缩并上传短片段。完整原片默认关闭。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。")}>
+        <Row label={t("帮助改进 AutoClip")} hint={t("失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。本地视频默认会压缩并上传短片段。完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。")}>
           <Switch checked={helpDiagnostics} onChange={(enabled) => void saveDiagnostics(enabled, enabled ? helpMedia : false, enabled && helpMedia ? helpOriginal : false)} />
         </Row>
-        <Row label={t("允许附带失败任务的片段")} hint={t("默认打开。失败后上传一段重新压缩的短视频，最长约 60 秒，画面不超过 720p。有失败时间时会围着那个时间截取。可以单独关闭。")}>
+        <Row label={t("允许附带失败任务的片段")} hint={t("默认打开，只对本地视频文件生效。失败后上传一段重新压缩的短视频，最长约 60 秒，画面不超过 720p。有失败时间时会围着那个时间截取。视频链接不上传视频。可以单独关闭。")}>
           <Switch checked={helpMedia} disabled={!helpDiagnostics} onChange={(enabled) => void saveDiagnostics(true, enabled, enabled ? helpOriginal : false)} />
         </Row>
         <Row label={t("允许附带完整原片")} hint={t("默认关闭。打开后才上传未压缩的完整原片。原片可能包含私人内容，只用于排查和改进，不用于训练。关闭后，未完成的原片上传会取消。")}>

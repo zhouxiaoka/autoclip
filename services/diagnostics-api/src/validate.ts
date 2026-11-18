@@ -1,6 +1,7 @@
 import allowlist from '../../../backend/services/diagnostics/allowlist.json' with { type: 'json' }
 
 const SECRET = /sk-|bearer\s|api[_-]?key\s*[:=]|authorization\s*[:=]|password\s*[:=]|\/Users\/|\\Users\\|https?:\/\/\S+\?/i
+const SECRET_PARAM = /token|secret|signature|password|passwd|credential|cookie|apikey|api_key|(^|_)(key|sig|sid|pwd|auth)($|_)/i
 
 export function manifestProblems(manifest: unknown, maxBytes: number): string[] {
   const problems: string[] = []
@@ -15,8 +16,28 @@ export function manifestProblems(manifest: unknown, maxBytes: number): string[] 
   const encoded = new TextEncoder().encode(JSON.stringify(record))
   if (encoded.byteLength > maxBytes) problems.push('too_large')
   walk(record, problems)
-  if (SECRET.test(JSON.stringify(record))) problems.push('secret_or_path')
+  if ('source_link' in record && !sourceLinkOk(record.source_link)) problems.push('source_link')
+  const scanned = { ...record }
+  delete scanned.source_link
+  if (SECRET.test(JSON.stringify(scanned))) problems.push('secret_or_path')
   return problems
+}
+
+function sourceLinkOk(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 300 || /\s/.test(value)) return false
+  if (/^(file|data|javascript|blob):/i.test(value)) return false
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  if (url.username || url.password || url.hash) return false
+  for (const key of url.searchParams.keys()) {
+    if (SECRET_PARAM.test(key)) return false
+  }
+  return true
 }
 
 function walk(value: unknown, problems: string[]): void {

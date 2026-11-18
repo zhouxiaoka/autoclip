@@ -443,6 +443,34 @@ def _put_part_attempts(transport, url: str, payload: bytes, headers: dict) -> st
     raise last
 
 
+def _drop_blocked_media(item: dict) -> dict:
+    """A link, or an origin we cannot prove, must not upload a downloaded video."""
+    from backend.services.diagnostics.source import classify, sanitize_source_link
+    decision = classify(str(item.get("project_id") or ""))
+    if decision.origin == "file":
+        return item
+    changes: dict = {}
+    if item.get("files"):
+        changes["files"] = []
+    manifest = item.get("manifest") if isinstance(item.get("manifest"), dict) else {}
+    if decision.origin == "link" and not manifest.get("source_link"):
+        link = sanitize_source_link(decision.source_url)
+        if link:
+            updated = dict(manifest)
+            updated["source_link"] = link
+            if not validate_manifest(updated):
+                changes["manifest"] = updated
+    if not changes:
+        return {**item, "files": []} if item.get("files") else item
+    stored = queue.update(
+        item["id"], if_version=item.get("version"), updated_at=queue.now_iso(), **changes,
+    )
+    if stored is None:
+        live = _live(item["id"], item)
+        return {**live, "files": []}
+    return stored
+
+
 def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
     """One attempt. Does not touch the generation attempt that produced the failure."""
     item_id = item["id"]
@@ -478,6 +506,7 @@ def upload_item(item: dict, transport, *, now: datetime | None = None) -> dict:
         if diverted is not None:
             return diverted
         _still_authorized(item)
+        item = _drop_blocked_media(item)
         session = item.get("upload") if isinstance(item.get("upload"), dict) else {}
         if not session.get("case_id") or item.get("refresh_plan") or _plan_expired(session, now):
             recovery = queue.recovery_token(item_id, create=True)

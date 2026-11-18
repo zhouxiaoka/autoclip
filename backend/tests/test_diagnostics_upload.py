@@ -18,6 +18,7 @@ from backend.services.diagnostics import (
     observe,
     queue,
     service,
+    source,
     upload,
 )
 from backend.services.diagnostics.manifest import build_manifest
@@ -47,9 +48,9 @@ def _receipt(**extra):
 
 def test_privacy_copy_exists_in_all_eight_locales():
     key = "帮助改进 AutoClip"
-    purpose = "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。默认会压缩并上传短片段。完整原片默认关闭。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。"
+    purpose = "失败后会自动上传脱敏诊断，只用于排查问题并改进产品，不会用于训练模型。新安装默认打开，可以关闭。不含 API 密钥、字幕正文、项目名或个人路径。本地视频默认会压缩并上传短片段。完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。关闭总开关会停掉并取消尚未完成的上传。"
     notice = "从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。"
-    media_scope = "默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容，片尾的问题可能不在里面。完整原片默认不上传，需要你打开开关。字幕正文不会自动上传。"
+    media_scope = "本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。"
     retention = "已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。"
     for lang in ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr"):
         data = json.loads((ROOT / "frontend/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
@@ -316,6 +317,7 @@ def test_background_checkbox_before_notice_does_not_grant_media(data_dir):
 
 
 def test_confirmed_default_asks_for_the_original_and_not_subtitles(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
     consent.update(diagnostics=True, media=True, full_original=True, informed=True)
     seen = {}
 
@@ -600,6 +602,7 @@ def test_delete_during_upload_is_not_overwritten_and_stays_retryable(data_dir, t
     (tmp_path / "diagnostics").mkdir()
     (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("proj", "file")
     built = build_manifest(_receipt())
     from backend.services.studio import store
     root = store.directory("proj")
@@ -655,6 +658,7 @@ def test_lost_create_response_replays_the_plan_and_uploads_every_byte(data_dir, 
     (tmp_path / "diagnostics").mkdir()
     (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("proj", "file")
     payload = b"hello-media"
     from backend.services.studio import store
     root = store.directory("proj")
@@ -860,6 +864,7 @@ def test_incomplete_plan_is_not_marked_uploaded(data_dir, tmp_path):
     (tmp_path / "diagnostics").mkdir()
     (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("proj", "file")
     from backend.services.studio import store
     root = store.directory("proj")
     (root / "raw").mkdir(parents=True)
@@ -971,6 +976,136 @@ def test_multipart_request_sends_one_md5_per_part(tmp_path):
     assert media.part_md5s(path, len(payload), 16) == []
 
 
+def test_source_link_keeps_the_video_id_and_drops_secrets():
+    raw = "https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLpublic&token=abc&signature=dead#frag"
+    assert source.sanitize_source_link(raw) == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLpublic"
+    assert source.sanitize_source_link("file:///tmp/private.mp4") is None
+    assert source.sanitize_source_link("https://www.youtube.com/watch?v=abc") == "https://www.youtube.com/watch?v=abc"
+    legacy_link = source.classify_metadata({"source_url": "https://youtu.be/A_156w0aYtU"})
+    legacy_file = source.classify_metadata({"source_url": None, "via": "cli"})
+    assert legacy_link.origin == "link" and legacy_link.source_url.startswith("https://youtu.be/")
+    assert legacy_file.origin == "file"
+    assert source.classify_metadata({}).origin == "unknown"
+    assert source.classify_metadata(None).origin == "unknown"
+
+
+def test_link_input_sends_the_url_and_does_not_transcode_or_upload_media(data_dir, tmp_path, monkeypatch):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    source.record_input_origin(
+        "proj", "link",
+        source_url="https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ&token=abc#t=1",
+    )
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("link input must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert queued["manifest"]["source_link"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert "downloaded-video" not in json.dumps(queued)
+    assert "token" not in queued["manifest"]["source_link"]
+    assert "pass" not in queued["manifest"]["source_link"]
+
+    class Transport:
+        def __init__(self):
+            self.files = None
+            self.puts = 0
+
+        def create_case(self, base, body, key):
+            self.files = body["files"]
+            return {"case_id": "remote", "capability": "cap", "uploads": []}
+
+        def put_part(self, *args, **kwargs):
+            self.puts += 1
+            raise AssertionError("link input must not upload media")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("no media part to complete")
+
+    transport = Transport()
+    upload.pump_once(transport)
+    assert transport.files == []
+    assert transport.puts == 0
+    assert queue.list_items()[0]["status"] == "uploaded"
+
+
+def test_unknown_origin_does_not_auto_upload_a_downloaded_file(data_dir, monkeypatch):
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    raw = data_dir / "projects" / "proj" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "input.mp4").write_bytes(b"downloaded-video")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("unknown origin must not transcode")
+
+    monkeypatch.setattr(media, "default_cut", boom)
+    queued = service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00"))
+    assert queued["files"] == []
+    assert "source_link" not in queued["manifest"]
+
+
+def test_queued_link_media_is_blocked_before_put(data_dir, tmp_path):
+    (tmp_path / "diagnostics").mkdir()
+    (tmp_path / "diagnostics" / "endpoint.json").write_text(json.dumps({"endpoint": "http://127.0.0.1:9"}), encoding="utf-8")
+    consent.update(diagnostics=True, media=True, full_original=True, informed=True)
+    source.record_input_origin("proj", "link", source_url="https://www.bilibili.com/video/BV1qheu6kEFV/?token=secret")
+    media_file = data_dir / "projects" / "proj" / "raw" / "input.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"cached-link-video")
+    queue.enqueue({
+        "id": "c-old-link", "idempotency_key": "old-link", "status": "queued", "epoch": consent.load().epoch,
+        "project_id": "proj", "attempt_id": TOKEN, "explicit": False, "disposition": "upload",
+        "save_local": False, "manifest": build_manifest(_receipt()), "attempts": 0, "upload": {},
+        "files": [{
+            "role": "original", "path": str(media_file), "size_bytes": len(b"cached-link-video"),
+            "sha256": __import__("hashlib").sha256(b"cached-link-video").hexdigest(), "content_type": "video/mp4",
+        }],
+    })
+
+    class Transport:
+        def __init__(self):
+            self.files = None
+            self.puts = 0
+
+        def create_case(self, base, body, key):
+            self.files = body["files"]
+            return {"case_id": "remote", "capability": "cap", "uploads": []}
+
+        def put_part(self, *args, **kwargs):
+            self.puts += 1
+            raise AssertionError("queued link video must not be uploaded")
+
+        def complete(self, *args, **kwargs):
+            raise AssertionError("no media part to complete")
+
+    transport = Transport()
+    upload.pump_once(transport)
+    stored = queue.get("c-old-link")
+    assert transport.files == []
+    assert transport.puts == 0
+    assert stored["files"] == []
+    assert stored["manifest"]["source_link"] == "https://www.bilibili.com/video/BV1qheu6kEFV/"
+    assert "token" not in stored["manifest"]["source_link"]
+    assert "cached-link-video" not in json.dumps(stored)
+
+
+def test_link_is_not_uploaded_before_notice_or_when_diagnostics_are_off(data_dir):
+    source.record_input_origin("proj", "link", source_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    assert queue.list_items() == []
+    consent.update(diagnostics=False, media=False, full_original=False, informed=True)
+    assert service.background_enqueue("proj", _receipt(finished_at="2999-01-01T00:00:00+00:00")) is None
+    assert queue.list_items() == []
+    blob = (data_dir / "diagnostics" / "queue.json").read_text(encoding="utf-8") if (data_dir / "diagnostics" / "queue.json").exists() else ""
+    assert "youtube.com" not in blob
+
+
 def test_unset_consent_is_excerpt_on_and_original_off():
     grant = consent._unset()
     assert grant.diagnostics is True and grant.media is True and grant.full_original is False
@@ -1033,6 +1168,7 @@ def test_excerpt_over_40mb_is_discarded(tmp_path, monkeypatch):
 
 
 def test_confirmed_default_uploads_a_compressed_excerpt(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
     consent.update(diagnostics=True, media=True, full_original=False, informed=True)
     seen = {}
 
@@ -1047,6 +1183,7 @@ def test_confirmed_default_uploads_a_compressed_excerpt(data_dir, monkeypatch):
 
 
 def test_transcode_failure_keeps_the_manifest_and_skips_the_original(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
     consent.update(diagnostics=True, media=True, full_original=False, informed=True)
     raw = data_dir / "projects" / "proj" / "raw"
     raw.mkdir(parents=True)
@@ -1066,6 +1203,7 @@ def test_transcode_failure_keeps_the_manifest_and_skips_the_original(data_dir, m
 
 
 def test_enabled_original_is_uploaded_without_transcode(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
     consent.update(diagnostics=True, media=True, full_original=True, informed=True)
     raw = data_dir / "projects" / "proj" / "raw"
     raw.mkdir(parents=True)
@@ -1084,6 +1222,7 @@ def test_enabled_original_is_uploaded_without_transcode(data_dir, monkeypatch):
 
 
 def test_observe_cuts_around_the_failure_time(data_dir, monkeypatch):
+    source.record_input_origin("proj", "file")
     consent.update(diagnostics=True, media=True, full_original=False, informed=True)
     raw = data_dir / "projects" / "proj" / "raw"
     raw.mkdir(parents=True)

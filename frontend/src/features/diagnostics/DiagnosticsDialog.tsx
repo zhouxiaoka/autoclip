@@ -70,7 +70,7 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
       open={open}
       onClose={onClose}
       title={t('提交诊断')}
-      description={t('看看将要发送的内容。这一次的素材需要逐项勾选，不会自动带上。确认说明之后的自动发送会压缩并上传短片段；完整原片默认关闭，要在设置里打开。已上传的诊断会在 14 天后自动删除。用于排查和改进，不会用于训练模型。')}
+      description={t('看看将要发送的内容。这一次的素材需要逐项勾选，不会自动带上。本地视频在确认说明之后会压缩并上传短片段；完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。用于排查和改进，不会用于训练模型。')}
       footer={
         <div className="right">
           <Btn size="sm" onClick={onClose}>{t('关闭')}</Btn>

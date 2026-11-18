@@ -93,7 +93,7 @@ def create(db: Session) -> Project:
             'analysis_mode': meta.get('analysis_mode', 'subtitle'),
             'video_category': meta.get('video_category', 'default'),
         },
-        project_metadata={'source_url': meta['source_url'], EXAMPLE_FLAG: True},
+        project_metadata={'source_url': meta['source_url'], 'input_origin': 'link', EXAMPLE_FLAG: True},
         completed_at=now,
     )
     db.add(project)
@@ -111,6 +111,11 @@ def create(db: Session) -> Project:
         shutil.copyfile(ASSETS / meta['cover'], raw / 'input_cover.jpg')
     project.video_path = str(source)
     project.subtitle_path = str(raw / 'input.srt')
+    try:
+        from backend.services.diagnostics.source import record_input_origin
+        record_input_origin(str(project.id), 'link', source_url=meta.get('source_url'))
+    except Exception:  # noqa: BLE001 - the sample project still installs if the note cannot be written
+        pass
 
     records = []
     for entry in manifest['clips']:

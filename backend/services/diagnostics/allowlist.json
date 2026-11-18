@@ -12,7 +12,8 @@
     "run",
     "media_facts",
     "log_lines",
-    "limits"
+    "limits",
+    "source_link"
   ],
   "runtime_keys": ["app_version", "os", "arch", "runtime"],
   "attempt_keys": [

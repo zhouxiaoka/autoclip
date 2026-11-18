@@ -263,10 +263,15 @@ def _register_project(req: RunRequest, video_path: Path) -> None:
             video_path=str(video_path),
             thumbnail=thumbnail,
             processing_config={"source": "cli"},
-            project_metadata={"source_url": None, "via": "cli", "original_video": str(req.video)},
+            project_metadata={"source_url": None, "via": "cli", "original_video": str(req.video), "input_origin": "file"},
         )
         db.add(project)
         db.commit()
+        try:
+            from backend.services.diagnostics.source import record_input_origin
+            record_input_origin(str(project.id), "file")
+        except Exception:  # noqa: BLE001 - CLI import still proceeds if the diagnostics note cannot be written
+            logger.warning("input origin was not recorded", exc_info=True)
     finally:
         db.close()
 

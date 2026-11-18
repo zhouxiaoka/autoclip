@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.services.diagnostics import consent, queue, service, upload
+from backend.services.diagnostics import consent, queue, service, source, upload
 from backend.services.diagnostics.manifest import build_manifest
 from backend.services.studio import store
 
@@ -22,6 +22,7 @@ def item(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_SYNC", "1")
     monkeypatch.setenv("AUTOCLIP_DIAGNOSTICS_ENDPOINT", "http://127.0.0.1:9")
     consent.update(diagnostics=True, media=False, full_original=False, informed=True)
+    source.record_input_origin("recovery", "file")
     path = store.directory("recovery") / "raw" / "input.mp4"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"abcdef")
