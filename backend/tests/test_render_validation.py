@@ -182,18 +182,17 @@ def test_full_body_with_outro_is_published(env, monkeypatch):
 
 def test_corrupt_tail_audio_is_rejected(env, monkeypatch):
     tmp, folder, output = env
-    video = _clip__r13_render_validation(tmp / 'v.mp4', 3)
-    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=3', '-c:a', 'aac', '-y', str(tmp / 'a.aac')], check=True)
-    import random
-    data = bytearray((tmp / 'a.aac').read_bytes())
-    rng = random.Random(1)
-    for i in range(int(len(data) * .7), len(data)):
-        if data[i - 1] != 0xFF:
-            data[i] = rng.randrange(256)
-    (tmp / 'bad.aac').write_bytes(bytes(data))
-    muxed = tmp / 'bad-audio.mp4'
-    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(video), '-i', str(tmp / 'bad.aac'), '-map', '0:v', '-map', '1:a',
-                    '-c', 'copy', '-movflags', '+faststart', '-y', str(muxed)], check=True)
+    import json
+    muxed = _clip__r13_render_validation(tmp / 'bad-audio.mp4', 3, audio=True)
+    # Corrupt only muxed AAC payloads. Newer muxers refuse malformed ADTS headers
+    # before the renderer under test even gets the file.
+    probe = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'a:0',
+                                     '-show_entries', 'packet=pos,size,pts_time', '-of', 'json', str(muxed)])
+    with muxed.open('r+b') as stream:
+        for packet in json.loads(probe)['packets']:
+            if float(packet['pts_time']) >= 2.1:
+                stream.seek(int(packet['pos']))
+                stream.write(b'\xff' * int(packet['size']))
     with pytest.raises(ValueError, match='渲染输出'):
         _render(monkeypatch, muxed, seconds=3)
     assert output.read_bytes() == b'previous saved video'
