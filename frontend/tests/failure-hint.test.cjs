@@ -13,6 +13,17 @@ const loadHint = new Function('module', 'exports', 'localStorage', compiled)
 loadHint(hintModule, hintModule.exports, { getItem: () => null, setItem: () => undefined })
 const hint = hintModule.exports
 
+test('a failed project card keeps the thumbnail above the text', () => {
+  const css = fs.readFileSync(path.join(root, 'frontend/src/ui/ac.css'), 'utf8')
+  const card = fs.readFileSync(path.join(root, 'frontend/src/components/ProjectCard.tsx'), 'utf8')
+  assert.match(css, /\.ac-card \{[^}]*flex-direction: column/)
+  assert.match(css, /\.ac-card-thumb \{[^}]*aspect-ratio: 16 \/ 9/)
+  assert.doesNotMatch(css, /ac-project-card--failed[\s\S]*112px/)
+  assert.match(card, /ac-failure-summary/)
+  assert.match(card, /failureView\.primary/)
+  assert.match(card, /ac-failure-outcome/)
+})
+
 test('the startup card and the import prompt are gone', () => {
   const app = fs.readFileSync(path.join(root, 'frontend/src/App.tsx'), 'utf8')
   const importer = fs.readFileSync(path.join(root, 'frontend/src/features/studio/CreativeImport.tsx'), 'utf8')
