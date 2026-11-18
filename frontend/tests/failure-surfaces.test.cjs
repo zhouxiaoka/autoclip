@@ -24,6 +24,7 @@ function renderCard(project, connectionCount) {
     '../utils/externalLinks': { openExternalLink() {} },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
+    '../features/diagnostics/DiagnosticsDialog': { __esModule: true, default: () => null },
     '../features/studio/DiagnosePanel': { __esModule: true, default: () => null },
     '../features/studio/SwitchModelDialog': { __esModule: true, default: () => null },
     '../stores/useSimpleProgressStore': { useSimpleProgressStore: (select) => select({ getProgress: () => null }) },

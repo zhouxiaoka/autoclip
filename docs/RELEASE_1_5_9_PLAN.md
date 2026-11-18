@@ -4,6 +4,17 @@
 > 数据：PostHog 450605（production · desktop · 排除 cohort 641509）近 21 天；Sentry 10-16 起断流，11-05 后再拉。
 > 范围只有三刀。本地模型、转写兜底、D#508 可选 key 放 1.5.10。不做账号 / credits，不做新模板。
 
+## 诊断提交（已进入本分支，尚未上线）
+
+Charlie 已授权把「失败诊断」放进 1.5.9 的实现，不并入那三刀的成功口径。
+
+- 设置「帮助改进 AutoClip」默认关闭。只上传同意之后的新失败，不补传历史失败。
+- 清单是字段白名单。不打包原始日志目录，不把密钥、查询串、个人路径、项目名、转写正文放进清单。
+- 片段和完整原片各自再要一次同意。上传不改 attempt、不改重试、不改 `studio_generation_finished` / `studio_production_finished` 的分母。
+- 桌面端上传地址默认为空。空地址不会发网络请求。
+- `services/diagnostics-api` 是未创建的 Worker + D1 + R2 模板。不创建 Cloudflare 资源，不改现有 `autoclip-media` 桶。4GiB 落地 + 2GiB 在途、14 天保留、各角色体积上限都是待批的提议，不是生产配置，也不等于账号免费层的花费封顶。
+- 不新增 PostHog / Sentry / 公开 GitHub 的诊断正文。
+
 ## 0. 版本目标（用 `docs/analytics/success_rate.sql` 同口径验收）
 
 | 指标 | 1.5.7 基线 | 1.5.9 目标 | 说明 |

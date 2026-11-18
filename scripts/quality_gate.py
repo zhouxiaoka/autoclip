@@ -38,6 +38,10 @@ def checks(group: str, python: str):
             ('backend_tests', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests', '-q', '-r', 's'], ROOT),
             ('editorial_fixtures', [python, '-m', 'backend.eval'], ROOT),
         ],
+        'diagnostics': [
+            ('diagnostics_types', ['npm', 'run', 'typecheck'], ROOT / 'services/diagnostics-api'),
+            ('diagnostics_tests', ['npm', 'test'], ROOT / 'services/diagnostics-api'),
+        ],
         'frontend': [
             (f'frontend_{name}', ['npm', 'run', name], ROOT / 'frontend')
             for name in ('lint', 'typecheck', 'test', 'build')
@@ -176,7 +180,7 @@ def run(group: str, report_path: Path, python: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--group', choices=('all', 'contracts', 'redline', 'backend', 'frontend'), default='all')
+    parser.add_argument('--group', choices=('all', 'contracts', 'redline', 'backend', 'frontend', 'diagnostics'), default='all')
     parser.add_argument('--python', default=sys.executable)
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()

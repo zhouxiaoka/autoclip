@@ -340,6 +340,46 @@ export const settingsApi = {
   },
 }
 
+export interface DiagnosticsConsent {
+  diagnostics: boolean
+  media: boolean
+  full_original: boolean
+  epoch: number
+  text_version: string
+  purpose: string
+  not_for_training: boolean
+  diagnostics_at: string | null
+  endpoint_configured: boolean
+}
+
+export interface DiagnosticsPreview {
+  manifest: { attempt?: { error_code?: string; failure_stage?: string; attempt_id?: string; sequence?: number }; run?: { provider?: string; model?: string; duration_ms?: number } }
+  files: { role: string; size_bytes?: number; duration_sec?: number; rejected?: string; limitation?: string }[]
+  consent: DiagnosticsConsent
+  excerpt_limitation: string
+  not_for_training: boolean
+}
+
+export const diagnosticsApi = {
+  consent: (): Promise<DiagnosticsConsent> => api.get('/diagnostics/consent'),
+  setConsent: (body: { diagnostics: boolean; media: boolean; full_original: boolean; informed: boolean }): Promise<DiagnosticsConsent> =>
+    api.put('/diagnostics/consent', body),
+  preview: (projectId: string, attemptId: string): Promise<DiagnosticsPreview> =>
+    api.get('/diagnostics/preview', { params: { project_id: projectId, attempt_id: attemptId } }),
+  submit: (body: {
+    project_id: string
+    attempt_id: string
+    roles: string[]
+    informed: boolean
+    full_original_ack?: boolean
+    subtitle_ack?: boolean
+    also_enable_background?: boolean
+    save_local?: boolean
+  }): Promise<{ id: string; status: string; case_id?: string; error?: string; export_ready?: boolean; export_path?: string; deletable?: boolean }> =>
+    api.post('/diagnostics/submit', body),
+  remove: (id: string): Promise<{ status: string }> => api.delete(`/diagnostics/cases/${id}`),
+}
+
 // 项目相关API
 /** Bundled project with real media; creating it does not require a model key. */
 export const exampleProjectApi = {

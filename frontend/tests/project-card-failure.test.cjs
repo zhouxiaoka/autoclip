@@ -18,6 +18,7 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     '../utils/externalLinks': { openExternalLink: (url) => { opened.push(url); if (extra.onExternal) extra.onExternal(url) } },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
+    '../features/diagnostics/DiagnosticsDialog': { __esModule: true, default: () => null },
     '../features/studio/DiagnosePanel': { __esModule: true, default: () => null },
     '../features/studio/SwitchModelDialog': { __esModule: true, default: () => null },
     '../stores/useSimpleProgressStore': {

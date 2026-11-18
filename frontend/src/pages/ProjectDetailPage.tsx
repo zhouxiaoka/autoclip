@@ -24,6 +24,7 @@ import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
+import DiagnosticsDialog from '../features/diagnostics/DiagnosticsDialog'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { flagAssigned } from '../analytics/flags'
@@ -59,6 +60,7 @@ const ProjectDetailPage: React.FC = () => {
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
@@ -366,6 +368,7 @@ const ProjectDetailPage: React.FC = () => {
           )}
           {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Btn onClick={() => setDiagnosticsOpen(true)}>{t("提交诊断")}</Btn>
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
               {installTranscription && !bodyOwnsInstall && <Btn variant="cta" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
               <Btn variant={llmKeyFailure || shownSubtitleKind || installTranscription ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
@@ -424,6 +427,7 @@ const ProjectDetailPage: React.FC = () => {
       )}
 
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+      <DiagnosticsDialog open={diagnosticsOpen} onClose={() => setDiagnosticsOpen(false)} projectId={currentProject.id} />
 
       <CreateCollectionModal
         visible={showCreateCollection}

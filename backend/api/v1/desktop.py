@@ -92,24 +92,15 @@ async def get_logs(lines: int = 100):
     check_desktop_mode()
     
     try:
-        config = get_desktop_config()
-        log_file = config.data_dir / "logs" / "autoclip.log"
-        
+        from backend.core.path_utils import get_log_file_path
+        from backend.services.diagnostics.redact import sanitized_log_file
+        log_file = get_log_file_path()
         if not log_file.exists():
             return {"logs": [], "message": "日志文件不存在"}
-        
-        # 读取最后N行日志
-        with open(log_file, 'r', encoding='utf-8') as f:
-            all_lines = f.readlines()
-            recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
-        
-        return {
-            "logs": [line.strip() for line in recent_lines],
-            "total_lines": len(all_lines),
-            "returned_lines": len(recent_lines)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取日志失败: {str(e)}")
+        logs = sanitized_log_file(log_file, limit=max(1, min(lines, 200)))
+        return {"logs": logs, "returned_lines": len(logs)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="读取日志失败")
 
 @router.post("/service/restart")
 async def restart_service():

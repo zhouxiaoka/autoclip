@@ -792,6 +792,37 @@ def test_grab_pts_are_matched_by_output_name_not_log_order(tmp_path, monkeypatch
     assert [bool(frame) for frame in grabbed] == [True, False, True]
 
 
+def test_a_torn_showinfo_line_is_reread_and_a_distant_timestamp_stays_discarded(tmp_path, monkeypatch):
+    """FFmpeg 8 can split a parallel showinfo record. The missing time is read alone."""
+    import re
+    video = _write_clip(tmp_path, 'torn', [np.full((SOURCE[1], SOURCE[0], 3), 30, np.uint8)] * (FPS * 3))
+    original = face.run
+    calls = {'n': 0}
+
+    def torn(cmd, timeout, **kwargs):
+        proc = original(cmd, timeout, **kwargs)
+        calls['n'] += 1
+        stderr = proc.stderr or b''
+        if isinstance(stderr, str):
+            stderr = stderr.encode('utf-8', 'replace')
+        if sum(part == '-i' for part in cmd) > 1:
+            proc.stderr = re.sub(br'\[showinfo@g0 @[^\n]*', b'', stderr)
+        return proc
+
+    monkeypatch.setattr(face, 'run', torn)
+    grabbed = face._grab_frames(video, [0.36, 1.5, 2.64], 5.0, 160)
+    assert [frame is not None for frame in grabbed] == [True, True, True]
+    assert calls['n'] == 2
+
+    def distant(cmd, timeout, **kwargs):
+        proc = original(cmd, timeout, **kwargs)
+        proc.stderr = b'[showinfo@g0 @ 0x1] n:   0 pts: 1 pts_time:9.0\n'
+        return proc
+
+    monkeypatch.setattr(face, 'run', distant)
+    assert face._grab_frames(video, [0.36], 5.0, 160) == [None]
+
+
 def test_production_budget_rejects_a_bad_crop_the_middle_frame_would_pass(tmp_path, monkeypatch):
     """The old 0.9 s budget sampled the middle once. Edges next to the cuts are the bad crop."""
     frontal, turned = _faces()
