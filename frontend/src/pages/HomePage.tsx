@@ -28,7 +28,7 @@ import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
 import { apiConfigManager } from '../utils/apiConfig'
 import FailureHint from '../features/diagnostics/FailureHint'
-import { nextLiveFailure } from '../features/diagnostics/failureHint'
+import { nextLiveFailure } from '../features/diagnostics/failureHintPolicy'
 
 const { Content } = Layout
 const { Title, Text } = Typography

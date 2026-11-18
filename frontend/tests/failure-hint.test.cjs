@@ -5,7 +5,7 @@ const path = require('path')
 const ts = require('typescript')
 
 const root = path.resolve(__dirname, '../..')
-const hintSource = fs.readFileSync(path.join(root, 'frontend/src/features/diagnostics/failureHint.ts'), 'utf8')
+const hintSource = fs.readFileSync(path.join(root, 'frontend/src/features/diagnostics/failureHintPolicy.ts'), 'utf8')
 const viewSource = fs.readFileSync(path.join(root, 'frontend/src/features/diagnostics/FailureHint.tsx'), 'utf8')
 const compiled = ts.transpileModule(hintSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
 const hintModule = { exports: {} }

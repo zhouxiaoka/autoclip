@@ -3,9 +3,10 @@
 
 Blocking: review-round test filenames, review ids in comments and docstrings,
 product error-code literals outside event_catalog.json (including quoted keys),
-a second literal copy of a catalog error-code table, and a Python string
-that copies a failure_messages.json sentence. The line-count
-table is written to the PR job summary and never fails the run.
+a second literal copy of a catalog error-code table, a Python string
+that copies a failure_messages.json sentence, and tracked paths that collide
+when case is ignored. The line-count table is written to the PR job summary
+and never fails the run.
 """
 from __future__ import annotations
 
@@ -385,6 +386,55 @@ def catalog_sentence_copies(root: Path = ROOT) -> list[str]:
     return found
 
 
+# Vite tries these in order. On a case-insensitive disk, import './FailureHint'
+# binds failureHint.ts before FailureHint.tsx, and the component default is missing.
+RESOLVE_EXTS = ('.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json', '.cjs', '.cts')
+
+
+def casefold_collisions(paths) -> list[str]:
+    """Paths that cannot stay distinct on macOS or Windows, including extensionless imports."""
+    exact: dict[str, list[str]] = {}
+    stems: dict[str, list[str]] = {}
+    for raw in paths:
+        rel = str(raw).replace('\\', '/').strip()
+        if not rel or any(part in SKIP_PARTS for part in rel.split('/')):
+            continue
+        exact.setdefault(rel.casefold(), []).append(rel)
+        root, ext = os.path.splitext(rel)
+        if ext.lower() in RESOLVE_EXTS:
+            stems.setdefault(root.casefold(), []).append(rel)
+    found = []
+    reported = set()
+    for group in exact.values():
+        unique = tuple(sorted(set(group)))
+        if len(unique) > 1:
+            found.append('大小写相同的路径: ' + ', '.join(unique))
+            reported.add(unique)
+    for group in stems.values():
+        unique = tuple(sorted(set(group)))
+        if len(unique) > 1 and unique not in reported:
+            found.append('大小写折叠后的模块名相同: ' + ', '.join(unique))
+    return found
+
+
+def tracked_paths(root: Path = ROOT) -> list[str]:
+    out = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z'])
+    return [part.decode() for part in out.split(b'\0') if part]
+
+
+def resolve_casefolded(spec: str, paths, extensions=RESOLVE_EXTS) -> str | None:
+    """The file an extensionless import hits when lookup ignores case."""
+    folded: dict[str, str] = {}
+    for raw in paths:
+        rel = str(raw).replace('\\', '/')
+        folded.setdefault(rel.casefold(), rel)
+    for ext in extensions:
+        hit = folded.get((spec + ext).casefold())
+        if hit:
+            return hit
+    return None
+
+
 def main() -> int:
     base = os.environ.get('GITHUB_BASE_REF', '')
     if base:
@@ -405,6 +455,9 @@ def main() -> int:
     sentences = catalog_sentence_copies()
     if sentences:
         problems.append('手写失败文案:\n' + '\n'.join(sentences))
+    collisions = casefold_collisions(tracked_paths())
+    if collisions:
+        problems.append('跨平台文件名碰撞:\n' + '\n'.join(collisions))
     if problems:
         print('\n\n'.join(problems), file=sys.stderr)
         return 1

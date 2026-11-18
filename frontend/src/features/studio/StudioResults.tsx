@@ -33,7 +33,7 @@ import { noticeCopy } from './completionNotice'
 import { dismissMorePlatformBanner, hasSuccessHistory, morePlatformBannerSeen, stashReuseImport, suggestAnotherPlatform } from './platformMemory'
 import { followOutputLeave } from './overrides'
 import FailureHint from '../diagnostics/FailureHint'
-import { nextLiveFailure } from '../diagnostics/failureHint'
+import { nextLiveFailure } from '../diagnostics/failureHintPolicy'
 
 import './studio.css'
 import './quick-output.css'

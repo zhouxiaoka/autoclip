@@ -12,7 +12,7 @@ import {
   hintKind,
   taskOrigin,
   type HintKind,
-} from './failureHint'
+} from './failureHintPolicy'
 
 type ProjectLike = Parameters<typeof taskOrigin>[0]
 

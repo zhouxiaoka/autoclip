@@ -19,6 +19,18 @@ class CiGuardTests(unittest.TestCase):
         for text in ('HTTP 500', 'status 404', 'version 1.5.7', 'Render the page', 'done', 'dongle'):
             self.assertIsNone(ci_guards._REVIEW_ID.search(text), text)
 
+    def test_casefold_names_do_not_share_a_resolver_hit(self):
+        spec = 'frontend/src/features/diagnostics/FailureHint'
+        broken = [spec + '.tsx', 'frontend/src/features/diagnostics/failureHint.ts']
+        self.assertTrue(ci_guards.casefold_collisions(broken))
+        self.assertEqual(ci_guards.resolve_casefolded(spec, broken), broken[1])
+        fixed = [spec + '.tsx', 'frontend/src/features/diagnostics/failureHintPolicy.ts']
+        self.assertEqual(ci_guards.casefold_collisions(fixed), [])
+        self.assertEqual(ci_guards.resolve_casefolded(spec, fixed), fixed[0])
+        self.assertTrue(ci_guards.casefold_collisions(['docs/Readme.md', 'docs/readme.md']))
+        self.assertEqual(ci_guards.casefold_collisions(['a/Foo.ts', 'b/foo.ts']), [])
+        self.assertEqual(ci_guards.casefold_collisions(ci_guards.tracked_paths()), [])
+
     def test_review_round_filenames(self):
         self.assertTrue(ci_guards._REVIEW_FILE.match('test_' + 'r12.py'))
         self.assertTrue(ci_guards._REVIEW_FILE.match('test_' + 'i575.ts'))
