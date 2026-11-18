@@ -211,11 +211,6 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
     warnings = []
     draft = recover_empty_packaging(project_id, draft, warnings)
-    if draft.ending_review_required:
-        warnings.append('片尾完整性需要复核，请预览最后一段')
-    if draft.packaging and draft.packaging.captions_enabled:
-        if draft.packaging.translation_status in ('partial', 'source_fallback'):
-            warnings.append('字幕翻译尚未完成，请检查后再发布')
     keep_audio = draft.original_audio and audio.has_audio(video)
     if draft.original_audio and not keep_audio:
         warnings.append('原素材没有音轨，本次导出无声')

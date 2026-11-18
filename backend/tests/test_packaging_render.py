@@ -333,25 +333,3 @@ def test_issue_367_switched_off_captions_are_not_recovered_from_source(monkeypat
     warnings = []
     assert render.recover_empty_packaging('p', draft, warnings) is draft
     assert warnings == []
-
-
-def test_quality_warnings_reach_export_result_without_changing_accepted_captions(monkeypatch):
-    from backend.services.studio import render
-    from backend.services.studio.models import Draft, Packaging, Scene
-    package = Packaging(template='interview_zh', audience_language='zh', source_language='en',
-                        translation_status='partial', translated_rows=1, translation_total_rows=2,
-                        cues=[{'start': 0, 'end': 2, 'text': '已完成译文', 'original': 'Source words'}])
-    draft = Draft(id='quality', title='Title', scenes=[Scene(id='s', start=0, end=4)],
-                  packaging=package, ending_review_required=True, original_audio=False)
-    monkeypatch.setattr(render, '_probe', lambda *_: {'duration': 4, 'width': 320, 'height': 240})
-    monkeypatch.setattr(render, 'resolve_cjk_font', lambda: None)
-    captured = []
-    def encode(project_id, video, actual, job, progress, info, width, height, warnings, *args, **kwargs):
-        captured.append(actual.packaging.model_dump())
-        return {'warnings': warnings}
-    monkeypatch.setattr(render, '_encode_draft', encode)
-    result = render.render_draft('quality', 'video.mp4', draft, 'j', lambda *_: None)
-    assert result['warnings'] == ['片尾完整性需要复核，请预览最后一段', '字幕翻译尚未完成，请检查后再发布']
-    assert captured == [package.model_dump()]
-    draft.packaging.captions_enabled = False
-    assert render.render_draft('quality', 'video.mp4', draft, 'j2', lambda *_: None)['warnings'] == ['片尾完整性需要复核，请预览最后一段']

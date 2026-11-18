@@ -180,6 +180,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         setHelpOriginal(grant.full_original)
       }).catch(() => { /* 读不到已保存的选择时不把它写成关闭 */ })
     }
+    if (typeof window === 'undefined') return () => { active = false }
     window.addEventListener('autoclip-diagnostics-consent', refreshDiagnostics)
     return () => { active = false; window.removeEventListener('autoclip-diagnostics-consent', refreshDiagnostics) }
   }, [])
