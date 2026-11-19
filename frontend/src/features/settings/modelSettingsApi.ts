@@ -20,6 +20,7 @@ export interface Connection {
   image_base_url: string
   validation_status?: 'ok' | 'failed' | 'unchecked' | 'transient'
   validation_error_type?: string
+  validation_hint_key?: string
   /** 1.5.9 3B: ISO stamp while retry is locked after insufficient_quota. */
   quota_exhausted_at?: string | null
   /** F2 trial-run card state — F5 import area reads the same fields. */
@@ -30,6 +31,7 @@ export interface Connection {
   trial_avg_ms?: number | null
   trial_estimate_requests?: number | null
   trial_estimate_minutes?: number | null
+  trial_answer?: '' | 'ok' | 'format' | 'no_answer' | 'transport' | 'context' | 'rate'
   base_url_source?: Source
   preset_version?: number
   custom_models?: CustomModelOffer[]

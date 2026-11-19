@@ -10,6 +10,9 @@ import { bindingCapability, modelSettingsApi, type Connection, type FetchListRes
 import { applyModelDefaults } from './modelDefaults'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
+
+/** Same sentence as backend LOCAL_MODEL_NOT_READY_HINT. A listed local model that did not answer. */
+const LOCAL_MODEL_NOT_READY = '本机服务有响应，但这个模型在限时内没有给出回答。其他已列出的模型仍可选用，生成也不会因这次快速测试被整条连接拦住。'
 import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
@@ -354,6 +357,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     try {
       let next = effective
       let warned = ''
+      let localModelNotReady = false
       const noticed: Array<{ id: string; status?: string; errorType?: string }> = []
       for (const { role, connection, model } of logic.validationTargets(next)) {
         const modelChanged = savedRef.current?.[role]?.model !== next[role]?.model
@@ -366,6 +370,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const row = next.connections.find(item => item.id === connection.id)
         if (row) noticed.push({ id: row.id, status: row.validation_status, errorType: row.validation_error_type })
         if (passed(result)) {
+          if (role === 'analysis' && result.warning === LOCAL_MODEL_NOT_READY) localModelNotReady = true
           const text = acceptWarning(connection.id, result)
           if (text) warned = text
           const normalized = { ...connection, base_url: result.normalized_base_url || connection.base_url }
@@ -409,7 +414,9 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       // back to the failed project, if settings were opened from one (SETTINGS_SAVED_EVENT in studio/settingsReturn).
       if (!failed && !visionFailed) notifySettingsSaved()
       // F2: after save, default-run trial on the analysis connection (cancellable).
-      if (!failed && !visionFailed) {
+      // A listed local model that did not answer the short probe is still connected.
+      // Starting the long trial immediately would time out again and look like a dead endpoint.
+      if (!failed && !visionFailed && !localModelNotReady) {
         const analysis = logic.validationTargets(value || next).find(item => item.role === 'analysis')
         if (analysis) {
           void (async () => {
@@ -477,9 +484,19 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     setTestingKind(probeKind)
     try {
       const vision = role === 'vision' || (role === 'analysis' && settings.analysis_mode !== 'subtitle' && capability === 'multimodal')
-      const value = await probe(connection, binding.model, vision, role, role === 'analysis' ? probeKind : 'quick', controller.signal)
+      const probedModel = binding.model
+      const value = await probe(connection, probedModel, vision, role, role === 'analysis' ? probeKind : 'quick', controller.signal)
+      if (!logic.probeStillCurrent(settingsRef.current, role, connection.id, probedModel)) {
+        finish('failed', { reason: 'cancelled' })
+        return
+      }
       emitValidation(connection, value)
-      replace(logic.applyValidation(settings, connection.id, value))
+      setSettings(current => (
+        current && logic.probeStillCurrent(current, role, connection.id, probedModel)
+          ? logic.applyValidation(current, connection.id, value)
+          : current
+      ))
+      setDirty(true)
       finish(passed(value) ? 'completed' : 'failed', { config_source: value.config_source, ...(passed(value) ? {} : connectionTestFailure(value)) })
       if (passed(value)) {
         const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
@@ -568,9 +585,17 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       if (!model) model = 'gpt-4o-mini'
       const value = await probe(connection, model, false, 'analysis', probeKind, controller.signal)
       if (controller.signal.aborted) return
+      if (!logic.probeStillCurrent(settingsRef.current, 'analysis', connection.id, model)) {
+        finish('failed', { reason: 'cancelled' })
+        return
+      }
       emitValidation(connection, value)
-      const applied = logic.applyValidation(settingsRef.current || next, connection.id, value)
-      replace(applied)
+      setSettings(current => (
+        current && logic.probeStillCurrent(current, 'analysis', connection.id, model)
+          ? logic.applyValidation(current, connection.id, value)
+          : current
+      ))
+      setDirty(true)
       finish(passed(value) ? 'completed' : 'failed', { config_source: value.config_source, ...(passed(value) ? {} : connectionTestFailure(value)) })
       if (passed(value)) {
         const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }

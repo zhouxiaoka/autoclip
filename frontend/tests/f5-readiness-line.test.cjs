@@ -71,6 +71,28 @@ test('F5: missing ASR is ✗ with one-click install_whisper fix', () => {
   assert.equal(items[1].detail, '本地 small')
 })
 
+test('F5: configured vision shows the model; auto and subtitle keep 未启用', () => {
+  // Discussion #592 has no screenshot. These are the two before-start lines.
+  const configured = readiness.readinessLineItems(report({
+    visual: { ok: true, code: 'configured', repair: 'none', label: 'qwen3.8-flash' },
+  }))
+  assert.equal(configured[2].mark, 'ok')
+  assert.equal(configured[2].detail, 'qwen3.8-flash')
+  assert.equal(configured[2].needsFix, false)
+
+  const optional = readiness.readinessLineItems(report({
+    visual: { ok: true, code: 'optional', repair: 'none', label: '未启用' },
+  }))
+  assert.equal(optional[2].mark, 'dash')
+  assert.equal(optional[2].detail, '未启用')
+
+  const off = readiness.readinessLineItems(report({
+    visual: { ok: true, code: 'not_required', repair: 'none', label: '未启用' },
+  }))
+  assert.equal(off[2].mark, 'dash')
+  assert.equal(off[2].detail, '未启用')
+})
+
 test('F5: unchecked trial (null) does not show badge', () => {
   const items = readiness.readinessLineItems(report({
     analysis: { ok: true, code: 'configured', repair: 'none', label: 'gpt-4o', trial_ok: null },

@@ -37,6 +37,19 @@ const models = [
   { id: 'wanx2.1-t2i-turbo', analysis: false, image: true },
 ]
 
+test('a probe for the previous Ollama model does not replace the model the user just selected', () => {
+  const current = fresh()
+  current.connections = [conn('ollama', 'ollama', { base_url: 'http://localhost:11434/v1', validation_status: 'ok' })]
+  current.analysis = { connection_id: 'ollama', model: 'qwen2.5:7b', capability: 'auto' }
+  assert.equal(logic.probeStillCurrent(current, 'analysis', 'ollama', 'qwen2.5-coder:14b'), false)
+  const stamped = logic.probeStillCurrent(current, 'analysis', 'ollama', 'qwen2.5-coder:14b')
+    ? logic.applyValidation(current, 'ollama', { success: false, ok: false, error_type: 'unknown', result: 'failed' })
+    : current
+  assert.equal(stamped, current)
+  assert.equal(stamped.analysis.model, 'qwen2.5:7b')
+  assert.equal(stamped.connections[0].validation_status, 'ok')
+})
+
 test('Infistar gateway address survives save and validation without switching domains', () => {
   for (const host of ['infistar.ai', 'www.infistar.ai', 'infistar.cc', 'www.infistar.cc']) {
     const url = `https://${host}/v1`

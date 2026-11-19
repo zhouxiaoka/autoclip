@@ -7,6 +7,8 @@ export type TrialResultLike = {
   trial_context_ok?: boolean | null
   trial_rate_limited?: boolean | null
   trial_json_ok?: boolean | null
+  /** ok | format | no_answer | transport | context | rate. Empty when the trial did not classify an answer. */
+  trial_answer?: '' | 'ok' | 'format' | 'no_answer' | 'transport' | 'context' | 'rate'
   trial_avg_ms?: number | null
   trial_estimate_requests?: number | null
   trial_estimate_minutes?: number | null
@@ -22,15 +24,21 @@ export type TrialLine = {
   label: string
 }
 
+const TIMEOUT_LINE = '模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。'
+const NO_ANSWER_LINE = '模型只返回了思考过程，没有最终回答。请换一个会直接作答的模型。'
+
 export function trialLines(result: TrialResultLike | null | undefined): TrialLine[] {
   // Only a successful trial probe may paint the three lights. A failed address/key/kind
   // check used to hard-code trial_*=false and still render a fake 「速率 ✓」.
   if (!result || result.probe_kind !== 'trial') return []
   if (result.ok === false || result.success === false) return []
+  // A timeout or dropped request is not a context-window or JSON-format result.
+  if (result.trial_answer === 'transport') {
+    return [{ key: 'json', tone: 'fail', label: TIMEOUT_LINE }]
+  }
   const contextOk = result.trial_context_ok === true
   const rateLimited = result.trial_rate_limited === true
-  const jsonOk = result.trial_json_ok === true
-  return [
+  const lines: TrialLine[] = [
     {
       key: 'context',
       tone: contextOk ? 'ok' : 'fail',
@@ -41,12 +49,21 @@ export function trialLines(result: TrialResultLike | null | undefined): TrialLin
       tone: rateLimited ? 'warn' : 'ok',
       label: rateLimited ? '速率 ⚠（出现限流，长视频建议降并发）' : '速率 ✓',
     },
-    {
-      key: 'json',
-      tone: jsonOk ? 'ok' : 'fail',
-      label: jsonOk ? '输出格式 ✓' : '输出格式 ✗',
-    },
   ]
+  if (result.trial_answer === 'no_answer') {
+    lines.push({ key: 'json', tone: 'fail', label: NO_ANSWER_LINE })
+    return lines
+  }
+  // null means the attempt produced no visible answer to judge. Only an explicit
+  // false is a format failure; only an explicit true is a format pass.
+  if (result.trial_json_ok === true || result.trial_json_ok === false) {
+    lines.push({
+      key: 'json',
+      tone: result.trial_json_ok ? 'ok' : 'fail',
+      label: result.trial_json_ok ? '输出格式 ✓' : '输出格式 ✗',
+    })
+  }
+  return lines
 }
 
 export function trialEstimateCopy(result: TrialResultLike | null | undefined): string {
@@ -64,6 +81,33 @@ export function trialEstimateParts(result: TrialResultLike | null | undefined): 
   const m = result.trial_estimate_minutes
   if (typeof n !== 'number' || typeof m !== 'number') return null
   return { n, m }
+}
+
+/** Saved trial fields, used when the in-memory probe result is gone after a reload. */
+export function trialResultFromConnection(connection: {
+  trial_status?: string
+  trial_context_ok?: boolean | null
+  trial_rate_limited?: boolean | null
+  trial_json_ok?: boolean | null
+  trial_answer?: TrialResultLike['trial_answer']
+  trial_avg_ms?: number | null
+  trial_estimate_requests?: number | null
+  trial_estimate_minutes?: number | null
+} | null | undefined): TrialResultLike | null {
+  if (!connection || !connection.trial_status || connection.trial_status === 'unchecked') return null
+  return {
+    ok: true,
+    success: true,
+    probe_kind: 'trial',
+    trial_passed: connection.trial_status === 'passed',
+    trial_context_ok: connection.trial_context_ok,
+    trial_rate_limited: connection.trial_rate_limited,
+    trial_json_ok: connection.trial_json_ok,
+    trial_answer: connection.trial_answer,
+    trial_avg_ms: connection.trial_avg_ms,
+    trial_estimate_requests: connection.trial_estimate_requests,
+    trial_estimate_minutes: connection.trial_estimate_minutes,
+  }
 }
 
 export function showTrialFailedBadge(connection: {

@@ -2071,6 +2071,8 @@
   "速率 ⚠（出现限流，长视频建议降并发）": "Taxa ⚠ (limite de taxa — reduza a concorrência em vídeos longos)",
   "输出格式 ✓": "Formato de saída ✓",
   "输出格式 ✗": "Formato de saída ✗",
+  "模型只返回了思考过程，没有最终回答。请换一个会直接作答的模型。": "O modelo devolveu só o raciocínio, sem uma resposta final. Escolha um modelo que responda diretamente.",
+  "本机服务有响应，但这个模型在限时内没有给出回答。其他已列出的模型仍可选用，生成也不会因这次快速测试被整条连接拦住。": "O serviço local respondeu, mas este modelo não respondeu a tempo. Os outros modelos da lista continuam selecionáveis, e este teste rápido não bloqueia a geração de toda a conexão.",
   "预计 30 分钟素材约需 {{n}} 次请求、约 {{m}} 分钟": "Para ~30 min de material: ~{{n}} solicitações, ~{{m}} min",
   "大概率解析失败，不建议做分析": "Provável falha de análise — não recomendado",
   "推荐 qwen2.5:7b / 14b（中文）或 llama3.1:8b": "Recomendado: qwen2.5:7b / 14b (chinês) ou llama3.1:8b",

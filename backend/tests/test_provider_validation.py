@@ -1040,7 +1040,9 @@ def test_trial_run_context_error_fails_context(monkeypatch):
     _patch_httpx(monkeypatch, handler)
     result = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
     assert result['trial_context_ok'] is False
-    assert result['trial_json_ok'] is False
+    # The body never became a visible answer, so format is not what failed.
+    assert result['trial_json_ok'] is None
+    assert result['trial_answer'] == 'context'
     assert result['trial_passed'] is False
 
 

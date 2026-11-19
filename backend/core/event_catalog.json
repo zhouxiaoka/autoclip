@@ -764,7 +764,7 @@
           ]
         },
         "trial_context_ok": {
-          "description": "F2 trial: all three attempts fitted the context window.",
+          "description": "F2 trial: no attempt reported a context-window error. A timeout, transport failure, or missing visible answer does not clear this.",
           "format": "boolean"
         },
         "trial_rate_limited": {
@@ -772,7 +772,7 @@
           "format": "boolean"
         },
         "trial_json_ok": {
-          "description": "F2 trial: all three attempts returned parseable outline JSON.",
+          "description": "F2 trial: every attempt that returned visible answer text parsed as outline JSON. Omitted when an attempt had no visible answer or did not complete. Reasoning text is not an answer.",
           "format": "boolean"
         },
         "trial_avg_ms": {

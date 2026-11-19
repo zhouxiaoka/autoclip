@@ -42,6 +42,7 @@ export interface ValidationResult {
   trial_avg_ms?: number | null
   trial_estimate_requests?: number | null
   trial_estimate_minutes?: number | null
+  trial_answer?: '' | 'ok' | 'format' | 'no_answer' | 'transport' | 'context' | 'rate'
   trial_passed?: boolean | null
 }
 
