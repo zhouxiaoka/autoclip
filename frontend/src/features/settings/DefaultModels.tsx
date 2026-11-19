@@ -82,6 +82,8 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
     <Select<string, Choice> id={`ai-defaults-select-${purpose}`} aria-label={title} className="ac-purpose-select"
       showSearch optionFilterProp="label" listHeight={248} placeholder={t('搜索模型')}
       value={selected?.value ?? saved?.value} labelRender={({ label }) => label ?? saved?.label}
+      // Chromium's native search clear can reopen the menu after Select handles Escape.
+      onInputKeyDown={event => { if (event.key === 'Escape') event.preventDefault() }}
       options={choices}
       optionRender={({ data }) => <div className="ac-model-choice"><span>{data.label}</span>{data.hint && <small>{data.hint}</small>}</div>}
       notFoundContent={choices.length ? t('没有匹配的模型。') : t('请在下方的服务商设置中测试连接并启用模型。')}
