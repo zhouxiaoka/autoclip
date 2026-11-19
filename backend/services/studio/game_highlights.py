@@ -262,7 +262,8 @@ def _review_times(scene, reaction):
     return sorted(times)
 
 
-def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None, evidence_times=None):
+def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None, evidence_times=None,
+                    wins_only=False, confirmed_wins=None):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -292,6 +293,9 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
         "frame 用段内1–8的整数标出最清楚的证据帧，proof 记下可读标识或观察到的具体变化。"
         '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语","core":"极短主句"}]}。'
     )
+    if wins_only:
+        prompt += (" 此批只查本玩家整局胜利的最终结算。不能只因提到胜率、幸存人数或出现其他选手的第一名便报胜。"
+                   "务必核对结算页、冠军标识和归属，只写当前编号画面可证的事实。")
     if selection is not None:
         prompt += (" 每条再返回standalone：independent表示片内能独立验证一次值得回看的操作或结果，"
                    "routine表示普通进度和重复玩法，aftermath表示只见事后反应，unclear表示证据不足。"
@@ -364,6 +368,11 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                 if supported and isinstance(outcome, str)
                 else 0
             )
+            if supported and outcome == "match_win":
+                if confirmed_wins is not None:
+                    confirmed_wins.add(scene.id)
+            elif wins_only:
+                continue
             if selection is not None:
                 verdict = row.get("standalone")
                 if verdict not in ("independent", "routine", "aftermath", "unclear"):
@@ -580,6 +589,42 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
                   "audio_change_times": peaks, "selection": list(audit.values())}
 
 
+_RESULT_CUE = re.compile(
+    r"\b(?:(?:i|we|i've|we've)\s+(?:just\s+|finally\s+|have\s+)?won|"
+    r"win\s+rate|first\s+place|we(?:'re| are)\s+(?:the\s+)?champions)\b|"
+    r"吃鸡了|夺冠|拿下第一|拿了第一|赢了|胜率|優勝|勝率|勝った", re.I
+)
+
+
+def _recover_result_windows(video, rows, duration, prefs, ranked, confirmed):
+    # Retrospective commentary can follow the results by a whole subtitle cue.
+    # A phrase only authorizes a look inside the already enabled visual route.
+    windows = []
+    last_cue = -float("inf")
+    for at, _, text in rows:
+        if at - last_cue < prefs.duration or not _RESULT_CUE.search(text):
+            continue
+        last_cue = at
+        if any(s.id in confirmed and s.start <= at + prefs.duration and
+               s.end >= at - 1.6 * prefs.duration for s in ranked):
+            continue
+        for offset in (-1.6, -.8, 0):
+            start = max(0, min(duration - prefs.duration, at + offset * prefs.duration))
+            if not any(abs(start - s.start) < .5 for s in windows):
+                windows.append(Scene(id=uuid.uuid4().hex, start=start,
+                                     end=min(duration, start + prefs.duration)))
+        if len(windows) >= 9:
+            break
+    wins = review_outcomes(video, windows, prefs.language, wins_only=True) if windows else []
+    recovered = []
+    for win in wins:
+        if not any(min(win.end, s.end) > max(win.start, s.start) for s in recovered):
+            recovered.append(win)
+    return recovered + [s for s in ranked if not any(
+        min(win.end, s.end) - max(win.start, s.start) > .45 * min(win.end-win.start, s.end-s.start)
+        for win in recovered)]
+
+
 def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False):
     from backend.utils.speech_recognizer import generate_subtitle_for_video
 
@@ -693,10 +738,12 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
         selected.append(Scene(id=uuid.uuid4().hex, start=start, end=end, label=label))
         if len(selected) == (12 if frames_allowed else 6):
             break
+    if frames_allowed:
+        confirmed = set()
+        selected = review_outcomes(video, selected, prefs.language, confirmed_wins=confirmed)
+        selected = _recover_result_windows(video, rows, duration, prefs, selected, confirmed)[:6]
     if not selected:
         raise UserFacingError("解说中未识别到有完整动作和结果的游戏片段")
-    if frames_allowed:
-        selected = review_outcomes(video, selected, prefs.language)[:6]
     return [
         Draft(
             id=uuid.uuid4().hex,

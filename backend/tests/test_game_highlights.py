@@ -360,3 +360,23 @@ def test_grid_keeps_indices_when_a_counter_row_is_unreadable(tmp_path, monkeypat
     track = games._read_counter_grid(tmp_path, 12, goal)
     assert track["values"] == [None] * 6 + [7, 8, 9, 10, 11, 12]
     assert games._visible_goal_changes([track], 12)[0]["after"] == 10
+
+
+def test_retrospective_cue_can_only_add_a_visually_confirmed_win(monkeypatch, tmp_path):
+    from backend.services.studio.models import Scene
+
+    prefs = Preferences(goal="highlight", duration=45)
+    ordinary = Scene(id="placement", start=5, end=50, label="Eighth place")
+    rows = [(140, 150, "That's quite a win rate")]
+    monkeypatch.setattr(intelligence, "sample", lambda *a, **kw: [])
+    def inspect_group(phase, parts):
+        import re
+        ids = re.findall(r"候选编号 ([\w-]+)", str(parts))
+        return {"reviews": [dict(id=i, frame=6, proof="Final results", subject="First place",
+                                 final_for_player=(n == 0), outcome="match_win") for n,i in enumerate(ids)]}
+    monkeypatch.setattr(intelligence, "vision_call_at", inspect_group)
+    ranked = games._recover_result_windows(tmp_path/"video", rows, 240, prefs, [ordinary], set())
+    assert len(ranked) == 2 and ranked[0].start < 100 < ranked[0].end
+    assert ranked[1].id == ordinary.id
+    monkeypatch.setattr(intelligence, "vision_call_at", lambda *a: pytest.fail("duplicate verification"))
+    assert games._recover_result_windows(tmp_path/"video", rows, 240, prefs, ranked, {ranked[0].id}) == ranked
