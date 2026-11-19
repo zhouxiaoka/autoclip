@@ -130,6 +130,18 @@ def test_a3_2_submit_production_exhausted_makes_no_llm_calls(tmp_path, monkeypat
     assert gen.get('billable_calls_before_failure') == 0
 
 
+def test_quota_cache_separates_keys_with_the_same_prefix(monkeypatch):
+    from backend.core import quota_precheck as qp
+
+    def probe(_base, key):
+        return 'exhausted' if key.endswith('empty') else 'ok'
+
+    monkeypatch.setattr(qp, '_probe_new_api', probe)
+    args = {'provider': 'api88', 'base_url': 'https://example.invalid/v1'}
+    assert qp.check_quota(**args, api_key='test-credential-empty') == 'exhausted'
+    assert qp.check_quota(**args, api_key='test-credential-funded') == 'ok'
+
+
 def test_import_exposes_a_coded_quota_refusal(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
