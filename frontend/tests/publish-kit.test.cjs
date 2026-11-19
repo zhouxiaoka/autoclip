@@ -33,9 +33,3 @@ test('the kit retains its complete cover preview',()=>{
  assert.match(kit,/<img src=\{coverUrl\}/)
  assert.match(card,/coverStamp=\{coverStamp\}/)
 })
-
-test('automatic projects list their outputs only: raw clips have no video file to preview or download',()=>{
- const results=read('src/features/studio/StudioResults.tsx')
- assert.match(results,/\{loaded && !automatic && children\}/)
- assert.match(read('src/features/studio/useWorkspace.ts'),/setLoaded\(true\)/)
-})

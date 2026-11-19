@@ -1,4 +1,10 @@
 {
+  "已导出": "Exporté",
+  "待导出": "À exporter",
+  "发布设置": "Paramètres de publication",
+  "发布账号": "Comptes de publication",
+  "配置发布账号": "Configurer un compte",
+  "连接账号后，即可将成片发布到平台。": "Connectez un compte pour publier cette vidéo sur vos plateformes.",
   "画面结果不可用，已改用字幕继续制作。": "Résultat visuel indisponible ; passage aux sous-titres pour continuer.",
   "视觉服务暂不可用，已切换为字幕分析继续制作。": "L’analyse visuelle est temporairement indisponible. Le passage à l’analyse des sous-titres permet de poursuivre la création des clips.",
   "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Certains paramètres d’IA sont illisibles. Sélectionnez à nouveau le service et saisissez la clé. Les paramètres d’origine sont conservés ; une copie des fichiers endommagés est créée lors de l’enregistrement des corrections.",

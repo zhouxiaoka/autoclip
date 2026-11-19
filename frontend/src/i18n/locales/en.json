@@ -1,4 +1,10 @@
 {
+  "已导出": "Exported",
+  "待导出": "Not exported",
+  "发布设置": "Publishing settings",
+  "发布账号": "Publishing accounts",
+  "配置发布账号": "Set up an account",
+  "连接账号后，即可将成片发布到平台。": "Connect an account to publish this video to your platforms.",
   "画面结果不可用，已改用字幕继续制作。": "Visual result unavailable; switched to subtitles to continue.",
   "视觉服务暂不可用，已切换为字幕分析继续制作。": "Vision is temporarily unavailable. Switched to subtitle analysis to continue creating clips.",
   "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Some AI settings could not be read. Select the service and enter the key again. The original settings are preserved; damaged files are backed up when you save the corrections.",

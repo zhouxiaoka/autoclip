@@ -5,11 +5,11 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage, error = 'failure', message = 'screening') {
+function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage, error = 'failure', message = 'screening', items = {}) {
   const workspace = {
     analysis: { status, phase, message, error, error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
-    drafts: [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
+    drafts: items.drafts || [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
   }
   const exportsObject = {}
   const children = ({ children }) => React.createElement('div', null, children)
@@ -25,7 +25,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     if (name === './studioProgress') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/features/studio/studioProgress.ts'))
     if (name === '../../i18n') return { t: value => value, getLocale: () => 'zh' }
     if (name === '../../ui') return { Btn: props => { buttons.push(props); return React.createElement('button', null, props.children) },
-      Section: ({ children, description, right }) => React.createElement('section', null, description, right, children),
+      Section: ({ children, title, count, description, right }) => React.createElement('section', { 'aria-label':title, 'data-count':count }, description, right, children),
       Dialog: empty, fmtDuration: String }
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args), retry: async (...args) => calls.push(['retry', ...args]) }, errorText: String }
@@ -71,7 +71,8 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { exports: exportsObject, require: moduleRequire, URLSearchParams })
   return renderToStaticMarkup(React.createElement(exportsObject.default, {
-    project: { id: 'test', status: 'processing', settings: { smart_import: {} }, clips: [], collections: [] },
+    project: { id: 'test', status: 'processing', settings: { smart_import: {} }, clips: items.clips || [], collections: [] },
+    children: React.createElement('article', null, 'source-card'),
     onCreateCollection() {}, onReload() {},
   }))
 }
@@ -489,4 +490,20 @@ test('existing settings entries stay on their own failures', () => {
   render(true, 'production', 'failed', invalid, [], 'invalid_key', 'analyze')
   assert.ok(labels(invalid).includes('去设置'))
   assert.equal(labels(invalid).includes('重试'), false)
+})
+
+test('manual results count drafts separately and keep source actions reachable, including clip-only projects', () => {
+  const { Window } = require('happy-dom')
+  const mixed = { drafts: [{ id: 'd1' }, { id: 'd2' }], clips: [{ id: 'c1' }] }
+  const view = (automatic, items) => {
+    const { document } = new Window()
+    document.body.innerHTML = render(automatic, 'production', 'completed', [], [], undefined, undefined, '', '', items)
+    return document
+  }
+  const document = view(false, mixed)
+  assert.equal(document.querySelector('section').dataset.count, '2')
+  assert.doesNotMatch(document.querySelector('.studio-result-grid').textContent, /source-card/)
+  assert.match(document.querySelector('details').textContent, /source-card/)
+  assert.match(view(false, {clips: mixed.clips}).querySelector('.studio-result-grid').textContent, /source-card/)
+  assert.doesNotMatch(view(true, mixed).body.textContent, /source-card/)
 })
