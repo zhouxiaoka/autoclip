@@ -9,7 +9,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const workspace = {
     analysis: { status, phase, message, error, error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
-    drafts: items.drafts || [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
+    drafts: items.drafts || [], jobs: [], events: [], output_variants: items.variants || [], attempts: attemptsOverride.value || undefined,
   }
   const exportsObject = {}
   const children = ({ children }) => React.createElement('div', null, children)
@@ -98,6 +98,34 @@ test('manual screening keeps its confirmation guidance', () => {
 })
 test('failed automatic generation does not claim AI is still producing', () => {
   assert.doesNotMatch(render(true, 'screening', 'failed'), /AI 正在按所选平台制作成片/)
+})
+
+test('completed export reports model packaging separately for the current attempt and older projects', () => {
+  const warning = /部分包装未完整生成/
+  const settled = { auto_start: true, status: 'completed', attempt_id: 'latest' }
+  const items = { drafts: [{ id: 'd', revision: 1, packaging: { fallback: true } }],
+    variants: [{ id: 'v', status: 'completed', draft_id: 'd', draft_revision: 1 }] }
+  const renderDone = () => render(true, 'rendering', 'completed', [], [], undefined, undefined, '', '', items)
+  try {
+    generationOverride.value = settled
+    attemptsOverride.value = [{ attempt_id: 'old', summary: { packaging_fallback_count: 1 } },
+      { attempt_id: 'latest', summary: { packaging_fallback_count: 0 } }]
+    assert.doesNotMatch(renderDone(), warning)
+    attemptsOverride.value[1].summary.packaging_fallback_count = 1
+    assert.match(renderDone(), warning)
+    assert.doesNotMatch(renderDone(), /可发布成片/)
+    generationOverride.value = { ...settled, not_redone_failed_count: 1 }
+    assert.match(renderDone(), /之前还有/)
+    assert.match(renderDone(), warning)
+    generationOverride.value = { auto_start: true, status: 'completed' }
+    attemptsOverride.value = []
+    assert.match(renderDone(), warning)
+    items.drafts[0].revision = 2
+    assert.doesNotMatch(renderDone(), warning)
+  } finally {
+    generationOverride.value = null
+    attemptsOverride.value = null
+  }
 })
 
 test('X1 two same-code failures lead with diagnose and keep retry secondary', () => {

@@ -80,10 +80,17 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const cookieRecovery = workspace.analysis?.status === 'failed' && browserCookieRecovery(failedCode, workspace.analysis?.error)
   // the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
-  const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
-    : workspace.generation?.status === 'completed' ? t('已按所选平台生成可发布成片。')
+  const attemptId = workspace.generation?.attempt_id
+  const fallbackCount = workspace.attempts?.find(receipt => receipt.attempt_id === attemptId)?.summary?.packaging_fallback_count
+  const incompletePackaging = (workspace.generation?.status === 'completed' || workspace.generation?.status === 'partial') &&
+    (attemptId ? typeof fallbackCount === 'number' && fallbackCount > 0 : workspace.output_variants?.some(variant =>
+      variant.status === 'completed' && workspace.drafts.some(draft =>
+        draft.id === variant.draft_id && draft.revision === variant.draft_revision && draft.packaging?.fallback)))
+  const outputStatus = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
+    : workspace.generation?.status === 'completed' ? t(incompletePackaging ? '已导出 · 可下载' : '已按所选平台生成可发布成片。')
     : workspace.generation?.status === 'partial' ? t('部分成片已完成，未完成版本可稍后重试。')
       : workspace.generation?.status === 'failed' ? t(sourceUnusable ? '这个素材无法使用' : '这次制作未完成') : t('AI 正在按所选平台制作成片。')
+  const generationDescription = incompletePackaging ? `${outputStatus} ${t('部分包装未完整生成，详情见下方成片。')}` : outputStatus
   const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
   const variantJob = (jobId?: string) => workspace.jobs.find(job => job.job_id === jobId)
   const latest = useRef(workspace)
