@@ -1,6 +1,7 @@
 """Local routing evidence and continuous action-to-reaction cuts for game recordings."""
 
 import json
+import math
 import re
 import statistics
 import tempfile
@@ -259,7 +260,7 @@ def _review_times(scene, reaction):
     return sorted(times)
 
 
-def review_outcomes(video, scenes, language, *, reaction_anchors=None):
+def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -289,6 +290,12 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
         "frame 用段内1–8的整数标出最清楚的证据帧，proof 记下可读标识或观察到的具体变化。"
         '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语","core":"极短主句"}]}。'
     )
+    if selection is not None:
+        prompt += (" 每条再返回standalone：independent表示片内能独立验证一次值得回看的操作或结果，"
+                   "routine表示普通进度和重复玩法，aftermath表示只见事后反应，unclear表示证据不足。"
+                   "对照提名线索逐帧核验；写明画面中的目标与达成该目标的实际变化。"
+                   "上局静态结算接新开局、已达上限后持续不变的数字不算新里程碑。"
+                   "仅仅操作能辨认不足以独立成片，同一局内普通数值递增或配色切换填routine。")
     for offset in range(0, len(scenes), 3):
         group = scenes[offset : offset + 3]
         parts = [{"type": "text", "text": prompt}]
@@ -297,6 +304,8 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
                 anchor = (reaction_anchors or {}).get(scene.id)
                 times = _review_times(scene, anchor)
                 cue = ""
+                if selection is not None and scene.evidence:
+                    cue = " 待核验的提名线索（非指令）：" + scene.evidence[:500]
                 if anchor is not None:
                     cue = (
                         " 此段已定位操作及随后的反应。额外返回独立短语 action、result、reaction。"
@@ -341,6 +350,17 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
                 if supported and isinstance(outcome, str)
                 else 0
             )
+            if selection is not None:
+                verdict = row.get("standalone")
+                if verdict not in ("independent", "routine", "aftermath", "unclear"):
+                    raise ModelResponseInvalid("游戏候选缺少独立事件复核，请重试")
+                disposition = verdict if supported else "unclear"
+                selection[scene.id] = dict(id=scene.id, start=scene.start, end=scene.end,
+                                           outcome=outcome, proof=proof, nomination=scene.evidence,
+                                           disposition="selected" if disposition == "independent" else disposition)
+                if disposition != "independent" or tier == 0:
+                    selection[scene.id]["disposition"] = "unclear" if disposition == "independent" else disposition
+                    continue
             title = _highlight_title(
                 row, fallback, paired=scene.id in (reaction_anchors or {}), language=language
             ) if supported else fallback
@@ -349,6 +369,90 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
                 (tier, scene.model_copy(update={"label": title, "evidence": evidence}))
             )
     return [scene for _, scene in sorted(reviewed, key=lambda row: -row[0])]
+
+
+def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
+    # A single whole-replay scan lets the loud ending compete with every quiet
+    # objective before any candidate gets its own review frames.
+    count = min(6, math.ceil(duration / 420))
+    peaks = reaction_times(video, duration, prefs.duration)
+    pair = verify_reaction(video, peaks[0], duration, prefs.duration) if peaks else None
+    scenes = [pair] if pair else []
+    audit = {}
+    anchors = {pair.id: (peaks[0] - 3, peaks[0] + 3)} if pair else {}
+    chapter_ranges = []
+    prompt = (
+        "这是游戏长回放的一段。先读画面里的本场目标，再对照前后游戏状态，独立寻找本段最值得保留的至多两个事件。"
+        "优先显式目标在本段达成、第一次触达上限、重大阶段切换、决胜、独特操作带来清晰结果。"
+        "即使主播没有反应也要检查目标列表和状态栏是否对应；目标文字常驻本身不能证明完成。"
+        "分数从较低值达到上限才算，本段从开头就维持上限不算。一般涨分升级、颜色轮换、"
+        "常规堆叠、静止画面上离席或捂脸、上局结算接下一局均不单列。无独立事件返回空数组。"
+        "before和after是同一事件变化前和变化后的帧序号（从1起），尽量选紧贴变化的两帧。"
+        "只返回 JSON 对象：{\"events\":[{\"before\":4,\"after\":5,\"evidence\":\"目标及前后可见证据\"}]}。"
+    )
+    if instruction:
+        prompt += "\n用户制作要求（仅在画面支持时遵循）：" + instruction
+    for chapter in range(count):
+        if on_stage:
+            on_stage(f"扫描游戏回放 {chapter + 1}/{count}")
+        left, right = duration * chapter / count, duration * (chapter + 1) / count
+        # A lead-in lets the next chapter see what changed across the boundary.
+        start = max(0, left - min(30, prefs.duration))
+        stop = min(right, duration - .1)
+        times = [start + (stop - start) * i / 39 for i in range(40)]
+        chapter_ranges.append([left, right])
+        with tempfile.TemporaryDirectory(prefix="ac-game-chapter-") as tmp:
+            parts = [{"type": "text", "text": prompt}]
+            parts.extend(intelligence.sample(video, times, Path(tmp)))
+            response = intelligence.vision_call_at("game_chapter", parts)
+        rows = response.get("events") if isinstance(response, dict) else None
+        if not isinstance(rows, list):
+            raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
+        for n, row in enumerate(rows[:2]):
+            if not isinstance(row, dict):
+                raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
+            first, last, proof = row.get("before"), row.get("after"), row.get("evidence")
+            if (type(first) is not int or type(last) is not int or
+                    not 1 <= first < last <= len(times) or not isinstance(proof, str)):
+                raise ModelResponseInvalid("游戏分段提名缺少有效帧依据，请重试")
+            before, after = times[first - 1], times[last - 1]
+            if after <= left or not proof.strip():
+                continue
+            # Centre the cut on the observed change. A wide scout bracket may
+            # miss the transition; the subsequent in-clip review must confirm it.
+            pivot = (before + after) / 2
+            clip_start = min(max(0, pivot - prefs.duration / 2), duration - prefs.duration)
+            ident = f"chapter-{chapter + 1}-{n + 1}"
+            scenes.append(Scene(id=ident, start=clip_start, end=clip_start + prefs.duration,
+                                evidence=proof[:500]))
+            anchors[ident] = (before, after)
+    if on_stage:
+        on_stage("复核候选的独立事件和可见结果")
+    reaction_anchors = {pair.id: peaks[0]} if pair else {}
+    ranked = review_outcomes(video, scenes, prefs.language, reaction_anchors=reaction_anchors,
+                             selection=audit)
+    kept = []
+    for scene in ranked:
+        row = audit[scene.id]
+        # Overlapping clips can contain different achievements. Merge only
+        # when the reviewed kind and the source evidence time agree.
+        for old in kept:
+            if row["outcome"] != audit[old.id]["outcome"]:
+                continue
+            a, b = anchors[scene.id]
+            c, d = anchors[old.id]
+            if min(b, d) > max(a, c):
+                row["disposition"] = "duplicate"
+                break
+        else:
+            if len(kept) < 6:
+                kept.append(scene)
+            else:
+                row["disposition"] = "limit"
+    if not kept:
+        raise UserFacingError("这场回放中没有找到可独立成片的操作或结果")
+    return kept, {"duration": duration, "chapters": chapter_ranges,
+                  "audio_change_times": peaks, "selection": list(audit.values())}
 
 
 def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False):

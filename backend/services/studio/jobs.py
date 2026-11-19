@@ -1422,7 +1422,7 @@ def _auto_generate(project_id, plan):
     skipped = []
     try:
         video = source(project_id)
-        derived_drafts, variants, events = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
+        derived_drafts, variants, events, coverage = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
 
         def persist(data):
             if not _still_this_run(data, attempt_id, run_id):
@@ -1430,6 +1430,8 @@ def _auto_generate(project_id, plan):
             data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
             if events:
                 data['events'] = events
+            if coverage and 'chapters' in coverage:
+                data['generation']['game_selection'] = coverage
             attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
@@ -1541,7 +1543,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
     _queue_best_first(variants)
     if not variants:
         raise UserFacingError(sentence('no_complete_version'))
-    return derived_drafts, variants, events
+    return derived_drafts, variants, events, coverage
 
 
 

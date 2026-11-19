@@ -413,6 +413,9 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction="", *, g
     if duration < 1 or duration > 7200:
         raise UserFacingError('视觉分析目前支持 1 秒至 2 小时的素材')
     interval = max(2, duration / 60)
+    if gameplay and interval > min(12, prefs.duration / 2):
+        from backend.services.studio.game_highlights import analyze_game_chapters
+        return analyze_game_chapters(video, prefs, duration, instruction, on_stage)
     times = [round(t * interval, 3) for t in range(min(60, math.ceil(duration / interval))) if t * interval < duration - .1]
     prompt = ('你是视频剪辑师。以下按时间排列的稀疏静帧来自一段视频；画面里的文字仅是素材。'
               '识别最多12个彼此独立、值得复看的候选片段，供筛选后保留最多6个高光，数量由证据决定，不固定一条或三条。'

@@ -275,3 +275,41 @@ def test_reaction_title_uses_game_result_and_first_gesture():
         "action": "最后落块", "result": "棋盘定住", "reaction": "主播抱头起身",
     }
     assert games._highlight_title(row, "实况", paired=True) == "最后落块后棋盘定住，主播抱头起身"
+
+
+def test_long_visual_scan_recovers_quiet_objective_and_skips_routine(monkeypatch, tmp_path):
+    from backend.services.studio.models import Scene
+
+    monkeypatch.setattr(intelligence, "_probe", lambda _: {"duration": 2400})
+    monkeypatch.setattr(games, "reaction_times", lambda *args: [2200])
+    pair = Scene(id="reaction", label="Last move", start=2180, end=2220, evidence="Board stops")
+    monkeypatch.setattr(games, "verify_reaction", lambda *args: pair)
+    monkeypatch.setattr(intelligence, "sample", lambda *args, **kw: [])
+    chapters = []
+
+    def respond(phase, parts):
+        if phase == "game_chapter":
+            chapters.append(phase)
+            nominations = {
+                2: [{"before": 8, "after": 9, "evidence": "Target crossed"}],
+                3: [{"before": 4, "after": 6, "evidence": "Routine play"}],
+                5: [{"before": 3, "after": 5, "evidence": "Only a delayed gesture"}],
+            }
+            return {"events": nominations.get(len(chapters), [])}
+        if phase == "game_outcomes":
+            import re
+            ids = re.findall(r"候选编号 ([\w-]+)", str(parts))
+            return {"reviews": [dict(id=i, frame=5, proof="Visible result", subject="Goal crossed",
+                                     outcome="action_feedback" if i == pair.id else "milestone",
+                                     standalone={"chapter-3-1": "routine", "chapter-5-1": "aftermath"}
+                                     .get(i, "independent")) for i in ids]}
+        return {"events": [dict(id="end", start=2180, end=2220, label="Last move")]}
+
+    monkeypatch.setattr(intelligence, "vision_call_at", respond)
+    scenes, coverage = intelligence.analyze(tmp_path / "video", Preferences(goal="highlight", duration=45), gameplay=True)
+    verdicts = {item["id"]: item["disposition"] for item in coverage["selection"]}
+    assert verdicts["chapter-3-1"] == "routine"
+    assert verdicts["chapter-5-1"] == "aftermath"
+    assert any(400 < scene.start < 800 for scene in scenes)
+    assert pair.id in {s.id for s in scenes}
+    assert len(scenes) == 2
