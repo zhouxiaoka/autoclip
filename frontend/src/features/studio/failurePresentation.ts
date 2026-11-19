@@ -204,7 +204,7 @@ function reasonFor(input: PresentInput): string {
   return text
 }
 
-function recoveryFor(input: PresentInput): PrimaryAction {
+function primaryFor(input: PresentInput): PrimaryAction {
   if (weakLocalTimelineFailure(input.error, input.error_code)) {
     return { id: 'settings', label: '去配置模型', destination: '/settings?section=analysis' }
   }
@@ -246,7 +246,7 @@ function recoveryFor(input: PresentInput): PrimaryAction {
 
 export function presentFailure(input: PresentInput): FailureView {
   const preserved = Math.max(0, Number(input.preservedCount) || 0)
-  const recovery = recoveryFor(input)
+  const recovery = primaryFor(input)
   const requests = Number(input.llm_calls)
   const successes = Number(input.billable_calls_before_failure)
   const duration = (!input.error_code || ['timeline_empty', 'unexpected', 'unknown'].includes(input.error_code))
