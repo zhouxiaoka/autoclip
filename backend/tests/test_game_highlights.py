@@ -263,5 +263,5 @@ def test_verified_reaction_gets_close_views_without_losing_window_ends():
     times = games._review_times(scene, 59)
     assert len(times) == len(set(times)) == 8
     assert times == sorted(times)
-    assert {57, 59, 61, coarse[0], coarse[-1]} <= set(times)
+    assert {55, 58, 59, 61, coarse[0], coarse[-1]} <= set(times)
     assert games._review_times(scene, 85) == coarse

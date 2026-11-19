@@ -232,10 +232,10 @@ def _review_times(scene, reaction):
     span = scene.end - scene.start
     times = [scene.start + span * (i + 0.5) / 8 for i in range(8)]
     if reaction is not None and scene.start < reaction < scene.end:
-        # Keep full-window context and reserve three views for a fleeting gesture.
-        step = min(2, span / 16, reaction - scene.start, (scene.end - reaction) / 2)
-        nearest = sorted(range(1, 7), key=lambda i: abs(times[i] - reaction))[:3]
-        for index, at in zip(nearest, (reaction - step, reaction, reaction + step)):
+        # Keep full-window context and include the onset before the loudest moment of a gesture.
+        step = min(1, span / 24, (reaction - scene.start) / 5, (scene.end - reaction) / 3)
+        nearest = sorted(range(1, 7), key=lambda i: abs(times[i] - reaction))[:4]
+        for index, at in zip(nearest, (reaction - 4 * step, reaction - step, reaction, reaction + 2 * step)):
             times[index] = at
     return sorted(times)
 
@@ -257,7 +257,9 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
         "把核验依据和给观众看的标题分开。proof 可以详细写，标题只留最重要的动作和结果。"
         "subject 用一个短句直写改变了什么；有最终名次就直说赢下比赛或获得第几。"
         "不要罗列中途等级、分数、玩家名、画面方位，除非该信息就是这条的看点。"
-        "如果画面从最后一次操作转为静止，写明操作和游戏画面定住；不要猜卡死、世界纪录。"
+        "主语和动词要能在画面上指出来（移动、落下、越线等）。不要把面板数字或颜色的变化解释为"
+        "翻转、通关、创纪录等机制或成就。画面从运动转为静止时，写出最后一个可见动作和哪个物体停住。"
+        "proof 依次核对动作结束前、结果出现、反应发生时的画面。角色手碰到头、站起等比泛称张臂反应更具体。"
         "detail 通常留空。只有紧接着发生、看得清、值得留下的结果或肢体动作才补一个短语，"
         "直接写抱头、起身等具体动作，不写明显反应等套话，不猜心情和动机。"
         "画面始终静止时不能编造最后一次操作。人物离开镜头不能据此猜测起身。"
