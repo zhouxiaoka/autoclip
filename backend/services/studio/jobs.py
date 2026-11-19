@@ -843,7 +843,8 @@ def _content_drafts(project_id, plan, video, platforms=()):
         # still matches every short-platform import.
         if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
             from backend.services.studio.game_highlights import subtitle_drafts
-            return subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''))
+            return subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
+                                   auto_frame_review=(plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto')
         clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
         from backend.utils.text_processor import TextProcessor
         picked = []
@@ -1179,7 +1180,13 @@ def _posts_for(project_id, items, cache):
         key, (value, platforms) = entry
         lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
         title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
-        return key, post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        posts = post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        if (cache.get('gameplay') and 'original' in posts
+                and value.get('origin') in ('subtitle-highlight', 'visual-highlight')):
+            # The original-format publish card shares the reviewed clip title.
+            # Platform adaptations keep their own language and length contracts.
+            posts['original']['title'] = post_copy.fallback(value['title'], 'original')['title']
+        return key, posts
 
     try:
         with llm_usage.stage('post_copy'):
@@ -1312,6 +1319,7 @@ def _packaging_inputs(project_id, cache):
         meta = state.get('source_meta') or {}
         cache['names'] = f"{meta.get('title', '')} {meta.get('channel', '')}"
         cache['burned_language'] = (state.get('generation') or {}).get('burned_caption_language')
+        cache['gameplay'] = (state.get('plan') or {}).get('content_type') == 'gameplay'
 
 
 def _prefetch_packaging(project_id, items, burned, cache):

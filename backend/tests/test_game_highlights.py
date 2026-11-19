@@ -97,3 +97,112 @@ def test_no_visual_pair_when_evidence_is_only_a_reaction(tmp_path, monkeypatch):
     monkeypatch.setattr(intelligence, "sample", lambda *a: [])
     monkeypatch.setattr(intelligence, "vision_call_at", lambda *a: {"events": []})
     assert games.verify_reaction(tmp_path / "video", 82, 180, 30) is None
+
+
+def test_verified_win_outranks_placement_and_titles_use_observations(
+    monkeypatch, tmp_path
+):
+    from backend.services.studio.models import Scene
+
+    scenes = [
+        Scene(id="top", start=0, end=20, label="Top ten"),
+        Scene(id="win", start=22, end=45, label="He must be furious"),
+    ]
+    monkeypatch.setattr(intelligence, "sample", lambda *a, **kw: [])
+
+    def reply(*args):
+        return {
+            "reviews": [
+                {
+                    "id": "win",
+                    "outcome": "match_win",
+                    "final_for_player": True,
+                    "proof": "Final Results: 1st",
+                    "frame": 5,
+                    "subject": "First place on the results screen",
+                    "detail": "He looks devastated",
+                },
+                {
+                    "id": "top",
+                    "outcome": "placement",
+                    "proof": "Final Results: 8th",
+                    "frame": 4,
+                    "subject": "Eighth place on the results screen",
+                    "detail": "",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(intelligence, "vision_call_at", reply)
+    reviewed = games.review_outcomes(tmp_path / "video", scenes, "en")
+    assert [s.id for s in reviewed] == ["win", "top"]
+    assert reviewed[0].label == "First place on the results screen"
+    assert [(s.start, s.end) for s in reviewed] == [(22, 45), (0, 20)]
+
+
+def test_other_players_result_cannot_promote_or_title_clip(monkeypatch, tmp_path):
+    from backend.services.studio.models import Scene
+
+    monkeypatch.setattr(intelligence, "sample", lambda *a, **k: [])
+    monkeypatch.setattr(
+        intelligence,
+        "vision_call_at",
+        lambda *a: {
+            "reviews": [
+                {
+                    "id": "other",
+                    "outcome": "match_win",
+                    "final_for_player": False,
+                    "frame": 5,
+                    "proof": "Opponent won",
+                    "subject": "Winner!",
+                },
+                {
+                    "id": "ours",
+                    "outcome": "placement",
+                    "frame": 7,
+                    "proof": "8th",
+                    "subject": "Finish in eighth place",
+                },
+            ]
+        },
+    )
+    scenes = [
+        Scene(id=x, start=i * 10, end=i * 10 + 9)
+        for i, x in enumerate(["other", "ours"])
+    ]
+    ranked = games.review_outcomes(tmp_path / "recording", scenes, "en")
+    assert [s.id for s in ranked] == ["ours", "other"]
+    assert ranked[-1].label == "Gameplay clip"
+
+
+def test_original_game_post_keeps_reviewed_title(tmp_path, monkeypatch):
+    from backend.services.studio import jobs, post_copy
+
+    monkeypatch.setattr(
+        jobs,
+        "_packaging_inputs",
+        lambda _, cache: cache.update(gameplay=True, entries=[]),
+    )
+    monkeypatch.setattr(
+        post_copy,
+        "build_posts",
+        lambda *a, **kw: {
+            "original": {
+                "title": "He looks devastated",
+                "description": "Clip",
+                "tags": [],
+            }
+        },
+    )
+    value = {
+        "title": "Board stops moving",
+        "origin": "visual-highlight",
+        "scenes": [{"start": 0, "end": 10}],
+    }
+    posts = jobs._posts_for("test", [("original", value)], {})
+    assert next(iter(posts.values())) == {
+        "title": "Board stops moving",
+        "description": "Clip",
+        "tags": [],
+    }

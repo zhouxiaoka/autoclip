@@ -443,7 +443,7 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction="", *, g
         on_stage('扫描画面，寻找候选高光')
     with tempfile.TemporaryDirectory(prefix='ac-vision-') as tmp:
         response = vision_call_at('scan', [{'type': 'text', 'text': prompt}] + sample(video, times, Path(tmp)))
-    events, selection = select_highlights(response.get('events', []), duration, max_duration=prefs.duration)
+    events, selection = select_highlights(response.get('events', []), duration, limit=12 if gameplay else 6, max_duration=prefs.duration)
     if any(e.end - e.start > prefs.duration + .1 for e in events):
         raise ModelResponseInvalid('模型选段超出期望时长，请重试')
     # Refine the strongest candidate with a denser second pass; preserve exact source timestamps.
@@ -497,13 +497,23 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction="", *, g
                             item['disposition'] = 'replaced_by_verified_pair'
                 else:
                     kept.append(event)
-            events = [pair, *kept[:5]]
+            events = [pair, *kept[:11]]
             for item in selection:
                 if item['disposition'] == 'selected' and item['id'] not in {e.id for e in events}:
                     item['disposition'] = 'limit'
             selection.insert(0, {'id':pair.id, 'label':pair.label, 'start':pair.start, 'end':pair.end,
                                  'event_type':'gameplay', 'watch_score':None, 'selection_reason':pair.evidence,
                                  'disposition':'selected'})
+    if gameplay:
+        from backend.services.studio.game_highlights import review_outcomes
+        events = review_outcomes(video, events, prefs.language)[:6]
+        selected = {e.id:e for e in events}
+        for item in selection:
+            if item['id'] in selected:
+                event = selected[item['id']]
+                item.update(label=event.label, selection_reason=event.evidence, start=event.start, end=event.end)
+            elif item['disposition'] == 'selected':
+                item['disposition'] = 'limit'
     return events, {'duration': duration, 'sample_interval': interval, 'refine_interval': dense_interval, **({'audio_change_times': peaks, 'verified_reaction_id': verified_id} if gameplay else {}), 'selection': selection, 'refined_event_id': best.id if refined else None, 'note': '基于有序静帧筛选并按观看价值排序，已排除模型明确标记的纯菜单、领奖和加载画面；分类与排序仍需人工核对，不代表投放效果。未标记类型的旧接口结果会保留。'}
 
 def assemble_sequences(events, prefs, source_duration):

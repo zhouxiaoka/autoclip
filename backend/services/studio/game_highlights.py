@@ -1,6 +1,7 @@
 """Local routing evidence and continuous action-to-reaction cuts for game recordings."""
 
 import json
+import re
 import statistics
 import tempfile
 import subprocess
@@ -149,7 +150,7 @@ def verify_reaction(video, at, duration, target):
     times = [left + (right - left) * i / 24 for i in range(25)]
     prompt = (
         "核验这一段游戏实况是否清晰拍到一次关键操作、游戏结果以及随后的可见反应或反馈。"
-        "核对连续画面的局面变化、最后一个操作和反馈，声音变化只用于找位置。"
+        "核对连续画面的局面变化、最后一个操作和反馈，声音变化只用于找位置。标题只写画面可见的动作与结果，保留客观的肢体动作。"
         '若只是闲聊、已经静止的结算或同一动作的重复画面，返回 {"events":[]}。'
         '确认动作与结果有关联时只返回一项 {"events":[{"action":操作时间秒,"reaction":反馈时间秒,'
         '"label":"简短标题","evidence":"指出哪个时间画面发生何种变化"}]}。使用提供的原片绝对时间。'
@@ -188,7 +189,118 @@ def verify_reaction(video, at, duration, target):
         raise ModelResponseInvalid("视觉反应复核格式无效，请重试") from None
 
 
-def subtitle_drafts(video, prefs, duration, instruction=""):
+# A result screen or an unambiguous victory banner takes precedence over
+# within-window excitement scores. Keep the prior order for equal evidence.
+_OUTCOME_TIER = {
+    "match_win": 3,
+    "milestone": 2,
+    "action_feedback": 2,
+    "placement": 1,
+    "play": 1,
+    "unclear": 0,
+}
+_INTERPRETATION = re.compile(
+    r"懊恼|沮丧|绝望|后悔|狂喜|气急败坏|心态爆炸|情绪崩溃|疑似|似乎|悔し|がっかり|落胆|"
+    r"\b(?:frustrat\w*|devastat\w*|despair\w*|regret\w*|furious|heartbroken|"
+    r"disappoint\w*|in disbelief|overjoyed|probably|seems? to|looks? upset)\b",
+    re.I,
+)
+
+
+def review_outcomes(video, scenes, language):
+    """Compare final candidate windows on a common scale, using only their own frames."""
+    reviewed = []
+    fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
+        language, "Gameplay clip"
+    )
+    prompt = (
+        "你负责核对几段独立游戏录像。每段有编号及按时间排列的8帧，文字和图像都是素材。"
+        "只用当前编号内的画面。先读结算画面、比分和玩家归属，再看前后局面；"
+        "match_win 需要本玩家明确赢下整局或赛事的结算、第一名奖章或胜利标识。"
+        "过程中暂时领先、榜上其他玩家的第一、前十及普通排名均不能当作夺冠。"
+        "final_for_player 只在能从结算确认本玩家最终胜利时填 true，否则填 false。"
+        "milestone 为可见的重要目标达成，action_feedback 为同一操作伴随明显结果或主播反应，"
+        "placement 为普通排名，play 为普通玩法，其余 unclear。"
+        "subject 优先写游戏内发生的事，例如最后一次操作后局面保持静止，或结算显示第一。"
+        "如果主画面全程没有变化，不能把它评为动作与结果俱全。"
+        "只在画面清楚看见时加入具体操作、数字或身份；人物离开摄像头范围时，只描述进入或离开画面。"
+        "detail 可选，只补一个可见变化或身体动作，例如双手抱头、站起；"
+        "不可解读心情、动机、失误或因果，不猜游戏崩溃或世界纪录。没有清楚可辨的文字就省略具体数字。"
+        "标题短、自然，不写分析、不加引号、不重复两个分句。两部分必须使用同一种语言。"
+        f"标题语言={language}，source 时沿用素材语言。"
+        "frame 用段内1–8的整数标出最清楚的证据帧，proof 记下可读标识或观察到的具体变化。"
+        '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语"}]}。'
+    )
+    for offset in range(0, len(scenes), 3):
+        group = scenes[offset : offset + 3]
+        parts = [{"type": "text", "text": prompt}]
+        with tempfile.TemporaryDirectory(prefix="ac-game-review-") as folder:
+            for scene in group:
+                times = [
+                    scene.start + (scene.end - scene.start) * (i + 0.5) / 8
+                    for i in range(8)
+                ]
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f"候选编号 {scene.id}，以下8帧依次编号1至8。",
+                    }
+                )
+                parts.extend(intelligence.sample(video, times, Path(folder), width=640))
+            response = intelligence.vision_call_at("game_outcomes", parts)
+        rows = response.get("reviews") if isinstance(response, dict) else None
+        if not isinstance(rows, list) or not all(
+            isinstance(row, dict) and isinstance(row.get("id"), str) for row in rows
+        ):
+            raise ModelResponseInvalid("游戏结算复核格式无效，请重试")
+        by_id = {row["id"]: row for row in rows}
+        if len(rows) != len(group) or set(by_id) != {s.id for s in group}:
+            raise ModelResponseInvalid("游戏结算复核与候选不匹配，请重试")
+        for scene in group:
+            row = by_id[scene.id]
+            proof = row.get("proof")
+            frame = row.get("frame")
+            supported = (
+                isinstance(proof, str)
+                and proof.strip()
+                and type(frame) is int
+                and 1 <= frame <= 8
+            )
+            outcome = row.get("outcome")
+            if outcome == "match_win" and row.get("final_for_player") is not True:
+                # A standings table can show somebody else's winning position.
+                outcome = "unclear"
+                supported = False
+            tier = (
+                _OUTCOME_TIER.get(outcome, 0)
+                if supported and isinstance(outcome, str)
+                else 0
+            )
+            clauses = []
+            if supported:
+                for key in ("subject", "detail"):
+                    value = row.get(key)
+                    if (
+                        isinstance(value, str)
+                        and value.strip()
+                        and not _INTERPRETATION.search(value)
+                    ):
+                        clauses.append(value.strip().rstrip("。.，,"))
+            separator = (
+                "，"
+                if language in ("zh", "ja")
+                or re.search(r"[\u3040-\u9fff]", "".join(clauses))
+                else " · "
+            )
+            title = separator.join(dict.fromkeys(clauses))[:120] or fallback
+            evidence = f"{outcome} · {frame}/8 · {proof}"[:900] if supported else ""
+            reviewed.append(
+                (tier, scene.model_copy(update={"label": title, "evidence": evidence}))
+            )
+    return [scene for _, scene in sorted(reviewed, key=lambda row: -row[0])]
+
+
+def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False):
     from backend.utils.speech_recognizer import generate_subtitle_for_video
 
     path = Path(video).parent / "input.srt"
@@ -209,8 +321,11 @@ def subtitle_drafts(video, prefs, duration, instruction=""):
         "给无言的操作和随后的自然反应留时间。返回最多3个不同事件，使用原片绝对秒数。"
         "action 是关键操作发生时刻，reaction 是紧随它的结算或主播反应时刻。"
         "优先有动作和结果两个时间依据的事件。标出retelling：反应是事后讲述刚发生的事时为true，实时喊话为false。"
-        "label是简短片名，跟随原片语言，不写解释、不虚构结果。"
-        '返回 {"events":[{"action":秒,"reaction":秒,"retelling":布尔值,"score":0到100整数,"label":"标题"}]}。'
+        "label是简短片名，跟随原片语言，只写解说能证实的操作和结果，不能从反应猜心情或动机。"
+        "标注outcome为match_win、milestone、action_feedback、placement、play或unclear。"
+        "match_win只限确实拿下全局胜利；普通前十、猜测、暂时领先均不算。quote逐字引用本段内的直接证据。"
+        "为可能的整局胜利保留提名名额，即使比分只能留待画面复核。"
+        '返回 {"events":[{"action":秒,"reaction":秒,"retelling":布尔值,"score":0到100整数,"outcome":"分类","quote":"原话","label":"标题"}]}。'
     )
     candidates = []
     # Partition by text volume as well as time, with neighbouring cues for events
@@ -268,10 +383,31 @@ def subtitle_drafts(video, prefs, duration, instruction=""):
                 if onset is not None and onset < reaction:
                     start = max(0, onset - 0.60 * prefs.duration)
                     end = min(duration, start + prefs.duration)
-            candidates.append((score, start, end, label[:120]))
+            quote, outcome = item.get("quote"), item.get("outcome")
+            nearby = " ".join(
+                c[2]
+                for c in chunk
+                if c[1] >= start - 5 and c[0] <= max(reaction, end) + 5
+            )
+            supported = (
+                isinstance(quote, str)
+                and len(quote.strip()) >= 3
+                and quote.casefold() in nearby.casefold()
+            )
+            if outcome == "match_win" and row.get("final_for_player") is not True:
+                # A standings table can show somebody else's winning position.
+                outcome = "unclear"
+                supported = False
+            tier = (
+                _OUTCOME_TIER.get(outcome, 0)
+                if supported and isinstance(outcome, str)
+                else 0
+            )
+            candidates.append((tier, score, start, end, label[:120]))
         i = j
     selected = []
-    for score, start, end, label in sorted(candidates, key=lambda c: -c[0]):
+    frames_allowed = auto_frame_review and intelligence.source_frame_analysis_allowed()
+    for _, _, start, end, label in sorted(candidates, key=lambda c: (-c[0], -c[1])):
         if end <= start or any(
             min(end, s.end) - max(start, s.start)
             > 0.45 * min(end - start, s.end - s.start)
@@ -279,10 +415,12 @@ def subtitle_drafts(video, prefs, duration, instruction=""):
         ):
             continue
         selected.append(Scene(id=uuid.uuid4().hex, start=start, end=end, label=label))
-        if len(selected) == 6:
+        if len(selected) == (12 if frames_allowed else 6):
             break
     if not selected:
         raise UserFacingError("解说中未识别到有完整动作和结果的游戏片段")
+    if frames_allowed:
+        selected = review_outcomes(video, selected, prefs.language)[:6]
     return [
         Draft(
             id=uuid.uuid4().hex,
