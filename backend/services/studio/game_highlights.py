@@ -207,7 +207,40 @@ _INTERPRETATION = re.compile(
 )
 
 
-def review_outcomes(video, scenes, language):
+def _highlight_title(row, fallback):
+    def clause(key):
+        value = row.get(key)
+        if not isinstance(value, str) or _INTERPRETATION.search(value):
+            return ""
+        return " ".join(value.split()).strip("。，,. ·")
+
+    def fits(text):
+        if re.search(r"[\u3040-\u9fff\uac00-\ud7af]", text):
+            return len(text) <= 20
+        return len(text) <= 58 and len(text.split()) <= 9
+
+    subject, detail, core = (clause(key) for key in ("subject", "detail", "core"))
+    if subject and detail and detail not in subject:
+        separator = "，" if re.search(r"[\u3040-\u9fff]", subject) else " · "
+        combined = subject + separator + detail
+        if fits(combined):
+            return combined
+    return next((part for part in (subject, core) if part and fits(part)), fallback)
+
+
+def _review_times(scene, reaction):
+    span = scene.end - scene.start
+    times = [scene.start + span * (i + 0.5) / 8 for i in range(8)]
+    if reaction is not None and scene.start < reaction < scene.end:
+        # Keep full-window context and reserve three views for a fleeting gesture.
+        step = min(2, span / 16, reaction - scene.start, (scene.end - reaction) / 2)
+        nearest = sorted(range(1, 7), key=lambda i: abs(times[i] - reaction))[:3]
+        for index, at in zip(nearest, (reaction - step, reaction, reaction + step)):
+            times[index] = at
+    return sorted(times)
+
+
+def review_outcomes(video, scenes, language, *, reaction_anchors=None):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -221,25 +254,25 @@ def review_outcomes(video, scenes, language):
         "final_for_player 只在能从结算确认本玩家最终胜利时填 true，否则填 false。"
         "milestone 为可见的重要目标达成，action_feedback 为同一操作伴随明显结果或主播反应，"
         "placement 为普通排名，play 为普通玩法，其余 unclear。"
-        "subject 优先写游戏内发生的事，例如最后一次操作后局面保持静止，或结算显示第一。"
-        "如果主画面全程没有变化，不能把它评为动作与结果俱全。"
-        "只在画面清楚看见时加入具体操作、数字或身份；人物离开摄像头范围时，只描述进入或离开画面。"
-        "detail 可选，只补一个可见变化或身体动作，例如双手抱头、站起；"
-        "不可解读心情、动机、失误或因果，不猜游戏崩溃或世界纪录。没有清楚可辨的文字就省略具体数字。"
-        "标题短、自然，不写分析、不加引号、不重复两个分句。两部分必须使用同一种语言。"
+        "把核验依据和给观众看的标题分开。proof 可以详细写，标题只留最重要的动作和结果。"
+        "subject 用一个短句直写改变了什么；有最终名次就直说赢下比赛或获得第几。"
+        "不要罗列中途等级、分数、玩家名、画面方位，除非该信息就是这条的看点。"
+        "如果画面从最后一次操作转为静止，写明操作和游戏画面定住；不要猜卡死、世界纪录。"
+        "detail 通常留空。只有紧接着发生、看得清、值得留下的结果或肢体动作才补一个短语，"
+        "直接写抱头、起身等具体动作，不写明显反应等套话，不猜心情和动机。"
+        "画面始终静止时不能编造最后一次操作。人物离开镜头不能据此猜测起身。"
+        "两部分合计中文以10到16字为宜、最多20字；英文最多9词。不要重复。"
+        "core 给出只保留最重要事实的备用极短标题，中文最多10字、英文最多5词。"
         f"标题语言={language}，source 时沿用素材语言。"
         "frame 用段内1–8的整数标出最清楚的证据帧，proof 记下可读标识或观察到的具体变化。"
-        '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语"}]}。'
+        '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语","core":"极短主句"}]}。'
     )
     for offset in range(0, len(scenes), 3):
         group = scenes[offset : offset + 3]
         parts = [{"type": "text", "text": prompt}]
         with tempfile.TemporaryDirectory(prefix="ac-game-review-") as folder:
             for scene in group:
-                times = [
-                    scene.start + (scene.end - scene.start) * (i + 0.5) / 8
-                    for i in range(8)
-                ]
+                times = _review_times(scene, (reaction_anchors or {}).get(scene.id))
                 parts.append(
                     {
                         "type": "text",
@@ -276,23 +309,7 @@ def review_outcomes(video, scenes, language):
                 if supported and isinstance(outcome, str)
                 else 0
             )
-            clauses = []
-            if supported:
-                for key in ("subject", "detail"):
-                    value = row.get(key)
-                    if (
-                        isinstance(value, str)
-                        and value.strip()
-                        and not _INTERPRETATION.search(value)
-                    ):
-                        clauses.append(value.strip().rstrip("。.，,"))
-            separator = (
-                "，"
-                if language in ("zh", "ja")
-                or re.search(r"[\u3040-\u9fff]", "".join(clauses))
-                else " · "
-            )
-            title = separator.join(dict.fromkeys(clauses))[:120] or fallback
+            title = _highlight_title(row, fallback) if supported else fallback
             evidence = f"{outcome} · {frame}/8 · {proof}"[:900] if supported else ""
             reviewed.append(
                 (tier, scene.model_copy(update={"label": title, "evidence": evidence}))

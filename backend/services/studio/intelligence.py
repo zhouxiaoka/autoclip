@@ -506,7 +506,8 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction="", *, g
                                  'disposition':'selected'})
     if gameplay:
         from backend.services.studio.game_highlights import review_outcomes
-        events = review_outcomes(video, events, prefs.language)[:6]
+        reaction_anchors = {verified_id: peaks[0]} if verified_id else {}
+        events = review_outcomes(video, events, prefs.language, reaction_anchors=reaction_anchors)[:6]
         selected = {e.id:e for e in events}
         for item in selection:
             if item['id'] in selected:

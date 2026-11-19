@@ -242,3 +242,26 @@ def test_transcript_win_nomination_with_quote_beats_higher_placement_score(
         tmp_path / "video.mp4", Preferences(goal="highlight"), 105
     )
     assert [d["title"] for d in drafts] == ["Match win", "Ninth place"]
+
+
+@pytest.mark.parametrize(("row", "expected"), [
+    ({"subject": "最后落块后棋盘定住", "detail": "主播抱头起身"}, "最后落块后棋盘定住，主播抱头起身"),
+    ({"subject": "最后落块后棋盘定住", "detail": "主播向后仰靠然后用双手抱头从椅子上起身"}, "最后落块后棋盘定住"),
+    ({"subject": "结算画面里可以看到第一名的金色奖章和参赛选手名字", "core": "拿下第一名"}, "拿下第一名"),
+    ({"subject": "Wins the final round", "detail": "The board shows nine knockouts and a golden medal"}, "Wins the final round"),
+    ({"subject": "棋盘定住", "detail": "主播懊恼抱头"}, "棋盘定住"),
+])
+def test_title_keeps_complete_short_observations(row, expected):
+    assert games._highlight_title(row, "Gameplay clip") == expected
+
+
+def test_verified_reaction_gets_close_views_without_losing_window_ends():
+    from backend.services.studio.models import Scene
+
+    scene = Scene(id="clip", start=30, end=75, label="Action")
+    coarse = games._review_times(scene, None)
+    times = games._review_times(scene, 59)
+    assert len(times) == len(set(times)) == 8
+    assert times == sorted(times)
+    assert {57, 59, 61, coarse[0], coarse[-1]} <= set(times)
+    assert games._review_times(scene, 85) == coarse
