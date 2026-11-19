@@ -25,7 +25,7 @@ from .presets import load_catalog_providers, reset_catalog_cache
 def reset_live_catalog() -> None:
     reset_catalog_cache()
 
-# Success clips must be >= short-tier min_clip_sec (20s). Live material stays 1–2 min.
+# Success clips must be >= short-tier min_clip_sec (10s). Live material stays 1–2 min.
 SUCCESS_DURATION_SEC = 70
 TOO_SHORT_DURATION_SEC = 8
 LIVE_MODES = ('nightly', 'prerelease', 'verify', 'api88')

@@ -20,7 +20,7 @@ const { classifyLlmKeyFailure } = require('./load-ts.cjs').loadTs(path.join(__di
 const { classifySubtitleFailure } = load('../src/utils/subtitleFailure.ts')
 
 // 与 backend empty_timeline_failure().user_message() 一致；CLI 会把它写进 last_error。
-const LAST_ERROR = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
+const LAST_ERROR = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 10 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
 const PROGRESS = `处理失败：${LAST_ERROR}`
 
 test('classifies the stable code and a last_error that has no code', () => {

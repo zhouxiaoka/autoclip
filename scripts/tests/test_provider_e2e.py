@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
 from backend.core.upstream_errors import UpstreamErrorType, is_retryable
+from backend.pipeline.quality import SHORT_MIN_CLIP_SEC
 from provider_e2e import SUCCESS_RATE_THRESHOLD, judge, mask, matrix, mock_openai
 from provider_e2e.presets import find_e2e_presets_path, load_catalog_providers
 from provider_e2e.report import merge_reports
@@ -98,10 +99,10 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertEqual(len(succeed), 8)
         self.assertEqual(len(blocked), 2)
         self.assertEqual({item['id'] for item in blocked}, {'too_short', 'no_audio'})
-        self.assertLess(matrix.TOO_SHORT_DURATION_SEC, 20)
+        self.assertLess(matrix.TOO_SHORT_DURATION_SEC, SHORT_MIN_CLIP_SEC)
         self.assertGreaterEqual(matrix.SUCCESS_DURATION_SEC, 60)
         self.assertLessEqual(matrix.SUCCESS_DURATION_SEC, 120)
-        self.assertTrue(all(item['duration_sec'] >= 20 for item in succeed))
+        self.assertTrue(all(item['duration_sec'] >= SHORT_MIN_CLIP_SEC for item in succeed))
         labels = {item['label'] for item in succeed}
         for name in ('中文口播', '中文访谈', '英文播客', '带字幕', '竖屏', '游戏', '体育', '纯音乐'):
             self.assertIn(name, labels)
