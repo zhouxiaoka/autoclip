@@ -156,6 +156,7 @@ class Packaging(BaseModel):
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
+    fallback_captions: Literal['source', 'translated'] | None = None
     # Visual style inside the classic templates; None = the golden default (classic / pop).
     style: Literal['classic', 'boxed', 'spotlight', 'pop', 'cinematic'] | None = None
     # Content mood chosen by the model; it picks the palette and style (packaging.choose_look).
@@ -226,6 +227,8 @@ class Draft(BaseModel):
     origin: str = 'manual'
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
+    # Frozen import choice for standalone drafts. Platform versions own their render settings.
+    html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
     packaging: Packaging | None = None
     # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
     # an English version of a source with Chinese captions in the picture.

@@ -34,6 +34,8 @@ except ImportError:
 
 from backend.core.llm_telemetry import sanitize_exception_text, log_safe_exception
 from backend.core.failure_logging import failure_logger
+from backend.core.job_budget import JobDurationExceeded
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
 
 logger = failure_logger(__name__)
 
@@ -57,6 +59,8 @@ class LLMClient:
         """
         try:
             return self.llm_manager.call(prompt, input_data)
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise
         except Exception as e:
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None
@@ -75,6 +79,8 @@ class LLMClient:
         """
         try:
             return self.llm_manager.call_with_retry(prompt, input_data, max_retries)
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise
         except Exception as e:
             logger.error("LLM重试调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None

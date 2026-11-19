@@ -555,6 +555,13 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             video = jobs.source(project_id)
             call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
+        if 'html_template' not in body.model_fields_set:
+            # Editing another preference must keep the previous template. Explicit null clears it.
+            saved = previous_config.get('smart_import') or {}
+            retained = {key: saved[key] for key in ('html_template', 'recommended_template')
+                        if key not in body.model_fields_set and saved.get(key)}
+            if retained:
+                body = ImportOptions.model_validate({**body.model_dump(), **retained})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
         try:
@@ -809,6 +816,9 @@ def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = Non
     )
     if variant:
         return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)), **jobs.template_export_kwargs(variant))
+    if (draft.aspect == 'portrait' and draft.html_template
+            and not any(item.get('draft_id') == draft_id for item in state.get('output_variants', []))):
+        return call(jobs.export, project_id, draft, html_template=draft.html_template)
     return call(jobs.export, project_id, draft)
 
 @router.get('/{project_id}/exports/{job_id}/video')

@@ -77,9 +77,25 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
             job['requested_template'] = requested_template
     if _variant_identity is not None:
         job['variant_links'] = [list(_variant_identity)]
+    def same_render(candidate):
+        if candidate.get('status') not in ('queued', 'running') or candidate.get('draft_id') != draft.id:
+            return False
+        if candidate.get('brand_outro', False) != brand_outro:
+            return False
+        for key in ('html_template', 'html_fallback', 'html_safe_area'):
+            if candidate.get(key) != job.get(key):
+                return False
+        previous_request = candidate.get('requested_template') or candidate.get('html_template') or 'classic'
+        if previous_request != job['requested_template']:
+            return False
+        # Read older snapshots with the same optional-field defaults as the incoming draft.
+        try:
+            return Draft.model_validate(candidate.get('snapshot')) == draft
+        except ValueError:
+            return False
+
     def add(data):
-        active = next((j for j in data['jobs'] if j['status'] in ('queued', 'running') and j.get('snapshot') == job['snapshot']
-                       and j.get('brand_outro', False) == brand_outro), None)
+        active = next((candidate for candidate in data['jobs'] if same_render(candidate)), None)
         if active:
             if _variant_identity is not None and list(_variant_identity) not in active.get('variant_links', []):
                 active.setdefault('variant_links', []).append(list(_variant_identity))
@@ -2356,7 +2372,9 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
 
 
 def _add_confirmed_drafts(data, drafts):
-    rows = [{**d, 'updated_at': store.now()} for d in drafts]
+    from backend.services.studio.template_choice import manual_draft_template
+    choice = manual_draft_template(data)
+    rows = [{**d, 'html_template': choice, 'updated_at': store.now()} for d in drafts]
     attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
     data['drafts'].extend(rows)
 

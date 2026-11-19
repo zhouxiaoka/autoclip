@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from contextlib import nullcontext
 from collections.abc import Callable
 from typing import Any
 
-from backend.core.job_budget import JobDurationExceeded
-from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+from backend.core.job_budget import (JobDurationExceeded, budget_expired, clip_job_active,
+                                     clip_job_read_timeout, clip_step_budget)
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted, checkpoint
 from backend.services.studio.models import Packaging
 
 logger = logging.getLogger(__name__)
 
 PACKAGING_BUDGET_SEC = 300
+TRANSLATION_RESERVE_SEC = 60
 
 CJK = re.compile(r'[㐀-鿿]')
 KANA = re.compile(r'[぀-ヿ]')
@@ -394,9 +398,11 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     fallback_title = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
+    if translate and not burned:
+        fallback['cues'] = source_cues(lines, audience)
+        if fallback['cues']:
+            fallback['fallback_captions'] = 'source'
     if not lines or not allow_model:
-        if translate and not burned:
-            fallback['cues'] = source_cues(lines, audience)
         return _stamp_cues(fallback)
     if call is None:
         from backend.services.studio.intelligence import text_json as call
@@ -407,29 +413,41 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
                'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
     # Short ASR rows make the segment contract easy to break once; a second try with the reason
     # usually fixes it, and losing the whole package (captions included) costs far more.
+    reserve = 0
+    if translate and clip_job_active():
+        reserve = min(TRANSLATION_RESERVE_SEC, clip_job_read_timeout(PACKAGING_BUDGET_SEC) / 5)
     can_translate = True
     for attempt in range(2):
         try:
-            result = call(PROMPT, payload)
+            started = time.monotonic()
+            with clip_step_budget(PACKAGING_BUDGET_SEC, reserve_seconds=reserve) if reserve else nullcontext():
+                try:
+                    checkpoint()
+                    result = call(PROMPT, payload)
+                    checkpoint()
+                except JobDurationExceeded:
+                    logger.warning('Packaging deadline phase=structured attempt=%d rows=%d elapsed_ms=%d',
+                                   attempt + 1, len(lines), round((time.monotonic() - started) * 1000))
+                    if not reserve or not budget_expired():
+                        raise
+                    break
             return _stamp_cues(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes, captions))
         except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
             raise
         except (ValueError, TypeError) as error:
-            logger.warning('Packaging response rejected (attempt %d): %s', attempt + 1, error)
+            logger.warning('Packaging response rejected phase=structured attempt=%d type=%s', attempt + 1, type(error).__name__)
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
         except Exception as error:  # noqa: BLE001 - packaging must never block output
             logger.warning('Packaging fell back: %s', type(error).__name__)
             can_translate = False
             break
-    if translate:
-        # Last resort for foreign-language audiences: plain line-by-line translation, so the
-        # version still gets captions in its own language instead of none (or the source's).
-        fallback['cues'] = (_translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
-                                              protected_terms=_protected_terms(draft, lines, audience)) if can_translate else [])
-        if not fallback['cues'] and not burned:
-            # A rejected model response must not turn an English interview into a captionless
-            # video. Keep readable source rows and disclose the loss of translation in the UI.
-            fallback['cues'] = source_cues(lines, audience)
+    if translate and can_translate:
+        # Both the translation and the structured attempt spend the original batch budget.
+        checkpoint()
+        translated = _translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
+                                      protected_terms=_protected_terms(draft, lines, audience))
+        if translated:
+            fallback.update(cues=translated, fallback_captions='translated')
     return _stamp_cues(fallback)
 
 
@@ -441,12 +459,14 @@ def source_cues(lines: list[dict[str, Any]], audience: str) -> list[dict[str, An
 def _translated_rows(lines: list[dict[str, Any]], audience: str, call, *, keep_original=False,
                      protected_terms: list[str] | None = None) -> list[dict[str, Any]]:
     language = {'zh': '简体中文', 'en': 'English'}[audience]
+    started = time.monotonic()
     try:
         result = call(f'把 lines 逐条翻译成{language}，口语自然，不合并、不遗漏，不添加事实。'
                       'protected_terms 中的原文专名和术语在译文中必须保留拼写，不猜测音译或改成地名。'
                       '每个输入 id 必须恰好返回一次。返回 {"lines":[{"id":0,"text":"..."}]}',
                       {'protected_terms': protected_terms or [],
                        'lines': [{'id': i, 'text': line['text']} for i, line in enumerate(lines)]})
+        checkpoint()
         rows = (result or {}).get('lines') if isinstance(result, dict) else None
         if not isinstance(rows, list) or len(rows) != len(lines):
             return []
@@ -464,7 +484,11 @@ def _translated_rows(lines: list[dict[str, Any]], audience: str, call, *, keep_o
             _check_preserved_terms(line['text'], _clean(row)[:600], protected_terms or [])
         return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600],
                  'original': l['text'][:900] if keep_original else ''} for l, r in zip(lines, rows)]
-    except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+    except JobDurationExceeded:
+        logger.warning('Packaging deadline phase=translation rows=%d elapsed_ms=%d',
+                       len(lines), round((time.monotonic() - started) * 1000))
+        raise
+    except (JobStopped, ProjectDeleted, ServiceRestarted):
         raise
     except Exception as error:  # noqa: BLE001
         logger.warning('Row translation failed: %s', type(error).__name__)

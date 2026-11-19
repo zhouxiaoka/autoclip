@@ -73,6 +73,31 @@ def style_from_generation(generation: dict | None) -> dict[str, str]:
     return {'template': applied, 'requested_template': requested or 'classic'}
 
 
+def manual_draft_template(state: dict) -> str | None:
+    """A confirmed plan owns its request, including an explicit classic choice.
+
+    Older plans can lack the raw import options. Only inherit an actual request
+    from that generation, never reconstruct a choice from its applied default.
+    """
+    overrides = (state.get('plan') or {}).get('overrides') or {}
+    value = overrides.get('html_template', (state.get('generation') or {}).get('html_template'))
+    return value if value in STYLE_IDS else None
+
+
+def restore_manual_draft_templates(state: dict) -> None:
+    """Older standalone drafts inherit only a request bound to their own production."""
+    plan = state.get('plan') or {}
+    choice = (plan.get('overrides') or {}).get('html_template')
+    if not plan.get('id') or choice not in STYLE_IDS:
+        return
+    owned = {draft_id for attempt in state.get('attempts') or []
+             if isinstance(attempt, dict) and attempt.get('kind') == 'production' and attempt.get('plan_id') == plan['id']
+             for draft_id in attempt.get('draft_ids', [])}
+    for draft in state.get('drafts', []):
+        if isinstance(draft, dict) and draft.get('id') in owned:
+            draft.setdefault('html_template', choice)
+
+
 def _score(draft: dict) -> float:
     try:
         return float(draft.get('_auto_score'))

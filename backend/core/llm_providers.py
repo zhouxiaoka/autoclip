@@ -563,10 +563,16 @@ class OpenAIProvider(LLMProvider):
             # can; a refusal or a single JSON body is assembled the same way.
             payload["stream"] = True
             from backend.core.llm_stream import collect_sdk, create_openai_chat
+            from backend.core.llm_usage import current_stage
             request_timeout = _budget_request_timeout(LLM_READ_TIMEOUT_SEC)
+            client = self.client
+            if request_timeout is not None and current_stage() == 'packaging':
+                # SDK retries reuse the original read timeout. A second POST can consume
+                # the time reserved for captions before a stream handle even exists.
+                client = client.with_options(max_retries=0)
             try:
                 response = create_openai_chat(
-                    self.client, payload, request_timeout, lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
+                    client, payload, request_timeout, lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
             except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
@@ -578,7 +584,7 @@ class OpenAIProvider(LLMProvider):
                     raise
                 logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", sanitize_model(model))
                 response = create_openai_chat(
-                    self.client, to_max_completion_tokens(payload),
+                    client, to_max_completion_tokens(payload),
                     _budget_request_timeout(LLM_READ_TIMEOUT_SEC),
                     lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
             collected = collect_sdk(response)

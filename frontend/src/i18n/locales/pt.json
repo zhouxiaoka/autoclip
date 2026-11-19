@@ -1547,6 +1547,8 @@
   "访谈式 · 中英字幕": "Estilo entrevista · legendas em chinês e inglês",
   "模板": "Modelo",
   "字幕、名牌和版式由模板按发布平台自动生成。": "O modelo gera legendas, identificação de nomes e layout conforme a plataforma escolhida.",
+  "包装样式未完整生成，已保留原文字幕，缺少译文": "O estilo está incompleto. As legendas originais foram mantidas. A tradução está ausente.",
+  "包装样式未完整生成，已保留翻译字幕": "O estilo está incompleto. As legendas traduzidas foram mantidas.",
   "包装未能完整生成，已保留可用字幕": "A edição está incompleta; as legendas disponíveis foram mantidas",
   "包装未能完整生成，字幕暂不可用": "A edição está incompleta; as legendas estão indisponíveis no momento",
   "包装未能完整生成，已使用原字幕": "A edição ficou incompleta; as legendas originais foram usadas",

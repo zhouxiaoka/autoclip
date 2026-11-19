@@ -250,3 +250,56 @@ def test_automatic_dispatch_reuses_template_export_kwargs(root, monkeypatch):
     assert stored['d-rank']['requested_template'] == 'editorial'
     assert stored['d-rank']['template'] == recorded_style(None, 'editorial')['template']
     assert 'html_template' not in stored['d-classic']
+
+
+@pytest.mark.parametrize('choice', ['editorial', 'street', 'news', 'cinema', 'classic', None])
+def test_confirmed_manual_choice_survives_save_and_export(client, monkeypatch, choice):
+    submitted, _ = _capture(monkeypatch)
+    raw = _draft(True).model_copy(update={'aspect': 'portrait', 'packaging': None,
+                                          'origin': 'subtitle-highlight'}).model_dump()
+    # A resumed manual production uses the already confirmed plan, with no platform variant.
+    overrides = {'html_template': choice} if choice else {}
+    state = {'drafts': [], 'jobs': [], 'plan': {'overrides': overrides}, 'output_variants': []}
+    jobs._add_confirmed_drafts(state, [raw])
+    store.write('p1', state)
+    saved = client.put('/studio/p1/drafts/d', json={**state['drafts'][0], 'subtitle_style': 'accent'})
+    assert saved.status_code == 200
+    result = client.post('/studio/p1/drafts/d/export', json={'revision': saved.json()['revision']})
+    assert result.status_code == 200
+    assert result.json()['requested_template'] == (choice or 'classic')
+    assert submitted[0][1].get('html_template') == (choice if choice != 'classic' else None)
+    assert saved.json().get('html_template') == choice
+
+
+def test_shared_snapshot_different_design_renders_separately(client, monkeypatch):
+    submitted, _ = _capture(monkeypatch)
+    draft = _draft(True)
+    store.write('p1', {'jobs': [], 'drafts': [draft.model_dump()]})
+    first = jobs.export('p1', draft, html_template='editorial', safe_area='douyin')
+    second = jobs.export('p1', draft, html_template='street', safe_area='tiktok')
+    repeat = jobs.export('p1', draft, html_template='street', safe_area='tiktok')
+    assert first['job_id'] != second['job_id'] == repeat['job_id']
+    assert len(submitted) == 2
+
+
+def test_legacy_draft_inherits_only_its_own_confirmed_plan(root):
+    drafts = [{'id': 'old'}, {'id': 'owned'}, {'id': 'explicit', 'html_template': 'classic'}]
+    store.write('p1', {'drafts': drafts, 'plan': {'id': 'p', 'overrides': {'html_template': 'news'}},
+                       'attempts': [{'kind': 'production', 'plan_id': 'old-plan', 'draft_ids': ['old']},
+                                    {'kind': 'production', 'plan_id': 'p', 'draft_ids': ['owned', 'explicit']}]})
+    assert [d.get('html_template') for d in store.read('p1')['drafts']] == [None, 'news', 'classic']
+
+
+def test_old_manual_draft_can_select_design_after_recovery(client, monkeypatch):
+    submitted, _ = _capture(monkeypatch)
+    raw = _draft(True).model_copy(update={'aspect': 'portrait', 'packaging': None}).model_dump()
+    raw.pop('html_template')
+    store.write('p1', {'drafts': [raw], 'jobs': [], 'output_variants': []})
+    response = client.put('/studio/p1/drafts/d', json={**raw, 'html_template': 'editorial'})
+    assert response.status_code == 200
+    edited = response.json()
+    edited.pop('html_template')  # a pre-upgrade editor only sends fields it knows
+    response = client.put('/studio/p1/drafts/d', json={**edited, 'subtitle_style': 'accent'})
+    assert response.status_code == 200 and response.json()['html_template'] == 'editorial'
+    job = client.post('/studio/p1/drafts/d/export', json={'revision': response.json()['revision']})
+    assert job.status_code == 200 and submitted[0][1]['html_template'] == 'editorial'

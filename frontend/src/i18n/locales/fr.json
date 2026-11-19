@@ -1547,6 +1547,8 @@
   "访谈式 · 中英字幕": "Style interview · sous-titres chinois et anglais",
   "模板": "Modèle",
   "字幕、名牌和版式由模板按发布平台自动生成。": "Le modèle génère les sous-titres, les bandeaux de nom et la mise en page selon la plateforme choisie.",
+  "包装样式未完整生成，已保留原文字幕，缺少译文": "L’habillage est incomplet. Les sous-titres d’origine sont disponibles, la traduction manque.",
+  "包装样式未完整生成，已保留翻译字幕": "L’habillage est incomplet. Les sous-titres traduits sont disponibles.",
   "包装未能完整生成，已保留可用字幕": "L’habillage est incomplet ; les sous-titres disponibles sont conservés",
   "包装未能完整生成，字幕暂不可用": "L’habillage est incomplet ; les sous-titres sont indisponibles pour le moment",
   "包装未能完整生成，已使用原字幕": "L’habillage est incomplet : les sous-titres d’origine sont utilisés",
