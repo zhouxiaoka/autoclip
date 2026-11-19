@@ -206,11 +206,18 @@ _INTERPRETATION = re.compile(
     re.I,
 )
 
+_FINAL_WIN_CLAIM = re.compile(
+    r"夺冠|赢下(?:整局|比赛)|赢得(?:比赛|冠军)|拿下冠军|優勝|"
+    r"\b(?:wins?|won) (?:the |this )?(?:match|championship|tournament)\b", re.I
+)
+
 
 def _highlight_title(row, fallback):
     def clause(key):
         value = row.get(key)
         if not isinstance(value, str) or _INTERPRETATION.search(value):
+            return ""
+        if row.get("outcome") != "match_win" and _FINAL_WIN_CLAIM.search(value):
             return ""
         return " ".join(value.split()).strip("。，,. ·")
 
@@ -264,6 +271,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
         "直接写抱头、起身等具体动作，不写明显反应等套话，不猜心情和动机。"
         "画面始终静止时不能编造最后一次操作。人物离开镜头不能据此猜测起身。"
         "两部分合计中文以10到16字为宜、最多20字；英文最多9词。不要重复。"
+        "里程碑只写获得的具体称号或显示的结果，标题中宣称赢下整局必须与match_win一致。"
         "core 给出只保留最重要事实的备用极短标题，中文最多10字、英文最多5词。"
         f"标题语言={language}，source 时沿用素材语言。"
         "frame 用段内1–8的整数标出最清楚的证据帧，proof 记下可读标识或观察到的具体变化。"
@@ -274,11 +282,16 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
         parts = [{"type": "text", "text": prompt}]
         with tempfile.TemporaryDirectory(prefix="ac-game-review-") as folder:
             for scene in group:
-                times = _review_times(scene, (reaction_anchors or {}).get(scene.id))
+                anchor = (reaction_anchors or {}).get(scene.id)
+                times = _review_times(scene, anchor)
+                cue = ""
+                if anchor is not None and scene.evidence:
+                    cue = (" 同段密集帧的核验笔记（仅供核对）：" + scene.evidence[:500]
+                           + "。结合画面，subject写出引发停顿或反馈的具体操作及结果，再用detail写人物动作。")
                 parts.append(
                     {
                         "type": "text",
-                        "text": f"候选编号 {scene.id}，以下8帧依次编号1至8。",
+                        "text": f"候选编号 {scene.id}，以下8帧依次编号1至8。{cue}",
                     }
                 )
                 parts.extend(intelligence.sample(video, times, Path(folder), width=640))

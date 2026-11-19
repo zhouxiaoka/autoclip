@@ -250,6 +250,7 @@ def test_transcript_win_nomination_with_quote_beats_higher_placement_score(
     ({"subject": "结算画面里可以看到第一名的金色奖章和参赛选手名字", "core": "拿下第一名"}, "拿下第一名"),
     ({"subject": "Wins the final round", "detail": "The board shows nine knockouts and a golden medal"}, "Wins the final round"),
     ({"subject": "棋盘定住", "detail": "主播懊恼抱头"}, "棋盘定住"),
+    ({"outcome": "milestone", "subject": "赢下整局获评大师", "core": "获评大师"}, "获评大师"),
 ])
 def test_title_keeps_complete_short_observations(row, expected):
     assert games._highlight_title(row, "Gameplay clip") == expected
