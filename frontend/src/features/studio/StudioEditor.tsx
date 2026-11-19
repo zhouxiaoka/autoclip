@@ -133,7 +133,8 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const playLength = showRendered ? renderedDuration : scene ? scene.end - scene.start : 0
   const togglePlay = () => { const v = video.current; if (!v) return; if (v.paused) void v.play().catch(() => undefined); else v.pause() }
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
-  const exportState = draft ? draftExportState(draft, jobs) : undefined
+  const standalone = !workspace.output_variants?.some(item => item.draft_id === draftId)
+  const exportState = draft ? draftExportState(draft, jobs, standalone) : undefined
   const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
   const active = jobs.find(j => j.status === 'queued' || j.status === 'running')
 
@@ -225,7 +226,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
         {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>{t("起点（秒）")}<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>{t("终点（秒）")}<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" onClick={() => setPicker(i)}>{t("替换")}</Btn><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>{t("上移")}</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>{t("下移")}</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>{t("移除")}</Btn></div></div>)}
       </details>
       </section>
-      <DraftSettingsPanel templateEditable={templatesOn && !workspace.output_variants?.some(item => item.draft_id === draft.id)} draft={draft} patch={patch} scene={scene} currentTime={currentTime} onShot={setShot}
+      <DraftSettingsPanel templateEditable={templatesOn && standalone} draft={draft} patch={patch} scene={scene} currentTime={currentTime} onShot={setShot}
         framing={framing} onAutoFrame={() => void autoFrame()} onInstallFraming={() => void installFraming()} onPortrait={applyPortrait}
         coverHref={previewUrl && currentJob ? `/project/${projectId}/publish/studio-${currentJob.job_id}` : undefined}
         onOpenCover={href => navigate(href)} /></div>
