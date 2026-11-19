@@ -288,18 +288,27 @@ def _review_eliminations(video, scene, row):
     continuous = row.get("same_match")
     change = _elimination_change(counts, continuous)
     box = row.get("elimination_box")
-    if (change or continuous is not True or row.get("impact") != "routine"
-            or not _counter_box(box) or not isinstance(counts, list) or len(counts) != 8):
+    if change or continuous is not True or row.get("impact") != "routine":
         return change, None
-    readable = [v for v in counts if type(v) is int and v >= 0]
-    if len(readable) < 2 or readable[-1] - readable[0] != 1:
+    readable = [v for v in counts if type(v) is int and v >= 0] if isinstance(counts, list) else []
+    partial = len(readable) >= 2 and readable[-1] - readable[0] == 1
+    missing = not readable and re.search(r"\b(?:kills?|knockouts?|eliminat\w*|K\.?O\.?)\b|淘汰|击杀|撃破", scene.evidence or "", re.I)
+    if not (partial or missing):
         return None, None
-    # A small HUD glyph can be misread in the whole frame. Verify borderline
-    # single gains with a separate transcription of the same player's counter.
     times = _review_times(scene, None)
-    goal = {"goal": "本玩家的累计淘汰数 K.O.，仅抄录该栏，排除名次和徽章", "box": box}
     with tempfile.TemporaryDirectory(prefix="ac-game-eliminations-") as folder:
-        intelligence.sample(video, times, Path(folder))
+        frames = intelligence.sample(video, times, Path(folder))
+        if not _counter_box(box):
+            # The full-window review can miss a small tally. Locate it on this
+            # clip before asking the independent reader to transcribe its digits.
+            prompt = ("找本玩家自己的累计淘汰数（K.O.），不要框PLACE、徽章或其他玩家。"
+                      "返回一个JSON对象，box为包含字段名和数值的整图坐标[左,上,右,下]，"
+                      "0至1000。未定位填null。")
+            location = _optional_observation("game_counter", [{"type":"text","text":prompt}, *frames[:4]])
+            box = location.get("box") if isinstance(location, dict) else None
+        if not _counter_box(box):
+            return None, None
+        goal = {"goal": "本玩家的累计淘汰数 K.O.，仅抄录该栏，排除名次和徽章", "box": box}
         enlarged = _read_counter_grid(Path(folder), len(times), goal)["values"]
     return _elimination_change(enlarged, continuous), enlarged
 
@@ -368,10 +377,10 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
     if commentary_selection is not None:
         schema = dict(id="编号", outcome="分类", final_for_player=False, frame=5, proof="依据",
                       subject="主句", detail="可选短语", core="极短主句", impact="分类",
-                      final_rank=None, before_frame=1, after_frame=8, same_match=False, elimination_counts=[None]*8, elimination_box=None)
+                      final_rank=None, before_frame=1, after_frame=8, same_match=False, elimination_counts=[None]*8, elimination_box=None, combo_before=None, combo_peak=None)
         prompt += (" 动作归属要核对本玩家的计数栏开头和末尾读数，尤其是 K.O.、徽章和连击计数。"
                    "即使提名猜错奖励，仍可保留画面证实的另一项战果，如淘汰数连续增加。"
-                   "same_match仅在同一局连续进行时为true；elimination_counts按1至8帧逐格转录本方累计淘汰数。读不到、字段不是淘汰数或显示结算时填null。elimination_box只框本玩家累计淘汰数和字段名，整帧坐标[左,上,右,下]为0到1000，未定位时填null；不要用PLACE、徽章、剩余人数或对手数据补数。每个字段单独写入对象，proof只写观察。")
+                   "same_match仅在同一局连续进行时为true；elimination_counts按1至8帧逐格转录本方累计淘汰数。读不到、字段不是淘汰数或显示结算时填null。elimination_box只框本玩家累计淘汰数和字段名，整帧坐标[左,上,右,下]为0到1000，未定位时填null；不要用PLACE、徽章、剩余人数或对手数据补数。combo_before、combo_peak分别读本玩家同一连击开始及峰值的数字，普通攻击行数不可代替，无法认出填null。每个字段单独写入对象，proof只写观察。")
         prompt += " 只返回" + json.dumps({"reviews": [schema]}, ensure_ascii=False)
     for offset in range(0, len(scenes), 3):
         group = scenes[offset : offset + 3]
@@ -448,13 +457,19 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                 before, after = row.get("before_frame"), row.get("after_frame")
                 ordered = type(before) is int and type(after) is int and 1 <= before < after <= 8
                 rank = row.get("final_rank")
+                combo_start, peak = row.get("combo_before"), row.get("combo_peak")
+                long_chain = (row.get("same_match") is True and ordered and type(combo_start) is int
+                              and type(peak) is int and 0 <= combo_start <= peak - 4 and peak >= 8)
                 enlarged = None
                 if supported and outcome in ("play", "action_feedback", "placement", "milestone"):
                     tally, enlarged = _review_eliminations(video, scene, row)
                 if outcome == "match_win" and supported:
                     tier = 4
-                elif supported and ordered and impact == "podium" and outcome == "placement" and type(rank) is int and rank in (2, 3):
+                elif supported and ordered and impact == "podium" and outcome in ("placement", "podium") and type(rank) is int and rank in (2, 3):
                     tier = 3
+                elif supported and long_chain and outcome in ("play", "action_feedback", "streak"):
+                    tier = 2
+                    impact = "streak"
                 elif tally:
                     tier = 2
                     if not ordered or impact not in ("recovery", "streak", "milestone"):
@@ -467,6 +482,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                     id=scene.id, start=scene.start, end=scene.end, nomination=scene.evidence,
                     outcome=outcome, impact=impact, before_frame=before, after_frame=after, proof=proof,
                     elimination_counts=row.get("elimination_counts"), enlarged_counts=enlarged, confirmed_eliminations=tally,
+                    combo_before=combo_start, combo_peak=peak,
                     disposition="selected" if tier else ("routine" if impact == "routine" else "unclear"))
                 if not tier:
                     continue
@@ -487,6 +503,8 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                 row, fallback, paired=scene.id in (reaction_anchors or {}), language=language
             ) if supported else fallback
             evidence = f"{outcome} · {frame}/8 · {proof}"[:900] if supported else ""
+            if commentary_selection is not None and long_chain and impact == "streak":
+                title = {"zh": f"连击数升至{peak}", "ja": f"{peak}連鎖"}.get(language, f"{peak} Combo")
             if tally:
                 change = f"{tally[0]} → {tally[1]}"
                 if impact == "elimination":
@@ -592,6 +610,19 @@ def _read_counter_grid(folder, count, goal):
                 row = [int(v) if re.fullmatch(r"[0-9]{1,15}", v) else None for v in row.split()]
             values.extend(row if isinstance(row, list) and len(row) == size else [None] * size)
     return {**goal, "values": values}
+
+
+def _reconcile_counter_tracks(tracks):
+    # Two objectives can point to exactly the same readout. Only use readings
+    # from the same sampled frame and region; conflicting digits stay unknown.
+    for i, track in enumerate(tracks):
+        for other in tracks[i+1:]:
+            if track.get("box") and track["box"] == other.get("box"):
+                values = []
+                for left, right in zip(track["values"], other["values"]):
+                    observed = {v for v in (left, right) if type(v) is int and v >= 0}
+                    values.append(observed.pop() if len(observed) == 1 else None)
+                track["values"] = other["values"] = values
 
 
 def _visible_goal_changes(tracks, frame_count):
@@ -724,6 +755,7 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
             parts.extend(frames)
             response = intelligence.vision_call_at("game_chapter", parts)
             tracks = [_read_counter_grid(Path(tmp), len(times), goal) for goal in goals]
+        _reconcile_counter_tracks(tracks)
         chapter_samples = {
             track["goal"]: list(zip(times, track["values"])) for track in tracks if track["mode"] == "rollover"
         }

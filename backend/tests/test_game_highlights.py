@@ -503,7 +503,7 @@ def test_commentary_review_requires_distinct_consequence(tmp_path, monkeypatch):
     cases = [
         ("flash", "action_feedback", "routine", None, 3, 5),
         ("plain", "play", "routine", None, 3, 5),
-        ("bronze", "placement", "podium", 3, 2, 6),
+        ("bronze", "podium", "podium", 3, 2, 6),
         ("rank", "placement", "podium", 9, 2, 6),
         ("survival", "action_feedback", "recovery", None, 2, 6),
         ("guess", "action_feedback", "recovery", None, 5, 5),
@@ -552,3 +552,14 @@ def test_commentary_recovers_small_counter_glyphs(tmp_path, monkeypatch):
     assert games._review_eliminations(tmp_path/"video", scene, row) == ((5, 7), readings)
     readings[-2:] = [6, 6]
     assert games._review_eliminations(tmp_path/"video", scene, row) == (None, readings)
+
+
+def test_incomplete_grid_can_use_same_hud_at_the_same_frame():
+    tracks = [
+        dict(goal="rollover", mode="rollover", target=29, box=[10,20,30,40], values=[29,None,None,4]),
+        dict(goal="reach", mode="reach", target=3, box=[10,20,30,40], values=[29,0,None,6]),
+        dict(goal="lines", mode="reach", target=30, box=[10,30,30,50], values=[29,7,0,6]),
+    ]
+    games._reconcile_counter_tracks(tracks)
+    assert tracks[0]["values"] == [29,0,None,None]
+    assert tracks[2]["values"] == [29,7,0,6]
