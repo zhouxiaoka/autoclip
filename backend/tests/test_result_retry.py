@@ -182,14 +182,14 @@ def test_timeline_empty_retries_twice_then_stops(tmp_path, monkeypatch):
 
     obj = prepared_extractor(tmp_path)
     (obj.srt_chunks_dir / "chunk_0.json").write_text(
-        __import__("json").dumps([dict(cue(0, 10), index=1)])
+        __import__("json").dumps([dict(cue(0, 6), index=1)])
     )
     save_profile(profile_for(10), tmp_path)
     calls = []
 
     def always(*a, **k):
         calls.append(1)
-        return __import__("json").dumps([topic("short", 0, 10)])
+        return __import__("json").dumps([topic("short", 0, 6)])
 
     obj.llm_client.call_with_retry = always
     with pytest.raises(PipelineFailure) as caught:

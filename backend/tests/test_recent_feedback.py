@@ -12,11 +12,20 @@ def cue(s, e):
 
 
 def test_adjacent_short_topics_can_merge_before_being_dropped():
+    # Topics under the 10s floor still merge with the next one instead of being dropped.
+    cues = [cue(0, 6), cue(6, 12)]
+    items = [dict(outline=str(i), start_time=to_srt_time(i), end_time=to_srt_time(i + 6)) for i in (0, 6)]
+    out, report = refine_timeline(items, cues, profile_for(30))
+    assert len(out) == 1
+    assert out[0]["duration_sec"] == 12
+    assert not report["dropped"]
+
+
+def test_topics_at_the_ten_second_floor_stay_separate():
     cues = [cue(i, i + 5) for i in range(0, 30, 5)]
     items = [dict(outline=str(i), start_time=to_srt_time(i), end_time=to_srt_time(i + 10)) for i in (0, 10, 20)]
     out, report = refine_timeline(items, cues, profile_for(30))
-    assert len(out) == 1
-    assert out[0]["duration_sec"] == 30
+    assert [item["duration_sec"] for item in out] == [10, 10, 10]
     assert not report["dropped"]
 
 
@@ -48,7 +57,7 @@ def test_invalid_or_outside_chunk_ranges_are_rejected(tmp_path, start, end):
     assert extractor(tmp_path)._parse_and_validate_response(json.dumps([dict(outline="topic", start_time=start, end_time=end)]), "00:00:00,000", "00:00:30,000", 0) == []
 
 
-def test_full_extraction_normalizes_and_merges_model_topics(tmp_path):
+def test_full_extraction_normalizes_topics_that_meet_the_minimum(tmp_path):
     obj = extractor(tmp_path)
     obj.timeline_prompt = "Extract topics"
     obj.srt_chunks_dir = tmp_path / "step1_srt_chunks"
@@ -60,18 +69,25 @@ def test_full_extraction_normalizes_and_merges_model_topics(tmp_path):
     response = json.dumps([dict(outline=str(i), start_time=to_srt_time(i).replace(",", "."), end_time=to_srt_time(i + 10).replace(",", ".")) for i in (0, 10, 20)])
     obj.llm_client.call_with_retry = lambda *a, **k: response
     out = obj.extract_timeline([dict(title="topic", subtopics=[], chunk_index=0)])
-    assert len(out) == 1
+    assert [item["duration_sec"] for item in out] == [10, 10, 10]
     assert out[0]["start_time"] == "00:00:00,000"
-    assert out[0]["end_time"] == "00:00:30,000"
-    assert out[0]["duration_sec"] == 30
-    assert json.loads((tmp_path / "quality_report.json").read_text())["step2"]["output"] == 1
+    assert out[0]["end_time"] == "00:00:10,000"
+    assert out[2]["end_time"] == "00:00:30,000"
+    assert json.loads((tmp_path / "quality_report.json").read_text())["step2"]["output"] == 3
 
 
-def test_short_source_remains_below_existing_minimum():
-    # This fix does not silently lower the product's 20-second minimum.
+def test_ten_second_span_meets_the_short_floor():
     out, report = refine_timeline([dict(outline="short", **{k: v for k, v in cue(0, 10).items() if k != "text"})], [cue(0, 10)], profile_for(10))
+    assert len(out) == 1
+    assert out[0]["duration_sec"] == 10
+    assert not report["dropped"]
+
+
+def test_span_under_ten_seconds_is_still_dropped():
+    out, report = refine_timeline([dict(outline="short", **{k: v for k, v in cue(0, 8).items() if k != "text"})], [cue(0, 8)], profile_for(8))
     assert out == []
     assert len(report["dropped"]) == 1
+    assert "10s < 10s" not in report["dropped"][0]["reason"]
 
 
 def test_merge_does_not_exceed_maximum():
@@ -146,15 +162,15 @@ def test_partial_failure_only_returns_successful_current_chunks(tmp_path):
 
 def test_short_tail_can_extend_backward_without_crossing_previous_topic():
     cues = [cue(i, i + 5) for i in range(0, 90, 5)]
-    out, report = refine_timeline([topic('earlier', 0, 30), topic('tail', 80, 90)], cues, profile_for(90))
+    out, report = refine_timeline([topic('earlier', 0, 30), topic('tail', 85, 90)], cues, profile_for(90))
     tail = next(c for c in out if c['outline']=='tail')
-    assert tail['start_time'] == to_srt_time(70) and tail['duration_sec'] == 20
+    assert tail['start_time'] == to_srt_time(80) and tail['duration_sec'] == 10
     assert 'extend_start' in tail['refine']['ops']
     assert not report['dropped']
 
 
 def test_short_tail_does_not_expand_across_silence():
-    out, report = refine_timeline([topic('tail',80,90)], [cue(50,55),cue(80,85),cue(85,90)], profile_for(90))
+    out, report = refine_timeline([topic('tail', 86, 90)], [cue(50, 55), cue(86, 90)], profile_for(90))
     assert out == [] and report['dropped']
 
 
@@ -257,7 +273,7 @@ def test_step2_invalid_reply_has_current_safe_diagnostics(tmp_path, monkeypatch,
     assert report['chunks'][0]['rejected'][reason] == 1
 
 
-@pytest.mark.parametrize('total,min_sec,start,end', [(10,20,0,10), (600,45,0,30), (3600,90,0,30)])
+@pytest.mark.parametrize('total,min_sec,start,end', [(10,10,0,6), (600,45,0,30), (3600,90,0,30)])
 def test_step2_duration_failure_reports_actual_profile(tmp_path, monkeypatch, total, min_sec, start, end):
     from backend.pipeline.failures import PipelineFailure
     from backend.pipeline.quality import save_profile

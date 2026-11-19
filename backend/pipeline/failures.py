@@ -96,7 +96,7 @@ HINT_CHECK_FFMPEG = "确认 ffmpeg 可用（桌面版内置；Docker / 脚本模
 # The extractor itself distinguishes request, response and duration failures.
 CODE_TIMELINE_EMPTY = "timeline_empty"
 HINT_EMPTY_TIMELINE = (
-    "短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。"
+    "短视频里的片段常被最短时长滤掉（短片约 10 秒起），或模型给出的时间戳对不上字幕。"
     "换一条更长、口播更完整的素材后再试。"
 )
 

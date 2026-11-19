@@ -72,9 +72,12 @@ def test_probe_tells_audio_and_duration_and_never_guesses(tmp_path):
 
 def test_minimum_sentence_matches_the_short_profile():
     # Every source shorter than its minimum is in the short tier, so the fixed sentence holds.
-    assert profile_for(19.9).min_clip_sec == media_precheck.SUBTITLE_MIN_SOURCE_SEC == 20
-    assert '20 秒' in media_precheck.TOO_SHORT_MESSAGE
-    assert media_precheck.too_short(10.05) and not media_precheck.too_short(20.0)
+    assert profile_for(19.9).min_clip_sec == media_precheck.SUBTITLE_MIN_SOURCE_SEC == 10
+    assert profile_for(20.084).min_clip_sec == profile_for(19.88).min_clip_sec == 10
+    assert '10 秒' in media_precheck.TOO_SHORT_MESSAGE
+    assert '20 秒' not in media_precheck.TOO_SHORT_MESSAGE
+    assert media_precheck.too_short(9.5) and not media_precheck.too_short(10.0)
+    assert not media_precheck.too_short(19.88) and not media_precheck.too_short(20.084)
     assert not media_precheck.too_short(None) and not media_precheck.too_short(0)
 
 
@@ -102,7 +105,7 @@ def test_short_source_is_blocked_before_screening_even_with_vision(tmp_path, mon
     video = _video(tmp_path / 'raw' / 'input.mp4', 3)
     _preferences(monkeypatch)
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
-    monkeypatch.setattr(intelligence, '_probe', lambda v: {'duration': 10.05, 'width': 960, 'height': 540})
+    monkeypatch.setattr(intelligence, '_probe', lambda v: {'duration': 8.0, 'width': 960, 'height': 540})
     _no_model_calls(monkeypatch)
     with pytest.raises(PipelineFailure) as caught:
         planning.recommend(video, ImportOptions(auto_start=True))
@@ -161,7 +164,7 @@ def test_silent_source_goes_visual_when_screening_picks_a_visual_goal(tmp_path, 
 
 def test_import_of_a_short_video_fails_fast_with_a_translated_unreported_code(client, monkeypatch):
     from backend.core import sentry_setup
-    short = _video(store.directory('p1').parent / 'upload' / 'short.mp4', 10)
+    short = _video(store.directory('p1').parent / 'upload' / 'short.mp4', 8)
     _preferences(monkeypatch)
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
     _no_model_calls(monkeypatch)
@@ -200,7 +203,7 @@ def test_import_of_a_silent_video_without_vision_fails_fast(client, monkeypatch)
 
 def test_confirm_refuses_the_subtitle_route_for_a_short_source(client, monkeypatch):
     # The review flow (auto_start=false) keeps the visual route open; confirming subtitles is refused.
-    short = _video(store.directory('p1').parent / 'upload' / 'short.mp4', 10)
+    short = _video(store.directory('p1').parent / 'upload' / 'short.mp4', 8)
     _asr_ready(monkeypatch)
     _preferences(monkeypatch)
     monkeypatch.setattr(intelligence, 'ready', lambda: True)

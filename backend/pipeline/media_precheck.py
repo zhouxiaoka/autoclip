@@ -1,7 +1,7 @@
 """Source checks that run before any model call (RC156 Win QA #10, #11).
 
 The subtitle route needs two things the source either has or does not:
-- at least one minimum-length clip of material (`profile_for(...).min_clip_sec`, 20 s for short sources);
+- at least one minimum-length clip of material (`profile_for(...).min_clip_sec`, 10 s for short sources);
 - an audio track to transcribe, unless the user attached an SRT.
 
 Both are known as soon as ffprobe can read the file, so a source that cannot
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.pipeline.failures import PipelineFailure
-from backend.pipeline.quality import profile_for
+from backend.pipeline.quality import SHORT_MIN_CLIP_SEC, profile_for
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ SOURCE_INPUT_CODES = frozenset({SOURCE_TOO_SHORT, SOURCE_NO_AUDIO})
 
 # Every source shorter than the minimum is in the "short" tier, whose minimum is this value
 # (test_media_precheck keeps the sentence and quality.profile_for in step).
-SUBTITLE_MIN_SOURCE_SEC = 20
+SUBTITLE_MIN_SOURCE_SEC = SHORT_MIN_CLIP_SEC
 # These sentences are i18n keys in all eight frontend locales: keep them fixed (no interpolation).
-TOO_SHORT_MESSAGE = "视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。"
+TOO_SHORT_MESSAGE = "视频太短：不到 10 秒，按字幕切不出完整片段。请换一段 10 秒以上的视频。"
 NO_AUDIO_MESSAGE = (
     "这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；"
     "想按画面剪辑，请到「设置 → 服务商与模型」换一个能看图的模型。"

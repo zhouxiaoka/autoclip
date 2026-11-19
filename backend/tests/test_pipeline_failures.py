@@ -342,7 +342,7 @@ def test_adapter_empty_timeline_does_not_send_user_to_model_settings(adapter, mo
     assert result["stage"] == "ANALYZE"
     assert result["error_code"] == "timeline_empty"
     assert "4 个话题" in result["error"]
-    assert "20" in result["error"]
+    assert "10 秒" in result["error"]
     assert "时间戳" in result["error"]
     assert "最短时长" in result["error"]
     assert "设置 → 服务商与模型" not in result["error"]

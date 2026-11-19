@@ -103,7 +103,7 @@
 
 | 项 | 怎么验 |
 |---|---|
-| 5 分钟视频不再出 2 分钟片 | eval case `short-*`：片数 3–6，时长 20–150 s |
+| 5 分钟视频不再出 2 分钟片 | eval case `short-*`：片数 3–6，时长 10–150 s |
 | 边界对齐 | `quality_report.snap_offsets` p90 < 0.5 s；人工抽看 5 条无半句 |
 | 零片率 | eval 全部 case `clips >= min_keep`；`fallback_rate` 有数但不为 100% |
 | 发布导出 | 三个预设各导一条：ffprobe 分辩率正确、字幕可见、标题卡前 4 秒出现、时长与元数据一致（±0.1 s） |
