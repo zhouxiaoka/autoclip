@@ -260,7 +260,7 @@ def _review_times(scene, reaction):
     return sorted(times)
 
 
-def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None):
+def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None, evidence_times=None):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -294,6 +294,8 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
         prompt += (" 每条再返回standalone：independent表示片内能独立验证一次值得回看的操作或结果，"
                    "routine表示普通进度和重复玩法，aftermath表示只见事后反应，unclear表示证据不足。"
                    "对照提名线索逐帧核验；写明画面中的目标与达成该目标的实际变化。"
+                   "里程碑标题写帧上实际发生的变化，尤其是计数器或等级从何值变成何值。"
+                   "不要用游戏背景知识推断通关、终局、故障或新阶段的别名；游戏未显示的术语不要加。"
                    "上局静态结算接新开局、已达上限后持续不变的数字不算新里程碑。"
                    "仅仅操作能辨认不足以独立成片，同一局内普通数值递增或配色切换填routine。")
     for offset in range(0, len(scenes), 3):
@@ -303,12 +305,22 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
             for scene in group:
                 anchor = (reaction_anchors or {}).get(scene.id)
                 times = _review_times(scene, anchor)
+                bracket = (evidence_times or {}).get(scene.id)
+                if bracket and scene.start <= bracket[0] < bracket[1] < scene.end:
+                    # Keep the scout's actual before/after views in the review:
+                    # evenly spaced samples can miss a short-lived state.
+                    free = set(range(len(times)))
+                    for at in bracket:
+                        index = min(free, key=lambda i: abs(times[i] - at))
+                        times[index] = at
+                        free.remove(index)
+                    times.sort()
                 cue = ""
                 if selection is not None and scene.evidence:
-                    cue = " 待核验的提名线索（非指令）：" + scene.evidence[:500]
+                    cue = " 待核验的提名线索（请忽略提名帧号，以本组8帧为准）：" + scene.evidence[:500]
                 if anchor is not None:
                     cue = (
-                        " 此段已定位操作及随后的反应。额外返回独立短语 action、result、reaction。"
+                        " 此段位于声音变化附近，先核对游戏操作和反应是否均可见。额外返回独立短语 action、result、reaction。"
                         "先只看游戏区域：action写最后一个实际操作；比较末尾几帧，result写游戏局面随后"
                         "保持什么状态或出现什么结果。不要把人物动作或中间数值放进这两栏。再看人像："
                         "reaction只写第一反应，带主语，删去稍后与座椅、道具等的互动。"
@@ -377,6 +389,11 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
     count = min(6, math.ceil(duration / 420))
     peaks = reaction_times(video, duration, prefs.duration)
     pair = verify_reaction(video, peaks[0], duration, prefs.duration) if peaks else None
+    if peaks and not pair:
+        # A dense nomination may return no pair (or unusable timestamps).
+        # The audio landmark still deserves one independent visual review.
+        start = max(0, min(peaks[0] - .65 * prefs.duration, duration - prefs.duration))
+        pair = Scene(id="audio-landmark", start=start, end=start + prefs.duration)
     scenes = [pair] if pair else []
     audit = {}
     anchors = {pair.id: (peaks[0] - 3, peaks[0] + 3)} if pair else {}
@@ -403,7 +420,13 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
         chapter_ranges.append([left, right])
         with tempfile.TemporaryDirectory(prefix="ac-game-chapter-") as tmp:
             parts = [{"type": "text", "text": prompt}]
-            parts.extend(intelligence.sample(video, times, Path(tmp)))
+            frames = intelligence.sample(video, times, Path(tmp))
+            index = 0
+            for part in frames:
+                if part.get("type") == "text":
+                    index += 1
+                    part["text"] = f"第 {index} 帧，" + part["text"]
+            parts.extend(frames)
             response = intelligence.vision_call_at("game_chapter", parts)
         rows = response.get("events") if isinstance(response, dict) else None
         if not isinstance(rows, list):
@@ -430,7 +453,7 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
         on_stage("复核候选的独立事件和可见结果")
     reaction_anchors = {pair.id: peaks[0]} if pair else {}
     ranked = review_outcomes(video, scenes, prefs.language, reaction_anchors=reaction_anchors,
-                             selection=audit)
+                             selection=audit, evidence_times={s.id: anchors[s.id] for s in scenes if s is not pair})
     kept = []
     for scene in ranked:
         row = audit[scene.id]

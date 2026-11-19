@@ -313,3 +313,23 @@ def test_long_visual_scan_recovers_quiet_objective_and_skips_routine(monkeypatch
     assert any(400 < scene.start < 800 for scene in scenes)
     assert pair.id in {s.id for s in scenes}
     assert len(scenes) == 2
+
+
+@pytest.mark.parametrize("verdict,expected", [("independent", True), ("aftermath", False)])
+def test_missing_dense_pair_still_needs_visual_confirmation(tmp_path, monkeypatch, verdict, expected):
+    monkeypatch.setattr(games, "reaction_times", lambda *args: [850])
+    monkeypatch.setattr(games, "verify_reaction", lambda *args: None)
+    monkeypatch.setattr(intelligence, "sample", lambda *args, **kwargs: [])
+    def review(phase, parts):
+        if phase == "game_chapter":
+            return {"events": []}
+        return {"reviews": [{"id": "audio-landmark", "outcome": "action_feedback",
+                             "frame": 5, "proof": "Board and player in frame",
+                             "subject": "Board stops", "standalone": verdict}]}
+    monkeypatch.setattr(intelligence, "vision_call_at", review)
+    if expected:
+        scenes, _ = games.analyze_game_chapters(tmp_path / "video", Preferences(), 900, "", None)
+        assert len(scenes) == 1 and scenes[0].start < 850 < scenes[0].end
+    else:
+        with pytest.raises(games.UserFacingError, match="独立成片"):
+            games.analyze_game_chapters(tmp_path / "video", Preferences(), 900, "", None)
