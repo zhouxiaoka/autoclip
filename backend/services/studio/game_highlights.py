@@ -397,19 +397,33 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
 def _read_game_objectives(video, duration):
     prompt = (
         "找出直播画面文字明确列出的本场数值目标，以及衡量它的实时游戏读数。"
-        "优先明确的阶段转换，最多两项；无明确目标返回空数组。"
+        "先逐字转录目标列表的每一行，再为每行匹配实时读数。多项目标中转换/回绕目标必须单列，其次才是累计数值。"
+        "同栏的不同目标也要分别记录，优先可直接核验的阶段转换；无明确目标返回空数组。"
         "goal照抄目标文字，target为整数。mode为reach或rollover（到指定数值后回绕）。"
         "box圈出实时读数及其字段名，不是目标列表；坐标为整张图的[左,上,右,下]，0至1000。"
-        '返回 {"goals":[{"goal":"原文","target":整数,"mode":"reach或rollover","box":[整数,整数,整数,整数]}]}。'
+        '返回 {"visible_goal_lines":["逐行原文"],"goals":[{"goal":"原文","target":整数,"mode":"reach或rollover","box":[整数,整数,整数,整数]}]}。'
     )
     with tempfile.TemporaryDirectory(prefix="ac-game-objectives-") as tmp:
         frames = intelligence.sample(video, [duration * f for f in (.05, .18, .45)], Path(tmp), width=960)
-        reply = intelligence.vision_call_at("game_objectives", [{"type": "text", "text": prompt}, *frames])
+        # Small stream overlays may be unreadable at the model's whole-frame
+        # resolution. Supply four enlarged excerpts as well as the full image.
+        from PIL import Image
+        with Image.open(Path(tmp) / "0.jpg") as overview:
+            width, height = overview.size
+            for y in (0, height // 2):
+                for x in (0, width // 2):
+                    tile = overview.crop((x, y, x + width // 2, y + height // 2))
+                    buf = io.BytesIO()
+                    tile.resize((width, height)).save(buf, format="JPEG")
+                    frames.extend([{"type": "text", "text": f"局部放大，仅供读字：左{x*1000//width}，上{y*1000//height}。框坐标仍按整图。"},
+                                   {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," +
+                                    base64.b64encode(buf.getvalue()).decode("ascii")}}])
+        reply = _optional_observation("game_objectives", [{"type": "text", "text": prompt}, *frames])
     goals = []
     rows = reply.get("goals") if isinstance(reply, dict) else None
     if not isinstance(rows, list):
-        raise ModelResponseInvalid("画面目标格式无效，请重试")
-    for row in rows[:2]:
+        return []
+    for row in rows:
         if not isinstance(row, dict):
             continue
         box = row.get("box")
@@ -419,7 +433,22 @@ def _read_game_objectives(video, duration):
                 row.get("mode") in ("reach", "rollover") and type(row.get("target")) is int
                 and row["target"] > 0 and isinstance(row.get("goal"), str) and row["goal"].strip()):
             goals.append({k: row[k] for k in ("goal", "target", "mode", "box")})
-    return goals
+    goals.sort(key=lambda goal: goal["mode"] != "rollover")
+    unique = {}
+    for goal in goals:
+        unique.setdefault((goal["mode"], goal["target"], tuple(goal["box"])), goal)
+    return list(unique.values())[:2]
+
+
+def _optional_observation(phase, parts):
+    try:
+        return intelligence.vision_call_at(phase, parts)
+    except intelligence.VisionRequestError as error:
+        if error.code != "invalid_response":
+            raise
+        # Invalid auxiliary OCR is not evidence. The ordinary visual nomination
+        # and independent in-clip review can still complete.
+        return {}
 
 
 def _read_counter_grid(folder, count, goal):
@@ -446,16 +475,19 @@ def _read_counter_grid(folder, count, goal):
         {"type": "text", "text": "逐格抄录该目标对应的实时游戏计数，不作高光判断。目标为"
          + json.dumps(goal["goal"], ensure_ascii=False) +
          f"。按编号1–{count}依次返回{count}个读数；纯十进制转为整数（00为0），其余填null。"
-         '按图片的行列返回 {"rows":[[第一行6个值],[第二行6个值],...]}，重复的数字也要逐格抄录。'},
+         '返回JSON对象，每行作为一个字符串，例如 {"rows":["3 3 4 4 _ 5","6 6 7 7 7 8"]}。'
+         '空格分隔，无法辨认用_占位。每行6格，重复值也要抄录。'},
         {"type": "image_url", "image_url": {"url": "data:image/png;base64," +
          base64.b64encode(buf.getvalue()).decode("ascii")}},
     ]
-    response = intelligence.vision_call_at("game_counter", content)
+    response = _optional_observation("game_counter", content)
     rows = response.get("rows") if isinstance(response, dict) else None
     values = []
     if isinstance(rows, list) and len(rows) == math.ceil(count / 6):
         for index, row in enumerate(rows):
             size = min(6, count - index * 6)
+            if isinstance(row, str):
+                row = [int(v) if re.fullmatch(r"[0-9]{1,15}", v) else None for v in row.split()]
             values.extend(row if isinstance(row, list) and len(row) == size else [None] * size)
     return {**goal, "values": values}
 

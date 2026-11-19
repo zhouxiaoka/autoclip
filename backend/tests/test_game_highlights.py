@@ -380,3 +380,15 @@ def test_retrospective_cue_can_only_add_a_visually_confirmed_win(monkeypatch, tm
     assert ranked[1].id == ordinary.id
     monkeypatch.setattr(intelligence, "vision_call_at", lambda *a: pytest.fail("duplicate verification"))
     assert games._recover_result_windows(tmp_path/"video", rows, 240, prefs, ranked, {ranked[0].id}) == ranked
+
+
+def test_unreadable_optional_counter_keeps_the_primary_scan(monkeypatch):
+    def invalid(*args):
+        raise intelligence.VisionRequestError("invalid_response", "bad grid")
+    monkeypatch.setattr(intelligence, "vision_call_at", invalid)
+    assert games._optional_observation("game_counter", []) == {}
+    def offline(*args):
+        raise intelligence.VisionRequestError("network", "network down")
+    monkeypatch.setattr(intelligence, "vision_call_at", offline)
+    with pytest.raises(intelligence.VisionRequestError, match="network"):
+        games._optional_observation("game_counter", [])
