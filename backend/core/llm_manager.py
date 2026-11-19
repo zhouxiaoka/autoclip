@@ -204,6 +204,12 @@ class LLMManager:
             except Exception as e:
                 logger.warning(f"加载设置文件失败: {sanitize_exception_text(e)}")
         
+        # The settings editor can migrate inactive, explicitly saved accounts. Do not
+        # turn keys supplied only by the process environment into persisted accounts.
+        self.stored_legacy_providers = tuple(
+            field.removesuffix("_api_key") for field in self._ENV_KEY_FALLBACKS
+            if isinstance(default_settings.get(field), str) and default_settings[field].strip()
+        )
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)

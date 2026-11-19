@@ -714,6 +714,19 @@ def migrate_legacy() -> ModelSettings:
             # Keep the old file untouched and never send its values in the warning.
             cover_assignment = None
             migration_warnings.append('cover_configuration_invalid')
+    # Legacy clients saved a key per provider even when only one was selected.
+    # The shared OpenAI URL may belong to the active gateway or local runtime.
+    for other in getattr(manager, 'stored_legacy_providers', ()):
+        if other == provider or (other == 'openai' and s.get('openai_base_url')):
+            continue
+        url = (s.get('dashscope_base_url') or '') if other == 'dashscope' else ''
+        try:
+            account = Connection(id=f'legacy-provider-{other}', name=other, provider=other,
+                                 api_key=s[f'{other}_api_key'], base_url=url)
+        except ValidationError:
+            continue
+        if not any(c.provider == other and c.api_key == account.api_key and c.base_url == url for c in connections):
+            connections.append(account)
     prefs = analysis_preferences.load()
     settings = ModelSettings(connections=connections, analysis=analysis, vision=vision,
                          cover=cover_assignment, cover_enabled=cfg.enabled and cover_assignment is not None,

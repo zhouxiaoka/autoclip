@@ -2,8 +2,11 @@ import { socialPublishObserved, socialPublishOutcome } from '../analytics/studio
 import { workflow } from '../analytics/observer'
 import i18n, { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import StudioDownloadLink from '../features/studio/StudioDownloadLink'
+import type { RenderJob } from '../features/studio/types'
+import './publish-clip.css'
 import { studioApi } from '../features/studio/api'
 import { outputVariantPublishTarget } from '../features/studio/outputVariantPublish'
 import { projectApi } from '../services/api'
@@ -77,12 +80,17 @@ function defaultWhen(): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-const PublishClipPage: React.FC = () => {
-  useTranslation()
+export default function PublishClipPage() {
   const { id: projectId = '', clipId = '' } = useParams()
+  const { search } = useLocation()
+  return <PublishClip key={`${projectId}/${clipId}${search}`} projectId={projectId} clipId={clipId} search={search} />
+}
+
+function PublishClip({ projectId, clipId, search }: { projectId: string; clipId: string; search: string }) {
+  useTranslation()
   const studioJobId = /^studio-[a-f0-9]{32}$/.test(clipId) ? clipId.slice(7) : null
-  const variantTarget = outputVariantPublishTarget(useLocation().search)
-  const [studioRevision, setStudioRevision] = useState<number>()
+  const variantTarget = outputVariantPublishTarget(search)
+  const [studioExport, setStudioExport] = useState<RenderJob | null>(null)
   const navigate = useNavigate()
   const runId = useRef(0)
 
@@ -138,7 +146,7 @@ const PublishClipPage: React.FC = () => {
           const exported = workspace.jobs.find(job => job.job_id === studioJobId && job.status === 'completed')
           if (!exported) throw new Error(t('成片尚未完成或不存在，请返回项目重新导出'))
           nextTitle = exported.title
-          setStudioRevision(exported.revision)
+          setStudioExport(exported)
           // An automatic output arrives with its publish kit: start from its copy and cover.
           const variant = (workspace.output_variants || []).find(item => item.id === variantTarget.uploadPost)
           if (variant?.post) {
@@ -180,7 +188,7 @@ const PublishClipPage: React.FC = () => {
       }
     }
     void load()
-    return () => { cancelled = true }
+    return () => { cancelled = true; runId.current++; coverJob.current++ }
   }, [projectId, clipId, studioJobId])
 
   const chooseUser = (next: string) => {
@@ -193,13 +201,15 @@ const PublishClipPage: React.FC = () => {
     setSelected((cur) => cur.includes(platform) ? cur.filter((p) => p !== platform) : [...cur, platform])
   }
 
+  const ready = configured || biliConfigured
+
   // Covers are on by default: make one as soon as the page is ready so the user sees it instead of an empty box.
   const autoCover = useRef(false)
   useEffect(() => {
-    if (loading || error || cover || coverBusy || autoCover.current) return
+    if (loading || !ready || error || cover || coverBusy || autoCover.current) return
     autoCover.current = true
     void generateCover()
-  }, [loading, error, cover, coverBusy])
+  }, [loading, ready, error, cover, coverBusy])
 
   const generateCover = async () => {
     if (!projectId || !clipId || coverBusy) return
@@ -246,7 +256,6 @@ const PublishClipPage: React.FC = () => {
   const connected = profile?.connected_platforms || []
   const destinations = publishDestinations(connected, biliConfigured)
   const reconnect = (profile?.reconnect_platforms || []).map(platformLabel).join(' · ')
-  const ready = configured || biliConfigured
   const busy = phase === 'running' || phase === 'waiting' || savingFile
   const preset = renderPreset(selected)
   const longYoutube = selected.includes('youtube') && title.trim().length > 100
@@ -374,7 +383,7 @@ const PublishClipPage: React.FC = () => {
     setPercent(8)
     try {
       const started = await projectApi.startClipExport(projectId, clipId, {
-        preset: studioJobId ? 'original' : preset,
+        preset,
         subtitles,
         title_card: titleCard,
       })
@@ -412,167 +421,178 @@ const PublishClipPage: React.FC = () => {
             ? t("正在渲成片并提交")
             : null
 
+  const exported = studioExport?.job_id === studioJobId ? studioExport : null
+  const showMedia = !loading && (studioJobId ? !!exported : !!clipId)
+  const settingsLink = () => navigate('/settings?section=publish')
+
   return (
-    <div className="ac-page ac-page--narrow">
+    <div className="ac-page publish-clip-page">
       <header>
         <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>
           <Icon.Back />{t("项目")}
         </button>
         <h1 className="ac-title">{t("发布")}</h1>
-        <div className="ac-meta">
-          <span>{clipTitle || t("切片")}</span>
-          <span className="dot" />
-          <a href={publishGuideHref(i18n.language)} onClick={(e) => { e.preventDefault(); void openExternalLink(publishGuideHref(i18n.language)) }} style={{ color: 'var(--ac-accent)' }}>{t("操作教程")}</a>
-        </div>
       </header>
 
-      <div className="ac-rows" style={{ marginTop: 28 }}>
-        {loading && <div style={{ padding: '28px 0' }}><StatusDot tone="accent" label={t("还在处理中")} /></div>}
-        {!loading && !ready && !error && (
-          <div className="ac-empty" style={{ marginTop: 8 }}>
-            <b>{t("还没有配置发布账号。到设置里填一次即可。")}</b>
-            <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Btn size="sm" variant="cta" onClick={() => navigate('/settings?section=publish')}>{t("去设置")}</Btn>
-              <Btn size="sm" onClick={() => void openExternalLink(publishGuideHref(i18n.language))}>{t("操作教程")}<Icon.External size={12} /></Btn>
-            </div>
+      {loading && <div className="publish-loading" role="status"><StatusDot tone="accent" label={t("还在处理中")} /></div>}
+      <div className="publish-layout">
+        {showMedia && <section className="publish-media" aria-label={t('视频预览')}>
+          <video key={clipId} controls playsInline preload="metadata" aria-label={clipTitle || t('视频预览')}
+            src={exported ? studioApi.video(projectId, exported.job_id) : projectApi.getClipVideoUrl(projectId, clipId)}
+            poster={exported ? studioApi.thumbnail(projectId, exported.draft_id, exported.revision, exported.job_id) : undefined} />
+          <div className="publish-media-info">
+            {exported && <p className="publish-revision"><StatusDot tone="ok" label={t('已导出')} /> · V{exported.revision}</p>}
+            <h2>{clipTitle || t("切片")}</h2>
+            {exported
+              ? <StudioDownloadLink className="ac-btn ac-btn--sm" projectId={projectId} jobId={exported.job_id} />
+              : <Btn size="sm" loading={savingFile} disabled={busy} onClick={() => void downloadFile()}>{t("下载成片")}</Btn>}
           </div>
-        )}
-        {!loading && ready && (
-          <>
-            {profiles.length > 1 && (
-              <Row label={t("默认账号")}>
-                <Segmented size="sm" ariaLabel={t("默认账号")} value={user} onChange={chooseUser}
-                  options={profiles.map((p) => ({ value: p.username, label: p.username }))} />
-              </Row>
-            )}
-            <Row label={t("何时")}>
-              <Segmented size="sm" ariaLabel={t("何时")} value={when} onChange={setWhen}
-                options={[{ value: 'now', label: t("现在发") }, { value: 'later', label: t("定时") }]} />
-            </Row>
-            {when === 'later' && (
-              <Row label={t("选择发出的时间")} hint={selected.includes('bilibili') ? t("B 站定时要晚于现在两小时。") : undefined}>
-                <input className="ac-input" style={{ width: 220 }} type="datetime-local" aria-label={t("选择发出的时间")} value={whenValue} onChange={(e) => setWhenValue(e.target.value)} />
-              </Row>
-            )}
-            {destinations.length > 0 && (
-              <Row label={t("选择要发布的平台")} stack>
-                <div className="ac-seg ac-seg--sm" role="group" aria-label={t("选择要发布的平台")}>
-                  {destinations.map((p) => (
-                    <button key={p} type="button" aria-pressed={selected.includes(p)} onClick={() => toggle(p)} disabled={busy}>{platformLabel(p)}</button>
-                  ))}
-                </div>
-              </Row>
-            )}
-            {configured && profiles.length > 0 && !connected.length && !biliConfigured && !reconnect && (
-              <p style={{ color: 'var(--ac-sub)', fontSize: 13 }}>{t("这个账号还没有连接平台。")}</p>
-            )}
-            {reconnect && (
-              <p style={{ color: 'var(--ac-sub)', fontSize: 13, margin: '8px 0 0' }}>{t("需要重新连接：{{platforms}}", { platforms: reconnect })}</p>
-            )}
-            <Row label={t("可见范围")} hint={t("默认先发到自己看得到的地方。公开会直接出现在账号上。")}>
-              <Segmented size="sm" ariaLabel={t("可见范围")} value={visibility} onChange={setVisibility}
-                options={[{ value: 'private', label: t("仅自己") }, { value: 'public', label: t("公开") }]} />
-            </Row>
-            <Row wide label={t("标题")} hint={longYoutube ? t("YouTube 标题超过 100 字时会自动缩短。") : t("不填就用切片标题。")}>
-              <input className="ac-input" aria-label={t("标题")} value={title} onChange={(e) => setTitle(e.target.value)} />
-            </Row>
-            <Row wide label={t("描述")} hint={t("YouTube、LinkedIn、Facebook、Pinterest 和 B 站会用到。")}>
-              <textarea className="ac-input ac-textarea" style={{ minHeight: 88 }} aria-label={t("描述")} value={description} onChange={(e) => setDescription(e.target.value)} />
-            </Row>
-            <Row stack label={t("封面")} hint={t("生图失败或未生成时，投稿会自动截帧，不会卡住发布。")}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-                <div style={{
-                  width: '100%',
-                  maxWidth: 360,
-                  aspectRatio: coverPlatform(selected) === 'douyin' ? '9 / 16' : '16 / 9',
-                  background: 'var(--ac-thumb)',
-                  borderRadius: 12,
-                  overflow: 'hidden',
-                  border: '1px solid var(--ac-line)',
-                }}>
-                  {cover?.url ? (
-                    <img src={cover.url} alt={t("封面")} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  ) : (
-                    <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--ac-muted)', fontSize: 13 }}>
-                      {coverBusy ? t("正在生成封面") : t("还没有封面")}
+        </section>}
+        {!loading && <div className="publish-controls">
+          <div className="publish-panel-head">
+            <h2>{t(ready ? '发布设置' : '发布账号')}</h2>
+            <a href={publishGuideHref(i18n.language)} onClick={(e) => { e.preventDefault(); void openExternalLink(publishGuideHref(i18n.language)) }}>{t("操作教程")}<Icon.External size={12} /></a>
+          </div>
+          {!ready && !error && <div className="publish-account-setup">
+            <p>{t('连接账号后，即可将成片发布到平台。')}</p>
+            <Btn size="sm" variant="cta" onClick={settingsLink}>{t('配置发布账号')}</Btn>
+          </div>}
+          <div className="publish-fields">
+            {ready && (
+              <>
+                {profiles.length > 1 && (
+                  <Row label={t("默认账号")}>
+                    <Segmented size="sm" ariaLabel={t("默认账号")} value={user} onChange={chooseUser}
+                      options={profiles.map((p) => ({ value: p.username, label: p.username }))} />
+                  </Row>
+                )}
+                <Row label={t("何时")}>
+                  <Segmented size="sm" ariaLabel={t("何时")} value={when} onChange={setWhen}
+                    options={[{ value: 'now', label: t("现在发") }, { value: 'later', label: t("定时") }]} />
+                </Row>
+                {when === 'later' && (
+                  <Row label={t("选择发出的时间")} hint={selected.includes('bilibili') ? t("B 站定时要晚于现在两小时。") : undefined}>
+                    <input className="ac-input" style={{ width: 220 }} type="datetime-local" aria-label={t("选择发出的时间")} value={whenValue} onChange={(e) => setWhenValue(e.target.value)} />
+                  </Row>
+                )}
+                {destinations.length > 0 && (
+                  <Row label={t("选择要发布的平台")} stack>
+                    <div className="ac-seg ac-seg--sm" role="group" aria-label={t("选择要发布的平台")}>
+                      {destinations.map((p) => (
+                        <button key={p} type="button" aria-pressed={selected.includes(p)} onClick={() => toggle(p)} disabled={busy}>{platformLabel(p)}</button>
+                      ))}
                     </div>
-                  )}
-                </div>
-                <input className="ac-input" aria-label={t("封面标题")} placeholder={t("封面标题")} value={coverTitle} onChange={(e) => setCoverTitle(e.target.value)} />
-                <input className="ac-input" aria-label={t("封面副标题")} placeholder={t("封面副标题")} value={coverSubtitle} onChange={(e) => setCoverSubtitle(e.target.value)} />
-                <input className="ac-input" aria-label={t("封面角标")} placeholder={t("封面角标")} value={coverBadge} onChange={(e) => setCoverBadge(e.target.value)} />
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <Btn size="sm" loading={coverBusy} disabled={busy} onClick={() => void generateCover()}>
-                    {cover?.url ? t("重新生成封面") : t("生成封面")}
-                  </Btn>
-                  <Btn size="sm" onClick={() => navigate('/settings?section=cover')}>{t("封面设置")}</Btn>
-                </div>
-                {coverHint && <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{coverHint}</p>}
-                {cover?.method === 'frame' && !coverHint && (
-                  <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{t("当前是截帧封面")}</p>
+                  </Row>
                 )}
-              </div>
-            </Row>
-          </>
-        )}
-        {!loading && !studioJobId && (
-          <>
-            <Row label={t("字幕")} hint={t("把这段的字幕压进画面")}>
-              <Segmented size="sm" ariaLabel={t("字幕")} value={subtitles ? 'on' : 'off'} onChange={(v) => setSubtitles(v === 'on')}
-                options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不显示") }]} />
-            </Row>
-            <Row label={t("片头标题")} hint={t("片头约 4 秒显示标题文字")}>
-              <Segmented size="sm" ariaLabel={t("片头标题")} value={titleCard ? 'on' : 'off'} onChange={(v) => setTitleCard(v === 'on')}
-                options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不显示") }]} />
-            </Row>
-          </>
-        )}
+                {configured && profiles.length > 0 && !connected.length && !biliConfigured && !reconnect && (
+                  <p style={{ color: 'var(--ac-sub)', fontSize: 13 }}>{t("这个账号还没有连接平台。")}</p>
+                )}
+                {reconnect && (
+                  <p style={{ color: 'var(--ac-sub)', fontSize: 13, margin: '8px 0 0' }}>{t("需要重新连接：{{platforms}}", { platforms: reconnect })}</p>
+                )}
+                <Row label={t("可见范围")} hint={t("默认先发到自己看得到的地方。公开会直接出现在账号上。")}>
+                  <Segmented size="sm" ariaLabel={t("可见范围")} value={visibility} onChange={setVisibility}
+                    options={[{ value: 'private', label: t("仅自己") }, { value: 'public', label: t("公开") }]} />
+                </Row>
+                <Row wide label={t("标题")} hint={longYoutube ? t("YouTube 标题超过 100 字时会自动缩短。") : t("不填就用切片标题。")}>
+                  <input className="ac-input" aria-label={t("标题")} value={title} onChange={(e) => setTitle(e.target.value)} />
+                </Row>
+                <Row wide label={t("描述")} hint={t("YouTube、LinkedIn、Facebook、Pinterest 和 B 站会用到。")}>
+                  <textarea className="ac-input ac-textarea" style={{ minHeight: 88 }} aria-label={t("描述")} value={description} onChange={(e) => setDescription(e.target.value)} />
+                </Row>
+                <Row stack label={t("封面")} hint={t("生图失败或未生成时，投稿会自动截帧，不会卡住发布。")}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+                    <div style={{
+                      width: '100%',
+                      maxWidth: 360,
+                      aspectRatio: coverPlatform(selected) === 'douyin' ? '9 / 16' : '16 / 9',
+                      background: 'var(--ac-thumb)',
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      border: '1px solid var(--ac-line)',
+                    }}>
+                      {cover?.url ? (
+                        <img src={cover.url} alt={t("封面")} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      ) : (
+                        <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--ac-muted)', fontSize: 13 }}>
+                          {coverBusy ? t("正在生成封面") : t("还没有封面")}
+                        </div>
+                      )}
+                    </div>
+                    <input className="ac-input" aria-label={t("封面标题")} placeholder={t("封面标题")} value={coverTitle} onChange={(e) => setCoverTitle(e.target.value)} />
+                    <input className="ac-input" aria-label={t("封面副标题")} placeholder={t("封面副标题")} value={coverSubtitle} onChange={(e) => setCoverSubtitle(e.target.value)} />
+                    <input className="ac-input" aria-label={t("封面角标")} placeholder={t("封面角标")} value={coverBadge} onChange={(e) => setCoverBadge(e.target.value)} />
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <Btn size="sm" loading={coverBusy} disabled={busy} onClick={() => void generateCover()}>
+                        {cover?.url ? t("重新生成封面") : t("生成封面")}
+                      </Btn>
+                      <Btn size="sm" onClick={() => navigate('/settings?section=cover')}>{t("封面设置")}</Btn>
+                    </div>
+                    {coverHint && <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{coverHint}</p>}
+                    {cover?.method === 'frame' && !coverHint && (
+                      <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{t("当前是截帧封面")}</p>
+                    )}
+                  </div>
+                </Row>
+              </>
+            )}
+            {!studioJobId && (
+              <>
+                <Row label={t("字幕")} hint={t("把这段的字幕压进画面")}>
+                  <Segmented size="sm" ariaLabel={t("字幕")} value={subtitles ? 'on' : 'off'} onChange={(v) => setSubtitles(v === 'on')}
+                    options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不显示") }]} />
+                </Row>
+                <Row label={t("片头标题")} hint={t("片头约 4 秒显示标题文字")}>
+                  <Segmented size="sm" ariaLabel={t("片头标题")} value={titleCard ? 'on' : 'off'} onChange={(v) => setTitleCard(v === 'on')}
+                    options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不显示") }]} />
+                </Row>
+              </>
+            )}
+          </div>
+
+          {!studioJobId && (
+            <p className="ac-sub" style={{ marginTop: 16 }}>
+              {t("成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。")}
+            </p>
+          )}
+          {busy && <div style={{ marginTop: 16 }}><ProgressLine percent={percent} /></div>}
+          {summary && <p style={{ marginTop: 12, color: 'var(--ac-sub)', fontSize: 13 }}>{summary}</p>}
+          {results.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {results.map((r) => {
+                const tone = r.skipped ? 'muted' : r.success ? 'ok' : 'error'
+                const note = r.skipped
+                  ? t("该平台未连接，已跳过")
+                  : r.fallback_to_inbox
+                    ? t("进了 TikTok 收件箱，需要在 App 里再发一次")
+                    : (r.error || r.message || '')
+                return (
+                  <div key={r.platform} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--ac-line)' }}>
+                    <StatusDot tone={tone} label={<>{platformLabel(r.platform || '')}{note ? <span style={{ color: 'var(--ac-muted)' }}> · {note}</span> : null}</>} />
+                    {r.url && (
+                      <a href={r.url} onClick={(e) => { e.preventDefault(); void openExternalLink(r.url!) }} style={{ color: 'var(--ac-accent)', fontSize: 13 }}>{t("打开链接")}</a>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {error && <p role="alert" style={{ marginTop: 12, color: 'var(--ac-error)', fontSize: 13 }}>{error}</p>}
+
+          {ready && (
+            <div className="publish-submit">
+              {phase !== 'done' && phase !== 'partial' && phase !== 'scheduled' && (
+                <Btn variant="cta" loading={phase === 'running' || phase === 'waiting'} disabled={!selected.length || savingFile} onClick={() => void publish()}>
+                  {when === 'later' ? t("排期发布") : t("开始发布")}
+                </Btn>
+              )}
+              {(phase === 'done' || phase === 'partial' || phase === 'scheduled') && (
+                <Btn onClick={() => navigate(`/project/${projectId}/publish`)}>{t("查看发布记录")}</Btn>
+              )}
+            </div>
+          )}
+        </div>}
       </div>
-
-      {!loading && (
-        <p className="ac-sub" style={{ marginTop: 16 }}>
-          {studioJobId ? t('发布已导出的 V{{revision}} 成片，保留画幅、文字和声音。需要修改时，请返回编辑器另行导出。', { revision: studioRevision ?? '—' }) : t("成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。")}
-        </p>
-      )}
-      {busy && <div style={{ marginTop: 16 }}><ProgressLine percent={percent} /></div>}
-      {summary && <p style={{ marginTop: 12, color: 'var(--ac-sub)', fontSize: 13 }}>{summary}</p>}
-      {results.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          {results.map((r) => {
-            const tone = r.skipped ? 'muted' : r.success ? 'ok' : 'error'
-            const note = r.skipped
-              ? t("该平台未连接，已跳过")
-              : r.fallback_to_inbox
-                ? t("进了 TikTok 收件箱，需要在 App 里再发一次")
-                : (r.error || r.message || '')
-            return (
-              <div key={r.platform} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--ac-line)' }}>
-                <StatusDot tone={tone} label={<>{platformLabel(r.platform || '')}{note ? <span style={{ color: 'var(--ac-muted)' }}> · {note}</span> : null}</>} />
-                {r.url && (
-                  <a href={r.url} onClick={(e) => { e.preventDefault(); void openExternalLink(r.url!) }} style={{ color: 'var(--ac-accent)', fontSize: 13 }}>{t("打开链接")}</a>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {error && <p style={{ marginTop: 12, color: 'var(--ac-error)', fontSize: 13 }}>{error}</p>}
-
-      {!loading && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 28 }}>
-          <Btn loading={savingFile} disabled={phase === 'running' || phase === 'waiting'} onClick={() => void downloadFile()}>{t("下载成片")}</Btn>
-          {ready && phase !== 'done' && phase !== 'partial' && phase !== 'scheduled' && (
-            <Btn variant="cta" loading={phase === 'running' || phase === 'waiting'} disabled={!selected.length || savingFile} onClick={() => void publish()}>
-              {when === 'later' ? t("排期发布") : t("开始发布")}
-            </Btn>
-          )}
-          {(phase === 'done' || phase === 'partial' || phase === 'scheduled') && (
-            <Btn onClick={() => navigate(`/project/${projectId}/publish`)}>{t("查看发布记录")}</Btn>
-          )}
-        </div>
-      )}
     </div>
   )
 }
-
-export default PublishClipPage

@@ -52,6 +52,7 @@ function settingsFor(provider, model, baseUrl) {
 
 function renderModels(settings) {
   const DefaultModels = loadTs('DefaultModels.tsx', {
+    antd: { Select: () => null },
     react: { ...React, useState: initial => [initial, () => {}], useEffect: () => {}, useMemo: fn => fn(), useRef: value => ({ current: value }) },
     'react-i18next': { useTranslation: () => {} },
     '../../i18n': { t: key => key },

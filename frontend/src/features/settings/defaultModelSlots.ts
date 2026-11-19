@@ -9,10 +9,11 @@ import { t } from '../../i18n'
  */
 import { connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
 export { modelHasVision } from './modelSettingsLogic'
+import { listFromOffers } from './customProvider'
 import { enabledModelIds } from './modelVisibility'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
 import { syncFollowingCover } from './modelDefaults'
-import { analysisCandidates, getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
+import { analysisCandidates, getProvider } from './providerPresets'
 import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings, ModelSource } from './modelSettingsApi'
 import { isImageModel } from './modelKind'
 
@@ -31,15 +32,12 @@ export const PURPOSE_IDS = PURPOSE_SLOTS.map(slot => slot.id)
 export const COMING_SOON = ['配音 · 语音合成', '配乐 · 音乐'] as const
 export const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large', 'large-v3'] as const
 const GROUP_RANK: Record<string, number> = { recommended: 0, popular: 1, local: 2, more: 3 }
-const CANDIDATE_KEY: Record<PurposeId, CatalogPurpose> = {
-  analysis: 'analysis', vision: 'vision', transcription: 'asr', cover: 'image',
-}
-
 export type ModelOffer = {
   modelId: string
   provider: string
-  connectionId?: string
+  connectionId: string
   connected: boolean
+  selectable: boolean
   displayName: string
 }
 export type ModelGroup = { modelId: string; offers: ModelOffer[] }
@@ -86,42 +84,37 @@ function addOffer(byId: Record<string, ModelOffer[]>, offer: ModelOffer) {
   byId[offer.modelId] = list
 }
 
-/** Models from connected lists, enriched with other catalog providers that offer the same id. */
+/** Fixed choices can be validated on save. Smart routing requires a verified account list. */
 export function collectModelGroups(settings: ModelSettings, lists: Record<string, ModelList>, purpose: PurposeId): ModelGroup[] {
-  const byId: Record<string, ModelOffer[]> = {}
-  const key = CANDIDATE_KEY[purpose]
+  const byId: Record<string, ModelOffer[]> = Object.create(null)
   for (const connection of settings.connections) {
-    if (!endpointProviderReady(connection)) continue
+    if (!connectionReady(connection)) continue
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
     const list = lists[connection.id]
+    const accountList = isAccountList(list)
+    if (preset?.auth === 'api_key' && !connection.has_key && !connection.api_key?.trim()) continue
+    const verified = isValidated(connection) && accountList
     const fitting = (list?.models || []).filter(entry => entryFits(purpose, entry))
-    // Visibility applies to account lists only. Explicit user choice is strict; the recommendation never empties a purpose.
-    const enabled = list && isAccountList(list) ? enabledModelIds(settings, connection, list.models) : null
+    const enabled = accountList && list ? enabledModelIds(settings, connection, list.models) : null
     const picked = enabled ? fitting.filter(entry => enabled.has(entry.id)) : fitting
-    const live = !enabled || Array.isArray(connection.enabled_model_ids) || picked.length ? picked : fitting
-    for (const entry of live) {
-      addOffer(byId, {
-        modelId: entry.id, provider, connectionId: connection.id,
-        connected: isValidated(connection) && isAccountList(list), displayName: displayName(connection),
-      })
+    const visible = !enabled || Array.isArray(connection.enabled_model_ids) || picked.length ? picked : fitting
+    const ids = new Set(accountList ? visible.map(entry => entry.id) : [])
+    // A saved cloud analysis connection can choose a fixed model before its first probe.
+    // Only use curated or explicitly configured IDs when account discovery is unavailable.
+    if (purpose === 'analysis' && !accountList && preset?.group !== 'local') {
+      for (const id of preset?.candidates.analysis || []) ids.add(id)
+      for (const entry of listFromOffers(connection.custom_models || []).models) {
+        if (entryFits(purpose, entry)) ids.add(entry.id)
+      }
+      if (settings.analysis?.connection_id === connection.id && settings.analysis.model) ids.add(settings.analysis.model)
     }
-    // A live/cache list with no suitable model is authoritative: do not invent catalog candidates.
-  }
-  for (const modelId of Object.keys(byId)) {
-    const offers = byId[modelId]
-    for (const preset of Object.values(getCatalog().providers)) {
-      if (!(preset.candidates[key] || []).includes(modelId)) continue
-      if (offers.some(item => item.provider === preset.id)) continue
-      const candidate = findCatalogConnection(settings, preset)
-      if (!preset.base_url && preset.protocol !== 'local' && (!candidate || !endpointProviderReady(candidate))) continue
-      const connection = candidate && connectionReady(candidate) ? candidate : undefined
-      const list = connection && lists[connection.id]
-      if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
+    for (const modelId of ids) {
+      if (Array.isArray(connection.enabled_model_ids) && !connection.enabled_model_ids.includes(modelId)) continue
+      if ((purpose === 'analysis' || purpose === 'vision') && isImageModel(modelId)) continue
       addOffer(byId, {
-        modelId, provider: preset.id, connectionId: connection?.id,
-        connected: isValidated(connection) && isAccountList(list),
-        displayName: preset.short_name || preset.display_name,
+        modelId, provider, connectionId: connection.id, displayName: displayName(connection),
+        connected: verified, selectable: connection.validation_status !== 'failed',
       })
     }
   }
