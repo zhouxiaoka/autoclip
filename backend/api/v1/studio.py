@@ -499,7 +499,7 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
 class RetryCommand(BaseModel):
     """The one retry command (#419): the backend validates the parent and creates the attempt."""
     model_config = ConfigDict(extra='forbid')
-    scope: Literal['analysis', 'variant']
+    scope: Literal['analysis', 'variant', 'project']
     variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
     idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
@@ -511,7 +511,7 @@ def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get
     """Returns the attempt receipt. Same idempotency_key -> same receipt, dispatched once."""
     from backend.services.studio import attempts
     project = project_or_404(project_id, db)
-    retry = {'parent_attempt_id': body.parent_attempt_id, 'key': body.idempotency_key, 'fresh': bool(body.fresh)}
+    retry = {'parent_attempt_id': body.parent_attempt_id, 'key': body.idempotency_key, 'fresh': bool(body.fresh), 'scope': body.scope}
     if body.scope == 'variant':
         if not body.variant_id:
             raise HTTPException(422, '缺少成片版本')

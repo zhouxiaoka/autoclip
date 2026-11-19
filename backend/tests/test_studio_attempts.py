@@ -1174,3 +1174,58 @@ the round is the output it redid (redone_by_attempt); A's other outputs and B's 
     # only the output this retry redid; A's earlier completed output is not this round's. Was: variant_count 2.
     assert (data['generation']['status'], receipt['state'], receipt['summary']['variant_count']) == ('completed', 'completed', 1)
     assert data['generation']['not_redone_failed_count'] == 1          # B's failed output, still listed
+
+
+def test_card_retry_reuses_failed_confirmed_plan_once(env, monkeypatch):
+    from backend.api.v1 import studio as api
+
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    plan = store.read(pid)['plan']
+    flow.production_finished(pid, 'failed', 'timeline_empty')
+    project = type('Project', (), {'processing_config': {'smart_import': {'auto_start': False}}})()
+    monkeypatch.setattr(api, 'project_or_404', lambda *_: project)
+    body = api.RetryCommand(scope='project', idempotency_key='retry-card-once')
+    env.clear()
+    receipt = api.retry_command(pid, body, None)
+    assert api.retry_command(pid, body, None) == receipt
+    assert env == ['_produce_selected']
+    parent, retry = flow.receipts(pid)
+    assert retry['retry_of'] == parent['attempt_id']
+    assert retry['run_id'] == receipt['analysis_run_id']
+    assert store.read(pid)['plan'] == plan
+    assert store.read(pid)['analysis']['phase'] == 'production'
+
+
+def test_card_retry_of_failed_screening_never_uses_an_older_confirmed_plan(env, monkeypatch):
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    flow.production_finished(pid, 'failed')
+    jobs.inspect_project(pid, flow.MANUAL, retry={'key': 'screen-again'})
+    store.change(pid, lambda data: data['analysis'].update(status='failed', phase='screening'))
+    env.clear()
+    jobs.inspect_project(pid, flow.MANUAL, retry={'scope': 'project', 'key': 'card-retry'})
+    assert env == ['_inspect']
+    assert store.read(pid)['analysis']['phase'] == 'screening'
+
+
+def test_confirmed_card_retry_refused_before_dispatch_preserves_failed_attempt(env, monkeypatch):
+    from backend.services.studio import preflight
+
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    flow.production_finished(pid, 'failed')
+    previous = store.read(pid)
+
+    def refuse(*args):
+        raise ValueError('missing source')
+
+    monkeypatch.setattr(preflight, 'check', refuse)
+    env.clear()
+    with pytest.raises(ValueError, match='missing source'):
+        jobs.inspect_project(pid, flow.MANUAL, retry={'scope': 'project', 'key': 'card-preflight'})
+    assert env == []
+    assert store.read(pid) == previous

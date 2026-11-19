@@ -2186,5 +2186,7 @@
   "这个视频没法用。": "Cette vidéo ne peut pas être utilisée.",
   "制作中断了，可以重试。": "La production s’est interrompue. Vous pouvez réessayer.",
   "当前模型没能排出时间线。": "Ce modèle n’a pas pu construire le découpage.",
-  "这次没有做完，可以重试。": "Cette fois-ci n’est pas allée au bout. Vous pouvez réessayer."
+  "这次没有做完，可以重试。": "Cette fois-ci n’est pas allée au bout. Vous pouvez réessayer.",
+  "{{candidates}} 个候选片段都不足 {{seconds}} 秒。请换用口播连续、话题完整的素材。": "Les {{candidates}} extraits repérés durent moins de {{seconds}} secondes chacun. Essayez une vidéo qui traite un sujet en entier sans interruption.",
+  "转写模型文件缺失或不完整，请重新下载。": "Le modèle de transcription est absent ou incomplet. Téléchargez-le à nouveau."
 }

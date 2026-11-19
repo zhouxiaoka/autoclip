@@ -429,17 +429,10 @@
 .ac-project-tags .ac-tag { position: static; }
 .ac-project-title { padding: 0; text-align: left; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
 .ac-project-card .ac-card-body { padding: 18px 20px 20px; gap: 12px; }
-.ac-project-card--weak .ac-card-thumb { cursor: default; }
-.ac-project-card--weak .ac-project-open { cursor: default; }
-.ac-project-card--weak .ac-card-title { margin: 0; font-size: 16px; font-weight: 600; min-height: 0; -webkit-line-clamp: 2; }
-.ac-fail-pill {
-  display: inline-flex; align-items: center; padding: 3px 10px 3px 8px;
-  border-radius: 999px; background: var(--ac-card);
-  box-shadow: 0 1px 2px rgba(26,26,25,.08);
-}
-.ac-fail-pill .ac-status { font-weight: 500; font-size: 12.5px; }
-.ac-project-weak { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.ac-project-weak-reason { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ac-sub); }
+.ac-project-card--failed .ac-card-body { gap: 8px; padding: 16px; }
+.ac-failure-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ac-failure-heading .ac-card-title { min-width: 0; min-height: 0; margin: 0; overflow-wrap: anywhere; font-size: 16px; font-weight: 600; }
+.ac-failure-heading .ac-status { flex: none; font-size: 12px; }
 .ac-project-weak-suggest { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ac-ink); }
 .ac-project-weak-suggest strong { font-weight: 600; }
 .ac-project-weak-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -450,9 +443,14 @@
 .ac-project-recovery { display: flex; gap: 2px; flex-wrap: wrap; }
 .ac-project-card:focus-within .ac-card-actions { opacity: 1; }
 .ac-failure-summary { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.ac-failure-reason { margin: 0; width: 100%; padding: 8px 10px; border: 1px dashed var(--ac-line); border-radius: 10px; font-size: 13px; line-height: 1.5; color: var(--ac-ink); }
+.ac-failure-reason { margin: 0; font-size: 13px; line-height: 1.6; color: var(--ac-sub); overflow-wrap: anywhere; user-select: text; }
 .ac-failure-outcome { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--ac-sub); }
-.ac-failure-weak { display: flex; flex-wrap: wrap; gap: 4px; }
+.ac-project-card--failed .ac-card-foot { margin-top: 6px; padding-top: 12px; }
+.ac-failure-actions, .ac-failure-meta { display: flex; align-items: center; gap: 4px; }
+.ac-failure-actions { flex-wrap: wrap; }
+.ac-failure-meta { margin-inline-start: auto; }
+.ac-failure-more { padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-sub); font-family: inherit; font-size: 18px; font-weight: 600; line-height: 1; min-height: 30px; cursor: pointer; }
+.ac-failure-more:hover, .ac-failure-more:focus-visible { background: var(--ac-bg); color: var(--ac-ink); }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

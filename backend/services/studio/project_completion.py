@@ -59,7 +59,13 @@ def sync_project_completion(project_id, db=None):
                     return False
             outcome = generation.get('status')
             variants = [item for item in raw_variants if item.get('status') != 'on_demand']
-            if not generation.get('auto_start') or outcome not in ('completed', 'partial', 'failed'):
+            if not generation.get('auto_start'):
+                # Manual production settles analysis. Its generation can still say awaiting_confirmation.
+                if analysis.get('status') != 'failed':
+                    return False
+                outcome = 'partial' if analysis.get('outcome') == 'partial' else 'failed'
+                generation = {}
+            if outcome not in ('completed', 'partial', 'failed'):
                 return False
             # generation.status is the project-index source of truth. A terminal
             # receipt must leave SQLite even when analysis or variant rows lag.
@@ -220,7 +226,10 @@ def _update_index(project_id, db, outcome, completed, draft_count, failure=(None
     from backend.models.collection import Collection
     from backend.models.project import Project, ProjectStatus
     project = db.get(Project, project_id)
-    if project is None or not (project.processing_config or {}).get('smart_import'):
+    if project is None:
+        return False
+    config = project.processing_config or {}
+    if 'smart_import' not in config and (config.get('creative') or {}).get('goal') not in ('highlight', 'promo'):
         return False
     status = ProjectStatus.COMPLETED if outcome == 'completed' else ProjectStatus.FAILED
     dropped = ('studio_generation_error', 'studio_generation_error_code', 'billable_calls_before_failure',

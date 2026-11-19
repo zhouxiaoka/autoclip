@@ -261,3 +261,20 @@ def test_failed_generation_mirrors_billable_calls_onto_home_settings(project):
         assert detail.status is ResponseStatus.FAILED
         assert detail.settings.get('billable_calls_before_failure') == 4
         assert db.get(Project, 'visual').processing_config.get('billable_calls_before_failure') == 4
+
+
+def test_list_recovers_confirmed_manual_failure_from_workspace(project):
+    reason = '精彩高光：时间线提取为空：4 个有效候选在字幕边界校正后均未达到最短时长（20 秒）。'
+    with project() as db:
+        row = db.get(Project, 'visual')
+        row.status = ProjectStatus.FAILED
+        row.processing_config = {'smart_import': {'auto_start': False}}
+        db.commit()
+    store.write('visual', {
+        'generation': {'auto_start': False, 'status': 'awaiting_confirmation'},
+        'plan': {'id': 'plan-a', 'confirmed_at': store.now(), 'selected_goals': ['highlight']},
+        'analysis': {'status': 'failed', 'phase': 'production', 'error': reason, 'error_code': 'timeline_empty'},
+    })
+    with project() as db:
+        [listed] = ProjectService(db).get_projects_paginated(PaginationParams()).items
+        assert (listed.error_code, listed.error_message) == ('timeline_empty', reason)

@@ -98,7 +98,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if str(status_value).lower() != "failed":
             return None, None
         config = getattr(project, 'processing_config', None) or {}
-        if config.get('smart_import') and config.get('studio_generation_status') in ('failed', 'partial'):
+        if config.get('studio_generation_status') in ('failed', 'partial'):
             # Studio-managed runs mirror their own reason; a Task row may be from an older run
             # or carry nothing when the render (not the pipeline) failed (RC156 #13).
             message = config.get('studio_generation_error')
@@ -202,6 +202,10 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             from ..models.task import Task
             
             project_id = str(project.id)
+            config = project.processing_config or {}
+            if (project.status == ProjectStatus.FAILED and not (config.get('smart_import') or {}).get('auto_start')
+                    and ('smart_import' in config or (config.get('creative') or {}).get('goal') in ('highlight', 'promo'))):
+                sync_project_completion(project_id, self.db)
             total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
             completed_variants = (project.processing_config or {}).get('studio_completed_variant_count', 0)
             if isinstance(completed_variants, int):
