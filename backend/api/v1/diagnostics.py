@@ -106,6 +106,16 @@ def get_cases(request: Request):
     return {"cases": [_public_item(item) for item in queue.list_items()]}
 
 
+@router.get("/cases/{item_id}")
+def get_case(item_id: str, request: Request):
+    _local(request)
+    from backend.services.diagnostics.service import _public_item
+    item = queue.get(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="case")
+    return _public_item(item)
+
+
 @router.delete("/cases/{item_id}")
 def delete_case(item_id: str, request: Request):
     _local(request)

@@ -1437,6 +1437,22 @@ def test_upgrade_only_removes_stale_unclaimed_excerpt_staging(data_dir):
     assert unverified.exists()
 
 
+def test_save_io_failure_is_visible_and_can_be_retried(data_dir, monkeypatch):
+    project = _failed_local_project()
+    original_export = upload._export_local
+    def full_disk(item):
+        original_export(item)
+        raise OSError('disk full')
+    monkeypatch.setattr(upload, '_export_local', full_disk)
+    first = service.submit(project, TOKEN, roles=[], informed=True, save_local=True)
+    assert first['status'] == 'failed'
+    assert not (data_dir / 'diagnostics' / 'exports' / first['id']).exists()
+    monkeypatch.setattr(upload, '_export_local', original_export)
+    second = service.submit(project, TOKEN, roles=[], informed=True, save_local=True)
+    assert second['status'] == 'saved_local'
+    assert second['id'] != first['id']
+
+
 def test_two_inflight_excerpt_producers_only_leave_the_queued_copy(data_dir, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
