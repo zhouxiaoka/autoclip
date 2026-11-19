@@ -540,11 +540,13 @@ def _confirm_rollover(video, scene, audit, goals, samples, nominated_goal):
         return True
     for goal in goals:
         label = goal["goal"]
-        # Older compatible reviewers may omit objective. Bind a numeric headline
-        # to the explicitly named scout objective even for those replies.
-        named = label.casefold() in audit["nomination"].casefold()
+        # The review can identify a different outcome than the nomination.
+        # Bind its numeric headline even if the objective is in the proof only.
+        named = any(label.casefold() in str(audit.get(field, "")).casefold()
+                    for field in ("nomination", "proof"))
+        reset_title = re.search(r"回[绕繞卷]|归零|歸零|roll[ -]?over|rolls? over|resets?", scene.label, re.I)
         number = re.search(rf"(?<![0-9A-Za-z]){goal['target']}(?![0-9A-Za-z])", scene.label)
-        if label not in (audit.get("objective"), nominated_goal) and not (named and number):
+        if label not in (audit.get("objective"), nominated_goal) and not (number and (named or reset_title)):
             continue
         target = goal["target"]
         readings = [(t, v) for t, v in samples.get(label, []) if scene.start <= t < scene.end]

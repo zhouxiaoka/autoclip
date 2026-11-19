@@ -479,3 +479,15 @@ def test_missing_goal_location_cannot_approve_a_named_rollover_target(tmp_path):
     audit = {"outcome": "milestone", "nomination": "对应目标'Clear 29-3'与'29 rollover'的起始节点"}
     assert not games._confirm_rollover(tmp_path / "video", scene, audit, [], {}, None)
     assert audit["disposition"] == "unconfirmed_goal"
+
+
+def test_review_can_identify_reset_on_another_goals_candidate(tmp_path):
+    from backend.services.studio.models import Scene
+
+    scene = Scene(id="alternate", start=1, end=46, label="等级从29回绕到00")
+    goal = {"goal": "29 rollover", "mode": "rollover", "target": 29}
+    audit = {"outcome": "milestone", "nomination": "画面目标 Clear 29-3；状态读数 28 → 29",
+             "proof": "帧6为29，帧7显示00，确认回绕。objective:29 rollover"}
+    assert games._confirm_rollover(tmp_path / "video", scene, audit, [goal],
+                                   {"29 rollover": [(5, 28), (15, 29), (25, 0)]}, "Clear 29-3")
+    assert audit.get("rollover_times") == [15, 25]
