@@ -263,7 +263,7 @@ def _review_times(scene, reaction):
 
 
 def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None, evidence_times=None,
-                    wins_only=False, confirmed_wins=None, rollover_goals=()):
+                    wins_only=False, confirmed_wins=None, rollover_goals=(), commentary_selection=None):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -305,6 +305,18 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                    "不要用游戏背景知识推断通关、终局、故障或新阶段的别名；游戏未显示的术语不要加。"
                    "上局静态结算接新开局、已达上限后持续不变的数字不算新里程碑。"
                    "仅仅操作能辨认不足以独立成片，同一局内普通数值递增或配色切换填routine。")
+    if commentary_selection is not None:
+        prompt += (
+            " 这是解说实况的候选。提名和原话仅帮你找操作，先看本玩家画面，再决定是否独立成片。"
+            "每项返回impact：podium=从对局进入最终前三名结算（final_rank填本玩家最终整数名次），"
+            "recovery=确有迫近的失败危险且通过可见操作摆脱，streak=连续多步形成明显超出普通一击的连锁，"
+            "elimination=明确的连续击败或关键对手淘汰，milestone=可核对的重大目标或奖励，其他为routine。"
+            "读本玩家的战绩、徽章、连击或状态前后变化；单次小连击、发光、一般涨分、进入局中前十、"
+            "笑或说很精彩不能单独作为保留理由。普通落块＋特效也填routine。"
+            "不可把对手的数字当成本方，不可把差一点全清、设想或上局成绩写成结果。"
+            "在before_frame和after_frame填片内两个不同先后帧（1至8）；proof说明这两帧的状态和实际影响。"
+            "无法在片内证实就填routine。subject写已核实的战果，勿用普通消行标题掩盖有凭据的连续击败、救局或长连击。"
+        )
     if rollover_goals:
         prompt += (" 对照回绕目标：" + json.dumps(rollover_goals, ensure_ascii=False) +
                    "。若里程碑依据是该计数栏到达指定数字或发生回绕，objective照录相应目标原文；"
@@ -328,7 +340,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                         free.remove(index)
                     times.sort()
                 cue = ""
-                if selection is not None and scene.evidence:
+                if (selection is not None or commentary_selection is not None) and scene.evidence:
                     cue = " 待核验的提名线索（请忽略提名帧号，以本组8帧为准）：" + scene.evidence[:500]
                 if anchor is not None:
                     cue = (
@@ -344,7 +356,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                         "text": f"候选编号 {scene.id}，以下8帧依次编号1至8。{cue}",
                     }
                 )
-                parts.extend(intelligence.sample(video, times, Path(folder), width=640))
+                parts.extend(intelligence.sample(video, times, Path(folder), width=960 if commentary_selection is not None else 640))
             response = intelligence.vision_call_at("game_outcomes", parts)
         rows = response.get("reviews") if isinstance(response, dict) else None
         if not isinstance(rows, list) or not all(
@@ -379,6 +391,25 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                     confirmed_wins.add(scene.id)
             elif wins_only:
                 continue
+            if commentary_selection is not None:
+                impact = row.get("impact")
+                before, after = row.get("before_frame"), row.get("after_frame")
+                ordered = type(before) is int and type(after) is int and 1 <= before < after <= 8
+                rank = row.get("final_rank")
+                if outcome == "match_win" and supported:
+                    tier = 4
+                elif supported and ordered and impact == "podium" and outcome == "placement" and type(rank) is int and rank in (2, 3):
+                    tier = 3
+                elif supported and ordered and impact in ("recovery", "streak", "elimination", "milestone") and outcome in ("play", "action_feedback", "milestone"):
+                    tier = 2
+                else:
+                    tier = 0
+                commentary_selection[scene.id] = dict(
+                    id=scene.id, start=scene.start, end=scene.end, nomination=scene.evidence,
+                    outcome=outcome, impact=impact, before_frame=before, after_frame=after, proof=proof,
+                    disposition="selected" if tier else ("routine" if impact == "routine" else "unclear"))
+                if not tier:
+                    continue
             if selection is not None:
                 verdict = row.get("standalone")
                 if verdict not in ("independent", "routine", "aftermath", "unclear"):
@@ -733,7 +764,7 @@ def _recover_result_windows(video, rows, duration, prefs, ranked, confirmed):
         for win in recovered)]
 
 
-def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False):
+def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False, selection_log=None):
     from backend.utils.speech_recognizer import generate_subtitle_for_video
 
     path = Path(video).parent / "input.srt"
@@ -832,24 +863,43 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
                 if supported and isinstance(outcome, str)
                 else 0
             )
-            candidates.append((tier, score, start, end, label[:120]))
+            candidates.append((tier, score, start, end, label[:120], quote if supported else "", action, reaction))
         i = j
     selected = []
     frames_allowed = auto_frame_review and intelligence.source_frame_analysis_allowed()
-    for _, _, start, end, label in sorted(candidates, key=lambda c: (-c[0], -c[1])):
+    anchors = {}
+    for _, _, start, end, label, quote, action, reaction in sorted(candidates, key=lambda c: (-c[0], -c[1])):
         if end <= start or any(
             min(end, s.end) - max(start, s.start)
             > 0.45 * min(end - start, s.end - s.start)
             for s in selected
         ):
             continue
-        selected.append(Scene(id=uuid.uuid4().hex, start=start, end=end, label=label))
+        scene = Scene(id=uuid.uuid4().hex, start=start, end=end, label=label)
+        if frames_allowed:
+            scene.evidence = f"{label} · {quote}" if quote else label
+            anchors[scene.id] = (action, reaction)
+        selected.append(scene)
         if len(selected) == (12 if frames_allowed else 6):
             break
     if frames_allowed:
         confirmed = set()
-        selected = review_outcomes(video, selected, prefs.language, confirmed_wins=confirmed)
-        selected = _recover_result_windows(video, rows, duration, prefs, selected, confirmed)[:6]
+        audit = {}
+        selected = review_outcomes(video, selected, prefs.language, confirmed_wins=confirmed,
+                                   evidence_times=anchors, commentary_selection=audit)
+        ranked = _recover_result_windows(video, rows, duration, prefs, selected, confirmed)
+        selected = ranked[:6]
+        if selection_log is not None:
+            final_ids = {s.id for s in selected}
+            ranked_ids = {s.id for s in ranked}
+            for r in audit.values():
+                if r["disposition"] == "selected" and r["id"] not in final_ids:
+                    r["disposition"] = "limit" if r["id"] in ranked_ids else "duplicate"
+            for s in selected:
+                if s.id not in audit:
+                    audit[s.id] = dict(id=s.id, start=s.start, end=s.end, outcome="match_win",
+                                       proof=s.evidence, disposition="selected")
+            selection_log.extend(audit.values())
     if not selected:
         raise UserFacingError("解说中未识别到有完整动作和结果的游戏片段")
     return [

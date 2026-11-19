@@ -843,8 +843,11 @@ def _content_drafts(project_id, plan, video, platforms=()):
         # still matches every short-platform import.
         if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
             from backend.services.studio.game_highlights import subtitle_drafts
-            return subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
-                                   auto_frame_review=(plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto')
+            selection = []
+            drafts = subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
+                                     auto_frame_review=(plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto',
+                                     selection_log=selection)
+            return (drafts, [], {'selection': selection}) if selection else drafts
         clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
         from backend.utils.text_processor import TextProcessor
         picked = []
@@ -1430,7 +1433,7 @@ def _auto_generate(project_id, plan):
             data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
             if events:
                 data['events'] = events
-            if coverage and 'chapters' in coverage:
+            if coverage and 'selection' in coverage:
                 data['generation']['game_selection'] = coverage
             attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
             data['output_variants'].extend(variants)

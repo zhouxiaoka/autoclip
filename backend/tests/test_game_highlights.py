@@ -495,3 +495,33 @@ def test_review_can_identify_reset_on_another_goals_candidate(tmp_path):
     assert games._confirm_rollover(tmp_path / "video", scene, audit, [goal],
                                    {"29 rollover": [(5, 28), (15, 29), (25, 0)]}, "Clear 29-3")
     assert audit.get("rollover_times") == [15, 25]
+
+
+def test_commentary_review_requires_distinct_consequence(tmp_path, monkeypatch):
+    from backend.services.studio.models import Scene
+
+    cases = [
+        ("flash", "action_feedback", "routine", None, 3, 5),
+        ("plain", "play", "routine", None, 3, 5),
+        ("bronze", "placement", "podium", 3, 2, 6),
+        ("rank", "placement", "podium", 9, 2, 6),
+        ("survival", "action_feedback", "recovery", None, 2, 6),
+        ("guess", "action_feedback", "recovery", None, 5, 5),
+        ("champion", "match_win", "routine", None, None, None),
+    ]
+    scenes = [Scene(id=k, start=i*60, end=i*60+45, evidence="commentary nomination")
+              for i,(k,*_) in enumerate(cases)]
+    monkeypatch.setattr(intelligence, "sample", lambda *a, **kw: [])
+    def review(phase, parts):
+        ids = [p["text"].split()[1].split("，")[0] for p in parts
+               if p["type"] == "text" and p["text"].startswith("候选编号 ")]
+        return {"reviews": [dict(id=k, outcome=outcome, impact=impact, final_rank=rank,
+                                 before_frame=before, after_frame=after, frame=5, subject=k,
+                                 proof="Visible change", final_for_player=k=="champion")
+                            for k,outcome,impact,rank,before,after in cases if k in ids]}
+    monkeypatch.setattr(intelligence, "vision_call_at", review)
+    audit = {}
+    ranked = games.review_outcomes(tmp_path/"video", scenes, "en", commentary_selection=audit)
+    assert [s.id for s in ranked] == ["champion", "bronze", "survival"]
+    assert audit["plain"]["disposition"] == "routine"
+    assert audit["guess"]["disposition"] != "selected"
