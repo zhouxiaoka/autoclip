@@ -1334,6 +1334,31 @@ def test_observe_cuts_around_the_failure_time(data_dir, monkeypatch):
     assert "media_time_sec" not in json.dumps(stored["manifest"])
 
 
+def _failed_local_project():
+    from backend.services.studio import store
+    project = 'diagnostic-save'
+    root = store.directory(project)
+    (root / 'metadata').mkdir(parents=True)
+    (root / 'raw').mkdir()
+    (root / 'raw' / 'input.mp4').write_bytes(b'synthetic video')
+    (root / 'metadata' / 'studio.json').write_text(json.dumps({'attempts': [_receipt()]}))
+    source.record_input_origin(project, 'file')
+    return project
+
+
+def test_saving_then_uploading_are_distinct_idempotent_commands(data_dir, monkeypatch):
+    project = _failed_local_project()
+    monkeypatch.delenv('AUTOCLIP_DIAGNOSTICS_SYNC')
+    monkeypatch.setattr(upload, 'wake', lambda: None)
+    def submit(local):
+        return service.submit(project, TOKEN, roles=[], informed=True, save_local=local)
+    local, remote = submit(True), submit(False)
+    assert local['id'] != remote['id']
+    assert submit(True)['id'] == local['id']
+    assert submit(False)['id'] == remote['id']
+    assert [row['disposition'] for row in queue.list_items()] == ['local', 'upload']
+
+
 def test_submit_offloads_sync_work_while_consent_request_finishes(data_dir, monkeypatch):
     import asyncio
     import httpx

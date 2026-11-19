@@ -70,9 +70,17 @@ def list_items() -> list[dict]:
         return _load()
 
 
-def by_key(key: str) -> dict | None:
+def _same_command(item: dict, key: str, disposition: str) -> bool:
+    # Pre-upgrade rows may only have save_local. Keep their remote keys replayable.
+    target = item.get("disposition") or ("local" if item.get("save_local") else "upload")
+    if disposition == "local" and item.get("status") in {"deleted", "failed", "cancelled"}:
+        return False
+    return item.get("idempotency_key") == key and target == disposition
+
+
+def by_key(key: str, disposition: str = "upload") -> dict | None:
     with _LOCK:
-        return next((item for item in _load() if item.get("idempotency_key") == key), None)
+        return next((item for item in _load() if _same_command(item, key, disposition)), None)
 
 
 def enqueue(item: dict) -> dict:
@@ -81,7 +89,8 @@ def enqueue(item: dict) -> dict:
         items = _load()
         key = item.get("idempotency_key")
         if isinstance(key, str):
-            existing = next((row for row in items if row.get("idempotency_key") == key), None)
+            disposition = item.get("disposition") or ("local" if item.get("save_local") else "upload")
+            existing = next((row for row in items if _same_command(row, key, disposition)), None)
             if existing:
                 return existing
         active = [row for row in items if row.get("status") not in TERMINAL or row.get("inflight_create") is True]
