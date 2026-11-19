@@ -162,6 +162,9 @@ def load_profile(metadata_dir: Path) -> Optional[DurationProfile]:
         return None
     try:
         d = json.loads(path.read_text(encoding="utf-8"))
+        # A resumed extraction skips Step 1, which originally saved this tier's floor.
+        if d.get("tier") == "short" and d.get("min_clip_sec") == 20:
+            d["min_clip_sec"] = SHORT_MIN_CLIP_SEC
         d["target_clip_sec"] = tuple(d["target_clip_sec"])
         d["topics_hint"] = tuple(d["topics_hint"])
         return DurationProfile(**d)

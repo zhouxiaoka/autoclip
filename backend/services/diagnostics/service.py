@@ -98,6 +98,38 @@ def _key(attempt_id: str, roles: list[str], manifest: dict, explicit: bool) -> s
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _enqueue_with_media(item: dict, roles: list[str], *, cut=None) -> dict:
+    """A new excerpt belongs to this producer until the durable queue accepts it."""
+    def command_key(selected):
+        return _key(item["attempt_id"], selected, item["manifest"], item["explicit"])
+
+    item["idempotency_key"] = command_key(roles)
+    existing = queue.by_key(item["idempotency_key"], item["disposition"])
+    if existing is not None:
+        return existing
+    owns_excerpt = "excerpt" in roles
+    try:
+        if roles:
+            directory = get_data_directory() / "diagnostics" / "excerpts" / item["id"]
+            try:
+                if directory.is_symlink():
+                    raise media.MediaRejected("path")
+                item["files"] = media.materialize(item["project_id"], roles, excerpt_dir=directory, cut=cut)
+            except media.MediaRejected as exc:
+                if item["explicit"]:
+                    raise DiagnosticsError(exc.reason, 422) from exc
+                logger.warning("diagnostics media skipped")
+                item["idempotency_key"] = command_key([])
+        stored = queue.enqueue(item)
+        if (stored["id"] == item["id"] and stored.get("error") != "queue_full"
+                and any(row["role"] == "excerpt" for row in item["files"])):
+            owns_excerpt = False
+        return stored
+    finally:
+        if owns_excerpt:
+            queue.discard_excerpt(item["id"])
+
+
 def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool,
            full_original_ack: bool = False, subtitle_ack: bool = False,
            also_enable_background: bool = False, save_local: bool = False,
@@ -131,20 +163,10 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
     if validate_manifest(manifest):
         raise DiagnosticsError("manifest_rejected", 422)
     item_id = queue.new_id()
-    files = []
-    if wanted:
-        excerpt_dir = get_data_directory() / "diagnostics" / "excerpts" / item_id
-        if excerpt_dir.is_symlink():
-            raise DiagnosticsError("path", 422)
-        try:
-            files = media.materialize(project_id, wanted, excerpt_dir=excerpt_dir, cut=cut)
-        except media.MediaRejected as exc:
-            raise DiagnosticsError(exc.reason, 422) from exc
     item = {
         "id": item_id,
-        "idempotency_key": _key(attempt_id, wanted, manifest, True),
         "project_id": project_id,
-        "attempt_id": attempt_id,
+        "attempt_id": receipt["attempt_id"],
         "created_at": queue.now_iso(),
         "updated_at": queue.now_iso(),
         "status": "queued",
@@ -155,11 +177,11 @@ def submit(project_id: str, attempt_id: str, *, roles: list[str], informed: bool
         "disposition": "local" if save_local else "upload",
         "version": 1,
         "manifest": manifest,
-        "files": files,
+        "files": [],
         "attempts": 0,
         "upload": {},
     }
-    stored = queue.enqueue(item)
+    stored = _enqueue_with_media(item, wanted, cut=cut)
     if stored.get("status") == "failed" and stored.get("error") == "queue_full":
         raise DiagnosticsError("queue_full", 429)
     upload.wake()
@@ -267,21 +289,8 @@ def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | No
         receipt, log_text=_log_text(project_id), project_id=project_id, source_link=source_link,
     )
     item_id = queue.new_id()
-    files = []
-    if roles:
-        excerpt_dir = get_data_directory() / "diagnostics" / "excerpts" / item_id
-        try:
-            files = media.materialize(
-                project_id, roles, excerpt_dir=excerpt_dir,
-                cut=cut if cut is not None else media.cut_for_receipt(receipt),
-            )
-        except media.MediaRejected:
-            logger.warning("diagnostics media skipped")
-            files = []
-            roles = []
     item = {
         "id": item_id,
-        "idempotency_key": _key(str(receipt.get("attempt_id")), roles, manifest, False),
         "project_id": project_id,
         "attempt_id": receipt.get("attempt_id"),
         "created_at": queue.now_iso(),
@@ -294,10 +303,10 @@ def background_enqueue(project_id: str, receipt: dict, *, cut=None) -> dict | No
         "disposition": "upload",
         "version": 1,
         "manifest": manifest,
-        "files": files,
+        "files": [],
         "attempts": 0,
         "upload": {},
     }
-    stored = queue.enqueue(item)
+    stored = _enqueue_with_media(item, roles, cut=cut or media.cut_for_receipt(receipt))
     upload.wake()
     return stored

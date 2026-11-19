@@ -126,7 +126,7 @@ def _export_local(item: dict) -> str:
     for row in item.get("files") or []:
         path = media.reroot(str(row.get("path") or ""), _roots(item))
         if path is None:
-            continue
+            raise media.MediaRejected("missing")
         target = dest / ("subtitle.srt" if row.get("role") == "subtitle" else f"{row.get('role')}.mp4")
         if target.exists():
             continue
@@ -289,13 +289,23 @@ def _finish_delete(item: dict, transport) -> dict:
 def _save_only(item: dict) -> dict:
     if item.get("status") == "saved_local" and item.get("export_path"):
         return item
-    exported = _export_local(item)
+    try:
+        exported = _export_local(item)
+    except (OSError, media.MediaRejected) as error:
+        failed = queue.update(item["id"], if_version=item.get("version"), if_status=queue.OPEN,
+                              status="failed", error=type(error).__name__, updated_at=queue.now_iso())
+        if failed:
+            queue.discard_export(item["id"])
+            queue.discard_excerpt(item["id"])
+        return failed or _live(item["id"], item)
     saved = queue.update(
         item["id"], if_version=item.get("version"),
         if_status={item.get("status"), "queued", "uploading", "offline", "needs_endpoint"},
         status="saved_local", export_path=exported, error="", updated_at=queue.now_iso(),
     )
-    return saved or _live(item["id"], item)
+    if saved:
+        return saved
+    return _released(_live(item["id"], item))
 
 
 def _divert(item: dict, transport) -> dict | None:

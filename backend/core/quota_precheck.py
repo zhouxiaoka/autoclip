@@ -6,6 +6,7 @@ reports balance numbers — only the enum ``skipped|ok|exhausted|unavailable``.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -21,7 +22,7 @@ RESULTS = frozenset({'skipped', 'ok', 'exhausted', 'unavailable'})
 _CACHE_TTL = 60.0
 _TIMEOUT = 3.0
 _lock = threading.Lock()
-_cache: dict[str, tuple[float, str]] = {}
+_cache: dict[tuple[str | None, str, str], tuple[float, str]] = {}
 
 
 def _preset_billing_probe(provider: str | None) -> str | None:
@@ -108,7 +109,8 @@ def check_quota(*, provider: str | None, base_url: str | None, api_key: str | No
         return 'skipped'
     if not base_url or not api_key:
         return 'unavailable'
-    cache_key = f'{provider}|{base_url.strip()}|{api_key[:8]}'
+    credential = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+    cache_key = (provider, base_url.strip(), credential)
     now = time.monotonic()
     with _lock:
         hit = _cache.get(cache_key)

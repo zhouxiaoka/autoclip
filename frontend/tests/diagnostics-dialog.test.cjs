@@ -41,6 +41,7 @@ async function mount(entry, render) {
       not_for_training: true,
     }),
     submit: async (body) => { submitted.push(body); return { id: 'local-1', status: 'queued' } },
+    getCase: async () => ({ id: 'local-1', status: 'saved_local', export_path: 'diagnostics-export-folder' }),
     remove: async () => ({ status: 'deleted' }),
   }
   const project = {
@@ -211,4 +212,17 @@ test('project card enables submit from the preview attempt and sends that id', a
 
 test('project detail enables submit from the preview attempt and sends that id', async () => {
   await submitFrom('pages/ProjectDetailPage.tsx', (Page) => React.createElement(Page))
+})
+
+test('saving locally displays the completed export path from the worker', async () => {
+  const page = await mount('features/diagnostics/DiagnosticsDialog.tsx', (Dialog) =>
+    React.createElement(Dialog, { open: true, onClose() {}, projectId: 'proj' }))
+  try {
+    await React.act(async () => { button(page.document, '保存到本机').click() })
+    await page.settle()
+    assert.equal(page.submitted[0].save_local, true)
+    assert.match(page.document.body.textContent, /diagnostics-export-folder/)
+  } finally {
+    await page.close()
+  }
 })

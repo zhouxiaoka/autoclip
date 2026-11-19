@@ -363,6 +363,16 @@ export interface DiagnosticsPreview {
   not_for_training: boolean
 }
 
+export interface DiagnosticsCase {
+  id: string
+  status: string
+  case_id?: string
+  error?: string
+  export_ready?: boolean
+  export_path?: string
+  deletable?: boolean
+}
+
 export const diagnosticsApi = {
   consent: (): Promise<DiagnosticsConsent> => api.get('/diagnostics/consent'),
   setConsent: (body: { diagnostics: boolean; media: boolean; full_original: boolean; informed: boolean }): Promise<DiagnosticsConsent> =>
@@ -378,8 +388,9 @@ export const diagnosticsApi = {
     subtitle_ack?: boolean
     also_enable_background?: boolean
     save_local?: boolean
-  }): Promise<{ id: string; status: string; case_id?: string; error?: string; export_ready?: boolean; export_path?: string; deletable?: boolean }> =>
+  }): Promise<DiagnosticsCase> =>
     api.post('/diagnostics/submit', body),
+  getCase: (id: string): Promise<DiagnosticsCase> => api.get(`/diagnostics/cases/${encodeURIComponent(id)}`),
   remove: (id: string): Promise<{ status: string }> => api.delete(`/diagnostics/cases/${id}`),
 }
 

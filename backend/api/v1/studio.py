@@ -14,6 +14,8 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
+from backend.core.failure_codes import sentence
+from backend.core.quota_precheck import QuotaExhausted
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
 from backend.models.clip import Clip
@@ -38,6 +40,8 @@ from backend.core.failure_attribution import ModelResponseInvalid
 def call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
+    except QuotaExhausted:
+        raise HTTPException(422, {'code': 'insufficient_quota', 'message': sentence('insufficient_quota')}) from None
     except store.ConflictError as error:
         if getattr(error, 'error_code', None):  # a coded refusal (frontend errorText maps the code)
             raise HTTPException(error.status, {'error_code': error.error_code, 'message': str(error)}) from None

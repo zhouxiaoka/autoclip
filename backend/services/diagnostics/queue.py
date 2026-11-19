@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -70,9 +71,17 @@ def list_items() -> list[dict]:
         return _load()
 
 
-def by_key(key: str) -> dict | None:
+def _same_command(item: dict, key: str, disposition: str) -> bool:
+    # Pre-upgrade rows may only have save_local. Keep their remote keys replayable.
+    target = item.get("disposition") or ("local" if item.get("save_local") else "upload")
+    if disposition == "local" and item.get("status") in {"deleted", "failed", "cancelled"}:
+        return False
+    return item.get("idempotency_key") == key and target == disposition
+
+
+def by_key(key: str, disposition: str = "upload") -> dict | None:
     with _LOCK:
-        return next((item for item in _load() if item.get("idempotency_key") == key), None)
+        return next((item for item in _load() if _same_command(item, key, disposition)), None)
 
 
 def enqueue(item: dict) -> dict:
@@ -81,7 +90,8 @@ def enqueue(item: dict) -> dict:
         items = _load()
         key = item.get("idempotency_key")
         if isinstance(key, str):
-            existing = next((row for row in items if row.get("idempotency_key") == key), None)
+            disposition = item.get("disposition") or ("local" if item.get("save_local") else "upload")
+            existing = next((row for row in items if _same_command(row, key, disposition)), None)
             if existing:
                 return existing
         active = [row for row in items if row.get("status") not in TERMINAL or row.get("inflight_create") is True]
@@ -294,6 +304,44 @@ def _owned(kind: str, item_id: str) -> Path | None:
     return resolved
 
 
+def discard_excerpt(item_id: str) -> None:
+    excerpt = _owned("excerpts", item_id)
+    if excerpt is not None:
+        shutil.rmtree(excerpt)
+
+
+def discard_export(item_id: str) -> None:
+    export = _owned("exports", item_id)
+    if export is not None:
+        shutil.rmtree(export)
+
+
+def clean_unclaimed_excerpts() -> None:
+    """Recover old staging copies left by a crash or an older client losing deduplication."""
+    folder = get_data_directory() / "diagnostics" / "excerpts"
+    if folder.is_symlink() or not folder.is_dir():
+        return
+    cutoff = time.time() - timedelta(days=1).total_seconds()
+    with _LOCK:
+        # An unreadable ledger cannot establish that a copy is unclaimed.
+        raw = json.loads(queue_path().read_text(encoding="utf-8"))
+        rows = raw.get("items") if isinstance(raw, dict) else None
+        if not isinstance(rows, list) or not all(isinstance(row, dict) and isinstance(row.get("id"), str) for row in rows):
+            return
+        owners = {row["id"] for row in rows}
+        for directory in folder.iterdir():
+            if directory.name in owners or not re.fullmatch(r"c-[0-9a-f]{32}", directory.name):
+                continue
+            if directory.is_symlink() or not directory.is_dir() or directory.stat().st_mtime >= cutoff:
+                continue
+            clip = directory / "excerpt.mp4"
+            if clip.is_symlink() or not clip.is_file() or clip.stat().st_mtime >= cutoff:
+                continue
+            if list(directory.iterdir()) == [clip]:
+                clip.unlink()
+                directory.rmdir()
+
+
 def release_local_residue(item: dict) -> None:
     """Remove this case's diagnostic copies and, once remote cleanup is done, its secrets.
 
@@ -304,17 +352,13 @@ def release_local_residue(item: dict) -> None:
     if status not in {"deleted", "cancelled", "delete_pending", "uploaded"}:
         return
     item_id = str(item.get("id") or "")
-    excerpt = _owned("excerpts", item_id)
-    if excerpt is not None:
-        shutil.rmtree(excerpt)
+    discard_excerpt(item_id)
     remote = bool(
         (item.get("upload") or {}).get("case_id") or item.get("case_id") or item.get("inflight_create") is True
     )
     if status in {"delete_pending", "uploaded"} or (status == "cancelled" and remote):
         return
-    export = _owned("exports", item_id)
-    if export is not None:
-        shutil.rmtree(export)
+    discard_export(item_id)
     for kind in ("capabilities", "recovery"):
         secret = _owned(kind, item_id)
         if secret is not None and secret.is_file():

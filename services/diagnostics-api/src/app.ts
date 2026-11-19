@@ -22,7 +22,7 @@ export interface Bucket {
   delete(key: string): Promise<void>
   createMultipartUpload(key: string): Promise<MultipartUpload>
   resumeMultipartUpload(key: string, uploadId: string): MultipartUpload
-  list(prefix: string): Promise<string[]>
+  list(prefix: string, uploadedBefore?: Date): Promise<string[]>
 }
 
 export interface Signer {
@@ -563,6 +563,9 @@ export async function sweep(deps: Deps): Promise<{ aborted: number; expired: num
       else expired += 1
     }
   }
+  // Writers register ownership before storing bytes. Check ownership *after*
+  // listing, so a concurrent case cannot appear only on the storage side.
+  const listed = await deps.bucket.list('cases/', new Date(now - 60 * 60 * 1000))
   const live = new Set<string>()
   for (const row of await deps.repo.allCases()) {
     if (row.state === 'deleted') continue
@@ -571,7 +574,7 @@ export async function sweep(deps: Deps): Promise<{ aborted: number; expired: num
       if (object.state !== 'aborted') live.add(object.r2Key)
     }
   }
-  const orphans = orphanKeys(await deps.bucket.list('cases/'), live)
+  const orphans = orphanKeys(listed, live)
   for (const key of orphans) await deps.bucket.delete(key)
   await deps.repo.reconcile()
   return { aborted, expired, orphans }

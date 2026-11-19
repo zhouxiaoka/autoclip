@@ -552,3 +552,32 @@ test('migration states the conditional reservation and does not name the media b
   assert.doesNotMatch(adapter, /arrayBuffer/)
   assert.doesNotMatch(source, /bucket\.get\(|stored\.arrayBuffer|object\.arrayBuffer/)
 })
+
+test('a case created while the bucket listing is in flight survives the sweep', async () => {
+  const { deps: value, bucket } = deps()
+  const list = bucket.list.bind(bucket)
+  let manifestKey = ''
+  bucket.list = async () => {
+    const created = await create(value, {
+      purpose: 'troubleshooting_and_product_improvement', not_for_training: true,
+      manifest: manifest(), files: [],
+    })
+    assert.equal(created.status, 201)
+    manifestKey = `cases/${(await created.json()).case_id}/manifest.json`
+    return list()
+  }
+  const { orphans } = await sweep(value)
+  assert.ok(bucket.objects.has(manifestKey))
+  assert.ok(!orphans.includes(manifestKey))
+})
+
+test('orphan cleanup only considers objects known to predate its grace period', async () => {
+  const cutoff = new Date('2026-11-16T00:00:00Z')
+  const objects = [
+    { key: 'cases/old', uploaded: new Date(cutoff.getTime() - 1) },
+    { key: 'cases/new', uploaded: cutoff },
+    { key: 'cases/unknown' },
+  ]
+  const bucket = adaptBucket({ list: async () => ({ objects, truncated: false }) } as never)
+  assert.deepEqual(await bucket.list('cases/', cutoff), ['cases/old'])
+})

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import { Btn, Dialog } from '../../ui'
-import { diagnosticsApi, type DiagnosticsPreview } from '../../services/api'
+import { diagnosticsApi, type DiagnosticsCase, type DiagnosticsPreview } from '../../services/api'
 
 /** One explicit submission. Media stays unchecked until the user selects it. */
 export default function DiagnosticsDialog({ open, onClose, projectId, attemptId }: {
@@ -17,19 +17,59 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
   const [roles, setRoles] = useState<string[]>([])
   const [background, setBackground] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ id: string; status: string; case_id?: string; export_path?: string } | null>(null)
+  const [result, setResult] = useState<DiagnosticsCase | null>(null)
+  const [localSaveId, setLocalSaveId] = useState('')
+  const session = useRef(0)
 
   useEffect(() => {
     if (!open || !projectId) return
     setRoles([])
     setBackground(false)
     setResult(null)
+    setPreview(null)
+    setLocalSaveId('')
+    setBusy(false)
     let cancel = false
     diagnosticsApi.preview(projectId, attemptId || '')
       .then((value) => { if (!cancel) setPreview(value) })
       .catch(() => { if (!cancel) setPreview(null) })
-    return () => { cancel = true }
+    return () => { cancel = true; session.current++ }
   }, [open, projectId, attemptId])
+
+  useEffect(() => {
+    if (!open || !localSaveId) return
+    let active = true
+    let timer: ReturnType<typeof setTimeout>
+    const check = async () => {
+      try {
+        const item = await diagnosticsApi.getCase(localSaveId)
+        if (!active) return
+        if (item.status === 'saved_local') {
+          setResult(item)
+          setLocalSaveId('')
+          message.success(t('已保存到本机。'))
+          return
+        }
+        if (!['queued', 'uploading', 'needs_endpoint', 'offline'].includes(item.status)) {
+          setLocalSaveId('')
+          setResult(null)
+          message.error(t('保存失败，请重试'))
+          return
+        }
+      } catch (error) {
+        if (!active) return
+        if ((error as { response?: { status?: number } }).response?.status === 404) {
+          setResult(null)
+          setLocalSaveId('')
+          message.error(t('保存失败，请重试'))
+          return
+        }
+      }
+      timer = setTimeout(check, 1000)
+    }
+    void check()
+    return () => { active = false; clearTimeout(timer) }
+  }, [open, localSaveId])
 
   const toggle = (role: string) => {
     setRoles((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])
@@ -39,6 +79,7 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
 
   const send = async (saveLocal: boolean) => {
     if (!projectId || !resolvedAttemptId) return
+    const currentSession = session.current
     setBusy(true)
     try {
       const value = await diagnosticsApi.submit({
@@ -51,14 +92,17 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
         also_enable_background: background,
         save_local: saveLocal,
       })
+      if (session.current !== currentSession) return
       setResult(value)
       if (value.status === 'saved_local') message.success(t('已保存到本机。'))
+      else if (saveLocal) setLocalSaveId(value.id)
       else message.success(t('诊断已排队'))
     } catch (error) {
+      if (session.current !== currentSession) return
       const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       message.error(detail === 'notice_required' ? t('请先在启动说明里确认是否自动发送。') : t('诊断没有提交'))
     } finally {
-      setBusy(false)
+      if (session.current === currentSession) setBusy(false)
     }
   }
 
@@ -76,7 +120,7 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
           <Btn size="sm" onClick={onClose}>{t('关闭')}</Btn>
           {!result && <Btn size="sm" disabled={busy || !resolvedAttemptId} onClick={() => void send(true)}>{t('保存到本机')}</Btn>}
           {!result && <Btn size="sm" variant="cta" loading={busy} disabled={!resolvedAttemptId} onClick={() => void send(false)}>{t('我将对照清单再提交')}</Btn>}
-          {result?.id && <Btn size="sm" onClick={() => void diagnosticsApi.remove(result.id).then(() => { message.success(t('已取消上传')); onClose() })}>{t('删除已上传的诊断')}</Btn>}
+          {result?.id && <Btn size="sm" onClick={() => void diagnosticsApi.remove(result.id).then(onClose).catch(() => message.error(t('删除失败')))}>{localSaveId || result.status === 'saved_local' ? t('删除') : t('删除已上传的诊断')}</Btn>}
         </div>
       }
     >
@@ -96,7 +140,8 @@ export default function DiagnosticsDialog({ open, onClose, projectId, attemptId 
         <label className="ac-note"><input type="checkbox" checked={roles.includes('subtitle')} disabled={!available.has('subtitle')} onChange={() => toggle('subtitle')} /> {t('字幕文本（默认不发送）')}</label>
         <label className="ac-note"><input type="checkbox" checked={background} onChange={(event) => setBackground(event.target.checked)} /> {t('以后的失败也自动发送脱敏诊断')}</label>
         <p className="ac-note">{t('只对打开这项之后的新失败生效，不会补传以前的失败。')}</p>
-        {result?.export_path && <p className="ac-note">{result.export_path}</p>}
+        {localSaveId && <p className="ac-note" role="status">{t('正在处理中，请稍候...')}</p>}
+        {result?.export_path && <p className="ac-note" role="status">{result.export_path}</p>}
       </div>
     </Dialog>
   )

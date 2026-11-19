@@ -128,3 +128,37 @@ def test_a3_2_submit_production_exhausted_makes_no_llm_calls(tmp_path, monkeypat
     assert gen.get('upstream_error_type') == 'insufficient_quota'
     assert gen.get('quota_precheck') == 'exhausted'
     assert gen.get('billable_calls_before_failure') == 0
+
+
+def test_quota_cache_separates_keys_with_the_same_prefix(monkeypatch):
+    from backend.core import quota_precheck as qp
+
+    def probe(_base, key):
+        return 'exhausted' if key.endswith('empty') else 'ok'
+
+    monkeypatch.setattr(qp, '_probe_new_api', probe)
+    args = {'provider': 'api88', 'base_url': 'https://example.invalid/v1'}
+    assert qp.check_quota(**args, api_key='test-credential-empty') == 'exhausted'
+    assert qp.check_quota(**args, api_key='test-credential-funded') == 'ok'
+
+
+def test_import_exposes_a_coded_quota_refusal(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1 import studio
+    from backend.core import quota_precheck
+    from backend.services import ai_model_settings as models
+    from backend.tests.test_studio_readiness import document
+
+    connection = models.Connection(id='ai', name='Test', provider='api88', api_key='fixture')
+    settings = document(connections=[connection], analysis=models.Assignment(connection_id='ai', model='gpt-4o-mini'))
+    monkeypatch.setattr(models, 'load', lambda: settings)
+    monkeypatch.setattr(models, 'save', lambda *_: None)
+    monkeypatch.setattr(quota_precheck, 'check_for_analysis_settings', lambda: ('exhausted', {}))
+    app = FastAPI()
+    app.include_router(studio.router, prefix='/studio')
+    with TestClient(app, raise_server_exceptions=False) as client:
+        res = client.post('/studio/import', data={'url': 'https://youtu.be/example'})
+    assert res.status_code == 422
+    assert res.json()['detail']['code'] == 'insufficient_quota'
+    assert res.json()['detail']['message']
