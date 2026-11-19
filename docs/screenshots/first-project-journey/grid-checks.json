@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "commit": "f5165bf20ebcd4b8efeae8c4de66de4bc99fbe1b",
+  "tracked_changes": false,
+  "group": "frontend",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "frontend_lint",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 2.06
+    },
+    {
+      "name": "frontend_typecheck",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 4.03
+    },
+    {
+      "name": "frontend_test",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 39.68
+    },
+    {
+      "name": "frontend_build",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 4.76
+    }
+  ]
+}

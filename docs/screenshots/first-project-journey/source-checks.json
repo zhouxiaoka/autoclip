@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "commit": "9aa02f41e913c9b35e94e1a97712eb7c82899b8d",
+  "tracked_changes": false,
+  "group": "all",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "versions",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.05
+    },
+    {
+      "name": "readmes",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.08
+    },
+    {
+      "name": "tracking_inventory",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.04
+    },
+    {
+      "name": "ci_guards",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 2.77
+    },
+    {
+      "name": "release_gate_tests",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 19.36
+    },
+    {
+      "name": "redline_backend",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 78.15,
+      "skipped_tests": [],
+      "coverage": {
+        "test_count": 25,
+        "module_count": 4,
+        "missing_modules": [],
+        "missing_reload_cases": []
+      }
+    },
+    {
+      "name": "redline_frontend",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 1.3
+    },
+    {
+      "name": "media_test_dependencies",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.25
+    },
+    {
+      "name": "python_correctness",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.08
+    },
+    {
+      "name": "llm_hot_reload_tests",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 1.48,
+      "skipped_tests": [],
+      "coverage": {
+        "test_count": 6,
+        "module_count": 1,
+        "missing_modules": [],
+        "missing_reload_cases": []
+      }
+    },
+    {
+      "name": "backend_tests",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 598.76,
+      "skipped_tests": [
+        {
+          "test": "test_pip_dies_when_backend_is_killed_hard",
+          "allowed": true
+        },
+        {
+          "test": "test_pip_dies_when_backend_is_killed_hard",
+          "allowed": true
+        },
+        {
+          "test": "test_live_upload_post_rejects_unknown_key",
+          "allowed": true
+        },
+        {
+          "test": "test_real_hub_copy_layout_does_not_replace_an_existing_file",
+          "allowed": true
+        },
+        {
+          "test": "test_windows_real_reset_and_subprocess",
+          "allowed": true
+        }
+      ],
+      "coverage": {
+        "test_count": 4729,
+        "module_count": 278,
+        "missing_modules": [],
+        "missing_reload_cases": []
+      }
+    },
+    {
+      "name": "editorial_fixtures",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.14
+    },
+    {
+      "name": "diagnostics_types",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 0.6
+    },
+    {
+      "name": "diagnostics_tests",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 35.78
+    },
+    {
+      "name": "frontend_lint",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 2.01
+    },
+    {
+      "name": "frontend_typecheck",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 3.69
+    },
+    {
+      "name": "frontend_test",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 33.95
+    },
+    {
+      "name": "frontend_build",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_sec": 4.56
+    }
+  ]
+}
