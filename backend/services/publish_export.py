@@ -55,9 +55,11 @@ def find_source_video(project_id: str) -> Path:
     from backend.core.path_utils import get_project_directory
     raw = get_project_directory(project_id) / "raw"
     for p in [raw / "input.mp4", raw / "input.mov", raw / "input.mkv", raw / "input.webm"]:
-        if p.exists():
+        if p.is_file():
             return p
-    vids = sorted(raw.glob("input.*"))
+    # A downloaded video can disappear while its attached SRT or .part file remains.
+    video_suffixes = {'.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.flv', '.ts', '.mts', '.m2ts', '.mpg', '.mpeg', '.wmv', '.3gp', '.ogv', '.vob'}
+    vids = sorted(p for p in raw.glob("input.*") if p.stem == 'input' and p.suffix.lower() in video_suffixes and p.is_file())
     if vids:
         return vids[0]
     raise FileNotFoundError(f"项目 {project_id} 没有源视频（raw/input.*）")

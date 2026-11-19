@@ -2141,8 +2141,10 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
                     and analysis.get('phase') == 'production' and plan.get('confirmed_at')
                     and plan.get('selected_goals') and plan.get('confirmed_preferences')
                     and plan.get('confirmed_analysis') in ('subtitle', 'visual')):
-                _check_production_route(project_id, plan['confirmed_analysis'], plan['selected_goals'])
-                return _dispatch_confirmed_plan(project_id, deepcopy(previous), previous, retry, parent)
+                restore_source = (url, browser, options) if url else None
+                if not restore_source:
+                    _check_production_route(project_id, plan['confirmed_analysis'], plan['selected_goals'])
+                return _dispatch_confirmed_plan(project_id, deepcopy(previous), previous, retry, parent, restore_source)
         state = deepcopy(previous)
         state.setdefault('schema_version', 2)
         from backend.services.output_captions import load_settings as load_output_captions
@@ -2323,7 +2325,7 @@ def confirm_project(project_id, body):
         return _dispatch_confirmed_plan(project_id, state, previous)
 
 
-def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=None):
+def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=None, restore_source=None):
     plan = state['plan']
     from backend.services.studio.failure_identity import phase_identity
     state['analysis'] = {**phase_identity('production', plan, plan['selected_goals']), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
@@ -2339,7 +2341,8 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
     attempts.bind_plan(pending, plan)  # the confirmed plan is this attempt's own
     store.write(project_id, state)
     try:
-        executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
+        kwargs = {'restore_source': restore_source} if restore_source else {}
+        executor.submit(_produce_selected, project_id, plan, **kwargs, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
     except Exception as error:
         store.remember_submission_rejection(project_id, ('analysis', state['analysis']['run_id'], 'production'), error_code=studio_error_code(error))
         logger.warning('Studio production dispatch failed: %s', type(error).__name__)
@@ -2359,7 +2362,7 @@ def _add_confirmed_drafts(data, drafts):
 
 
 @_tracked('production')
-def _produce_selected(project_id, plan):
+def _produce_selected(project_id, plan, *, restore_source=None):
     from backend.core.job_budget import suspend_clip_job_budget
     from backend.services.studio import intelligence
     started = monotonic()
@@ -2379,6 +2382,10 @@ def _produce_selected(project_id, plan):
         store.change(project_id, lambda data:data['analysis'].update(message=message))
     try:
         mark_project(project_id, 'processing', awaiting_confirmation=False, import_staging=False, creative=plan['confirmed_preferences'])
+        if restore_source:
+            with llm_usage.timed('download'):
+                download(project_id, *restore_source)
+            _check_production_route(project_id, plan['confirmed_analysis'], plan['selected_goals'])
         video = source(project_id)
         instruction = plan.get('overrides', {}).get('instruction', '')
         for goal in plan['selected_goals']:
