@@ -2358,7 +2358,7 @@ def _produce_selected(project_id, plan):
                     raise visual_error
                 if events is None:
                     try:
-                        if plan.get('content_type') == 'gameplay' and goal == 'highlight':
+                        if plan.get('content_type') == 'gameplay' and 'highlight' in plan['selected_goals']:
                             events, coverage = analyze(video, prefs, stage, instruction, gameplay=True)
                         else:
                             events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)

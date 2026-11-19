@@ -490,7 +490,7 @@ def test_multiple_choices_share_visual_analysis_and_require_confirmation(client,
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     calls=[]
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:{**recommendation(),'suggested_goals':['highlight','promo']})
-    monkeypatch.setattr(jobs,'analyze',lambda *a: calls.append('analysis') or ([Scene(id='e1',start=0,end=1)],{}))
+    monkeypatch.setattr(jobs,'analyze',lambda *a, gameplay: calls.append('game-analysis' if gameplay else 'analysis') or ([Scene(id='e1',start=0,end=1)],{}))
     def drafts(events,prefs,*args,**kwargs):
         calls.append(prefs.goal)
         from backend.services.studio.models import Draft
@@ -505,7 +505,7 @@ def test_multiple_choices_share_visual_analysis_and_require_confirmation(client,
     assert client.post('/studio/'+pid+'/start',json={**body,'plan_id':'stale'}).status_code==409
     assert calls==[]
     assert client.post('/studio/'+pid+'/start',json=body).status_code==200
-    assert calls==['analysis','highlight','promo']
+    assert calls==['game-analysis','highlight','promo']
     assert client.post('/studio/'+pid+'/start',json=body).status_code==409
     assert len(client.get('/studio/'+pid).json()['drafts'])==2
 
@@ -516,7 +516,7 @@ def test_unchecked_goal_is_never_produced(client,source,monkeypatch):
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     calls=[]
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:{**recommendation(),'suggested_goals':['highlight','promo']})
-    monkeypatch.setattr(jobs,'analyze',lambda *a: ([Scene(id='e1',start=0,end=1)],{}))
+    monkeypatch.setattr(jobs,'analyze',lambda *a, gameplay: ([Scene(id='e1',start=0,end=1)],{}))
     monkeypatch.setattr(jobs,'make_drafts',lambda events,prefs,*args,**kwargs:calls.append(prefs.goal) or [])
     response=client.post('/studio/import',files={'video':('input.mp4',source.read_bytes(),'video/mp4')})
     pid=response.json()['project_id'];state=client.get('/studio/'+pid).json()
@@ -599,7 +599,8 @@ def test_shared_visual_failure_is_not_retried_for_second_goal(client,source,monk
     monkeypatch.setattr(jobs, 'capture_studio_exception', lambda error, phase, **kwargs: reports.append((error, phase)))
     failure=intelligence.VisionRequestError('rate_limited','请稍后重试',elapsed_seconds=2,http_status=429)
     failure.phase='scan'
-    def analyze(*args):
+    def analyze(*args, gameplay):
+        assert gameplay
         calls.append('scan')
         raise failure
     monkeypatch.setattr(jobs,'analyze',analyze)
