@@ -1359,6 +1359,28 @@ def test_saving_then_uploading_are_distinct_idempotent_commands(data_dir, monkey
     assert [row['disposition'] for row in queue.list_items()] == ['local', 'upload']
 
 
+@pytest.mark.parametrize('full', [False, True])
+def test_unclaimed_excerpts_removed_on_dedup_and_queue_full(data_dir, monkeypatch, full):
+    project = _failed_local_project()
+    monkeypatch.setattr(upload, 'wake', lambda: None)
+    monkeypatch.delenv('AUTOCLIP_DIAGNOSTICS_SYNC')
+    def cut(_, dest):
+        dest.parent.mkdir(parents=True)
+        dest.write_bytes(b'synthetic')
+    def submit():
+        return service.submit(project, TOKEN, roles=['excerpt'], informed=True, save_local=True, cut=cut)
+    if full:
+        monkeypatch.setattr(queue, 'MAX_ITEMS', 1)
+        queue.enqueue({'id': 'first', 'idempotency_key': 'other', 'status': 'queued'})
+        with pytest.raises(service.DiagnosticsError, match='queue_full'):
+            submit()
+    else:
+        first, second = submit(), submit()
+        assert first['id'] == second['id']
+        service.delete_local(first['id'])
+    assert not list((data_dir / 'diagnostics' / 'excerpts').glob('*/excerpt.mp4'))
+
+
 def test_submit_offloads_sync_work_while_consent_request_finishes(data_dir, monkeypatch):
     import asyncio
     import httpx
@@ -1384,3 +1406,54 @@ def test_submit_offloads_sync_work_while_consent_request_finishes(data_dir, monk
                 release.set()
                 await job
     asyncio.run(exercise())
+
+
+def test_upgrade_only_removes_stale_unclaimed_excerpt_staging(data_dir):
+    import os
+    folder = data_dir / 'diagnostics' / 'excerpts'
+    def make(name, *, stale=True):
+        directory = folder / name
+        directory.mkdir(parents=True)
+        clip = directory / 'excerpt.mp4'
+        clip.write_bytes(b'fixture')
+        if stale:
+            os.utime(clip, (1, 1))
+            os.utime(directory, (1, 1))
+        return clip
+
+    owner = queue.new_id()
+    queue.enqueue({'id': owner, 'idempotency_key': 'existing', 'status': 'queued'})
+    claimed = make(owner)
+    older = make(queue.new_id())
+    current = make(queue.new_id(), stale=False)
+    unrelated = make('other')
+    queue.clean_unclaimed_excerpts()
+    assert not older.exists()
+    assert claimed.exists() and current.exists() and unrelated.exists()
+    unverified = make(queue.new_id())
+    queue.queue_path().write_text('unreadable')
+    with pytest.raises(ValueError):
+        queue.clean_unclaimed_excerpts()
+    assert unverified.exists()
+
+
+def test_two_inflight_excerpt_producers_only_leave_the_queued_copy(data_dir, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    project = _failed_local_project()
+    barrier = threading.Barrier(2)
+    monkeypatch.setattr(upload, 'wake', lambda: None)
+    monkeypatch.setattr(service, '_input_for_diagnostics', lambda _: ('file', None))
+    monkeypatch.delenv('AUTOCLIP_DIAGNOSTICS_SYNC')
+    def cut(_, dest):
+        dest.parent.mkdir(parents=True)
+        dest.write_bytes(b'synthetic')
+        barrier.wait(timeout=5)
+    def submit():
+        return service.submit(project, TOKEN, roles=['excerpt'], informed=True, cut=cut)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        futures = [workers.submit(submit) for _ in range(2)]
+        first, second = (future.result() for future in futures)
+    assert first['id'] == second['id']
+    assert len(queue.list_items()) == 1
+    assert len(list((data_dir / 'diagnostics' / 'excerpts').glob('*/excerpt.mp4'))) == 1
