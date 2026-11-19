@@ -283,7 +283,7 @@ def _counter_box(box):
             box[0] < box[2] and box[1] < box[3])
 
 
-def _review_eliminations(video, scene, row):
+def _review_eliminations(video, scene, row, reference_box=None):
     counts = row.get("elimination_counts")
     continuous = row.get("same_match")
     change = _elimination_change(counts, continuous)
@@ -298,6 +298,10 @@ def _review_eliminations(video, scene, row):
     times = _review_times(scene, None)
     with tempfile.TemporaryDirectory(prefix="ac-game-eliminations-") as folder:
         frames = intelligence.sample(video, times, Path(folder))
+        if not _counter_box(box) and _counter_box(reference_box):
+            # A neighbouring candidate can locate the HUD. Only transcribe the
+            # current clip; a different field or an unreadable label is unknown.
+            box = reference_box
         if not _counter_box(box):
             # The full-window review can miss a small tally. Locate it on this
             # clip before asking the independent reader to transcribe its digits.
@@ -308,7 +312,7 @@ def _review_eliminations(video, scene, row):
             box = location.get("box") if isinstance(location, dict) else None
         if not _counter_box(box):
             return None, None
-        goal = {"goal": "本玩家的累计淘汰数 K.O.，仅抄录该栏，排除名次和徽章", "box": box}
+        goal = {"goal": "只读本玩家 K.O. 字段对应的累计淘汰数。若此框不是该字段或字形模糊则填null，严禁用PLACE、徽章、百分比代替", "box": box}
         enlarged = _read_counter_grid(Path(folder), len(times), goal)["values"]
     return _elimination_change(enlarged, continuous), enlarged
 
@@ -382,6 +386,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                    "即使提名猜错奖励，仍可保留画面证实的另一项战果，如淘汰数连续增加。"
                    "same_match仅在同一局连续进行时为true；elimination_counts按1至8帧逐格转录本方累计淘汰数。读不到、字段不是淘汰数或显示结算时填null。elimination_box只框本玩家累计淘汰数和字段名，整帧坐标[左,上,右,下]为0到1000，未定位时填null；不要用PLACE、徽章、剩余人数或对手数据补数。combo_before、combo_peak分别读本玩家同一连击开始及峰值的数字，普通攻击行数不可代替，无法认出填null。每个字段单独写入对象，proof只写观察。")
         prompt += " 只返回" + json.dumps({"reviews": [schema]}, ensure_ascii=False)
+    tally_box = None
     for offset in range(0, len(scenes), 3):
         group = scenes[offset : offset + 3]
         parts = [{"type": "text", "text": prompt}]
@@ -426,6 +431,10 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
         by_id = {row["id"]: row for row in rows}
         if len(rows) != len(group) or set(by_id) != {s.id for s in group}:
             raise ModelResponseInvalid("游戏结算复核与候选不匹配，请重试")
+        if commentary_selection is not None:
+            tally_box = next((r["elimination_box"] for r in rows if _counter_box(r.get("elimination_box"))
+                              and isinstance(r.get("elimination_counts"), list)
+                              and any(type(v) is int for v in r["elimination_counts"])), tally_box)
         for scene in group:
             row = by_id[scene.id]
             proof = row.get("proof")
@@ -462,7 +471,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                               and type(peak) is int and 0 <= combo_start <= peak - 4 and peak >= 8)
                 enlarged = None
                 if supported and outcome in ("play", "action_feedback", "placement", "milestone"):
-                    tally, enlarged = _review_eliminations(video, scene, row)
+                    tally, enlarged = _review_eliminations(video, scene, row, tally_box)
                 if outcome == "match_win" and supported:
                     tier = 4
                 elif supported and ordered and impact == "podium" and outcome in ("placement", "podium") and type(rank) is int and rank in (2, 3):

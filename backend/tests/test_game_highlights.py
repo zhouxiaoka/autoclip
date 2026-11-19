@@ -563,3 +563,17 @@ def test_incomplete_grid_can_use_same_hud_at_the_same_frame():
     games._reconcile_counter_tracks(tracks)
     assert tracks[0]["values"] == [29,0,None,None]
     assert tracks[2]["values"] == [29,7,0,6]
+
+
+def test_unreadable_elimination_field_can_reuse_location_but_not_other_counts(tmp_path, monkeypatch):
+    from backend.services.studio.models import Scene
+
+    scene = Scene(id="nominee", start=0, end=45, evidence="Big kill")
+    row = dict(impact="routine", same_match=True, elimination_counts=[None]*8)
+    box = [630, 720, 700, 765]
+    monkeypatch.setattr(intelligence, "sample", lambda *a: [])
+    def read(folder, count, goal):
+        assert count == 8 and goal["box"] == box
+        return {"values": [5,5,5,5,6,6,7,7]}
+    monkeypatch.setattr(games, "_read_counter_grid", read)
+    assert games._review_eliminations(tmp_path/"video", scene, row, box)[0] == (5,7)
