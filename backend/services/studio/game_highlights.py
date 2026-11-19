@@ -212,7 +212,7 @@ _FINAL_WIN_CLAIM = re.compile(
 )
 
 
-def _highlight_title(row, fallback):
+def _highlight_title(row, fallback, *, paired=False, language="source"):
     def clause(key):
         value = row.get(key)
         if not isinstance(value, str) or _INTERPRETATION.search(value):
@@ -227,6 +227,18 @@ def _highlight_title(row, fallback):
         return len(text) <= 58 and len(text.split()) <= 9
 
     subject, detail, core = (clause(key) for key in ("subject", "detail", "core"))
+    if paired and row.get("outcome") == "action_feedback":
+        action, result, reaction = (clause(key) for key in ("action", "result", "reaction"))
+        if action and result:
+            chinese = language == "zh" or (
+                language == "source" and re.search(r"[\u4e00-\u9fff]", action + result)
+                and not re.search(r"[\u3040-\u30ff]", action + result)
+            )
+            joiner = "后" if chinese else ("、" if language == "ja" else ", ")
+            game_title = action + joiner + result
+            # Describe one game event first, then only the immediate gesture.
+            subject = game_title if fits(game_title) else result
+            detail = reaction
     if subject and detail and detail not in subject:
         separator = "，" if re.search(r"[\u3040-\u9fff]", subject) else " · "
         combined = subject + separator + detail
@@ -285,9 +297,14 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
                 anchor = (reaction_anchors or {}).get(scene.id)
                 times = _review_times(scene, anchor)
                 cue = ""
-                if anchor is not None and scene.evidence:
-                    cue = (" 同段密集帧的核验笔记（仅供核对）：" + scene.evidence[:500]
-                           + "。结合画面，subject写出引发停顿或反馈的具体操作及结果，再用detail写人物动作。")
+                if anchor is not None:
+                    cue = (
+                        " 此段已定位操作及随后的反应。额外返回独立短语 action、result、reaction。"
+                        "先只看游戏区域：action写最后一个实际操作；比较末尾几帧，result写游戏局面随后"
+                        "保持什么状态或出现什么结果。不要把人物动作或中间数值放进这两栏。再看人像："
+                        "reaction只写第一反应，带主语，删去稍后与座椅、道具等的互动。"
+                        "每栏中文约2至6字，英文1到3词；action不带连接词，不能确认的栏留空。"
+                    )
                 parts.append(
                     {
                         "type": "text",
@@ -324,7 +341,9 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None):
                 if supported and isinstance(outcome, str)
                 else 0
             )
-            title = _highlight_title(row, fallback) if supported else fallback
+            title = _highlight_title(
+                row, fallback, paired=scene.id in (reaction_anchors or {}), language=language
+            ) if supported else fallback
             evidence = f"{outcome} · {frame}/8 · {proof}"[:900] if supported else ""
             reviewed.append(
                 (tier, scene.model_copy(update={"label": title, "evidence": evidence}))

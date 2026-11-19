@@ -266,3 +266,12 @@ def test_verified_reaction_gets_close_views_without_losing_window_ends():
     assert times == sorted(times)
     assert {55, 58, 59, 61, coarse[0], coarse[-1]} <= set(times)
     assert games._review_times(scene, 85) == coarse
+
+
+
+def test_reaction_title_uses_game_result_and_first_gesture():
+    row = {
+        "outcome": "action_feedback", "subject": "消行后主播后仰", "detail": "扑向健身球",
+        "action": "最后落块", "result": "棋盘定住", "reaction": "主播抱头起身",
+    }
+    assert games._highlight_title(row, "实况", paired=True) == "最后落块后棋盘定住，主播抱头起身"
