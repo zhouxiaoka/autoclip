@@ -461,3 +461,21 @@ def test_independent_score_cap_can_share_the_rollover_hud(tmp_path, monkeypatch)
     audit = {"outcome": "milestone", "nomination": "Goal panel: Phase 12 rollover; score hits the cap."}
     monkeypatch.setattr(intelligence, "sample", lambda *args: pytest.fail("independent score requested OCR"))
     assert games._confirm_rollover(tmp_path/"video", scene, audit, [goal], {}, None)
+
+
+def test_rollover_locator_accepts_a_single_fenced_payload_after_transcription():
+    raw = ('目标列表（右侧 GOALS）逐行：\n- "2 million"\n- "Clear 29-3"\n- "29 rollover"\n'
+           '阶段转换用 LEVEL 字段。\n\n```json\n{"goals":[{"goal":"29 rollover",'
+           '"target":29,"mode":"rollover","box":[470,655,600,775]}]}\n```')
+    assert intelligence.decode_json(raw)["goals"][0]["target"] == 29
+    with pytest.raises(ValueError):
+        intelligence.decode_json(raw + '\n```json\n{}\n```')
+
+
+def test_missing_goal_location_cannot_approve_a_named_rollover_target(tmp_path):
+    from backend.services.studio.models import Scene
+
+    scene = Scene(id="redisplay", start=1, end=46, label="等级显示由A8变为29")
+    audit = {"outcome": "milestone", "nomination": "对应目标'Clear 29-3'与'29 rollover'的起始节点"}
+    assert not games._confirm_rollover(tmp_path / "video", scene, audit, [], {}, None)
+    assert audit["disposition"] == "unconfirmed_goal"

@@ -45,8 +45,13 @@ def source_frame_analysis_allowed():
 
 def decode_json(raw):
     raw = raw.strip()
-    if raw.startswith('```'):
-        raw = raw.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+    # Some providers transcribe the image before returning one fenced answer.
+    # Only unwrap a complete, unambiguous JSON block.
+    if not raw.startswith(('{', '[')) and raw.count('```') == 2 and raw.endswith('```'):
+        _, block, _ = raw.split('```')
+        language, sep, body = block.partition('\n')
+        if sep and language.strip().lower() in ('', 'json'):
+            raw = body.strip()
     return json.loads(raw)
 
 def text_json(prompt, data):

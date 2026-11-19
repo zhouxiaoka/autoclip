@@ -562,6 +562,13 @@ def _confirm_rollover(video, scene, audit, goals, samples, nominated_goal):
             audit["disposition"] = "unconfirmed_goal"
             return False
         return True
+    # A failed or incomplete goal locator may leave a named reset without a HUD
+    # region. A sighting of its target cannot independently establish success.
+    nomination = audit["nomination"]
+    for target in re.findall(r"(?<![0-9A-Za-z])(\d+)\s*(?:rollover\b|回[绕繞])", nomination, re.I):
+        if re.search(rf"(?<![0-9A-Za-z]){target}(?![0-9A-Za-z])", scene.label):
+            audit["disposition"] = "unconfirmed_goal"
+            return False
     return True
 
 
