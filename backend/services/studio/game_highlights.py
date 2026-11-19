@@ -263,7 +263,7 @@ def _review_times(scene, reaction):
 
 
 def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None, evidence_times=None,
-                    wins_only=False, confirmed_wins=None):
+                    wins_only=False, confirmed_wins=None, rollover_goals=()):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -300,10 +300,16 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
         prompt += (" 每条再返回standalone：independent表示片内能独立验证一次值得回看的操作或结果，"
                    "routine表示普通进度和重复玩法，aftermath表示只见事后反应，unclear表示证据不足。"
                    "对照提名线索逐帧核验；写明画面中的目标与达成该目标的实际变化。"
+                   "同一数值在本段首次出现，不足以证明本场首次达标；回绕要核实目标值之后回到初值。"
                    "里程碑标题写帧上实际发生的变化，尤其是计数器或等级从何值变成何值。"
                    "不要用游戏背景知识推断通关、终局、故障或新阶段的别名；游戏未显示的术语不要加。"
                    "上局静态结算接新开局、已达上限后持续不变的数字不算新里程碑。"
                    "仅仅操作能辨认不足以独立成片，同一局内普通数值递增或配色切换填routine。")
+    if rollover_goals:
+        prompt += (" 对照回绕目标：" + json.dumps(rollover_goals, ensure_ascii=False) +
+                   "。若里程碑依据是该计数栏到达指定数字或发生回绕，objective照录相应目标原文；"
+                   "若看点独立于这些目标，objective填null。窗口内再次出现目标数字不能单独算达成。"
+                   "必须看见目标值之后回到初值，其他代码变成目标数字不能替代该转换。")
     for offset in range(0, len(scenes), 3):
         group = scenes[offset : offset + 3]
         parts = [{"type": "text", "text": prompt}]
@@ -381,6 +387,8 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                 selection[scene.id] = dict(id=scene.id, start=scene.start, end=scene.end,
                                            outcome=outcome, proof=proof, nomination=scene.evidence,
                                            disposition="selected" if disposition == "independent" else disposition)
+                if rollover_goals and isinstance(row.get("objective"), str) and row["objective"] in rollover_goals:
+                    selection[scene.id]["objective"] = row["objective"]
                 if disposition != "independent" or tier == 0:
                     selection[scene.id]["disposition"] = "unclear" if disposition == "independent" else disposition
                     continue
@@ -476,7 +484,7 @@ def _read_counter_grid(folder, count, goal):
          + json.dumps(goal["goal"], ensure_ascii=False) +
          f"。按编号1–{count}依次返回{count}个读数；纯十进制转为整数（00为0），其余填null。"
          '返回JSON对象，每行作为一个字符串，例如 {"rows":["3 3 4 4 _ 5","6 6 7 7 7 8"]}。'
-         '空格分隔，无法辨认用_占位。每行6格，重复值也要抄录。'},
+         '空格分隔，无法辨认用_占位。每行6格，末行按实际格数，重复值也要抄录。'},
         {"type": "image_url", "image_url": {"url": "data:image/png;base64," +
          base64.b64encode(buf.getvalue()).decode("ascii")}},
     ]
@@ -513,10 +521,48 @@ def _visible_goal_changes(tracks, frame_count):
                 old == target and new < old or old == target - 1 and new == 0 and new < old
             )
             if crossed:
-                changes.append({"before": index, "after": index + 1,
+                changes.append({"before": index, "after": index + 1, "objective": label,
                                 "evidence": f"画面目标 {label[:100]}；状态读数 {old} → {new}，请核对转换。"})
                 break
     return changes
+
+
+def _rollover_pair(readings, target):
+    """Return evidence times only for two adjacent, legible target-to-zero readings."""
+    for (before, old), (after, new) in zip(readings, readings[1:]):
+        if type(old) is int and type(new) is int and old == target and new == 0:
+            return [before, after]
+    return None
+
+
+def _confirm_rollover(video, scene, audit, goals, samples, nominated_goal):
+    if audit["outcome"] != "milestone":
+        return True
+    for goal in goals:
+        label = goal["goal"]
+        # Older compatible reviewers may omit objective. Bind a numeric headline
+        # to the explicitly named scout objective even for those replies.
+        named = label.casefold() in audit["nomination"].casefold()
+        number = re.search(rf"(?<![0-9A-Za-z]){goal['target']}(?![0-9A-Za-z])", scene.label)
+        if label not in (audit.get("objective"), nominated_goal) and not (named and number):
+            continue
+        target = goal["target"]
+        readings = [(t, v) for t, v in samples.get(label, []) if scene.start <= t < scene.end]
+        pair = _rollover_pair(readings, target)
+        if not pair:
+            # Coarse scouting may skip a short-lived state. Read the same HUD
+            # independently at higher density before rejecting the nomination.
+            times = [scene.start + (scene.end - scene.start) * (i + .5) / 16 for i in range(16)]
+            with tempfile.TemporaryDirectory(prefix="ac-game-rollover-") as folder:
+                intelligence.sample(video, times, Path(folder))
+                track = _read_counter_grid(Path(folder), len(times), goal)
+            pair = _rollover_pair(list(zip(times, track["values"])), target)
+        audit.update(objective=label, rollover_times=pair)
+        if pair is None:
+            audit["disposition"] = "unconfirmed_goal"
+            return False
+        return True
+    return True
 
 
 def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
@@ -536,15 +582,20 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
     chapter_ranges = []
     goals = _read_game_objectives(video, duration)
     goal_labels = [g["goal"] for g in goals]
+    rollover_goals = [g for g in goals if g["mode"] == "rollover"]
+    samples_by_scene = {}
+    nominated_goals = {}
     prompt = (
         "这是游戏长回放的一段。先读画面里的本场目标，再对照前后游戏状态，独立寻找本段最值得保留的至多两个事件。"
         "优先显式目标在本段达成、第一次触达上限、重大阶段切换、决胜、独特操作带来清晰结果。"
         "即使主播没有反应也要检查目标列表和状态栏是否对应；目标文字常驻本身不能证明完成。"
         "分数从较低值达到上限才算，本段从开头就维持上限不算。一般涨分升级、颜色轮换、"
         "常规堆叠、静止画面上离席或捂脸、上局结算接下一局均不单列。无独立事件返回空数组。"
+        "提名若以回绕目标为看点，objective照录目标原文，并确认目标值之后回到初值；"
+        "只因再度显示该数值不能提名。其他独立事件objective填null。"
         "before和after是同一事件变化前和变化后的帧序号（从1起），尽量选紧贴变化的两帧。"
         "只返回含events数组的JSON对象，数组项格式为"
-        "{\"before\":4,\"after\":5,\"evidence\":\"目标及前后可见证据\"}。"
+        "{\"before\":4,\"after\":5,\"objective\":null,\"evidence\":\"目标及前后可见证据\"}。"
     )
     if instruction:
         prompt += "\n用户制作要求（仅在画面支持时遵循）：" + instruction
@@ -570,6 +621,9 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
             parts.extend(frames)
             response = intelligence.vision_call_at("game_chapter", parts)
             tracks = [_read_counter_grid(Path(tmp), len(times), goal) for goal in goals]
+        chapter_samples = {
+            track["goal"]: list(zip(times, track["values"])) for track in tracks if track["mode"] == "rollover"
+        }
         rows = response.get("events") if isinstance(response, dict) else None
         if not isinstance(rows, list):
             raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
@@ -592,14 +646,20 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
             scenes.append(Scene(id=ident, start=clip_start, end=clip_start + prefs.duration,
                                 evidence=proof[:500]))
             anchors[ident] = (before, after)
+            samples_by_scene[ident] = chapter_samples
+            nominated_goals[ident] = row.get("objective")
     if on_stage:
         on_stage("复核候选的独立事件和可见结果")
     reaction_anchors = {pair.id: peaks[0]} if pair else {}
     ranked = review_outcomes(video, scenes, prefs.language, reaction_anchors=reaction_anchors,
-                             selection=audit, evidence_times={s.id: anchors[s.id] for s in scenes if s is not pair})
+                             selection=audit, rollover_goals=[g["goal"] for g in rollover_goals],
+                             evidence_times={s.id: anchors[s.id] for s in scenes if s is not pair})
     kept = []
     for scene in ranked:
         row = audit[scene.id]
+        if not _confirm_rollover(video, scene, row, rollover_goals,
+                                 samples_by_scene.get(scene.id, {}), nominated_goals.get(scene.id)):
+            continue
         # Overlapping clips can contain different achievements. Merge only
         # when the reviewed kind and the source evidence time agree.
         for old in kept:

@@ -392,3 +392,69 @@ def test_unreadable_optional_counter_keeps_the_primary_scan(monkeypatch):
     monkeypatch.setattr(intelligence, "vision_call_at", offline)
     with pytest.raises(intelligence.VisionRequestError, match="network"):
         games._optional_observation("game_counter", [])
+
+
+def test_scout_milestone_must_show_the_named_rollover(monkeypatch, tmp_path):
+    # Replay the two different scout decisions from the same match, including
+    # the positive editorial verdict on the later window.
+    goal = {"goal": "29 rollover", "target": 29, "mode": "rollover", "box": [470, 658, 595, 772]}
+    monkeypatch.setattr(games, "_read_game_objectives", lambda *a: [goal])
+    monkeypatch.setattr(games, "reaction_times", lambda *a: [])
+    monkeypatch.setattr(intelligence, "sample", lambda *a, **kw: [])
+    chapter = 0
+
+    def counter(folder, count, target):
+        values = [None] * count
+        if count == 48:
+            values[12:15] = [28, 29, 0] if chapter == 1 else [None, 29, None]
+        else:
+            values[count // 2] = 29
+        return {**target, "values": values}
+
+    def respond(phase, parts):
+        nonlocal chapter
+        if phase == "game_chapter":
+            chapter += 1
+            evidence = ("目标29 rollover，LEVEL从29回到00" if chapter == 1 else
+                        "目标列表含29 rollover；LEVEL为A8，首次变为29，完成本段首次触达29级")
+            return {"events": [{"before": 13, "after": 15, "evidence": evidence}]}
+        ids = [p["text"].split("候选编号 ")[1].split("，")[0] for p in parts
+               if p["type"] == "text" and p["text"].startswith("候选编号 ")]
+        return {"reviews": [{"id": ident, "outcome": "milestone", "standalone": "independent",
+                             "frame": 5, "subject": "等级升到29" if ident.startswith("chapter-2") else "等级从29回到00",
+                             "proof": "A8 → 29 → F0" if ident.startswith("chapter-2") else "29 → 00"}
+                            for ident in ids]}
+
+    monkeypatch.setattr(games, "_read_counter_grid", counter)
+    monkeypatch.setattr(intelligence, "vision_call_at", respond)
+    scenes, coverage = games.analyze_game_chapters(tmp_path / "video", Preferences(duration=45), 800, "", None)
+    assert len(scenes) == 1 and scenes[0].start < 400
+    rejected = next(r for r in coverage["selection"] if r["id"] == "chapter-2-1")
+    assert rejected["disposition"] == "unconfirmed_goal"
+
+
+def test_rollover_needs_ordered_readings_on_the_same_counter(tmp_path, monkeypatch):
+    from backend.services.studio.models import Scene
+
+    goal = {"goal": "Phase 12 rollover", "mode": "rollover", "target": 12}
+    scene = Scene(id="s", start=50, end=85, label="Phase resets")
+    audit = {"outcome": "milestone", "nomination": "A change on the HUD", "objective": goal["goal"]}
+    history = {goal["goal"]: [(20, 12), (21, 0), (55, 12), (60, 10), (70, None), (75, 0)]}
+    monkeypatch.setattr(intelligence, "sample", lambda *args, **kw: [])
+    dense = [None] * 16
+    monkeypatch.setattr(games, "_read_counter_grid", lambda *args: {"values": dense})
+    assert not games._confirm_rollover(tmp_path/"video", scene, audit.copy(), [goal], history, None)
+    dense[8:10] = [12, 0]
+    checked = dict(audit)
+    assert games._confirm_rollover(tmp_path/"video", scene, checked, [goal], history, None)
+    assert scene.start < checked["rollover_times"][0] < checked["rollover_times"][1] < scene.end
+
+
+def test_independent_score_cap_can_share_the_rollover_hud(tmp_path, monkeypatch):
+    from backend.services.studio.models import Scene
+
+    goal = {"goal": "Phase 12 rollover", "mode": "rollover", "target": 12}
+    scene = Scene(id="score", start=50, end=85, label="Score reaches 999999")
+    audit = {"outcome": "milestone", "nomination": "Goal panel: Phase 12 rollover; score hits the cap."}
+    monkeypatch.setattr(intelligence, "sample", lambda *args: pytest.fail("independent score requested OCR"))
+    assert games._confirm_rollover(tmp_path/"video", scene, audit, [goal], {}, None)
