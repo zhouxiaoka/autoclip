@@ -103,9 +103,12 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   }
   const replace = (next: ModelSettings) => { setSettings(next); setDirty(true); setError('') }
 
+  const discoveryProperties = (connection: Connection, trigger: 'load' | 'edit' | 'provider_change' | 'manual') =>
+    ({ placement, provider: telemetryProvider(connection.provider), trigger })
+
   const discover = async (connection: Connection, refresh = false, trigger: 'load' | 'edit' | 'provider_change' | 'manual' = 'manual') => {
     if (connection.provider === 'compatible' && !connection.base_url) return
-    const reported = { placement, provider: telemetryProvider(connection.provider), trigger }
+    const reported = discoveryProperties(connection, trigger)
     const finish: (outcome: 'completed' | 'failed' | 'blocked', extra?: Record<string, unknown>, error?: unknown) => void =
       shouldReportModelDiscovery(trigger, connectionSignature(settingsRef.current), loadedSignature.current)
         ? (trigger === 'edit' ? beginDebouncedEditDiscovery(reported) : beginExperience('model_discovery', reported))
@@ -451,7 +454,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     setMatching(true)
     setError('')
     try {
-      const discovered = beginExperience('model_discovery', { placement, provider: telemetryProvider(connection.provider), trigger: 'manual' })
+      const discovered = beginExperience('model_discovery', discoveryProperties(connection, 'manual'))
       const list = await modelSettingsApi.discover({ ...connection, custom_models: [] }, true).catch(e => {
         discovered('failed', {}, e)
         throw e
