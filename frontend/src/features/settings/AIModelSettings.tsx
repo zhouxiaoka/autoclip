@@ -140,7 +140,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   const translation = useTranslation() as { i18n?: { language?: string } }
   const promo = useSponsorPromo()
   const language = (translation?.i18n?.language || 'zh').toLowerCase().split('-')[0]
-  const m = useModelSettings()
+  const m = useModelSettings('settings_model', returnToImport && requestedProvider === 'cloud')
   const { settings } = m
   const asrReady = useLocalAsrReady(settings)
   const [query, setQuery] = useState('')

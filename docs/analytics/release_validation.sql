@@ -32,6 +32,7 @@ GROUP BY event, outcome, error_code
 ORDER BY event, outcome;
 
 -- Run separately: missing failure codes are a coverage defect, never a cause category.
+-- One-key setup probes one shared credential. Count provider validations per connection, not per model role.
 SELECT count() AS failed_events,
        countIf(properties.error_code IS NULL OR toString(properties.error_code) = '') AS missing_error_code,
        uniq(distinct_id) AS devices
@@ -64,7 +65,6 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
 GROUP BY event, attribution_source, provider, upstream_error_type, failure_stage, outcome
 ORDER BY event, events DESC;
 
--- One-key setup probes one shared credential. Count provider validations per connection, not per model role.
 -- S5: AUTO vision degradation uses a fixed code, never free-text reasons.
 SELECT event, properties.degrade_reason AS degrade_reason,
        properties.analysis_mode AS analysis_mode, properties.route AS route,

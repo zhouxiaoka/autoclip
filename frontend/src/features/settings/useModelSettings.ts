@@ -57,7 +57,7 @@ function failureCopy(result: ValidationResult, model?: string) {
  * One editable copy of the AI model document, shared by the settings page and the first-run card.
  * Editing a key or address triggers one debounced discovery; recommendations fill empty slots only.
  */
-export function useModelSettings(placement: Placement = 'settings_model') {
+export function useModelSettings(placement: Placement = 'settings_model', requireCloudTranscription = false) {
   const [settings, setSettings] = useState<ModelSettings | null>(null)
   const [lists, setLists] = useState<Record<string, ModelList>>({})
   const [busy, setBusy] = useState<Record<string, boolean>>({})
@@ -467,8 +467,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         if (binding?.model && !isImageMarker(binding.model)) next = { ...base, analysis: binding, cover_follows_analysis: base.cover?.connection_id === connection.id && !!base.cover_follows_analysis }
       }
       if (!next?.analysis?.model) throw new Error(t('无法自动匹配剪辑模型。请检查密钥，或手动选择模型。'))
-      const target = ['analysis', 'vision', 'transcription', 'cover'].map(role => ({
-        role: role as Role, binding: next[role as Role],
+      if (requireCloudTranscription && next.transcription?.provider !== 'cloud') {
+        throw new Error(t('连接支持语音识别的服务商后，即可继续导入。'))
+      }
+      const target = (['analysis', 'vision', 'transcription', 'cover'] as const).map(role => ({
+        role, binding: next[role],
       })).find(({ binding }) => binding?.connection_id === connection.id && binding.model)
       if (!target?.binding) throw new Error(t('无法自动匹配剪辑模型。请检查密钥，或手动选择模型。'))
       const value = await probe(connection, target.binding.model, target.role === 'vision' || (target.role === 'analysis' && next.analysis_mode === 'visual'), target.role)
