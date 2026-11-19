@@ -377,3 +377,15 @@ def test_issue_428_empty_intervals_are_invalid_response_after_the_chunk_budget()
     assert failure.user_message() == ISSUE_428
     kind, retryable = classify_for_retry(failure)
     assert (kind, retryable, MAX_ATTEMPTS) == ('invalid_response', True, 3)
+
+
+def test_resumed_step2_migrates_the_legacy_short_floor(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from backend.pipeline.quality import save_profile
+
+    obj = prepared_extractor(tmp_path)
+    save_profile(replace(profile_for(15), min_clip_sec=20), tmp_path)
+    (obj.srt_chunks_dir / 'chunk_0.json').write_text(json.dumps([dict(cue(0, 15), index=1)]))
+    obj.llm_client.call_with_retry = lambda *a, **k: json.dumps([topic('short', 0, 15)])
+    assert len(run_prepared_step2(obj, monkeypatch)) == 1
+    assert obj.extraction_report['minimum_seconds'] == 10
