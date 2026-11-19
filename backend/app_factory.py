@@ -132,11 +132,14 @@ def create_app(mode: str = "web") -> FastAPI:
         
         # 根据模式进行不同的初始化
         if mode == "desktop":
-            from backend.services.diagnostics import queue
+            from backend.services.diagnostics import queue, upload
             try:
                 queue.clean_unclaimed_excerpts()
             except (OSError, ValueError):
                 logger.warning("无法核对旧诊断片段，已保留本地文件")
+            if any(row.get("status") in queue.OPEN or row.get("status") == "delete_pending"
+                   for row in queue.list_items()):
+                upload.wake()
             logger.info("桌面模式：使用本地队列和 SQLite")
         else:
             logger.info("Web 模式：使用 Redis/Celery")

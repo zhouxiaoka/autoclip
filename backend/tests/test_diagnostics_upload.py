@@ -1408,6 +1408,16 @@ def test_submit_offloads_sync_work_while_consent_request_finishes(data_dir, monk
     asyncio.run(exercise())
 
 
+def test_desktop_startup_resumes_pending_deletion(data_dir, monkeypatch):
+    from backend.app_factory import create_app
+    called = []
+    monkeypatch.setattr(upload, 'wake', lambda: called.append(True))
+    queue.enqueue({'id': 'resume-deletion', 'idempotency_key': 'pending', 'status': 'delete_pending'})
+    with TestClient(create_app('desktop'), base_url='http://127.0.0.1:8000') as client:
+        assert client.get('/api/v1/diagnostics/cases').status_code == 200
+    assert called == [True]
+
+
 def test_upgrade_only_removes_stale_unclaimed_excerpt_staging(data_dir):
     import os
     folder = data_dir / 'diagnostics' / 'excerpts'
