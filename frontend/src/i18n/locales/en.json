@@ -2194,5 +2194,8 @@
   "当前模型没能排出时间线。": "This model couldn’t build a timeline.",
   "这次没有做完，可以重试。": "This one didn’t finish. You can try again.",
   "{{candidates}} 个候选片段都不足 {{seconds}} 秒。请换用口播连续、话题完整的素材。": "Each of the {{candidates}} candidate clips was shorter than {{seconds}} seconds. Try a video with one continuous, complete discussion.",
-  "转写模型文件缺失或不完整，请重新下载。": "The transcription model is missing or incomplete. Download it again."
+  "转写模型文件缺失或不完整，请重新下载。": "The transcription model is missing or incomplete. Download it again.",
+  "已配置，保存时验证": "Verify on save",
+  "连接校验失败": "Connection check failed",
+  "请在下方的服务商设置中测试连接并启用模型。": "Test the connection and enable models in the provider settings below."
 }

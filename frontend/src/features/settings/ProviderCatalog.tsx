@@ -155,6 +155,7 @@ export default function ProviderCatalog({
           <span className="visually-hidden">{t('settings.providers.search')}</span>
           <input
             className="ac-input"
+            id="ai-provider-search"
             type="search"
             value={query}
             placeholder={t('settings.providers.search_placeholder')}

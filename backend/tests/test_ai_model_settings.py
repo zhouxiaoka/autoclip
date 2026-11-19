@@ -1099,3 +1099,55 @@ def test_save_allows_same_image_model_on_cover(tmp_path, monkeypatch):
     public = ai.save(settings)
     assert public['cover']['model'] == seedream
     assert public['analysis']['model'] == 'doubao-seed-2-1-lite-260915'
+
+
+@pytest.mark.parametrize('nested', [True, False], ids=['desktop', 'flat'])
+def test_other_saved_legacy_cloud_account_can_be_selected_without_reentering_keys(tmp_path, monkeypatch, nested):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.core import llm_manager
+    from backend.services import cover
+    from backend.services.studio import vision_settings, analysis_preferences
+
+    active, other = ('dashscope', 'deepseek') if nested else ('deepseek', 'dashscope')
+    active_model = 'qwen-plus' if nested else 'deepseek-flash'
+    base = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
+    keys = {'dashscope': 'test-ali-only', 'deepseek': 'test-deep-only'}
+    legacy = {'api': {'api_provider': active, 'api_model': active_model, 'api_keys': keys}} if nested else {
+        'llm_provider': active, 'model_name': active_model, 'dashscope_base_url': base,
+        **{f'{p}_api_key': key for p, key in keys.items()},
+    }
+    legacy_path = tmp_path / 'settings.json'
+    original = json.dumps(legacy)
+    legacy_path.write_text(original, encoding='utf-8')
+    monkeypatch.setenv('API_KIMI_API_KEY', 'test-env-only')
+    monkeypatch.setattr(llm_manager.LLMManager, '_sync_config_if_needed', lambda self: None)
+    monkeypatch.setattr(llm_manager.LLMManager, '_initialize_provider', lambda self: None)
+    manager = llm_manager.LLMManager(legacy_path)
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: {})
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig())
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences())
+    monkeypatch.setattr(ai, 'migrate_legacy', legacy_migrate)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get('/settings/ai-models')
+        response.raise_for_status()
+        doc = response.json()
+        rows = {row['provider']: row for row in doc['connections']}
+        assert set(rows) == set(keys)
+        assert all(row['has_key'] and row['validation_status'] == 'unchecked' for row in rows.values())
+        assert not any(key in response.text for key in keys.values())
+        assert doc['analysis']['connection_id'] == rows[active]['id']
+        assert not ai.path().exists()
+        doc['analysis'] = {'connection_id': rows[other]['id'], 'model': 'deepseek-flash' if nested else 'qwen-plus',
+                           'capability': 'text', 'model_source': 'user'}
+        client.put('/settings/ai-models', json=doc).raise_for_status()
+        assert client.get('/settings/ai-models').json()['analysis'] == doc['analysis']
+        persisted = ai.load()
+        endpoint = ai.chat_endpoint(ai.connection_for(persisted, persisted.analysis), persisted.analysis.model)
+        assert endpoint['api_key'] == keys[other]
+        assert endpoint['base_url'] == ('https://api.deepseek.com/v1' if nested else base)
+        assert legacy_path.read_text(encoding='utf-8') == original

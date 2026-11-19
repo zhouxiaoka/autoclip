@@ -2194,5 +2194,8 @@
   "当前模型没能排出时间线。": "Este modelo no pudo armar la línea de tiempo.",
   "这次没有做完，可以重试。": "Esta vez no terminó. Puedes intentarlo de nuevo.",
   "{{candidates}} 个候选片段都不足 {{seconds}} 秒。请换用口播连续、话题完整的素材。": "Los {{candidates}} fragmentos candidatos duran menos de {{seconds}} segundos. Prueba con un vídeo donde se hable de un tema de principio a fin sin interrupciones.",
-  "转写模型文件缺失或不完整，请重新下载。": "Falta el modelo de transcripción o está incompleto. Vuelve a descargarlo."
+  "转写模型文件缺失或不完整，请重新下载。": "Falta el modelo de transcripción o está incompleto. Vuelve a descargarlo.",
+  "已配置，保存时验证": "Verificar al guardar",
+  "连接校验失败": "Falló la prueba de conexión",
+  "请在下方的服务商设置中测试连接并启用模型。": "Prueba la conexión y activa los modelos en la configuración del proveedor de abajo."
 }

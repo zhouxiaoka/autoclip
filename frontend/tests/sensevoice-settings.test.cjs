@@ -15,10 +15,6 @@ function flatten(node) {
   return [node, ...flatten(node.props?.children)]
 }
 
-function textOf(node) {
-  return flatten(node).filter(item => typeof item === 'string' || typeof item === 'number').join('')
-}
-
 const i18n = { t: (key, values) => {
   if (!values) return key
   return Object.keys(values).reduce((out, name) => out.replace(`{{${name}}}`, String(values[name])), key)
@@ -33,21 +29,9 @@ test('DefaultModels switches local ASR engines without a cloud connection', () =
     chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
   }
   const updates = []
-  // Force the transcription panel open on first useState call (open purpose id).
-  let stateCalls = 0
+  const Select = () => null
   const DefaultModels = loadTs('DefaultModels.tsx', {
-    react: {
-      ...React,
-      useState: initial => {
-        stateCalls += 1
-        // First useState in DefaultModels is `open`; return transcription so PurposePanel mounts.
-        if (stateCalls === 1) return ['transcription', () => {}]
-        return [typeof initial === 'function' ? initial() : initial, () => {}]
-      },
-      useEffect: () => {},
-      useMemo: fn => fn(),
-      useRef: value => ({ current: value }),
-    },
+    antd: { Select },
     'react-i18next': { useTranslation: () => {} },
     '../../i18n': i18n,
     '../../ui': { Icon: { Check: () => null, Help: () => null } },
@@ -57,17 +41,13 @@ test('DefaultModels switches local ASR engines without a cloud connection', () =
     lists: {},
     onChange: next => { settings = next; updates.push(next) },
   })
-  const buttons = flatten(tree).filter(node => node.type === 'button' && node.props?.className === 'ac-purpose-option')
-  const sense = buttons.find(node => textOf(node).includes('本机 SenseVoice'))
-  assert.ok(sense, 'SenseVoice option must appear in the transcription purpose panel')
-  sense.props.onClick()
+  const select = flatten(tree).find(node => node.type === Select && node.props['aria-label'] === '语音转字幕')
+  const choose = label => select.props.onChange(select.props.options.find(option => option.label === label).value)
+  choose('本机 SenseVoice')
   assert.equal(settings.transcription.provider, 'sensevoice_local')
   assert.equal(settings.transcription.model, 'SenseVoiceSmall')
   assert.equal(settings.transcription.model_source, 'user')
-  const whisperBase = buttons.find(node => textOf(node).includes('本机 Whisper') && textOf(node).includes('base'))
-  assert.ok(whisperBase)
-  // Closures capture the initial settings snapshot; applyLocalTranscription still yields a local binding.
-  whisperBase.props.onClick()
+  choose('本机 Whisper · base')
   assert.equal(settings.transcription.provider, 'whisper_local')
   assert.equal(settings.transcription.model, 'base')
   assert.equal(settings.transcription.model_source, 'user')
