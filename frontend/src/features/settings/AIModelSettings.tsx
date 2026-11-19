@@ -226,8 +226,6 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     }
     if (result.issue) {
       const slot = document.getElementById(issueAnchor(result.issue))
-      const details = slot?.closest('details')
-      if (details) details.open = true
       slot?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     }
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -266,7 +264,6 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           <DefaultModels
             settings={settings}
             lists={m.lists}
-            requestedSection={requestedSection}
             onChange={next => m.update(next)}
             transcriptionNote={<>
               {cloudChecking && <p className="ac-note" role="status">{t('正在检查可用的云端转写…')}</p>}

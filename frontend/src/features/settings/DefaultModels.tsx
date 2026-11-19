@@ -100,11 +100,10 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
   )
 }
 
-export default function DefaultModels({ settings, lists, onChange, requestedSection, transcriptionNote = null }: {
+export default function DefaultModels({ settings, lists, onChange, transcriptionNote = null }: {
   settings: ModelSettings
   lists: Record<string, ModelList>
   onChange: (next: ModelSettings) => void
-  requestedSection?: string
   transcriptionNote?: ReactNode
 }) {
   useTranslation()
@@ -164,14 +163,8 @@ export default function DefaultModels({ settings, lists, onChange, requestedSect
         </button>
       </div>
       <div className="ac-purpose-grid">
-        {renderSlot(PURPOSE_SLOTS[0])}
+        {PURPOSE_SLOTS.map(renderSlot)}
       </div>
-      <details className="ac-disclosure" open={['speech', 'vision', 'cover'].includes(requestedSection || '') || undefined}>
-        <summary>{t('其他模型')}</summary>
-        <div className="ac-purpose-grid">
-          {PURPOSE_SLOTS.slice(1).map(renderSlot)}
-        </div>
-      </details>
     </div>
   )
 }
