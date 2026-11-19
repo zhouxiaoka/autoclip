@@ -1,5 +1,7 @@
 """Local routing evidence and continuous action-to-reaction cuts for game recordings."""
 
+import base64
+import io
 import json
 import math
 import re
@@ -383,6 +385,72 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
     return [scene for _, scene in sorted(reviewed, key=lambda row: -row[0])]
 
 
+def _read_game_objectives(video, duration):
+    prompt = (
+        "找出直播画面文字明确列出的本场数值目标，以及衡量它的实时游戏读数。"
+        "优先明确的阶段转换，最多两项；无明确目标返回空数组。"
+        "goal照抄目标文字，target为整数。mode为reach或rollover（到指定数值后回绕）。"
+        "box圈出实时读数及其字段名，不是目标列表；坐标为整张图的[左,上,右,下]，0至1000。"
+        '返回 {"goals":[{"goal":"原文","target":整数,"mode":"reach或rollover","box":[整数,整数,整数,整数]}]}。'
+    )
+    with tempfile.TemporaryDirectory(prefix="ac-game-objectives-") as tmp:
+        frames = intelligence.sample(video, [duration * f for f in (.05, .18, .45)], Path(tmp), width=960)
+        reply = intelligence.vision_call_at("game_objectives", [{"type": "text", "text": prompt}, *frames])
+    goals = []
+    rows = reply.get("goals") if isinstance(reply, dict) else None
+    if not isinstance(rows, list):
+        raise ModelResponseInvalid("画面目标格式无效，请重试")
+    for row in rows[:2]:
+        if not isinstance(row, dict):
+            continue
+        box = row.get("box")
+        if (isinstance(box, list) and len(box) == 4 and
+                all(type(v) is int and 0 <= v <= 1000 for v in box) and
+                box[0] < box[2] and box[1] < box[3] and
+                row.get("mode") in ("reach", "rollover") and type(row.get("target")) is int
+                and row["target"] > 0 and isinstance(row.get("goal"), str) and row["goal"].strip()):
+            goals.append({k: row[k] for k in ("goal", "target", "mode", "box")})
+    return goals
+
+
+def _read_counter_grid(folder, count, goal):
+    from PIL import Image, ImageDraw, ImageOps
+
+    # The grid preserves actual source pixels. Each numbered tile represents
+    # exactly one frame, irrespective of whether the scout nominated an event.
+    grid = Image.new("RGB", (6 * 146, math.ceil(count / 6) * 78), "#262626")
+    draw = ImageDraw.Draw(grid)
+    for i in range(count):
+        with Image.open(folder / f"{i}.jpg") as frame:
+            x0, y0, x1, y1 = goal["box"]
+            # Tolerate small localization errors without losing adjacent labels.
+            crop = frame.crop((max(0, x0-18)*frame.width//1000, max(0, y0-24)*frame.height//1000,
+                               math.ceil(min(1000, x1+18)*frame.width/1000),
+                               math.ceil(min(1000, y1+24)*frame.height/1000)))
+            tile = ImageOps.contain(crop, (144, 60), Image.Resampling.NEAREST)
+            x, y = (i % 6) * 146, (i // 6) * 78
+            grid.paste(tile, (x, y + 16))
+            draw.text((x+2, y), str(i+1), fill="white")
+    buf = io.BytesIO()
+    grid.save(buf, format="PNG")
+    content = [
+        {"type": "text", "text": "逐格抄录该目标对应的实时游戏计数，不作高光判断。目标为"
+         + json.dumps(goal["goal"], ensure_ascii=False) +
+         f"。按编号1–{count}依次返回{count}个读数；纯十进制转为整数（00为0），其余填null。"
+         '按图片的行列返回 {"rows":[[第一行6个值],[第二行6个值],...]}，重复的数字也要逐格抄录。'},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64," +
+         base64.b64encode(buf.getvalue()).decode("ascii")}},
+    ]
+    response = intelligence.vision_call_at("game_counter", content)
+    rows = response.get("rows") if isinstance(response, dict) else None
+    values = []
+    if isinstance(rows, list) and len(rows) == math.ceil(count / 6):
+        for index, row in enumerate(rows):
+            size = min(6, count - index * 6)
+            values.extend(row if isinstance(row, list) and len(row) == size else [None] * size)
+    return {**goal, "values": values}
+
+
 def _visible_goal_changes(tracks, frame_count):
     """Locate a visible numeric objective independently of editorial nominations."""
     if not isinstance(tracks, list):
@@ -425,20 +493,16 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
     audit = {}
     anchors = {pair.id: (peaks[0] - 3, peaks[0] + 3)} if pair else {}
     chapter_ranges = []
-    known_goals = []
+    goals = _read_game_objectives(video, duration)
+    goal_labels = [g["goal"] for g in goals]
     prompt = (
         "这是游戏长回放的一段。先读画面里的本场目标，再对照前后游戏状态，独立寻找本段最值得保留的至多两个事件。"
         "优先显式目标在本段达成、第一次触达上限、重大阶段切换、决胜、独特操作带来清晰结果。"
         "即使主播没有反应也要检查目标列表和状态栏是否对应；目标文字常驻本身不能证明完成。"
         "分数从较低值达到上限才算，本段从开头就维持上限不算。一般涨分升级、颜色轮换、"
         "常规堆叠、静止画面上离席或捂脸、上局结算接下一局均不单列。无独立事件返回空数组。"
-        "独立于events，把画面明确列出的数值目标（最多2项）记录到goal_tracks。只跟踪当前比赛实际统计栏，"
-        "不要把目标栏、历史最高分或例子当作当前读数。优先跟踪画面明确点名的等级/阶段转换，再跟踪分数。"
-        "每项目标含goal（照录画面原文）、target（目标整数）、mode（达标reach；目标要求计数绕回初值则rollover），"
-        "values为按帧号依次抄录该统计栏的一维数组，每帧一个整数。非纯十进制或看不清填null，长度须等于帧数。"
-        "这项只抄读数，即使events为空也要返回，数值从中间经过后又变化也要如实记录。无明确目标时返回空数组。"
         "before和after是同一事件变化前和变化后的帧序号（从1起），尽量选紧贴变化的两帧。"
-        "只返回 JSON 对象，包含goal_tracks及events两个数组。events项格式为"
+        "只返回含events数组的JSON对象，数组项格式为"
         "{\"before\":4,\"after\":5,\"evidence\":\"目标及前后可见证据\"}。"
     )
     if instruction:
@@ -454,7 +518,7 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
         chapter_ranges.append([left, right])
         with tempfile.TemporaryDirectory(prefix="ac-game-chapter-") as tmp:
             reminder = (" 之前看到的目标文字（仅在当前画面仍能核实时抄录）：" +
-                        json.dumps(known_goals, ensure_ascii=False)) if known_goals else ""
+                        json.dumps(goal_labels, ensure_ascii=False)) if goal_labels else ""
             parts = [{"type": "text", "text": prompt + reminder}]
             frames = intelligence.sample(video, times, Path(tmp))
             index = 0
@@ -464,14 +528,11 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
                     part["text"] = f"第 {index} 帧，" + part["text"]
             parts.extend(frames)
             response = intelligence.vision_call_at("game_chapter", parts)
+            tracks = [_read_counter_grid(Path(tmp), len(times), goal) for goal in goals]
         rows = response.get("events") if isinstance(response, dict) else None
         if not isinstance(rows, list):
             raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
-        tracks = response.get("goal_tracks")
         changes = _visible_goal_changes(tracks, len(times))
-        if isinstance(tracks, list):
-            known_goals = [t["goal"][:100] for t in tracks[:2] if isinstance(t, dict)
-                           and isinstance(t.get("goal"), str)]
         for n, row in enumerate(rows[:2] + changes):
             if not isinstance(row, dict):
                 raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
@@ -515,7 +576,7 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
                 row["disposition"] = "limit"
     if not kept:
         raise UserFacingError("这场回放中没有找到可独立成片的操作或结果")
-    return kept, {"duration": duration, "chapters": chapter_ranges,
+    return kept, {"duration": duration, "chapters": chapter_ranges, "objectives": goals,
                   "audio_change_times": peaks, "selection": list(audit.values())}
 
 

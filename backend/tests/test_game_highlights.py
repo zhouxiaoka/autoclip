@@ -281,6 +281,7 @@ def test_long_visual_scan_recovers_quiet_objective_and_skips_routine(monkeypatch
     from backend.services.studio.models import Scene
 
     monkeypatch.setattr(intelligence, "_probe", lambda _: {"duration": 2400})
+    monkeypatch.setattr(games, "_read_game_objectives", lambda *args: [])
     monkeypatch.setattr(games, "reaction_times", lambda *args: [2200])
     pair = Scene(id="reaction", label="Last move", start=2180, end=2220, evidence="Board stops")
     monkeypatch.setattr(games, "verify_reaction", lambda *args: pair)
@@ -317,6 +318,7 @@ def test_long_visual_scan_recovers_quiet_objective_and_skips_routine(monkeypatch
 
 @pytest.mark.parametrize("verdict,expected", [("independent", True), ("aftermath", False)])
 def test_missing_dense_pair_still_needs_visual_confirmation(tmp_path, monkeypatch, verdict, expected):
+    monkeypatch.setattr(games, "_read_game_objectives", lambda *args: [])
     monkeypatch.setattr(games, "reaction_times", lambda *args: [850])
     monkeypatch.setattr(games, "verify_reaction", lambda *args: None)
     monkeypatch.setattr(intelligence, "sample", lambda *args, **kwargs: [])
@@ -346,3 +348,15 @@ def test_objective_readings_recover_quiet_changes_without_a_nomination():
     tracks[0]["values"] = [8, 0, 1, None, 0]
     tracks[1]["values"] = [510, 520, 530, 540, 550]
     assert games._visible_goal_changes(tracks, 5) == []
+
+
+def test_grid_keeps_indices_when_a_counter_row_is_unreadable(tmp_path, monkeypatch):
+    from PIL import Image
+
+    for n in range(12):
+        Image.new("RGB", (64, 48), "black").save(tmp_path / f"{n}.jpg")
+    goal = {"box": [100, 100, 300, 250], "mode": "reach", "target": 10, "goal": "Reach 10"}
+    monkeypatch.setattr(intelligence, "vision_call_at", lambda *a: {"rows": [[1, 2], [7, 8, 9, 10, 11, 12]]})
+    track = games._read_counter_grid(tmp_path, 12, goal)
+    assert track["values"] == [None] * 6 + [7, 8, 9, 10, 11, 12]
+    assert games._visible_goal_changes([track], 12)[0]["after"] == 10
