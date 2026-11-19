@@ -630,7 +630,7 @@ def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,s
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:recommendation())
     calls=[]
-    monkeypatch.setattr(jobs,'analyze',lambda *a:calls.append('scan') or ([Scene(id='e1',start=0,end=1)],{'duration':1}))
+    monkeypatch.setattr(jobs,'analyze',lambda *a, gameplay:calls.append('game-scan' if gameplay else 'scan') or ([Scene(id='e1',start=0,end=1)],{'duration':1}))
     def drafts(events,prefs,*a,**kw):
         calls.append(prefs.goal)
         if prefs.goal=='promo':
@@ -643,7 +643,7 @@ def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,s
     pid=response.json()['project_id'];plan=client.get('/studio/'+pid).json()['plan']
     assert client.post('/studio/'+pid+'/start',json={'plan_id':plan['id'],'goals':['promo','highlight']}).status_code==200
     result=client.get('/studio/'+pid).json()
-    assert calls==['scan','promo','highlight']
+    assert calls==['game-scan','promo','highlight']
     assert result['analysis']['outcome']=='partial'
     assert result['analysis']['succeeded_goals']==['highlight']
     assert result['analysis']['failed_goals']==['promo']
