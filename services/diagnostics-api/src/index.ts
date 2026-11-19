@@ -94,12 +94,14 @@ export function adaptBucket(bucket: R2Bucket): Bucket {
     delete: (key) => bucket.delete(key),
     createMultipartUpload: async (key) => wrapUpload(await bucket.createMultipartUpload(key)),
     resumeMultipartUpload: (key, uploadId) => wrapUpload(bucket.resumeMultipartUpload(key, uploadId)),
-    list: async (prefix) => {
+    list: async (prefix, uploadedBefore) => {
       const keys: string[] = []
       let cursor: string | undefined
       for (let page = 0; page < 1000; page += 1) {
         const listed = await bucket.list({ prefix, cursor, limit: 1000 })
-        for (const object of listed.objects) keys.push(object.key)
+        for (const object of listed.objects) {
+          if (!uploadedBefore || object.uploaded < uploadedBefore) keys.push(object.key)
+        }
         if (!listed.truncated) return keys
         if (!listed.cursor || listed.cursor === cursor) return keys
         cursor = listed.cursor
