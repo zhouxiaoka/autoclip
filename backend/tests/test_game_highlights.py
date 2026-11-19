@@ -468,6 +468,10 @@ def test_rollover_locator_accepts_a_single_fenced_payload_after_transcription():
            '阶段转换用 LEVEL 字段。\n\n```json\n{"goals":[{"goal":"29 rollover",'
            '"target":29,"mode":"rollover","box":[470,655,600,775]}]}\n```')
     assert intelligence.decode_json(raw)["goals"][0]["target"] == 29
+    unfenced = raw.replace("```json\n", "").removesuffix("\n```")
+    assert intelligence.decode_json(unfenced)["goals"][0]["target"] == 29
+    with pytest.raises(ValueError):
+        intelligence.decode_json(unfenced + "\n{}")
     with pytest.raises(ValueError):
         intelligence.decode_json(raw + '\n```json\n{}\n```')
 

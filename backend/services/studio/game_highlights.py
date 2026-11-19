@@ -409,7 +409,7 @@ def _read_game_objectives(video, duration):
         "同栏的不同目标也要分别记录，优先可直接核验的阶段转换；无明确目标返回空数组。"
         "goal照抄目标文字，target为整数。mode为reach或rollover（到指定数值后回绕）。"
         "box圈出实时读数及其字段名，不是目标列表；坐标为整张图的[左,上,右,下]，0至1000。"
-        '返回 {"visible_goal_lines":["逐行原文"],"goals":[{"goal":"原文","target":整数,"mode":"reach或rollover","box":[整数,整数,整数,整数]}]}。'
+        '转录只填入JSON字段，对象外不写说明。返回 {"visible_goal_lines":["逐行原文"],"goals":[{"goal":"原文","target":整数,"mode":"reach或rollover","box":[整数,整数,整数,整数]}]}。'
     )
     with tempfile.TemporaryDirectory(prefix="ac-game-objectives-") as tmp:
         frames = intelligence.sample(video, [duration * f for f in (.05, .18, .45)], Path(tmp), width=960)

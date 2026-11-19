@@ -52,6 +52,14 @@ def decode_json(raw):
         language, sep, body = block.partition('\n')
         if sep and language.strip().lower() in ('', 'json'):
             raw = body.strip()
+    elif not raw.startswith(('{', '[')) and '```' not in raw:
+        # Also accept a single unfenced object on its own line after a preface.
+        # Parsing the entire suffix rejects trailing prose or competing answers.
+        lines = raw.splitlines(keepends=True)
+        for index, line in enumerate(lines):
+            if line.lstrip().startswith('{'):
+                raw = ''.join(lines[index:])
+                break
     return json.loads(raw)
 
 def text_json(prompt, data):
