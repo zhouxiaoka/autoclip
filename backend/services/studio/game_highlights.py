@@ -394,10 +394,6 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
                 and len(quote.strip()) >= 3
                 and quote.casefold() in nearby.casefold()
             )
-            if outcome == "match_win" and row.get("final_for_player") is not True:
-                # A standings table can show somebody else's winning position.
-                outcome = "unclear"
-                supported = False
             tier = (
                 _OUTCOME_TIER.get(outcome, 0)
                 if supported and isinstance(outcome, str)

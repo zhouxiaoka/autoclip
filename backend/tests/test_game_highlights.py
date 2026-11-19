@@ -206,3 +206,39 @@ def test_original_game_post_keeps_reviewed_title(tmp_path, monkeypatch):
         "description": "Clip",
         "tags": [],
     }
+
+
+def test_transcript_win_nomination_with_quote_beats_higher_placement_score(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "input.srt").write_text(
+        "1\n00:00:05,000 --> 00:00:10,000\nFinished ninth\n\n2\n00:01:30,000 --> 00:01:42,000\nI won that match\n"
+    )
+    events = [
+        dict(
+            action=5,
+            reaction=10,
+            label="Ninth place",
+            score=99,
+            outcome="placement",
+            quote="Finished ninth",
+        ),
+        dict(
+            action=90,
+            reaction=96,
+            label="Match win",
+            score=81,
+            outcome="match_win",
+            quote="I won that match",
+        ),
+    ]
+    monkeypatch.setattr(intelligence, "text_json", lambda *a: {"events": events})
+    monkeypatch.setattr(
+        intelligence,
+        "vision_call_at",
+        lambda *a: pytest.fail("text-only route sent frames"),
+    )
+    drafts = games.subtitle_drafts(
+        tmp_path / "video.mp4", Preferences(goal="highlight"), 105
+    )
+    assert [d["title"] for d in drafts] == ["Match win", "Ninth place"]
