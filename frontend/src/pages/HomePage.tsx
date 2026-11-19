@@ -51,6 +51,11 @@ export default function HomePage() {
   const [setupRequest, setSetupRequest] = useState(0)
   const [exampleBusy, setExampleBusy] = useState(false)
   const [aiSettings, setAiSettings] = useState<ModelSettings | null>(null)
+  const importArea = useRef<HTMLDivElement>(null)
+  const chooseAnotherVideo = () => {
+    importArea.current?.scrollIntoView({ block: 'start' })
+    importArea.current?.querySelector<HTMLElement>('textarea:not(:disabled), input[type="file"]:not(:disabled)')?.focus({ preventScroll: true })
+  }
   const seenStatus = useRef<Record<string, string>>({})
   const [liveFailure, setLiveFailure] = useState<Project | null>(null)
   useEffect(() => {
@@ -60,7 +65,7 @@ export default function HomePage() {
   }, [projects])
 
   // 使用项目轮询Hook
-  useProjectPolling({
+  const { refreshNow } = useProjectPolling({
     onProjectsUpdate: (updatedProjects) => {
       setProjects(updatedProjects || [])
     },
@@ -165,10 +170,9 @@ export default function HomePage() {
         },
       })))
       setAiSettings(saved)
-      if (managed) await studioApi.retry(projectId, { retry_kind: 'switch_model' })
+      if (managed) await studioApi.retry(projectId, { scope: 'project', retry_kind: 'switch_model' })
       else await projectApi.retryProcessing(projectId)
-      message.success(t("已开始重试处理项目"))
-      await loadProjects()
+      await handleRetryProject()
     } catch (error) {
       message.error(t("重试失败，请稍后再试"))
       console.error('Switch model and retry error:', error)
@@ -178,7 +182,7 @@ export default function HomePage() {
   const handleRetryProject = async () => {
     message.success(t("已开始重试处理项目"))
     try {
-      await loadProjects()
+      await refreshNow()
     } catch (error) {
       console.error('Refresh after retry error:', error)
     }
@@ -229,7 +233,7 @@ export default function HomePage() {
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
           {liveFailure && <FailureHint active project={liveFailure} />}
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
-          <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} />
+          <div ref={importArea}><CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} /></div>
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
           {/* 项目管理区域 */}
@@ -318,6 +322,7 @@ export default function HomePage() {
                          onDelete={handleDeleteProject}
                          onRetry={() => handleRetryProject()}
                          onClick={() => handleProjectCardClick(project)}
+                         onChangeVideo={chooseAnotherVideo}
                          replacement={replacement}
                          switchOptions={switchOptions}
                          connectionCount={usableConnectionCount(aiSettings)}

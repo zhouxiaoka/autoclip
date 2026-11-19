@@ -32,8 +32,10 @@ export type FailureView = {
   reason: string
   /** One short sentence for the project card. The full reason stays on the diagnose panel. */
   brief: string
+  briefValues?: { candidates: string; seconds: string }
   outcome: string
   primary: PrimaryAction | null
+  recovery: PrimaryAction
   technical: { requests: number | null; successes: number | null } | null
 }
 
@@ -146,14 +148,16 @@ const CARD_BRIEFS = {
   rate_limited: '请求太频繁，请稍后再试。',
   auth: '密钥或权限有问题，请到设置里检查。',
   llm_not_configured: '还没有配好模型，请到设置里检查。',
-  source: '这个视频没法用。',
+  duration: '{{candidates}} 个候选片段都不足 {{seconds}} 秒。请换用口播连续、话题完整的素材。',
   interrupted: '制作中断了，可以重试。',
   timeline: '当前模型没能排出时间线。',
   unknown: '这次没有做完，可以重试。',
 } as const
 
 const AUTH_CODES = new Set(['authentication', 'invalid_key', 'llm_auth_invalid', 'permission_denied'])
-const INTERRUPTED_CODES = new Set(['unexpected', 'timeline_empty', 'transcription_empty'])
+// Only interpolate the two numbers emitted by timeline_failure_from_report.
+const MINIMUM_DURATION = /时间线提取为空：([0-9]+) 个有效候选在字幕边界校正后均未达到最短时长（([0-9]+(?:\.[0-9]+)?) 秒）/
+const MODEL_FILE_MISSING = '转写模型文件缺失或不完整，请重新下载。'
 
 /** Card sentence. A long vendor message never becomes the card text, even when it has no line break. */
 export function briefReason(input: PresentInput): string {
@@ -172,9 +176,13 @@ export function briefReason(input: PresentInput): string {
   if (code === 'connection' || upstream === 'connection') return CARD_BRIEFS.connection
   if (code === 'service_restarted' || upstream === 'service_restarted') return CARD_BRIEFS.service_restarted
   if (code === 'rate_limited' || upstream === 'rate_limited') return CARD_BRIEFS.rate_limited
-  if (SOURCE_CODES.has(code) || code === 'source_blocked') return CARD_BRIEFS.source
-  if (INTERRUPTED_CODES.has(code)) return CARD_BRIEFS.interrupted
-  return CARD_BRIEFS.unknown
+  if (code === 'whisper_model_missing' || code === 'whisper_model_failed'
+      || (!code && input.error === 'Whisper 模型文件缺失或不完整。')) return MODEL_FILE_MISSING
+  if (upstream && upstream !== 'unknown' && USER_MESSAGES[upstream]) return USER_MESSAGES[upstream]
+  if (code === 'unexpected') return CARD_BRIEFS.interrupted
+  if (code && code !== 'unknown' && USER_MESSAGES[code]) return USER_MESSAGES[code]
+  const stored = input.error?.trim()
+  return stored && Object.values(USER_MESSAGES).includes(stored) ? stored : CARD_BRIEFS.unknown
 }
 
 function reasonFor(input: PresentInput): string {
@@ -196,8 +204,7 @@ function reasonFor(input: PresentInput): string {
   return text
 }
 
-function primaryFor(input: PresentInput, preserved: number): PrimaryAction | null {
-  if (preserved > 0) return { id: 'view_results', label: '查看已有结果' }
+function primaryFor(input: PresentInput): PrimaryAction {
   if (weakLocalTimelineFailure(input.error, input.error_code)) {
     return { id: 'settings', label: '去配置模型', destination: '/settings?section=analysis' }
   }
@@ -239,15 +246,20 @@ function primaryFor(input: PresentInput, preserved: number): PrimaryAction | nul
 
 export function presentFailure(input: PresentInput): FailureView {
   const preserved = Math.max(0, Number(input.preservedCount) || 0)
+  const recovery = primaryFor(input)
   const requests = Number(input.llm_calls)
   const successes = Number(input.billable_calls_before_failure)
+  const duration = (!input.error_code || ['timeline_empty', 'unexpected', 'unknown'].includes(input.error_code))
+    ? MINIMUM_DURATION.exec(input.error || '') : null
   return {
     status: SOURCE_CODES.has(input.error_code || '') || input.error_code === 'source_blocked' ? '这个素材无法使用' : FAILURE_STATUS,
     step: failureStep(input.failure_stage, input.phase, input.error_code),
     reason: reasonFor(input),
-    brief: briefReason(input),
+    brief: duration ? CARD_BRIEFS.duration : briefReason(input),
+    ...(duration && { briefValues: { candidates: duration[1], seconds: duration[2] } }),
     outcome: preserved > 0 ? KEPT_RESULT_OUTCOME : NO_RESULT_OUTCOME,
-    primary: primaryFor(input, preserved),
+    primary: preserved > 0 ? { id: 'view_results', label: '查看已有结果' } : recovery,
+    recovery,
     technical: Number.isFinite(requests) && requests > 0 ? { requests, successes: Number.isFinite(successes) ? successes : null } : null,
   }
 }

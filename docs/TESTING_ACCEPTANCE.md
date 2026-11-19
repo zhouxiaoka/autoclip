@@ -80,6 +80,8 @@ Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/�
 
 Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `VITE_TELEMETRY_VALIDATION=true`；受控后端进程使用 `AUTOCLIP_BUILD_ENVIRONMENT=validation` 并明确标记测试 scope，见 [监控说明](analytics/STUDIO_MONITORING.md)）；它是同一提交的补充证据，**不替代最终生产安装包**。桌面启动器会注入 production/development，验收时需核查实际事件标签。生产包检查版本标记与关闭采集，validation 检查最终收数。不要把验收事件塞入生产成功率。
 
+首页失败恢复回归：打开已有的手动确认项目，其中 4 个候选片段都短于 20 秒。项目列表应显示实际数量和最低时长。点击「重试制作」后停留在列表，同一份素材沿用上次确认的目标、分析方式和画幅；快速连点只提交一次。validation 中核对新 production 回执沿用 flow、指向失败的父 attempt，按现有 `studio_production_finished` 口径去重。初筛阶段失败的项目重试后仍需首次确认方案。
+
 自动制作在生成版本前失败的恢复验收，还需从真实结果页确认重试入口，修正前置条件后沿用原素材和所选平台完成出片；validation 收数应保留同一 flow、不同 attempt 的失败与成功，各尝试重复观察只入库一次。
 
 1.5.7 E5 / 启动环境字段回归：在隔离目录验证首次启动、已有 `analytics.json` 的重启、后端端口延迟与首次身份写入失败。PostHog 与后端 Sentry 的匿名 UUID 必须相同；晚到的身份必须覆盖启动环境变量并对 worker 生效。Mac arm64 的首屏/启动事件必须带 `os=macos, arch=aarch64`，Windows x64 必须为 `windows, x86_64`；执行 [release_validation.sql](analytics/release_validation.sql) 的首屏覆盖查询，缺失/unknown 不通过。分析关闭时 Sentry 不携带 user，崩溃报告关闭时不发送；载荷不得出现密钥、完整 URL、个人路径、标题或正文。首次安装在前端尚未生成 UUID 前的后端错误可以无 user，不能为了填字段另造设备身份。源码回归不能替代两平台最终包实际收数。

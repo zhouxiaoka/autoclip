@@ -167,8 +167,7 @@ test('a quota failure is not rewritten into an invalid-key prompt', () => {
 test('failed project shows the persisted reason even after progress state is lost', () => {
   const html = renderCard('error', 'Whisper 模型文件缺失或不完整。')
   assert.match(html, /role="alert"/)
-  assert.match(html, /这次没有做完，可以重试。/)
-  assert.doesNotMatch(html, /Whisper 模型文件缺失或不完整。/)
+  assert.match(html, /转写模型文件缺失或不完整，请重新下载。/)
 })
 
 test('progress failure remains visible before project refresh and is escaped', () => {
@@ -199,7 +198,7 @@ test('restart-interrupted automatic project shows its reason and regenerates fro
   assert.deepEqual(visited, [])
 })
 
-test('managed project without a finished generation still reopens import review', async () => {
+test('failed screening retries on the card without reopening import review', async () => {
   const visited = []
   const buttons = {}
   renderCard('failed', '导入失败', null, {
@@ -207,7 +206,7 @@ test('managed project without a finished generation still reopens import review'
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, (to) => visited.push(to))
   await buttons['重试']()
-  assert.deepEqual(visited, ['/import/test'])
+  assert.deepEqual(visited, [])
 })
 
 
@@ -290,7 +289,8 @@ test('failed card shows one short reason and keeps the long catalog text off the
     project: { error_code: 'timeout', processing_config: { failure_stage: 'highlight' } },
   })
   assert.match(html, /响应超时了，可以重试。/)
-  assert.match(html, /查看详情/)
+  assert.match(html, /更多选项/)
+  assert.doesNotMatch(html, />查看详情<|>提交诊断<|>反馈</)
   assert.doesNotMatch(html, /分析：/)
   assert.equal(html.includes(messages.timeout), false)
 })
@@ -303,9 +303,24 @@ test('failed card keeps one primary action and does not show a billable-call cha
       processing_config: { billable_calls_before_failure: 3, failure_stage: 'analyze' },
     },
   })
-  assert.match(html, /这次没有做完，可以重试。/)
+  assert.match(html, /模型服务返回了无法识别的错误/)
   assert.doesNotMatch(html, /分析：/)
   assert.doesNotMatch(html, /本次已消耗/)
   assert.doesNotMatch(html, /ac-project-billing/)
   assert.doesNotMatch(html, /本次没有可用成果/)
+})
+
+test('duration failure on an older managed card explains the limit and retries in the list', async () => {
+  const error = '精彩高光：时间线提取为空：4 个有效候选在字幕边界校正后均未达到最短时长（20 秒）。 相邻片段合并和补足后仍不够长。'
+  const visited = [], calls = [], buttons = {}
+  const html = renderCard('failed', error, null, {
+    project: { error_code: 'timeline_empty', settings: { smart_import: { auto_start: false } } },
+    studioRetry: async (id, options) => calls.push([id, options.scope]),
+    onButton: (label, action) => { buttons[label] = action },
+  }, to => visited.push(to))
+  assert.match(html, /4 个候选片段.*20 秒/)
+  assert.match(html, /口播连续/)
+  await buttons['重试制作']()
+  assert.deepEqual(visited, [])
+  assert.deepEqual(calls, [['test', 'project']])
 })

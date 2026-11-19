@@ -150,7 +150,7 @@ test('the same stage conflict renders 制作 on the list and the detail', () => 
     error_message: error, error_code: 'provider_error',
     processing_config: { failure_stage: 'render', studio_generation_status: 'failed', preserved_result_count: 0 },
   })
-  assert.match(card.html, /这次没有做完，可以重试。/)
+  assert.match(card.html, /模型服务返回了无法识别的错误/)
   assert.doesNotMatch(card.html, /制作：|筛选：/)
   assert.match(detail.html, /制作：渲染失败/)
   assert.doesNotMatch(detail.html, /筛选：/)
@@ -175,7 +175,8 @@ test('a collection alone, or a completed export alone, is a kept result on both 
   for (const side of [collection.card, collection.detail, job.card, job.detail]) {
     assert.match(side.html, /已保留 1 条成片/)
     assert.ok(labels(side.buttons).includes('查看已有结果'))
-    assert.equal(labels(side.buttons).includes('重试'), false)
+    assert.deepEqual(cta(side.buttons), ['查看已有结果'])
+    assert.equal(labels(side.buttons).includes('重试'), side === collection.card || side === job.card)
   }
 })
 

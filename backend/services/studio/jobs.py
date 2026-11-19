@@ -2131,6 +2131,18 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             parent = _retry_parent(previous, retry.get('parent_attempt_id'))
         if (previous.get('analysis') or {}).get('status') == 'running':
             raise UserFacingError('当前任务正在运行，请稍后再试')
+        if retry and retry.get('scope') == 'project':
+            analysis = previous.get('analysis') or {}
+            generation = previous.get('generation') or {}
+            plan = previous.get('plan') or {}
+            if (analysis or generation) and analysis.get('status') != 'failed' and generation.get('status') not in ('failed', 'partial'):
+                raise store.ConflictError('只有失败或部分完成的制作可以重试')
+            if (not options.auto_start and not generation.get('auto_start')
+                    and analysis.get('phase') == 'production' and plan.get('confirmed_at')
+                    and plan.get('selected_goals') and plan.get('confirmed_preferences')
+                    and plan.get('confirmed_analysis') in ('subtitle', 'visual')):
+                _check_production_route(project_id, plan['confirmed_analysis'], plan['selected_goals'])
+                return _dispatch_confirmed_plan(project_id, deepcopy(previous), previous, retry, parent)
         state = deepcopy(previous)
         state.setdefault('schema_version', 2)
         from backend.services.output_captions import load_settings as load_output_captions
@@ -2267,6 +2279,22 @@ def _inspect(project_id, options, url, browser):
             pass
 
 
+def _check_production_route(project_id, route, goals):
+    if route == 'visual' and goals == ['content']:
+        raise UserFacingError('内容切片当前使用字幕分析，请选择字幕模式后确认')
+    if route == 'visual':
+        from backend.services.studio import intelligence
+        if not intelligence.ready():
+            raise UserFacingError('视觉模型不可用，请配置后重新确认；原素材已保留')
+    if route == 'subtitle' or 'content' in goals:
+        # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
+        # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
+        # prompt (coded 422, waiting codes kept as is), before production spends any model call.
+        from backend.services.studio import preflight
+        video = source(project_id)
+        preflight.check(preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', route='subtitle'))
+
+
 def confirm_project(project_id, body):
     from backend.services.studio import readiness
     readiness.ensure_analysis_usable()
@@ -2276,19 +2304,7 @@ def confirm_project(project_id, body):
         if plan.get('id') != body.plan_id or (state.get('analysis') or {}).get('status') != 'awaiting_confirmation':
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
         route = body.analysis_mode or plan.get('recommended_analysis', 'subtitle')
-        if route == 'visual' and body.goals == ['content']:
-            raise UserFacingError('内容切片当前使用字幕分析，请选择字幕模式后确认')
-        if route == 'visual':
-            from backend.services.studio import intelligence
-            if not intelligence.ready():
-                raise UserFacingError('视觉模型不可用，请配置后重新确认；原素材已保留')
-        if route == 'subtitle' or 'content' in body.goals:
-            # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
-            # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
-            # prompt (coded 422, waiting codes kept as is), before production spends any model call.
-            from backend.services.studio import preflight
-            video = source(project_id)
-            preflight.check(preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', route='subtitle'))
+        _check_production_route(project_id, route, body.goals)
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals
@@ -2304,28 +2320,36 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        from backend.services.studio.failure_identity import phase_identity
-        state['analysis'] = {**phase_identity('production', plan, body.goals), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
-        # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
-        pending = attempts.current(state)
-        if pending and pending['kind'] == 'production' and not pending.get('run_id'):
-            attempts.bind_run(pending, state['analysis']['run_id'])
-        else:
-            pending = attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
-        attempts.bind_plan(pending, plan)  # the confirmed plan is this attempt's own
-        store.write(project_id, state)
-        try:
-            executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
-        except Exception as error:
-            store.remember_submission_rejection(project_id, ('analysis', state['analysis']['run_id'], 'production'), error_code=studio_error_code(error))
-            logger.warning('Studio production dispatch failed: %s', type(error).__name__)
-            capture_studio_exception(error, 'dispatch')
-            # No worker accepted this confirmation. Preserve the exact plan and
-            # staging state so an explicit retry can use the same plan ID.
-            store.write(project_id, previous, restore=True)  # rollback is not a transition
-            raise UserFacingError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+        return _dispatch_confirmed_plan(project_id, state, previous)
 
-        return state['analysis']['run_id']
+
+def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=None):
+    plan = state['plan']
+    from backend.services.studio.failure_identity import phase_identity
+    state['analysis'] = {**phase_identity('production', plan, plan['selected_goals']), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+    # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
+    pending = attempts.current(state)
+    if retry:
+        pending = attempts.open_attempt(state, 'production', trigger='retry', parent=parent,
+                                        run_id=state['analysis']['run_id'], key=retry['key'], now=store.now())
+    elif pending and pending['kind'] == 'production' and not pending.get('run_id'):
+        attempts.bind_run(pending, state['analysis']['run_id'])
+    else:
+        pending = attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
+    attempts.bind_plan(pending, plan)  # the confirmed plan is this attempt's own
+    store.write(project_id, state)
+    try:
+        executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
+    except Exception as error:
+        store.remember_submission_rejection(project_id, ('analysis', state['analysis']['run_id'], 'production'), error_code=studio_error_code(error))
+        logger.warning('Studio production dispatch failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'dispatch')
+        # No worker accepted this confirmation. Preserve the exact plan and
+        # staging state so an explicit retry can use the same plan ID.
+        store.write(project_id, previous, restore=True)  # rollback is not a transition
+        raise UserFacingError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+
+    return state['analysis']['run_id']
 
 
 def _add_confirmed_drafts(data, drafts):

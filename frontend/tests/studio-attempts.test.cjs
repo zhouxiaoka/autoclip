@@ -110,6 +110,15 @@ test('failed-page 「重试」 is the backend retry command (automatic: generati
   }
 })
 
+test('list retry watches the resumed production receipt without recording a second screening', async () => {
+  const calls = []
+  const opened = { ...receipt(B, 2, 'open', { retry_of: A }), kind: 'production', run_id: 'run-confirmed' }
+  const h = setup({ post: (url, body) => { calls.push([url, body.scope]); return { analysis_run_id: opened.run_id, attempt: opened } } })
+  await h.studioApi.retry('p1', { scope: 'project' })
+  assert.deepEqual(calls, [['/studio/p1/retry', 'project']])
+  assert.deepEqual(Array.from(h.tracker.list(), w => [w.kind, w.attemptId, w.runId]), [['studio-production', B, 'run-confirmed']])
+})
+
 test('#264: auth + timeout - the statistics keep timeout; with 0 usable connections the page leads with 「建议再加一个服务商」+「去设置」', () => {
   const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
   const settled = { ...receipt(A, 1, 'failed'), run_id: 'run-x', error_code: 'timeout',

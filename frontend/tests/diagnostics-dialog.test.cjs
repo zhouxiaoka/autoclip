@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const React = require('react')
+const { Dropdown } = require('antd')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
@@ -86,7 +87,10 @@ async function mount(entry, render) {
   }
   const restore = installGlobals({
     window, document: window.document, navigator: window.navigator, localStorage: window.localStorage,
-    HTMLElement: window.HTMLElement, Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true,
+    HTMLElement: window.HTMLElement, Element: window.Element, Node: window.Node,
+    SVGElement: window.SVGElement, ShadowRoot: window.ShadowRoot, MessageChannel: window.MessageChannel,
+    getComputedStyle: window.getComputedStyle.bind(window), ResizeObserver: window.ResizeObserver,
+    IS_REACT_ACT_ENVIRONMENT: true,
   })
   const cache = new Map()
   const load = (file) => {
@@ -127,6 +131,7 @@ async function mount(entry, render) {
         }
         if (id === 'react-i18next') return { useTranslation: () => ({ t: (key) => key }) }
         if (id === 'antd') return {
+          Dropdown,
           message: { success() {}, error() {}, warning() {}, info() {} },
           ConfigProvider: ({ children }) => React.createElement(React.Fragment, null, children),
         }
@@ -175,7 +180,13 @@ function button(document, label) {
 async function submitFrom(entry, render) {
   const page = await mount(entry, render)
   try {
-    const open = button(page.document, '提交诊断')
+    const more = page.document.querySelector('button[aria-label="更多选项"]')
+    if (more) {
+      await React.act(async () => { more.click() })
+      await page.settle()
+    }
+    const open = button(page.document, '提交诊断') || [...page.document.querySelectorAll('[role="menuitem"]')]
+      .find(item => item.textContent === '提交诊断')
     assert.ok(open, `${entry} renders 提交诊断`)
     await React.act(async () => { open.click() })
     await page.settle()

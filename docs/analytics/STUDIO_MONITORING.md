@@ -20,7 +20,7 @@
 | `studio_import_*` | 导入请求、受理、请求失败；固定来源与是否自带字幕 |
 | `studio_plan_update_*` / `studio_rescreen_*` | 修改方案或重新识别，并替换该项目本地观察记录 |
 | `studio_confirm_*` | 确认制作；记录分析路线、目标布尔值、画幅 |
-| `studio_screen_finished` | 初筛终态；local/ai 为 recommended，manual/fallback 分开；旧 plan 不算正在重试的完成；复用页面快照避免快速确认漏报，旧在途响应不能完成新 attempt |
+| `studio_screen_finished` | 首页重试沿用已确认方案时直接进入制作，只跟踪对应的 production 回执。需要重新初筛时才跟踪初筛终态；local/ai 为 recommended，manual/fallback 分开；旧 plan 不算正在重试的完成；复用页面快照避免快速确认漏报，旧在途响应不能完成新 attempt |
 | `studio_production_finished` | completed/partial/failed，本次 requested/succeeded/failed 目标、结果数量、后端耗时 |
 | `studio_draft_create/save/duplicate_*` | 用户显式编辑动作；不记录按键、字幕、标题或镜头正文 |
 | `studio_rewrite_*` | 改写接口结果和请求耗时；不上传提示词/模型回答 |
