@@ -538,3 +538,17 @@ def test_commentary_review_requires_distinct_consequence(tmp_path, monkeypatch):
 ])
 def test_commentary_reads_the_players_elimination_tally(readings, same_match, expected):
     assert games._elimination_change(readings, same_match) == expected
+
+
+def test_commentary_recovers_small_counter_glyphs(tmp_path, monkeypatch):
+    from backend.services.studio.models import Scene
+
+    scene = Scene(id="two-knockouts", start=20, end=65)
+    row = {"impact": "routine", "same_match": True, "elimination_box": [660, 700, 707, 737],
+           "elimination_counts": [5, 5, 5, 5, 6, 6, 6, 6]}
+    monkeypatch.setattr(intelligence, "sample", lambda *a: [])
+    readings = [5, 5, 5, 5, 6, 6, 7, 7]
+    monkeypatch.setattr(games, "_read_counter_grid", lambda *a: {"values": readings})
+    assert games._review_eliminations(tmp_path/"video", scene, row) == ((5, 7), readings)
+    readings[-2:] = [6, 6]
+    assert games._review_eliminations(tmp_path/"video", scene, row) == (None, readings)
