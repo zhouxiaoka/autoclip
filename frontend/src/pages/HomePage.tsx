@@ -229,13 +229,14 @@ export default function HomePage() {
       minHeight: '100vh',
       background: 'var(--ac-bg)'
     }}>
-      <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
+      <Content className="ac-home-content" style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
           {liveFailure && <FailureHint active project={liveFailure} />}
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
           <div ref={importArea}><CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} /></div>
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
+          {!(setupNeeded && !projects.length) && <>
           {/* 项目管理区域 */}
           <div style={{
             background: 'transparent',
@@ -335,7 +336,8 @@ export default function HomePage() {
                )}
              </div>
            </div>
-         </div>
+           </>}
+        </div>
       </Content>
     </Layout>
   )

@@ -52,6 +52,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || ((failed || transient) && errorType) || ''
   const keyLink = sponsorKeyLink(key)
   const addressEditable = canEditAddress(key)
+  const officialHostsOnly = key === 'deepseek' || key === 'gemini' || key === 'api88' || key === 'infistar'
   return <>
     {picker}
     {!preset?.local && (sharedKey && !editShared
@@ -100,7 +101,8 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
           })()}
         </Row>)}
     {addressEditable && <Row wide label={t('接口地址')} hint={[
-      preset?.local ? t('本机服务用默认地址即可。')
+      officialHostsOnly ? t('此服务商使用官方接口。第三方地址请在「添加服务商」中配置。')
+        : preset?.local ? t('本机服务用默认地址即可。')
         : connection.base_url ? t('已填默认，可改。')
         : t('请填写，一般以 /v1 结尾。'),
       contextHintFor(key, connection.base_url),

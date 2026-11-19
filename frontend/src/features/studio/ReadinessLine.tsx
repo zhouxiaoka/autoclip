@@ -35,8 +35,10 @@ export default function ReadinessLine({
   busy,
   repairing,
   onFix,
+  subtitleLabel,
 }: {
   report: ImportReadiness | null
+  subtitleLabel?: string
   busy?: boolean
   repairing?: boolean
   onFix: (item: ReadinessLineItem) => void
@@ -49,6 +51,9 @@ export default function ReadinessLine({
       marginTop: 12, fontSize: 13, color: 'var(--ac-sub, #6b7280)', lineHeight: 1.6,
     }}>
       {items.map((item, index) => {
+        if (item.key === 'transcription' && subtitleLabel) return <span key={item.key} data-testid="readiness-line-transcription" data-mark="ok">
+          · {t('字幕')} ✓ {subtitleLabel}
+        </span>
         const destination = repairDestination(item.repair)
         const clickable = item.repair !== 'none' && (destination || item.repair === 'install_whisper')
         const color = item.mark === 'fail' ? 'var(--ac-danger, #b91c1c)'

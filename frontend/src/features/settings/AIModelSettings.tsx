@@ -22,6 +22,7 @@ import {
   applyRequestedCloudTranscription, cloudTranscriptionDiscoverTargets, cloudTranscriptionSavePatch,
   cloudTranscriptionWaitExpired, CLOUD_TRANSCRIPTION_WAIT_MS,
 } from './defaultModelSlots'
+import { toConnection } from './customProvider'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 import { requestClipboardScan, takePendingSelect } from './keyGuideBus'
 import { PROVIDERS } from './providers'
@@ -82,6 +83,8 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
         onChoose={p => m.chooseProvider('analysis', p)}
         onEdit={patch => m.editConnection(connection, patch)}
       />
+      <p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
+      <Btn variant="cta" size="sm" onClick={() => void m.configureProvider(connection)}>{t('一键配置模型')}</Btn>
       {isAnalysis && settings.analysis
         ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
             <ModelPicker
@@ -133,11 +136,11 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
   )
 }
 
-export default function AIModelSettings({ requestedSection, requestedProvider = '' }: { requestedSection: string; requestedProvider?: string }) {
+export default function AIModelSettings({ requestedSection, requestedProvider = '', returnToImport = false }: { requestedSection: string; requestedProvider?: string; returnToImport?: boolean }) {
   const translation = useTranslation() as { i18n?: { language?: string } }
   const promo = useSponsorPromo()
   const language = (translation?.i18n?.language || 'zh').toLowerCase().split('-')[0]
-  const m = useModelSettings()
+  const m = useModelSettings('settings_model', returnToImport && requestedProvider === 'cloud')
   const { settings } = m
   const asrReady = useLocalAsrReady(settings)
   const [query, setQuery] = useState('')
@@ -214,15 +217,21 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
     const patch = cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)
+    if (returnToImport && requestedProvider === 'cloud' && !patch?.transcription && settings.transcription?.provider !== 'cloud') return
     const result = await m.save(patch)
     if (result.ok && !result.validationFailed && patch?.transcription?.provider === 'cloud' && patch.transcription.model) {
       cloudPending.current = false
       const chosen = applyRequestedCloudTranscription('cloud', { ...settings, ...patch }, m.lists)
       if (chosen.kind === 'selected') setCloudNote({ provider: chosen.providerLabel, model: chosen.model })
     }
-    if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    if (result.issue) {
+      const slot = document.getElementById(issueAnchor(result.issue))
+      slot?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
+  const needsCloudModel = returnToImport && requestedProvider === 'cloud' && settings.transcription?.provider !== 'cloud'
+    && !cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)?.transcription
   const providerOf = (id?: string) => settings.connections.find(item => item.id === id)?.provider
   const usageSlots: UsageSlot[] = [
     { provider: providerOf(settings.analysis?.connection_id), label: 'analysis' },
@@ -289,12 +298,19 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
         <Btn variant="text" size="sm" disabled={m.saving} onClick={() => void m.save({ analysis: { ...settings.analysis!, model: item.replacement } })}>{t('保存这个模型')}</Btn>
       </p>
     ))}
+    {needsCloudModel && <p className="ac-note">{t('连接支持语音识别的服务商后，即可继续导入。')}</p>}
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">
       <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
-      <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing} loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
+      <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing || needsCloudModel} loading={m.saving} onClick={() => void save()}>{returnToImport ? t('保存并继续导入') : t('保存设置')}</Btn>
     </div>
     <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}
+      onAuto={async draft => {
+        const connection = toConnection(draft)
+        const result = await m.configureProvider(connection, { ...settings, connections: [...settings.connections, connection] })
+        if (result.ok) setCustomOpen(false)
+        return result
+      }}
       onSubmit={draft => { m.addCustomProvider(draft); setCustomOpen(false) }} />
   </div>
 }

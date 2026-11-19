@@ -20,11 +20,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
-  // A saved edit shows right away: the workspace stops polling once every output is done.
-  const [saved, setSaved] = useState<PostCopy | null>(null)
-  useEffect(() => setSaved(null), [variant.post])
-  const post = saved || variant.post
+export default function PublishKit({ projectId, variant, post, onPostChange, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; post?: PostCopy | null; onPostChange: (post: PostCopy) => void; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
   const [editing, setEditing] = useState(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
@@ -38,7 +34,7 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
   const save = async () => {
     setSaving(true)
     try {
-      setSaved(await studioApi.updateVariantPost(projectId, variant.id, draft))
+      onPostChange(await studioApi.updateVariantPost(projectId, variant.id, draft))
       if (draft.title !== post.title) trackAutoChoiceOverridden({ field: 'title', stage: 'results_chip' }, flagAssigned('track_overrides'))
       setEditing(false)
       message.success(t('文案已保存'))

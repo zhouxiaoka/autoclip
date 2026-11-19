@@ -84,13 +84,13 @@ const SettingsPage: React.FC = () => {
       <div className="ac-settings" style={{ marginTop: 36 }}>
         <nav className="ac-settings-nav" aria-label={t("设置分类")}>
           {NAV.map((n) => (
-            <button key={n.key} aria-current={active === n.key} onClick={() => navigate(`/settings?section=${n.key}`, { replace: true })}>{n.label}</button>
+            <button key={n.key} aria-current={active === n.key} onClick={() => navigate(`/settings?section=${n.key}${new URLSearchParams(location.search).get('return_import') === '1' ? '&return_import=1' : ''}`, { replace: true, state: location.state })}>{n.label}</button>
           ))}
         </nav>
 
         <div className="ac-settings-body">
           <div hidden={active !== 'ai'}>
-            <AIModelSettings requestedSection={requested} requestedProvider={new URLSearchParams(location.search).get('provider') || ''} />
+            <AIModelSettings returnToImport={new URLSearchParams(location.search).get('return_import') === '1'} requestedSection={requested} requestedProvider={new URLSearchParams(location.search).get('provider') || ''} />
           </div>
 
           {/* ---------------- 应用 ---------------- */}

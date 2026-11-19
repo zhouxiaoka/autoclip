@@ -30,7 +30,7 @@ import { workflow } from '../../analytics/observer'
 import { legacyEntrypointsHidden } from './legacyEntrypoints'
 import { clearCompletionBadge, subscribeCompletionNotice, type NoticeKind } from './noticeRuntime'
 import { noticeCopy } from './completionNotice'
-import { dismissMorePlatformBanner, hasSuccessHistory, morePlatformBannerSeen, stashReuseImport, suggestAnotherPlatform } from './platformMemory'
+import { dismissMorePlatformBanner, morePlatformBannerSeen, stashReuseImport, suggestAnotherPlatform } from './platformMemory'
 import { followOutputLeave } from './overrides'
 import FailureHint from '../diagnostics/FailureHint'
 import { nextLiveFailure } from '../diagnostics/failureHintPolicy'
@@ -213,12 +213,12 @@ export default function StudioResults({ project, children, onCreateCollection, o
   }
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
   const genDone = workspace.generation?.status === 'completed' || workspace.generation?.status === 'partial'
-  const [showMorePlatform, setShowMorePlatform] = useState(() => genDone && hasSuccessHistory() && !morePlatformBannerSeen())
+  const [viewedProject, setViewedProject] = useState<string | null>(null)
+  const showMorePlatform = viewedProject === project.id && !morePlatformBannerSeen()
   const usedFirstWindow = Boolean(workspace.plan?.overrides?.source_window)
   const [showFullImportTip, setShowFullImportTip] = useState(() => genDone && usedFirstWindow)
   useEffect(() => {
     if (!genDone) return
-    if (hasSuccessHistory() && !morePlatformBannerSeen()) setShowMorePlatform(true)
     if (usedFirstWindow) setShowFullImportTip(true)
   }, [genDone, workspace.generation?.status, usedFirstWindow])
   const alreadyPlatforms = workspace.generation?.requested_platforms || []
@@ -228,7 +228,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
     : platformLabel(morePlatformId)
   const startAnotherPlatform = () => {
     dismissMorePlatformBanner()
-    setShowMorePlatform(false)
+    setViewedProject(null)
     stashReuseImport({
       platforms: [morePlatformId],
       sourceUrl: project.source_url || undefined,
@@ -244,13 +244,6 @@ export default function StudioResults({ project, children, onCreateCollection, o
   return <div className="studio-results">
     <FailureHint active={liveFailure} project={project} />
     {doneNote && <p className="studio-done-note" role="status">{t(noticeCopy(doneNote))}</p>}
-    {showMorePlatform && genDone && <div className="studio-more-platform" role="status" data-testid="t1-more-platform">
-      <p className="studio-muted">{morePlatformId === 'xiaohongshu' ? t('也可以再做一个小红书版本') : morePlatformId === 'youtube_shorts' ? t('也可以再做一个 Shorts 版本') : t('也可以再做一个{{platform}}版本', { platform: morePlatformLabel })}</p>
-      <div className="studio-actions">
-        <Btn size="sm" variant="cta" onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>
-        <Btn size="sm" variant="text" onClick={() => { dismissMorePlatformBanner(); setShowMorePlatform(false) }}>{t('知道了')}</Btn>
-      </div>
-    </div>}
     {showFullImportTip && genDone && usedFirstWindow && <div className="studio-more-platform" role="status" data-testid="t2-full-import-tip">
       <p className="studio-muted">{t('配置没问题，可以重新导入全片')}</p>
       <div className="studio-actions">
@@ -293,10 +286,17 @@ export default function StudioResults({ project, children, onCreateCollection, o
         <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>
       </div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
-      <div className={showDraftList ? "studio-result-grid studio-draft-list" : "ac-grid-3 studio-result-grid"}>{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
+      <div className={showDraftList ? "studio-result-grid studio-draft-list" : "ac-grid-3 studio-result-grid"}>{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} onViewed={() => setViewedProject(project.id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
         onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} allowExport={!hideLegacy} onExport={()=>{ noteLegacy('export_confirm'); setExporting(d) }} onHistory={()=>setHistory(true)} />)}{loaded && !automatic && !showDraftList && children}</div>
       {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&!sourceUnusable&&!cookieRecovery&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
     </Section>}
+    {showMorePlatform && genDone && <div className="studio-more-platform" role="status" data-testid="t1-more-platform">
+      <p className="studio-muted">{morePlatformId === 'xiaohongshu' ? t('也可以再做一个小红书版本') : morePlatformId === 'youtube_shorts' ? t('也可以再做一个 Shorts 版本') : t('也可以再做一个{{platform}}版本', { platform: morePlatformLabel })}</p>
+      <div className="studio-actions">
+        <Btn size="sm" variant="cta" onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>
+        <Btn size="sm" variant="text" onClick={() => { dismissMorePlatformBanner(); setViewedProject(null) }}>{t('知道了')}</Btn>
+      </div>
+    </div>}
     {actionError&&<p className="studio-error" role="alert">{actionError}</p>}
     {(sourceCount > 0 || workspace.analysis?.coverage) && <details className="studio-details studio-source-details"><summary>{showDraftList ? t('来源片段') : visual ? t('高光片段') : t('来源片段')}{showDraftList && !!project.collections?.length && ` / ${t('合集')}`} <span className="ac-mono">{sourceCount}</span></summary>
       {workspace.analysis?.coverage && <p className="studio-muted">{workspace.analysis.coverage.note} {t('全片初筛采样间隔约 {{seconds}} 秒。', { seconds: workspace.analysis.coverage.sample_interval.toFixed(1) })}</p>}

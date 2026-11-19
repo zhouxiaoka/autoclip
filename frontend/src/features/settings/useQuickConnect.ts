@@ -7,7 +7,6 @@ import type { Placement } from '../../analytics/experience'
 import { SETTINGS_SAVED_EVENT } from '../studio/settingsReturn'
 import { mainConnection } from './modelSettingsLogic'
 import type { ProviderKey } from './providers'
-import { quickConnectPatch } from './quickConnect'
 import { useModelSettings } from './useModelSettings'
 
 export function useQuickConnect(placement: Placement = 'home_setup') {
@@ -35,7 +34,13 @@ export function useQuickConnect(placement: Placement = 'home_setup') {
   const connect = async () => {
     const settings = model.settings
     if (!settings) return { ok: false as const }
-    return save(quickConnectPatch(settings))
+    const connection = mainConnection(settings)
+    if (!connection) return { ok: false as const }
+    ownSave.current = true
+    try {
+      const result = await model.configureProvider(connection)
+      return { ok: result.ok, validationFailed: !result.ok }
+    } finally { ownSave.current = false }
   }
   return { ...model, save, selectProvider, setKey, connect }
 }

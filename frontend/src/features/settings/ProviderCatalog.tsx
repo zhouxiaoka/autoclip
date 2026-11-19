@@ -65,7 +65,7 @@ function CustomCard({
         <span className="ac-provider-card-title">{connection.name || t('自定义 OpenAI 兼容接口')}</span>
       </span>
       <span className="ac-provider-card-action">
-        <span className="ac-provider-action-label">{t('settings.providers.repair_custom')}</span>
+        <span className="ac-provider-action-label">{t(connection.validation_status === 'failed' ? 'settings.providers.repair_custom' : '编辑')}</span>
       </span>
     </button>
   )

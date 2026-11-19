@@ -95,7 +95,7 @@ test('the import card walks provider, key and connect, and the example path need
     assert.deepEqual(calls[1], ['key', 'sk-live-secret'])
     assert.equal(events.some(item => item.event === 'setup_step_done' && item.props.step === 'key'), true)
     assert.equal(JSON.stringify(events).includes('sk-live-secret'), false)
-    await act(async () => { button(host, '连接并保存').click() })
+    await act(async () => { button(host, '一键配置模型').click() })
     assert.deepEqual(calls[2], ['connect'])
     assert.equal(events.some(item => item.event === 'setup_step_done' && item.props.step === 'connect' && item.props.provider === 'apimart'), true)
     await act(async () => { root.unmount() })
@@ -147,7 +147,8 @@ test('later only dismisses the first-run overlay', async () => {
         save: async () => ({ ok: true }),
       }) },
       './providers': loadTs('providers.ts', { '../../i18n': i18n }),
-      './ProviderFields': { default: () => null },
+      './ModelPicker': { default: () => null },
+    './ProviderFields': { default: () => null },
       './modelSettingsLogic': {
         needsSetup: () => true,
         mainConnection: () => undefined,
@@ -159,11 +160,12 @@ test('later only dismisses the first-run overlay', async () => {
     document.body.appendChild(host)
     const root = createRoot(host)
     await act(async () => { root.render(React.createElement(FirstRun, { onStatus: value => statuses.push(value) })) })
+    assert.equal(host.querySelector('[role="dialog"]'), null)
+    await act(async () => { root.render(React.createElement(FirstRun, { openRequest: 1, onStatus: value => statuses.push(value) })) })
     assert.ok(host.querySelector('[role="dialog"]'))
     assert.ok(statuses.length >= 1 && statuses.every(value => value === true))
     await act(async () => { button(host, '稍后设置').click() })
     assert.equal(host.querySelector('[role="dialog"]'), null)
-    assert.equal(window.sessionStorage.getItem('autoclip.firstRunSetup.dismissed'), '1')
     assert.ok(statuses.every(value => value === true))
     await act(async () => { root.unmount() })
   } finally {
@@ -269,7 +271,7 @@ test('leaving the provider step freezes one identity across a later promotion', 
     const propsKey = Object.keys(key).find(name => name.startsWith('__reactProps'))
     await act(async () => { key[propsKey].onChange({ target: { value: 'fixture-kept-key' } }) })
     await act(async () => { button(host, '下一步').click() })
-    await act(async () => { button(host, '连接并保存').click() })
+    await act(async () => { button(host, '一键配置模型').click() })
     assert.deepEqual(calls.filter(item => item[0] === 'key'), [['key', 'deepseek', 'fixture-kept-key']])
     assert.deepEqual(calls.filter(item => item[0] === 'connect'), [['connect', 'deepseek', 'fixture-kept-key']])
     assert.equal(calls.some(item => item[0] === 'link'), false)

@@ -5,7 +5,6 @@ import { Btn, Dialog, Row } from '../../ui'
 import { beginExperience } from '../../analytics/experience'
 import { modelSettingsApi } from './modelSettingsApi'
 import {
-  CUSTOM_PROTOCOL,
   MODEL_TYPES,
   addManualModel,
   draftIssue,
@@ -46,9 +45,11 @@ export default function AddCustomProviderDialog({
   open,
   onClose,
   onSubmit,
+  onAuto,
 }: {
   open: boolean
   onClose: () => void
+  onAuto: (draft: CustomProviderDraft) => Promise<{ ok: boolean; error?: string }>
   onSubmit: (draft: CustomProviderDraft) => void
 }) {
   const [draft, setDraft] = useState(emptyDraft)
@@ -60,6 +61,8 @@ export default function AddCustomProviderDialog({
   const [note, setNote] = useState('')
   const fetchGen = useRef(0)
 
+  const [matching, setMatching] = useState(false)
+  const matchingRef = useRef(false)
   const reset = () => {
     fetchGen.current += 1
     setDraft(emptyDraft())
@@ -70,7 +73,7 @@ export default function AddCustomProviderDialog({
     setFetchFailed(false)
     setNote('')
   }
-  const close = () => { reset(); onClose() }
+  const close = () => { if (!matchingRef.current) { reset(); onClose() } }
 
   const editCredentials = (patch: Partial<Pick<CustomProviderDraft, 'base_url' | 'api_key'>>) => {
     if (!Object.entries(patch).some(([key, value]) => draft[key as keyof typeof patch] !== value)) return
@@ -129,37 +132,48 @@ export default function AddCustomProviderDialog({
     reset()
   }
 
+  const auto = async () => {
+    if (matchingRef.current || draftUrlIssue(draft.base_url)) return
+    matchingRef.current = true
+    setMatching(true)
+    setNote('')
+    try {
+      const result = await onAuto({
+        ...draft, name: draft.name.trim() || new URL(normalizedDraftUrl(draft.base_url)).hostname, models: [],
+      })
+      if (result.ok) reset()
+      else setNote(result.error || t('保存失败，请重试'))
+    } finally { matchingRef.current = false; setMatching(false) }
+  }
+
   const models = visibleModels(draft, search)
   const issue = draftIssue(draft)
 
   return <Dialog open={open} onClose={close} title={t('添加自定义服务商')}
-    description={t('填写 OpenAI 兼容的接口地址和密钥，即可拉取或手动添加模型。')}
+    description={t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}
     footer={<div className="ac-setup-foot">
       <Btn size="sm" onClick={close}>{t('取消')}</Btn>
-      <Btn variant="cta" size="sm" disabled={!!issue || fetching} onClick={submit}>{t('添加服务商')}</Btn>
+      <Btn variant="cta" size="sm" disabled={!!draftUrlIssue(draft.base_url) || fetching} loading={matching} onClick={() => void auto()}>{t('一键配置模型')}</Btn>
     </div>}>
-    <div className="ac-custom-dialog ac-rows">
-      <Row wide label={t('服务商名称')}>
-        <input className="ac-input" aria-label={t('服务商名称')} value={draft.name}
-          placeholder={t('例如公司内网网关')}
-          onChange={e => setDraft({ ...draft, name: e.target.value })} />
-      </Row>
-      <Row wide label={t('协议')} hint={t('本版仅支持 OpenAI 兼容接口。')}>
-        <span>{t('OpenAI 兼容')}</span>
-        <input type="hidden" name="protocol" value={CUSTOM_PROTOCOL} readOnly />
-      </Row>
-      <Row wide label={t('接口地址')}>
+    <fieldset className="ac-model-fields ac-custom-dialog ac-rows" disabled={matching}>
+      <Row wide stack label={t('接口地址')} hint={t('OpenAI 兼容')}>
         <input className="ac-input" aria-label={t('接口地址')} value={draft.base_url}
           placeholder="https://example.com/v1"
           onChange={e => editCredentials({ base_url: e.target.value })}
           onBlur={() => editCredentials({ base_url: normalizedDraftUrl(draft.base_url) || draft.base_url })} />
       </Row>
-      <Row wide label={t('服务密钥（API Key）')} hint={t('API 密钥仅保存在本机')}>
+      <Row wide stack label={t('服务密钥（API Key）')} hint={t('API 密钥仅保存在本机')}>
         <Input.Password aria-label="API Key" autoComplete="new-password" value={draft.api_key}
           placeholder={t('sk-…（自建服务可留空）')}
           onChange={e => editCredentials({ api_key: e.target.value })}
           onBlur={e => editCredentials({ api_key: e.target.value.trim() })} />
       </Row>
+      <Row wide stack label={t('服务商名称')}>
+        <input className="ac-input" aria-label={t('服务商名称')} value={draft.name}
+          placeholder={t('可选')}
+          onChange={e => setDraft({ ...draft, name: e.target.value })} />
+      </Row>
+      <details className="studio-details"><summary>{t('手动选择模型')}</summary>
       <div className="ac-custom-toolbar">
         <Btn size="sm" loading={fetching} disabled={fetching} onClick={() => void fetchModels()}>{t('获取模型列表')}</Btn>
         <input className="ac-input" aria-label={t('搜索模型')} value={search} placeholder={t('搜索模型')}
@@ -178,8 +192,10 @@ export default function AddCustomProviderDialog({
           onToggle={enabled => setDraft(current => toggleModel(current, model.id, enabled))}
           onEdit={patch => setDraft(current => editModel(current, model.id, patch))} />)}
       </ul>}
+      <Btn size="sm" disabled={!!issue || fetching} onClick={submit}>{t('添加服务商')}</Btn>
+      </details>
       {note && <p className="ac-note" role="alert">{note}</p>}
-    </div>
+    </fieldset>
   </Dialog>
 }
 

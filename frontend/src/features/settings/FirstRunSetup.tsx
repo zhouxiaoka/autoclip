@@ -10,6 +10,7 @@ import { Btn, Dialog, Icon, StatusDot } from '../../ui'
 import { openExternalLink } from '../../utils/externalLinks'
 import { useQuickConnect } from './useQuickConnect'
 import { PROVIDERS } from './providers'
+import ModelPicker from './ModelPicker'
 import ProviderFields from './ProviderFields'
 import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogic'
 import { readSponsorPromo, subscribeSponsorPromo } from './sponsorPromoWatch'
@@ -23,7 +24,6 @@ import {
   firstRunSponsor,
 } from './firstRunGuidance'
 
-const DISMISSED_KEY = 'autoclip.firstRunSetup.dismissed'
 
 function optionTitle(id: string): (() => string) | null {
   if (id === 'other') return () => t('其他服务商')
@@ -50,10 +50,7 @@ function choicesFor(latest: readonly string[], selected: string, locked: boolean
   return shown
 }
 
-/**
- * First-launch chooser: APIMart / other providers. "Later" hides it for the session;
- * a blocked import can reopen it. One-click opens the sponsor site; deeplink write is L1.
- */
+/** The welcome screen opens this chooser when the user starts their own video. */
 export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?: (needed: boolean) => void; openRequest?: number }) {
   const navigate = useNavigate()
   const m = useQuickConnect('home_setup')
@@ -69,13 +66,16 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   const [step, setStep] = useState<'choose' | 'connect'>('choose')
   const initial = useRef<boolean | null>(null)
   if (settings && initial.current === null) initial.current = needsSetup(settings)
-  const needed = !!settings && !!initial.current && !settings.saved
+  const [connectingAttempt, setConnectingAttempt] = useState(false)
+  const needed = !!settings && !!initial.current && (!settings.saved || connectingAttempt)
+  const saveConnection = async (manual = false) => {
+    setConnectingAttempt(true)
+    const result = manual ? await m.save() : await m.connect()
+    if (result.ok && !result.validationFailed) setConnectingAttempt(false)
+  }
   useEffect(() => { if (settings) onStatus?.(needed) }, [settings, needed])
   useEffect(() => {
-    if (!needed) { setOpen(false); return }
-    let dismissed = false
-    try { dismissed = sessionStorage.getItem(DISMISSED_KEY) === '1' } catch { /* restricted storage: just show it */ }
-    if (!dismissed) setOpen(true)
+    if (!needed) setOpen(false)
   }, [needed])
   useEffect(() => { if (openRequest > 0 && needed) setOpen(true) }, [openRequest])
   const presentation = useRef('')
@@ -97,7 +97,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     }
     if (!presentation.current) {
       presentation.current = telemetryId()
-      trackExperience('setup_presented', { placement: 'home_setup', presentation_id: presentation.current, trigger: openRequest > 0 ? 'import_blocked' : 'initial' })
+      trackExperience('setup_presented', { placement: 'home_setup', presentation_id: presentation.current, trigger: openRequest === 1 ? 'initial' : 'import_blocked' })
     }
     const apply = () => {
       const applied = readSponsorPromo()
@@ -125,11 +125,11 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   if (!settings || !needed) return null
 
   // Only the overlay closes. The import zone stays on the setup card until analysis is actually saved.
-  const later = () => { action('later'); try { sessionStorage.setItem(DISMISSED_KEY, '1') } catch { /* ignore */ } setOpen(false) }
+  const later = () => { if (m.saving) return; action('later'); setOpen(false) }
   const goSettings = () => {
     action('open_settings')
     setOpen(false)
-    navigate('/settings?section=ai', { state: { settingsEntry: 'home_setup' } })
+    navigate('/settings?section=ai&return_import=1', { state: { settingsEntry: 'home_setup' } })
   }
   const primary = () => {
     frozen.current = true
@@ -159,11 +159,8 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   }
   const main = mainConnection(settings)
   const model = settings.analysis?.model
-  const fetching = !!main && !!m.busy[main.id] && !model
-  const status = fetching ? t('正在获取可用模型…')
-    : model ? t('已选好模型：{{model}}', { model })
-    : main && connectionReady(main) ? t('请确认 API Key，或直接输入模型名')
-    : t('等待 API Key')
+  const status = !main || !connectionReady(main) ? t('请先粘贴服务商的 API 密钥')
+    : t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')
   const sponsorId = firstRunSponsor(choice)
   const snapNow = readPromoSnapshot()
   const packagedNow = !snapNow || snapNow.source === 'bundled' ? (sponsorId ? PROVIDERS[sponsorId].sponsor?.registerUrl || '' : '') : ''
@@ -178,22 +175,28 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     description={connecting ? (choice === 'other' || !liveLink ? t('把 API 密钥粘贴到下方即可。') : t('在浏览器完成注册后，把 API 密钥粘贴到下方。')) : undefined}
     footer={<div className="ac-setup-foot">
       {connecting
-        ? <Btn variant="text" size="sm" onClick={() => setStep('choose')}>{t('返回')}</Btn>
+        ? <Btn variant="text" size="sm" disabled={m.saving} onClick={() => setStep('choose')}>{t('返回')}</Btn>
         : <Btn variant="text" size="sm" onClick={later}>{t('稍后设置')}</Btn>}
       {connecting
-        ? <Btn variant="cta" size="sm" loading={m.saving} disabled={fetching} onClick={() => void m.save()}>{t('连接并保存')}</Btn>
+        ? <Btn variant="cta" size="sm" loading={m.saving} disabled={!main || !connectionReady(main)} onClick={() => void saveConnection()}>{t('一键配置模型')}</Btn>
         : <Btn variant="cta" size="sm" onClick={primary}>{t(label.key, label.values)}</Btn>}
     </div>}>
     <ConfigProvider theme={{ token: { zIndexPopupBase: 1300 } }}>
       <div className="ac-setup-dialog ac-ai-settings">
         {connecting && main ? <>
-          <div className="ac-rows">
+          <fieldset className="ac-model-fields" disabled={m.saving}>
             <ProviderFields connection={main} hideProvider placement="home_setup"
               keyHint={m.keyHints[main.id]}
               onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
-          </div>
+          </fieldset>
+          <div className="ac-setup-status"><StatusDot tone="muted" label={status} /></div>
+          {connectionReady(main) && <details className="studio-details"><summary>{t('手动选择模型')}</summary><ModelPicker role="analysis" connection={main} model={model || ''}
+            mode={settings.analysis_mode} list={m.lists[main.id]} busy={!!m.busy[main.id]} listError={m.listErrors[main.id]}
+            onRefresh={() => void m.discover(main, true)}
+            onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto', model_source: 'user' } })} />
+            <Btn size="sm" disabled={m.saving || !model?.trim()} onClick={() => void saveConnection(true)}>{t('连接并保存')}</Btn>
+          </details>}
           {m.error && <p className="studio-error" role="alert">{m.error}</p>}
-          <div className="ac-setup-status"><StatusDot tone={fetching ? 'accent' : model ? 'ok' : 'muted'} label={status} /></div>
         </> : <>
           <div className="ac-choice-list" role="radiogroup" aria-label={t('选择 AI 服务商')}>
             {choices.map(id => {

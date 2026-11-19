@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
-function settingsHook(initial, transport) {
+function settingsHook(initial, transport, requireCloudTranscription = false) {
   let cursor = 0
   const slots = []
   const react = {
@@ -41,7 +41,7 @@ function settingsHook(initial, transport) {
       bindingCapability: () => 'text',
     },
   })
-  return () => { cursor = 0; return hook.useModelSettings('settings_model') }
+  return () => { cursor = 0; return hook.useModelSettings('settings_model', requireCloudTranscription) }
 }
 
 const whisperSettings = () => ({
@@ -79,3 +79,50 @@ test('the save that follows a pending cloud choice persists Bailian transcriptio
   assert.equal(plain.ok, true)
   assert.equal(persisted.transcription.provider, 'cloud')
 })
+
+test('one-key setup validates the account and commits four assignments in one write', async () => {
+  const writes = []
+  const initial = whisperSettings()
+  const render = settingsHook(initial, {
+    discover: async () => ({ source: 'live', models: [
+      { id: 'qwen-plus', analysis: true, capability: 'text' },
+      { id: 'qwen-vl-plus', analysis: true, capability: 'multimodal' },
+      { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true },
+      { id: 'qwen-image-plus', image: true },
+    ] }),
+    test: async () => ({ success: true, ok: true, result: 'ok' }),
+    save: async value => { writes.push(value); return { ...value, saved: true } },
+  })
+  await render().load()
+  const first = render().configureProvider(initial.connections[0])
+  const repeat = await render().configureProvider(initial.connections[0])
+  assert.equal(repeat.ok, false)
+  assert.equal((await first).ok, true)
+  assert.equal(writes.length, 1)
+  const [saved] = writes
+  for (const role of ['analysis', 'vision', 'transcription', 'cover']) assert.equal(saved[role].connection_id, 'ds')
+  assert.equal(saved.cover_enabled, false)
+  assert.equal(saved.transcription.provider, 'cloud')
+})
+
+for (const cause of ['invalid key', 'missing cloud ASR']) {
+  test('one-key setup preserves the prior document on ' + cause, async () => {
+    let writes = 0
+    let probes = 0
+    const initial = whisperSettings()
+    const render = settingsHook(initial, {
+      discover: async () => ({ source: 'live', models: [{ id: 'qwen-plus', analysis: true }] }),
+      test: async () => {
+        probes++
+        return cause === 'invalid key' ? { ok: false, result: 'failed', error_type: 'invalid_key' } : { ok: true, success: true }
+      },
+      save: async value => { writes++; return value },
+    }, cause === 'missing cloud ASR')
+    await render().load()
+    const result = await render().configureProvider(initial.connections[0])
+    assert.equal(result.ok, false)
+    assert.equal(writes, 0)
+    assert.equal(probes, cause === 'missing cloud ASR' ? 0 : 1)
+    assert.equal(render().settings.transcription.provider, 'whisper_local')
+  })
+}

@@ -6,7 +6,7 @@ import type { ModelList, ModelSettings } from './modelSettingsApi'
 import {
   analysisImageMisconfig, analysisImageMisconfigCopy, applyAnalysisImageFix,
   applyCoverOff, applyFixedSelection, applyLocalTranscription, applySmartSelection, applyVisionFollow,
-  collectModelGroups, COMING_SOON, isFixedSelected, isSmartSelected,
+  collectModelGroups, isFixedSelected, isSmartSelected,
   preferredOffer, PURPOSE_SLOTS, slotSummary, visionWarning, WHISPER_MODELS,
   type PurposeId, type SlotLine,
 } from './defaultModelSlots'
@@ -78,6 +78,11 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
   const summary = slotSummary(settings, lists, purpose)
   // Keep an existing binding legible while discovering models or after its account list changes.
   const saved = summary.kind !== 'empty' ? { value: 'saved', label: lineText(summary) } : undefined
+  if (purpose === 'analysis' && !choices.length && (!settings.saved || !saved)) {
+    return <button type="button" className="ac-link-button" onClick={() => document.getElementById('ai-provider-search')?.focus()}>
+      {t('先连接服务商')}
+    </button>
+  }
   return (
     <Select<string, Choice> id={`ai-defaults-select-${purpose}`} aria-label={title} className="ac-purpose-select"
       showSearch optionFilterProp="label" listHeight={248} placeholder={t('搜索模型')}
@@ -102,6 +107,53 @@ export default function DefaultModels({ settings, lists, onChange, transcription
   transcriptionNote?: ReactNode
 }) {
   useTranslation()
+  const renderSlot = (slot: typeof PURPOSE_SLOTS[number]) => {
+    const warning = slot.id === 'vision' ? visionWarning(settings, lists) : null
+    return (
+      <div key={slot.id} id={`ai-defaults-${slot.id}`} className="ac-purpose-slot">
+        <div className="ac-purpose-card">
+          <div className="ac-purpose-heading">
+            <label className="ac-purpose-title" htmlFor={`ai-defaults-select-${slot.id}`}>{t(slot.titleKey)}</label>
+            <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
+          </div>
+          <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} />
+          {slot.id === 'cover' && !settings.cover_enabled && settings.cover?.model && (
+            <button type="button" className="ac-link-button" onClick={() => onChange({ ...settings, cover_enabled: true })}>
+              {t('启用 {{model}}', { model: settings.cover.model })}
+            </button>
+          )}
+        </div>
+        {slot.id === 'transcription' && transcriptionNote}
+        {warning && (
+          <p className="ac-note ac-note--error" role="alert">
+            {warning === 'follow'
+              ? t('画面理解跟随的模型没有视觉能力。可以保存，开始生成前会拦住。')
+              : t('画面理解所选模型没有视觉能力。可以保存，开始生成前会拦住。')}
+          </p>
+        )}
+        {slot.id === 'analysis' && analysisUsesWeakLocalTimelineModel(settings) && <WeakLocalTimelineNote />}
+        {slot.id === 'analysis' && (() => {
+          const fix = analysisImageMisconfig(settings)
+          if (!fix) return null
+          return (
+            <div className="ac-note ac-note--error" role="alert" data-testid="analysis-image-misconfig">
+              <p>{analysisImageMisconfigCopy(fix.model, fix.recommend)}</p>
+              {fix.recommend && (
+                <button
+                  type="button"
+                  className="ac-link-button"
+                  data-testid="analysis-image-fix"
+                  onClick={() => onChange(applyAnalysisImageFix(settings, fix))}
+                >
+                  {t('改用 {{recommend}}', { recommend: fix.recommend })}
+                </button>
+              )}
+            </div>
+          )
+        })()}
+      </div>
+    )
+  }
   return (
     <div id="ai-defaults" className="ac-default-models">
       <div className="ac-default-models-head">
@@ -111,53 +163,8 @@ export default function DefaultModels({ settings, lists, onChange, transcription
         </button>
       </div>
       <div className="ac-purpose-grid">
-        {PURPOSE_SLOTS.map(slot => {
-          const warning = slot.id === 'vision' ? visionWarning(settings, lists) : null
-          return (
-            <div key={slot.id} id={`ai-defaults-${slot.id}`} className="ac-purpose-slot">
-              <div className="ac-purpose-card">
-                <div className="ac-purpose-heading">
-                  <label className="ac-purpose-title" htmlFor={`ai-defaults-select-${slot.id}`}>{t(slot.titleKey)}</label>
-                  <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
-                </div>
-                <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} />
-              </div>
-              {slot.id === 'transcription' && transcriptionNote}
-              {warning && (
-                <p className="ac-note ac-note--error" role="alert">
-                  {warning === 'follow'
-                    ? t('画面理解跟随的模型没有视觉能力。可以保存，开始生成前会拦住。')
-                    : t('画面理解所选模型没有视觉能力。可以保存，开始生成前会拦住。')}
-                </p>
-              )}
-              {slot.id === 'analysis' && analysisUsesWeakLocalTimelineModel(settings) && <WeakLocalTimelineNote />}
-              {slot.id === 'analysis' && (() => {
-                const fix = analysisImageMisconfig(settings)
-                if (!fix) return null
-                return (
-                  <div className="ac-note ac-note--error" role="alert" data-testid="analysis-image-misconfig">
-                    <p>{analysisImageMisconfigCopy(fix.model, fix.recommend)}</p>
-                    {fix.recommend && (
-                      <button
-                        type="button"
-                        className="ac-link-button"
-                        data-testid="analysis-image-fix"
-                        onClick={() => onChange(applyAnalysisImageFix(settings, fix))}
-                      >
-                        {t('改用 {{recommend}}', { recommend: fix.recommend })}
-                      </button>
-                    )}
-                  </div>
-                )
-              })()}
-            </div>
-          )
-        })}
+        {PURPOSE_SLOTS.map(renderSlot)}
       </div>
-      <p className="ac-purpose-soon">
-        <span>{t('即将支持')}</span>
-        {COMING_SOON.map(label => <span key={label}>{t(label)}</span>)}
-      </p>
     </div>
   )
 }

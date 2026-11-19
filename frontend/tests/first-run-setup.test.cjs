@@ -23,7 +23,7 @@ function renderFirstRun() {
   let settings = { saved: false, connections: [], analysis: null }
   const store = {
     settings,
-    busy: {},
+    busy: {}, lists: {}, listErrors: {},
     saving: false,
     error: '',
     chooseProvider(_role, provider) {
@@ -67,6 +67,7 @@ function renderFirstRun() {
     '../../utils/externalLinks': { openExternalLink: url => links.push(url) },
     './useQuickConnect': { useQuickConnect: () => store },
     './providers': providers,
+    './ModelPicker': { default: () => null },
     './ProviderFields': { default: () => React.createElement('div', { className: 'fields' }) },
     './modelSettingsLogic': {
       needsSetup: () => true,
@@ -134,7 +135,7 @@ test('first-run does not promote Infistar; the saved preset and other providers 
   const settingsButton = chosen.find(n => n?.type === 'button' && String(n.props?.children).includes('去设置选择其他服务商'))
   assert.ok(settingsButton)
   settingsButton.props.onClick()
-  assert.equal(other.navigations[0], '/settings?section=ai')
+  assert.equal(other.navigations[0], '/settings?section=ai&return_import=1')
   assert.equal(other.events.some(e => e.event === 'setup_action' && e.props.action === 'open_settings'), true)
 
   const connect = renderFirstRun()
@@ -170,7 +171,7 @@ async function mountFirstRun() {
   const calls = []
   const store = {
     settings: { saved: false, connections: [], analysis: null },
-    busy: {},
+    busy: {}, lists: {}, listErrors: {},
     keyHints: {},
     saving: false,
     error: '',
@@ -212,6 +213,7 @@ async function mountFirstRun() {
     '../../utils/externalLinks': { openExternalLink: url => links.push(url) },
     './useQuickConnect': { useQuickConnect: () => store },
     './providers': providers,
+    './ModelPicker': { default: () => null },
     './ProviderFields': {
       default: ({ connection }) => React.createElement('div', {
         'data-fields': connection?.provider || '',
@@ -234,7 +236,7 @@ async function mountFirstRun() {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
-  await act(async () => { root.render(React.createElement(FirstRun, {})) })
+  await act(async () => { root.render(React.createElement(FirstRun, { openRequest: 1 })) })
   return {
     window, previous, host, root, links, calls, store, state, act,
     close: async () => {

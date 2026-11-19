@@ -260,7 +260,7 @@ test('import card preselects the remote default and a late default cannot move a
     await act(async () => { key[propsKey].onChange({ target: { value: 'fixture-kept-key' } }) })
     await act(async () => { publish(promoView({ defaultChoice: 'api88' })) })
     await act(async () => { button(host, '下一步').click() })
-    await act(async () => { button(host, '连接并保存').click() })
+    await act(async () => { button(host, '一键配置模型').click() })
     assert.deepEqual(calls.filter(item => item[0] === 'key'), [['key', 'apimart', 'fixture-kept-key']])
     assert.deepEqual(calls.filter(item => item[0] === 'connect'), [['connect', 'apimart', 'fixture-kept-key']])
     await act(async () => { button(host, '返回').click() })
