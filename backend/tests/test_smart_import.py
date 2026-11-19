@@ -361,6 +361,9 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
     def provider(content, **kwargs):
         if 'content_type' in content[0]['text']: return recommendation(goal)
         if 'hooks' in content[0]['text']: return {'hooks':[{'title':'Variant','hook':'Try this!'}]}
+        if '"reviews"' in content[0]['text']:
+            return {'reviews':[{'id':'e1','outcome':'play','subject':'Piece lands','detail':'',
+                                'proof':'Piece on board','frame':2}]}
         return {'events':[{'id':'e1','label':'Visible event','start':0,'end':1,'evidence':'Fixture'}]}
     monkeypatch.setattr(intelligence,'vision_call',provider)
     content_calls=[]
@@ -388,6 +391,7 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
     assert bool(content_calls)==(goal=='content')
     assert len(state['drafts'])==(0 if goal=='content' else 1)
     if goal!='content': assert state['drafts'][0]['subtitles'] is True
+    if goal=='highlight': assert state['drafts'][0]['title']=='Piece lands'
     from backend.core.database import SessionLocal
     from backend.models import Project
     with SessionLocal() as db:
