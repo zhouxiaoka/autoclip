@@ -1,0 +1,47 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { loadTs } = require('./load-ts.cjs')
+const { recommendProviderSetup } = loadTs('providerModelSetup.ts')
+const connection = { id: 'one', provider: 'openai' }
+const base = { connections: [connection], analysis: null, vision: null, transcription: null, cover: null, cover_enabled: false, allow_send_frame: false }
+const list = { source: 'live', models: [
+  { id: 'text', analysis: true, capability: 'text' },
+  { id: 'vision', analysis: true, capability: 'multimodal' },
+  { id: 'whisper-1', asr: true, asr_supported: true },
+  { id: 'gpt-image-1', image: true },
+] }
+test('one account supplies all four purposes while AI covers stay opt-in', () => {
+  const next = recommendProviderSetup(base, connection, list)
+  for (const slot of ['analysis','vision','transcription','cover']) assert.equal(next[slot].connection_id, 'one', slot)
+  assert.equal(next.vision.model, 'vision')
+  assert.equal(next.transcription.model, 'whisper-1')
+  assert.equal(next.cover_enabled, false)
+  assert.equal(next.allow_send_frame, false)
+})
+test('text-only provider keeps existing speech and cover, never selects unsupported or hidden models', () => {
+  const conn = { ...connection, enabled_model_ids: ['text','asr-preview','unadapted'] }
+  const current = { ...base, cover: { connection_id: 'prior', model: 'keep' }, transcription: { provider: 'whisper_local', model: 'base' } }
+  const next = recommendProviderSetup(current, conn, { source: 'live', models: [...list.models, { id: 'asr-preview', asr: true, asr_preview: true, asr_supported: true }, { id: 'unadapted', asr: true }] })
+  assert.equal(next.analysis.model, 'text')
+  assert.equal(next.vision, null)
+  assert.equal(next.transcription, current.transcription)
+  assert.equal(next.cover, current.cover)
+})
+test('catalog previews and accounts without a usable model never produce a misleading setup', () => {
+  assert.equal(recommendProviderSetup(base, connection, { ...list, source: 'catalog', preview: true }), null)
+  assert.equal(recommendProviderSetup(base, connection, { source: 'live', models: [{ id: 'video', kind: 'video', analysis: false }] }), null)
+})
+test('replacing the key removes retired routes on that account while preserving the choice to use local covers', () => {
+  const previous = recommendProviderSetup(base, connection, list)
+  const next = recommendProviderSetup(previous, connection, { source: 'live', models: [list.models[0]] })
+  assert.equal(next.analysis.model, 'text')
+  assert.equal(next.vision, null)
+  assert.equal(next.cover, null)
+  assert.equal(next.transcription.provider, 'whisper_local')
+})
+test('a cover retained on a different provider stays independently usable after a text-only switch', () => {
+  const previous = { ...base, cover_enabled: true, cover_follows_analysis: true, cover: { connection_id: 'old', model: 'existing-cover' } }
+  const next = recommendProviderSetup(previous, connection, { source: 'live', models: [list.models[0]] })
+  assert.equal(next.cover, previous.cover)
+  assert.equal(next.cover_follows_analysis, false)
+})

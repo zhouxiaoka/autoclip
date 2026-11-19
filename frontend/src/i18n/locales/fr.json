@@ -1,4 +1,14 @@
 {
+  "把长视频剪成精彩片段": "Tirez des extraits\nde vos vidéos",
+  "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Importez une vidéo ou collez un lien. L’IA repère les moments à partager.",
+  "示例项目": "Projet exemple",
+  "Sam Altman 访谈": "Entretien avec Sam Altman",
+  "一键配置模型": "Configurer mes modèles",
+  "手动选择模型": "Choisir les modèles manuellement",
+  "可选": "Facultatif",
+  "自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。": "Utilisez ce fournisseur pour le montage, l’analyse visuelle, la transcription et les couvertures selon ses capacités. La transcription en ligne lui envoie l’audio.",
+  "已配置：{{purposes}}": "Modèles configurés pour {{purposes}}",
+  "无法自动匹配剪辑模型。请检查密钥，或手动选择模型。": "Aucun modèle de montage adapté. Vérifiez la clé ou choisissez un modèle manuellement.",
   "已导出": "Exporté",
   "待导出": "À exporter",
   "发布设置": "Paramètres de publication",
@@ -1733,7 +1743,7 @@
   "当前模型只能处理文字，不能看画面。请到「设置 → 服务商与模型」换一个能看图的模型，或改用字幕分析。": "Ce modèle ne lit que le texte, pas les images. Dans Réglages → Modèles, choisissez un modèle capable de voir les images, ou passez à l’analyse par sous-titres.",
   "视觉模型响应超时，请稍后重试；原素材已保留。": "Le modèle visuel n’a pas répondu à temps. Réessayez plus tard. Le fichier d’origine est conservé.",
   "settings.providers.title": "Fournisseurs et modèles",
-  "settings.providers.subtitle": "Connectez un fournisseur, puis choisissez un modèle par défaut pour chaque usage",
+  "settings.providers.subtitle": "Connectez un fournisseur pour configurer ses modèles en un clic.",
   "settings.providers.nav": "Fournisseurs et modèles",
   "settings.providers.search": "Rechercher des fournisseurs",
   "settings.providers.search_placeholder": "Filtrer par nom",
@@ -2220,5 +2230,6 @@
   "发布工具": "Outils de publication",
   "本机转写": "Transcrire sur cet appareil",
   "连接支持语音识别的服务商后，即可继续导入。": "Connectez un fournisseur de reconnaissance vocale pour reprendre l’importation.",
-  "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "Ce fournisseur utilise son API officielle. Pour une autre adresse, choisissez Ajouter un fournisseur."
+  "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "Ce fournisseur utilise son API officielle. Pour une autre adresse, choisissez Ajouter un fournisseur.",
+  "启用 {{model}}": "Activer {{model}}"
 }

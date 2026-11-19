@@ -249,7 +249,7 @@ multiIf(
 | `setup_action` | `placement`, `action` | `later` / `open_settings` / `one_click` / `connect_recommended`（赞助商一键获取，以及「其他」里连接实测默认服务商，只记 action + provider，不记 URL / key） |
 | `setup_step_done` | `placement`, `step` | 导入区三步卡每步完成。`step` = `provider` / `key` / `connect`。不记密钥和 URL |
 | `import_blocked` | `reason` | 未配置就被导入挡住 |
-| `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；保存成功 ≠ 能调用 |
+| `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；一键配置多个用途只计一次保存，连接探测仍按账号计数 |
 | `provider_connection_test_requested` / `_finished` | `provider`, `outcome`（finished） | 现有连接测试 |
 | `provider_validation_finished` | `provider`, `result` | **线 B 主事件**：保存前真实小请求。`result`=`success`/`failed`/`skipped`；失败带 `upstream_error_type`、`base_url_host`。1.5s 内完全相同的结果只发一次；保存和连接测试本身不采样 |
 

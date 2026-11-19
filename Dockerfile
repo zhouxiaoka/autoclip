@@ -25,6 +25,7 @@ COPY frontend/ ./
 COPY src-tauri/tauri.conf.json /app/src-tauri/tauri.conf.json
 # Frontend imports the shared provider presets, measured quality tiers, and the failure-code catalog.
 COPY backend/presets/provider_presets.json /app/backend/presets/provider_presets.json
+COPY backend/assets/example/cover.jpg /app/backend/assets/example/cover.jpg
 COPY backend/presets/provider_quality.json /app/backend/presets/provider_quality.json
 COPY backend/core/event_catalog.json backend/core/failure_messages.json /app/backend/core/
 

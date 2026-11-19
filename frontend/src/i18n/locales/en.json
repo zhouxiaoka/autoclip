@@ -1,4 +1,14 @@
 {
+  "把长视频剪成精彩片段": "Turn long videos\ninto highlights",
+  "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Import a video or paste a link. AI finds the moments worth sharing.",
+  "示例项目": "Sample project",
+  "Sam Altman 访谈": "Sam Altman interview",
+  "一键配置模型": "Set up models for me",
+  "手动选择模型": "Choose models manually",
+  "可选": "Optional",
+  "自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。": "Use this provider for the editing, visual, transcription and cover models it supports. Cloud transcription sends audio to this provider.",
+  "已配置：{{purposes}}": "Configured for {{purposes}}",
+  "无法自动匹配剪辑模型。请检查密钥，或手动选择模型。": "Couldn’t match an editing model. Check the key or choose a model manually.",
   "已导出": "Exported",
   "待导出": "Not exported",
   "发布设置": "Publishing settings",
@@ -1733,7 +1743,7 @@
   "当前模型只能处理文字，不能看画面。请到「设置 → 服务商与模型」换一个能看图的模型，或改用字幕分析。": "This model can only read text, not pictures. In Settings → Providers and models, switch to a vision-capable model, or use subtitle analysis instead.",
   "视觉模型响应超时，请稍后重试；原素材已保留。": "The vision model timed out. Try again later. The original media is kept.",
   "settings.providers.title": "Providers & models",
-  "settings.providers.subtitle": "Connect a provider, then pick a default model for each task",
+  "settings.providers.subtitle": "Connect a provider to set up its supported models in one click.",
   "settings.providers.nav": "Providers & models",
   "settings.providers.search": "Search providers",
   "settings.providers.search_placeholder": "Filter by name",
@@ -2220,5 +2230,6 @@
   "发布工具": "Publishing tools",
   "本机转写": "Transcribe on this device",
   "连接支持语音识别的服务商后，即可继续导入。": "Connect a provider that supports speech recognition to continue importing.",
-  "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "This provider uses its official endpoint. For a third-party endpoint, choose Add provider."
+  "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "This provider uses its official endpoint. For a third-party endpoint, choose Add provider.",
+  "启用 {{model}}": "Enable {{model}}"
 }

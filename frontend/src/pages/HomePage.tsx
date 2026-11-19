@@ -229,7 +229,7 @@ export default function HomePage() {
       minHeight: '100vh',
       background: 'var(--ac-bg)'
     }}>
-      <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
+      <Content className="ac-home-content" style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
           {liveFailure && <FailureHint active project={liveFailure} />}
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />

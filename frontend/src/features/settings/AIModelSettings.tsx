@@ -22,6 +22,7 @@ import {
   applyRequestedCloudTranscription, cloudTranscriptionDiscoverTargets, cloudTranscriptionSavePatch,
   cloudTranscriptionWaitExpired, CLOUD_TRANSCRIPTION_WAIT_MS,
 } from './defaultModelSlots'
+import { toConnection } from './customProvider'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 import { requestClipboardScan, takePendingSelect } from './keyGuideBus'
 import { PROVIDERS } from './providers'
@@ -82,6 +83,8 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
         onChoose={p => m.chooseProvider('analysis', p)}
         onEdit={patch => m.editConnection(connection, patch)}
       />
+      <p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
+      <Btn variant="cta" size="sm" onClick={() => void m.configureProvider(connection)}>{t('一键配置模型')}</Btn>
       {isAnalysis && settings.analysis
         ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
             <ModelPicker
@@ -305,6 +308,12 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
       <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing || needsCloudModel} loading={m.saving} onClick={() => void save()}>{returnToImport ? t('保存并继续导入') : t('保存设置')}</Btn>
     </div>
     <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}
+      onAuto={async draft => {
+        const connection = toConnection(draft)
+        const result = await m.configureProvider(connection, { ...settings, connections: [...settings.connections, connection] })
+        if (result.ok) setCustomOpen(false)
+        return result
+      }}
       onSubmit={draft => { m.addCustomProvider(draft); setCustomOpen(false) }} />
   </div>
 }

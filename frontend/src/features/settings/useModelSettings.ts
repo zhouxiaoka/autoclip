@@ -7,6 +7,8 @@ import { beginDebouncedEditDiscovery, beginExperience, claimModelSettingsLoad, c
 import { hintKeyForUpstreamError, isRetryableUpstreamError, telemetryProvider } from '../../analytics/successRateContract'
 import { type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
+import { quickConnectPatch } from './quickConnect'
+import { recommendProviderSetup } from './providerModelSetup'
 import { applyModelDefaults } from './modelDefaults'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
@@ -62,6 +64,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const [listErrors, setListErrors] = useState<Record<string, string>>({})
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [matching, setMatching] = useState(false)
+  const matchingRef = useRef(false)
   const [testing, setTesting] = useState(false)
   const [testingKind, setTestingKind] = useState<'quick' | 'trial' | null>(null)
   const [lastTrialByConnection, setLastTrialByConnection] = useState<Record<string, ValidationResult>>({})
@@ -341,12 +345,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   /** Validate, persist, and report the first blocking problem so the caller can scroll to it.
    * `patch` is merged first so a click can persist a choice made in the same turn as this save.
    * `base` is an already-built document (key guide) so save does not close over a stale render. */
-  const save = async (patch?: Partial<ModelSettings>, base?: ModelSettings): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
+  const save = async (patch?: Partial<ModelSettings>, base?: ModelSettings, checked?: { connectionId: string; list: ModelList }): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
     const source = base ?? settings
     if (!source) return { ok: false }
     const current = patch ? { ...source, ...patch } : source
-    if (patch || base) setSettings(current)
-    const effective = logic.coverFallback(current, lists)
+    if (!checked && (patch || base)) setSettings(current)
+    const currentLists = checked ? { ...lists, [checked.connectionId]: checked.list } : lists
+    const effective = logic.coverFallback(current, currentLists)
     const finish = beginExperience('provider_configuration_save', summary(effective))
     const issue = logic.saveIssue(effective)
     if (issue) { finish('blocked', { reason: issue.reason, role: issue.role, error_code: 'validation' }); const text = issueText(issue); setError(text); message.error(text); return { ok: false, issue } }
@@ -358,7 +363,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       for (const { role, connection, model } of logic.validationTargets(next)) {
         const modelChanged = savedRef.current?.[role]?.model !== next[role]?.model
           || savedRef.current?.[role]?.connection_id !== connection.id
-        if (connection.validation_status === 'ok' && !modelChanged) continue
+        if (connection.id === checked?.connectionId || (connection.validation_status === 'ok' && !modelChanged)) continue
         const vision = role === 'vision' || (role === 'analysis' && next.analysis_mode !== 'subtitle' && bindingCapability(next.analysis, lists) === 'multimodal')
         const result = await probe(connection, model, vision, role)
         emitValidation(connection, result)
@@ -376,8 +381,9 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         else {
           acceptWarning(connection.id, result)
           setError(failureCopy(result, model))
+          if (checked) { finish('failed', connectionTestFailure(result)); return { ok: false, validationFailed: true } }
         }
-        setSettings(next)
+        if (!checked) setSettings(next)
       }
       for (const connection of next.connections) {
         if (noticed.some(item => item.id === connection.id)) continue
@@ -401,10 +407,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const text = t('settings.key_guide.unverified')
         if (typeof warn === 'function') warn(text)
         else message.error(text)
-      } else message.success(t('已保存'))
+      } else if (!checked) message.success(t('已保存'))
       if (warned) message.warning(warned)
       const failed = [value, next].some(s => logic.validationTargets(s).some(({ connection }) => connection.validation_status === 'failed'))
-      const visionFailed = logic.visionFollowLacksCapability(next, lists) || logic.visionFollowLacksCapability(value, lists)
+      const visionFailed = logic.visionFollowLacksCapability(next, currentLists) || logic.visionFollowLacksCapability(value, currentLists)
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
       // back to the failed project, if settings were opened from one (SETTINGS_SAVED_EVENT in studio/settingsReturn).
       if (!failed && !visionFailed) notifySettingsSaved()
@@ -436,6 +442,57 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       return { ok: true, validationFailed: failed || visionFailed }
     } catch (e) { finish('failed', {}, e); setError(errorText(e)); return { ok: false } }
     finally { setSaving(false) }
+  }
+
+  // Discover, check access, then persist the complete document in one save.
+  const configureProvider = async (connection: Connection, base = settings): Promise<{ ok: boolean; error?: string }> => {
+    if (!base || matchingRef.current || saving) return { ok: false }
+    matchingRef.current = true
+    setMatching(true)
+    setError('')
+    try {
+      const discovered = beginExperience('model_discovery', { placement, provider: telemetryProvider(connection.provider), trigger: 'manual' })
+      const list = await modelSettingsApi.discover({ ...connection, custom_models: [] }, true).catch(e => {
+        discovered('failed', {}, e)
+        throw e
+      })
+      discovered('completed', { source: list.source, preview: !!list.preview, has_warning: !!list.warning, result_count: list.models.length })
+      if (!alive.current) return { ok: false }
+      let next = recommendProviderSetup(base, connection, list)
+      // Some named providers permit chat but do not expose an account list. Probe one
+      // analysis candidate before using it. A catalog preview never enables optional services.
+      if (!next && list.preview && !connection.enabled_model_ids && getProvider(connection.provider)?.candidates.analysis.length) {
+        const draft = { ...base, analysis: base.analysis?.connection_id === connection.id ? base.analysis : logic.cleanBinding(connection.id) }
+        const binding = quickConnectPatch(draft)?.analysis || draft.analysis
+        if (binding?.model && !isImageMarker(binding.model)) next = { ...base, analysis: binding, cover_follows_analysis: base.cover?.connection_id === connection.id && !!base.cover_follows_analysis }
+      }
+      if (!next?.analysis?.model) throw new Error(t('无法自动匹配剪辑模型。请检查密钥，或手动选择模型。'))
+      const target = ['analysis', 'vision', 'transcription', 'cover'].map(role => ({
+        role: role as Role, binding: next[role as Role],
+      })).find(({ binding }) => binding?.connection_id === connection.id && binding.model)
+      if (!target?.binding) throw new Error(t('无法自动匹配剪辑模型。请检查密钥，或手动选择模型。'))
+      const value = await probe(connection, target.binding.model, target.role === 'vision' || (target.role === 'analysis' && next.analysis_mode === 'visual'), target.role)
+      if (!alive.current) return { ok: false }
+      emitValidation(connection, value)
+      if (!passed(value)) throw new Error(failureCopy(value, target.binding.model))
+      const verified = logic.applyValidation(next, connection.id, value)
+      setLists(old => ({ ...old, [connection.id]: list }))
+      const saved = await save(undefined, verified, { connectionId: connection.id, list })
+      if (!saved.ok || saved.validationFailed) return { ok: false, error: saved.issue ? issueText(saved.issue) : t('保存失败，请重试') }
+      const purposes = [
+        [next.analysis, '精彩片段分析'], [next.vision, '画面理解'], [next.transcription, '语音转字幕'], [next.cover, '封面生成'],
+      ] as const
+      const labels = purposes.filter(([binding, label]) => binding?.connection_id === connection.id && (!list.preview || label === '精彩片段分析')).map(([, label]) => t(label))
+      message.success(t('已配置：{{purposes}}', { purposes: labels.join(' · ') }))
+      return { ok: true }
+    } catch (e) {
+      const text = errorText(e)
+      setError(text)
+      return { ok: false, error: text }
+    } finally {
+      matchingRef.current = false
+      if (alive.current) setMatching(false)
+    }
   }
 
   const validateCatalogConnection = async (connection: Connection, model: string) => {
@@ -691,7 +748,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
 
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
-    settings, lists, busy, listErrors, dirty, saving, testing, error, testWarning, setError, main, keyHints,
+    settings, lists, busy, listErrors, dirty, saving: saving || matching, testing, error, configureProvider, testWarning, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test, cancelTrial,

@@ -143,7 +143,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
       {keyHref() && <button type="button" className="studio-link" onClick={openKey}>{t('获取 API Key')}</button>}
     </label>}
     {step === 'connect' && <div>
-      <p className="studio-muted">{t('连接会先做一次快速检查，通过后保存。')}</p>
+      <p className="studio-muted">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
       <p className="studio-muted">{preset?.short}</p>
       {connect.error && <p className="studio-error" role="alert">{connect.error}</p>}
     </div>}
@@ -155,7 +155,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
         {step === 'provider' && <button type="button" className="studio-link" onClick={() => navigate('/settings?section=ai&return_import=1', { state: { settingsEntry: 'home_setup' } })}>{t('去设置选择其他服务商')}</button>}
       </div>
       {step === 'connect'
-        ? <Btn variant="cta" size="sm" loading={connect.saving} disabled={!connect.settings} onClick={() => void save()}>{t('连接并保存')}</Btn>
+        ? <Btn variant="cta" size="sm" loading={connect.saving} disabled={!connect.settings} onClick={() => void save()}>{t('一键配置模型')}</Btn>
         : <Btn variant="cta" size="sm" disabled={!connect.settings || (step === 'provider' && !canContinue) || (step === 'key' && !apiKey.trim())} onClick={next}>{t('下一步')}</Btn>}
     </div>
   </div>

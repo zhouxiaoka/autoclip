@@ -1,4 +1,14 @@
 {
+  "把长视频剪成精彩片段": "Convierte vídeos largos\nen clips",
+  "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Importa un vídeo o pega un enlace. La IA encuentra los momentos que vale la pena compartir.",
+  "示例项目": "Proyecto de ejemplo",
+  "Sam Altman 访谈": "Entrevista a Sam Altman",
+  "一键配置模型": "Configurar modelos por mí",
+  "手动选择模型": "Elegir modelos manualmente",
+  "可选": "Opcional",
+  "自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。": "Usa este proveedor para la edición, el análisis visual, la transcripción y las portadas que admita. La transcripción en la nube le envía el audio.",
+  "已配置：{{purposes}}": "Configurado para {{purposes}}",
+  "无法自动匹配剪辑模型。请检查密钥，或手动选择模型。": "No se encontró un modelo de edición. Comprueba la clave o elige uno manualmente.",
   "已导出": "Exportado",
   "待导出": "Sin exportar",
   "发布设置": "Ajustes de publicación",
@@ -1733,7 +1743,7 @@
   "当前模型只能处理文字，不能看画面。请到「设置 → 服务商与模型」换一个能看图的模型，或改用字幕分析。": "Este modelo solo lee texto, no imágenes. En Ajustes → Proveedores y modelos, elige un modelo que pueda ver imágenes, o usa el análisis por subtítulos.",
   "视觉模型响应超时，请稍后重试；原素材已保留。": "El modelo visual agotó el tiempo de espera. Inténtalo de nuevo más tarde. El material original se conserva.",
   "settings.providers.title": "Proveedores y modelos",
-  "settings.providers.subtitle": "Conecta un proveedor y elige un modelo predeterminado para cada uso",
+  "settings.providers.subtitle": "Conecta un proveedor y configura sus modelos con un clic.",
   "settings.providers.nav": "Proveedores y modelos",
   "settings.providers.search": "Buscar proveedores",
   "settings.providers.search_placeholder": "Filtrar por nombre",
@@ -2220,5 +2230,6 @@
   "发布工具": "Herramientas de publicación",
   "本机转写": "Transcribir en este equipo",
   "连接支持语音识别的服务商后，即可继续导入。": "Conecta un proveedor de reconocimiento de voz para continuar.",
-  "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "Este proveedor usa su API oficial. Para otra dirección, elige Añadir proveedor."
+  "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "Este proveedor usa su API oficial. Para otra dirección, elige Añadir proveedor.",
+  "启用 {{model}}": "Activar {{model}}"
 }

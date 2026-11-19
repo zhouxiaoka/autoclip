@@ -118,6 +118,11 @@ export default function DefaultModels({ settings, lists, onChange, requestedSect
             <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
           </div>
           <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} />
+          {slot.id === 'cover' && !settings.cover_enabled && settings.cover?.model && (
+            <button type="button" className="ac-link-button" onClick={() => onChange({ ...settings, cover_enabled: true })}>
+              {t('启用 {{model}}', { model: settings.cover.model })}
+            </button>
+          )}
         </div>
         {slot.id === 'transcription' && transcriptionNote}
         {warning && (

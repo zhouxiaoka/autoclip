@@ -571,15 +571,21 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   }
   const names = platforms.map(platformLabel).join(uiLocale().toLowerCase().startsWith('zh') ? '、' : ', ')
   const youtubeLongOnlyTooShort = longGate.durationSec != null && longGate.durationSec < YOUTUBE_LONG_MIN_SEC && platforms.length > 0 && platforms.every(platform => platform === 'youtube_long')
-  if (blocked) return <section className="ac-creative-import">
-    <div className="studio-import-box">
-      <h1 className="ac-title">{t('制作你的第一条视频')}</h1>
-      <p className="studio-muted">{t('先看一条示例成片，或连接 AI 来剪自己的视频。')}</p>
-      <div className="studio-actions">
-        <Btn variant="cta" onClick={onBlocked}>{t('剪自己的视频')}</Btn>
-        <Btn loading={exampleBusy} onClick={onExample}>{t('先看示例')}</Btn>
-      </div>
+  if (blocked) return <section className="ac-welcome" aria-labelledby="welcome-title">
+    <div className="ac-welcome-copy">
+      <h1 id="welcome-title">{t('把长视频剪成精彩片段')}</h1>
+      <p>{t('导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。')}</p>
+      <Btn variant="cta" onClick={onBlocked}>{t('剪自己的视频')}</Btn>
     </div>
+    <figure className="ac-welcome-sample" aria-labelledby="welcome-sample-title">
+      <figcaption>
+        <span>{t('示例项目')}</span>
+        <strong id="welcome-sample-title">{t('Sam Altman 访谈')}</strong>
+        <button type="button" className="ac-welcome-play" disabled={exampleBusy} aria-busy={exampleBusy} onClick={onExample}>
+          {exampleBusy ? t('加载中…') : t('先看示例')}
+        </button>
+      </figcaption>
+    </figure>
   </section>
   if (analysisBlocked) {
     return <section className="ac-creative-import">

@@ -68,9 +68,9 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   if (settings && initial.current === null) initial.current = needsSetup(settings)
   const [connectingAttempt, setConnectingAttempt] = useState(false)
   const needed = !!settings && !!initial.current && (!settings.saved || connectingAttempt)
-  const saveConnection = async () => {
+  const saveConnection = async (manual = false) => {
     setConnectingAttempt(true)
-    const result = await m.save()
+    const result = manual ? await m.save() : await m.connect()
     if (result.ok && !result.validationFailed) setConnectingAttempt(false)
   }
   useEffect(() => { if (settings) onStatus?.(needed) }, [settings, needed])
@@ -125,7 +125,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   if (!settings || !needed) return null
 
   // Only the overlay closes. The import zone stays on the setup card until analysis is actually saved.
-  const later = () => { action('later'); setOpen(false) }
+  const later = () => { if (m.saving) return; action('later'); setOpen(false) }
   const goSettings = () => {
     action('open_settings')
     setOpen(false)
@@ -159,11 +159,8 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   }
   const main = mainConnection(settings)
   const model = settings.analysis?.model
-  const fetching = !!main && !!m.busy[main.id] && !model
   const status = !main || !connectionReady(main) ? t('请先粘贴服务商的 API 密钥')
-    : fetching ? t('正在获取可用模型…')
-    : model ? t('已选好模型：{{model}}', { model })
-    : t('请输入或选择模型')
+    : t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')
   const sponsorId = firstRunSponsor(choice)
   const snapNow = readPromoSnapshot()
   const packagedNow = !snapNow || snapNow.source === 'bundled' ? (sponsorId ? PROVIDERS[sponsorId].sponsor?.registerUrl || '' : '') : ''
@@ -178,26 +175,28 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     description={connecting ? (choice === 'other' || !liveLink ? t('把 API 密钥粘贴到下方即可。') : t('在浏览器完成注册后，把 API 密钥粘贴到下方。')) : undefined}
     footer={<div className="ac-setup-foot">
       {connecting
-        ? <Btn variant="text" size="sm" onClick={() => setStep('choose')}>{t('返回')}</Btn>
+        ? <Btn variant="text" size="sm" disabled={m.saving} onClick={() => setStep('choose')}>{t('返回')}</Btn>
         : <Btn variant="text" size="sm" onClick={later}>{t('稍后设置')}</Btn>}
       {connecting
-        ? <Btn variant="cta" size="sm" loading={m.saving} disabled={fetching || !main || !connectionReady(main) || !model?.trim()} onClick={() => void saveConnection()}>{t('连接并保存')}</Btn>
+        ? <Btn variant="cta" size="sm" loading={m.saving} disabled={!main || !connectionReady(main)} onClick={() => void saveConnection()}>{t('一键配置模型')}</Btn>
         : <Btn variant="cta" size="sm" onClick={primary}>{t(label.key, label.values)}</Btn>}
     </div>}>
     <ConfigProvider theme={{ token: { zIndexPopupBase: 1300 } }}>
       <div className="ac-setup-dialog ac-ai-settings">
         {connecting && main ? <>
-          <div className="ac-rows">
+          <fieldset className="ac-model-fields" disabled={m.saving}>
             <ProviderFields connection={main} hideProvider placement="home_setup"
               keyHint={m.keyHints[main.id]}
               onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
-          </div>
-          {connectionReady(main) && <ModelPicker role="analysis" connection={main} model={model || ''}
+          </fieldset>
+          <div className="ac-setup-status"><StatusDot tone="muted" label={status} /></div>
+          {connectionReady(main) && <details className="studio-details"><summary>{t('手动选择模型')}</summary><ModelPicker role="analysis" connection={main} model={model || ''}
             mode={settings.analysis_mode} list={m.lists[main.id]} busy={!!m.busy[main.id]} listError={m.listErrors[main.id]}
             onRefresh={() => void m.discover(main, true)}
-            onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto', model_source: 'user' } })} />}
+            onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto', model_source: 'user' } })} />
+            <Btn size="sm" disabled={m.saving || !model?.trim()} onClick={() => void saveConnection(true)}>{t('连接并保存')}</Btn>
+          </details>}
           {m.error && <p className="studio-error" role="alert">{m.error}</p>}
-          <div className="ac-setup-status"><StatusDot tone={fetching ? 'accent' : model && main && connectionReady(main) ? 'ok' : 'muted'} label={status} /></div>
         </> : <>
           <div className="ac-choice-list" role="radiogroup" aria-label={t('选择 AI 服务商')}>
             {choices.map(id => {
