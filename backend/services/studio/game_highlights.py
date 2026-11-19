@@ -291,8 +291,9 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
         "core 给出只保留最重要事实的备用极短标题，中文最多10字、英文最多5词。"
         f"标题语言={language}，source 时沿用素材语言。"
         "frame 用段内1–8的整数标出最清楚的证据帧，proof 记下可读标识或观察到的具体变化。"
-        '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语","core":"极短主句"}]}。'
     )
+    if commentary_selection is None:
+        prompt += '只返回 {"reviews":[{"id":"编号","outcome":"分类","final_for_player":false,"frame":5,"proof":"依据","subject":"主句","detail":"可选短语","core":"极短主句"}]}。'
     if wins_only:
         prompt += (" 此批只查本玩家整局胜利的最终结算。不能只因提到胜率、幸存人数或出现其他选手的第一名便报胜。"
                    "务必核对结算页、冠军标识和归属，只写当前编号画面可证的事实。")
@@ -322,6 +323,14 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                    "。若里程碑依据是该计数栏到达指定数字或发生回绕，objective照录相应目标原文；"
                    "若看点独立于这些目标，objective填null。窗口内再次出现目标数字不能单独算达成。"
                    "必须看见目标值之后回到初值，其他代码变成目标数字不能替代该转换。")
+    if commentary_selection is not None:
+        schema = dict(id="编号", outcome="分类", final_for_player=False, frame=5, proof="依据",
+                      subject="主句", detail="可选短语", core="极短主句", impact="分类",
+                      final_rank=None, before_frame=1, after_frame=8)
+        prompt += (" 动作归属要核对本玩家的计数栏开头和末尾读数，尤其是 K.O.、徽章和连击计数。"
+                   "即使提名猜错奖励，仍可保留画面证实的另一项战果，如淘汰数连续增加。"
+                   "每个字段单独写入对象，proof只写观察。")
+        prompt += " 只返回" + json.dumps({"reviews": [schema]}, ensure_ascii=False)
     for offset in range(0, len(scenes), 3):
         group = scenes[offset : offset + 3]
         parts = [{"type": "text", "text": prompt}]
@@ -887,14 +896,12 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
         audit = {}
         selected = review_outcomes(video, selected, prefs.language, confirmed_wins=confirmed,
                                    evidence_times=anchors, commentary_selection=audit)
-        ranked = _recover_result_windows(video, rows, duration, prefs, selected, confirmed)
-        selected = ranked[:6]
+        selected = _recover_result_windows(video, rows, duration, prefs, selected, confirmed)
         if selection_log is not None:
             final_ids = {s.id for s in selected}
-            ranked_ids = {s.id for s in ranked}
             for r in audit.values():
                 if r["disposition"] == "selected" and r["id"] not in final_ids:
-                    r["disposition"] = "limit" if r["id"] in ranked_ids else "duplicate"
+                    r["disposition"] = "duplicate"
             for s in selected:
                 if s.id not in audit:
                     audit[s.id] = dict(id=s.id, start=s.start, end=s.end, outcome="match_win",
