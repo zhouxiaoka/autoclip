@@ -292,7 +292,7 @@ def _review_eliminations(video, scene, row, reference_box=None):
         return change, None
     readable = [v for v in counts if type(v) is int and v >= 0] if isinstance(counts, list) else []
     partial = len(readable) >= 2 and readable[-1] - readable[0] == 1
-    missing = not readable and re.search(r"\b(?:kills?|knockouts?|eliminat\w*|K\.?O\.?)\b|淘汰|击杀|撃破", scene.evidence or "", re.I)
+    missing = not readable and re.search(r"\b(?:kills?|knockouts?|eliminat\w*|badges?|K\.?O\.?)\b|淘汰|击杀|撃破|徽章|バッジ", scene.evidence or "", re.I)
     if not (partial or missing):
         return None, None
     times = _review_times(scene, None)
@@ -379,8 +379,8 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                    "若看点独立于这些目标，objective填null。窗口内再次出现目标数字不能单独算达成。"
                    "必须看见目标值之后回到初值，其他代码变成目标数字不能替代该转换。")
     if commentary_selection is not None:
-        schema = dict(id="编号", outcome="分类", final_for_player=False, frame=5, proof="依据",
-                      subject="主句", detail="可选短语", core="极短主句", impact="分类",
+        schema = dict(id="编号", outcome="match_win / milestone / action_feedback / placement / play / unclear", final_for_player=False, frame=5, proof="依据",
+                      subject="主句", detail="可选短语", core="极短主句", impact="podium / recovery / streak / elimination / milestone / routine",
                       final_rank=None, before_frame=1, after_frame=8, same_match=False, elimination_counts=[None]*8, elimination_box=None, combo_before=None, combo_peak=None)
         prompt += (" 动作归属要核对本玩家的计数栏开头和末尾读数，尤其是 K.O.、徽章和连击计数。"
                    "即使提名猜错奖励，仍可保留画面证实的另一项战果，如淘汰数连续增加。"
@@ -446,6 +446,13 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                 and 1 <= frame <= 8
             )
             outcome = row.get("outcome")
+            if commentary_selection is not None and outcome == row.get("impact"):
+                # Compatible reviewers sometimes copy the consequence into both
+                # fields. All frame, attribution and result checks still apply.
+                if outcome in ("recovery", "streak", "elimination"):
+                    outcome = "action_feedback"
+                elif outcome == "podium":
+                    outcome = "placement"
             if outcome == "match_win" and row.get("final_for_player") is not True:
                 # A standings table can show somebody else's winning position.
                 outcome = "unclear"

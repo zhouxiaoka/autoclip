@@ -505,7 +505,7 @@ def test_commentary_review_requires_distinct_consequence(tmp_path, monkeypatch):
         ("plain", "play", "routine", None, 3, 5),
         ("bronze", "podium", "podium", 3, 2, 6),
         ("rank", "placement", "podium", 9, 2, 6),
-        ("survival", "action_feedback", "recovery", None, 2, 6),
+        ("survival", "recovery", "recovery", None, 2, 6),
         ("guess", "action_feedback", "recovery", None, 5, 5),
         ("champion", "match_win", "routine", None, None, None),
     ]
