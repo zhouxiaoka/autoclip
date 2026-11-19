@@ -13,7 +13,9 @@ export function settingsReturnUrl(destination: string, projectId: string): strin
 
 /** Where to go after a successful save on `search` (the settings page query), or null to stay. */
 export function returnAfterSave(search: string): string | null {
-  const pid = new URLSearchParams(search).get(RETURN_PARAM)
+  const params = new URLSearchParams(search)
+  if (params.get('return_import') === '1') return '/'
+  const pid = params.get(RETURN_PARAM)
   return pid && /^[\w-]{1,128}$/.test(pid) ? `/project/${encodeURIComponent(pid)}?${CONTINUE_PARAM}=1` : null
 }
 

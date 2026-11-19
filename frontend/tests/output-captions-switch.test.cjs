@@ -8,7 +8,7 @@ const React = require('react')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 
 const HINT = '关闭后成片不带字幕。标题只在封面上，不会烧进视频。'
-const MAIN = '字幕'
+const MAIN = '成片显示字幕'
 const SETTINGS = '自动成片压字幕'
 const SAVE_ERROR = '保存失败，请稍后重试'
 const LANGS = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']

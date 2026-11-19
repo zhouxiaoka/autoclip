@@ -147,7 +147,8 @@ test('later only dismisses the first-run overlay', async () => {
         save: async () => ({ ok: true }),
       }) },
       './providers': loadTs('providers.ts', { '../../i18n': i18n }),
-      './ProviderFields': { default: () => null },
+      './ModelPicker': { default: () => null },
+    './ProviderFields': { default: () => null },
       './modelSettingsLogic': {
         needsSetup: () => true,
         mainConnection: () => undefined,
@@ -159,11 +160,12 @@ test('later only dismisses the first-run overlay', async () => {
     document.body.appendChild(host)
     const root = createRoot(host)
     await act(async () => { root.render(React.createElement(FirstRun, { onStatus: value => statuses.push(value) })) })
+    assert.equal(host.querySelector('[role="dialog"]'), null)
+    await act(async () => { root.render(React.createElement(FirstRun, { openRequest: 1, onStatus: value => statuses.push(value) })) })
     assert.ok(host.querySelector('[role="dialog"]'))
     assert.ok(statuses.length >= 1 && statuses.every(value => value === true))
     await act(async () => { button(host, '稍后设置').click() })
     assert.equal(host.querySelector('[role="dialog"]'), null)
-    assert.equal(window.sessionStorage.getItem('autoclip.firstRunSetup.dismissed'), '1')
     assert.ok(statuses.every(value => value === true))
     await act(async () => { root.unmount() })
   } finally {

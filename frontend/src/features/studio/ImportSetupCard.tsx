@@ -152,7 +152,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
       <div className="ac-import-setup-side">
         {index > 0 && <Btn variant="text" size="sm" onClick={back}>{t('返回')}</Btn>}
         <button type="button" className="studio-link" disabled={exampleBusy} onClick={() => onExample?.()}>{t('先用示例视频看看效果')}</button>
-        {step === 'provider' && <button type="button" className="studio-link" onClick={() => navigate('/settings?section=ai', { state: { settingsEntry: 'home_setup' } })}>{t('去设置选择其他服务商')}</button>}
+        {step === 'provider' && <button type="button" className="studio-link" onClick={() => navigate('/settings?section=ai&return_import=1', { state: { settingsEntry: 'home_setup' } })}>{t('去设置选择其他服务商')}</button>}
       </div>
       {step === 'connect'
         ? <Btn variant="cta" size="sm" loading={connect.saving} disabled={!connect.settings} onClick={() => void save()}>{t('连接并保存')}</Btn>

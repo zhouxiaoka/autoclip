@@ -81,7 +81,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   assert.equal(recommendedIds.includes('openai'), false)
 })
 
-test('saved custom gateways appear as a repair entry', () => {
+test('custom gateways are editable without a repair warning', () => {
   const tree = Catalog({
     settings: {
       ...settings,
@@ -97,7 +97,7 @@ test('saved custom gateways appear as a repair entry', () => {
   assert.ok(nodes.some(node => node.props && node.props['data-provider-group'] === 'custom'))
   const card = nodes.find(node => node.props && node.props['data-provider-id'] === 'custom:gw')
   assert.ok(card)
-  assert.match(textOf(card), /settings\.providers\.repair_custom/)
+  assert.match(textOf(card), /编辑/)
 })
 
 test('whisper is not marked available until the local model is ready', () => {

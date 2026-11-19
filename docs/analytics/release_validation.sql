@@ -11,6 +11,7 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.analytics_environment = 'validation'
   AND properties.app_version = 'VERSION_UNDER_TEST'
   AND properties.runtime = 'desktop'
+  -- setup_presented counts the provider chooser. Sample-only users also appear in pageviews.
   AND event IN ('$pageview', 'setup_presented', 'app_installed', 'app_opened', 'app_updated')
 GROUP BY event, os, arch
 ORDER BY event, os, arch;

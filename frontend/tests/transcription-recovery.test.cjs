@@ -1585,7 +1585,7 @@ test('R20 #166: while submit re-probes readiness the form is locked and nothing 
   act(() => view.root.unmount())
 })
 
-for (const [code, label] of [['whisper_not_installed', '需要先安装本地转写'], ['whisper_installing', '等待安装完成']]) {
+for (const [code, label] of [['whisper_not_installed', '选择字幕来源'], ['whisper_installing', '等待安装完成']]) {
   test(`R20 #167: a coded 422 (${code}) renders the ${label} dialog in the page`, async () => {
     // The backend still reports the refused state on the next poll (a ready poll would continue by itself, #232).
     const view = await render({ readiness: thenReport(() => check(code)), importImpl: async () => { throw axios422({ code, message: 'whatever the backend says' }) } })
@@ -1767,7 +1767,7 @@ test('R24 #232: a failed install offers retry (restarts it and waits again) and 
   await clock.advance(2000)
   assert.match(view.host.textContent, /安装或模型下载失败/)
   await act(async () => { button(view.host, '打开转写设置').click() })
-  assert.deepEqual(went, ['/settings?section=speech'])
+  assert.deepEqual(went, ['/settings?section=speech&return_import=1'])
   await act(async () => { button(view.host, '重试').click() }); await act(async () => {}); await act(async () => {})
   assert.equal(installs.length, 1, 'retry restarts the install')
   assert.equal(button(view.host, '重试'), undefined, 'back to waiting after retry')
@@ -1808,7 +1808,7 @@ test('#349: from model_missing (no READY first): 一键安装 -> download -> don
     importImpl: async body => { imports.push(body); return { project_id: 'p' } } })
   await dropFile(view.host, 'talk.mp4')
   await act(async () => { startButton(view.host).click() }); await act(async () => {})
-  assert.equal(view.host.querySelector('[role=alertdialog]').getAttribute('aria-label'), '需要先安装本地转写')
+  assert.equal(view.host.querySelector('[role=alertdialog]').getAttribute('aria-label'), '选择字幕来源')
   assert.equal(imports.length, 0)
   await act(async () => { button(view.host, '一键安装').click() }); await act(async () => {}); await act(async () => {})
   assert.deepEqual(downloads, ['small'])

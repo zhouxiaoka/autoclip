@@ -245,7 +245,7 @@ multiIf(
 
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
-| `setup_presented` | `placement`, `trigger` | 引导实际显示。`placement` 含 `home_setup` 与导入区替换卡 `import_card` |
+| `setup_presented` | `placement`, `trigger` | 首屏点击「剪自己的视频」打开选择器才记录引导曝光。仅看示例走 `example_project_viewed`。`placement` 含 `home_setup` 与导入区替换卡 `import_card` |
 | `setup_action` | `placement`, `action` | `later` / `open_settings` / `one_click` / `connect_recommended`（赞助商一键获取，以及「其他」里连接实测默认服务商，只记 action + provider，不记 URL / key） |
 | `setup_step_done` | `placement`, `step` | 导入区三步卡每步完成。`step` = `provider` / `key` / `connect`。不记密钥和 URL |
 | `import_blocked` | `reason` | 未配置就被导入挡住 |

@@ -726,3 +726,22 @@
     --style-gap: 12px;
   }
 }
+
+.studio-source-subtitles, .studio-publish-tools {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.studio-source-subtitles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.studio-publish-tools summary {
+  color: var(--ac-sub);
+  cursor: pointer;
+}
+.studio-publish-tools[open] summary {
+  margin-bottom: 12px;
+}

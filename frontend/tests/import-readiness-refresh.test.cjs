@@ -190,7 +190,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
   let settings = { saved: false, connections: [], analysis: null }
   const store = {
     settings,
-    busy: {},
+    busy: {}, lists: {}, listErrors: {},
     keyHints: {},
     saving: false,
     error: '',
@@ -238,6 +238,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
     '../../utils/externalLinks': { openExternalLink() {} },
     './useQuickConnect': { useQuickConnect: () => store },
     './providers': providers,
+    './ModelPicker': { default: () => null },
     './ProviderFields': { default: () => React.createElement('div', { className: 'fields' }) },
     './modelSettingsLogic': {
       needsSetup: () => true,

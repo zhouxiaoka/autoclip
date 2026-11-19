@@ -338,7 +338,6 @@ export default function EditingStylePicker({
     return <fieldset className="studio-template-picker studio-style-picker" disabled={disabled}>
       <legend>{t('editing_style.title')}</legend>
       <p className="studio-muted">{t('editing_style.lead')}</p>
-      <p className="studio-style-empty">{t('editing_style.empty')}</p>
     </fieldset>
   }
 

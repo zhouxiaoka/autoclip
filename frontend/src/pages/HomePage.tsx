@@ -236,6 +236,7 @@ export default function HomePage() {
           <div ref={importArea}><CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} /></div>
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
+          {!(setupNeeded && !projects.length) && <>
           {/* 项目管理区域 */}
           <div style={{
             background: 'transparent',
@@ -335,7 +336,8 @@ export default function HomePage() {
                )}
              </div>
            </div>
-         </div>
+           </>}
+        </div>
       </Content>
     </Layout>
   )
