@@ -55,7 +55,7 @@ def _http(error: DiagnosticsError) -> HTTPException:
 
 
 @router.get("/consent")
-async def get_consent(request: Request):
+def get_consent(request: Request):
     _local(request)
     view = load().public()
     view["endpoint_configured"] = bool(endpoint())
@@ -63,7 +63,7 @@ async def get_consent(request: Request):
 
 
 @router.put("/consent")
-async def put_consent(body: ConsentBody, request: Request):
+def put_consent(body: ConsentBody, request: Request):
     _local(request)
     try:
         consent = set_consent(
@@ -78,7 +78,7 @@ async def put_consent(body: ConsentBody, request: Request):
 
 
 @router.get("/preview")
-async def get_preview(request: Request, project_id: str = Query(min_length=1), attempt_id: str = Query(default="")):
+def get_preview(request: Request, project_id: str = Query(min_length=1), attempt_id: str = Query(default="")):
     _local(request)
     try:
         return preview(project_id, attempt_id)
@@ -87,7 +87,7 @@ async def get_preview(request: Request, project_id: str = Query(min_length=1), a
 
 
 @router.post("/submit")
-async def post_submit(body: SubmitBody, request: Request):
+def post_submit(body: SubmitBody, request: Request):
     _local(request)
     try:
         return submit(
@@ -100,14 +100,14 @@ async def post_submit(body: SubmitBody, request: Request):
 
 
 @router.get("/cases")
-async def get_cases(request: Request):
+def get_cases(request: Request):
     _local(request)
     from backend.services.diagnostics.service import _public_item
     return {"cases": [_public_item(item) for item in queue.list_items()]}
 
 
 @router.delete("/cases/{item_id}")
-async def delete_case(item_id: str, request: Request):
+def delete_case(item_id: str, request: Request):
     _local(request)
     try:
         return delete_local(item_id)

@@ -1332,3 +1332,30 @@ def test_observe_cuts_around_the_failure_time(data_dir, monkeypatch):
     stored = queue.list_items()[0]
     assert stored["files"][0]["role"] == "excerpt"
     assert "media_time_sec" not in json.dumps(stored["manifest"])
+
+
+def test_submit_offloads_sync_work_while_consent_request_finishes(data_dir, monkeypatch):
+    import asyncio
+    import httpx
+    from backend.api.v1 import diagnostics as api
+
+    app = FastAPI()
+    app.include_router(api.router)
+    entered, release = threading.Event(), threading.Event()
+    def slow_submit(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return {'status': 'queued'}
+    monkeypatch.setattr(api, 'submit', slow_submit)
+    async def exercise():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://127.0.0.1') as client:
+            job = asyncio.create_task(client.post('/diagnostics/submit', json={'project_id': 'fixture', 'informed': True}))
+            try:
+                assert await asyncio.to_thread(entered.wait, 3)
+                assert (await client.get('/diagnostics/consent')).status_code == 200
+                assert not job.done()
+            finally:
+                release.set()
+                await job
+    asyncio.run(exercise())
