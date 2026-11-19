@@ -388,6 +388,13 @@ def recommend(video: Path, options: ImportOptions):
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
     route = resolve_route(consent.analysis_mode, result.goal, duration, ai_screened=mode == 'ai', degraded=invalid_degrade)
+    if (mode == 'ai' and consent.analysis_mode == 'auto' and result.content_type == 'gameplay'
+            and result.goal == 'highlight' and not (short or no_audio or options.source_window)):
+        from backend.services.studio.game_highlights import commentary_evidence
+        local_evidence = commentary_evidence(video, duration)
+        if local_evidence['commentary']:
+            route = 'subtitle'
+            result.reason = '分段检查发现持续解说，按解说定位关键操作和随后的反应。'
     if short or no_audio:
         from backend.pipeline import media_precheck
         if route == 'subtitle' and options.auto_start:

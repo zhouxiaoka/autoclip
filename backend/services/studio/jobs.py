@@ -841,6 +841,9 @@ def _content_drafts(project_id, plan, video, platforms=()):
         min_sec, label = long_form_minimum(platforms)
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
+        if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
+            from backend.services.studio.game_highlights import subtitle_drafts
+            return subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''))
         clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
         from backend.utils.text_processor import TextProcessor
         picked = []
@@ -900,7 +903,10 @@ def _content_drafts(project_id, plan, video, platforms=()):
     if not intelligence.ready():
         raise UserFacingError('请先在设置中配置视觉理解模型')
     try:
-        events, coverage = analyze(video, prefs)
+        if plan.get('content_type') == 'gameplay' and prefs.goal == 'highlight':
+            events, coverage = analyze(video, prefs, gameplay=True)
+        else:
+            events, coverage = analyze(video, prefs)
         drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
         window = (plan.get('overrides') or {}).get('source_window')
         if isinstance(window, dict) and window.get('end') is not None:
@@ -2315,6 +2321,14 @@ def _produce_selected(project_id, plan):
             try:
                 prefs = Preferences.model_validate(plan.get('goal_preferences', {}).get(goal) or {**plan['confirmed_preferences'], 'goal':goal})
                 stage('制作' + labels[goal])
+                if (goal == 'highlight' and plan.get('confirmed_analysis') == 'subtitle'
+                        and (plan.get('local_evidence') or {}).get('commentary')):
+                    from backend.services.studio.game_highlights import subtitle_drafts
+                    drafts = subtitle_drafts(video, prefs, plan['source_duration'], instruction)
+                    store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
+                    result_count += len(drafts)
+                    succeeded_goals.append(goal)
+                    continue
                 if goal == 'content' or plan.get('confirmed_analysis', 'subtitle') == 'subtitle':
                     if subtitle_error is not None:
                         raise subtitle_error
@@ -2344,7 +2358,10 @@ def _produce_selected(project_id, plan):
                     raise visual_error
                 if events is None:
                     try:
-                        events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
+                        if plan.get('content_type') == 'gameplay' and goal == 'highlight':
+                            events, coverage = analyze(video, prefs, stage, instruction, gameplay=True)
+                        else:
+                            events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
                     except Exception as error:
                         # Both visual goals share one attempt, including its failure.
                         # A second paid scan requires a new explicit user confirmation.
