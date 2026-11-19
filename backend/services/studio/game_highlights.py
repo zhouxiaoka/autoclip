@@ -383,6 +383,33 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
     return [scene for _, scene in sorted(reviewed, key=lambda row: -row[0])]
 
 
+def _visible_goal_changes(tracks, frame_count):
+    """Locate a visible numeric objective independently of editorial nominations."""
+    if not isinstance(tracks, list):
+        return []
+    changes = []
+    for track in tracks[:2]:
+        if not isinstance(track, dict):
+            continue
+        label, mode, target = (track.get(k) for k in ("goal", "mode", "target"))
+        values = track.get("values")
+        if not (isinstance(label, str) and label.strip() and mode in ("reach", "rollover")
+                and type(target) is int and target > 0 and isinstance(values, list)
+                and len(values) == frame_count):
+            continue
+        for index, (old, new) in enumerate(zip(values, values[1:]), 1):
+            if not all(type(v) is int and v >= 0 for v in (old, new)):
+                continue
+            crossed = old < target <= new if mode == "reach" else (
+                old == target and new < old or old == target - 1 and new == 0 and new < old
+            )
+            if crossed:
+                changes.append({"before": index, "after": index + 1,
+                                "evidence": f"画面目标 {label[:100]}；状态读数 {old} → {new}，请核对转换。"})
+                break
+    return changes
+
+
 def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
     # A single whole-replay scan lets the loud ending compete with every quiet
     # objective before any candidate gets its own review frames.
@@ -398,14 +425,21 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
     audit = {}
     anchors = {pair.id: (peaks[0] - 3, peaks[0] + 3)} if pair else {}
     chapter_ranges = []
+    known_goals = []
     prompt = (
         "这是游戏长回放的一段。先读画面里的本场目标，再对照前后游戏状态，独立寻找本段最值得保留的至多两个事件。"
         "优先显式目标在本段达成、第一次触达上限、重大阶段切换、决胜、独特操作带来清晰结果。"
         "即使主播没有反应也要检查目标列表和状态栏是否对应；目标文字常驻本身不能证明完成。"
         "分数从较低值达到上限才算，本段从开头就维持上限不算。一般涨分升级、颜色轮换、"
         "常规堆叠、静止画面上离席或捂脸、上局结算接下一局均不单列。无独立事件返回空数组。"
+        "独立于events，把画面明确列出的数值目标（最多2项）记录到goal_tracks。只跟踪当前比赛实际统计栏，"
+        "不要把目标栏、历史最高分或例子当作当前读数。优先跟踪画面明确点名的等级/阶段转换，再跟踪分数。"
+        "每项目标含goal（照录画面原文）、target（目标整数）、mode（达标reach；目标要求计数绕回初值则rollover），"
+        "values为按帧号依次抄录该统计栏的一维数组，每帧一个整数。非纯十进制或看不清填null，长度须等于帧数。"
+        "这项只抄读数，即使events为空也要返回，数值从中间经过后又变化也要如实记录。无明确目标时返回空数组。"
         "before和after是同一事件变化前和变化后的帧序号（从1起），尽量选紧贴变化的两帧。"
-        "只返回 JSON 对象：{\"events\":[{\"before\":4,\"after\":5,\"evidence\":\"目标及前后可见证据\"}]}。"
+        "只返回 JSON 对象，包含goal_tracks及events两个数组。events项格式为"
+        "{\"before\":4,\"after\":5,\"evidence\":\"目标及前后可见证据\"}。"
     )
     if instruction:
         prompt += "\n用户制作要求（仅在画面支持时遵循）：" + instruction
@@ -416,10 +450,12 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
         # A lead-in lets the next chapter see what changed across the boundary.
         start = max(0, left - min(30, prefs.duration))
         stop = min(right, duration - .1)
-        times = [start + (stop - start) * i / 39 for i in range(40)]
+        times = [start + (stop - start) * i / 47 for i in range(48)]
         chapter_ranges.append([left, right])
         with tempfile.TemporaryDirectory(prefix="ac-game-chapter-") as tmp:
-            parts = [{"type": "text", "text": prompt}]
+            reminder = (" 之前看到的目标文字（仅在当前画面仍能核实时抄录）：" +
+                        json.dumps(known_goals, ensure_ascii=False)) if known_goals else ""
+            parts = [{"type": "text", "text": prompt + reminder}]
             frames = intelligence.sample(video, times, Path(tmp))
             index = 0
             for part in frames:
@@ -431,7 +467,12 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
         rows = response.get("events") if isinstance(response, dict) else None
         if not isinstance(rows, list):
             raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
-        for n, row in enumerate(rows[:2]):
+        tracks = response.get("goal_tracks")
+        changes = _visible_goal_changes(tracks, len(times))
+        if isinstance(tracks, list):
+            known_goals = [t["goal"][:100] for t in tracks[:2] if isinstance(t, dict)
+                           and isinstance(t.get("goal"), str)]
+        for n, row in enumerate(rows[:2] + changes):
             if not isinstance(row, dict):
                 raise ModelResponseInvalid("游戏分段提名格式无效，请重试")
             first, last, proof = row.get("before"), row.get("after"), row.get("evidence")

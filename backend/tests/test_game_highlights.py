@@ -333,3 +333,16 @@ def test_missing_dense_pair_still_needs_visual_confirmation(tmp_path, monkeypatc
     else:
         with pytest.raises(games.UserFacingError, match="独立成片"):
             games.analyze_game_chapters(tmp_path / "video", Preferences(), 900, "", None)
+
+
+def test_objective_readings_recover_quiet_changes_without_a_nomination():
+    tracks = [
+        {"goal": "Complete phase 12", "mode": "rollover", "target": 12,
+         "values": [10, 11, 12, 0, 1]},
+        {"goal": "Reach 500", "mode": "reach", "target": 500,
+         "values": [410, 430, 510, 515, 520]},
+    ]
+    assert [(x["before"], x["after"]) for x in games._visible_goal_changes(tracks, 5)] == [(3, 4), (2, 3)]
+    tracks[0]["values"] = [8, 0, 1, None, 0]
+    tracks[1]["values"] = [510, 520, 530, 540, 550]
+    assert games._visible_goal_changes(tracks, 5) == []
