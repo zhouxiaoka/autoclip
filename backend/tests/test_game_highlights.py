@@ -525,3 +525,16 @@ def test_commentary_review_requires_distinct_consequence(tmp_path, monkeypatch):
     assert [s.id for s in ranked] == ["champion", "bronze", "survival"]
     assert audit["plain"]["disposition"] == "routine"
     assert audit["guess"]["disposition"] != "selected"
+
+
+@pytest.mark.parametrize(("readings", "same_match", "expected"), [
+    ([5, 5, 5, 5, 6, 6, 7, 7], True, (5, 7)),
+    ([0, 0, None, 0, 0, 2, 2, 2], True, (0, 2)),
+    ([5, 5, 6, 6, 6, 6, 6, 6], True, None),
+    ([5, 5, 7, 0, 1, 1, 2, 2], True, None),
+    ([0, 0, 0, 1, 2, 2, 2, 2], False, None),
+    ([None]*6 + [0, 2], True, None),
+    ([0, 0, 0, 0, 0, 0, 0, 82], True, None),
+])
+def test_commentary_reads_the_players_elimination_tally(readings, same_match, expected):
+    assert games._elimination_change(readings, same_match) == expected
