@@ -665,8 +665,15 @@ def analyze_game_chapters(video, prefs, duration, instruction, on_stage):
         for old in kept:
             if row["outcome"] != audit[old.id]["outcome"]:
                 continue
-            a, b = anchors[scene.id]
-            c, d = anchors[old.id]
+            prior = audit[old.id]
+            if row.get("rollover_times") and prior.get("rollover_times"):
+                if row["objective"] != prior["objective"]:
+                    continue
+                a, b = row["rollover_times"]
+                c, d = prior["rollover_times"]
+            else:
+                a, b = anchors[scene.id]
+                c, d = anchors[old.id]
             if min(b, d) > max(a, c):
                 row["disposition"] = "duplicate"
                 break

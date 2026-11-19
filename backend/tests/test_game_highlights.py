@@ -417,7 +417,7 @@ def test_scout_milestone_must_show_the_named_rollover(monkeypatch, tmp_path):
             chapter += 1
             evidence = ("目标29 rollover，LEVEL从29回到00" if chapter == 1 else
                         "目标列表含29 rollover；LEVEL为A8，首次变为29，完成本段首次触达29级")
-            return {"events": [{"before": 13, "after": 15, "evidence": evidence}]}
+            return {"events": [{"before": 13, "after": 14, "evidence": evidence}]}
         ids = [p["text"].split("候选编号 ")[1].split("，")[0] for p in parts
                if p["type"] == "text" and p["text"].startswith("候选编号 ")]
         return {"reviews": [{"id": ident, "outcome": "milestone", "standalone": "independent",
@@ -429,6 +429,9 @@ def test_scout_milestone_must_show_the_named_rollover(monkeypatch, tmp_path):
     monkeypatch.setattr(intelligence, "vision_call_at", respond)
     scenes, coverage = games.analyze_game_chapters(tmp_path / "video", Preferences(duration=45), 800, "", None)
     assert len(scenes) == 1 and scenes[0].start < 400
+    same_reset = [r for r in coverage["selection"] if r["id"].startswith("chapter-1-")]
+    assert {r["disposition"] for r in same_reset} == {"selected", "duplicate"}
+    assert same_reset[0]["rollover_times"] == same_reset[1]["rollover_times"]
     rejected = next(r for r in coverage["selection"] if r["id"] == "chapter-2-1")
     assert rejected["disposition"] == "unconfirmed_goal"
 
