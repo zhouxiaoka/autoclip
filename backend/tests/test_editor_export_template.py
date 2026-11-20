@@ -303,3 +303,49 @@ def test_old_manual_draft_can_select_design_after_recovery(client, monkeypatch):
     assert response.status_code == 200 and response.json()['html_template'] == 'editorial'
     job = client.post('/studio/p1/drafts/d/export', json={'revision': response.json()['revision']})
     assert job.status_code == 200 and submitted[0][1]['html_template'] == 'editorial'
+
+
+def test_remake_freezes_composition_until_confirmation_and_export(client, monkeypatch, source):
+    from backend.services.studio import planning
+    submitted, _ = _capture(monkeypatch)
+    old = _draft(True).model_copy(update={'aspect': 'portrait', 'origin': 'subtitle-highlight',
+        'layout': 'blur', 'revision': 2}).model_dump()
+    old['id'] = 'first'
+    store.write('p1', {'drafts': [old], 'jobs': [], 'analysis': {'status': 'running'}, 'output_variants': []})
+    monkeypatch.setattr(planning, 'recommend', lambda *args: {'preferences': {'duration': 15}, 'overrides': {'html_template': 'editorial'}})
+    monkeypatch.setattr(jobs, 'mark_project', lambda *args, **kw: None)
+    from backend.services.studio.models import ImportOptions
+    jobs._inspect('p1', ImportOptions(duration=15, auto_start=False), None, None)
+    pending = store.read('p1')
+    assert pending['analysis']['status'] == 'awaiting_confirmation' and len(pending['drafts']) == 1
+    new = {**old, 'id': 'next', 'layout': 'crop', 'revision': 1}
+    jobs._add_confirmed_drafts(pending, [new, {**new, 'id': 'horizontal', 'aspect': 'landscape', 'layout': 'fit'}])
+    assert [d['layout'] for d in pending['drafts']] == ['blur', 'blur', 'fit']
+    store.write('p1', pending)
+    response = client.post('/studio/p1/drafts/next/export', json={'revision': 1})
+    assert response.status_code == 200
+    exported = next(j for j in store.read('p1')['jobs'] if j['draft_id'] == 'next')
+    assert exported['snapshot']['layout'] == 'blur' and submitted
+
+
+@pytest.mark.parametrize(('scene', 'layout'), [
+    ({'id': 's', 'start': 0, 'end': 1}, 'blur'),
+    ({'id': 's', 'start': 0, 'end': 1, 'crop_x': .25}, 'crop'),
+])
+def test_manual_portrait_highlight_needs_a_subject_position_to_auto_crop(scene, layout):
+    state = {'drafts': [], 'plan': {}}
+    raw = _draft(True).model_dump()
+    jobs._add_confirmed_drafts(state, [{**raw, 'origin': 'subtitle-highlight', 'aspect': 'portrait',
+                                       'layout': 'crop', 'scenes': [scene]}])
+    assert state['drafts'][0]['layout'] == layout
+
+
+def test_existing_project_can_remake_after_old_version_already_lost_the_edit():
+    base = {'origin': 'subtitle-highlight', 'aspect': 'portrait', 'scenes': [{'id': 's', 'start': 0, 'end': 1}]}
+    first = {**base, 'id': 'v1', 'revision': 2, 'layout': 'blur'}
+    second = {**base, 'id': 'v2', 'revision': 1, 'layout': 'crop'}
+    state = {'drafts': [first, second], 'attempts': [
+        {'kind': 'production', 'draft_ids': ['v1']}, {'kind': 'production', 'draft_ids': ['v2']} ]}
+    assert jobs._remake_layouts(state) == {'subtitle-highlight:portrait': 'blur'}
+    second.update(revision=2, layout='fit')
+    assert jobs._remake_layouts(state) == {'subtitle-highlight:portrait': 'fit'}

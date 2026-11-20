@@ -73,6 +73,8 @@ test('controller holds immediately and releases after delay', async () => {
     },
   })
 
+  const headerStates = []
+  ctrl.subscribe(value => headerStates.push(value))
   ctrl.syncProjects([{ status: 'processing' }])
   await ctrl.flush()
   assert.equal(ctrl.isHeld(), true)
@@ -82,7 +84,9 @@ test('controller holds immediately and releases after delay', async () => {
   await ctrl.flush()
   assert.equal(calls.length, 1)
 
-  ctrl.syncProjects([{ status: 'completed' }])
+  ctrl.syncProjects([{ status: 'pending', settings: { awaiting_confirmation: true } }])
+  assert.equal(ctrl.showsActivityLock(), false)
+  assert.equal(headerStates.at(-1), false)
   await ctrl.flush()
   assert.equal(calls.length, 1)
   assert.equal(timers.length, 1)
@@ -433,4 +437,14 @@ test('a late acquire cannot overwrite a release that was requested while it was 
   assert.equal(ctrl.lockState(), 'released')
   assert.equal(ctrl.isHeld(), false)
   assert.equal(ctrl.showsActivityLock(), false)
+})
+
+test('waiting for a studio confirmation is idle, including restored project records', () => {
+  const m = loadKeepAwake()
+  for (const handle of ['settings', 'processing_config']) {
+    assert.equal(m.projectIsProducing({ status: 'pending', [handle]: { awaiting_confirmation: true } }), false)
+    assert.equal(m.projectIsProducing({ status: 'pending', [handle]: { studio_generation_status: 'awaiting_confirmation' } }), false)
+  }
+  assert.equal(m.projectIsProducing({ status: 'processing', settings: { awaiting_confirmation: true, studio_generation_status: 'production' } }), true)
+  assert.equal(m.anyProjectProducing([{ status: 'pending', settings: { awaiting_confirmation: true } }, { status: 'processing' }]), true)
 })

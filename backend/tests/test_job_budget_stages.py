@@ -281,7 +281,7 @@ def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isol
     monkeypatch.setattr(jobs, '_posts_for', lambda *args: {})
     calls = []
     def slow(*args):
-        calls.append(args[0] == packaging.PROMPT)
+        calls.append((args[0] == packaging.PROMPT, job_budget.clip_job_read_timeout(1000)))
         while not job_budget.budget_expired():
             now[0] += 30
         raise JobDurationExceeded()
@@ -293,5 +293,7 @@ def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isol
     assert state['output_variants'][0]['status'] == 'queued'
     pack = state['drafts'][0]['packaging']
     assert pack['fallback'] and pack['cues'][0]['text'] == 'Source words remain available'
-    assert dispatched == ['ondemand-step-budget'] and calls == [True, False]
+    assert dispatched == ['ondemand-step-budget']
+    assert calls == [(True, 120), (True, 120), (False, 60)]
+    assert now[0] == 100.0 + packaging.PACKAGING_BUDGET_SEC
     assert pack['fallback_captions'] == 'source'

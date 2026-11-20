@@ -16,6 +16,7 @@ from typing import Any
 
 from backend.core.job_budget import (JobDurationExceeded, budget_expired, clip_job_active,
                                      clip_job_read_timeout, clip_step_budget)
+from backend.core.llm_stream import buffered_completion
 from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted, checkpoint
 from backend.services.studio.models import Packaging
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 PACKAGING_BUDGET_SEC = 300
 TRANSLATION_RESERVE_SEC = 60
+FIRST_STRUCTURED_LIMIT_SEC = 120
 
 CJK = re.compile(r'[㐀-鿿]')
 KANA = re.compile(r'[぀-ヿ]')
@@ -416,20 +418,29 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     reserve = 0
     if translate and clip_job_active():
         reserve = min(TRANSLATION_RESERVE_SEC, clip_job_read_timeout(PACKAGING_BUDGET_SEC) / 5)
+    structured_window = clip_job_read_timeout(PACKAGING_BUDGET_SEC) - reserve if clip_job_active() else 0
+    first_limit = min(FIRST_STRUCTURED_LIMIT_SEC, structured_window / 2) if structured_window >= 60 else None
+    retry_buffered = False
     can_translate = True
     for attempt in range(2):
         try:
             started = time.monotonic()
-            with clip_step_budget(PACKAGING_BUDGET_SEC, reserve_seconds=reserve) if reserve else nullcontext():
+            attempt_limit = first_limit if attempt == 0 else None
+            deadline = clip_step_budget(attempt_limit or PACKAGING_BUDGET_SEC, reserve_seconds=reserve) if attempt_limit or reserve else nullcontext()
+            with deadline:
                 try:
                     checkpoint()
-                    result = call(PROMPT, payload)
+                    with buffered_completion() if retry_buffered else nullcontext():
+                        result = call(PROMPT, payload)
                     checkpoint()
                 except JobDurationExceeded:
                     logger.warning('Packaging deadline phase=structured attempt=%d rows=%d elapsed_ms=%d',
                                    attempt + 1, len(lines), round((time.monotonic() - started) * 1000))
-                    if not reserve or not budget_expired():
+                    if not (attempt_limit or reserve) or not budget_expired():
                         raise
+                    if attempt_limit:
+                        retry_buffered = True
+                        continue
                     break
             return _stamp_cues(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes, captions))
         except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):

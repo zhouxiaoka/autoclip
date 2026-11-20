@@ -76,6 +76,12 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py backend/tests/test_orphan_reaper.py -q
+      - name: Recover a full package after a stalled HTTP 200 stream
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-packaging-recovery
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-packaging-recovery
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_packaging_budget.py -q
       - name: Store lock across processes (msvcrt.locking, #391 / R27 I414 I419 I425)
         env:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-store-lock

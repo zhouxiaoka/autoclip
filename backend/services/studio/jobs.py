@@ -2289,6 +2289,9 @@ def _inspect(project_id, options, url, browser):
         def awaiting_confirmation(data):
             from backend.services.studio.failure_identity import SCREENING_KEY, screening_identity
             screening = screening_identity(data.get('analysis'))
+            layouts = _remake_layouts(data)
+            if layouts:
+                plan['remake_layouts'] = layouts
             data.update(plan=plan, analysis={**screening, **({SCREENING_KEY: screening} if screening else {}), 'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
             if data.get('generation'):
                 data['generation']['status'] = 'awaiting_confirmation'
@@ -2392,10 +2395,50 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
     return state['analysis']['run_id']
 
 
+def _untracked_subtitle_crop(draft):
+    return (draft.get('origin') == 'subtitle-highlight' and draft.get('aspect') == 'portrait'
+            and draft.get('layout') == 'crop' and not any(
+                scene.get('crop_track') or scene.get('crop_x') is not None for scene in draft.get('scenes', [])))
+
+
+def _remake_layouts(data):
+    """Freeze the prior manual output's composition for each matching type and aspect."""
+    rounds = {draft_id: n for n, receipt in enumerate(data.get('attempts') or [])
+              if receipt.get('kind') == 'production' for draft_id in receipt.get('draft_ids') or []}
+    choices, priorities = {}, {}
+    for draft in data.get('drafts') or []:
+        if rounds and draft['id'] not in rounds:
+            continue
+        layout = draft.get('layout')
+        if layout not in ('fit', 'crop', 'blur', 'window'):
+            continue
+        edited = (draft.get('revision') or 1) > 1
+        if not edited and _untracked_subtitle_crop(draft):
+            continue
+        key = f"{draft.get('origin')}:{draft.get('aspect')}"
+        # Older releases may already have produced a later, untouched center crop.
+        # Prefer the most recent edited round, then the latest generated round.
+        priority = (edited, rounds.get(draft['id'], 0))
+        if key not in priorities or priority > priorities[key]:
+            priorities[key], choices[key] = priority, set()
+        if priority == priorities[key]:
+            choices[key].add(layout)
+    # Conflicting clip-specific edits cannot establish a project-wide default.
+    return {key: next(iter(layouts)) for key, layouts in choices.items() if len(layouts) == 1}
+
+
 def _add_confirmed_drafts(data, drafts):
     from backend.services.studio.template_choice import manual_draft_template
     choice = manual_draft_template(data)
     rows = [{**d, 'html_template': choice, 'updated_at': store.now()} for d in drafts]
+    layouts = (data.get('plan') or {}).get('remake_layouts') or {}
+    for row in rows:
+        layout = layouts.get(f"{row.get('origin')}:{row.get('aspect')}")
+        if layout:
+            row['layout'] = layout
+        elif _untracked_subtitle_crop(row):
+            # Timing from subtitles carries no evidence about where the speaker is on screen.
+            row['layout'] = 'blur'
     attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
     data['drafts'].extend(rows)
 
