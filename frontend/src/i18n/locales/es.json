@@ -1582,6 +1582,8 @@
   "发布文案已复制": "Texto de publicación copiado",
   "发布包已保存到下载文件夹": "Kit de publicación guardado en Descargas",
   "封面已用 AI 重新设计": "Portada rediseñada con IA",
+  "请先在设置里开启 AI 封面并选择图像模型": "Activa las portadas con IA y elige un modelo de imagen en Ajustes.",
+  "AI 封面未生成，已保留原封面": "No se pudo generar la portada con IA. Se ha conservado la portada anterior.",
   "AI 封面没有生成成功，可以在设置里检查图像模型": "No se creó la portada con IA; revisa el modelo de imagen en Ajustes",
   "简介": "Descripción",
   "话题": "Hashtags",

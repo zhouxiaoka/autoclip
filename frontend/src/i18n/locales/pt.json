@@ -1582,6 +1582,8 @@
   "发布文案已复制": "Texto do post copiado",
   "发布包已保存到下载文件夹": "Kit de publicação salvo em Downloads",
   "封面已用 AI 重新设计": "Capa refeita com IA",
+  "请先在设置里开启 AI 封面并选择图像模型": "Ative as capas com IA e escolha um modelo de imagem nas configurações.",
+  "AI 封面未生成，已保留原封面": "A geração da capa com IA falhou. A capa anterior foi mantida.",
   "AI 封面没有生成成功，可以在设置里检查图像模型": "A capa com IA não foi criada; verifique o modelo de imagem nas Configurações",
   "简介": "Descrição",
   "话题": "Hashtags",

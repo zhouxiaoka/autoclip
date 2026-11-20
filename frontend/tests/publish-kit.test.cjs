@@ -9,7 +9,7 @@ const publish=read('src/pages/PublishClipPage.tsx')
 
 test('every output card shows its publish kit and uses the designed cover as the poster',()=>{
  assert.match(card,/<PublishKit projectId=\{projectId\} variant=\{variant\}/)
- assert.match(card,/poster=\{variant\.cover \? studioApi\.variantCover\(projectId, variant\.id, coverStamp\) : undefined\}/)
+ assert.match(card,/poster=\{\(variant\.cover \|\| coverStamp\) \? studioApi\.variantCover\(projectId, variant\.id, coverStamp\) : undefined\}/)
  assert.match(api,/output-variants\/\$\{variantId\}\/kit/)
  assert.match(api,/api\.put\(`\/studio\/\$\{pid\}\/output-variants\/\$\{variantId\}\/post`, post\)/)
 })

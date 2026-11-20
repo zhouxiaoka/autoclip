@@ -212,7 +212,7 @@
 
 .studio-output-card .studio-post-body {
   gap: 10px;
-  min-height: 132px;
+  min-height: 0;
 }
 
 .studio-output-card .studio-post-cover {
@@ -267,22 +267,28 @@
   -webkit-line-clamp: 2;
 }
 
-.studio-output-card .studio-post-actions {
+.studio-post-edit label {
   display: grid;
-  gap: 2px 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 8px;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ac-sub);
 }
 
-.studio-output-card .studio-post-actions > * {
-  border-radius: 6px;
+.studio-post-edit .ac-textarea { resize: vertical; }
+.studio-output-card .studio-post-actions { gap: 8px 12px; }
+.studio-cover-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 10px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--ac-line);
   font-size: 12px;
-  justify-content: flex-start;
-  line-height: 1.4;
-  min-height: 30px;
-  padding: 5px 0;
-  text-align: left;
+  color: var(--ac-sub);
 }
+.studio-cover-tools .ac-btn { padding-inline: 0; }
+.studio-publish-tools > .ac-btn { width: 100%; }
 
 .studio-output-card .ac-card-foot {
   margin-top: auto;

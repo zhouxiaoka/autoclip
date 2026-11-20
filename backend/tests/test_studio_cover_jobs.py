@@ -107,6 +107,41 @@ def test_card_api_rejects_ai_when_image_model_is_disabled(client, monkeypatch):
     assert client.post('/studio/p1/output-variants/v/cover/ai').status_code == 409
 
 
+@pytest.mark.parametrize('allow_frame', [False, True])
+def test_redesign_returns_the_new_cover_over_http_with_optional_reference(client, monkeypatch, allow_frame):
+    import io
+    import json
+    from PIL import Image
+    from backend.core import image_providers
+
+    store.write('p1', _completed_output())
+    config = cover.CoverConfig(enabled=True, model='test-image', api_key='fixture', allow_send_frame=allow_frame)
+    monkeypatch.setattr(cover, 'load_config', lambda: config)
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
+    encoded = io.BytesIO()
+    Image.new('RGB', (48, 64), 'navy').save(encoded, 'PNG')
+    reference = encoded.getvalue()
+    args = ('p1', 'render', 'xiaohongshu')
+    publish_kit.frame_path(*args).write_bytes(reference)
+    publish_kit.cd_meta_path(*args).write_text(json.dumps({'lines': ['Headline'], 'accent': 0}))
+
+    def image_model(*, request, **_):
+        assert request.reference == (reference if allow_frame else None)
+        assert request.model == 'test-image'
+        return reference
+
+    monkeypatch.setattr(image_providers, 'generate_image', image_model)
+    monkeypatch.setattr(publish_kit, '_title_ok', lambda *_: True)
+    url = '/studio/p1/output-variants/v/cover'
+    job = client.post(url + '/ai')
+    assert job.status_code == 200 and job.json()['status'] == 'completed'
+    assert client.get(url + '/ai').json()['job_id'] == job.json()['job_id']
+    response = client.get(url)
+    assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
+    with Image.open(io.BytesIO(response.content)) as image:
+        assert image.size == (1080, 1440)
+
+
 def test_kit_http_download_cleans_up_the_archive(client, root, monkeypatch):
     from pathlib import Path
     store.write('p1', _completed_output())
