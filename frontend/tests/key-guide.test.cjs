@@ -221,7 +221,9 @@ test('key guide dialog rows keep labels outside a full-width control', () => {
   const prompt = fs.readFileSync(path.join(__dirname, '../src/features/settings/KeyGuidePrompt.tsx'), 'utf8')
   const css = fs.readFileSync(path.join(__dirname, '../src/ui/ac.css'), 'utf8')
   assert.match(prompt, /className="ac-rows ac-key-guide-fields"/)
-  assert.equal((prompt.match(/<Row stack wide /g) || []).length, 2)
+  for (const label of ['settings.key_guide.pick', 'settings.key_guide.endpoint', '模型 ID']) {
+    assert.ok(prompt.includes(`<Row stack wide label={t('${label}')}`), label)
+  }
   assert.equal(prompt.includes('className="ac-row"'), false)
   assert.equal(prompt.includes("width: '100%'"), false)
   assert.match(css, /\.ac-key-guide-fields \.ac-row-label \{[^}]*flex:\s*0 0 auto/)
