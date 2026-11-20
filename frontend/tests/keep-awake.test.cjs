@@ -73,6 +73,8 @@ test('controller holds immediately and releases after delay', async () => {
     },
   })
 
+  const headerStates = []
+  ctrl.subscribe(value => headerStates.push(value))
   ctrl.syncProjects([{ status: 'processing' }])
   await ctrl.flush()
   assert.equal(ctrl.isHeld(), true)
@@ -84,6 +86,7 @@ test('controller holds immediately and releases after delay', async () => {
 
   ctrl.syncProjects([{ status: 'pending', settings: { awaiting_confirmation: true } }])
   assert.equal(ctrl.showsActivityLock(), false)
+  assert.equal(headerStates.at(-1), false)
   await ctrl.flush()
   assert.equal(calls.length, 1)
   assert.equal(timers.length, 1)

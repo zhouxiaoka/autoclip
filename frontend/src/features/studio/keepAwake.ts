@@ -210,6 +210,8 @@ export function createKeepAwakeController(options: KeepAwakeControllerOptions = 
   }
 
   const recompute = () => {
+    // The header follows activity even while native release is delayed.
+    notify()
     if (!getEnabled() || anySource()) {
       clearTimer('release')
       kick()
