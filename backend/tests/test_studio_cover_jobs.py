@@ -52,8 +52,8 @@ def test_dispatch_failure_preserves_the_video_and_allows_retry(cover_state, monk
     assert jobs.request_ai_cover('p', 'v')['job_id'] != result['job_id']
 
 
-def test_no_model_task_without_permission_to_send_the_frame(cover_state, monkeypatch):
-    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=False))
+def test_no_model_task_when_image_generation_is_disabled(cover_state, monkeypatch):
+    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=False, configured=True, allow_send_frame=False))
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *_: pytest.fail('must not submit'))
     assert jobs.request_ai_cover('p', 'v') is None
     assert 'cover_job' not in cover_state['output_variants'][0]
@@ -87,9 +87,10 @@ def _completed_output():
         {'id': 'v', 'strategy_id': 'xiaohongshu', 'render_job_id': 'render', 'status': 'completed', 'cover': 'design'}]}
 
 
-def test_card_api_returns_and_polls_the_same_platform_cover_task(client, monkeypatch):
+@pytest.mark.parametrize('allow_frame', [True, False])
+def test_card_api_returns_and_polls_the_same_platform_cover_task(client, monkeypatch, allow_frame):
     store.write('p1', _completed_output())
-    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=True))
+    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=allow_frame))
     submitted = []
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *args, **kwargs: submitted.append(args))
     started = client.post('/studio/p1/output-variants/v/cover/ai')
@@ -99,9 +100,9 @@ def test_card_api_returns_and_polls_the_same_platform_cover_task(client, monkeyp
     assert len(submitted) == 1
 
 
-def test_card_api_rejects_ai_when_frames_may_not_be_sent(client, monkeypatch):
+def test_card_api_rejects_ai_when_image_model_is_disabled(client, monkeypatch):
     store.write('p1', _completed_output())
-    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=False))
+    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=False, configured=True, allow_send_frame=False))
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *_: pytest.fail('must not submit'))
     assert client.post('/studio/p1/output-variants/v/cover/ai').status_code == 409
 

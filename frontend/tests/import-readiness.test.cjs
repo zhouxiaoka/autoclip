@@ -162,6 +162,16 @@ function button(tree, label) {
   return tree.find(node => node.type === 'button' && node.props?.children === label)
 }
 
+test('optional vision leaves a configured import ready to generate without a status strip', async () => {
+  const view = render({ report: report({
+    analysis: { ...check(true, 'configured', 'none'), label: 'qwen-plus' },
+    visual: { ...check(true, 'optional', 'none'), label: '未启用' },
+  }) })
+  assert.equal(view.tree.some(node => node.type === 'readiness-line' || node.props?.className === 'studio-readiness'), false)
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 1)
+})
+
 test('the banner installs whisper and blocks an unready import', async () => {
   const failing = report({
     transcription: check(false, 'whisper_not_installed', 'install_whisper'),
@@ -338,9 +348,11 @@ test('R21: the desktop follows the backend skippable flag instead of inferring t
   const missing = check(false, 'whisper_not_installed', 'install_whisper')
   const skippable = { ...report({ transcription: { ...missing, skippable: true } }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(skippable, false, true, { source: 'file' }), null)
+  assert.equal(readiness.visibleIssues(skippable, false, { source: 'file' }).length, 0)
   // visual mode without the flag (e.g. no vision model): blocked like any other missing transcriber
   const visualOnly = { ...report({ transcription: missing }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(visualOnly, false, true, { source: 'file' }), 'transcription')
+  assert.equal(readiness.visibleIssues(visualOnly, false, { source: 'file' })[0].key, 'transcription')
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/importReadiness.ts'), 'utf8')
   assert.doesNotMatch(source, /analysis_mode === 'visual'/)
 })

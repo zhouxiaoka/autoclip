@@ -513,3 +513,26 @@ def test_unexpected_image_programming_failure_is_not_hidden_as_network(data_dir,
     with pytest.raises(RuntimeError, match='synthetic programming defect'):
         generate_image(provider='openai', api_key='synthetic-key', base_url='',
                        request=ImageRequest('cover', 1080, 1920), session=DefectiveSession())
+
+
+def test_reopening_an_export_reuses_its_running_cover_job(data_dir, monkeypatch):
+    from backend.services import cover
+    from threading import Event
+    started, finish = Event(), Event()
+    def generate(**kwargs):
+        started.set()
+        assert finish.wait(5)
+        return {'ok': True}
+    monkeypatch.setattr(cover, 'generate_cover', generate)
+    first = cover.start_generate(project_id='p1', clip_id='studio-test', title='Saved title')
+    try:
+        assert started.wait(3)
+        second = cover.start_generate(project_id='p1', clip_id='studio-test', title='Saved title')
+        assert second['job_id'] == first['job_id']
+    finally:
+        finish.set()
+        import time
+        deadline = time.monotonic() + 3
+        while cover.get_job(first['job_id'])['status'] == 'running' and time.monotonic() < deadline:
+            time.sleep(.01)
+    assert cover.get_job(first['job_id'])['status'] == 'completed'

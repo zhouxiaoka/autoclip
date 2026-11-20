@@ -15,7 +15,7 @@ import subprocess
 import threading
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +48,8 @@ PLATFORMS = {
 }
 CONTENT_TYPES = ("knowledge", "interview", "game", "vlog", "general")
 _jobs: dict[str, dict[str, Any]] = {}
-_jobs_lock = threading.Lock()
+_jobs_lock = threading.RLock()
+_active_requests: dict[tuple, str] = {}
 _cancel: dict[str, threading.Event] = {}
 
 
@@ -399,7 +400,7 @@ def build_prompt(
     if has_reference:
         lines.append("以参考图为背景，保留人物、服装、场景，只在合适位置叠加标题。")
     else:
-        lines.append("背景简洁有氛围，服务标题，不要喧宾夺主。")
+        lines.append("根据标题选一个能表达主题的视觉意象，用编辑插画或静物构图。不要虚构受访者的脸或身份。")
     return "\n".join(lines)
 
 
@@ -651,15 +652,17 @@ def generate_cover(
         try:
             if cancel is not None and cancel.is_set():
                 raise CoverError("已取消")
-            generated = generate_image(
-                provider=cfg.provider,
-                api_key=cfg.api_key,
-                base_url=cfg.base_url,
-                request=request,
-                session=session,
-                cancel=cancel,
-                poll_interval=poll_interval,
-            )
+            options = dict(provider=cfg.provider, api_key=cfg.api_key, base_url=cfg.base_url,
+                           session=session, cancel=cancel, poll_interval=poll_interval)
+            try:
+                generated = generate_image(request=request, **options)
+            except ImageError as error:
+                if not send_frame or not error.unsupported_edit:
+                    raise
+                send_frame = False
+                prompt = build_prompt(title_lines=lines, subtitle=sub_text, badge=badge_text,
+                                      platform=platform, content_type=kind, has_reference=False)
+                generated = generate_image(request=replace(request, reference=None, prompt=prompt), **options)
             fitted = fit_jpeg(generated, spec["width"], spec["height"])
             ok_text = True
             if cfg.ocr_model or cfg.provider:
@@ -711,9 +714,6 @@ def generate_cover(
         except ImageError as exc:
             warning, warning_detail = _image_fallback(exc)
             logger.warning("封面生图失败: %s", exc)
-            if getattr(exc, "unsupported_edit", False) and frame is not None:
-                # 不能图生图：背景用截帧，本地写字
-                pass
             if frame is not None:
                 try:
                     jpeg = overlay_title(
@@ -749,7 +749,12 @@ def generate_cover(
         raise CoverError("已取消")
 
     out = cover_path(project_id, clip_id, platform)
-    out.write_bytes(jpeg)
+    temporary = out.with_name(f'.{out.name}.{uuid.uuid4().hex}.tmp')
+    try:
+        temporary.write_bytes(jpeg)
+        os.replace(temporary, out)
+    finally:
+        temporary.unlink(missing_ok=True)
     meta = {
         "method": method,
         "title": title_text,
@@ -835,31 +840,24 @@ def start_generate(
     content_type: str | None = None,
     force_local: bool = False,
 ) -> dict[str, Any]:
-    job_id = str(uuid.uuid4())
-    event = threading.Event()
-    _cancel[job_id] = event
-    _remember_job({
-        "job_id": job_id,
-        "status": "queued",
-        "project_id": project_id,
-        "clip_id": clip_id,
-        "platform": normalize_platform(platform),
-    })
-    threading.Thread(
-        target=_run_job,
-        args=(job_id, {
-            "project_id": project_id,
-            "clip_id": clip_id,
-            "platform": platform,
-            "title": title,
-            "subtitle": subtitle,
-            "badge": badge,
-            "content_type": content_type,
-            "force_local": force_local,
-        }),
-        daemon=True,
-        name=f"cover-{job_id[:8]}",
-    ).start()
+    params = dict(project_id=project_id, clip_id=clip_id, platform=normalize_platform(platform),
+                  title=title, subtitle=subtitle, badge=badge, content_type=content_type, force_local=force_local)
+    key = tuple(params.items())
+    with _jobs_lock:
+        active = _jobs.get(_active_requests.get(key))
+        if active and active['status'] in ('queued', 'running'):
+            return {"ok": True, "job_id": active['job_id'], "status": active['status']}
+        job_id = str(uuid.uuid4())
+        _remember_job(dict(job_id=job_id, status='queued', project_id=project_id, clip_id=clip_id, platform=params['platform']))
+        _cancel[job_id] = threading.Event()
+        _active_requests[key] = job_id
+        try:
+            threading.Thread(target=_run_job, args=(job_id, params), daemon=True, name=f"cover-{job_id[:8]}").start()
+        except RuntimeError:
+            _active_requests.pop(key, None)
+            _cancel.pop(job_id, None)
+            _remember_job({**_jobs[job_id], 'status': 'failed'})
+            raise
     return {"ok": True, "job_id": job_id, "status": "queued"}
 
 
@@ -898,4 +896,8 @@ def _run_job(job_id: str, params: dict[str, Any]) -> None:
         job.update(status="failed", error=user_visible_error(exc))
         _remember_job(job)
     finally:
-        _cancel.pop(job_id, None)
+        with _jobs_lock:
+            key = tuple(params.items())
+            if _active_requests.get(key) == job_id:
+                _active_requests.pop(key)
+            _cancel.pop(job_id, None)

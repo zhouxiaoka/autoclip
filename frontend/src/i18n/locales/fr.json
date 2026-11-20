@@ -1,4 +1,8 @@
 {
+  "导出时自动生成": "Créée à l’exportation",
+  "下载封面": "Télécharger la couverture",
+  "封面已保存": "Couverture enregistrée",
+  "封面生成失败，请重试": "La création de la couverture a échoué. Réessayez.",
   "部分包装未完整生成，详情见下方成片。": "Certains éléments de mise en forme sont incomplets. Consultez les vidéos ci-dessous pour plus de détails.",
   "把长视频剪成精彩片段": "Tirez des extraits\nde vos vidéos",
   "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Importez une vidéo ou collez un lien. L’IA repère les moments à partager.",

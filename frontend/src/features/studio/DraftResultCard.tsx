@@ -5,6 +5,7 @@ import { Btn, Icon, fmtDuration } from '../../ui'
 import { studioApi } from './api'
 import { draftExportState, type ExportStatus } from './draftExportState'
 import StudioDownloadLink from './StudioDownloadLink'
+import { ExportCoverButton } from './ExportCover'
 import { Draft, RenderJob, draftDuration, languages } from './types'
 
 const statusLabels: Record<ExportStatus, string> = {
@@ -49,6 +50,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
     </div>
     <div className="studio-draft-actions">
       {completed && <StudioDownloadLink className="ac-btn ac-btn--cta ac-btn--sm" projectId={projectId} jobId={completed.job_id} />}
+      {completed && <ExportCoverButton projectId={projectId} job={completed} />}
       {active ? <Btn size="sm" onClick={onHistory}>{t('查看进度')}</Btn>
         : !completed && allowExport && <Btn size="sm" variant="cta" onClick={onExport}>{t(status === 'failed' ? '重试导出' : '导出成片')}</Btn>}
       <Btn size="sm" onClick={onEdit}>{t('预览与修改')}</Btn>
