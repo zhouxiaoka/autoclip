@@ -338,3 +338,14 @@ def test_manual_portrait_highlight_needs_a_subject_position_to_auto_crop(scene, 
     jobs._add_confirmed_drafts(state, [{**raw, 'origin': 'subtitle-highlight', 'aspect': 'portrait',
                                        'layout': 'crop', 'scenes': [scene]}])
     assert state['drafts'][0]['layout'] == layout
+
+
+def test_existing_project_can_remake_after_old_version_already_lost_the_edit():
+    base = {'origin': 'subtitle-highlight', 'aspect': 'portrait', 'scenes': [{'id': 's', 'start': 0, 'end': 1}]}
+    first = {**base, 'id': 'v1', 'revision': 2, 'layout': 'blur'}
+    second = {**base, 'id': 'v2', 'revision': 1, 'layout': 'crop'}
+    state = {'drafts': [first, second], 'attempts': [
+        {'kind': 'production', 'draft_ids': ['v1']}, {'kind': 'production', 'draft_ids': ['v2']} ]}
+    assert jobs._remake_layouts(state) == {'subtitle-highlight:portrait': 'blur'}
+    second.update(revision=2, layout='fit')
+    assert jobs._remake_layouts(state) == {'subtitle-highlight:portrait': 'fit'}

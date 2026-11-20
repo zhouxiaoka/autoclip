@@ -2374,19 +2374,34 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
     return state['analysis']['run_id']
 
 
+def _untracked_subtitle_crop(draft):
+    return (draft.get('origin') == 'subtitle-highlight' and draft.get('aspect') == 'portrait'
+            and draft.get('layout') == 'crop' and not any(
+                scene.get('crop_track') or scene.get('crop_x') is not None for scene in draft.get('scenes', [])))
+
+
 def _remake_layouts(data):
     """Freeze the prior manual output's composition for each matching type and aspect."""
-    ids = next((set(a['draft_ids']) for a in reversed(data.get('attempts') or [])
-                if a.get('draft_ids') and a.get('kind') == 'production'), None)
-    choices = {}
+    rounds = {draft_id: n for n, receipt in enumerate(data.get('attempts') or [])
+              if receipt.get('kind') == 'production' for draft_id in receipt.get('draft_ids') or []}
+    choices, priorities = {}, {}
     for draft in data.get('drafts') or []:
-        if ids is not None and draft['id'] not in ids:
+        if rounds and draft['id'] not in rounds:
             continue
         layout = draft.get('layout')
         if layout not in ('fit', 'crop', 'blur', 'window'):
             continue
+        edited = (draft.get('revision') or 1) > 1
+        if not edited and _untracked_subtitle_crop(draft):
+            continue
         key = f"{draft.get('origin')}:{draft.get('aspect')}"
-        choices.setdefault(key, set()).add(layout)
+        # Older releases may already have produced a later, untouched center crop.
+        # Prefer the most recent edited round, then the latest generated round.
+        priority = (edited, rounds.get(draft['id'], 0))
+        if key not in priorities or priority > priorities[key]:
+            priorities[key], choices[key] = priority, set()
+        if priority == priorities[key]:
+            choices[key].add(layout)
     # Conflicting clip-specific edits cannot establish a project-wide default.
     return {key: next(iter(layouts)) for key, layouts in choices.items() if len(layouts) == 1}
 
@@ -2400,9 +2415,7 @@ def _add_confirmed_drafts(data, drafts):
         layout = layouts.get(f"{row.get('origin')}:{row.get('aspect')}")
         if layout:
             row['layout'] = layout
-        elif (row.get('origin') == 'subtitle-highlight' and row.get('aspect') == 'portrait'
-              and row.get('layout') == 'crop' and not any(
-                  scene.get('crop_track') or scene.get('crop_x') is not None for scene in row.get('scenes', []))):
+        elif _untracked_subtitle_crop(row):
             # Timing from subtitles carries no evidence about where the speaker is on screen.
             row['layout'] = 'blur'
     attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
