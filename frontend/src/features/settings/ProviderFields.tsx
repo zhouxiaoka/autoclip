@@ -74,7 +74,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             placeholder={connection.has_key ? t('已保存；留空则不改') : preset?.placeholder || 'sk-…'}
             onPaste={event => {
               const text = event.clipboardData?.getData('text') || ''
-              if (text && offerPastedKey(text, key || connection.provider)) event.preventDefault()
+              if (text && offerPastedKey(text, key || connection.provider, connection.base_url)) event.preventDefault()
             }}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />

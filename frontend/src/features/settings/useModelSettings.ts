@@ -12,7 +12,7 @@ import { recommendProviderSetup } from './providerModelSetup'
 import { applyModelDefaults } from './modelDefaults'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
-import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
+import { assignAnalysis, catalogDraftConnection, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, IMAGE_MODEL_IN_ANALYSIS, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
@@ -699,10 +699,6 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       message.error(t('settings.key_guide.keep'))
       return { ok: false, blocked: true }
     }
-    if (plan.action === 'unchanged') {
-      stagePendingSelect(custom ? `custom:${plan.connectionId}` : request.providerId)
-      return { ok: true, connectionId: plan.connectionId }
-    }
     let next = current
     let connectionId = ''
     if (plan.action === 'create' && plan.custom) {
@@ -718,16 +714,14 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       next = applyCustomProvider(current, draft)
       connectionId = next.connections[next.connections.length - 1]?.id || ''
     } else if (plan.action === 'create' && preset) {
-      const ensured = ensureCatalogConnection(current, preset)
-      next = ensured.settings
-      const created = ensured.connection
-      if (!created) return { ok: false }
-      connectionId = created.id
-      next = logic.editConnection(next, created.id, { api_key: plan.apiKey })
-      if (next.analysis?.connection_id === created.id && !next.analysis.model) {
-        const model = preset.default_model || preset.candidates?.analysis?.[0] || ''
-        if (model) next = { ...next, analysis: { ...next.analysis, model, model_source: 'preset' } }
-      }
+      const draft = catalogDraftConnection(preset, crypto.randomUUID())
+      if (!draft) return { ok: false }
+      connectionId = draft.id
+      const connection = { ...draft, api_key: plan.apiKey, has_key: true }
+      next = { ...current, connections: [...current.connections, connection] }
+      if (!next.analysis && preset.capabilities.includes('language')) next = assignAnalysis(next, connection)
+    } else if (plan.action === 'unchanged') {
+      connectionId = plan.connectionId
     } else if (plan.action === 'update') {
       connectionId = plan.connectionId
       const patch: Partial<Connection> = { api_key: plan.apiKey }
@@ -735,9 +729,25 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       next = logic.editConnection(current, plan.connectionId, patch)
     }
     const connection = next.connections.find(item => item.id === connectionId)
+    if (connection && preset?.capabilities.includes('language') && (!next.analysis || next.analysis.connection_id === connection.id)
+        && !next.analysis?.model) {
+      const binding = logic.cleanBinding(connection.id)
+      const model = request.model?.trim() || preset.default_model || preset.candidates.analysis[0]
+      next = { ...next, analysis: { ...binding, model: model || '', model_source: request.model?.trim() ? 'user' : 'preset' } }
+      if (!model) {
+        try {
+          const list = await modelSettingsApi.discover(connection, true)
+          const matched = recommendProviderSetup(next, connection, list)
+          if (matched?.analysis) next = { ...next, analysis: matched.analysis }
+          setLists(old => ({ ...old, [connection.id]: list }))
+        } catch {
+          // Keep the draft editable. The normal save guard asks for a manual model ID.
+        }
+      }
+    }
     const bound = logic.validationTargets(next).some(item => item.connection.id === connectionId)
     if (connection && !bound) {
-      const model = preset?.default_model || preset?.candidates?.analysis?.[0] || (custom ? 'gpt-4o-mini' : '')
+      const model = preset?.default_model || preset?.candidates?.analysis?.[0] || request.model?.trim() || (custom ? 'gpt-4o-mini' : '')
       if (model) {
         const result = await probe(connection, model, false, 'analysis')
         emitValidation(connection, result)

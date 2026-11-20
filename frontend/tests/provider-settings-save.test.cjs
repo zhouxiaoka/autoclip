@@ -2,9 +2,11 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
-function settingsHook(initial, transport, requireCloudTranscription = false) {
+function settingsHook(initial, transport, requireCloudTranscription = false, guideBus) {
   let cursor = 0
   const slots = []
+  const mountEffects = []
+  let mounted = false
   const react = {
     useState(value) {
       const i = cursor++
@@ -16,10 +18,11 @@ function settingsHook(initial, transport, requireCloudTranscription = false) {
       if (!(i in slots)) slots[i] = { current: value }
       return slots[i]
     },
-    useEffect() {},
+    useEffect(fn, deps) { if (guideBus && !mounted && deps?.length === 0) mountEffects.push(fn) },
   }
   const hook = loadTs('useModelSettings.ts', {
     react,
+    ...(guideBus && { './keyGuideBus': guideBus }),
     antd: { message: { success() {}, error() {} } },
     '../../i18n': { t: text => text },
     '../studio/api': { errorText: () => 'redacted' },
@@ -41,7 +44,13 @@ function settingsHook(initial, transport, requireCloudTranscription = false) {
       bindingCapability: () => 'text',
     },
   })
-  return () => { cursor = 0; return hook.useModelSettings('settings_model', requireCloudTranscription) }
+  return () => {
+    cursor = 0
+    const store = hook.useModelSettings('settings_model', requireCloudTranscription)
+    mounted = true
+    for (const effect of mountEffects.splice(0)) effect()
+    return store
+  }
 }
 
 const whisperSettings = () => ({
@@ -183,4 +192,47 @@ test('catalog tests and first save use the chosen model, and saving never starts
   assert.deepEqual(calls.slice(2), [['changed-model', 'quick']])
   assert.equal(writes[1].connections[0].validation_status, 'transient')
   assert.equal(writes[1].connections[0].api_key, 'fixture')
+})
+
+test('OpenRouter key guide discovers an analysis model before the first save (#621)', async () => {
+  const initial = { ...whisperSettings(), saved: false, analysis: null, connections: [] }
+  const bus = loadTs('keyGuideBus.ts')
+  const model = 'nvidia/nemotron-3-ultra-550b-a55b'
+  const probes = [], writes = []
+  const render = settingsHook(initial, {
+    discover: async () => ({ source: 'live', models: [{ id: model, analysis: true, capability: 'text' }] }),
+    test: async (connection, id) => { probes.push([connection.base_url, id]); return { ok: true } },
+    save: async value => { writes.push(value); return { ...value, saved: true } },
+  }, false, bus)
+  render()
+  await new Promise(resolve => setImmediate(resolve))
+  render()
+  const url = 'https://openrouter.ai/api/v1'
+  const result = await bus.commitKeyGuide({ providerId: 'openrouter', apiKey: 'fixture', baseUrl: url, overwrite: false })
+  assert.equal(result.ok, true)
+  assert.deepEqual(probes, [[url, model]])
+  assert.equal(writes[0].analysis.model, model)
+  assert.equal(writes[0].connections[0].api_key, 'fixture')
+})
+
+test('OpenRouter guide keeps a missing model editable, then saves a manual ID on retry', async () => {
+  const bus = loadTs('keyGuideBus.ts')
+  const writes = [], probes = []
+  const render = settingsHook({ ...whisperSettings(), saved: false, connections: [], analysis: null }, {
+    discover: async () => ({ source: 'catalog', preview: true, models: [] }),
+    test: async (connection, model) => { probes.push(model); return { ok: true } },
+    save: async value => { writes.push(value); return { ...value, saved: true } },
+  }, false, bus)
+  render()
+  await new Promise(resolve => setImmediate(resolve))
+  render()
+  const request = { providerId: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'fixture', overwrite: false }
+  assert.equal((await bus.commitKeyGuide(request)).ok, false)
+  assert.equal(writes.length, 0)
+  assert.deepEqual(probes, [])
+  render()
+  assert.equal((await bus.commitKeyGuide({ ...request, model: 'vendor/manual' })).ok, true)
+  assert.deepEqual(probes, ['vendor/manual'])
+  assert.equal(writes[0].analysis.model_source, 'user')
+  assert.equal(writes[0].connections.length, 1)
 })
