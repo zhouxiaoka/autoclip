@@ -130,7 +130,6 @@ function studioMocks(templates) {
     '../../analytics/experience': { trackExperience() {} },
     './TemplatePicker': { default: () => h('h2', null, '剪辑风格'), templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
-    './ReadinessLine': { default: 'readiness-line' },
     './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: () => null },
