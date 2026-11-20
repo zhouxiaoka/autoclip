@@ -562,3 +562,24 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     assert.ok(flatten(tree).some(n => n.type === 'button' && /one_click|一键获取/.test(textOf(n))))
   }
 })
+
+test('pasting an OpenRouter key into its compatible connection stays in the field (#621)', () => {
+  const watch = loadTs('keyGuideWatch.ts', {
+    '../../utils/desktopMode': {}, './keyGuideBus': { publishOffer() {} },
+  })
+  watch.setKeyGuideTargets([{ id: 'openrouter', hosts: ['openrouter.ai'] }])
+  const Fields = loadTs('ProviderFields.tsx', {
+    react: { ...React, useState: () => [false, () => {}] },
+    antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
+    '../../i18n': i18n, '../../ui': ui, '../../utils/externalLinks': {}, '../../analytics/events': {},
+    './keyGuideWatch': watch,
+  }).default
+  for (const [base_url, intercept] of [['https://openrouter.ai/api/v1', false], ['https://other.example/v1', true]]) {
+    const connection = { id: 'gateway', name: 'Gateway', provider: 'compatible', base_url }
+    const tree = Fields({ connection, hideProvider: true, placement: 'settings_model', onEdit() {} })
+    const input = flatten(tree).find(node => node.type === 'password')
+    let prevented = false
+    input.props.onPaste({ clipboardData: { getData: () => 'sk-or-v1-fixture-only-abcdefghijklmnopqrstuvwxyz' }, preventDefault() { prevented = true } })
+    assert.equal(prevented, intercept)
+  }
+})

@@ -110,7 +110,7 @@ test('a receipt for this run wins over a placeholder generation', () => {
   assert.equal(resolved.error_code, 'job_budget')
   assert.equal(resolved.failure_stage, 'analyze')
   const mismatched = resolveFailureCause({
-    analysis: { error_code: 'rate_limited', failure_stage: 'production', error: '提供商限制了请求频率或额度，请检查配额并稍后重试。' },
+    analysis: { error_code: 'rate_limited', failure_stage: 'production', error: '请求过于频繁，请稍后重试。' },
     generation: { error_code: 'validation', error: '没有自动生成的成片，可选择备选片段继续生成' },
     receipt: null,
   })

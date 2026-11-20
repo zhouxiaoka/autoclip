@@ -110,6 +110,7 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
                 </span>
               )}
             />
+            <p className="ac-note">{t('settings.providers.test_cost')}</p>
             {(() => {
               const fix = analysisImageMisconfig(settings)
               if (!fix) return null

@@ -39,6 +39,7 @@ from backend.core.upstream_errors import (
     UPSTREAM_ERROR_TYPES,
     ClassifiedUpstreamError,
     UpstreamErrorType,
+    classify_provider_429,
     classify_upstream_error,
     hint_key_for,
     is_retryable,
@@ -296,8 +297,10 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     status = response.status_code
     text = response.text or ''
     upstream = symbolic_error_code(text[:4000])
-    if response.status_code == 429 or 500 <= response.status_code <= 599:
-        return _with_detail(_as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE), status, upstream_code=upstream)
+    if status == 429:
+        return _with_detail(classify_provider_429(text[:4000]), status, upstream_code=upstream)
+    if 500 <= status <= 599:
+        return _with_detail(_as_type(UpstreamErrorType.UPSTREAM_UNAVAILABLE), status, upstream_code=upstream)
     content_type = (response.headers.get('content-type') or '').lower()
     html = _html_or_classify(response.status_code, text[:4000], content_type)
     if html:

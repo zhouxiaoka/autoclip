@@ -11,7 +11,7 @@ const translate = (key, values) => values
   ? String(key).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name) => values[name] == null ? '' : String(values[name]))
   : key
 const TIMEOUT = '模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。'
-const RATE = '提供商限制了请求频率或额度，请检查配额并稍后重试。'
+const RATE = '请求过于频繁，请稍后重试。'
 
 function renderCard(project, connectionCount) {
   const buttons = []

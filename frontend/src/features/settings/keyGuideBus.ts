@@ -12,6 +12,7 @@ export type KeyOffer = {
 }
 
 export type KeyGuideRequest = {
+  model?: string
   providerId: string
   apiKey: string
   baseUrl: string

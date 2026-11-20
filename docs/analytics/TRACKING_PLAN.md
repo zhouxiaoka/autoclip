@@ -251,7 +251,7 @@ multiIf(
 | `import_blocked` | `reason` | 未配置就被导入挡住 |
 | `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；一键配置多个用途只计一次保存，连接探测仍按账号计数 |
 | `provider_connection_test_requested` / `_finished` | `provider`, `outcome`（finished） | 现有连接测试 |
-| `provider_validation_finished` | `provider`, `result` | **线 B 主事件**：保存前真实小请求。`result`=`success`/`failed`/`skipped`；失败带 `upstream_error_type`、`base_url_host`。1.5s 内完全相同的结果只发一次；保存和连接测试本身不采样 |
+| `provider_validation_finished` | `provider`, `result` | **线 B 主事件**：统计实际发出的验证请求。保存复用匹配结果时不新增事件，样本试跑由用户主动触发。`result`=`success`/`failed`/`skipped`；失败带 `upstream_error_type`、`base_url_host`。1.5s 内完全相同的结果只发一次；保存和连接测试本身不采样 |
 
 ### 5.3 导入
 

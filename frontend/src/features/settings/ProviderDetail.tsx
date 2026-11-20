@@ -189,6 +189,7 @@ export default function ProviderDetail({
 
             {canTest && connection && (
               <div className="ac-provider-test-row">
+                <p className="ac-note">{t('settings.providers.test_cost')}</p>
                 {persisted && <><p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
                   <Btn variant="cta" size="sm" disabled={testDisabled || m.saving} onClick={() => void m.configureProvider(persisted)}>{t('一键配置模型')}</Btn></>}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

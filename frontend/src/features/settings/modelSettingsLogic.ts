@@ -70,20 +70,21 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
   if (typeof next.api_key === 'string') next.api_key = next.api_key.trim()
   if (typeof next.base_url === 'string') next.base_url = collapseSpaces(next.base_url)
   if (typeof next.image_base_url === 'string') next.image_base_url = collapseSpaces(next.image_base_url)
-  const changedAddress = next.base_url !== undefined || next.image_base_url !== undefined
-  const changedCreds = changedAddress || next.api_key !== undefined
   return {
     ...s,
     connections: s.connections.map(c => {
       if (c.id !== id) return c
+      const changedBase = next.base_url !== undefined && next.base_url !== c.base_url
+      const changedAddress = changedBase || (next.image_base_url !== undefined && next.image_base_url !== c.image_base_url)
+      const changedCreds = changedAddress || (next.api_key !== undefined && next.api_key !== c.api_key)
       const merged = {
         ...c,
         ...next,
         ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
-        ...(typeof next.api_key === 'string' && next.api_key ? { has_key: true } : {}),
+        ...(typeof next.api_key === 'string' ? { has_key: !!next.api_key } : {}),
         ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '' } : {}),
       }
-      if (next.base_url !== undefined) {
+      if (changedBase) {
         merged.base_url_source = c.provider === 'compatible' || merged.base_url ? 'user' : 'preset'
       }
       return merged

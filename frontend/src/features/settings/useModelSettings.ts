@@ -12,7 +12,7 @@ import { recommendProviderSetup } from './providerModelSetup'
 import { applyModelDefaults } from './modelDefaults'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
-import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
+import { assignAnalysis, catalogDraftConnection, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, IMAGE_MODEL_IN_ANALYSIS, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
@@ -53,6 +53,17 @@ function failureCopy(result: ValidationResult, model?: string) {
 }
 
 
+function probeVision(settings: ModelSettings, role: Role, lists: Record<string, ModelList>) {
+  return role === 'vision' || (role === 'analysis' && (settings.analysis_mode === 'visual'
+    || (settings.analysis_mode === 'auto' && bindingCapability(settings.analysis, lists) === 'multimodal')))
+}
+
+/** Compare validation inputs only in memory. Never send this signature to analytics or persistence. */
+function probeSignature(connection: Connection, model: string, vision: boolean, role: Role) {
+  return JSON.stringify([connection.id, connection.provider, connection.catalog_provider_id, connection.base_url,
+    connection.image_base_url, connection.image_api, connection.api_key, !!connection.has_key, model, vision, role])
+}
+
 /**
  * One editable copy of the AI model document, shared by the settings page and the first-run card.
  * Editing a key or address triggers one debounced discovery; recommendations fill empty slots only.
@@ -81,6 +92,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const listsRef = useRef(lists)
   listsRef.current = lists
   settingsRef.current = settings
+  const tested = useRef(new Map<string, string>())
   const savedRef = useRef<ModelSettings | null>(null)
   // Signature of the last loaded or saved document. The post-load rediscovery is not an edit.
   const loadedSignature = useRef<string | null>(null)
@@ -141,6 +153,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       // Remounts and repeat reads of the same document are not another load.
       if (claimModelSettingsLoad(placement, value)) beginExperience('model_settings_load', { placement })('completed')
       loadedSignature.current = connectionSignature(value)
+      tested.current.clear()
       savedRef.current = value
       autoCover.current = !value.saved
       setSettings(value)
@@ -270,13 +283,16 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const backfillModels = (connection: Connection, listing?: { models?: string[]; recommended?: Record<string, string[]> }) => {
     const ids = orderedIds(listing)
     if (ids.length) {
-      setLists(old => ({
-        ...old,
-        [connection.id]: mergeCustomList(connection, {
-          models: ids.map(id => ({ id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id) })),
-          source: 'live', preview: false, updated_at: Date.now(),
-        }),
-      }))
+      setLists(old => {
+        // The validation response contains IDs only. Keep known capabilities until discovery completes.
+        const known = new Map(old[connection.id]?.models.map(entry => [entry.id, entry]))
+        const models = ids.map(id => known.get(id) ?? {
+          id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id),
+        })
+        return { ...old, [connection.id]: mergeCustomList(connection, {
+          models, source: 'live', preview: false, updated_at: Date.now(),
+        }) }
+      })
     }
     void discover(connection, true, 'manual')
   }
@@ -328,8 +344,15 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     signal?: AbortSignal,
   ): Promise<ValidationResult> => {
     const payload = { ...connection, api_key: connection.api_key?.trim() ?? connection.api_key }
+    tested.current.delete(connection.id)
     try {
-      return await modelSettingsApi.test(payload, model, vision, role, probeKind, { signal })
+      const result = await modelSettingsApi.test(payload, model, vision, role, probeKind, { signal })
+      if (passed(result) && !signal?.aborted) {
+        const base_url = logic.presetKey(connection) === 'compatible' && result.normalized_base_url
+          ? result.normalized_base_url : connection.base_url
+        tested.current.set(connection.id, probeSignature({ ...connection, base_url }, model, vision, role))
+      }
+      return result
     } catch (e) {
       const error = e as { code?: string; response?: { status?: number } } | null
       const status = error?.response?.status
@@ -364,10 +387,14 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       let warned = ''
       const noticed: Array<{ id: string; status?: string; errorType?: string }> = []
       for (const { role, connection, model } of logic.validationTargets(next)) {
-        const modelChanged = savedRef.current?.[role]?.model !== next[role]?.model
-          || savedRef.current?.[role]?.connection_id !== connection.id
-        if (connection.id === checked?.connectionId || (connection.validation_status === 'ok' && !modelChanged)) continue
-        const vision = role === 'vision' || (role === 'analysis' && next.analysis_mode !== 'subtitle' && bindingCapability(next.analysis, lists) === 'multimodal')
+        const vision = probeVision(next, role, currentLists)
+        const signature = probeSignature(connection, model, vision, role)
+        const previous = savedRef.current
+        const oldConnection = previous && logic.connectionOf(previous, role)
+        const savedSignature = previous && oldConnection?.validation_status === 'ok'
+          ? probeSignature(oldConnection, previous[role]?.model || '', probeVision(previous, role, currentLists), role)
+          : undefined
+        if (connection.validation_status === 'ok' && signature === (tested.current.get(connection.id) ?? savedSignature)) continue
         const result = await probe(connection, model, vision, role)
         emitValidation(connection, result)
         next = logic.applyValidation(next, connection.id, result)
@@ -402,6 +429,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       setSettings(value); setDirty(false); autoCover.current = false
       loadedSignature.current = connectionSignature(value)
       finish('completed')
+      tested.current.clear()
       savedRef.current = value
       if (toast.kind === 'invalid') message.error(`${t('settings.key_guide.invalid_saved')} ${validationCopy(toast.errorType)}`.trim())
       else if (toast.kind === 'failed') message.error(validationCopy(toast.errorType) || t('settings.key_guide.invalid_saved'))
@@ -417,31 +445,6 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
       // back to the failed project, if settings were opened from one (SETTINGS_SAVED_EVENT in studio/settingsReturn).
       if (!failed && !visionFailed) notifySettingsSaved()
-      // F2: after save, default-run trial on the analysis connection (cancellable).
-      if (!failed && !visionFailed) {
-        const analysis = logic.validationTargets(value || next).find(item => item.role === 'analysis')
-        if (analysis) {
-          void (async () => {
-            const controller = new AbortController()
-            trialAbortRef.current = controller
-            setTesting(true)
-            setTestingKind('trial')
-            try {
-              const trial = await probe(analysis.connection, analysis.model, false, 'analysis', 'trial', controller.signal)
-              if (!alive.current) return
-              emitValidation(analysis.connection, trial)
-              setSettings(old => old && logic.applyValidation(old, analysis.connection.id, trial))
-              if (trial.trial_passed === false) message.warning(t('未通过试跑'))
-            } catch (e) {
-              if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') return
-            } finally {
-              if (trialAbortRef.current === controller) trialAbortRef.current = null
-              setTesting(false)
-              setTestingKind(null)
-            }
-          })()
-        }
-      }
       return { ok: true, validationFailed: failed || visionFailed }
     } catch (e) { finish('failed', {}, e); setError(errorText(e)); return { ok: false } }
     finally { setSaving(false) }
@@ -477,7 +480,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
         role, binding: next[role],
       })).find(({ binding }) => binding?.connection_id === connection.id && binding.model)
       if (!target?.binding) throw new Error(t('无法自动匹配剪辑模型。请检查密钥，或手动选择模型。'))
-      const value = await probe(connection, target.binding.model, target.role === 'vision' || (target.role === 'analysis' && next.analysis_mode === 'visual'), target.role)
+      const value = await probe(connection, target.binding.model, probeVision(next, target.role, { ...lists, [connection.id]: list }), target.role)
       if (!alive.current) return { ok: false }
       emitValidation(connection, value)
       if (!passed(value)) throw new Error(failureCopy(value, target.binding.model))
@@ -539,7 +542,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     setTesting(true)
     setTestingKind(probeKind)
     try {
-      const vision = role === 'vision' || (role === 'analysis' && settings.analysis_mode !== 'subtitle' && capability === 'multimodal')
+      const vision = probeVision(settings, role, lists)
       const value = await probe(connection, binding.model, vision, role, role === 'analysis' ? probeKind : 'quick', controller.signal)
       emitValidation(connection, value)
       replace(logic.applyValidation(settings, connection.id, value))
@@ -617,19 +620,29 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     setTesting(true)
     setTestingKind(probeKind)
     try {
-      let model = (preset.candidates?.analysis || preset.candidates?.vision || [])[0] || ''
-      try {
-        const result = await modelSettingsApi.discover(connection, true)
-        const merged = mergeCustomList(connection, result)
-        setLists(old => ({ ...old, [connection!.id]: merged }))
-        setListErrors(old => { const copy = { ...old }; delete copy[connection!.id]; return copy })
-        model = merged.models.find(row => row.analysis)?.id || merged.models[0]?.id || model
-      } catch (e) {
-        // Fall through to probe with a catalog candidate; probe surfaces the real error.
-        setListErrors(old => ({ ...old, [connection!.id]: errorText(e) }))
+      const active = next.analysis?.connection_id === connection.id
+      let model = active ? next.analysis?.model : ''
+      let available = lists
+      if (!model) {
+        try {
+          const merged = mergeCustomList(connection, await modelSettingsApi.discover(connection, true))
+          available = { ...lists, [connection.id]: merged }
+          setLists(old => ({ ...old, [connection!.id]: merged }))
+          model = merged.models.find(row => row.analysis && !isImageMarker(row.id))?.id
+        } catch (e) {
+          setListErrors(old => ({ ...old, [connection!.id]: errorText(e) }))
+        }
+        model ||= preset.candidates.analysis[0]
       }
-      if (!model) model = 'gpt-4o-mini'
-      const value = await probe(connection, model, false, 'analysis', probeKind, controller.signal)
+      if (!model) {
+        const text = t('请先选择模型')
+        finish('blocked', { reason: 'model' })
+        setError(text)
+        message.error(text)
+        return
+      }
+      const testedModel = t('settings.providers.test_model', { model })
+      const value = await probe(connection, model, active && probeVision(next, 'analysis', available), 'analysis', probeKind, controller.signal)
       if (controller.signal.aborted) return
       emitValidation(connection, value)
       const applied = logic.applyValidation(settingsRef.current || next, connection.id, value)
@@ -638,18 +651,17 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       if (passed(value)) {
         const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
         backfillModels(normalized, value)
-        void discover(normalized, true, 'manual')
         if (probeKind === 'trial' && value.trial_passed === false) {
-          message.warning(t('未通过试跑'))
+          message.warning(testedModel + ' · ' + t('未通过试跑'))
         } else {
-          message.success(t('连接正常'))
+          message.success(testedModel + ' · ' + t('连接正常'))
         }
         const warn = acceptWarning(connection.id, value)
         if (warn) message.warning(warn)
         setError('')
       } else {
         acceptWarning(connection.id, value)
-        const text = failureCopy(value, model)
+        const text = testedModel + ' · ' + failureCopy(value, model)
         setError(text)
         message.error(text)
       }
@@ -690,10 +702,6 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       message.error(t('settings.key_guide.keep'))
       return { ok: false, blocked: true }
     }
-    if (plan.action === 'unchanged') {
-      stagePendingSelect(custom ? `custom:${plan.connectionId}` : request.providerId)
-      return { ok: true, connectionId: plan.connectionId }
-    }
     let next = current
     let connectionId = ''
     if (plan.action === 'create' && plan.custom) {
@@ -709,16 +717,14 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       next = applyCustomProvider(current, draft)
       connectionId = next.connections[next.connections.length - 1]?.id || ''
     } else if (plan.action === 'create' && preset) {
-      const ensured = ensureCatalogConnection(current, preset)
-      next = ensured.settings
-      const created = ensured.connection
-      if (!created) return { ok: false }
-      connectionId = created.id
-      next = logic.editConnection(next, created.id, { api_key: plan.apiKey })
-      if (next.analysis?.connection_id === created.id && !next.analysis.model) {
-        const model = preset.default_model || preset.candidates?.analysis?.[0] || ''
-        if (model) next = { ...next, analysis: { ...next.analysis, model, model_source: 'preset' } }
-      }
+      const draft = catalogDraftConnection(preset, crypto.randomUUID())
+      if (!draft) return { ok: false }
+      connectionId = draft.id
+      const connection = { ...draft, api_key: plan.apiKey, has_key: true }
+      next = { ...current, connections: [...current.connections, connection] }
+      if (!next.analysis && preset.capabilities.includes('language')) next = assignAnalysis(next, connection)
+    } else if (plan.action === 'unchanged') {
+      connectionId = plan.connectionId
     } else if (plan.action === 'update') {
       connectionId = plan.connectionId
       const patch: Partial<Connection> = { api_key: plan.apiKey }
@@ -726,9 +732,25 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       next = logic.editConnection(current, plan.connectionId, patch)
     }
     const connection = next.connections.find(item => item.id === connectionId)
+    if (connection && preset?.capabilities.includes('language') && (!next.analysis || next.analysis.connection_id === connection.id)
+        && !next.analysis?.model) {
+      const binding = logic.cleanBinding(connection.id)
+      const model = request.model?.trim() || preset.default_model || preset.candidates.analysis[0]
+      next = { ...next, analysis: { ...binding, model: model || '', model_source: request.model?.trim() ? 'user' : 'preset' } }
+      if (!model) {
+        try {
+          const list = await modelSettingsApi.discover(connection, true)
+          const matched = recommendProviderSetup(next, connection, list)
+          if (matched?.analysis) next = { ...next, analysis: matched.analysis }
+          setLists(old => ({ ...old, [connection.id]: list }))
+        } catch {
+          // Keep the draft editable. The normal save guard asks for a manual model ID.
+        }
+      }
+    }
     const bound = logic.validationTargets(next).some(item => item.connection.id === connectionId)
     if (connection && !bound) {
-      const model = preset?.default_model || preset?.candidates?.analysis?.[0] || (custom ? 'gpt-4o-mini' : '')
+      const model = preset?.default_model || preset?.candidates?.analysis?.[0] || request.model?.trim() || (custom ? 'gpt-4o-mini' : '')
       if (model) {
         const result = await probe(connection, model, false, 'analysis')
         emitValidation(connection, result)

@@ -21,6 +21,7 @@ from backend.core.llm_telemetry import hostname_of_base_url
 from backend.core.upstream_errors import (
     ClassifiedUpstreamError,
     UpstreamErrorType,
+    classify_provider_429,
     classify_upstream_error,
     hint_key_for,
     is_retryable,
@@ -481,9 +482,10 @@ def fetch_provider_models(
             break
 
         status = int(getattr(response, "status_code", 0) or 0)
-        if status == 429 or 500 <= status <= 599:
-            error_type = UpstreamErrorType.RATE_LIMITED if status == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE
-            return _failed(_as_classified(error_type), host, pages=pages, http_status=status)
+        if status == 429:
+            return _failed(classify_provider_429(_response_text(response)[:4000]), host, pages=pages, http_status=status)
+        if 500 <= status <= 599:
+            return _failed(_as_classified(UpstreamErrorType.UPSTREAM_UNAVAILABLE), host, pages=pages, http_status=status)
         text = _response_text(response)[:4000]
         content_type = _content_type(response)
         if _looks_like_html(text, content_type):
