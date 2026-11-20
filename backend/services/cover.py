@@ -455,6 +455,7 @@ def overlay_title(
     badge: str = "",
     width: int,
     height: int,
+    layout_version: int = 0,
 ) -> bytes:
     from PIL import Image, ImageDraw, ImageOps
 
@@ -475,7 +476,10 @@ def overlay_title(
     sub_font = _pil_font(sub_size)
     badge_font = _pil_font(badge_size)
     margin_x = int(width * 0.06)
-    y = int(height * 0.58)
+    y = int(height * (0.58, 0.68, 0.52)[layout_version % 3])
+    if layout_version % 3:
+        accent = (242, 181, 68) if layout_version % 3 == 1 else (70, 211, 166)
+        draw.rectangle((margin_x, y - 16, margin_x + title_size * 2, y - 10), fill=accent)
     for line in title_lines[:3]:
         draw.text((margin_x + 2, y + 2), line, font=title_font, fill=(0, 0, 0))
         draw.text((margin_x, y), line, font=title_font, fill=(255, 255, 255))
@@ -551,7 +555,7 @@ def get_cover(project_id: str, clip_id: str, platform: str = "bilibili") -> dict
         "ok": True,
         "platform": platform,
         "path": str(path),
-        "url": f"/api/v1/publish/covers/{project_id}/clips/{clip_id}/file?platform={platform}&t={int(path.stat().st_mtime)}",
+        "url": f"/api/v1/publish/covers/{project_id}/clips/{clip_id}/file?platform={platform}&t={path.stat().st_mtime_ns}",
         "method": meta.get("method") or "unknown",
         "title": meta.get("title") or "",
         "subtitle": meta.get("subtitle") or "",
@@ -621,7 +625,12 @@ def generate_cover(
     warning_detail = None
     method = "frame"
     jpeg: bytes | None = None
+    previous = read_cover_meta(project_id, clip_id, platform)
+    layout_version = (int(previous.get("layout_version") or 0) + 1) if previous else 0
     video, at = resolve_clip_frame(project_id, clip_id)
+    if layout_version and clip.get('duration_sec', 0) > 0:
+        start = to_seconds(clip.get("start_time") or "0")
+        at = start + clip['duration_sec'] * (0.35, 0.58, 0.72)[(layout_version - 1) % 3]
     frame: bytes | None = None
     try:
         frame = extract_frame_jpeg(video, at_sec=at)
@@ -707,7 +716,7 @@ def generate_cover(
                 warning_detail = None
                 if frame is not None:
                     jpeg = overlay_title(
-                        frame, title_lines=lines, subtitle=sub_text, badge=badge_text,
+                        frame, title_lines=lines, subtitle=sub_text, badge=badge_text, layout_version=layout_version,
                         width=spec["width"], height=spec["height"],
                     )
                     method = "local_overlay"
@@ -717,7 +726,7 @@ def generate_cover(
             if frame is not None:
                 try:
                     jpeg = overlay_title(
-                        frame, title_lines=lines, subtitle=sub_text, badge=badge_text,
+                        frame, title_lines=lines, subtitle=sub_text, badge=badge_text, layout_version=layout_version,
                         width=spec["width"], height=spec["height"],
                     )
                     method = "local_overlay"
@@ -728,7 +737,7 @@ def generate_cover(
         # 未开生图或模型不可用：本地排版叠在截帧上
         try:
             jpeg = overlay_title(
-                frame, title_lines=lines, subtitle=sub_text, badge=badge_text,
+                frame, title_lines=lines, subtitle=sub_text, badge=badge_text, layout_version=layout_version,
                 width=spec["width"], height=spec["height"],
             )
             method = "local_overlay"
@@ -757,6 +766,7 @@ def generate_cover(
         temporary.unlink(missing_ok=True)
     meta = {
         "method": method,
+        "layout_version": layout_version,
         "title": title_text,
         "subtitle": sub_text,
         "badge": badge_text,

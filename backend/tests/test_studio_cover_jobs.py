@@ -107,6 +107,94 @@ def test_card_api_rejects_ai_when_image_model_is_disabled(client, monkeypatch):
     assert client.post('/studio/p1/output-variants/v/cover/ai').status_code == 409
 
 
+@pytest.mark.parametrize('allow_frame', [False, True])
+def test_redesign_returns_the_new_cover_over_http_with_optional_reference(client, monkeypatch, allow_frame):
+    import io
+    import json
+    from PIL import Image
+    from backend.core import image_providers
+
+    store.write('p1', _completed_output())
+    config = cover.CoverConfig(enabled=True, model='test-image', api_key='fixture', allow_send_frame=allow_frame)
+    monkeypatch.setattr(cover, 'load_config', lambda: config)
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
+    encoded = io.BytesIO()
+    Image.new('RGB', (48, 64), 'navy').save(encoded, 'PNG')
+    reference = encoded.getvalue()
+    args = ('p1', 'render', 'xiaohongshu')
+    publish_kit.frame_path(*args).write_bytes(reference)
+    publish_kit.cd_meta_path(*args).write_text(json.dumps({'lines': ['Headline'], 'accent': 0}))
+
+    def image_model(*, request, **_):
+        assert request.reference == (reference if allow_frame else None)
+        assert request.model == 'test-image'
+        return reference
+
+    monkeypatch.setattr(image_providers, 'generate_image', image_model)
+    monkeypatch.setattr(publish_kit, '_title_ok', lambda *_: True)
+    url = '/studio/p1/output-variants/v/cover'
+    job = client.post(url + '/regenerate')
+    assert job.status_code == 200 and job.json()['status'] == 'completed'
+    assert client.get(url + '/ai').json()['job_id'] == job.json()['job_id']
+    response = client.get(url)
+    assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
+    with Image.open(io.BytesIO(response.content)) as image:
+        assert image.size == (1080, 1440)
+
+
+@pytest.mark.parametrize(('automatic', 'model_fails'), [(True, False), (False, False), (True, True)])
+def test_default_export_and_regeneration_make_distinct_local_jpegs(client, root, source, monkeypatch, automatic, model_fails):
+    import io
+    import shutil
+    from PIL import Image, ImageChops
+    from backend.core import image_providers
+
+    job_id = 'a' * 32
+    title = 'A new beginning'
+    draft = {'title': title, 'scenes': [{'start': 0, 'end': 2}]}
+    job = {'job_id': job_id, 'draft_id': 'd1', 'revision': 1, 'title': title, 'status': 'completed', 'snapshot': draft,
+           'result': {'duration': 3, 'width': 320, 'height': 180}}
+    variant = {'id': 'v', 'strategy_id': 'xiaohongshu', 'render_job_id': job_id, 'status': 'completed'}
+    store.write('p1', {'jobs': [job], 'output_variants': [variant] if automatic else []})
+    output = root / 'output' / 'studio'
+    output.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, output / f'{job_id}.mp4')
+    config = cover.CoverConfig(enabled=model_fails, api_key='fixture' if model_fails else '', model='fixture')
+    monkeypatch.setattr(cover, 'load_config', lambda: config)
+    model_requests = []
+    def generate_image(**kwargs):
+        assert model_fails and kwargs['request'].reference is None
+        model_requests.append(kwargs['request'].model)
+        raise image_providers.ImageError('offline fixture rejects the request')
+    monkeypatch.setattr(image_providers, 'generate_image', generate_image)
+    monkeypatch.setattr(jobs, 'source', lambda _: source)
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
+    jobs._design_covers('p1', draft, job_id)
+    url = '/studio/p1/output-variants/v/cover'
+
+    def image():
+        content = (client.get(url).content if automatic else
+                   cover.cover_path('p1', 'studio-' + job_id, 'bilibili').read_bytes())
+        with Image.open(io.BytesIO(content)) as jpg:
+            assert jpg.format == 'JPEG'
+            return jpg.convert('RGB')
+
+    previous = image()
+    for _ in range(2):
+        if automatic:
+            response = client.post(url + '/regenerate')
+            assert response.status_code == 200, response.text
+            assert response.json()['status'] == 'completed'
+            assert store.read('p1')['output_variants'][0]['cover'] == 'design'
+        else:
+            cover.generate_cover(project_id='p1', clip_id='studio-' + job_id, platform='bilibili', title=title)
+        current = image()
+        assert previous.size == current.size
+        assert ImageChops.difference(previous, current).getbbox(), 'regeneration repeated the same image'
+        previous = current
+    assert len(model_requests) == (3 if model_fails else 0)
+
+
 def test_kit_http_download_cleans_up_the_archive(client, root, monkeypatch):
     from pathlib import Path
     store.write('p1', _completed_output())

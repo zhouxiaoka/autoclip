@@ -28,33 +28,41 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const kind = draft.origin === 'visual-promo' ? t('推广成片') : draft.origin === 'visual-highlight' ? t('精彩高光') : ''
   const description = draft.hook || draft.scenes[0]?.evidence
 
-  return <article className="studio-draft-card">
-    <button type="button" className={`ac-card-thumb studio-thumb${completed ? ' studio-thumb--exported' : ''}`} onClick={onEdit}
-      aria-label={t('预览 {{title}}', { title: draft.title })} title={thumbnailLabel}>
-      {failedThumbnail === thumbnail
-        ? <span className="studio-thumbnail-fallback">{t('缩略图暂不可用 · 点击查看')}</span>
-        : <img key={thumbnail} src={thumbnail} alt={thumbnailLabel} loading="lazy" onError={() => setFailedThumbnail(thumbnail)} />}
-      <span className="play" aria-hidden="true"><span><Icon.Play size={18} /></span></span>
-      <span className="ac-tag ac-tag--br">{fmtDuration(draftDuration(draft))}</span>
-    </button>
-    <div className="studio-draft-content">
+  return <article className="ac-card studio-output-card" aria-label={draft.title}>
+    {completed ? <div className="studio-variant-thumb" title={thumbnailLabel}>
+      <video className="studio-variant-video" aria-label={t('播放成片')} controls preload="metadata"
+        poster={thumbnail} src={studioApi.video(projectId, completed.job_id)} />
+      <span className="ac-tag ac-tag--br">{fmtDuration(completed.result?.duration ?? draftDuration(draft))}</span>
+    </div> :
+      <button type="button" className="ac-card-thumb studio-thumb studio-variant-thumb" onClick={onEdit}
+        aria-label={t('预览 {{title}}', { title: draft.title })} title={thumbnailLabel}>
+        {failedThumbnail === thumbnail
+          ? <span className="studio-thumbnail-fallback">{t('缩略图暂不可用 · 点击查看')}</span>
+          : <img key={thumbnail} src={thumbnail} alt={thumbnailLabel} loading="lazy" onError={() => setFailedThumbnail(thumbnail)} />}
+        <span className="play" aria-hidden="true"><span><Icon.Play size={18} /></span></span>
+        <span className="ac-tag ac-tag--br">{fmtDuration(draftDuration(draft))}</span>
+      </button>}
+    <div className="ac-card-body studio-draft-content">
       <div className="studio-draft-status" data-status={status} role="status">
         {t(statusLabels[status])}{active && ` · ${active.percent ?? 0}%`}
       </div>
-      <h3>{draft.title}</h3>
+      <h2 className="ac-card-title">{draft.title}</h2>
       <p className="studio-draft-meta">{[kind, aspect, language, `V${draft.revision}`, t('{{count}} 段', { count: draft.scenes.length })].filter(Boolean).join(' · ')}</p>
       {description && description !== draft.title && <p className="studio-draft-description" title={description}>{description}</p>}
       {status === 'failed' && <p className="studio-error">{failure?.error || t('请重试导出，原草稿已保留')}</p>}
       {status === 'ready' && failure && <p>{t('本版曾有导出失败，已完成文件仍可下载。')}</p>}
       {previous && !completed && <button className="studio-link" onClick={onHistory}>{t('查看已导出的 V{{revision}} 旧版', { revision: previous.revision })}</button>}
-    </div>
-    <div className="studio-draft-actions">
-      {completed && <StudioDownloadLink className="ac-btn ac-btn--cta ac-btn--sm" projectId={projectId} jobId={completed.job_id} />}
-      {completed && <ExportCoverButton projectId={projectId} job={completed} />}
-      {active ? <Btn size="sm" onClick={onHistory}>{t('查看进度')}</Btn>
-        : !completed && allowExport && <Btn size="sm" variant="cta" onClick={onExport}>{t(status === 'failed' ? '重试导出' : '导出成片')}</Btn>}
-      <Btn size="sm" onClick={onEdit}>{t('预览与修改')}</Btn>
-      {completed && <Btn size="sm" variant="text" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>{t('发布')}</Btn>}
+      <div className="ac-card-foot"><div className="ac-card-actions">
+        {completed && <StudioDownloadLink className="studio-output-download" projectId={projectId} jobId={completed.job_id} />}
+        {active ? <Btn size="sm" onClick={onHistory}>{t('查看进度')}</Btn>
+          : !completed && allowExport && <Btn size="sm" variant="cta" onClick={onExport}>{t(status === 'failed' ? '重试导出' : '导出成片')}</Btn>}
+        <Btn size="sm" onClick={onEdit}>{t('预览与修改')}</Btn>
+      </div></div>
+      {completed && <details className="studio-publish-tools">
+        <summary>{t('发布工具')}</summary>
+        <ExportCoverButton projectId={projectId} job={completed} />
+        <Btn size="sm" variant="cta" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>{t('发布')}</Btn>
+      </details>}
     </div>
   </article>
 }

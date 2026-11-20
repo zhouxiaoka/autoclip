@@ -14,7 +14,7 @@ import { analysisUsesWeakLocalTimelineModel } from './weakLocalTimeline'
 import WeakLocalTimelineNote from './WeakLocalTimelineNote'
 
 function lineText(line: SlotLine): string {
-  if (line.kind === 'off') return t('关闭 · 使用视频帧')
+  if (line.kind === 'off') return t('本机排版 · 使用视频帧')
   if (line.kind === 'empty') return t('搜索模型')
   if (line.kind === 'follow') return t('与精彩片段分析相同')
   if (line.kind === 'local') return t('{{model}} · 本机', { model: line.model })
@@ -42,7 +42,7 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
     value: 'follow', label: t('与精彩片段分析相同'), selected: !settings.vision, apply: () => applyVisionFollow(settings),
   })
   if (purpose === 'cover') choices.push({
-    value: 'off', label: t('关闭 · 使用视频帧'), selected: !settings.cover_enabled, apply: () => applyCoverOff(settings),
+    value: 'off', label: t('本机排版 · 使用视频帧'), selected: !settings.cover_enabled, apply: () => applyCoverOff(settings),
   })
   if (purpose === 'transcription') {
     for (const model of WHISPER_MODELS) choices.push({

@@ -9,7 +9,7 @@ const publish=read('src/pages/PublishClipPage.tsx')
 
 test('every output card shows its publish kit and uses the designed cover as the poster',()=>{
  assert.match(card,/<PublishKit projectId=\{projectId\} variant=\{variant\}/)
- assert.match(card,/poster=\{variant\.cover \? studioApi\.variantCover\(projectId, variant\.id, coverStamp\) : undefined\}/)
+ assert.match(card,/poster=\{\(variant\.cover \|\| coverStamp\) \? studioApi\.variantCover\(projectId, variant\.id, coverStamp\) : undefined\}/)
  assert.match(api,/output-variants\/\$\{variantId\}\/kit/)
  assert.match(api,/api\.put\(`\/studio\/\$\{pid\}\/output-variants\/\$\{variantId\}\/post`, post\)/)
 })
@@ -28,8 +28,11 @@ test('the publish page starts from the output kit: copy, hashtags and the matchi
  assert.match(publish,/coverApi\.get\(projectId, clipId, coverSlot\)/)
 })
 
-test('the kit retains its complete cover preview',()=>{
+test('the thumbnail and caption open one cover dialog from the publish kit',()=>{
+ const preview=read('src/features/studio/ExportCover.tsx')
  assert.match(kit,/className=\{`studio-post-cover/)
  assert.match(kit,/<img src=\{coverUrl\}/)
- assert.match(card,/coverStamp=\{coverStamp\}/)
+ assert.match(kit,/<ExportCoverButton[^>]+>\{thumbnail\}<\/ExportCoverButton>/)
+ assert.match(preview,/aria-haspopup="dialog"[^>]*onClick=\{\(\) => setOpen\(true\)\}/)
+ assert.doesNotMatch(card,/<ExportCoverButton/)
 })

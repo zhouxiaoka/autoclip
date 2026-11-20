@@ -648,6 +648,16 @@ def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session 
     return job
 
 
+@router.post('/{project_id}/output-variants/{variant_id}/cover/regenerate')
+def regenerate_output_variant_cover(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    _, job = _variant_job(project_id, variant_id)
+    task = call(jobs.request_ai_cover, project_id, variant_id, job['job_id'], allow_local=True)
+    if task is None:
+        raise HTTPException(409, '成片版本已更新，请刷新重试')
+    return task
+
+
 @router.get('/{project_id}/output-variants/{variant_id}/cover/ai')
 def output_variant_cover_job(project_id: str, variant_id: str, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
