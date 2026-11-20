@@ -21,7 +21,6 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const [failedUrl, setFailedUrl] = useState('')
   const [loadedUrl, setLoadedUrl] = useState('')
   const [task, setTask] = useState<{ id: string; variantId?: string } | null>(null)
-  const [imageModel, setImageModel] = useState(false)
   const [useVariantFile, setUseVariantFile] = useState(coverStamp > 0)
   const [missingVariantFile, setMissingVariantFile] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -29,9 +28,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
-    let current = true
-    coverApi.getConfig().then(config => { if (current) setImageModel(config.configured && config.enabled) }).catch(() => {})
-    return () => { current = false; mounted.current = false }
+    return () => { mounted.current = false }
   }, [])
   const variantPath = variant && (variant.cover || useVariantFile) && !missingVariantFile
     ? `/studio/${projectId}/output-variants/${variant.id}/cover` : ''
@@ -75,7 +72,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
     setBusy(true)
     setError('')
     try {
-      if (variant && imageModel) {
+      if (variant) {
         const result = await studioApi.redesignVariantCover(projectId, variant.id)
         if (mounted.current) setTask({ id: result.job_id, variantId: variant.id })
         return
@@ -98,7 +95,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
           event.preventDefault()
           void saveLocalFile(path).then(() => message.success(t('封面已保存')), () => message.error(t('下载失败，请稍后重试')))
         }}>{t('下载封面')}</a>}
-      {!pending && !missing && loadedUrl === url && imageModel && <Btn size="sm" variant="text" onClick={generate}>{t('AI 重新设计封面')}</Btn>}
+      {!pending && !missing && loadedUrl === url && <Btn size="sm" variant="text" onClick={generate}>{t('重新生成封面')}</Btn>}
     </div>
     {!pending && !missing && <img src={url} alt={t('封面')} onLoad={() => setLoadedUrl(url)} onError={() => { if (variantPath) setMissingVariantFile(true); else setFailedUrl(url) }} />}
     {!pending && variant?.cover_job?.status === 'failed' && !missing && <span className="studio-muted">{t('生图失败，已改成本地排版或截帧')}</span>}

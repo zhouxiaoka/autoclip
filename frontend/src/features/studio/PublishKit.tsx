@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { message } from 'antd'
-import { Link } from 'react-router-dom'
-import { coverApi } from '../../publish/coverApi'
-import { errorText } from './errorText'
-import { settingsReturnUrl } from './settingsReturn'
 import { t } from '../../i18n'
 import { Btn, Dialog } from '../../ui'
 import { studioApi } from './api'
@@ -24,7 +20,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, toolsOpen, post, onPostChange, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; toolsOpen: boolean; post?: PostCopy | null; onPostChange: (post: PostCopy) => void; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
+export default function PublishKit({ projectId, variant, post, onPostChange, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; post?: PostCopy | null; onPostChange: (post: PostCopy) => void; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ title: '', description: '', tags: '' })
   const [saveError, setSaveError] = useState(false)
@@ -32,7 +28,7 @@ export default function PublishKit({ projectId, variant, toolsOpen, post, onPost
   const [packing, setPacking] = useState(false)
   const combined = useFlag('publish_pack_v2') === 'combined'
   const coverTools = variant.status === 'completed' && variant.render_job_id
-    ? <CoverRedesign projectId={projectId} variant={variant} toolsOpen={toolsOpen} onCoverChanged={onCoverChanged}/> : null
+    ? <CoverRedesign projectId={projectId} variant={variant} onCoverChanged={onCoverChanged}/> : null
   if (!post) return coverTools
   const edit = () => {
     setDraft({ title: post.title, description: post.description, tags: post.tags.join(' ') })
@@ -132,26 +128,15 @@ export default function PublishKit({ projectId, variant, toolsOpen, post, onPost
   </div>
 }
 
-function CoverRedesign({ projectId, variant, toolsOpen, onCoverChanged }: {
-  projectId: string; variant: OutputVariant; toolsOpen: boolean; onCoverChanged: () => void
+function CoverRedesign({ projectId, variant, onCoverChanged }: {
+  projectId: string; variant: OutputVariant; onCoverChanged: () => void
 }) {
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const [redesigning, setRedesigning] = useState(false)
   const [coverError, setCoverError] = useState('')
-  const [coverSetup, setCoverSetup] = useState<string | null>(null)
-  useEffect(() => {
-    if (!toolsOpen) return
-    let live = true
-    setCoverSetup(null)
-    coverApi.getConfig().then(config => {
-      if (!live) return
-      setCoverSetup(!config.enabled || !config.configured ? '请先在设置里开启 AI 封面并选择图像模型' : '')
-    }).catch(() => { if (live) setCoverSetup('') }) // The job endpoint also checks the current configuration.
-    return () => { live = false }
-  }, [toolsOpen])
   const redesign = async () => {
-    if (!variant.render_job_id || redesigning || coverSetup !== '') return
+    if (!variant.render_job_id || redesigning) return
     setCoverError('')
     setRedesigning(true)
     try {
@@ -166,22 +151,15 @@ function CoverRedesign({ projectId, variant, toolsOpen, onCoverChanged }: {
       }
       if (!mounted.current) return
       if (job.status === 'failed') throw new Error(job.error || 'failed')
-      if (!done) { message.info(t('AI 封面还在生成，稍后刷新查看')); return }
+      if (!done) { message.info(t('正在生成封面')); return }
       onCoverChanged()
-      message.success(t('封面已用 AI 重新设计'))
-    } catch (error) {
-      if (mounted.current) {
-        const detail = errorText(error)
-        if (detail === '请先在设置里开启 AI 封面并选择图像模型') setCoverSetup(detail)
-        else setCoverError(detail === 'AI 封面未生成，已保留原封面' || detail === '服务已重启，请重新生成封面' ? detail : '请求失败，请重试')
-      }
+      message.success(t('封面已重新生成'))
+    } catch {
+      if (mounted.current) setCoverError(t('封面生成失败，请重试'))
     } finally { if (mounted.current) setRedesigning(false) }
   }
   return <div className="studio-cover-tools">
-    {coverSetup ? <>
-      <span>{t(coverSetup)}</span>
-      <Link className="studio-link" to={settingsReturnUrl('/settings?section=cover', projectId)}>{t('封面设置')}</Link>
-    </> : <Btn variant="text" size="sm" disabled={coverSetup === null} loading={redesigning} onClick={() => void redesign()}>{t('AI 重新设计封面')}</Btn>}
-    {coverError && <span role="alert">{t(coverError)}</span>}
+    <Btn variant="text" size="sm" loading={redesigning} onClick={() => void redesign()}>{t('重新生成封面')}</Btn>
+    {coverError && <span role="alert">{coverError}</span>}
   </div>
 }

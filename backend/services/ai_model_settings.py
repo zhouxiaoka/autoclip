@@ -319,6 +319,8 @@ class ModelSettings(BaseModel):
         if (self.cover_follows_analysis and self.cover and self.analysis
                 and self.cover.connection_id != self.analysis.connection_id):
             raise ValueError('跟随分析的封面必须使用分析服务连接')
+        if 'cover_enabled' not in self.model_fields_set and self.cover and not self.prefer_local_cover:
+            self.cover_enabled = True
         if self.cover_enabled and not self.cover:
             raise ValueError('请选择封面生图模型')
         if self.analysis_mode == 'subtitle':

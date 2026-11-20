@@ -33,7 +33,6 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   useEffect(() => setEditedPost(null), [variant.post])
   const post = editedPost || variant.post
   const [asking, setAsking] = useState(false)
-  const [toolsOpen, setToolsOpen] = useState(false)
   const [coverStamp, setCoverStamp] = useState(0)
   const coverChanged = useCallback(() => setCoverStamp(Date.now()), [])
   const showReason = useFlag('clip_reasons') === true
@@ -76,10 +75,10 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {onDemand && <Btn variant="text" onClick={onProduce}>{t('生成这条')}</Btn>}
       </div></div>
-      {(post || completed) && <details className="studio-publish-tools" onToggle={event => setToolsOpen(event.currentTarget.open)}>
+      {(post || completed) && <details className="studio-publish-tools">
         <summary>{t('发布工具')}</summary>
         {completed && job && <ExportCoverButton projectId={projectId} job={job} variant={variant} coverStamp={coverStamp} onVariantCoverChanged={coverChanged} />}
-        <PublishKit projectId={projectId} variant={variant} toolsOpen={toolsOpen} post={post} onPostChange={setEditedPost} analytics={analytics} coverStamp={coverStamp} onCoverChanged={coverChanged} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
+        <PublishKit projectId={projectId} variant={variant} post={post} onPostChange={setEditedPost} analytics={analytics} coverStamp={coverStamp} onCoverChanged={coverChanged} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
         {completed && variant.render_job_id && <Btn size="sm" variant="cta" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
       </details>}
       {asking && <OutputFeedback projectId={projectId} variant={analytics} onDone={() => setAsking(false)}/>}

@@ -720,6 +720,17 @@ def test_fal_image_connections_and_unknown_image_apis_from_newer_versions():
     assert future.image_api == 'auto'  # an unknown value never invalidates the whole settings file
 
 
+@pytest.mark.parametrize('prefer_local', [True, False])
+def test_image_binding_without_explicit_switch_follows_automatic_cover_preference(prefer_local):
+    from backend.services import cover
+    saved = example().model_dump()
+    saved.pop('cover_enabled')
+    saved.update(cover_choice_version=ai.COVER_CHOICE_VERSION, prefer_local_cover=prefer_local)
+    ai.path().parent.mkdir(parents=True, exist_ok=True)
+    ai.path().write_text(json.dumps(saved), encoding='utf-8')
+    assert cover.load_config().enabled is (not prefer_local)
+
+
 def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again():
     from backend.services import cover
     written_by_1_4 = example().model_dump()

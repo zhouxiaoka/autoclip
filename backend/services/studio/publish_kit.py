@@ -52,9 +52,10 @@ def cover_file(project_id: str, job_id: str, strategy_id: str) -> tuple[Path | N
     slot = _publish_slot(strategy_id)
     ai = cover.cover_path(project_id, clip_id(job_id), slot)
     meta = cover.read_cover_meta(project_id, clip_id(job_id), slot) or {}
-    if ai.is_file() and meta.get('method') in AI_METHODS:
-        return ai, 'ai'
     designed = kit_cover_path(project_id, job_id, strategy_id)
+    # A portrait publish-slot image cannot replace the note's 3:4 cover.
+    if ai.is_file() and meta.get('method') in AI_METHODS and not (strategy_id == 'xiaohongshu' and designed.is_file()):
+        return ai, 'ai'
     return (designed, 'design') if designed.is_file() else (None, None)
 
 
@@ -207,6 +208,49 @@ def _fit(image, size: tuple[int, int]):
     mask.paste(0, sharp)
     mask = mask.filter(ImageFilter.GaussianBlur(feather / 2))
     return Image.composite(blurred, canvas, mask)
+
+
+def redesign_local_cover(project_id: str, job_id: str, strategy_id: str) -> None:
+    """Render a new platform-sized design from the saved frame or the finished video."""
+    from backend.services import cover
+    from backend.services.studio import cover_design as cd, store
+    from backend.services.studio.packaging_render import PALETTES
+
+    state = store.read(project_id)
+    job = next(row for row in state['jobs'] if row['job_id'] == job_id)
+    result = job.get('result') or {}
+    width, height = cd.size_for(strategy_id, result.get('width') or 1920, result.get('height') or 1080)
+    saved_frame = frame_path(project_id, job_id, strategy_id)
+    meta_path = cd_meta_path(project_id, job_id, strategy_id)
+    meta = json.loads(meta_path.read_text(encoding='utf-8')) if meta_path.is_file() else {}
+    revision = int(meta.get('layout_version') or 0) + 1
+    # Use the immutable export so redoing a cover still works after moving the source.
+    # A different still must not inherit a guest nameplate identified on the original frame.
+    guest = None
+    try:
+        video, default_at = cover.resolve_clip_frame(project_id, clip_id(job_id))
+        duration = result.get('duration') or 0
+        at = duration * (0.35, 0.58, 0.72)[(revision - 1) % 3] if duration > 0 else default_at
+        frame = cover.extract_frame_jpeg(video, at_sec=at)
+    except (FileNotFoundError, cover.CoverError):
+        if not saved_frame.is_file():
+            raise
+        frame = saved_frame.read_bytes()
+        if meta.get('guest') and meta.get('name'):
+            guest = (meta['name'], meta.get('role', ''))
+    palettes = list(PALETTES)
+    previous = meta.get('palette') or 'azure'
+    palette = palettes[(palettes.index(previous) + 1) % len(palettes)] if previous in palettes else 'azure'
+    if not meta.get('lines'):
+        meta['lines'], meta['accent'] = cd.title_lines_for(job.get('snapshot') or {}, job['title'], strategy_id)
+    jpeg = cd.design(frame, width=width, height=height, title_lines=meta['lines'], accent_line=meta['accent'],
+                     palette=palette, speaker=guest)
+    _atomic_write(kit_cover_path(project_id, job_id, strategy_id), jpeg)
+    _atomic_write(meta_path, json.dumps({**meta, 'palette': palette, 'layout_version': revision}, ensure_ascii=False).encode('utf-8'))
+    if strategy_id != 'xiaohongshu':
+        slot = _publish_slot(strategy_id)
+        _atomic_write(cover.cover_path(project_id, clip_id(job_id), slot), jpeg)
+        cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'design', 'title': ' '.join(meta['lines'])})
 
 
 def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:

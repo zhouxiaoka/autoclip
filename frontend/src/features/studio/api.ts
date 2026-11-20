@@ -69,7 +69,7 @@ signal); every HTTP answer (even a 500) is seen. */
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
   updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post), undefined, workflow.context(pid)),
-  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/ai`), (job: NonNullable<OutputVariant['cover_job']>, props) => {
+  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/regenerate`), (job: NonNullable<OutputVariant['cover_job']>, props) => {
     workflow.watch('studio-cover', job.job_id, pid, undefined, props)
     for (const watch of workflow.list().filter(w => w.kind === 'studio-cover' && w.projectId === pid && w.id === job.job_id)) workflow.observeCoverJob(watch, job)
   }, workflow.context(pid)),

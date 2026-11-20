@@ -86,7 +86,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const [keyHints, setKeyHints] = useState<Record<string, string>>({})
   const versions = useRef<Record<string, number>>({})
   const alive = useRef(true)
-  // First run only: the recommended image model turns AI covers on. Any explicit cover choice ends it.
+  // Fill an unassigned image slot from this account’s discovered models until the user chooses local covers.
   const autoCover = useRef(false)
   const settingsRef = useRef(settings)
   const listsRef = useRef(lists)
@@ -155,7 +155,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       loadedSignature.current = connectionSignature(value)
       tested.current.clear()
       savedRef.current = value
-      autoCover.current = !value.saved
+      autoCover.current = !value.prefer_local_cover && !value.cover
       setSettings(value)
       setLists(old => {
         const next = { ...old }
