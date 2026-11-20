@@ -66,6 +66,21 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
 const WEAK = '当前本地模型无法返回可用时间线'
 const LEGACY = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
 
+test('pending plan opens Studio results for managed projects and import review for older projects', () => {
+  for (const [settings, expected] of [
+    [{ awaiting_confirmation: true, smart_import: { auto_start: false }, import_staging: false }, '/project/test'],
+    [{ awaiting_confirmation: true }, '/import/test'],
+  ]) {
+    const buttons = {}
+    const visited = []
+    renderCard('pending', null, null, {
+      project: { settings }, onButton: (label, click) => { buttons[label] = click },
+    }, url => visited.push(url))
+    buttons['查看建议']()
+    assert.deepEqual(visited, [expected])
+  }
+})
+
 test('#428 home card with a replacement stays on the card and offers switch-and-retry', () => {
   const visited = []
   const buttons = {}

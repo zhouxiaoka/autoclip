@@ -387,6 +387,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }
 
   const openProject = () => {
+    if (awaitingConfirmation) {
+      // Studio resolves initial imports vs. remakes from the persisted staging flag.
+      navigate(isManaged ? `/project/${project.id}` : `/import/${project.id}`)
+      return
+    }
     if (!isManaged && project.status === 'pending') {
       message.warning(t("项目正在导入中，请稍后再查看详情"))
       return
@@ -395,8 +400,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       message.warning(t("项目处理中，请完成后再查看"))
       return
     }
-    if (awaitingConfirmation) navigate(`/project/${project.id}`)
-    else if (onClick) onClick()
+    if (onClick) onClick()
     else navigate(`/project/${project.id}`)
   }
 

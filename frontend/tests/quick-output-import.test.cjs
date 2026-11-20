@@ -347,7 +347,18 @@ test('leaving for cloud transcription preserves the original video and an attach
       transcriberMissing: true, navigate: route => routes.push(route),
     })
     await React.act(async () => { buttonText(view.host, '文件导入').click() })
+    const picker = view.host.querySelector('input[aria-label="视频文件"]')
+    assert.equal(picker.hidden, true, 'the OS file input must not add an untranslated row')
+    let pickerClicks = 0
+    picker.addEventListener('click', () => { pickerClicks++ })
+    await React.act(async () => { buttonText(view.host, '选择一段视频').click() })
+    assert.equal(pickerClicks, 1)
     await chooseFile(window, React.act, view)
+    await React.act(async () => { buttonText(view.host, '换一个视频').click() })
+    assert.equal(pickerClicks, 2)
+    Object.defineProperty(picker, 'files', { configurable: true, value: [] })
+    await React.act(async () => { picker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    assert.match(view.host.textContent, /short\.mp4/)
     await React.act(async () => { buttonText(view.host, '改用云端转写').click() })
     assert.equal(routes[0], '/settings?section=speech&provider=cloud&return_import=1')
     await view.remount()
