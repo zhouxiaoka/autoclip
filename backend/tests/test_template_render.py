@@ -190,7 +190,15 @@ def test_overlay_is_the_second_ffmpeg_input(tmp_path, monkeypatch):
     overlay = tmp_path / 'overlay.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=160x90:r=30:d=2', '-f', 'lavfi', '-i', 'sine=f=440:d=2', '-shortest', '-y', str(source)], check=True, capture_output=True)
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=white@0.3:s=64x64:d=2,format=rgba', '-y', str(overlay)], check=True, capture_output=True)
-    monkeypatch.setattr(html, 'prepare_overlay', lambda *args, **kwargs: html.OverlayJob(overlay, 'editorial', False, 'none', 'none', 'completed', requested_template='editorial', duration_ms=321))
+    (root / 'raw' / 'input.srt').write_text('1\n00:00:00,000 --> 00:00:01,000\nManual caption\n', encoding='utf-8')
+
+    def capture_manual(_project_id, template, package, *_args, **_kwargs):
+        assert package['captions_enabled'] and package['cues'] == [
+            {'start': 0.0, 'end': 0.4, 'text': 'Manual caption'}]
+        return html.OverlayJob(overlay, template, False, 'none', 'none', 'completed',
+                               requested_template=template, duration_ms=321)
+
+    monkeypatch.setattr(html, 'prepare_overlay', capture_manual)
     from backend.services import video_encoder
     from backend.services.studio.render import render_draft
     commands = []
@@ -201,7 +209,7 @@ def test_overlay_is_the_second_ffmpeg_input(tmp_path, monkeypatch):
         return real(build, run)
 
     monkeypatch.setattr(video_encoder, 'run_with_fallback', spy)
-    draft = Draft(id='d1', title='Short', scenes=[Scene(id='s1', start=0.0, end=0.4)], subtitles=False, original_audio=False, aspect='original', layout='fit')
+    draft = Draft(id='d1', title='Short', scenes=[Scene(id='s1', start=0.0, end=0.4)], subtitles=True, original_audio=False, aspect='original', layout='fit')
     result = render_draft('p1', source, draft, 'job-html', lambda _p: None, html_template='editorial', features={'pkg_templates_v1': True})
     output = root / 'output' / 'studio' / 'job-html.mp4'
     assert output.is_file()

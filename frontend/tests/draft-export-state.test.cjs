@@ -28,3 +28,14 @@ test('active re-export retains current download, and unordered histories are sor
  assert.equal(s.status,'rendering');assert.equal(s.active.job_id,'running');assert.equal(s.completed.job_id,'newest')
  assert.equal(JSON.stringify(jobs),snapshot)
 })
+test('a recovered portrait design keeps a same-revision classic export in history',()=>{
+ const recovered={...draft,aspect:'portrait',html_template:'news'}
+ const classic={...job('old-classic','completed'),requested_template:'classic'}
+ const design={...job('new-design','completed'),requested_template:'news'}
+ assert.equal(state(recovered,[classic]).status,'updated')
+ assert.equal(state(recovered,[classic]).previous.job_id,'old-classic')
+ assert.equal(state(recovered,[design,classic]).completed.job_id,'new-design')
+ assert.equal(state({...recovered,aspect:'landscape'},[classic]).status,'ready')
+ assert.equal(state(recovered,[classic],false).status,'ready')
+ assert.equal(state(recovered,[{...job('older-design','completed'),html_template:'news'}]).status,'ready')
+})

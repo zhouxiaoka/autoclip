@@ -467,6 +467,8 @@ def read(project_id: str):
             scope[1]['read_error'] = error
         raise
     data = json.loads(contents)
+    from backend.services.studio.template_choice import restore_manual_draft_templates
+    restore_manual_draft_templates(data)
     data.setdefault('schema_version', 1)
     data.setdefault('drafts', [])
     data.setdefault('events', [])
@@ -1223,6 +1225,9 @@ def save_draft(project_id, draft, *, create=False):
         if existing and existing['revision'] != draft.revision:
             raise ConflictError('草稿已在另一窗口修改，请重新加载后再保存')
         value = draft.model_dump()
+        if 'html_template' not in draft.model_fields_set:
+            from backend.services.studio.template_choice import manual_draft_template
+            value['html_template'] = existing.get('html_template') if existing else manual_draft_template(data)
         value.update(revision=existing['revision'] + 1 if existing else 1, updated_at=now())
         data['drafts'] = [d for d in data['drafts'] if d['id'] != draft.id] + [value]
         return value
@@ -1239,6 +1244,8 @@ def duplicate_draft(project_id, request):
         if request.draft.revision > parent['revision']:
             raise ConflictError('来源版本无效，请重新加载后再试')
         value = request.draft.model_dump()
+        if 'html_template' not in request.draft.model_fields_set:
+            value['html_template'] = parent.get('html_template')
         value.update(id=uuid.uuid4().hex, title=request.title, language=request.language,
                      revision=1, updated_at=now(), origin=parent.get('origin', 'manual'),
                      parent_draft_id=parent['id'], parent_revision=request.draft.revision)
@@ -1256,7 +1263,9 @@ def open_legacy_editor(project_id, draft, source_key, *, reuse_existing):
             linked = next((d for d in data['drafts'] if d['id'] == links.get(source_key)), None)
             if linked is not None:
                 return linked
+        from backend.services.studio.template_choice import manual_draft_template
         result = draft.model_dump()
+        result['html_template'] = manual_draft_template(data)
         result.update(revision=1, updated_at=now())
         data['drafts'].append(result)
         if reuse_existing:

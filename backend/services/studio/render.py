@@ -255,8 +255,17 @@ def _encode_draft(
         from backend.services.studio.templates.registry import TemplateRegistryError, get
         try:
             overlay_grade = get(html_template).base.grade or ''
+            overlay_packaging = draft.packaging
+            if overlay_packaging is None:
+                # Standalone drafts already translated these rows for the editor's language.
+                # Feed those same timed captions to HTML. Keep the classic fallback intact.
+                from backend.services.studio.packaging import draft_lines
+                overlay_packaging = {
+                    'captions_enabled': draft.subtitles, 'audience_language': draft.language,
+                    'cues': draft_lines(entries, [scene.model_dump() for scene in draft.scenes]),
+                }
             overlay_job = packaging_html.prepare_overlay(
-                project_id, html_template, draft.packaging,
+                project_id, html_template, overlay_packaging,
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
                 features=features, safe_area=safe_area, scenes=draft.scenes,
             )

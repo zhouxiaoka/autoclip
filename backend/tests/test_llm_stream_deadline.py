@@ -36,7 +36,7 @@ def test_deadline_eof_does_not_accept_partial_sse():
         llm_stream.collect_sse(lines())
 
 
-def test_deadline_interrupts_a_blocked_real_httpx_sdk_read(monkeypatch):
+def test_deadline_interrupts_a_blocked_real_httpx_sdk_read(monkeypatch, caplog):
     consumed = threading.Event()
     release = threading.Event()
     original_note = llm_stream._note
@@ -83,7 +83,8 @@ def test_deadline_interrupts_a_blocked_real_httpx_sdk_read(monkeypatch):
                 except FutureTimeout:
                     pytest.fail('expired stream stayed blocked on the old socket read timeout')
                 except job_budget.JobDurationExceeded:
-                    pass
+                    assert 'phase=response_body http_status=200' in caplog.text
+                    assert 'abort=socket_shutdown' in caplog.text
                 else:
                     pytest.fail('deadline returned an incomplete response as success')
             finally:
@@ -93,3 +94,35 @@ def test_deadline_interrupts_a_blocked_real_httpx_sdk_read(monkeypatch):
         server.server_close()
         provider.client.close()
         thread.join(timeout=2)
+
+
+def test_packaging_wait_for_headers_spends_only_one_sdk_attempt(caplog):
+    from backend.core import llm_usage
+    seen = []
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers['Content-Length']))
+            seen.append(True)
+            release.wait(5)
+
+    with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        provider = OpenAIProvider(api_key='local-fixture', model_name='fixture',
+                                  base_url=f'http://127.0.0.1:{server.server_port}/v1')
+        try:
+            with llm_usage.stage('packaging'), job_budget.bound_clip_job(.4), pytest.raises(job_budget.JobDurationExceeded):
+                provider.call('private fixture words')
+            assert seen == [True]
+            assert 'phase=open_stream' in caplog.text
+            assert 'private fixture words' not in caplog.text
+        finally:
+            release.set()
+            server.shutdown()
+            provider.client.close()
+            thread.join(timeout=2)

@@ -248,6 +248,15 @@ def test_english_pages_keep_the_spaces():
         _visible_sentence('street', fill, index)
 
 
+def test_short_english_phrases_keep_word_boundaries_on_one_screen():
+    text = 'She said, we did not finish the work last week, which is mostly my fault.'
+    pack = {'audience_language': 'en', 'cues': [{'start': 0, 'end': 4.8, 'text': text}]}
+    for template in ('editorial', 'street', 'news', 'cinema'):
+        fill = build_fill(pack, 4.8, template=template)
+        shown = ' '.join(word['text'] for word in fill['words'])
+        assert shown.split() == re.findall(r'[a-zA-Z]+', text)
+
+
 def test_chinese_breaks_keep_words_numbers_and_latin_together():
     from backend.services.studio.overlay_fill import _phrases
     marked = _phrases('甲乙丙丁生产力需要15小时写进DNA里', 5, '生产力')

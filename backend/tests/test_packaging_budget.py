@@ -27,7 +27,7 @@ def test_packaging_deadline_keeps_source_captions_and_parent_budget(packaging_ru
     now, items, cache, _ = packaging_run
     calls = []
     def slow(*args):
-        calls.append(True)
+        calls.append(args[0] == packaging.PROMPT)
         while not job_budget.budget_expired():
             now[0] += 30
         raise job_budget.JobDurationExceeded()
@@ -39,7 +39,8 @@ def test_packaging_deadline_keeps_source_captions_and_parent_budget(packaging_ru
             packed = jobs._apply_packaging('isolated-project', value, platform, False, cache)['packaging']
             assert packed['fallback'] is True
             assert packed['cues'][0]['text'] == 'Useful source words'
-    assert len(calls) == 1
+    assert calls == [True, False]  # one structured request, one translation, no retries
+    assert now[0] == 100 + packaging.PACKAGING_BUDGET_SEC
 
 
 def test_packaging_timeout_preserves_completed_cache(packaging_run, monkeypatch):
@@ -102,3 +103,27 @@ def test_packaging_transport_failure_does_not_retry_as_translation(packaging_run
     result = packaging.build_packaging({'title': 'Title'}, [{'start': 0, 'end': 5, 'text': 'Source words'}], strategy, call=call)
     assert result['fallback'] and result['cues'][0]['text'] == 'Source words'
     assert len(calls) == 1
+
+
+def test_stalled_style_leaves_time_for_one_caption_translation(packaging_run, monkeypatch, caplog):
+    now, items, cache, _ = packaging_run
+    cache['entries'][0]['text'] = 'These are the source subtitles for the interview.'
+    prompts = []
+
+    def model(prompt, payload):
+        prompts.append(prompt)
+        if prompt == packaging.PROMPT:
+            now[0] += job_budget.clip_job_read_timeout(1000) + .01
+            job_budget.ensure_clip_job_budget()
+        assert 0 < job_budget.clip_job_read_timeout(1000) <= 60
+        return {'lines': [{'id': row['id'], 'text': '这是访谈字幕。'} for row in payload['lines']]}
+
+    monkeypatch.setattr(intelligence, 'text_json', model)
+    with job_budget.bound_clip_job(1200):
+        jobs._prefetch_packaging('isolated-project', items[:1], False, cache)
+        pack = jobs._apply_packaging('isolated-project', items[0][1], 'douyin', False, cache)['packaging']
+        job_budget.ensure_clip_job_budget()
+    assert len(prompts) == 2
+    assert pack['fallback'] and pack['fallback_captions'] == 'translated'
+    assert pack['cues'][0]['text'] == '这是访谈字幕。'
+    assert 'phase=structured' in caplog.text and 'elapsed_ms=' in caplog.text

@@ -1,4 +1,5 @@
 {
+  "部分包装未完整生成，详情见下方成片。": "Algunos elementos de estilo están incompletos. Consulta los detalles de los vídeos a continuación.",
   "把长视频剪成精彩片段": "Convierte vídeos largos\nen clips",
   "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Importa un vídeo o pega un enlace. La IA encuentra los momentos que vale la pena compartir.",
   "示例项目": "Proyecto de ejemplo",
@@ -1547,6 +1548,8 @@
   "访谈式 · 中英字幕": "Estilo entrevista · subtítulos en chino e inglés",
   "模板": "Plantilla",
   "字幕、名牌和版式由模板按发布平台自动生成。": "La plantilla genera los subtítulos, los rótulos de nombre y el diseño según la plataforma elegida.",
+  "包装样式未完整生成，已保留原文字幕，缺少译文": "El diseño está incompleto. Se conservaron los subtítulos originales. Falta la traducción.",
+  "包装样式未完整生成，已保留翻译字幕": "El diseño está incompleto. Se conservaron los subtítulos traducidos.",
   "包装未能完整生成，已保留可用字幕": "La edición está incompleta; se han conservado los subtítulos disponibles",
   "包装未能完整生成，字幕暂不可用": "La edición está incompleta; los subtítulos no están disponibles por ahora",
   "包装未能完整生成，已使用原字幕": "La edición no se completó; se usan los subtítulos originales",

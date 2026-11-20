@@ -47,6 +47,10 @@ def stage(name: str):
         _stage.reset(token)
 
 
+def current_stage() -> str:
+    return _stage.get()
+
+
 def set_stage(name: str) -> None:
     """Name the step for the rest of a sequential run (the pipeline steps)."""
     from backend.core.project_cancellation import checkpoint
