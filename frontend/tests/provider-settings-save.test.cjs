@@ -154,3 +154,33 @@ test('retesting a masked NVIDIA connection and saving preserves its stored key (
   assert.equal(saved.has_key, true)
   assert.equal(saved.api_key, undefined, 'omit the hidden key on PUT so the backend preserves it')
 })
+
+test('catalog tests and first save use the chosen model, and saving never starts a trial (#619)', async () => {
+  const state = { ...whisperSettings(), saved: false, connections: [], analysis: null }
+  const models = ['gpt-4o-mini', 'gpt-5-mini'].map(id => ({ id, analysis: true, capability: 'text' }))
+  const calls = [], writes = []
+  const render = settingsHook(state, {
+    discover: async () => ({ source: 'live', models }),
+    test: async (c, model, vision, role, kind) => {
+      calls.push([model, kind])
+      if (model === 'changed-model') return { ok: false, result: 'transient', error_type: 'rate_limited' }
+      return { ok: true, probe_kind: kind, trial_passed: kind === 'trial' }
+    },
+    save: async value => { writes.push(value); return { ...value, saved: true } },
+  })
+  await render().load()
+  render().ensureCatalogProvider('openai', { api_key: 'fixture' })
+  await new Promise(resolve => setImmediate(resolve))
+  const { main } = render()
+  assert.equal(render().settings.analysis.model, 'gpt-5-mini')
+  for (const kind of ['quick', 'trial']) {
+    await render().testCatalogProvider('openai', { base_url: main.base_url, api_key: main.api_key }, kind)
+  }
+  assert.equal((await render().save()).ok, true)
+  assert.deepEqual(calls, [['gpt-5-mini', 'quick'], ['gpt-5-mini', 'trial']])
+  render().update({ analysis: { ...render().settings.analysis, model: 'changed-model' } })
+  assert.equal((await render().save()).ok, true)
+  assert.deepEqual(calls.slice(2), [['changed-model', 'quick']])
+  assert.equal(writes[1].connections[0].validation_status, 'transient')
+  assert.equal(writes[1].connections[0].api_key, 'fixture')
+})

@@ -1190,9 +1190,7 @@ test('save skips disabled/local connections and deduplicates shared access check
  },initial)
  await render().load();await Promise.resolve()
  const result=await render().save()
- // F2 post-save analysis trial also probes once; drain it before asserting.
- await Promise.resolve(); await Promise.resolve()
- assert.deepEqual(calls,['private-id','private-id'])
+ assert.deepEqual(calls,['private-id'])
  assert.equal(result.validationFailed,false)
 })
 
@@ -1207,9 +1205,7 @@ test('save rechecks only the changed optional binding on a validated connection'
  await render().load();await Promise.resolve()
  render().update({cover:{...initial.cover,model:'private-new-image'}})
  await render().save()
- // F2 post-save analysis trial probes the analysis binding after the cover recheck.
- await Promise.resolve(); await Promise.resolve()
- assert.deepEqual(calls,[['cover','private-new-image'],['private-id','private-model']])
+ assert.deepEqual(calls,[['cover','private-new-image']])
  assert.equal(render().lists.cover.preview,true,'non-chat ids must not be backfilled as live chat models')
 })
 

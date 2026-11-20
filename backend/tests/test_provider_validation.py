@@ -1152,3 +1152,21 @@ def test_cover_seedream_still_validates_without_image_model_block(monkeypatch):
     )
     assert result.ok is True
     assert result.error_type == ''
+
+
+@pytest.mark.parametrize('stage', ['GET', 'POST'])
+@pytest.mark.parametrize('code, expected', [
+    ('insufficient_quota', 'insufficient_quota'),
+    ('rate_limit_exceeded', 'rate_limited'),
+])
+def test_settings_probe_distinguishes_quota_and_rate_429(monkeypatch, stage, code, expected):
+    def handler(method, url, headers, body):
+        if method == stage:
+            return _FakeResponse(429, {'error': {'code': code}})
+        return _FakeResponse(200, {'data': [{'id': 'gpt-5-mini'}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'gpt-5-mini').as_api()
+    assert result['http_status'] == 429
+    assert result['error_type'] == expected
+    assert result['result'] == ('transient' if expected == 'rate_limited' else 'failed')
