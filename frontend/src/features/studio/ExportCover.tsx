@@ -8,18 +8,21 @@ import { studioApi } from './api'
 import { isDesktopDownload, saveLocalFile } from './nativeDownload'
 import type { OutputVariant, RenderJob } from './types'
 
-type Props = { projectId: string; job: RenderJob; variant?: OutputVariant }
+type Props = {
+  projectId: string; job: RenderJob; variant?: OutputVariant
+  coverStamp?: number; onVariantCoverChanged?: () => void
+}
 
 /** Reads the cover made for this export. Older exports can generate their missing cover here. */
-export default function ExportCover({ projectId, job, variant }: Props) {
+export default function ExportCover({ projectId, job, variant, coverStamp = 0, onVariantCoverChanged }: Props) {
   const clip = `studio-${job.job_id}`
   const platform = job.result && job.result.height > job.result.width ? 'douyin' : 'bilibili'
-  const [version, setVersion] = useState(0)
+  const [version, setVersion] = useState(coverStamp)
   const [failedUrl, setFailedUrl] = useState('')
   const [loadedUrl, setLoadedUrl] = useState('')
   const [task, setTask] = useState<{ id: string; variantId?: string } | null>(null)
   const [imageModel, setImageModel] = useState(false)
-  const [useVariantFile, setUseVariantFile] = useState(false)
+  const [useVariantFile, setUseVariantFile] = useState(coverStamp > 0)
   const [missingVariantFile, setMissingVariantFile] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -50,7 +53,11 @@ export default function ExportCover({ projectId, job, variant }: Props) {
           return
         }
         if (state.status === 'completed') {
-          if (task.variantId) { setUseVariantFile(true); setMissingVariantFile(false) }
+          if (task.variantId) {
+            setUseVariantFile(true)
+            setMissingVariantFile(false)
+            onVariantCoverChanged?.()
+          }
           setVersion(v => v + 1)
         }
         else setError(t('封面生成失败，请重试'))
@@ -62,7 +69,7 @@ export default function ExportCover({ projectId, job, variant }: Props) {
     }
     void check()
     return () => { closed = true; window.clearTimeout(timer) }
-  }, [projectId, task])
+  }, [projectId, task, onVariantCoverChanged])
 
   const generate = async () => {
     setBusy(true)

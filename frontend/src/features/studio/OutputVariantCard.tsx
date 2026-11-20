@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
@@ -35,6 +35,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const [asking, setAsking] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
   const [coverStamp, setCoverStamp] = useState(0)
+  const coverChanged = useCallback(() => setCoverStamp(Date.now()), [])
   const showReason = useFlag('clip_reasons') === true
   const reason = showReason ? clipReason({ evidence: draft?.scenes[0]?.evidence, framing: variant.framing }) : null
   const packaging = draft?.packaging
@@ -77,8 +78,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       </div></div>
       {(post || completed) && <details className="studio-publish-tools" onToggle={event => setToolsOpen(event.currentTarget.open)}>
         <summary>{t('发布工具')}</summary>
-        {completed && job && <ExportCoverButton projectId={projectId} job={job} variant={variant} />}
-        <PublishKit projectId={projectId} variant={variant} toolsOpen={toolsOpen} post={post} onPostChange={setEditedPost} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
+        {completed && job && <ExportCoverButton projectId={projectId} job={job} variant={variant} coverStamp={coverStamp} onVariantCoverChanged={coverChanged} />}
+        <PublishKit projectId={projectId} variant={variant} toolsOpen={toolsOpen} post={post} onPostChange={setEditedPost} analytics={analytics} coverStamp={coverStamp} onCoverChanged={coverChanged} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
         {completed && variant.render_job_id && <Btn size="sm" variant="cta" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
       </details>}
       {asking && <OutputFeedback projectId={projectId} variant={analytics} onDone={() => setAsking(false)}/>}
