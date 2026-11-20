@@ -126,3 +126,31 @@ for (const cause of ['invalid key', 'missing cloud ASR']) {
     assert.equal(render().settings.transcription.provider, 'whisper_local')
   })
 }
+
+test('retesting a masked NVIDIA connection and saving preserves its stored key (#622)', async () => {
+  const state = whisperSettings()
+  const connection = {
+    id: 'nvidia', provider: 'compatible', name: 'NVIDIA', has_key: true,
+    base_url: 'https://integrate.api.nvidia.com/v1', image_base_url: '', image_api: 'auto',
+  }
+  state.connections = [connection]
+  state.analysis = { connection_id: connection.id, model: 'nvidia/nemotron-3-ultra-550b-a55b', capability: 'text' }
+  const tests = [], writes = []
+  const render = settingsHook(state, {
+    discover: async () => ({ source: 'live', models: [{ id: state.analysis.model, analysis: true }] }),
+    test: async (c, model, vision, role, kind) => { tests.push({ c, kind }); return { ok: true, probe_kind: kind } },
+    save: async value => { writes.push(value); return value },
+  })
+  await render().load()
+  for (const kind of ['quick', 'trial']) {
+    await render().testCatalogProvider('nvidia', {
+      base_url: connection.base_url, api_key: undefined, has_key: true,
+    }, kind)
+  }
+  assert.deepEqual(tests.map(row => row.kind), ['quick', 'trial'])
+  assert.ok(tests.every(row => row.c.has_key && row.c.api_key === undefined))
+  assert.equal((await render().save()).ok, true)
+  const [saved] = writes[0].connections
+  assert.equal(saved.has_key, true)
+  assert.equal(saved.api_key, undefined, 'omit the hidden key on PUT so the backend preserves it')
+})
