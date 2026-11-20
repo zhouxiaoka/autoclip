@@ -82,7 +82,8 @@ test('controller holds immediately and releases after delay', async () => {
   await ctrl.flush()
   assert.equal(calls.length, 1)
 
-  ctrl.syncProjects([{ status: 'completed' }])
+  ctrl.syncProjects([{ status: 'pending', settings: { awaiting_confirmation: true } }])
+  assert.equal(ctrl.showsActivityLock(), false)
   await ctrl.flush()
   assert.equal(calls.length, 1)
   assert.equal(timers.length, 1)
@@ -435,7 +436,7 @@ test('a late acquire cannot overwrite a release that was requested while it was 
   assert.equal(ctrl.showsActivityLock(), false)
 })
 
-test('a restored studio plan waiting for the user releases the activity lock', async () => {
+test('waiting for a studio confirmation is idle, including restored project records', () => {
   const m = loadKeepAwake()
   for (const handle of ['settings', 'processing_config']) {
     assert.equal(m.projectIsProducing({ status: 'pending', [handle]: { awaiting_confirmation: true } }), false)
