@@ -517,6 +517,9 @@ def token_param_kwargs(model: Optional[str], base_url: Optional[str], request: D
 LLM_READ_TIMEOUT_SEC = 600.0
 LLM_CONNECT_TIMEOUT_SEC = 15.0
 LLM_SDK_MAX_RETRIES = 1
+# 设置页的"测试连接"不是挑片调用，不该背 600s 的生产超时：网络不通时它会一直挂到
+# 前端自己的 5 分钟超时先放弃，用户只看到一句不知所云的"请重试"而看不到真正的错误（#603）。
+CONNECTION_TEST_READ_TIMEOUT_SEC = 20.0
 
 
 class OpenAIProvider(LLMProvider):
@@ -552,6 +555,8 @@ class OpenAIProvider(LLMProvider):
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用OpenAI API"""
         try:
+            # 连接测试等一次性探测用：跳过生产超时/预算超时，直接指定一个短超时（#603）。
+            timeout_override = kwargs.pop("_request_timeout_override", None)
             model = self.request_model()
             full_input = self._build_full_input(prompt, input_data)
             payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, {
@@ -563,10 +568,11 @@ class OpenAIProvider(LLMProvider):
             # can; a refusal or a single JSON body is assembled the same way.
             payload["stream"] = True
             from backend.core.llm_stream import collect_sdk, create_openai_chat
-            request_timeout = _budget_request_timeout(LLM_READ_TIMEOUT_SEC)
+            request_timeout = timeout_override if timeout_override is not None else _budget_request_timeout(LLM_READ_TIMEOUT_SEC)
+            refresh_timeout = (lambda: timeout_override) if timeout_override is not None else (lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
             try:
                 response = create_openai_chat(
-                    self.client, payload, request_timeout, lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
+                    self.client, payload, request_timeout, refresh_timeout)
             except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
@@ -579,8 +585,7 @@ class OpenAIProvider(LLMProvider):
                 logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", sanitize_model(model))
                 response = create_openai_chat(
                     self.client, to_max_completion_tokens(payload),
-                    _budget_request_timeout(LLM_READ_TIMEOUT_SEC),
-                    lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
+                    refresh_timeout(), refresh_timeout)
             collected = collect_sdk(response)
             usage = collected.usage
             if usage:
@@ -617,7 +622,18 @@ class OpenAIProvider(LLMProvider):
                     logger.warning("OpenAI API Key格式可能不正确，期望以'sk-'开头")
             
             # 真实小请求：额度只剩一点时 max_tokens=1 也能通过。推理型号的输出上限也算推理 token。
-            response = self.call("测试", max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 16)
+            # 这是设置页的连通性检查，不是挑片调用：用短超时，网络不通时快速失败并报出真正的
+            # 错误，而不是悬在生产用的 600s 超时上，等前端自己的 5 分钟超时先放弃（#603）。
+            try:
+                import httpx
+                test_timeout = httpx.Timeout(CONNECTION_TEST_READ_TIMEOUT_SEC, connect=LLM_CONNECT_TIMEOUT_SEC)
+            except ImportError:  # pragma: no cover - httpx ships with openai
+                test_timeout = CONNECTION_TEST_READ_TIMEOUT_SEC
+            response = self.call(
+                "测试",
+                max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 16,
+                _request_timeout_override=test_timeout,
+            )
             return bool(response and str(response.content or "").strip())
         except Exception as e:
             logger.error("OpenAI连接测试失败 (base_url_host=%s): %s",
