@@ -11,6 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import ProjectCard from '../components/ProjectCard'
 import CreativeImport from '../features/studio/CreativeImport'
+import { needsImportConfirmation } from '../features/studio/importRouting'
 import FirstRunSetup from '../features/settings/FirstRunSetup'
 
 
@@ -212,9 +213,9 @@ export default function HomePage() {
     navigate(`/project/${project.id}`)
   }
 
-  const pendingImports = projects.filter(p => p.settings?.import_staging || p.processing_config?.import_staging)
+  const pendingImports = projects.filter(needsImportConfirmation)
   const filteredProjects = (projects || [])
-    .filter(p => !p.settings?.import_staging && !p.processing_config?.import_staging)
+    .filter(p => !needsImportConfirmation(p))
     .filter(project => {
       const matchesStatus = !statusFilter || statusFilter === 'all' || project.status === statusFilter || (statusFilter === 'error' && project.status === 'failed')
       return matchesStatus

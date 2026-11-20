@@ -535,3 +535,13 @@ test('manual results count drafts separately and keep source actions reachable, 
   assert.match(view(false, {clips: mixed.clips}).querySelector('.studio-result-grid').textContent, /source-card/)
   assert.doesNotMatch(view(true, mixed).body.textContent, /source-card/)
 })
+
+test('a completed manual project offers another version on the results page', () => {
+  const buttons = []
+  render(false, 'production', 'completed', buttons, [], undefined, undefined, '', '', {drafts: [{id: 'existing'}]})
+  const remake = buttons.find(button => button.children === '再做一版')
+  assert.ok(remake)
+  const before = navigations.length
+  remake.onClick()
+  assert.equal(navigations.length, before)
+})

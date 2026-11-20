@@ -154,6 +154,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   })
   const [file, setFile] = useState<File | null>(restored?.file || null)
   const [subtitle, setSubtitle] = useState<File | null>(restored?.subtitle || null)
+  const videoInput = useRef<HTMLInputElement>(null)
   const subtitleInput = useRef<HTMLInputElement>(null)
   const [options, setOptions] = useState<ImportOptions>(restored?.options || {...defaultImportOptions})
   const templatesOn = useFlag('pkg_templates_v1') === true
@@ -606,7 +607,22 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
       </div> : <>
         <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v => { if (!busy && v !== source) { clearPreview(); setPending(null); setSource(v) } }} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
-        {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>:<label className="studio-file"><span>{file?.name || t("选择一段视频")}</span><input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={e=>{ const picked = e.target.files?.[0] || null; setFile(picked); if (picked) arm('drop', { file: picked }) }}/><small>MP4 / MOV / MKV / WEBM / AVI</small></label>}
+        {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label> : (
+          <div className="studio-file">
+            <input type="file" hidden ref={videoInput} aria-label={t('视频文件')}
+              accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy}
+              onChange={event => {
+                const picked = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                if (picked) arm('drop', { file: picked })
+              }} />
+            {file && <span className="studio-file-name" title={file.name} role="status">{file.name}</span>}
+            <Btn size="sm" disabled={busy} aria-describedby="studio-video-formats" onClick={() => videoInput.current?.click()}>
+              {file ? t('换一个视频') : t('选择一段视频')}
+            </Btn>
+            <small id="studio-video-formats">MP4 / MOV / MKV / WEBM / AVI</small>
+          </div>
+        )}
       </>}
       <div className="studio-source-subtitles">
         <input type="file" accept=".srt" hidden ref={subtitleInput} aria-label={t('已有字幕')} disabled={busy}

@@ -387,6 +387,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }
 
   const openProject = () => {
+    if (awaitingConfirmation) {
+      // Studio resolves initial imports vs. remakes from the persisted staging flag.
+      navigate(isManaged ? `/project/${project.id}` : `/import/${project.id}`)
+      return
+    }
     if (!isManaged && project.status === 'pending') {
       message.warning(t("项目正在导入中，请稍后再查看详情"))
       return
@@ -395,8 +400,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       message.warning(t("项目处理中，请完成后再查看"))
       return
     }
-    if (awaitingConfirmation) navigate(`/import/${project.id}`)
-    else if (onClick) onClick()
+    if (onClick) onClick()
     else navigate(`/project/${project.id}`)
   }
 
@@ -432,7 +436,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             </button>
           )}
           {normalizedStatus !== 'failed' && (awaitingConfirmation ? (
-            <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={() => navigate(`/import/${project.id}`)}>{t("查看建议")}</Btn></div>
+            <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={openProject}>{t("查看建议")}</Btn></div>
           ) : isManaged && project.status === 'processing' ? (
             <StatusDot tone="accent" label={t("制作中 · 查看进度")} />
           ) : (
