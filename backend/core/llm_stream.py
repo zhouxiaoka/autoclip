@@ -410,12 +410,33 @@ def post_chat_completion(
         _close(again)
 
 
+_buffered_completion = contextvars.ContextVar('buffered_completion', default=False)
+
+
+@contextmanager
+def buffered_completion():
+    """Retry a stalled structured stream as one JSON body, scoped to this call."""
+    token = _buffered_completion.set(True)
+    try:
+        yield
+    finally:
+        _buffered_completion.reset(token)
+
+
 def create_openai_chat(client: Any, payload: dict[str, Any], timeout: Any, refresh_timeout) -> Any:
     """SDK create. A stream rejection retries once as a single JSON completion."""
     def once(body: dict[str, Any], limit: Any) -> Any:
         call = {} if limit is None else {"timeout": limit}
         from backend.core.job_budget import budget_expired
         started = time.monotonic()
+        if _buffered_completion.get():
+            # Request a single JSON document, but open its HTTP body lazily so the
+            # watchdog can still interrupt a read after the headers have arrived.
+            with client.chat.completions.with_streaming_response.create(
+                **{**body, "stream": False}, **call
+            ) as response:
+                with budget_watch(response.http_response):
+                    return response.parse()
         try:
             return client.chat.completions.create(**body, **call)
         except Exception:
@@ -428,7 +449,7 @@ def create_openai_chat(client: Any, payload: dict[str, Any], timeout: Any, refre
     try:
         return once(payload, timeout)
     except Exception as error:  # noqa: BLE001 - only a stream refusal is retried here
-        if payload.get("stream") is not True or not exception_rejects_stream(error):
+        if _buffered_completion.get() or payload.get("stream") is not True or not exception_rejects_stream(error):
             raise
         from backend.core.llm_degrade import consume_chunk_call
         if not consume_chunk_call():

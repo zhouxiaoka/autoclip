@@ -434,3 +434,13 @@ test('a late acquire cannot overwrite a release that was requested while it was 
   assert.equal(ctrl.isHeld(), false)
   assert.equal(ctrl.showsActivityLock(), false)
 })
+
+test('a restored studio plan waiting for the user releases the activity lock', async () => {
+  const m = loadKeepAwake()
+  for (const handle of ['settings', 'processing_config']) {
+    assert.equal(m.projectIsProducing({ status: 'pending', [handle]: { awaiting_confirmation: true } }), false)
+    assert.equal(m.projectIsProducing({ status: 'pending', [handle]: { studio_generation_status: 'awaiting_confirmation' } }), false)
+  }
+  assert.equal(m.projectIsProducing({ status: 'processing', settings: { awaiting_confirmation: true, studio_generation_status: 'production' } }), true)
+  assert.equal(m.anyProjectProducing([{ status: 'pending', settings: { awaiting_confirmation: true } }, { status: 'processing' }]), true)
+})

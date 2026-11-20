@@ -42,13 +42,13 @@ export function setKeepAwakeEnabled(
 /** Spec: screening / production / rendering, plus DB processing|pending. */
 export function projectIsProducing(project: KeepAwakeProjectLike): boolean {
   const status = String(project.status || '')
-  if (status === 'processing' || status === 'pending') return true
   const gen = String(
     project.settings?.studio_generation_status
       || project.processing_config?.studio_generation_status
       || '',
   )
-  return RUNNING_GENERATION.has(gen)
+  if (status === 'pending' && (gen === 'awaiting_confirmation' || project.settings?.awaiting_confirmation || project.processing_config?.awaiting_confirmation)) return false
+  return status === 'processing' || status === 'pending' || RUNNING_GENERATION.has(gen)
 }
 
 export function anyProjectProducing(projects: KeepAwakeProjectLike[]): boolean {

@@ -2268,6 +2268,9 @@ def _inspect(project_id, options, url, browser):
         def awaiting_confirmation(data):
             from backend.services.studio.failure_identity import SCREENING_KEY, screening_identity
             screening = screening_identity(data.get('analysis'))
+            layouts = _remake_layouts(data)
+            if layouts:
+                plan['remake_layouts'] = layouts
             data.update(plan=plan, analysis={**screening, **({SCREENING_KEY: screening} if screening else {}), 'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
             if data.get('generation'):
                 data['generation']['status'] = 'awaiting_confirmation'
@@ -2371,10 +2374,37 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
     return state['analysis']['run_id']
 
 
+def _remake_layouts(data):
+    """Freeze the prior manual output's composition for each matching type and aspect."""
+    ids = next((set(a['draft_ids']) for a in reversed(data.get('attempts') or [])
+                if a.get('draft_ids') and a.get('kind') == 'production'), None)
+    choices = {}
+    for draft in data.get('drafts') or []:
+        if ids is not None and draft['id'] not in ids:
+            continue
+        layout = draft.get('layout')
+        if layout not in ('fit', 'crop', 'blur', 'window'):
+            continue
+        key = f"{draft.get('origin')}:{draft.get('aspect')}"
+        choices.setdefault(key, set()).add(layout)
+    # Conflicting clip-specific edits cannot establish a project-wide default.
+    return {key: next(iter(layouts)) for key, layouts in choices.items() if len(layouts) == 1}
+
+
 def _add_confirmed_drafts(data, drafts):
     from backend.services.studio.template_choice import manual_draft_template
     choice = manual_draft_template(data)
     rows = [{**d, 'html_template': choice, 'updated_at': store.now()} for d in drafts]
+    layouts = (data.get('plan') or {}).get('remake_layouts') or {}
+    for row in rows:
+        layout = layouts.get(f"{row.get('origin')}:{row.get('aspect')}")
+        if layout:
+            row['layout'] = layout
+        elif (row.get('origin') == 'subtitle-highlight' and row.get('aspect') == 'portrait'
+              and row.get('layout') == 'crop' and not any(
+                  scene.get('crop_track') or scene.get('crop_x') is not None for scene in row.get('scenes', []))):
+            # Timing from subtitles carries no evidence about where the speaker is on screen.
+            row['layout'] = 'blur'
     attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
     data['drafts'].extend(rows)
 

@@ -122,7 +122,10 @@ export default function StudioResults({ project, children, onCreateCollection, o
   }, [project.id])
   // A retry whose response was lost is still watched: the open generation attempt on the snapshot is the source.
   useEffect(()=>{workflow.adoptOpenAttempt(project.id, workspace)},[project.id, workspace.attempts])
-  useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
+  useEffect(() => {
+    const status = workspace.analysis?.status
+    if (status === 'awaiting_confirmation' || (status && status !== 'running' && project.status !== 'completed')) onReload()
+  }, [workspace.analysis?.status])
   const act = async (key: string, fn:()=>Promise<void>) => {
     if (busyRef.current) return
     busyRef.current = key
