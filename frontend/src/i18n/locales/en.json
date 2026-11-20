@@ -1,4 +1,8 @@
 {
+  "导出时自动生成": "Created with the export",
+  "下载封面": "Download cover",
+  "封面已保存": "Cover saved",
+  "封面生成失败，请重试": "Couldn’t create the cover. Try again.",
   "部分包装未完整生成，详情见下方成片。": "Some styling is incomplete. See the clips below for details.",
   "把长视频剪成精彩片段": "Turn long videos\ninto highlights",
   "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Import a video or paste a link. AI finds the moments worth sharing.",

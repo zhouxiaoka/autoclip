@@ -23,7 +23,7 @@ export interface FramingState {
  * Top to bottom: name → subtitles (whole clip) → audio → frame + speaker framing → opening title
  * (optional, folded) → text language → cover. Everything has a working default.
  */
-export default function DraftSettingsPanel({ draft, patch, templateEditable, scene, currentTime, onShot, framing, onAutoFrame, onInstallFraming, onPortrait, coverHref, onOpenCover }: {
+export default function DraftSettingsPanel({ draft, patch, templateEditable, scene, currentTime, onShot, framing, onAutoFrame, onInstallFraming, onPortrait, coverControl }: {
   draft: Draft
   templateEditable?: boolean
   patch: (changes: Partial<Draft>) => void
@@ -36,8 +36,7 @@ export default function DraftSettingsPanel({ draft, patch, templateEditable, sce
   onAutoFrame: () => void
   onInstallFraming: () => void
   onPortrait: () => void
-  coverHref?: string
-  onOpenCover: (href: string) => void
+  coverControl?: React.ReactNode
 }) {
   const showTemplate = templateEditable && draft.aspect === 'portrait'
   const designed = showTemplate && !!draft.html_template && draft.html_template !== 'classic'
@@ -158,8 +157,8 @@ export default function DraftSettingsPanel({ draft, patch, templateEditable, sce
           options={languages.map(l => ({ value: l.value, label: l.value === 'source' ? t('原语言') : l.label }))}
           onChange={value => patch({ language: value as Draft['language'] })} />
       </Row>}
-      <Row label={t("封面")} hint={coverHref ? t("发布时按平台生成带标题的封面，也可以用视频截帧。") : t("导出成片后，在发布页生成带标题的封面。")}>
-        {coverHref && <Btn size="sm" variant="text" onClick={() => onOpenCover(coverHref)}>{t("去生成")}</Btn>}
+      <Row label={t("封面")}>
+        {coverControl ?? t("导出时自动生成")}
       </Row>
     </div>
   </aside>

@@ -50,6 +50,7 @@ export interface ModelSettings {
   vision: Assignment | null
   cover: Assignment | null
   transcription?: { provider: 'whisper_local' | 'sensevoice_local' | 'cloud'; model: string; connection_id?: string; capability?: Capability; model_source?: ModelSource } | null
+  prefer_local_cover?: boolean
   cover_enabled: boolean
   /** Explicit "cover follows analysis"; absent only in documents older than the flag. */
   cover_follows_analysis?: boolean | null

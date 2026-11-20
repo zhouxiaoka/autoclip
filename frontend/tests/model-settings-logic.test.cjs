@@ -48,20 +48,20 @@ test('Infistar gateway address survives save and validation without switching do
   }
 })
 
-test('first run: nothing is pre-selected; choosing a provider fills the recommendation, covers stay local', () => {
+test('first run: nothing is pre-selected; choosing a provider fills the recommendation including an available image model', () => {
   const value = logic.prepareLoaded(fresh())
   assert.equal(logic.needsSetup(value), true)
   assert.deepEqual([value.analysis, value.cover, value.vision], [null, null, null], 'no provider is pre-selected on first run')
   assert.equal(value.analysis_mode, 'auto')
-  assert.deepEqual([value.cover_enabled, value.allow_send_frame], [false, true], 'covers are designed locally until the user picks an image model')
+  assert.deepEqual([value.cover_enabled, value.allow_send_frame], [false, false], 'no model selected and no reference frame permission')
   assert.deepEqual(plain(logic.saveIssue(value)), { role: 'analysis', reason: 'provider' })
   const chosen = logic.chooseProvider(value, 'analysis', 'dashscope', {}, true)
   assert.equal(chosen.connection.id, 'legacy-analysis', 'the legacy connection of that provider is reused')
   assert.equal(chosen.settings.analysis.model, '')
   const filled = defaults.applyModelDefaults(chosen.settings, chosen.connection, models, true)
   assert.equal(filled.analysis.model, 'qwen3.8-flash')
-  assert.equal(filled.cover_enabled, false)
-  assert.equal(filled.cover, null)
+  assert.equal(filled.cover_enabled, true)
+  assert.ok(filled.cover.model)
 })
 
 test('setup is not needed once credentials exist, even before the new document is saved', () => {
@@ -183,7 +183,8 @@ test('a cached live list fills the recommendation immediately when switching pro
   const lists = { b: { models: [{ id: 'gpt-5-mini', capability: 'multimodal', analysis: true }, { id: 'dall-e-3', image: true }], source: 'live', preview: false } }
   const result = logic.chooseProvider({ ...fresh(), connections: [conn('a', 'dashscope'), conn('b', 'openai', { has_key: true })] }, 'analysis', 'openai', lists, true)
   assert.equal(result.settings.analysis.model, 'gpt-5-mini')
-  assert.equal(result.settings.cover_enabled, false, 'choosing a text provider never switches AI covers on')
+  assert.equal(result.settings.cover_enabled, true)
+  assert.equal(result.settings.cover.model, 'dall-e-3')
 })
 
 for (const entry of ['legacy', 'catalog']) {

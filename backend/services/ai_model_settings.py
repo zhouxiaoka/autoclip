@@ -264,6 +264,7 @@ class ModelSettings(BaseModel):
     cover: Assignment | None = None
     transcription: Transcription | None = None
     cover_enabled: bool = False
+    prefer_local_cover: bool = False  # Explicit choice, independent of image model availability.
     # Explicit "cover follows analysis". None only while reading a document written before the
     # flag existed: a cover on the analysis connection was the old "follow", anything else is
     # independent. Following covers move with analysis; independent ones never change provider.
@@ -361,6 +362,9 @@ def load(*, persist_migration: bool = False) -> ModelSettings | None:
             _atomic_write_json(target, raw)
         if settings.cover_choice_version < COVER_CHOICE_VERSION and settings.cover_enabled:
             settings = settings.model_copy(update={'cover_enabled': False})
+        if 'prefer_local_cover' not in raw and settings.cover and not settings.cover_enabled:
+            # Older documents cannot distinguish a user's Off choice from a preset saved as Off.
+            settings = settings.model_copy(update={'prefer_local_cover': True})
         return settings
 
 

@@ -6,6 +6,7 @@ import { trackOutputShare, type VariantProperties } from '../../analytics/studio
 import { flagAssigned, useFlag } from '../../analytics/flags'
 import { clipReason } from './clipReason'
 import StudioDownloadLink from './StudioDownloadLink'
+import { ExportCoverButton } from './ExportCover'
 import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, PostCopy, RenderJob } from './types'
 import { studioApi } from './api'
@@ -69,6 +70,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       {failed && billable && <p className="studio-billing">{t(BILLING_GUIDANCE)}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
         {completed && variant.render_job_id && <StudioDownloadLink className="studio-output-download" projectId={projectId} jobId={variant.render_job_id} onSaved={downloaded} variant={analytics}/>}
+        {completed && job && <ExportCoverButton projectId={projectId} job={job} variant={variant} />}
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {onDemand && <Btn variant="text" onClick={onProduce}>{t('生成这条')}</Btn>}

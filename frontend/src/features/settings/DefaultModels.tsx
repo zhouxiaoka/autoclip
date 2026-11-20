@@ -117,8 +117,12 @@ export default function DefaultModels({ settings, lists, onChange, transcription
             <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
           </div>
           <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} />
+          {slot.id === 'cover' && settings.cover_enabled && (
+            <label className="ac-note"><input type="checkbox" checked={settings.allow_send_frame}
+              onChange={event => onChange({ ...settings, allow_send_frame: event.target.checked })} /> {t('允许上传参考帧')}</label>
+          )}
           {slot.id === 'cover' && !settings.cover_enabled && settings.cover?.model && (
-            <button type="button" className="ac-link-button" onClick={() => onChange({ ...settings, cover_enabled: true })}>
+            <button type="button" className="ac-link-button" onClick={() => onChange({ ...settings, cover_enabled: true, prefer_local_cover: false })}>
               {t('启用 {{model}}', { model: settings.cover.model })}
             </button>
           )}

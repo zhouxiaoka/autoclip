@@ -10,12 +10,12 @@ const list = { source: 'live', models: [
   { id: 'whisper-1', asr: true, asr_supported: true },
   { id: 'gpt-image-1', image: true },
 ] }
-test('one account supplies all four purposes while AI covers stay opt-in', () => {
+test('one account supplies all four purposes including model-designed covers by default', () => {
   const next = recommendProviderSetup(base, connection, list)
   for (const slot of ['analysis','vision','transcription','cover']) assert.equal(next[slot].connection_id, 'one', slot)
   assert.equal(next.vision.model, 'vision')
   assert.equal(next.transcription.model, 'whisper-1')
-  assert.equal(next.cover_enabled, false)
+  assert.equal(next.cover_enabled, true)
   assert.equal(next.allow_send_frame, false)
 })
 test('text-only provider keeps existing speech and cover, never selects unsupported or hidden models', () => {
@@ -44,4 +44,11 @@ test('a cover retained on a different provider stays independently usable after 
   const next = recommendProviderSetup(previous, connection, { source: 'live', models: [list.models[0]] })
   assert.equal(next.cover, previous.cover)
   assert.equal(next.cover_follows_analysis, false)
+})
+
+test('a saved local-only choice survives one-key setup even when an image model is available', () => {
+  const next = recommendProviderSetup({ ...base, prefer_local_cover: true }, connection, list)
+  assert.equal(next.cover.model, 'gpt-image-1')
+  assert.equal(next.cover_enabled, false)
+  assert.equal(next.allow_send_frame, false)
 })

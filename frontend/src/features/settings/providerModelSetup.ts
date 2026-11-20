@@ -31,6 +31,7 @@ export function recommendProviderSetup(settings: ModelSettings, connection: Conn
   if (speech) next.transcription = { provider: 'cloud', model: speech.id, connection_id: connection.id, model_source: 'preset' }
   else if (next.transcription?.connection_id === connection.id) next.transcription = { provider: 'whisper_local', model: 'base', model_source: 'preset' }
   if (cover) {
+    next.cover_enabled = !settings.prefer_local_cover
     next.cover = bind(cover)
     next.cover_follows_analysis = !!analysis
   } else if (next.cover?.connection_id === connection.id) {

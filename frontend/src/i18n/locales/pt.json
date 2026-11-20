@@ -1,4 +1,8 @@
 {
+  "导出时自动生成": "Criada ao exportar",
+  "下载封面": "Baixar capa",
+  "封面已保存": "Capa salva",
+  "封面生成失败，请重试": "Não foi possível criar a capa. Tente novamente.",
   "部分包装未完整生成，详情见下方成片。": "Alguns elementos de estilo estão incompletos. Veja os detalhes nos vídeos abaixo.",
   "把长视频剪成精彩片段": "Transforme vídeos longos\nem destaques",
   "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Importe um vídeo ou cole um link. A IA encontra os momentos que merecem ser compartilhados.",

@@ -1,4 +1,8 @@
 {
+  "导出时自动生成": "Se crea al exportar",
+  "下载封面": "Descargar portada",
+  "封面已保存": "Portada guardada",
+  "封面生成失败，请重试": "No se pudo crear la portada. Inténtalo de nuevo.",
   "部分包装未完整生成，详情见下方成片。": "Algunos elementos de estilo están incompletos. Consulta los detalles de los vídeos a continuación.",
   "把长视频剪成精彩片段": "Convierte vídeos largos\nen clips",
   "导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。": "Importa un vídeo o pega un enlace. La IA encuentra los momentos que vale la pena compartir.",
