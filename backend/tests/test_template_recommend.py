@@ -1,4 +1,5 @@
 """Style recommendation stays inside a short budget and returns enums only."""
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -53,20 +54,15 @@ def test_recommend_route_rejects_an_empty_body_and_does_not_echo_the_url():
     assert 'youtu' not in str(body)
 
 
-def test_import_keeps_the_recommendation_next_to_the_choice(monkeypatch):
-    saved = {}
-    monkeypatch.setattr(store, 'read', lambda *_args, **_kwargs: {})
-    monkeypatch.setattr(store, 'write', lambda _pid, data, **_kwargs: saved.update(generation=data['generation']))
+@pytest.mark.parametrize('selected,accepted', [('street', False), ('editorial', True)])
+def test_import_keeps_the_recommendation_next_to_the_choice(tmp_path, monkeypatch, selected, accepted):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    store.directory('p1').mkdir()
     monkeypatch.setattr(jobs.executor, 'submit', lambda *_args, **_kwargs: None)
     jobs.inspect_project('p1', ImportOptions(
-        auto_start=False, platforms=['douyin'], html_template='street', recommended_template='editorial',
+        auto_start=False, platforms=['douyin'], html_template=selected, recommended_template='editorial',
     ))
-    generation = saved['generation']
-    assert generation['html_template'] == 'street'
+    generation = store.read('p1')['generation']
+    assert generation['html_template'] == selected
     assert generation['recommended_template'] == 'editorial'
-    assert generation['accepted_recommendation'] is False
-    saved.clear()
-    jobs.inspect_project('p1', ImportOptions(
-        auto_start=False, platforms=['douyin'], html_template='editorial', recommended_template='editorial',
-    ))
-    assert saved['generation']['accepted_recommendation'] is True
+    assert generation['accepted_recommendation'] is accepted
