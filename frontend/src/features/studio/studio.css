@@ -210,3 +210,13 @@
   .studio-draft-card .studio-thumb { grid-row: auto; }
   .studio-draft-actions { grid-column: 1 / -1; border-top: 1px solid var(--ac-line-2); padding-top: 10px; }
 }
+
+.studio-export-title.ac-row { display:grid; grid-template-columns:max-content minmax(0,1fr); align-items:center; }
+.studio-export-title b { font-size:14px; }
+.studio-export-title span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:end; }
+.studio-export-cover { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:14px 0; border-bottom:1px solid var(--ac-line); }
+.studio-export-cover > div { display:grid; justify-items:start; gap:8px; }
+.studio-export-cover b { font-size:14px; }
+.studio-export-cover [role=status] { color:var(--ac-sub); font-size:13px; }
+.studio-export-cover img { display:block; max-width:65%; max-height:180px; object-fit:contain; border-radius:6px; }
+.studio-export-cover .studio-error { flex-basis:100%; }

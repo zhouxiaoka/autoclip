@@ -38,16 +38,15 @@ export const needsSetup = (s: ModelSettings) => {
 
 /**
  * Loaded document → editable state. On first run nothing is pre-selected: the user picks a provider and
- * the recommendation follows the key. Covers are designed locally (free) until the user picks an image
- * model themselves: no account with any image service is assumed.
+ * the recommendation follows the models available to that key.
  */
 export function prepareLoaded(value: ModelSettings): ModelSettings {
   if (value.migration_warnings?.length) return value
   if (!needsSetup(value)) return value
-  return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false, allow_send_frame: true }
+  return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false }
 }
 
-/** AI covers are opt-in; once chosen, a service without any image model falls back to the designed cover instead of blocking save. */
+/** Without an eligible image model, keep the video export available with a local cover. */
 export function coverFallback(s: ModelSettings, lists: Record<string, ModelList>): ModelSettings {
   if (!s.cover_enabled || s.cover?.model) return s
   const connection = connectionOf(s, 'cover') || mainConnection(s)
@@ -164,9 +163,9 @@ export function setCoverSeparate(
 
 export function setCoverEnabled(s: ModelSettings, enabled: boolean, lists: Record<string, ModelList>): ModelSettings {
   const main = mainConnection(s)
-  if (!enabled) return { ...s, cover_enabled: false }
+  if (!enabled) return { ...s, cover_enabled: false, prefer_local_cover: true }
   if (main && !endpointProviderReady(main)) return s
-  return { ...s, cover_enabled: true, ...(!s.cover && main ? { cover_follows_analysis: true, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
+  return { ...s, cover_enabled: true, prefer_local_cover: false, ...(!s.cover && main ? { cover_follows_analysis: true, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
 }
 
 /** The "画面识别" switch: on = smart selection (multimodal models sample frames), off = subtitles only. */
@@ -185,7 +184,7 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 /** Model picked in the cover section: stays following only when it is on the analysis connection. */
 export function setCoverModel(s: ModelSettings, connectionId: string, model: string): ModelSettings {
   // E1: an explicit cover model pick is independent; only 「跟随分析」 turns following on.
-  return { ...s, cover_enabled: true, cover_follows_analysis: false, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
+  return { ...s, cover_enabled: true, prefer_local_cover: false, cover_follows_analysis: false, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
 }
 
 export { coverFollowsAnalysis }

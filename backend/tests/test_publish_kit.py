@@ -82,16 +82,35 @@ def test_ai_cover_fit_fills_the_gap_from_the_image_edge_without_cropping():
     assert fitted.getpixel((540, band_y))[0] > 200, 'the image itself is kept sharp, not blurred'
 
 
-def test_no_ai_cover_without_permission_to_send_the_frame(tmp_path, monkeypatch):
-    from types import SimpleNamespace
+@pytest.mark.parametrize('allow_frame', [False, True])
+def test_cover_model_designs_without_permission_or_when_reference_edits_are_unsupported(tmp_path, monkeypatch, allow_frame):
+    import json
+    from backend.core import image_providers
     from backend.services import cover
-    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=False))
-    frame, meta = tmp_path / 'f.jpg', tmp_path / 'm.json'
-    frame.write_bytes(b'f')
-    meta.write_text('{}')
-    monkeypatch.setattr(publish_kit, 'frame_path', lambda *_: frame)
-    monkeypatch.setattr(publish_kit, 'cd_meta_path', lambda *_: meta)
-    assert publish_kit.ai_cover('p', 'j', 'tiktok') is False, 'a made-up face must never carry the guest nameplate'
+    cfg = cover.CoverConfig(enabled=True, base_url='https://example.invalid', model='image', allow_send_frame=allow_frame)
+    monkeypatch.setattr(cover, 'load_config', lambda: cfg)
+    monkeypatch.setattr(cover, 'cover_dir', lambda *_: tmp_path)
+    if allow_frame:
+        publish_kit.frame_path('p', 'j', 'xiaohongshu').write_bytes(b'fixture-frame')
+    publish_kit.cd_meta_path('p', 'j', 'xiaohongshu').write_text(json.dumps({
+        'lines': ['封面标题'], 'accent': 0, 'guest': True, 'name': 'Guest', 'role': 'CEO'}))
+    img = io.BytesIO()
+    Image.new('RGB', (100, 140), 'blue').save(img, 'PNG')
+    requests = []
+    def generate(**kwargs):
+        request = kwargs['request']
+        requests.append(request)
+        if request.reference:
+            raise image_providers.ImageError('unsupported edit', unsupported_edit=True)
+        return img.getvalue()
+    monkeypatch.setattr(image_providers, 'generate_image', generate)
+    monkeypatch.setattr(publish_kit, '_title_ok', lambda *_: True)
+    monkeypatch.setattr(cover_design, 'nameplate', lambda *_: pytest.fail('text-only art must not identify a person'))
+    assert publish_kit.ai_cover('p', 'j', 'xiaohongshu')
+    assert len(requests) == (2 if allow_frame else 1)
+    assert requests[-1].reference is None and 'Guest' not in requests[-1].prompt
+    assert '封面标题' in requests[-1].prompt
+    assert Image.open(publish_kit.kit_cover_path('p', 'j', 'xiaohongshu')).size == (1080, 1440)
 
 
 def test_disk_kit_contains_the_whole_video_without_an_in_memory_archive(tmp_path, monkeypatch):

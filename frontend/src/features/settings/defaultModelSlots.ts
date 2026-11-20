@@ -184,7 +184,7 @@ function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: 
   if (purpose === 'cover') {
     // E1: picking a fixed or smart cover model is an explicit provider choice → independent.
     // Only the 「跟随分析」 entry (setCoverSeparate(false)) turns following on.
-    return { ...settings, cover_enabled: true, cover_follows_analysis: false, cover: assignment(connectionId, model, source) }
+    return { ...settings, cover_enabled: true, prefer_local_cover: false, cover_follows_analysis: false, cover: assignment(connectionId, model, source) }
   }
   const next = { ...settings, [purpose]: assignment(connectionId, model, source) }
   return purpose === 'analysis' ? syncFollowingCover(settings, next) : next
@@ -204,7 +204,7 @@ export function applyVisionFollow(settings: ModelSettings): ModelSettings {
 
 /** Cover off keeps the existing `cover` assignment; only `cover_enabled` flips. */
 export function applyCoverOff(settings: ModelSettings): ModelSettings {
-  return { ...settings, cover_enabled: false }
+  return { ...settings, cover_enabled: false, prefer_local_cover: true }
 }
 
 /** 「改用云端转写」tries configured accounts in this order.

@@ -1228,6 +1228,21 @@ def _design_covers(project_id, draft, job_id):
     from backend.services.studio import publish_kit
     state = store.read(project_id)
     targets = [item for item in state.get('output_variants', []) if item.get('render_job_id') == job_id]
+    if not targets:
+        # Standalone editor exports have no platform variant or publish kit.
+        from backend.services import cover
+        job = next((j for j in state.get('jobs', []) if j['job_id'] == job_id), {})
+        result = job.get('result') or {}
+        if not job or job.get('variant_links'):
+            return
+        platform = 'douyin' if result.get('height', 0) > result.get('width', 0) else 'bilibili'
+        try:
+            clip = publish_kit.clip_id(job_id)
+            if not cover.get_cover(project_id, clip, platform):
+                cover.generate_cover(project_id=project_id, clip_id=clip, platform=platform, title=job['title'])
+        except Exception as error:  # The saved video is usable and its cover can be retried.
+            logger.warning('Export cover failed: %s', type(error).__name__)
+        return
     designed = []
     for variant in targets:
         try:
@@ -1239,22 +1254,21 @@ def _design_covers(project_id, draft, job_id):
     if designed:
         def mark(data):
             for item in data.get('output_variants', []):
-                if item['id'] in designed and item.get('cover') != 'ai':
+                if item['id'] in designed and item.get('render_job_id') == job_id and item.get('cover') != 'ai':
                     item['cover'] = 'design'
         store.change(project_id, mark)
-        for variant in targets:
-            if variant['id'] in designed:
-                request_ai_cover(project_id, variant['id'])
+    for variant in targets:
+        request_ai_cover(project_id, variant['id'], job_id)
 
 
 cover_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='studio-cover')
 
 
-def request_ai_cover(project_id, variant_id):
+def request_ai_cover(project_id, variant_id, render_job_id=None):
     """Share one tracked AI task between automatic covers and requests from the output card."""
     from backend.services import cover
     cfg = cover.load_config()
-    if not (cfg.enabled and cfg.configured and cfg.allow_send_frame):
+    if not (cfg.enabled and cfg.configured):
         return None
     job_id = uuid.uuid4().hex
 
@@ -1262,14 +1276,18 @@ def request_ai_cover(project_id, variant_id):
         variant = next((item for item in data['output_variants'] if item['id'] == variant_id), None)
         if variant is None:
             raise FileNotFoundError('成片版本不存在')
+        if render_job_id and variant.get('render_job_id') != render_job_id:
+            return None
         active = variant.get('cover_job')
-        if active and active['status'] in ('queued', 'running'):
+        if active and active.get('render_job_id', variant.get('render_job_id')) == variant.get('render_job_id') and active['status'] in ('queued', 'running'):
             return active
-        variant['cover_job'] = {'job_id': job_id, 'status': 'queued', 'instance': store.INSTANCE}
+        variant['cover_job'] = {'job_id': job_id, 'render_job_id': variant.get('render_job_id'), 'status': 'queued', 'instance': store.INSTANCE}
         return variant['cover_job']
 
     with store.lock:
         claimed = store.change(project_id, claim)
+        if not claimed:
+            return None
         if claimed['job_id'] == job_id:
             try:
                 cover_executor.submit(_ai_cover_job, project_id, variant_id, job_id, _io_receipt=('cover', variant_id, job_id))
@@ -1293,7 +1311,7 @@ def _update_cover_job(project_id, variant_id, job_id, **values):
         job = variant.get('cover_job') or {}
         if job.get('job_id') == job_id:
             job.update(values)
-            if values.get('status') == 'completed':
+            if values.get('status') == 'completed' and job.get('render_job_id', variant.get('render_job_id')) == variant.get('render_job_id'):
                 variant['cover'] = 'ai'
     store.change(project_id, update)
 
@@ -1304,8 +1322,11 @@ def _ai_cover_job(project_id, variant_id, job_id):
     try:
         _update_cover_job(project_id, variant_id, job_id, status='running')
         variant = next(item for item in store.read(project_id).get('output_variants', []) if item['id'] == variant_id)
+        task = variant.get('cover_job') or {}
+        if task.get('job_id') != job_id:
+            return
         with llm_usage.timed('ai_cover'):
-            made = publish_kit.ai_cover(project_id, variant['render_job_id'], variant['strategy_id'])
+            made = publish_kit.ai_cover(project_id, task.get('render_job_id') or variant['render_job_id'], variant['strategy_id'])
     except Exception as error:  # noqa: BLE001 - the designed cover stays
         store.raise_owned_read_error(error)
         logger.warning('AI cover job failed: %s', type(error).__name__)

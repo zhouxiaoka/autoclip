@@ -82,6 +82,7 @@ export interface QaReport { schema_version: 1; mode: 'shadow'; duration_ms: numb
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
+  cover_pending?: boolean
   brand_outro?: boolean
   requested_template?: HtmlTemplateChoice
   html_template?: HtmlTemplateChoice

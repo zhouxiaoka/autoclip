@@ -31,7 +31,8 @@ export const studioApi = {
   analysisPreferences: (): Promise<AnalysisPreferences> => api.get('/studio/analysis-preferences'),
   saveAnalysisPreferences: (body: AnalysisPreferences): Promise<AnalysisPreferences> => observeStudioOperation('studio_analysis_preferences', () => api.put('/studio/analysis-preferences', body), undefined, { analysis_mode: body.analysis_mode, allow_visual_screening: body.allow_visual_screening }),
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,
-  subtitles: (pid: string, signal?: AbortSignal): Promise<{ cues: SubtitleCue[] }> => api.get(`/studio/${pid}/subtitles`, { signal }),
+  subtitles: (pid: string, draftId: string, width: number, height: number, style: Draft['subtitle_style'], signal: AbortSignal): Promise<{ cues: SubtitleCue[] }> =>
+    api.get(`/studio/${pid}/subtitles`, { signal, params: { draft_id: draftId, width, height, style } }),
   framingStatus: (): Promise<FramingStatus> => api.get('/studio/framing/status'),
   framingInstall: (): Promise<FramingStatus & { started: boolean }> => observeStudioOperation('studio_framing_install', () => api.post('/studio/framing/install'), (_result, props) => workflow.watch('framing-runtime', 'runtime', undefined, undefined, props, true)),
   autoFrame: (pid: string, draft: Draft, trigger: 'auto' | 'manual' | 'portrait_preset' = 'manual'): Promise<AutoFrameResult> => observeStudioOperation('studio_auto_frame', () => api.post(`/studio/${pid}/auto-frame`, draft, { timeout: 120000 }), (result: AutoFrameResult, props) => {

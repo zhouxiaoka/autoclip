@@ -630,7 +630,8 @@ def output_variant_cover(project_id: str, variant_id: str, db: Session = Depends
     path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
     if path is None:
         raise HTTPException(404, '封面尚未生成')
-    return FileResponse(path, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+    return FileResponse(path, media_type='image/jpeg', filename=f"{job['job_id']}-cover.jpg",
+                        content_disposition_type='inline', headers={'Cache-Control': 'no-store'})
 
 
 @router.post('/{project_id}/output-variants/{variant_id}/cover/ai')
@@ -641,8 +642,6 @@ def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session 
     cfg = cover.load_config()
     if not (cfg.enabled and cfg.configured):
         raise HTTPException(409, '请先在设置里开启 AI 封面并选择图像模型')
-    if not cfg.allow_send_frame:
-        raise HTTPException(409, '请先在设置里允许发送参考帧')
     job = call(jobs.request_ai_cover, project_id, variant_id)
     if job is None:
         raise HTTPException(409, '请先检查 AI 封面设置')
@@ -762,13 +761,28 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
     return candidate
 
 @router.get('/{project_id}/subtitles')
-def subtitles(project_id: str, db: Session = Depends(get_db)):
-    """Subtitle cues in seconds, for the editor's styled preview overlay."""
+def subtitles(project_id: str, db: Session = Depends(get_db), draft_id: Optional[str] = None,
+              width: int = Query(1080, ge=1, le=32768), height: int = Query(1920, ge=1, le=32768),
+              style: Literal['clean', 'box', 'bold', 'accent'] = 'clean'):
+    """Preview readable pages on the source clock, including saved translated captions."""
     from backend.pipeline.quality import to_seconds
-    from backend.services.publish_export import _load_srt_entries
+    from backend.services.publish_export import _load_srt_entries, subtitle_line_limit
+    from backend.services.studio.caption_layout import timed_screens
     project_or_404(project_id, db)
-    entries = _load_srt_entries(project_id)
-    return {'cues': [{'start': to_seconds(e['start_time']), 'end': to_seconds(e['end_time']), 'text': e.get('text', '')} for e in entries]}
+    package = None
+    if draft_id:
+        draft = next((d for d in store.read(project_id)['drafts'] if d['id'] == draft_id), None)
+        package = (draft or {}).get('packaging')
+    if package and package.get('cues'):
+        rows = [(c['start'], c['end'], c['text']) for c in package['cues']]
+    else:
+        rows = [(to_seconds(e['start_time']), to_seconds(e['end_time']), e.get('text') or '')
+                for e in _load_srt_entries(project_id)]
+    limit = subtitle_line_limit(width, height, style)
+    return {'cues': [{'start': a, 'end': b, 'text': page.replace('\\N', '\n')}
+                     for start, end, text in rows if end > start
+                     for a, b, page, _ in timed_screens(text, start, end, limit)]}
+
 
 @router.get('/framing/status')
 def framing_status():

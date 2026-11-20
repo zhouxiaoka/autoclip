@@ -110,7 +110,8 @@ test('one-key setup validates the account and commits four assignments in one wr
   assert.equal(writes.length, 1)
   const [saved] = writes
   for (const role of ['analysis', 'vision', 'transcription', 'cover']) assert.equal(saved[role].connection_id, 'ds')
-  assert.equal(saved.cover_enabled, false)
+  assert.equal(saved.cover_enabled, true)
+  assert.equal(saved.allow_send_frame, false)
   assert.equal(saved.transcription.provider, 'cloud')
 })
 

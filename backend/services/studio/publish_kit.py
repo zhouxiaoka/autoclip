@@ -130,7 +130,7 @@ AI_LAYOUT = {
 }
 
 
-def ai_prompt(strategy_id: str, lines: list[str], accent: int, name: str, palette: str | None = None) -> str:
+def ai_prompt(strategy_id: str, lines: list[str], accent: int, name: str, palette: str | None = None, *, has_reference: bool = True) -> str:
     from backend.services.platform_strategy import platform_strategy
     from backend.services.studio.packaging_render import PALETTES
     slot, layout = AI_LAYOUT.get(strategy_id, AI_LAYOUT['douyin'])
@@ -138,11 +138,14 @@ def ai_prompt(strategy_id: str, lines: list[str], accent: int, name: str, palett
     keyword = lines[accent] if 0 <= accent < len(lines) and len(lines) > 1 else lines[-1]
     english = platform_strategy(strategy_id).audience_language == 'en'
     title = ' / '.join(lines)
+    concept = (f'Keep the person in the reference image{" (" + name + ")" if name else ""} identifiable: preserve the face, '
+               'age and clothing. Separate the subject from the background with soft directional light.'
+               if has_reference else
+               'Use an editorial illustration or a striking visual metaphor specific to the headline. '
+               'Do not invent a portrait, face or identity for the speaker.')
     return (
-        f'Design a {slot} in a premium editorial magazine-cover style for an interview clip. '
-        f'Subject: the person in the reference image{" (" + name + ")" if name else ""} — keep their face, hair, age and clothing exactly; '
-        f'never replace, restyle or beautify them. Cut the subject out cleanly, head and shoulders large and sharp, with a soft rim light; '
-        f'background replaced by a deep, near-black gradient with subtle film grain, no clutter. Layout: {layout}. '
+        f'Design a {slot} in a premium editorial magazine-cover style for this video. {concept} '
+        f'Use one strong focal point, clear negative space and a restrained palette. Layout: {layout}. '
         f'Typography: a heavy condensed sans-serif headline, {"set in English" if english else "set in Simplified Chinese"}, '
         f'stacked in short lines exactly reading "{title}"; the words "{keyword}" sit on a solid {colour} colour block (or in {colour}), '
         f'the rest in off-white; strong hierarchy, generous margins, nothing touching the edges, the face never covered. '
@@ -209,36 +212,47 @@ def _fit(image, size: tuple[int, int]):
 def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
     """Generate the AI cover for one variant from its designed cover's frame and title; True when stored."""
     from PIL import Image
-    from backend.core.image_providers import ImageRequest, generate_image
+    from backend.core.image_providers import ImageError, ImageRequest, generate_image
     from backend.services import cover
     from backend.services.studio import cover_design as cd
     cfg = cover.load_config()
     frame_file, meta_file = frame_path(project_id, job_id, strategy_id), cd_meta_path(project_id, job_id, strategy_id)
-    if not (cfg.enabled and cfg.configured) or not frame_file.is_file() or not meta_file.is_file():
+    if not (cfg.enabled and cfg.configured):
         return False
-    if not cfg.allow_send_frame:
-        # Without the frame the model would invent a face, then carry the real guest's nameplate.
-        return False
-    meta = json.loads(meta_file.read_text(encoding='utf-8'))
+    if meta_file.is_file():
+        meta = json.loads(meta_file.read_text(encoding='utf-8'))
+    else:
+        from backend.services.studio import store
+        job = next((j for j in store.read(project_id)['jobs'] if j['job_id'] == job_id), None)
+        if not job:
+            return False
+        lines, accent = cd.title_lines_for(job.get('snapshot') or {}, job['title'], strategy_id)
+        meta = {'lines': lines, 'accent': accent}
     width, height = cd.size_for(strategy_id)
-    request = ImageRequest(prompt=ai_prompt(strategy_id, meta['lines'], meta['accent'], meta.get('name', ''), meta.get('palette')), width=width, height=height,
-                           reference=frame_file.read_bytes(), model=cfg.model)
-    image = None
+    reference = frame_file.read_bytes() if cfg.allow_send_frame and frame_file.is_file() else None
+    def generate(reference_bytes, correction=''):
+        prompt = ai_prompt(strategy_id, meta['lines'], meta['accent'], meta.get('name', ''), meta.get('palette'),
+                           has_reference=reference_bytes is not None)
+        request = ImageRequest(prompt=prompt + correction, width=width, height=height, reference=reference_bytes, model=cfg.model)
+        return generate_image(provider=cfg.provider, api_key=cfg.api_key, base_url=cfg.base_url, request=request)
+
+    correction = ''
     for attempt in range(2):
         try:
-            image = generate_image(provider=cfg.provider, api_key=cfg.api_key, base_url=cfg.base_url, request=request)
-        except Exception as error:  # noqa: BLE001 - the designed cover stays
-            logger.warning('AI cover failed: %s', type(error).__name__)
-            return False
+            image = generate(reference, correction)
+        except ImageError as error:
+            if reference is None or not error.unsupported_edit:
+                return False
+            reference = None
+            image = generate(None, correction)
         if _title_ok(image, meta['lines']) is not False:
             break
-        request = ImageRequest(prompt=request.prompt + ' The previous attempt misspelled the headline: render it character by character exactly.', width=width, height=height,
-                               reference=request.reference, model=cfg.model)
+        correction = ' The previous attempt misspelled the headline. Render it character by character exactly.'
     else:
         return False  # the title stayed wrong twice: keep the designed cover
     generated = Image.open(io.BytesIO(image)).convert('RGB')
     fitted = _fit(generated, (width, height))
-    if meta.get('guest') and meta.get('name'):
+    if reference is not None and meta.get('guest') and meta.get('name'):
         fitted = cd.nameplate(fitted, meta['name'], meta.get('role', ''), meta.get('palette'))
     out = io.BytesIO()
     fitted.save(out, format='JPEG', quality=92)
@@ -246,7 +260,7 @@ def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
     if height != 1440:  # the publish slot is 9:16 / 16:9; Xiaohongshu's 3:4 stays kit-only
         slot = _publish_slot(strategy_id)
         _atomic_write(cover.cover_path(project_id, clip_id(job_id), slot), out.getvalue())
-        cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'model', 'title': ' '.join(meta['lines'])})
+        cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'model' if reference is not None else 'model_bg', 'title': ' '.join(meta['lines'])})
     return True
 
 
