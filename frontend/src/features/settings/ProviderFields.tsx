@@ -74,8 +74,8 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
               const text = event.clipboardData?.getData('text') || ''
               if (text && offerPastedKey(text, key || connection.provider)) event.preventDefault()
             }}
-            onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
-            onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
+            onChange={e => onEdit({ api_key: e.target.value.trim() })}
+            onBlur={e => onEdit({ api_key: e.target.value.trim() })} />
           {preset?.sponsor && (
             <span className="ac-sponsor-inline" data-sponsor={preset.sponsor.id}>
               <Btn
