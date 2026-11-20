@@ -79,7 +79,7 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
         ...c,
         ...next,
         ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
-        ...(typeof next.api_key === 'string' && next.api_key ? { has_key: true } : {}),
+        ...(typeof next.api_key === 'string' ? { has_key: !!next.api_key } : {}),
         ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '' } : {}),
       }
       if (next.base_url !== undefined) {

@@ -264,12 +264,13 @@ test('cover follows or separates from the main connection without nested toggles
 })
 
 test('edit and save strip surrounding spaces and newlines from the API key', () => {
-  const state = { ...fresh(), connections: [conn('a', 'openai', { api_key: '  sk-live  \n' })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
+  const state = { ...fresh(), connections: [conn('a', 'openai', { api_key: '  sk-live  \n', has_key: true })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
   assert.equal(logic.forSave(state).connections[0].api_key, 'sk-live')
   const edited = logic.editConnection(state, 'a', { api_key: '  sk-new  \n' })
   assert.equal(edited.connections[0].api_key, 'sk-new')
   const blank = logic.editConnection(state, 'a', { api_key: '   ' })
   assert.equal(blank.connections[0].api_key, '')
+  assert.equal(blank.connections[0].has_key, false)
 })
 
 test('edit collapses URL spaces; save adds or dedupes /v1 without rejecting', () => {
