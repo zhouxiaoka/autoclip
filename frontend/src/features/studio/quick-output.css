@@ -132,6 +132,7 @@
 
 /* Keep the publish cover at its original ratio too. */
 .studio-post-cover {
+  display: block;
   border: 1px solid var(--ac-line);
   border-radius: 10px;
   flex: none;
@@ -275,7 +276,7 @@
 }
 
 .studio-post-edit .ac-textarea { resize: vertical; }
-.studio-output-card .studio-post-actions { gap: 8px 12px; }
+.studio-output-card .studio-post-actions { gap: 8px 12px; margin-top: 12px; }
 .studio-cover-tools {
   display: flex;
   flex-wrap: wrap;
@@ -288,7 +289,29 @@
   color: var(--ac-sub);
 }
 .studio-cover-tools .ac-btn { padding-inline: 0; }
-.studio-publish-tools > .ac-btn { width: 100%; }
+.studio-cover-preview {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  max-width: 40%;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-sub);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.studio-cover-preview .studio-post-cover { max-width: 100%; }
+.studio-cover-preview:hover { color: var(--ac-ink); text-decoration: underline; }
+.studio-cover-preview:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.studio-publish-tools > .ac-btn--cta { display: flex; width: 100%; margin-top: 12px; }
 
 .studio-output-card .ac-card-foot {
   margin-top: auto;

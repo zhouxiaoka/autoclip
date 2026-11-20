@@ -5,7 +5,8 @@ import { Btn, Dialog } from '../../ui'
 import { studioApi } from './api'
 import { copyText } from './outputShare'
 import { isDesktopDownload, saveLocalFile, saveStudioExport } from './nativeDownload'
-import type { OutputVariant, PostCopy } from './types'
+import type { OutputVariant, PostCopy, RenderJob } from './types'
+import { ExportCoverButton } from './ExportCover'
 import { studioDownloadRequested, observeStudioDownload, type VariantProperties } from '../../analytics/studio'
 import { flagAssigned, useFlag } from '../../analytics/flags'
 import { trackAutoChoiceOverridden } from '../../analytics/studio'
@@ -20,7 +21,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, post, onPostChange, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; post?: PostCopy | null; onPostChange: (post: PostCopy) => void; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
+export default function PublishKit({ projectId, variant, job, post, onPostChange, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; job?: RenderJob; post?: PostCopy | null; onPostChange: (post: PostCopy) => void; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ title: '', description: '', tags: '' })
   const [saveError, setSaveError] = useState(false)
@@ -29,7 +30,15 @@ export default function PublishKit({ projectId, variant, post, onPostChange, ana
   const combined = useFlag('publish_pack_v2') === 'combined'
   const coverTools = variant.status === 'completed' && variant.render_job_id
     ? <CoverRedesign projectId={projectId} variant={variant} onCoverChanged={onCoverChanged}/> : null
-  if (!post) return coverTools
+  const coverUrl = studioApi.variantCover(projectId, variant.id, coverStamp)
+  const noteCover = combined && variant.strategy_id === 'xiaohongshu'
+  const thumbnail = (variant.cover || coverStamp > 0) && <span className={`studio-post-cover${noteCover ? ' studio-post-cover--note' : LANDSCAPE.has(variant.strategy_id) ? ' studio-post-cover--wide' : ''}`}>
+    <img src={coverUrl} alt=""/>
+  </span>
+  const preview = job
+    ? <ExportCoverButton projectId={projectId} job={job} variant={variant} coverStamp={coverStamp} onVariantCoverChanged={onCoverChanged}>{thumbnail}</ExportCoverButton>
+    : thumbnail && <a href={coverUrl} target="_blank" rel="noreferrer" aria-label={t('查看封面')}>{thumbnail}</a>
+  if (!post) return <>{preview}{coverTools}</>
   const edit = () => {
     setDraft({ title: post.title, description: post.description, tags: post.tags.join(' ') })
     setSaveError(false)
@@ -55,8 +64,6 @@ export default function PublishKit({ projectId, variant, post, onPostChange, ana
     else message.error(t('复制失败，请稍后重试'))
   }
   const kitPath = `/studio/${projectId}/output-variants/${variant.id}/kit`
-  const coverUrl = studioApi.variantCover(projectId, variant.id, coverStamp)
-  const noteCover = combined && variant.strategy_id === 'xiaohongshu'
   const saveCombined = async () => {
     if (!variant.render_job_id || packing) return
     if (!(await copyText(captionWithCredit(postCaption(post), variant.strategy_id)))) { message.error(t('复制失败，请稍后重试')); return }
@@ -108,9 +115,7 @@ export default function PublishKit({ projectId, variant, post, onPostChange, ana
       </div>
     </Dialog>
     <div className="studio-post-body">
-      {(variant.cover || coverStamp > 0) && <a className={`studio-post-cover${noteCover ? ' studio-post-cover--note' : LANDSCAPE.has(variant.strategy_id) ? ' studio-post-cover--wide' : ''}`} href={coverUrl} target="_blank" rel="noreferrer" title={t('查看封面')}>
-        <img src={coverUrl} alt={t('封面')}/>
-      </a>}
+      {preview}
       <div className="studio-post-text">
         <h2 className="studio-post-title" title={post.title}>{post.title}</h2>
         {post.description && <p className="studio-post-desc">{post.description}</p>}

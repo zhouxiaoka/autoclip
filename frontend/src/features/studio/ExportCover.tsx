@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { coverApi } from '../../publish/coverApi'
@@ -103,9 +103,11 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   </section>
 }
 
-export function ExportCoverButton(props: Props) {
+export function ExportCoverButton({ children, ...props }: Props & { children?: ReactNode }) {
   const [open, setOpen] = useState(false)
-  return <><Btn size="sm" onClick={() => setOpen(true)}>{t('查看封面')}</Btn>
+  return <><button type="button" className="studio-cover-preview" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+      {children}<span>{t('查看封面')}</span>
+    </button>
     {open && <Dialog open onClose={() => setOpen(false)} title={t('查看封面')}>
       <ExportCover key={props.job.job_id} {...props} />
     </Dialog>}

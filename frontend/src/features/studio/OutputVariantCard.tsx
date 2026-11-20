@@ -6,7 +6,6 @@ import { trackOutputShare, type VariantProperties } from '../../analytics/studio
 import { flagAssigned, useFlag } from '../../analytics/flags'
 import { clipReason } from './clipReason'
 import StudioDownloadLink from './StudioDownloadLink'
-import { ExportCoverButton } from './ExportCover'
 import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, PostCopy, RenderJob } from './types'
 import { studioApi } from './api'
@@ -77,8 +76,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       </div></div>
       {(post || completed) && <details className="studio-publish-tools">
         <summary>{t('发布工具')}</summary>
-        {completed && job && <ExportCoverButton projectId={projectId} job={job} variant={variant} coverStamp={coverStamp} onVariantCoverChanged={coverChanged} />}
-        <PublishKit projectId={projectId} variant={variant} post={post} onPostChange={setEditedPost} analytics={analytics} coverStamp={coverStamp} onCoverChanged={coverChanged} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
+        <PublishKit projectId={projectId} variant={variant} job={completed ? job : undefined} post={post} onPostChange={setEditedPost} analytics={analytics} coverStamp={coverStamp} onCoverChanged={coverChanged} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
         {completed && variant.render_job_id && <Btn size="sm" variant="cta" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
       </details>}
       {asking && <OutputFeedback projectId={projectId} variant={analytics} onDone={() => setAsking(false)}/>}
