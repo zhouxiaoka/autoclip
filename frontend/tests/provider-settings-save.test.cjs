@@ -41,7 +41,7 @@ function settingsHook(initial, transport, requireCloudTranscription = false, gui
         discover: async () => ({ models: [], source: 'catalog', preview: true }),
         ...transport,
       },
-      bindingCapability: () => 'text',
+      bindingCapability: loadTs('modelSettingsApi.ts', { '../../services/api': {}, '../../utils/apiConfig': {} }).bindingCapability,
     },
   })
   return () => {
@@ -235,4 +235,28 @@ test('OpenRouter guide keeps a missing model editable, then saves a manual ID on
   assert.deepEqual(probes, ['vendor/manual'])
   assert.equal(writes[0].analysis.model_source, 'user')
   assert.equal(writes[0].connections.length, 1)
+})
+
+test('saving during a provider list refresh reuses the validated vision capability (#619)', async () => {
+  const state = whisperSettings()
+  const model = 'gpt-5-mini'
+  state.analysis = { connection_id: 'selected', model, capability: 'auto' }
+  state.analysis_mode = 'auto'
+  state.connections = [{ ...state.connections[0], id: 'selected', provider: 'openai', base_url: 'https://api.openai.com/v1' }]
+  const calls = []
+  let refresh = false
+  const render = settingsHook(state, {
+    discover: async () => refresh ? new Promise(() => {}) : { source: 'live', models: [{ id: model, analysis: true, capability: 'multimodal' }] },
+    test: async (c, id, vision, role, kind) => { calls.push([id, vision, kind]); return { ok: true, models: [model] } },
+    save: async value => value,
+  })
+  await render().load()
+  await new Promise(resolve => setImmediate(resolve))
+  refresh = true
+  await render().testCatalogProvider('openai')
+  await render().save()
+  assert.deepEqual(calls, [[model, true, 'quick']])
+  render().editConnection(render().main, { api_key: 'rotated-fixture' })
+  await render().save()
+  assert.equal(calls.length, 2, 'new credentials require a new check')
 })

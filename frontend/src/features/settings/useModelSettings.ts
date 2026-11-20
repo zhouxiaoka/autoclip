@@ -283,13 +283,16 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const backfillModels = (connection: Connection, listing?: { models?: string[]; recommended?: Record<string, string[]> }) => {
     const ids = orderedIds(listing)
     if (ids.length) {
-      setLists(old => ({
-        ...old,
-        [connection.id]: mergeCustomList(connection, {
-          models: ids.map(id => ({ id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id) })),
-          source: 'live', preview: false, updated_at: Date.now(),
-        }),
-      }))
+      setLists(old => {
+        // The validation response contains IDs only. Keep known capabilities until discovery completes.
+        const known = new Map(old[connection.id]?.models.map(entry => [entry.id, entry]))
+        const models = ids.map(id => known.get(id) ?? {
+          id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id),
+        })
+        return { ...old, [connection.id]: mergeCustomList(connection, {
+          models, source: 'live', preview: false, updated_at: Date.now(),
+        }) }
+      })
     }
     void discover(connection, true, 'manual')
   }
