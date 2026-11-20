@@ -30,7 +30,7 @@ test('S5 AUTO fallback message renders from the plan in all eight locales',()=>{
    'react-i18next':{useTranslation:()=>({t})},'../../i18n':{t},
    '../../ui':{Btn:passthrough,Dialog:()=>null,Row:passthrough,Segmented:()=>null,fmtDuration:String},
    './types':{defaultImportOptions:{},goalLabels:{content:'content'},languages:[]},
-   './ImportPreferences':{default:()=>null},'./api':{studioApi:{},errorText:String},
+   './PlanEditDialog':{default:()=>null},'./ImportPreferences':{default:()=>null},'./api':{studioApi:{},errorText:String},
    'react-router-dom':{useNavigate:()=>()=>{}},'../../services/api':{speechApi:{}},
    './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},
   }).default

@@ -171,6 +171,7 @@ export function portraitDesign(draft: Draft): Draft {
 export interface SourceWindow { start: number; end: number }
 
 export interface ImportOptions {
+  auto_start?: boolean
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
@@ -190,6 +191,8 @@ export interface ImportPlan {
   id: string; source_duration?:number; suggested_goals: Goal[]; selected_goals?: Goal[]
   mode: 'ai' | 'manual' | 'fallback' | 'local'; content_type: string; reason: string; confidence: number
   preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
+  confirmed_preferences?: ImportPlan['preferences']
+  goal_preferences?: Partial<Record<Goal, ImportPlan['preferences']>>
   overrides: ImportOptions
 }
 export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:'', portrait_style:'auto'}

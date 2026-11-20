@@ -21,6 +21,8 @@ import { settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
 import { Scene, Draft } from './types'
 import ExportHistory from './ExportHistory'
+import PlanEditDialog from './PlanEditDialog'
+import PlanSummary from './PlanSummary'
 import DraftResultCard from './DraftResultCard'
 import OutputVariantCard from './OutputVariantCard'
 import { platformLabel } from './platformLabel'
@@ -44,6 +46,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const location = useLocation()
   const resumeAfterSettings = new URLSearchParams(location.search || '').get('continue') === '1'
   const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
+  const [remaking, setRemaking] = useState(false)
   const [history, setHistory] = useState(false)
   const [busy,setBusy] = useState('')
   const busyRef = useRef('')
@@ -258,9 +261,16 @@ export default function StudioResults({ project, children, onCreateCollection, o
         <Btn size="sm" variant="text" onClick={() => setShowFullImportTip(false)}>{t('知道了')}</Btn>
       </div>
     </div>}
-    {managed && !automatic && !hideLegacy && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}
+    {remaking && <PlanEditDialog remake projectId={project.id} plan={workspace.plan} onClose={() => setRemaking(false)}
+      onSubmitted={() => { setRemaking(false); refresh() }} />}
+    {managed && !automatic && workspace.analysis?.status === 'awaiting_confirmation' && workspace.plan &&
+      <PlanSummary key={workspace.plan.id} projectId={project.id} plan={workspace.plan} remake
+        status={workspace.analysis.status} onChanged={refresh} />}
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
-    {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={automatic ? generationDescription : showDraftList ? undefined : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
+    {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={automatic ? generationDescription : showDraftList ? (sourceDuration != null ? t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) }) : undefined) : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions">
+        {managed && loaded && !automatic && !hideLegacy && workspace.analysis?.status !== 'awaiting_confirmation' &&
+          <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={() => { noteLegacy('plan_adjust'); setRemaking(true) }}>{t('再做一版')}</Btn>}
+        <Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {progress && <div className="ac-empty studio-processing">
         <div className="studio-progress" role="progressbar" aria-busy={progress.indeterminate || undefined} aria-valuenow={progress.indeterminate ? undefined : progress.percent} aria-valuemin={progress.indeterminate ? undefined : 0} aria-valuemax={progress.indeterminate ? undefined : 100} aria-valuetext={t(progress.label)}>
           <div className="studio-progress-track"><div className={`studio-progress-fill${progress.indeterminate ? ' studio-progress-fill--busy' : ''}`} style={progress.indeterminate ? undefined : { width: `${progress.percent}%` }} /></div>

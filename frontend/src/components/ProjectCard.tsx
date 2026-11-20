@@ -395,7 +395,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       message.warning(t("项目处理中，请完成后再查看"))
       return
     }
-    if (awaitingConfirmation) navigate(`/import/${project.id}`)
+    if (awaitingConfirmation) navigate(`/project/${project.id}`)
     else if (onClick) onClick()
     else navigate(`/project/${project.id}`)
   }
@@ -432,7 +432,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             </button>
           )}
           {normalizedStatus !== 'failed' && (awaitingConfirmation ? (
-            <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={() => navigate(`/import/${project.id}`)}>{t("查看建议")}</Btn></div>
+            <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={openProject}>{t("查看建议")}</Btn></div>
           ) : isManaged && project.status === 'processing' ? (
             <StatusDot tone="accent" label={t("制作中 · 查看进度")} />
           ) : (

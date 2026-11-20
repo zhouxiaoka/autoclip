@@ -29,6 +29,13 @@
 .studio-confirm-footer { display:flex!important; margin-top:24px; }
 @media(max-width:700px) { .studio-output-choices { grid-template-columns:1fr; } }
 
+.studio-remake-review { border: 1px solid var(--ac-line); border-radius: 16px; padding: 20px; }
+.studio-remake-heading p { margin: 0; }
+.studio-remake-controls { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ac-line-2); }
+.studio-remake-controls > summary { color: var(--ac-sub); }
+.studio-remake-controls .studio-output-choices { margin: 12px 0; }
+.studio-remake-review .studio-confirm-footer { margin-top: 12px; }
+
 .studio-import-review { max-width: 1100px; margin: 0 auto; }
 .studio-import-resume {display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:20px;color:var(--ac-muted)}
 
