@@ -125,12 +125,24 @@ test('QuitGuard runningCount includes active detail-page workspace sources and d
   assert.equal(quitGuard.runningCount([{ id: 'p1', status: 'processing' }], new Map([['workspace:p1', true]])), 1)
 })
 
-test('BackendCrashBanner is wired in App, translated in all 8 locales, and Rust backend_manager emits backend-crashed + reaps EOF child', () => {
+test('BackendCrashBanner invokes registered restart_backend_service command, is wired in App, translated in 8 locales, and Rust backend_manager emits backend-crashed + reaps EOF child', () => {
   const bannerPath = path.join(ROOT, 'src/desktop/BackendCrashBanner.tsx')
   assert.ok(fs.existsSync(bannerPath), 'BackendCrashBanner.tsx must exist')
   const banner = fs.readFileSync(bannerPath, 'utf8')
   assert.match(banner, /backend-crashed/)
-  assert.match(banner, /restart_backend/)
+
+  // Exact Tauri command cross-check: every invoke('...') in BackendCrashBanner must be registered in lib.rs and defined in commands.rs.
+  const invoked = [...banner.matchAll(/invoke\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1])
+  assert.deepEqual(invoked, ['restart_backend_service'])
+  const libRs = fs.readFileSync(path.join(REPO, 'src-tauri/src/lib.rs'), 'utf8')
+  const handlerMatch = libRs.match(/tauri::generate_handler!\[([\s\S]*?)\]/)
+  assert.ok(handlerMatch, 'tauri::generate_handler![] must exist in lib.rs')
+  const registered = new Set(handlerMatch[1].split(',').map(s => s.trim().split('::').pop()).filter(Boolean))
+  const commandsRs = fs.readFileSync(path.join(REPO, 'src-tauri/src/commands.rs'), 'utf8')
+  for (const cmd of invoked) {
+    assert.ok(registered.has(cmd), `command ${cmd} is not registered in src-tauri/src/lib.rs generate_handler![]`)
+    assert.match(commandsRs, new RegExp(`pub\\s+(?:async\\s+)?fn\\s+${cmd}\\b`), `command ${cmd} not defined in src-tauri/src/commands.rs`)
+  }
 
   const app = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8')
   assert.match(app, /BackendCrashBanner/)

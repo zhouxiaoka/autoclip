@@ -593,9 +593,14 @@ def test_dashscope_new_model_discovery_and_cached_runtime(monkeypatch):
     records = {row['id']: row for row in cached['models']}
     for expected in fixture['expected']:
         assert {key: records[expected['id']][key] for key in expected} == expected
-    # Explicit input metadata wins over the bundled default for the same official ID.
-    [text_only] = registry._records(connection, [{'id': 'qwen4-max', 'input_modalities': ['text']}], {})
-    assert text_only['capability'] == 'text'
+    # Exact verified official allowlist (qwen4-max) resists boilerplate text-only input metadata,
+    # while unverified IDs still follow explicit provider input metadata.
+    [verified_mm, explicit_text] = registry._records(connection, [
+        {'id': 'qwen4-max', 'input_modalities': ['text']},
+        {'id': 'fixture-alpha', 'input_modalities': ['text']},
+    ], {})
+    assert verified_mm['capability'] == 'multimodal'
+    assert explicit_text['capability'] == 'text'
     assert registry.lookup_capability(connection, 'fixture-alpha') == 'multimodal'
     assert registry.lookup_capability(connection, 'fixture-max-new') is None
 
@@ -1358,14 +1363,17 @@ def test_unknown_ids_require_a_declaration_and_empty_metadata_defers_to_evidence
     from backend.core.provider_model_fetch import _page_models
     c = ai.Connection(id='bailian', name='Bailian', provider='dashscope', api_key='fixture')
     raw = [{'id': name} for name in ('custom-vision-widget', 'fixture-max-new', 'qwen-image-9.9-ultra')]
-    raw += [{'id': 'qwen-image-2.1-pro', 'output_modalities': [], 'supported_endpoint_types': []},
-            {'id': 'qwen4-max', 'input_modalities': [], 'architecture': {'input_modalities': ['text']}}]
+    raw += [{'id': 'qwen-image-2.1-pro', 'output_modalities': [], 'supported_endpoint_types': ['multimodal-generation']},
+            {'id': 'qwen4-max', 'input_modalities': [], 'architecture': {'input_modalities': ['text']}},
+            {'id': 'fixture-text-only', 'architecture': {'input_modalities': ['text']}}]
     rows = {row['id']: row for row in registry._records(c, raw, {})}
     for row in raw[:3]:
         assert rows[row['id']]['kind'] == 'other'
         assert rows[row['id']]['capability'] is None
     assert rows['qwen-image-2.1-pro']['image']
-    assert rows['qwen4-max']['capability'] == 'text'
+    assert rows['qwen4-max']['capability'] == 'multimodal'
+    assert rows['fixture-text-only']['capability'] == 'text'
     assert pick_available_vision_model('dashscope', ['qwen4-max']) == 'qwen4-max'
     ids, caps = _page_models({'data': raw}, 'openai-completions', 'dashscope')
-    assert pick_available_vision_model('dashscope', ids, capabilities=caps) is None
+    assert pick_available_vision_model('dashscope', ids, capabilities=caps) == 'qwen4-max'
+    assert pick_available_vision_model('dashscope', ['fixture-text-only'], capabilities=caps) is None

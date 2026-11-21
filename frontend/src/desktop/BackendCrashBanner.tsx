@@ -45,7 +45,7 @@ export default function BackendCrashBanner() {
     setRestarting(true)
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('restart_backend')
+      await invoke('restart_backend_service')
     } catch (error) {
       console.warn('restart_backend failed', error)
       setRestarting(false)

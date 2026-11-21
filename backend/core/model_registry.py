@@ -313,6 +313,8 @@ def lookup_capability(connection, model):
         record = _record_from_offer(connection, offer)
         if record:
             return record.get('capability')
+    if _VERIFIED.get((connection.provider, model)) == 'multimodal':
+        return 'multimodal'
     data = _read()
     entry = next((m for m in data.get(_scope(connection), {}).get('models', []) if m['id'] == model), None)
     if entry and entry.get('capability_source') == 'provider':
@@ -423,6 +425,10 @@ def _records(connection, raw, data):
         reported = item.get('capability')
         capability = _cap(inputs) if inputs else reported if reported in ('text', 'multimodal') else None
         source = 'provider' if inputs or capability else 'catalog'
+        if _VERIFIED.get((connection.provider, name)) == 'multimodal' and capability != 'multimodal':
+            # Exact verified official allowlist IDs (e.g. dashscope/qwen4-max) must not be
+            # downgraded to text-only by boilerplate OpenAI-compat input_modalities=['text'].
+            capability, source = 'multimodal', 'catalog'
         if inputs is None and not capability:
             capability = _catalog_capability(connection.provider, name, data)
         if inputs is None and not capability and _named_capability(connection.provider, name):
@@ -446,8 +452,16 @@ def _records(connection, raw, data):
         if capability == 'multimodal' and model_catalog.known_text_only(name):
             capability, source = 'text', 'catalog'
         catalog = _catalog_record(connection.provider, name, data)
-        image = ('image' in outputs if outputs is not None else
-                 catalog.get('image_output', False) or name in image_catalog.MODELS.get(connection.provider, []) or name in model_catalog.IMAGE_MODELS.get(connection.provider, []))
+        known_image = (
+            name in image_catalog.MODELS.get(connection.provider, ())
+            or name in model_catalog.IMAGE_MODELS.get(connection.provider, ())
+        )
+        image = (
+            'image' in outputs if outputs is not None else
+            catalog.get('image_output', False) or known_image
+        )
+        if known_image and not image:
+            image = True
         methods = item.get('supportedGenerationMethods') or []
         chat_evidence = (capability or name in model_catalog.CURATED_MODELS.get(connection.provider, ())
                          or name in candidates_for(connection.provider, 'analysis') or 'generateContent' in methods
@@ -461,11 +475,17 @@ def _records(connection, raw, data):
                 image = False
         if item.get('supported_endpoint_types'):
             # Provider routing metadata distinguishes generation from editing.
-            endpoints = item['supported_endpoint_types'] or []
-            image = 'image-generation' in endpoints or '/v1/images/generations' in endpoints
+            endpoints = [str(e) for e in (item['supported_endpoint_types'] or [])]
+            multimodal_image = known_image and any('multimodal-generation' in e for e in endpoints)
+            image = (
+                'image-generation' in endpoints
+                or '/v1/images/generations' in endpoints
+                or multimodal_image
+                or known_image
+            )
             # new-api style gateways: video routes and async "task plugin" models are not chat models,
             # even when they also list the generic "openai" endpoint. The name guard drops TTS/STT/embedding.
-            video = any('video' in str(e) for e in endpoints)
+            video = any('video' in e for e in endpoints)
             task = str(item.get('owned_by') or '').lower() == 'task plugin'
             analysis = (('openai' in endpoints or '/v1/chat/completions' in endpoints) and not image and not video and not task
                         and model_catalog.is_chat_model(name, '', official=False))
