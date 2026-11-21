@@ -820,6 +820,7 @@ def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monk
     from backend.services.studio import intelligence, vision_settings
     assert intelligence.ready(), 'enabled frame analysis silently fell back to subtitles'
     assert vision_settings.effective()['model'] == model
+    assert vision_settings.effective()['model_source'] == 'user'
     # Do not infer an arbitrary gateway alias or a future model by its prefix.
     config.connections[0].provider = 'compatible'
     config.connections[0].base_url = 'https://gateway.example/v1'

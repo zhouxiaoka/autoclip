@@ -558,3 +558,22 @@ def test_text_only_model_length_is_not_reported_as_truncation(monkeypatch):
     assert str(caught.value) == VISION_BLOCK_MESSAGE
     assert "output_truncated" not in str(caught.value)
     assert "截断" not in str(caught.value)
+
+
+def test_fixed_vision_ignores_previous_smart_substitute_and_never_switches(monkeypatch):
+    from backend.core.model_recovery import remember_model
+
+    remember_model("dashscope", BASE, SECRET, "qwen4-max", "qwen3-vl-plus")
+    sent = []
+
+    def offline(request, timeout=None):
+        sent.append(json.loads(request.data)["model"])
+        raise _http_error(404, MISSING)
+
+    monkeypatch.setattr(intelligence.urllib.request, "urlopen", offline)
+    monkeypatch.setattr("backend.core.model_recovery.resolve_available_model",
+                        lambda **kwargs: pytest.fail("fixed model used automatic substitution"))
+    config = {"base_url": BASE, "model": "qwen4-max", "model_source": "user", "api_key": SECRET}
+    with pytest.raises(intelligence.VisionRequestError):
+        intelligence.vision_call([], config=config)
+    assert sent == ["qwen4-max"]

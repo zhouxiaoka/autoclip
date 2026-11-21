@@ -127,7 +127,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
     saved_model = model
     provider = provider_for_endpoint({'base_url': base, 'identity': identity})
-    cached = remembered_model(provider, base, key, saved_model)
+    allow_substitute = config.get('model_source') != 'user'
+    cached = remembered_model(provider, base, key, saved_model) if allow_substitute else None
     if cached:
         model = cached
     from backend.core.model_catalog import known_text_only
@@ -216,7 +217,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
                 info = classify_upstream_error(status, detail)
                 # The saved id is gone. Ask the account list once and retry that call once.
-                if not tried_substitute and info.error_type is UpstreamErrorType.MODEL_NOT_FOUND:
+                if allow_substitute and not tried_substitute and info.error_type is UpstreamErrorType.MODEL_NOT_FOUND:
                     tried_substitute = True
                     alt = resolve_available_model(
                         base_url=base, api_key=key, provider=provider,

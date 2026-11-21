@@ -553,6 +553,22 @@ def vision_endpoint(settings: ModelSettings) -> dict | None:
     return chat_endpoint(connection_for(settings, binding), binding.model)
 
 
+def _analysis_substitution_notice(settings: ModelSettings) -> dict | None:
+    from backend.core.model_recovery import analysis_catalog, substitution_notice
+    from backend.services.studio.failure_identity import connection_identity
+    binding = settings.analysis
+    if not binding or binding.model_source != 'preset':
+        return None
+    try:
+        connection = connection_for(settings, binding)
+        endpoint = chat_endpoint(connection, binding.model)
+    except ValueError:
+        return None  # An incomplete endpoint can still be opened and repaired in Settings.
+    provider = analysis_catalog(identity=connection_identity(connection, binding.model),
+                                base_url=endpoint['base_url'], named=[connection.provider])
+    return substitution_notice('analysis', provider, endpoint['base_url'], endpoint['api_key'], binding.model)
+
+
 def public(settings: ModelSettings) -> dict:
     value = settings.model_dump(exclude={'field_revisions'})
     notices = [item for item in settings._migration_warnings if item not in settings.seen_notices]
@@ -573,14 +589,8 @@ def public(settings: ModelSettings) -> dict:
             value.setdefault('migration_warnings', []).append('transcription_configuration_invalid')
     value['transcription_needs_repair'] = transcription_needs_repair(settings)
     value['saved'] = path().exists() and 'settings_configuration_invalid' not in settings._migration_warnings
-    if settings.analysis and settings.analysis.model:
-        from backend.core.model_recovery import substitution_notices
-        pending = [
-            item for item in substitution_notices('analysis')
-            if item['saved_model'] == settings.analysis.model and item['replacement'] != settings.analysis.model
-        ]
-        if pending:
-            value['model_substitutions'] = pending
+    if notice := _analysis_substitution_notice(settings):
+        value['model_substitutions'] = [notice]
     for c in value['connections']:
         key = c.pop('api_key') or ''
         c['has_key'] = bool(key)
