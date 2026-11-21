@@ -18,12 +18,13 @@ from pathlib import Path
 from backend.core import asr_model_catalog as asr_catalog
 from backend.core import model_catalog
 from backend.core import image_model_catalog as image_catalog
+from backend.core.provider_presets import candidates_for
 from backend.core.path_utils import get_data_directory
 
 _lock = threading.RLock()
 _last_remote_attempt = 0.0
 _remote_task = None
-_CAPABILITY_VERSION = 2  # Cached normalized records predate top-level input/output modalities.
+_CAPABILITY_VERSION = 3
 _MODEL_PROVIDER = {'dashscope': 'alibaba', 'seed': 'volcengine', 'gemini': 'google', 'kimi': 'moonshotai', 'glm': 'zhipuai', 'grok': 'xai'}
 # Verified against Alibaba's official text-generation documentation, 2026-09-29.
 # https://www.alibabacloud.com/help/en/model-studio/text-generation
@@ -233,7 +234,9 @@ def _modalities(item):
         key = f'{direction}_modalities'
         for container, field in ((item, key), (architecture, key), (modalities, direction)):
             if isinstance(container, dict) and isinstance(container.get(field), list):
-                return container[field]
+                values = [v.strip().lower() for v in container[field] if isinstance(v, str) and v.strip()]
+                if values:
+                    return values
         return None
 
     return read('input'), read('output')
@@ -242,14 +245,14 @@ def _modalities(item):
 def _cap(inputs):
     if inputs and 'image' in inputs:
         return 'multimodal'
-    if inputs == ['text']:
+    if inputs and 'text' in inputs:
         return 'text'
     return None
 
 
 def _custom_offers(connection):
     offers = list(getattr(connection, 'custom_models', None) or [])
-    if offers:
+    if offers or 'custom_models' in getattr(connection, 'model_fields_set', set()):
         return offers
     try:
         from backend.services import ai_model_settings as ai_models
@@ -274,6 +277,7 @@ def _record_from_offer(connection, offer):
         'id': name,
         'capability': 'multimodal' if vision else ('text' if 'language' in types else None),
         'capability_source': 'custom',
+        'kind': _model_kind({}, name, analysis='language' in types, image='image' in types, asr=asr, outputs=[]),
         'analysis': 'analysis' in scenarios or 'language' in types,
         'image': 'image' in types or 'cover' in scenarios,
         'asr': asr,
@@ -311,9 +315,15 @@ def lookup_capability(connection, model):
             return record.get('capability')
     data = _read()
     entry = next((m for m in data.get(_scope(connection), {}).get('models', []) if m['id'] == model), None)
-    if entry and entry.get('capability_source') == 'provider' and entry.get('capability'):
-        return entry['capability']
-    return _catalog_capability(connection.provider, model, data)
+    if entry and entry.get('capability_source') == 'provider':
+        return entry.get('capability')
+    return _catalog_capability(connection.provider, model, data) or _named_capability(connection.provider, model)
+
+
+def _named_capability(provider, model):
+    if provider != 'compatible' and model_catalog.catalog_vision_model(model):
+        return 'multimodal'
+    return None
 
 
 def _catalog_record(provider, model, data):
@@ -410,12 +420,13 @@ def _records(connection, raw, data):
         caps = item.get('capabilities')
         if inputs is None and isinstance(caps, list) and 'vision' in caps:
             inputs = ['text', 'image']
-        capability = _cap(inputs) or item.get('capability')
-        source = 'provider' if capability else 'catalog'
-        capability = capability or _catalog_capability(connection.provider, name, data)
-        if not capability and connection.provider != 'compatible' and model_catalog.supports_vision(name):
-            # Same name rules the pipeline uses for capability=auto. Only ever "multimodal":
-            # an unfamiliar ID is never labelled text-only.
+        reported = item.get('capability')
+        capability = _cap(inputs) if inputs else reported if reported in ('text', 'multimodal') else None
+        source = 'provider' if inputs or capability else 'catalog'
+        if inputs is None and not capability:
+            capability = _catalog_capability(connection.provider, name, data)
+        if inputs is None and not capability and _named_capability(connection.provider, name):
+            # Recognize known IDs only when the provider supplied no input restrictions.
             capability, source = 'multimodal', 'name'
         if getattr(connection, 'provider', None) == 'apimart':
             # Vision/Omni tags add multimodal. A Text tag leaves the name heuristic
@@ -430,22 +441,25 @@ def _records(connection, raw, data):
                 if lowered and not (lowered & {'text', 'vision', 'omni'}):
                     continue
             tagged = capability_from_tags(tags)
-            if tagged:
+            if tagged and inputs is None:
                 capability, source = tagged, 'provider'
+        if capability == 'multimodal' and model_catalog.known_text_only(name):
+            capability, source = 'text', 'catalog'
         catalog = _catalog_record(connection.provider, name, data)
         image = ('image' in outputs if outputs is not None else
                  catalog.get('image_output', False) or name in image_catalog.MODELS.get(connection.provider, []) or name in model_catalog.IMAGE_MODELS.get(connection.provider, []))
-        if name in image_catalog.EDIT_ONLY.get(connection.provider, set()):
-            image = False
-        methods = item.get('supportedGenerationMethods', [])
-        analysis = ('text' in outputs if outputs is not None else model_catalog.is_chat_model(name, '', official=False) and not image)
+        methods = item.get('supportedGenerationMethods') or []
+        chat_evidence = (capability or name in model_catalog.CURATED_MODELS.get(connection.provider, ())
+                         or name in candidates_for(connection.provider, 'analysis') or 'generateContent' in methods
+                         or isinstance(caps, list) and 'completion' in caps or item.get('type') == 'llm'
+                         or connection.provider == 'apimart' and item.get('category') in {'text', 'chat'})
+        analysis = bool(('text' in outputs if outputs is not None else chat_evidence and not image)
+                        and model_catalog.is_chat_model(name, '', official=False))
         if methods and 'generateContent' not in methods:
             analysis = False
             if connection.provider == 'gemini':
                 image = False
-        if name in image_catalog.UNSUPPORTED_ROUTES.get(connection.provider, set()):
-            analysis = image = False
-        if 'supported_endpoint_types' in item:
+        if item.get('supported_endpoint_types'):
             # Provider routing metadata distinguishes generation from editing.
             endpoints = item['supported_endpoint_types'] or []
             image = 'image-generation' in endpoints or '/v1/images/generations' in endpoints
@@ -455,12 +469,26 @@ def _records(connection, raw, data):
             task = str(item.get('owned_by') or '').lower() == 'task plugin'
             analysis = (('openai' in endpoints or '/v1/chat/completions' in endpoints) and not image and not video and not task
                         and model_catalog.is_chat_model(name, '', official=False))
-        asr = asr_catalog.metadata(connection.provider, name, item.get('supported_endpoint_types', []))
+        asr = asr_catalog.metadata(connection.provider, name, item.get('supported_endpoint_types') or [])
+        if name in image_catalog.UNSUPPORTED_ROUTES.get(connection.provider, ()) or name in image_catalog.EDIT_ONLY.get(connection.provider, ()):
+            analysis = image = False
+        if inputs and 'text' not in inputs and 'image' not in inputs:
+            analysis = False
         if asr['asr']:
             analysis = False
         kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'], outputs=outputs or [])
-        record = {**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
+        record = {**asr, 'id': name, 'capability': capability, 'capability_source': source if capability or inputs else None,
                        'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))}
+        if (kind == 'other' and not inputs and not outputs and not methods and not item.get('supported_endpoint_types')
+                and not model_catalog.is_non_chat_family(name)
+                and name not in image_catalog.UNSUPPORTED_ROUTES.get(connection.provider, ())
+                and name not in image_catalog.EDIT_ONLY.get(connection.provider, ())):
+            roles = [] if model_catalog.is_image_model(name) else ['analysis', 'vision']
+            if model_catalog.known_text_only(name) and 'vision' in roles:
+                roles.remove('vision')
+            if connection.provider in image_catalog.MODELS or connection.provider in {'compatible', 'infistar'}:
+                roles.append('cover')
+            record['manual_roles'] = roles
         # T3: surface size/context for the settings picker + D1 chunk_size later.
         params_b = item.get('params_b')
         if params_b is None:
@@ -472,6 +500,35 @@ def _records(connection, raw, data):
             record['context_tokens'] = int(context_tokens)
         result.append(record)
     return result
+
+
+def listed_chat_capabilities(provider, raw):
+    """The same account-list classification powers the picker and smart recovery."""
+    from types import SimpleNamespace
+    rows = _records(SimpleNamespace(provider=provider), raw, _read())
+    return {row['id']: (row['capability'] or 'chat') if row['analysis'] else 'unavailable' for row in rows}
+
+
+def _upgrade_cached_models(connection, cached):
+    """Older caches kept normalized rows only. Reclassify IDs using today's catalog
+    and preserve positive provider evidence without treating old guesses as metadata.
+    Keep the original timestamp so the next refresh still attempts discovery.
+    """
+    raw = []
+    for row in cached.get('models', []):
+        if not isinstance(row, dict) or not row.get('id'):
+            continue
+        item = {key: row[key] for key in ('id', 'params_b', 'context_tokens', 'asr_preview') if key in row}
+        if row.get('capability_source') == 'provider' and row.get('capability'):
+            item['capability'] = row['capability']
+        if row.get('asr'):
+            item['supported_endpoint_types'] = ['audio-transcription']
+        if row.get('image'):
+            item['output_modalities'] = ['image']
+        elif row.get('kind') in {'audio', 'video'}:
+            item['output_modalities'] = [row['kind']]
+        raw.append(item)
+    return _records(connection, raw, _read())
 
 
 async def discover(connection, refresh=False):
@@ -564,7 +621,8 @@ async def _discover_from_provider(connection, refresh=False):
     raw = results[0]
     if isinstance(raw, BaseException):
         if cached:
-            return {**cached, 'source': 'cache', 'warning': '模型列表刷新失败，正在使用上次成功的列表'}
+            models = cached['models'] if cached.get('capability_version') == _CAPABILITY_VERSION else _upgrade_cached_models(connection, cached)
+            return {**cached, 'models': models, 'capability_version': _CAPABILITY_VERSION, 'source': 'cache', 'warning': '模型列表刷新失败，正在使用上次成功的列表'}
         fallback = public['models'] if public else model_catalog.CURATED_MODELS.get(connection.provider, []) + image_catalog.MODELS.get(connection.provider, []) + asr_catalog.MODELS.get(connection.provider, [])
         return {'models': _records(connection, fallback, _read()), 'source': 'catalog', 'updated_at': None,
                 'preview': True, 'warning': '账号模型列表获取失败，当前为参考目录；请检查密钥后刷新。'}

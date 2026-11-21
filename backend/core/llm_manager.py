@@ -591,7 +591,7 @@ class LLMManager:
         asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved
         catalog, base, key = self._analysis_endpoint(route)
         allow_substitute = route.settings.get("model_source") != "user"
-        cached = remembered_model(catalog, base, key, asked) if asked and allow_substitute else None
+        cached = remembered_model(catalog, base, key, asked, purpose="analysis") if asked and allow_substitute else None
         if cached:
             override = cached
         sent = cached or asked

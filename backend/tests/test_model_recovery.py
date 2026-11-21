@@ -54,7 +54,7 @@ def test_live_list_supplies_a_vision_model_when_no_preset_hint_is_offered():
     live = ["qwen-plus", "qwen3-vl-plus", "wanx2.1-t2i-turbo"]
     assert pick_available_vision_model("dashscope", live, exclude=["qwen-vl-plus"]) == "qwen3-vl-plus"
     assert pick_available_vision_model("dashscope", ["qwen-plus", "qwen-vl-plus"], exclude=["qwen-vl-plus"]) is None
-    assert pick_available_vision_model("compatible", ["text-only-model", "custom-vl"], exclude=["retired"]) == "custom-vl"
+    assert pick_available_vision_model("compatible", ["text-only-model", "custom-vl"], exclude=["retired"]) is None
 
 
 def test_analysis_order_skips_a_dead_id_and_non_chat_families():
@@ -76,8 +76,8 @@ def test_analysis_order_skips_a_dead_id_and_non_chat_families():
 
 def test_analysis_falls_back_to_the_first_live_chat_model():
     live = ["gpt-5-search-api", "omni-moderation-latest", "other-chat", "text-embedding-3-large"]
-    assert pick_available_analysis_model("apimart", live, exclude=["chatgpt-4o-latest"]) == "other-chat"
-    assert pick_available_analysis_model("compatible", live) == "other-chat"
+    assert pick_available_analysis_model("apimart", live, exclude=["chatgpt-4o-latest"]) is None
+    assert pick_available_analysis_model("compatible", live, capabilities={"other-chat": "text"}) == "other-chat"
     assert pick_available_analysis_model("apimart", ["gpt-5-search-api", "text-embedding-3-large"]) is None
 
 
@@ -138,20 +138,24 @@ def test_saved_retired_model_retries_once_with_a_listed_vision_model(monkeypatch
     sent = []
 
     def urlopen(req, timeout=None):
+        assert req.get_header("Authorization") == "Bearer " + SECRET
+        assert req.full_url == BASE + "/chat/completions"
         sent.append(json.loads(req.data.decode()))
         if len(sent) == 1:
             raise _http_error(404, MISSING)
         return io.BytesIO(json.dumps(OK).encode())
 
     monkeypatch.setattr(intelligence.urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(
-        "backend.core.model_recovery.resolve_available_model",
-        lambda **kwargs: "qwen3-vl-plus" if kwargs["failed_model"] == "qwen-vl-plus" else None,
-    )
+    discovery = {"urls": []}
+    monkeypatch.setattr("backend.core.provider_model_fetch._default_http_get",
+                        _models_http(["custom-vision-widget", "qwen4-max"], discovery))
+    from backend.core.model_recovery import remember_model
+    remember_model("dashscope", BASE, SECRET, "qwen-vl-plus", "text-replacement", purpose="analysis")
     config = {"base_url": BASE, "model": "qwen-vl-plus", "api_key": SECRET, "timeout": 10,
               "identity": {"provider": "dashscope", "config_source": "preset"}}
     assert intelligence.vision_call([{"type": "text", "text": "x"}], config=config) == {"events": []}
-    assert [item["model"] for item in sent] == ["qwen-vl-plus", "qwen3-vl-plus"]
+    assert [item["model"] for item in sent] == ["qwen-vl-plus", "qwen4-max"]
+    assert discovery == {"urls": [BASE + "/models"], "auth": "Bearer " + SECRET}
     assert config["model"] == "qwen-vl-plus"
     assert SECRET not in json.dumps(sent)
 
@@ -274,7 +278,7 @@ def test_bailian_catalog_rewrites_official_hosts_and_leaves_a_proxy_alone():
     assert default_ocr_model(
         "dashscope", base_url="https://proxy.example.com/v1", api_key=SECRET,
         http=_models_http(["custom-vl"], proxy),
-    ) == "custom-vl"
+    ) == ""
     assert proxy["urls"] == ["https://proxy.example.com/v1/models"]
 
 
@@ -345,7 +349,8 @@ def test_saved_bailian_ocr_model_retries_once_from_the_account_list(caplog):
     assert all("/compatible-mode/" not in url for url, _body in session.sent)
     assert seen["urls"] == [COMPAT + "/models"]
     assert SECRET not in caplog.text and COMPAT not in caplog.text
-    assert remembered_model("dashscope", COMPAT, SECRET, "qwen-vl-plus") == "qwen3.8-flash"
+    assert remembered_model("dashscope", COMPAT, SECRET, "qwen-vl-plus", purpose="ocr") == "qwen3.8-flash"
+    assert remembered_model("dashscope", COMPAT, SECRET, "qwen-vl-plus", purpose="vision") is None
 
     def boom(url, *, headers, timeout, trust_env):
         raise AssertionError("cached substitute must not list again")

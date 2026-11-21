@@ -58,9 +58,10 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
   for (const { modelId, offers } of collectModelGroups(settings, lists, purpose)) {
     for (const offer of offers) {
       const label = t('{{model}} · {{provider}}', { model: modelId, provider: offer.displayName })
+      const accountFailed = settings.connections.find(connection => connection.id === offer.connectionId)?.validation_status === 'failed'
       choices.push({
         value: JSON.stringify(['user', offer.connectionId, modelId]), label,
-        hint: offer.connected ? t('已连接') : !offer.selectable ? t('当前模型校验失败，可换一个型号或重新测试。') : t('已配置'),
+        hint: accountFailed ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。') : offer.connected ? t('已连接') : !offer.selectable ? t('当前模型校验失败，可换一个型号或重新测试。') : t('已配置'),
         selected: isFixedSelected(settings, purpose, modelId, offer), disabled: !offer.selectable,
         apply: () => applyFixedSelection(settings, purpose, modelId, offer.connectionId),
       })
@@ -185,6 +186,12 @@ export default function DefaultModels({ settings, lists, onChange, transcription
           {t('settings.providers.search')}
         </button>
       </div>
+      {settings.connections.map(connection => {
+        const list = lists[connection.id]
+        return list?.source === 'cache' && list.warning
+          ? <p key={connection.id} role="status" className="ac-note">{connection.name} · {t(list.warning)}</p>
+          : null
+      })}
       <div className="ac-purpose-grid">
         {PURPOSE_SLOTS.map(renderSlot)}
       </div>

@@ -205,7 +205,7 @@ test('an unconfigured analysis model replaces the import zone and keeps a failed
     assert.equal(button(view.tree, '生成成片'), undefined, code)
     assert.equal(readiness.analysisNeedsSetup(report({ analysis: check(false, code, 'settings_ai') })), true, code)
   }
-  for (const code of ['validation_failed', 'settings_invalid']) {
+  for (const code of ['validation_failed', 'model_validation_failed', 'settings_invalid']) {
     const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
     assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), false, code)
     assert.ok(button(view.tree, '生成成片'), code)
@@ -226,6 +226,14 @@ test('a failed provider check blocks generation and points at model settings', a
   assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('未通过校验')))
   await button(view.tree, '去设置修改').props.onClick()
   assert.deepEqual(view.navigations, ['/settings?section=ai&return_import=1'])
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
+test('a failed model check names the selection and offers a model-level repair', async () => {
+  const failing = report({ analysis: { ...check(false, 'model_validation_failed', 'settings_ai'), label: 'qwen4-max' } })
+  const view = render({ report: failing })
+  assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label).includes('更换型号')))
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.calls.length, 0)
 })

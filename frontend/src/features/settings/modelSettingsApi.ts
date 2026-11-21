@@ -43,7 +43,7 @@ export interface ModelSettings {
   saved?: boolean
   transcription_needs_repair?: boolean
   migration_warnings?: string[]
-  model_substitutions?: { purpose: string; saved_model: string; replacement: string }[]
+  model_substitutions?: { purpose: string; connection_id?: string; saved_model: string; replacement: string }[]
   catalog_version?: number
   preset_update_available?: boolean
   seen_notices?: string[]
@@ -65,7 +65,7 @@ export interface ModelSettings {
   min_score_threshold: number
   max_clips_per_collection: number
 }
-export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other'; /** T3: billions of params when known (Ollama show / name inference). */ params_b?: number | null; /** T3: context window tokens when known. */ context_tokens?: number | null }
+export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; manual_roles?: ('analysis' | 'vision' | 'cover')[]; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other'; /** T3: billions of params when known (Ollama show / name inference). */ params_b?: number | null; /** T3: context window tokens when known. */ context_tokens?: number | null }
 export interface ModelList { models: ModelEntry[]; source: 'live' | 'cache' | 'catalog'; preview?: boolean; updated_at: number | null; warning?: string }
 export interface FetchListResult {
   ok?: boolean

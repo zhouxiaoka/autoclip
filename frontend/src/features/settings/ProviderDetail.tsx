@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import type { ModelEntry } from './modelSettingsApi'
 import { t } from '../../i18n'
 import { Btn, Icon, Row, StatusDot } from '../../ui'
 import { openExternalLink } from '../../utils/externalLinks'
@@ -268,6 +270,7 @@ export default function ProviderDetail({
               )}
             </h4>
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
+            {list?.source === 'cache' && list.warning && <p role="status" className="ac-note">{t(list.warning)}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
             {fetched && models.length > 0 && persisted && (
               <p className="ac-note ac-provider-model-hint" data-visibility={customized ? 'custom' : 'recommended'}>
@@ -275,7 +278,7 @@ export default function ProviderDetail({
                 {customized && <button type="button" className="ac-link-button" onClick={resetRecommended}>{t('恢复推荐')}</button>}
               </p>
             )}
-            {fetched && models.length > 0 && <ModelGroups models={models} enabled={enabledSet} onToggle={persisted ? toggleModels : undefined} />}
+            {fetched && models.length > 0 && <ModelGroups models={models} enabled={enabledSet} onToggle={persisted ? toggleModels : undefined} onDeclare={persisted ? (id, role) => m.declareModel(persisted, id, role) : undefined} />}
             {connection && !busy[connection.id] && !fetched && (
               <p className="ac-note" data-models-hint="pending">{t('填写 API 密钥并测通后，将自动拉取可用模型。')}</p>
             )}
@@ -289,18 +292,23 @@ export default function ProviderDetail({
   )
 }
 
-function ModelGroups({ models, enabled: on, onToggle }: {
-  models: Array<DetailModel>
+function ModelGroups({ models, enabled: on, onToggle, onDeclare }: {
+  models: ModelEntry[]
+  onDeclare?: (id: string, role: 'analysis' | 'vision' | 'cover' | '') => void
   enabled: Set<string>
   onToggle?: (ids: string[], enabled: boolean) => void
 }) {
+  const [search, setSearch] = useState('')
+  const query = search.trim().toLowerCase()
   return (
     <>
+      <input type="search" aria-label={t('搜索模型')} placeholder={t('搜索模型')} value={search} onChange={event => setSearch(event.target.value)} />
+      {query && !models.some(model => model.id.toLowerCase().includes(query)) && <p className="ac-note">{t('没有匹配的模型。')}</p>}
       {MODEL_GROUP.map(group => {
-        const rows = models.filter(model => modelGroupOf(model) === group.key).sort((a, b) => Number(on.has(b.id)) - Number(on.has(a.id)))
+        const rows = models.filter(model => modelGroupOf(model) === group.key && model.id.toLowerCase().includes(query)).sort((a, b) => Number(on.has(b.id)) - Number(on.has(a.id)))
         if (!rows.length) return null
         const enabled = rows.filter(model => on.has(model.id)).length
-        const renderRow = (model: DetailModel) => (
+        const renderRow = (model: ModelEntry) => (
           <li key={model.id} className={`ac-mono${!on.has(model.id) && onToggle ? ' is-hidden' : ''}`} data-model-id={model.id}>
             {onToggle
               ? <label className="ac-provider-model-check">
@@ -308,13 +316,21 @@ function ModelGroups({ models, enabled: on, onToggle }: {
                   <span>{model.id}</span>
                 </label>
               : model.id}
+            {!!model.manual_roles?.length && onDeclare && (
+              <select aria-label={`${t('指定模型用途')} ${model.id}`}
+                value={model.capability_source === 'custom' ? (model.image ? 'cover' : model.capability === 'multimodal' ? 'vision' : 'analysis') : ''}
+                onChange={event => onDeclare(model.id, event.target.value as 'analysis' | 'vision' | 'cover' | '')}>
+                <option value="">{t('未指定用途')}</option>
+                {model.manual_roles.map(role => <option key={role} value={role}>{t(role === 'cover' ? '封面生成' : role === 'vision' ? '画面理解' : '精彩片段分析')}</option>)}
+              </select>
+            )}
             {group.key === 'language' && model.capability === 'multimodal' && (
               <span className="ac-provider-cap">{t('视觉')}</span>
             )}
           </li>
         )
         return (
-          <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open || (!!onToggle && enabled > 0)}>
+          <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={!!query || group.open || (!!onToggle && enabled > 0)}>
             <summary className="ac-provider-model-group">
               {t(group.title)}<span className="count">{onToggle ? `${enabled}/${rows.length}` : rows.length}</span>
               {onToggle && (
@@ -324,14 +340,14 @@ function ModelGroups({ models, enabled: on, onToggle }: {
                 </span>
               )}
             </summary>
-            {group.key === 'other' && <p className="ac-note">{t('这些型号尚未识别为可用的剪辑、转写或封面模型。可刷新列表获取最新信息。')}</p>}
+            {group.key === 'other' && <p className="ac-note">{t('服务商未标明输入类型，可按模型文档选择。')}</p>}
             {(onToggle ? rows.filter(model => on.has(model.id)) : rows).length > 0 && (
               <ul className="ac-provider-model-list" data-model-rows="enabled">
                 {(onToggle ? rows.filter(model => on.has(model.id)) : rows).map(model => renderRow(model))}
               </ul>
             )}
             {onToggle && rows.length > enabled && (
-              <details className="ac-provider-model-off" data-model-rows="disabled">
+              <details open={query ? true : undefined} className="ac-provider-model-off" data-model-rows="disabled">
                 <summary>{t('已隐藏')}<span className="count">({rows.length - enabled})</span></summary>
                 <ul className="ac-provider-model-list">
                   {rows.filter(model => !on.has(model.id)).map(model => renderRow(model))}

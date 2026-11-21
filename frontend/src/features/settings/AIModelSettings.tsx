@@ -4,7 +4,7 @@ import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
 import api, { speechApi } from '../../services/api'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { mainConnection, hasFailedSelection, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import { mainConnection, failedSelection, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import TrialRunPanel from './TrialRunPanel'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
@@ -244,7 +244,10 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   ]
   const usageNotices = enabledUsageNotices(usageSlots, promo, language)
   const visionFailed = visionFollowLacksCapability(settings, m.lists)
-  const failed = hasFailedSelection(settings) || visionFailed
+  const invalid = failedSelection(settings)
+  const failed = !!invalid || visionFailed
+  const failureHint = invalid?.account ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+    : invalid ? t('型号 {{model}} 未通过校验，请更换型号或重新测试。', { model: invalid.model }) : t(VISION_HINT_KEY)
   return <div className="ac-ai-settings" data-layout="v6">
     <ModelSettingsLeaveGuard dirty={m.dirtyRef} saving={m.saving} onSave={save} />
     {usageNotices.map(notice => {
@@ -295,15 +298,18 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
         </details>
       </>}
     </fieldset>
-    {settings.analysis && settings.model_substitutions?.filter(item => item.purpose === 'analysis' && item.saved_model === settings.analysis?.model).map(item => (
-      <p className="ac-note" role="status" key={item.replacement}>
-        {t('分析模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。', { saved: item.saved_model, replacement: item.replacement })}
+    {settings.model_substitutions?.map(item => {
+      const role = item.purpose === 'vision' ? 'vision' : 'analysis'
+      const binding = role === 'vision' ? settings.vision || settings.analysis : settings.analysis
+      if (binding?.model_source !== 'preset' || binding.model !== item.saved_model || (item.connection_id && binding.connection_id !== item.connection_id)) return null
+      return <p className="ac-note" role="status" key={role}>
+        {t(role === 'vision' ? '视觉模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。' : '分析模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。', { saved: item.saved_model, replacement: item.replacement })}
         {' '}
-        <Btn variant="text" size="sm" disabled={m.saving} onClick={() => void m.save({ analysis: { ...settings.analysis!, model: item.replacement } })}>{t('保存这个模型')}</Btn>
+        <Btn variant="text" size="sm" disabled={m.saving} onClick={() => void m.save({ [role]: { ...binding, model: item.replacement, model_source: 'user' } })}>{t('保存这个模型')}</Btn>
       </p>
-    ))}
+    })}
     {needsCloudModel && <p className="ac-note">{t('连接支持语音识别的服务商后，即可继续导入。')}</p>}
-    {!m.error && failed && <p role="alert" className="studio-error">{visionFailed ? t(VISION_HINT_KEY) : t('当前模型校验失败，可换一个型号或重新测试。')}</p>}
+    {!m.error && failed && <p role="alert" className="studio-error">{failureHint}</p>}
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     {m.conflicted && <Btn size="sm" onClick={() => void m.load()}>{t('放弃本页更改并重新载入')}</Btn>}
     <div className="ac-savebar">

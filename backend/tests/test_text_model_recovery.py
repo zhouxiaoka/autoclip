@@ -135,7 +135,7 @@ def test_saved_dead_analysis_model_retries_once_through_call_with_retry(tmp_path
     assert listed["n"] == 1
     assert listed["provider"] == "apimart"
     assert listed["key"] == SECRET
-    assert remembered_model("apimart", listed["base"], SECRET, DEAD) == ALT
+    assert remembered_model("apimart", listed["base"], SECRET, DEAD, purpose="analysis") == ALT
     assert manager.settings["model_name"] == DEAD
     assert manager.current_provider.model_name == DEAD
     assert ai.load().analysis.model == DEAD
@@ -152,7 +152,7 @@ def test_saved_dead_analysis_model_retries_once_through_call_with_retry(tmp_path
     assert succeeded[0]["retry_count"] == 1
     assert succeeded[1].get("retry_count", 0) == 0
     notice = ai.public(ai.load())["model_substitutions"]
-    assert notice == [{"purpose": "analysis", "saved_model": DEAD, "replacement": ALT}]
+    assert notice == [{"purpose": "analysis", "saved_model": DEAD, "replacement": ALT, "connection_id": "c1"}]
     assert SECRET not in json.dumps(notice)
     other_account = ai.load()
     other_account.connections[0].api_key = 'other-fixture'
@@ -193,7 +193,7 @@ def test_a_second_missing_analysis_model_is_not_remembered(tmp_path, monkeypatch
 
     assert [item["model"] for item in sent] == [DEAD, ALT]
     assert listed["n"] == 1
-    assert remembered_model("apimart", listed["base"], SECRET, DEAD) is None
+    assert remembered_model("apimart", listed["base"], SECRET, DEAD, purpose="analysis") is None
 
 
 def test_other_text_errors_do_not_fetch_a_substitute(tmp_path, monkeypatch, caplog):

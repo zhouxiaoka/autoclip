@@ -856,6 +856,7 @@ function settingsHook(s, transport, initial, placement = 'home_setup') {
   const hook=load('../features/settings/useModelSettings',{
     './quickConnect': loadTs('quickConnect.ts', { './modelSettingsLogic': logic }),
     './providerModelSetup': loadTs('providerModelSetup.ts'),
+    './modelVisibility': loadTs('modelVisibility.ts'),
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},'../studio/settingsReturn':{notifySettingsSaved(){}},
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
@@ -978,6 +979,8 @@ test('actual fetchList ignores stale completions',async()=>{
  const latest=render()
  const ids=latest.lists[c.id].models.map(model=>model.id)
  assert.equal(ids.join(','),'fresh-id')
+ assert.equal(latest.lists[c.id].models[0].analysis,false)
+ assert.equal(latest.lists[c.id].models[0].kind,'other')
  assert.equal(JSON.stringify(s.events).includes('stale-id'),false)
 })
 

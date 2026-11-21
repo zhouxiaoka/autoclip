@@ -288,7 +288,7 @@ def test_qwen_verified_and_unknown_is_not_text_only():
     assert registry.lookup_capability(c, 'qwen3.8-flash') == 'multimodal'
     assert registry.lookup_capability(c, 'qwen-future-unknown') is None
     unknown = registry._records(c, [{'id': 'future-model'}], {})[0]
-    assert unknown['capability'] is None and unknown['analysis']
+    assert unknown['capability'] is None and not unknown['analysis']
 
 
 def test_http_config_and_discovery_use_saved_secrets_without_returning_them(monkeypatch):
@@ -346,7 +346,7 @@ def test_failed_refresh_preserves_last_live_list(monkeypatch):
     monkeypatch.setattr(registry, '_ensure_metadata', metadata)
     monkeypatch.setattr(registry.model_catalog, '_http_get_json', fail)
     result = asyncio.run(registry.discover(c, refresh=True))
-    assert result['models'] == [{'id': 'saved-model'}]
+    assert [row['id'] for row in result['models']] == ['saved-model']
     assert result['source'] == 'cache' and result['warning']
 
 
@@ -1296,7 +1296,7 @@ def test_account_only_scoped_failure_and_hidden_fixed_model_in_production_reques
         ai.require_analysis(ai.load())
     saved['analysis'] = {'connection_id': account.id, 'model': 'fixture-alpha', 'model_source': 'user'}
     ai.save(ai.ModelSettings.model_validate(saved))
-    assert readiness._analysis(ai.load())['code'] == 'validation_failed'
+    assert readiness._analysis(ai.load())['code'] == 'model_validation_failed'
     with pytest.raises(ValueError):
         ai.require_analysis(ai.load())
     working = ai.load()
@@ -1323,3 +1323,49 @@ def test_account_only_scoped_failure_and_hidden_fixed_model_in_production_reques
     assert manager.settings['model_source'] == 'user'
     assert manager.call_with_retry('test', max_retries=1) == 'ok'
     assert hits == [('dashscope.aliyuncs.com', 'qwen4-max')]
+
+
+def test_windows_upgrade_first_refresh_timeout_reclassifies_only_the_saved_account(tmp_path, monkeypatch):
+    profile = tmp_path / 'AppData' / 'Roaming' / 'AutoClip'
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(profile))
+    account = ai.Connection(id='legacy-analysis', name='Bailian', provider='dashscope', api_key='fixture-bailian')
+    other = account.model_copy(update={'id': 'other', 'api_key': 'fixture-other'})
+    ai.save(ai.ModelSettings(connections=[account, other], analysis=ai.Assignment(connection_id=account.id, model='qwen4-max')))
+    registry._update(registry._scope(account), {'source': 'live', 'updated_at': 1, 'models': [
+        {'id': 'qwen4-max', 'analysis': True, 'capability': None, 'kind': 'language'},
+        {'id': 'qwen-image-2.1-pro', 'image': False, 'kind': 'other'},
+        {'id': 'private-text', 'capability': 'text', 'capability_source': 'provider', 'analysis': True},
+    ]})
+    registry._update(registry._scope(other), {'models': [{'id': 'other-account-only'}]})
+    async def timeout(url, **kwargs):
+        assert kwargs['headers']['Authorization'] == 'Bearer fixture-bailian'
+        raise TimeoutError('fixture deadline')
+    async def offline():
+        pass
+    monkeypatch.setattr(registry, '_ensure_metadata', offline)
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', timeout)
+    listed = asyncio.run(registry.discover(ai.load().connections[0]))
+    by_id = {row['id']: row for row in listed['models']}
+    assert listed['source'] == 'cache' and listed['warning'] and listed['updated_at'] == 1
+    assert by_id['qwen4-max']['capability'] == 'multimodal'
+    assert by_id['qwen-image-2.1-pro']['kind'] == 'image'
+    assert by_id['private-text']['capability_source'] == 'provider'
+    assert 'other-account-only' not in by_id
+
+
+def test_unknown_ids_require_a_declaration_and_empty_metadata_defers_to_evidence():
+    from backend.core.model_recovery import pick_available_vision_model
+    from backend.core.provider_model_fetch import _page_models
+    c = ai.Connection(id='bailian', name='Bailian', provider='dashscope', api_key='fixture')
+    raw = [{'id': name} for name in ('custom-vision-widget', 'fixture-max-new', 'qwen-image-9.9-ultra')]
+    raw += [{'id': 'qwen-image-2.1-pro', 'output_modalities': [], 'supported_endpoint_types': []},
+            {'id': 'qwen4-max', 'input_modalities': [], 'architecture': {'input_modalities': ['text']}}]
+    rows = {row['id']: row for row in registry._records(c, raw, {})}
+    for row in raw[:3]:
+        assert rows[row['id']]['kind'] == 'other'
+        assert rows[row['id']]['capability'] is None
+    assert rows['qwen-image-2.1-pro']['image']
+    assert rows['qwen4-max']['capability'] == 'text'
+    assert pick_available_vision_model('dashscope', ['qwen4-max']) == 'qwen4-max'
+    ids, caps = _page_models({'data': raw}, 'openai-completions', 'dashscope')
+    assert pick_available_vision_model('dashscope', ids, capabilities=caps) is None

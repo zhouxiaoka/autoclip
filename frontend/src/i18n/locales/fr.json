@@ -1,4 +1,8 @@
 {
+  "视觉模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。": "Le modèle de vision {{saved}} est indisponible. Cette tâche a utilisé {{replacement}}.",
+  "指定模型用途": "Définir l’usage du modèle",
+  "未指定用途": "Usage non défini",
+  "型号 {{model}} 未通过校验，请更换型号或重新测试。": "La vérification de {{model}} a échoué. Choisissez un autre modèle ou relancez le test.",
   "封面模型可稍后选择，其他设置可先保存。": "Vous pouvez enregistrer vos réglages et choisir un modèle de couverture plus tard.",
   "服务商未标明输入类型，可按模型文档选择。": "Le fournisseur ne précise pas les types d’entrée. Consultez la documentation du modèle pour choisir.",
   "这些型号尚未识别为可用的剪辑、转写或封面模型。可刷新列表获取最新信息。": "La prise en charge du montage, de la transcription ou des couvertures reste à confirmer pour ces modèles. Actualisez la liste pour vérifier.",

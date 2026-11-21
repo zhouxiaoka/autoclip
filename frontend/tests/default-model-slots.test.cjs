@@ -51,7 +51,7 @@ test('Bailian account models retain their purpose and fixed account through save
     transcription: 'qwen-audio-3.1-asr-flash', cover: 'qwen-image-2.1-pro' })) {
     const groups = slots.collectModelGroups(next, account, purpose)
     assert.ok(groups.some(g => g.modelId === model && g.offers.some(o => o.connectionId === 'ds' && o.selectable)))
-    if (purpose === 'vision' || purpose === 'cover') assert.ok(!groups.some(g => g.modelId === 'fixture-max-new'))
+    assert.ok(!groups.some(g => g.modelId === 'fixture-max-new'))
     next = slots.applyFixedSelection(next, purpose, model, 'ds')
     assert.equal(next[purpose].model_source, 'user')
   }

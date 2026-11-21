@@ -17,7 +17,7 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, FIRST_WINDOW_END_SEC, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { CLOUD_TRANSCRIPTION_DESTINATION, analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { CLOUD_TRANSCRIPTION_DESTINATION, analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessCheck, type ReadinessIssue } from './importReadiness'
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
 import { hasSuccessHistory, readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
@@ -32,9 +32,16 @@ import UrlPreview, { shouldSuggestFirstWindow, type UrlInspectPreview } from './
 import './studio.css'
 import './quick-output.css'
 
+function validationHint(check?: ReadinessCheck | null) {
+  if (check?.code === 'model_validation_failed') return t('型号 {{model}} 未通过校验，请更换型号或重新测试。', { model: check.label || '' })
+  if (check?.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+  return ''
+}
+
 function issueCopy(item: ReadinessIssue) {
   if (item.code === 'no_model') return t('服务商已保存，请选择精彩片段分析模型。')
-  if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+  const hint = validationHint(item)
+  if (hint) return hint
   if (item.key === 'analysis' && item.code === 'image_model_in_analysis') return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model: item.label || '' })
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
   if (item.code === 'whisper_installing') return t('正在安装本地转写…')
@@ -52,7 +59,7 @@ function issueCopy(item: ReadinessIssue) {
 
 function repairLabel(item: ReadinessIssue) {
   if (item.code === 'no_model') return t('选择分析模型')
-  if (item.repair === 'settings_ai') return (item.code === 'validation_failed' || item.code === 'image_model_in_analysis') ? t('去设置修改') : t('连接 AI 服务')
+  if (item.repair === 'settings_ai') return (validationHint(item) || item.code === 'image_model_in_analysis') ? t('去设置修改') : t('连接 AI 服务')
   if (item.repair === 'install_whisper') return item.model ? t('下载转写模型') : t('安装 Whisper')
   if (item.repair === 'settings_transcription') return t('转写设置')
   if (item.repair === 'settings_vision') return t('视觉设置')
@@ -98,6 +105,10 @@ function longFormNotice(durationSec: number | null, platforms: string[]) {
 
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
+  if (reason === 'analysis' || reason === 'visual' || reason === 'transcription') {
+    const hint = validationHint(readiness?.checks?.[reason])
+    if (hint) return hint
+  }
   if (reason === 'analysis') {
     const code = readiness?.checks?.analysis?.code
     if (code === 'no_model') return t('服务商已保存，请选择精彩片段分析模型。')
@@ -105,9 +116,7 @@ function blockMessage(reason: string, readiness?: ImportReadiness | null) {
       const model = readiness?.checks?.analysis?.label || ''
       return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model })
     }
-    return code === 'validation_failed'
-      ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
-      : t('请先连接 AI 服务，再导入视频。')
+    return t('请先连接 AI 服务，再导入视频。')
   }
   if (reason === 'transcription') return t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
   if (reason === 'visual') return readiness?.checks?.visual?.code === 'vision_unsupported'

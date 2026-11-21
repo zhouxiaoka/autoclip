@@ -254,7 +254,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
             _telem['result'] = result
             if model != saved_model:
-                remember_model(provider, base, key, saved_model, model)
+                remember_model(provider, base, key, saved_model, model, purpose='vision')
             from backend.core import llm_usage
             llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
                              prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),

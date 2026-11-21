@@ -206,7 +206,10 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
     selection = settings.transcription
     connection = next(c for c in settings.connections if c.id == selection.connection_id)
     from backend.services import ai_model_settings as ai
-    if ai.transcription_needs_repair(settings) or ai.failed_check(connection, 'transcription', selection.model):
+    failure = ai.failure_scope(connection, 'transcription', selection.model)
+    if failure == 'validation_failed':
+        raise CloudTranscriptionError('转写账号未通过校验，请检查密钥或接口地址。')
+    if ai.transcription_needs_repair(settings) or failure:
         raise CloudTranscriptionError('请在设置中重新选择或测试转写模型。')
     if not connection.api_key and connection.provider != 'compatible':
         raise CloudTranscriptionError('请先在字幕转写设置中填写 API Key。', upstream_error_type='invalid_key')
