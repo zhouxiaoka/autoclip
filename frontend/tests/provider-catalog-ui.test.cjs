@@ -5,6 +5,10 @@ const path = require('path')
 const React = require('react')
 const { loadTs } = require('./load-ts.cjs')
 
+function loadDetail(mocks) {
+  return loadTs('ProviderDetail.tsx', { react: { ...React, useRef: current => ({ current }) }, ...mocks }).default
+}
+
 function flatten(node) {
   if (node == null || typeof node === 'boolean') return []
   if (Array.isArray(node)) return node.flatMap(flatten)
@@ -140,7 +144,7 @@ test('catalog shows both ready local ASR engines while cloud transcription is se
 })
 
 test('detail only shows a successful status for verified connections or ready local ASR', () => {
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -149,7 +153,7 @@ test('detail only shows a successful status for verified connections or ready lo
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   for (const id of ['deepseek', 'ollama']) {
     for (const validation_status of ['unchecked', 'failed', 'ok']) {
@@ -187,7 +191,7 @@ test('search and capability filter show unconnected more-group providers', () =>
 })
 
 test('detail shows a configure form for an unconnected preset without writing a connection', () => {
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n,
     '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
@@ -202,7 +206,7 @@ test('detail shows a configure form for an unconnected preset without writing a 
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const ensured = []
   const tree = Detail({
     preset: {
@@ -362,7 +366,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
 }
 
 test('provider detail uses two-column connect/models layout without analysis ModelPicker', () => {
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -370,7 +374,7 @@ test('provider detail uses two-column connect/models layout without analysis Mod
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   const tree = Detail({
     preset: view.catalogPreset('deepseek'),
@@ -408,7 +412,7 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
   assert.ok(openai && openai.locked && openai.base_url)
   const edits = []
   const tests = []
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -419,7 +423,7 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const detail = Detail({
     preset: openai,
     m: {
@@ -443,9 +447,73 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
 })
 
 
+for (const [presetId, address, legacy] of [
+  ['openai', 'https://api.openai.com/v', false],
+  ['openai', 'https://api.openai.com/proxy/v1', true],
+  ['openrouter', 'https://my-gateway.example/v1', false],
+]) {
+  test(`editing ${legacy ? 'a legacy' : 'a new'} ${presetId} connection retains its address across renders`, () => {
+    const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+    const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
+    const preset = view.catalogPreset(presetId)
+    const tracked = { current: undefined }
+    const probes = []
+    const m = {
+      settings: { ...settings, connections: legacy ? [{ ...logic.newConnection(presetId, 'legacy'), base_url: '', has_key: true }] : [] },
+      lists: {}, busy: {}, listErrors: {}, keyHints: {},
+      ensureCatalogProvider(id, patch) {
+        const result = view.ensureCatalogConnection(this.settings, preset)
+        this.settings = logic.editConnection(result.settings, result.connection.id, patch)
+        return result.connection.id
+      },
+      editConnection(connection, patch) {
+        this.settings = logic.editConnection(this.settings, connection.id, patch)
+      },
+      testCatalogProvider(id, connection, kind) { probes.push([connection.id, connection.base_url, kind]) },
+    }
+    const Detail = loadDetail({
+      react: { ...React, useRef: () => tracked },
+      '../../i18n': i18n, '../../ui': ui,
+      '../../utils/externalLinks': { openExternalLink: () => {} },
+      '../../components/SpeechRecognitionConfig': { default: () => null },
+      './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('input', {
+        value: connection.base_url, onChange: value => onEdit({ base_url: value }),
+      }) },
+      './SenseVoiceConfig': { default: () => null },
+      './TrialRunPanel': { default: () => null },
+    })
+    const render = () => flatten(Detail({ preset, m, onBack: () => {} }))
+    const field = () => render().find(node => node.type === 'input')
+    assert.equal(field().props.value, preset.base_url)
+    assert.equal(m.settings.connections.length, legacy ? 1 : 0)
+    if (legacy) assert.equal(render().find(node => node.type === 'button' && textOf(node) === '快速测试').props.disabled, false)
+    field().props.onChange(address)
+    assert.equal(field().props.value, address)
+    const connectionId = m.settings.connections[0].id
+    field().props.onChange('')
+    assert.equal(field().props.value, '')
+    assert.equal(render().find(node => node.type === 'button' && textOf(node) === '快速测试').props.disabled, true)
+    field().props.onChange(address)
+    m.editConnection(m.settings.connections[0], { api_key: 'test-only' })
+    for (const label of ['快速测试', '试跑一段']) {
+      const button = render().find(node => node.type === 'button' && textOf(node) === label)
+      assert.equal(button.props.disabled, false)
+      button.props.onClick()
+    }
+    assert.deepEqual(probes, [[connectionId, address, 'quick'], [connectionId, address, 'trial']])
+    const saved = logic.forSave(m.settings)
+    assert.equal(saved.connections.length, 1)
+    assert.equal(saved.connections[0].id, connectionId)
+    assert.equal(saved.connections[0].base_url, address)
+    const custom = view.unmatchedCompatibleConnections(logic.prepareLoaded(saved))
+    assert.equal(custom.length, 1)
+    assert.equal(custom[0].id, connectionId)
+  })
+}
+
 test('all endpoint-only catalog cards open an address entry flow without binding a default', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -458,7 +526,7 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
     const opened = []
     const tree = Catalog({ settings, query: preset.id, filter: 'all', moreOpen: true,
@@ -530,7 +598,7 @@ test('R6 transient validation shows an existing hint without marking credentials
 
 test('sponsor detail keeps only essentials: key, address, one-click, test, models', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -542,7 +610,7 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   for (const id of ['api88', 'infistar', 'apimart']) {
     const preset = view.catalogPreset(id)
     assert.ok(preset?.sponsor)

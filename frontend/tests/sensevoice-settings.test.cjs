@@ -97,6 +97,7 @@ test('SenseVoice detail reuses LocalModelPrepare instead of a new wizard', () =>
   assert.equal(/向导|wizard|clipboard/i.test(source), false)
 
   const Detail = loadTs('ProviderDetail.tsx', {
+    react: { ...React, useRef: current => ({ current }) },
     '../../i18n': i18n,
     '../../ui': {
       Btn: ({ children, ...props }) => React.createElement('button', props, children),
