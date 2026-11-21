@@ -2,6 +2,26 @@ import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings } fro
 import { isImageModel } from './modelKind'
 import { getProvider } from './providerPresets'
 
+/** Prefer preset curated analysis candidates over arbitrary raw `/models` ordering when probing. */
+export function pickRecommendedTestModel(connection: Pick<Connection, 'provider' | 'catalog_provider_id' | 'enabled_model_ids' | 'failed_model_checks'>, list?: ModelList | null): string {
+  const catalog = getProvider(connection.catalog_provider_id || connection.provider)?.candidates
+  const preferred = catalog?.analysis || []
+  const allowed = connection.enabled_model_ids ? new Set(connection.enabled_model_ids) : null
+  const eligible = (list?.models || []).filter(m =>
+    (!allowed || allowed.has(m.id))
+    && m.analysis
+    && !isImageModel(m.id)
+    && !m.asr
+    && (!m.kind || m.kind === 'language')
+    && !connection.failed_model_checks?.some(f => f.purpose === 'analysis' && f.model === m.id),
+  )
+  for (const id of preferred) {
+    const hit = eligible.find(m => m.id === id)
+    if (hit) return hit.id
+  }
+  return eligible[0]?.id || preferred[0] || ''
+}
+
 /** Only the selected account's discovered models may supply new assignments. */
 export function recommendProviderSetup(settings: ModelSettings, connection: Connection, list: ModelList): ModelSettings | null {
   if (list.preview || !['live', 'cache'].includes(list.source)) return null

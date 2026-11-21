@@ -8,7 +8,7 @@ import { hintKeyForUpstreamError, isRetryableUpstreamError, telemetryProvider } 
 import { type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { quickConnectPatch } from './quickConnect'
-import { preserveFixedAssignments, recommendProviderSetup } from './providerModelSetup'
+import { pickRecommendedTestModel, preserveFixedAssignments, recommendProviderSetup } from './providerModelSetup'
 import { applyModelDefaults, syncFollowingCover } from './modelDefaults'
 import { enabledModelIds } from './modelVisibility'
 import { slotTelemetry } from './defaultModelSlots'
@@ -441,9 +441,13 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
           else void discover(normalized, true, 'manual')
         }
         else {
+          const autoVisionMiss = role === 'analysis' && next.analysis_mode !== 'visual'
+            && (result.error_type === 'vision_unsupported' || result.error_code === 'vision_unsupported')
           acceptWarning(connection.id, result)
-          setError(failureCopy(result, model))
-          if (checked) { finish('failed', connectionTestFailure(result)); return { ok: false, validationFailed: true } }
+          if (!autoVisionMiss) {
+            setError(failureCopy(result, model))
+            if (checked) { finish('failed', connectionTestFailure(result)); return { ok: false, validationFailed: true } }
+          }
         }
         if (!checked) setSettings(next)
       }
@@ -674,7 +678,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
           const merged = mergeCustomList(connection, await modelSettingsApi.discover(connection, true))
           available = { ...lists, [connection.id]: merged }
           setLists(old => ({ ...old, [connection!.id]: merged }))
-          model = merged.models.find(row => row.analysis && !isImageMarker(row.id))?.id
+          model = pickRecommendedTestModel(connection, merged)
         } catch (e) {
           setListErrors(old => ({ ...old, [connection!.id]: errorText(e) }))
         }
@@ -692,7 +696,19 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       const value = await probe(connection, model, vision, 'analysis', probeKind, controller.signal)
       if (controller.signal.aborted) return
       emitValidation(connection, value)
-      const applied = logic.applyValidation(settingsRef.current || next, connection.id, value, model, 'analysis', vision)
+      const appliedBase = logic.applyValidation(settingsRef.current || next, connection.id, value, model, 'analysis', vision)
+      const testedEntry = available[connection.id]?.models.find(row => row.id === model)
+      const applied: ModelSettings = passed(value) && !appliedBase.analysis?.model
+        ? {
+            ...appliedBase,
+            analysis: {
+              connection_id: connection.id,
+              model,
+              capability: testedEntry?.capability === 'multimodal' || testedEntry?.capability === 'text' ? testedEntry.capability : 'auto',
+              model_source: 'preset',
+            },
+          }
+        : appliedBase
       replace(applied)
       finish(passed(value) ? 'completed' : 'failed', { config_source: value.config_source, ...(passed(value) ? {} : connectionTestFailure(value)) })
       if (passed(value)) {

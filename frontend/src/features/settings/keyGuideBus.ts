@@ -27,13 +27,23 @@ let pendingRequest: KeyGuideRequest | null = null
 let pendingSelect: string | null = null
 let applier: Applier | null = null
 let scanListener: (() => void) | null = null
+let clipboardSuppressed = 0
 const listeners = new Set<(offer: KeyOffer | null) => void>()
+
+export function setClipboardBannerSuppressed(suppressed: boolean) {
+  clipboardSuppressed = Math.max(0, clipboardSuppressed + (suppressed ? 1 : -1))
+  if (clipboardSuppressed > 0 && offer?.source === 'clipboard') {
+    offer = null
+    listeners.forEach(listener => listener(offer))
+  }
+}
 
 export function currentOffer(): KeyOffer | null {
   return offer
 }
 
 export function publishOffer(next: KeyOffer) {
+  if (next.source === 'clipboard' && clipboardSuppressed > 0) return
   offer = next
   listeners.forEach(listener => listener(offer))
 }
