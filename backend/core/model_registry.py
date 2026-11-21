@@ -23,6 +23,7 @@ from backend.core.path_utils import get_data_directory
 _lock = threading.RLock()
 _last_remote_attempt = 0.0
 _remote_task = None
+_CAPABILITY_VERSION = 2  # Cached normalized records predate top-level input/output modalities.
 _MODEL_PROVIDER = {'dashscope': 'alibaba', 'seed': 'volcengine', 'gemini': 'google', 'kimi': 'moonshotai', 'glm': 'zhipuai', 'grok': 'xai'}
 # Verified against Alibaba's official text-generation documentation, 2026-09-29.
 # https://www.alibabacloud.com/help/en/model-studio/text-generation
@@ -31,6 +32,9 @@ _VERIFIED = {('dashscope', name): 'multimodal' for name in ('qwen3.8-max', 'qwen
 # https://help.aliyun.com/zh/model-studio/qwen3-vl-flash
 _VERIFIED.update({('dashscope', name): 'multimodal'
                   for name in ('qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22')})
+# Text, image and video input; text output. Scope this ID to Bailian.
+# https://help.aliyun.com/zh/model-studio/qwen4-max
+_VERIFIED[('dashscope', 'qwen4-max')] = 'multimodal'
 
 
 # T3 local model gate: params < 7B or context < 8k → UI red warn (still selectable).
@@ -222,11 +226,17 @@ def _with_public_metadata(connection, raw, public):
 
 
 def _modalities(item):
-    architecture = item.get('architecture') or {}
-    modalities = item.get('modalities') or {}
-    inputs = architecture.get('input_modalities', modalities.get('input'))
-    outputs = architecture.get('output_modalities', modalities.get('output'))
-    return inputs if isinstance(inputs, list) else None, outputs if isinstance(outputs, list) else None
+    architecture = item.get('architecture')
+    modalities = item.get('modalities')
+
+    def read(direction):
+        key = f'{direction}_modalities'
+        for container, field in ((item, key), (architecture, key), (modalities, direction)):
+            if isinstance(container, dict) and isinstance(container.get(field), list):
+                return container[field]
+        return None
+
+    return read('input'), read('output')
 
 
 def _cap(inputs):
@@ -360,10 +370,9 @@ async def _ensure_metadata():
     await asyncio.shield(_remote_task)
 
 
-def _model_kind(item, name, *, analysis, image, asr):
+def _model_kind(item, name, *, analysis, image, asr, outputs):
     """One display group per model: provider type metadata first, then capability flags."""
     endpoints = [str(e) for e in (item.get('supported_endpoint_types') or [])]
-    outputs = item.get('output_modalities') or (item.get('architecture') or {}).get('output_modalities') or []
     lowered = name.lower()
     if any('video' in e for e in endpoints) or 'video' in outputs:
         return 'video'
@@ -399,7 +408,7 @@ def _records(connection, raw, data):
         seen.add(name)
         inputs, outputs = _modalities(item)
         caps = item.get('capabilities')
-        if isinstance(caps, list) and 'vision' in caps:
+        if inputs is None and isinstance(caps, list) and 'vision' in caps:
             inputs = ['text', 'image']
         capability = _cap(inputs) or item.get('capability')
         source = 'provider' if capability else 'catalog'
@@ -429,7 +438,7 @@ def _records(connection, raw, data):
         if name in image_catalog.EDIT_ONLY.get(connection.provider, set()):
             image = False
         methods = item.get('supportedGenerationMethods', [])
-        analysis = ('text' in outputs if outputs else model_catalog.is_chat_model(name, '', official=False) and not image)
+        analysis = ('text' in outputs if outputs is not None else model_catalog.is_chat_model(name, '', official=False) and not image)
         if methods and 'generateContent' not in methods:
             analysis = False
             if connection.provider == 'gemini':
@@ -449,7 +458,7 @@ def _records(connection, raw, data):
         asr = asr_catalog.metadata(connection.provider, name, item.get('supported_endpoint_types', []))
         if asr['asr']:
             analysis = False
-        kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'])
+        kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'], outputs=outputs or [])
         record = {**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
                        'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))}
         # T3: surface size/context for the settings picker + D1 chunk_size later.
@@ -490,7 +499,7 @@ async def _discover_from_provider(connection, refresh=False):
                 'warning': '公开目录预览，填写 API Key 后确认账号可用模型。' + (' 当前展示缓存目录。' if public and public.get('stale') else '')}
     scope = _scope(connection)
     cached = _read().get(scope)
-    if cached and not refresh and time.time() - cached.get('updated_at', 0) < 300:
+    if cached and cached.get('capability_version') == _CAPABILITY_VERSION and not refresh and time.time() - cached.get('updated_at', 0) < 300:
         return {**cached, 'source': 'cache'}
 
     async def fetch():
@@ -567,6 +576,7 @@ async def _discover_from_provider(connection, refresh=False):
             {'id': name, 'asr_preview': name not in asr_catalog.DASHSCOPE_SYNC}
             for name in asr_catalog.MODELS['dashscope'] if name not in ids
         )]
-    value = {'models': _records(connection, _with_public_metadata(connection, raw, public), _read()), 'source': 'live', 'updated_at': time.time()}
+    value = {'models': _records(connection, _with_public_metadata(connection, raw, public), _read()),
+             'source': 'live', 'updated_at': time.time(), 'capability_version': _CAPABILITY_VERSION}
     _update(scope, value)
     return value

@@ -205,6 +205,9 @@ def request_chunk(client, connection, model, audio, language):
 def transcribe(video: Path, output: Path | None, settings, language='auto', timeout=0):
     selection = settings.transcription
     connection = next(c for c in settings.connections if c.id == selection.connection_id)
+    from backend.services import ai_model_settings as ai
+    if ai.transcription_needs_repair(settings) or ai.failed_check(connection, 'transcription', selection.model):
+        raise CloudTranscriptionError('请在设置中重新选择或测试转写模型。')
     if not connection.api_key and connection.provider != 'compatible':
         raise CloudTranscriptionError('请先在字幕转写设置中填写 API Key。', upstream_error_type='invalid_key')
     output = Path(output) if output else video.with_suffix('.srt')

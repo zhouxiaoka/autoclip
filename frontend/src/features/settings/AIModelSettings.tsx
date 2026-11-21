@@ -4,7 +4,7 @@ import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
 import api, { speechApi } from '../../services/api'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { mainConnection, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import { mainConnection, hasFailedSelection, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import TrialRunPanel from './TrialRunPanel'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
@@ -16,6 +16,7 @@ import {
   catalogPreset, customConnectionId, sensevoiceAsrReady, whisperAsrReady,
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
+import ModelSettingsLeaveGuard from './ModelSettingsLeaveGuard'
 import DefaultModels from './DefaultModels'
 import {
   analysisImageMisconfig, analysisImageMisconfigCopy, applyAnalysisImageFix,
@@ -218,7 +219,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
     const patch = cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)
-    if (returnToImport && requestedProvider === 'cloud' && !patch?.transcription && settings.transcription?.provider !== 'cloud') return
+    if (returnToImport && requestedProvider === 'cloud' && !patch?.transcription && settings.transcription?.provider !== 'cloud') return false
     const result = await m.save(patch)
     if (result.ok && !result.validationFailed && patch?.transcription?.provider === 'cloud' && patch.transcription.model) {
       cloudPending.current = false
@@ -230,6 +231,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
       slot?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     }
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    return result.ok
   }
   const needsCloudModel = returnToImport && requestedProvider === 'cloud' && settings.transcription?.provider !== 'cloud'
     && !cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)?.transcription
@@ -242,8 +244,9 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   ]
   const usageNotices = enabledUsageNotices(usageSlots, promo, language)
   const visionFailed = visionFollowLacksCapability(settings, m.lists)
-  const failed = validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') || visionFailed
+  const failed = hasFailedSelection(settings) || visionFailed
   return <div className="ac-ai-settings" data-layout="v6">
+    <ModelSettingsLeaveGuard dirty={m.dirtyRef} saving={m.saving} onSave={save} />
     {usageNotices.map(notice => {
       const usageKey = notice.label === 'vision' ? '画面理解' : notice.label === 'cover' ? '封面' : notice.label === 'transcription' ? '转写' : '分析'
       const who = PROVIDERS[notice.provider as keyof typeof PROVIDERS]?.short || notice.provider
@@ -300,9 +303,11 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
       </p>
     ))}
     {needsCloudModel && <p className="ac-note">{t('连接支持语音识别的服务商后，即可继续导入。')}</p>}
+    {!m.error && failed && <p role="alert" className="studio-error">{visionFailed ? t(VISION_HINT_KEY) : t('当前模型校验失败，可换一个型号或重新测试。')}</p>}
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
+    {m.conflicted && <Btn size="sm" onClick={() => void m.load()}>{t('放弃本页更改并重新载入')}</Btn>}
     <div className="ac-savebar">
-      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
+      <StatusDot tone={m.dirty ? 'muted' : failed ? 'error' : 'ok'} label={m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
       <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing || needsCloudModel} loading={m.saving} onClick={() => void save()}>{returnToImport ? t('保存并继续导入') : t('保存设置')}</Btn>
     </div>
     <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}

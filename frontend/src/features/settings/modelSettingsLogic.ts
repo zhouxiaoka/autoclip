@@ -46,15 +46,6 @@ export function prepareLoaded(value: ModelSettings): ModelSettings {
   return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false }
 }
 
-/** Without an eligible image model, keep the video export available with a local cover. */
-export function coverFallback(s: ModelSettings, lists: Record<string, ModelList>): ModelSettings {
-  if (!s.cover_enabled || s.cover?.model) return s
-  const connection = connectionOf(s, 'cover') || mainConnection(s)
-  const list = connection && lists[connection.id]
-  if (list && !list.models.some(m => m.image)) return { ...s, cover_enabled: false, cover: null }
-  return s
-}
-
 export const newConnection = (provider: ProviderKey, id: string = crypto.randomUUID()): Connection => {
   const presetUrl = (getProvider(provider)?.base_url || PROVIDERS[provider]?.cloud?.baseUrl || '').trim()
   return {
@@ -81,7 +72,7 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
         ...next,
         ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
         ...(typeof next.api_key === 'string' ? { has_key: !!next.api_key } : {}),
-        ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '' } : {}),
+        ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '', failed_model_checks: [] } : {}),
       }
       if (changedBase) {
         merged.base_url_source = c.provider === 'compatible' || merged.base_url ? 'user' : 'preset'
@@ -91,7 +82,20 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
   }
 }
 
-export function applyValidation(s: ModelSettings, id: string, result: ValidationResult): ModelSettings {
+export function failedCheck(connection: Connection, purpose: Role, model: string) {
+  return connection.validation_status === 'failed' || !!connection.failed_model_checks?.some(item => item.model === model && item.purpose === purpose)
+}
+
+export function hasFailedSelection(s: ModelSettings): boolean {
+  return (['analysis', 'vision', 'transcription', 'cover'] as const).some(purpose => {
+    if ((purpose === 'cover' && !s.cover_enabled) || (purpose === 'vision' && s.analysis_mode !== 'visual' && !s.vision)) return false
+    const binding = purpose === 'vision' ? s.vision || s.analysis : s[purpose]
+    const connection = s.connections.find(c => c.id === binding?.connection_id)
+    return !!(binding && connection && failedCheck(connection, purpose, binding.model))
+  })
+}
+
+export function applyValidation(s: ModelSettings, id: string, result: ValidationResult, model?: string, purpose: Role = 'analysis', checkedVision = false): ModelSettings {
   const ok = passed(result)
   return {
     ...s,
@@ -100,11 +104,17 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
       const url = result.normalized_base_url && presetKey(c) === 'compatible' ? result.normalized_base_url : c.base_url
       const trialFailed = result.probe_kind === 'trial' && result.trial_passed === false
       const trialPassed = result.probe_kind === 'trial' && result.trial_passed === true
+      const transient = result.result === 'transient' || isRetryableUpstreamError(result.error_type || '')
+      const scoped = !!model && !ok && !transient && !['invalid_key', 'bad_endpoint', 'insufficient_quota', 'console_host'].includes(result.error_type || '')
+      const checkedPurpose = result.error_type === 'vision_unsupported' || result.error_code === 'vision_unsupported' ? 'vision' : purpose
+      const failures = (c.failed_model_checks || []).filter(item => item.model !== model || (item.purpose !== checkedPurpose && !(ok && checkedVision && item.purpose === 'vision')))
+      if (scoped && model) failures.push({ purpose: checkedPurpose, model })
       return {
         ...c,
+        ...(model && (ok || scoped) ? { failed_model_checks: failures } : {}),
         base_url: url,
-        validation_status: ok ? 'ok' : result.result === 'transient' || isRetryableUpstreamError(result.error_type || '') ? 'transient' : 'failed',
-        validation_error_type: ok ? '' : (result.error_type || 'unknown'),
+        validation_status: ok ? 'ok' : scoped ? c.validation_status || 'unchecked' : transient ? 'transient' : 'failed',
+        validation_error_type: ok ? '' : scoped ? c.validation_error_type : result.error_type || 'unknown',
         // 1.5.9 3B/N3: successful test clears the lock; real insufficient_quota stamps it.
         ...(ok
           ? { quota_exhausted_at: null }
@@ -217,11 +227,13 @@ export function visionFollowLacksCapability(s: ModelSettings, lists: Record<stri
 export { VISION_HINT_KEY }
 
 /** First blocking problem before save, in page order. */
-export function saveIssue(s: ModelSettings): SaveIssue | null {
+export function saveIssue(s: ModelSettings, allowAccountOnly = false): SaveIssue | null {
   for (const role of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if (role === 'analysis' && allowAccountOnly && !s.analysis?.model.trim()
+        && s.connections.some(c => persistableConnection(c, new Set()))) continue
     if (role === 'vision' && !s.vision) continue
     if (role === 'transcription' && s.transcription?.provider !== 'cloud') continue
-    if (role === 'cover' && !s.cover_enabled) continue
+    if (role === 'cover' && (!s.cover_enabled || !s.cover?.model.trim())) continue
     const binding = s[role]
     const connection = s.connections.find(c => c.id === binding?.connection_id)
     if (!connection) return { role, reason: 'provider' }
@@ -260,11 +272,14 @@ export function validationTargets(s: ModelSettings): { role: Role; connection: C
 
 /** Document to send: drop unused blank drafts; keep compatible rows that already have a URL. */
 export function forSave(s: ModelSettings): ModelSettings {
-  const cover = !s.cover_enabled && !s.cover?.model ? null : s.cover
+  const cover = s.cover?.model.trim() ? s.cover : null
   const active = new Set([s.analysis?.connection_id, s.vision?.connection_id, cover?.connection_id, s.transcription?.connection_id])
   return {
     ...s,
     cover,
+    analysis: s.analysis?.model.trim() ? s.analysis : null,
+    cover_enabled: !!cover && s.cover_enabled,
+    cover_follows_analysis: cover ? s.cover_follows_analysis : false,
     connections: s.connections
       .filter(c => persistableConnection(c, active))
       .map(c => ({

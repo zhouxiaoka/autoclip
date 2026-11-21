@@ -262,6 +262,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
   }
   const m = { settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
   const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
     './AddCustomProviderDialog': { default: () => null },
     react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {}, useRef: initial => ({ current: initial }) },
     'react-i18next': { useTranslation: () => {} },
@@ -325,6 +326,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
       update: () => {}, save: async () => ({}),
     }
     const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
       './AddCustomProviderDialog': { default: () => null },
       react: {
         ...React,

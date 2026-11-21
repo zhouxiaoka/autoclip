@@ -434,7 +434,12 @@ def test_gemini_cover_uses_native_multimodal_request():
     assert args['json']['generationConfig']['responseModalities'] == ['TEXT', 'IMAGE']
 
 
-@pytest.mark.parametrize('model,route,asynchronous', [('qwen-image-2.0', 'multimodal-generation', False), ('wan2.7-image', 'image-generation', True), ('wan2.6-t2i', 'image-generation', True)])
+@pytest.mark.parametrize('model,route,asynchronous', [
+    ('qwen-image-2.0', 'multimodal-generation', False),
+    ('qwen-image-2.1-pro', 'multimodal-generation', False),
+    ('wan2.7-image', 'image-generation', True),
+    ('wan2.6-t2i', 'image-generation', True),
+])
 def test_modern_dashscope_routes_and_extracts_images(model, route, asynchronous):
     from backend.core.image_providers import generate_image, ImageRequest
     image = _jpeg()
@@ -446,6 +451,7 @@ def test_modern_dashscope_routes_and_extracts_images(model, route, asynchronous)
     args = session.calls[0][2]
     assert session.calls[0][1].endswith(f'/services/aigc/{route}/generation')
     assert ('X-DashScope-Async' in args['headers']) == asynchronous
+    assert args['json']['model'] == model
     assert args['json']['input']['messages'][0]['content'] == [{'text': 'cover'}]
     assert args['json']['parameters']['n'] == 1
 

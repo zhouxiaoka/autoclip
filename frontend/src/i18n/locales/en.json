@@ -1,4 +1,7 @@
 {
+  "封面模型可稍后选择，其他设置可先保存。": "You can save these settings and choose a cover model later.",
+  "服务商未标明输入类型，可按模型文档选择。": "The provider hasn’t listed the input types. Check the model documentation to choose one.",
+  "这些型号尚未识别为可用的剪辑、转写或封面模型。可刷新列表获取最新信息。": "These models have no confirmed editing, transcription or cover support. Refresh the list to check for updates.",
   "导出时自动生成": "Created with the export",
   "下载封面": "Download cover",
   "封面已保存": "Cover saved",
@@ -2246,5 +2249,19 @@
   "本机转写": "Transcribe on this device",
   "连接支持语音识别的服务商后，即可继续导入。": "Connect a provider that supports speech recognition to continue importing.",
   "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "This provider uses its official endpoint. For a third-party endpoint, choose Add provider.",
-  "启用 {{model}}": "Enable {{model}}"
+  "启用 {{model}}": "Enable {{model}}",
+  "当前模型校验失败，可换一个型号或重新测试。": "This model failed its check. Choose another model or test it again.",
+  "原转写模型已不受支持，请重新选择转写模型。": "Your previous transcription model is no longer supported. Choose another.",
+  "设置已在另一处修改，请重新载入后再保存。": "Another window changed these settings. Reload to review the latest selection.",
+  "放弃本页更改并重新载入": "Discard my edits and reload",
+  "保存并离开": "Save and leave",
+  "放弃更改": "Discard changes",
+  "继续编辑": "Keep editing",
+  "在选择器显示": "Shown in selectors",
+  "全部显示": "Show all",
+  "全部隐藏": "Hide all",
+  "已隐藏": "Hidden",
+  "勾选要在选择器中显示的型号。隐藏型号后，已选用途仍会使用它。": "Choose which models appear in selectors. Hiding a model keeps existing assignments active.",
+  "服务商已保存，请选择精彩片段分析模型。": "Your provider is saved. Choose a model to find highlights.",
+  "选择分析模型": "Choose analysis model"
 }

@@ -66,7 +66,7 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
     from backend.core.model_catalog import is_image_model
     if is_image_model(label):
         return _check(False, 'image_model_in_analysis', 'settings_ai', label=label, trial_ok=trial)
-    if getattr(connection, 'validation_status', 'unchecked') == 'failed':
+    if ai_models.failed_check(connection, 'analysis', label):
         return _check(False, 'validation_failed', 'settings_ai', label=label, trial_ok=trial)
     return _check(True, 'configured', label=label, trial_ok=trial)
 
@@ -104,6 +104,8 @@ def ensure_analysis_usable() -> None:
 
 
 def _transcription(settings: ai_models.ModelSettings) -> dict:
+    if ai_models.transcription_needs_repair(settings):
+        return _check(False, 'cloud_not_configured', 'settings_transcription', label=settings.transcription.model)
     choice = settings.transcription or ai_models.Transcription()
     if choice.provider == 'whisper_local':
         from backend.services import whisper_runtime
@@ -126,7 +128,7 @@ def _transcription(settings: ai_models.ModelSettings) -> dict:
     connection = next((item for item in settings.connections if item.id == choice.connection_id), None)
     label = f'云端 {choice.model}'.strip() if choice.model else '云端转写'
     trial = _trial_ok(connection)
-    if choice.model and _connection_ready(connection):
+    if choice.model and _connection_ready(connection) and not ai_models.failed_check(connection, 'transcription', choice.model):
         return _check(True, 'cloud_configured', label=label, trial_ok=trial)
     return _check(False, 'cloud_not_configured', 'settings_transcription', label=label, trial_ok=trial)
 
@@ -160,7 +162,7 @@ def _visual(settings: ai_models.ModelSettings, mode: str | None = None) -> dict:
     if mode == 'subtitle':
         return _check(True, 'not_required', label='未启用')
     connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
-    if connection and connection.validation_status == 'failed':
+    if connection and ai_models.failed_check(connection, 'vision', vision_label):
         if mode == 'auto':
             return _check(True, 'optional', label='未启用')
         return _check(False, 'validation_failed', 'settings_vision', label=vision_label or None)

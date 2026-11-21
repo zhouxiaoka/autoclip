@@ -68,10 +68,16 @@ def get_sponsor_promo(
     return client.view(trigger=trigger or 'settings')
 
 
+class ModelSettingsUpdate(ai_models.ModelSettings):
+    edited_fields: set[str] | None = None
+
+
 @router.put('/ai-models')
-def put_ai_models(body: ai_models.ModelSettings):
+def put_ai_models(body: ModelSettingsUpdate):
     try:
-        return ai_models.save(body)
+        return ai_models.save(body, edited_fields=body.edited_fields)
+    except ai_models.SettingsConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         from backend.core.log_redaction import redact_text
         raise HTTPException(status_code=422, detail=redact_text(str(exc))) from exc

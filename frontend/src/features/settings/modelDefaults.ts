@@ -44,6 +44,7 @@ export function syncFollowingCover(before: ModelSettings, next: ModelSettings): 
 
 export function applyModelDefaults(settings: ModelSettings, connection: Connection, models: ModelEntry[], autoCover: boolean): ModelSettings {
   if (!endpointProviderReady(connection)) return settings
+  models = models.filter(model => !connection.enabled_model_ids || connection.enabled_model_ids.includes(model.id))
   const value = { ...settings }
   for (const role of ['analysis', 'vision', 'cover'] as const) {
     const binding = value[role]

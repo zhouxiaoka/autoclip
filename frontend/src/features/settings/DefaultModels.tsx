@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
-import type { ModelList, ModelSettings } from './modelSettingsApi'
+import type { Capability, ModelList, ModelSettings } from './modelSettingsApi'
 import {
   analysisImageMisconfig, analysisImageMisconfigCopy, applyAnalysisImageFix,
   applyCoverOff, applyFixedSelection, applyLocalTranscription, applySmartSelection, applyVisionFollow,
@@ -42,7 +42,7 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
     value: 'follow', label: t('与精彩片段分析相同'), selected: !settings.vision, apply: () => applyVisionFollow(settings),
   })
   if (purpose === 'cover') choices.push({
-    value: 'off', label: t('本机排版 · 使用视频帧'), selected: !settings.cover_enabled, apply: () => applyCoverOff(settings),
+    value: 'off', label: t('本机排版 · 使用视频帧'), selected: slotSummary(settings, lists, 'cover').kind === 'off', apply: () => applyCoverOff(settings),
   })
   if (purpose === 'transcription') {
     for (const model of WHISPER_MODELS) choices.push({
@@ -60,8 +60,7 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
       const label = t('{{model}} · {{provider}}', { model: modelId, provider: offer.displayName })
       choices.push({
         value: JSON.stringify(['user', offer.connectionId, modelId]), label,
-        hint: offer.connected ? t('已连接') : !offer.selectable ? t('连接校验失败')
-          : purpose === 'analysis' ? t('已配置，保存时验证') : t('已配置'),
+        hint: offer.connected ? t('已连接') : !offer.selectable ? t('当前模型校验失败，可换一个型号或重新测试。') : t('已配置'),
         selected: isFixedSelected(settings, purpose, modelId, offer), disabled: !offer.selectable,
         apply: () => applyFixedSelection(settings, purpose, modelId, offer.connectionId),
       })
@@ -107,6 +106,9 @@ export default function DefaultModels({ settings, lists, onChange, transcription
   transcriptionNote?: ReactNode
 }) {
   useTranslation()
+  const analysis = settings.analysis
+  const analysisList = analysis && lists[analysis.connection_id]
+  const analysisEntry = analysisList?.models.find(entry => entry.id === analysis?.model)
   const renderSlot = (slot: typeof PURPOSE_SLOTS[number]) => {
     const warning = slot.id === 'vision' ? visionWarning(settings, lists) : null
     return (
@@ -117,7 +119,19 @@ export default function DefaultModels({ settings, lists, onChange, transcription
             <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
           </div>
           <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} />
-          {slot.id === 'cover' && settings.cover_enabled && (
+          {slot.id === 'analysis' && analysis && analysisEntry?.analysis && !analysisEntry.capability && !analysisList?.preview && (
+            <label className="ac-note">
+              {t('服务商未标明输入类型，可按模型文档选择。')}
+              <Select<Capability> aria-label={t('自定义模型类型')} value={analysis.capability}
+                options={[{ value: 'auto', label: t('自动识别') }, { value: 'text', label: t('仅文字') }, { value: 'multimodal', label: t('多模态') }]}
+                onChange={capability => onChange({ ...settings, analysis: { ...analysis, capability } })} />
+            </label>
+          )}
+          {slot.id === 'transcription' && settings.transcription_needs_repair && <p className="ac-note ac-note--error" role="alert">{t('原转写模型已不受支持，请重新选择转写模型。')}</p>}
+          {slot.id === 'cover' && !settings.cover?.model && !settings.prefer_local_cover && (
+            <p className="ac-note">{t('封面模型可稍后选择，其他设置可先保存。')}</p>
+          )}
+          {slot.id === 'cover' && settings.cover_enabled && settings.cover?.model && (
             <label className="ac-note"><input type="checkbox" checked={settings.allow_send_frame}
               onChange={event => onChange({ ...settings, allow_send_frame: event.target.checked })} /> {t('允许上传参考帧')}</label>
           )}

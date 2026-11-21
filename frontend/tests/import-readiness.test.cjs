@@ -197,7 +197,8 @@ test('the banner installs whisper and blocks an unready import', async () => {
 })
 
 test('an unconfigured analysis model replaces the import zone and keeps a failed validation on it', () => {
-  for (const code of ['not_configured', 'no_model', 'invalid_connection']) {
+  assert.equal(readiness.analysisNeedsSetup({ checks: { analysis: { ok: false, code: 'no_model' } } }), false)
+  for (const code of ['not_configured', 'invalid_connection']) {
     const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
     assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), true, code)
     assert.equal(view.tree.some(node => node.type === 'textarea'), false, code)

@@ -1,4 +1,7 @@
 {
+  "封面模型可稍后选择，其他设置可先保存。": "Puedes guardar los ajustes y elegir el modelo de portada más tarde.",
+  "服务商未标明输入类型，可按模型文档选择。": "El proveedor no indica los tipos de entrada. Consulta la documentación del modelo para elegir.",
+  "这些型号尚未识别为可用的剪辑、转写或封面模型。可刷新列表获取最新信息。": "Aún no se ha confirmado si estos modelos sirven para editar, transcribir o crear portadas. Actualiza la lista para comprobarlo.",
   "导出时自动生成": "Se crea al exportar",
   "下载封面": "Descargar portada",
   "封面已保存": "Portada guardada",
@@ -2246,5 +2249,19 @@
   "本机转写": "Transcribir en este equipo",
   "连接支持语音识别的服务商后，即可继续导入。": "Conecta un proveedor de reconocimiento de voz para continuar.",
   "此服务商使用官方接口。第三方地址请在「添加服务商」中配置。": "Este proveedor usa su API oficial. Para otra dirección, elige Añadir proveedor.",
-  "启用 {{model}}": "Activar {{model}}"
+  "启用 {{model}}": "Activar {{model}}",
+  "当前模型校验失败，可换一个型号或重新测试。": "La prueba falló. Elige otro modelo o vuelve a probar.",
+  "原转写模型已不受支持，请重新选择转写模型。": "El modelo de transcripción anterior ya no es compatible. Elige otro.",
+  "设置已在另一处修改，请重新载入后再保存。": "Otra ventana ha cambiado estos ajustes. Vuelve a cargarlos para revisarlos.",
+  "放弃本页更改并重新载入": "Descartar mis cambios y recargar",
+  "保存并离开": "Guardar y salir",
+  "放弃更改": "Descartar cambios",
+  "继续编辑": "Seguir editando",
+  "在选择器显示": "Visibles en los selectores",
+  "全部显示": "Mostrar todos",
+  "全部隐藏": "Ocultar todos",
+  "已隐藏": "Ocultos",
+  "勾选要在选择器中显示的型号。隐藏型号后，已选用途仍会使用它。": "Elige qué modelos aparecen en las listas. Ocultarlos conserva sus asignaciones actuales.",
+  "服务商已保存，请选择精彩片段分析模型。": "El proveedor está guardado. Elige un modelo para buscar momentos destacados.",
+  "选择分析模型": "Elegir modelo de análisis"
 }

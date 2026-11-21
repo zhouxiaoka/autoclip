@@ -262,13 +262,16 @@ export default function ProviderDetail({
           <section className="ac-provider-detail-card" data-panel="models">
             <h4 className="ac-provider-models-title">
               {t('可用模型')}
-              <span className="count">{fetched ? (persisted ? `${t('已启用')} ${models.filter(x => enabledSet.has(x.id)).length} / ${models.length}` : models.length) : t('测通后获取')}</span>
+              <span className="count">{fetched ? (persisted ? `${t('在选择器显示')} ${models.filter(x => enabledSet.has(x.id)).length} / ${models.length}` : models.length) : t('测通后获取')}</span>
+              {persisted && (persisted.api_key || persisted.has_key) && (
+                <Btn variant="text" size="sm" disabled={!!listing} onClick={() => void m.discover(persisted, true)}>{t('刷新')}</Btn>
+              )}
             </h4>
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
             {fetched && models.length > 0 && persisted && (
               <p className="ac-note ac-provider-model-hint" data-visibility={customized ? 'custom' : 'recommended'}>
-                {customized ? t('已按你的勾选；默认模型只从已勾选里选。') : t('已为你勾选推荐模型，可自行增减；默认模型只从已勾选里选。')}
+                {t('勾选要在选择器中显示的型号。隐藏型号后，已选用途仍会使用它。')}
                 {customized && <button type="button" className="ac-link-button" onClick={resetRecommended}>{t('恢复推荐')}</button>}
               </p>
             )}
@@ -301,7 +304,7 @@ function ModelGroups({ models, enabled: on, onToggle }: {
           <li key={model.id} className={`ac-mono${!on.has(model.id) && onToggle ? ' is-hidden' : ''}`} data-model-id={model.id}>
             {onToggle
               ? <label className="ac-provider-model-check">
-                  <input type="checkbox" checked={on.has(model.id)} aria-label={`${t('启用')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
+                  <input type="checkbox" checked={on.has(model.id)} aria-label={`${t('在选择器显示')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
                   <span>{model.id}</span>
                 </label>
               : model.id}
@@ -316,11 +319,12 @@ function ModelGroups({ models, enabled: on, onToggle }: {
               {t(group.title)}<span className="count">{onToggle ? `${enabled}/${rows.length}` : rows.length}</span>
               {onToggle && (
                 <span className="ac-provider-model-bulk">
-                  <button type="button" disabled={enabled === rows.length} onClick={event => { event.preventDefault(); onToggle(rows.map(m => m.id), true) }}>{t('全部启用')}</button>
-                  <button type="button" disabled={enabled === 0} onClick={event => { event.preventDefault(); onToggle(rows.map(m => m.id), false) }}>{t('全部停用')}</button>
+                  <button type="button" disabled={enabled === rows.length} onClick={event => { event.preventDefault(); onToggle(rows.map(m => m.id), true) }}>{t('全部显示')}</button>
+                  <button type="button" disabled={enabled === 0} onClick={event => { event.preventDefault(); onToggle(rows.map(m => m.id), false) }}>{t('全部隐藏')}</button>
                 </span>
               )}
             </summary>
+            {group.key === 'other' && <p className="ac-note">{t('这些型号尚未识别为可用的剪辑、转写或封面模型。可刷新列表获取最新信息。')}</p>}
             {(onToggle ? rows.filter(model => on.has(model.id)) : rows).length > 0 && (
               <ul className="ac-provider-model-list" data-model-rows="enabled">
                 {(onToggle ? rows.filter(model => on.has(model.id)) : rows).map(model => renderRow(model))}
@@ -328,7 +332,7 @@ function ModelGroups({ models, enabled: on, onToggle }: {
             )}
             {onToggle && rows.length > enabled && (
               <details className="ac-provider-model-off" data-model-rows="disabled">
-                <summary>{t('未启用')}<span className="count">({rows.length - enabled})</span></summary>
+                <summary>{t('已隐藏')}<span className="count">({rows.length - enabled})</span></summary>
                 <ul className="ac-provider-model-list">
                   {rows.filter(model => !on.has(model.id)).map(model => renderRow(model))}
                 </ul>
