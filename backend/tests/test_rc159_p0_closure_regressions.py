@@ -128,3 +128,37 @@ def test_scene_ass_respects_crop_layout_safe_area_for_interview_zh():
     assert '\\pos(540,1420)' in crop_ass
     assert '1180' in crop_ass
     assert '1280' in crop_ass
+
+
+def test_verified_dashscope_allowlist_survives_text_only_modalities_and_multimodal_generation_endpoint():
+    """Exact verified official DashScope IDs must not be knocked out of vision/cover slots by boilerplate /models metadata."""
+    from backend.core import model_registry as registry
+    from backend.core.model_recovery import pick_available_vision_model
+    from backend.core.provider_model_fetch import _page_models
+    from backend.services import ai_model_settings as ai
+
+    conn = ai.Connection(id='bailian', name='Bailian', provider='dashscope', api_key='fixture')
+    raw = [
+        {'id': 'qwen4-max', 'input_modalities': ['text'], 'architecture': {'input_modalities': ['text']}},
+        {'id': 'qwen-image-2.1-pro', 'supported_endpoint_types': ['multimodal-generation'], 'output_modalities': ['text']},
+        {'id': 'qwen-image-edit', 'supported_endpoint_types': ['multimodal-generation']},
+        {'id': 'unknown-text-model', 'input_modalities': ['text']},
+        {'id': 'unknown-mm-model', 'supported_endpoint_types': ['multimodal-generation']},
+    ]
+    rows = {row['id']: row for row in registry._records(conn, raw, {})}
+
+    # Exact verified official allowlist entries survive non-empty provider metadata
+    assert rows['qwen4-max']['capability'] == 'multimodal'
+    assert rows['qwen-image-2.1-pro']['image'] is True
+    assert rows['qwen-image-2.1-pro']['kind'] == 'image'
+    assert rows['qwen-image-2.1-pro']['analysis'] is False
+
+    # Edit-only and unknown IDs remain strictly bounded
+    assert rows['qwen-image-edit']['image'] is False
+    assert rows['unknown-text-model']['capability'] == 'text'
+    assert rows['unknown-mm-model']['image'] is False
+
+    # Recovery path (_page_models -> pick_available_vision_model) also keeps qwen4-max eligible
+    ids, caps = _page_models({'data': raw}, 'openai-completions', 'dashscope')
+    assert pick_available_vision_model('dashscope', ids, capabilities=caps) == 'qwen4-max'
+
