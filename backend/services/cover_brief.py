@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.services.studio import cover_design as cd
 from backend.core.llm_telemetry import sanitize_model
 
-VERSION = "brief-6"
+VERSION = "brief-7"
 Recipe = Literal["auto", "photo_focus", "culture_editorial", "tech_question", "bold_statement"]
 Mode = Literal["crop_grade_text_only", "editorial_edit"]
 
@@ -298,7 +298,7 @@ def plan(
             preserve_pose=True,
             preserve_clothing=True,
             allow_cutout=not strict and opts.allow_cutout,
-            allow_background_replace=not strict and opts.allow_background_replace,
+            allow_background_replace=False,
             allow_new_objects=False,
             allow_subject_redraw=False,
         ),
@@ -355,8 +355,8 @@ def compile_prompt(b):
     allowed = ["裁切、调光、排字"]
     if b.permissions["allow_cutout"]:
         allowed.append("可沿真实轮廓抠图")
-    if b.permissions["allow_background_replace"]:
-        allowed.append("可替换为取自原场景的色调背景")
+    framing.append("按原照片的朝向取景，保持鼻尖、耳朵、双肩及可见双手的相对位置；不能水平翻转、转头或补出原片边缘以外的衣袖、躯干、手指。"
+                   "保留原现场及可辨识物体的排列。版心容不下时，调整标题字号、留白或裁切，不得为排字重建人物或背景。此约束优先于构图建议。")
     palette = design["palette"]
     emphasis = "、".join(e["text"] for e in copy["emphasis"])
     color = f"标题主色 {palette['text']}。"
@@ -660,6 +660,7 @@ def atomic(path, data):
 def make(b, frame, cfg, *, can_send, generate, check, previous=False):
     """Both producers use this decision, including the bounded edit retry and the same-frame fallback."""
     from backend.core.image_providers import ImageError, ImageRequest
+    from backend.services import cover_fidelity
 
     if not frame or hashlib.sha256(frame).hexdigest() != b.source["frame_sha256"]:
         raise ValueError("实际参考图与设计简报不符")
@@ -669,6 +670,7 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
     reason = None
     verify = None
     attempts = 0
+    comparisons = []
     if b.status == "constraint_conflict":
         raise ValueError(b.issues[-1]["message"])
     if b.status == "needs_source_validation":
@@ -691,11 +693,13 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
                 attempts += 1
                 try:
                     image = generate(req)
-                    with Image.open(io.BytesIO(image)) as candidate:
-                        if not b.permissions["allow_background_replace"] and not cd.keeps_scene(frame, candidate):
-                            reason = "scene_changed"
-                            break
                     data = fit_model(image, size)
+                    fidelity = cover_fidelity.compare(frame, image)
+                    comparisons.append(fidelity)
+                    verify = None
+                    if fidelity["status"] != "passed":
+                        reason = "subject_changed" if fidelity["status"] == "failed" else "fidelity_unavailable"
+                        break
                     verify = check(
                         data,
                         [b.copy_spec["exact_text"], *b.copy_spec["secondary_text"]],
@@ -716,7 +720,9 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
                         model=cfg.model,
                         prompt=req.prompt,
                     )
-                    audit.update(attempts=attempts, model_original_sha256=hashlib.sha256(image).hexdigest())
+                    audit.update(attempts=attempts, model_original_sha256=fidelity["candidate_sha256"],
+                                 model_fidelity=fidelity, fidelity_attempts=comparisons)
+                    audit["checks"]["editorial_identity"] = "passed"
                     audit["_original_bytes"] = image
                     return data, audit
                 reason = "text_unavailable" if verify is None else "text_mismatch"
@@ -736,18 +742,18 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
         audit = record(
             b,
             method="failed",
-            check="unavailable" if verify is None else "failed",
+            check="passed" if verify is True else "unavailable" if verify is None else "failed",
             provider=cfg.provider,
             model=cfg.model,
             prompt=prompt,
             reason=reason,
         )
-        audit["attempts"] = attempts
+        audit.update(attempts=attempts, model_fidelity=comparisons[-1] if comparisons else None, fidelity_attempts=comparisons)
         raise Rejected("模型结果未通过验证，已保留原封面" if attempts else "无法在原帧上排版，已保留原封面", audit)
     if local_layout_missing:
         audit = record(b, method="source_frame", check="unavailable", reason=reason or "local_typesetting",
                        prompt=prompt, provider=cfg.provider if attempts else "", model=cfg.model if attempts else "")
-        audit["attempts"] = attempts
+        audit.update(attempts=attempts, model_fidelity=comparisons[-1] if comparisons else None, fidelity_attempts=comparisons)
         return fit_model(frame, size), audit
     image, transform = render(frame, b)
     audit = record(
@@ -762,6 +768,8 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
     )
     audit.update(
         attempts=attempts,
+        model_fidelity=comparisons[-1] if comparisons else None,
+        fidelity_attempts=comparisons,
         model_text_validation=("failed" if verify is False else "unavailable") if attempts else None,
     )
     return image, audit

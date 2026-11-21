@@ -44,7 +44,8 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
       setTimes(view?.candidate_times || [])
       setFrameLocked(!!view?.frame_locked)
       setWarning(view?.warning === 'needs_source_validation' ? t('当前是截帧封面') :
-        view?.warning ? t('生图失败，已改成本地排版或截帧') : '')
+        view?.warning === 'subject_changed' || view?.warning === 'fidelity_unavailable' ? t(view.warning) :
+          view?.warning ? t('生图失败，已改成本地排版或截帧') : '')
       setAskReference(!!cfg?.enabled && cfg.configured && !cfg.allow_send_frame)
       setReferenceOnce(false)
     })

@@ -2079,6 +2079,8 @@
   "本地视频处理失败，请确认素材完整、磁盘有空间后重试。": "O processamento local do vídeo falhou. Confirme que o arquivo está íntegro e há espaço em disco, e tente de novo.",
   "磁盘空间不足，请清理空间后重试。": "Não há espaço em disco. Libere espaço e tente de novo.",
   "文件已损坏，请重新下载或换一个文件。": "O arquivo está danificado. Baixe de novo ou use outro arquivo.",
+  "subject_changed": "O sujeito ou o cenário mudou. A capa usa o quadro original.",
+  "fidelity_unavailable": "Não foi possível verificar a fidelidade ao original. A capa usa o quadro original.",
   "生图失败，已改成本地排版或截帧": "A geração da imagem falhou. Um layout local ou um quadro do vídeo será usado.",
   "生图标题校对未通过，已改成本地排版": "O título gerado não conferiu. Um layout local será usado.",
   "已用视频截帧作为封面": "Um quadro do vídeo é usado como capa.",

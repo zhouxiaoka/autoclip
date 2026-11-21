@@ -45,7 +45,8 @@ def brief(frame, **changes):
 def test_edit_permissions_are_independent(fake_frame, flag):
     terms = {"allow_cutout": "可沿真实轮廓抠图", "allow_background_replace": "可替换为"}
     edit = brief(fake_frame, options=cb.Options(mode="editorial_edit", **{flag: True}))
-    assert all((term in cb.compile_prompt(edit)) == (key == flag) for key, term in terms.items())
+    assert all((term in cb.compile_prompt(edit)) == (key == flag == "allow_cutout") for key, term in terms.items())
+    assert not edit.permissions["allow_background_replace"]
     strict = brief(fake_frame, options=cb.Options(**{flag: True}))
     assert not any(strict.permissions[k] for k in terms)
     assert not strict.copy_spec["show_nameplate"]

@@ -214,7 +214,8 @@ def _redesign(
         cfg = cover.load_config()
         saved_brief = cb.CoverBrief.model_validate(old)
         if (
-            meta.get("fingerprint") == cb.fingerprint(saved_brief, cfg.provider, cfg.model)
+            (meta.get("model_fidelity") or {}).get("status") == "passed"
+            and meta.get("fingerprint") == cb.fingerprint(saved_brief, cfg.provider, cfg.model)
             and kit_cover_path(project_id, job_id, strategy_id, variant_id).is_file()
         ):
             return "model"
