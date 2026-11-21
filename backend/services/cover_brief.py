@@ -202,6 +202,19 @@ def plan(
         "bold_statement": ("#FFF8E9", "#FFD54C"),
         "photo_focus": ("#FFF9F0", "#9EDBCF"),
     }[recipe]
+    scene_color = None
+    if photo:
+        preview = photo.convert("RGB").resize((24, 16), Image.Resampling.BOX)
+        zone = {"left": (0, 0, 10, 16), "right": (14, 0, 24, 16), "bottom": (0, 10, 24, 16)}[layout]
+        scene_color = preview.crop(zone).resize((1, 1), Image.Resampling.BOX).getpixel((0, 0))
+        red, green, blue = scene_color
+        # Keep a cool counterpoint on warm sets and warm type on cool walls.
+        if recipe == "tech_question" and red - blue > 8:
+            palette = (palette[0], "#A7F0E0")
+        elif recipe == "bold_statement" and blue - red > 12:
+            palette = (palette[0], "#FFD694")
+        elif recipe == "culture_editorial" and green >= red:
+            palette = (palette[0], "#FFD994")
     path = typeface(recipe, chinese)
     if recipe == "culture_editorial" and path == cd.FONT:
         issues.append(
@@ -216,8 +229,9 @@ def plan(
         **origin,
         **geometry,
         "frame_sha256": hashlib.sha256(frame).hexdigest() if frame else None,
-        "role": "subject_reference",
+        "role": origin["kind"] if origin.get("kind") in ("reference_cover", "style_reference") else "subject_reference",
         "size": list(photo.size) if photo else None,
+        "text_region_rgb": scene_color,
         "centre": centre,
     }
     content = dict(
@@ -332,7 +346,18 @@ def _wrap(text, font, width, emphasis):
     lines = []
     for paragraph in text.splitlines():
         current = ""
-        for token in re.findall(pattern, paragraph):
+        if re.search(r"[\u3400-\u9fff]", paragraph):
+            from backend.services.studio.cjk_segment import break_units
+
+            tokens = []
+            for unit in break_units(paragraph, emphasis):
+                if tokens and unit in ("着", "了", "的", "过", "？", "！", "。", "，"):
+                    tokens[-1] += unit
+                else:
+                    tokens.append(unit)
+        else:
+            tokens = re.findall(pattern, paragraph)
+        for token in tokens:
             trial = current + token
             if (
                 current.strip()
@@ -371,7 +396,7 @@ def _measure(b):
         if room > h * 0.14:
             maxh = min(maxh, room)
     path = typeface(d["recipe"], c["language"] == "zh")
-    size = int(min(w, h) * (0.16 if d["recipe"] == "bold_statement" else 0.145 if h > w else 0.105))
+    size = int(min(w, h) * (0.16 if d["recipe"] == "bold_statement" else 0.145 if h > w else 0.14))
     content = "\n".join([c["exact_text"], *c["secondary_text"]])
     size = round(size * (1, 0.94, 1.04)[d["revision"] % 3])
     emphasis = c["emphasis"][0]["text"] if c["emphasis"] else ""

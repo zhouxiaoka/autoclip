@@ -214,3 +214,26 @@ def test_failed_replacement_preserves_previous_file_and_records_unavailable(data
     rejection = json.loads(meta.with_suffix(".last-failure.json").read_text())
     assert rejection["previous_preserved"] and rejection["validation"] == "unavailable"
     assert rejection["fallback_reason"] == "text_unavailable" and rejection["attempts"] == 1
+
+
+def test_mobile_typesetting_keeps_units_and_short_emphasis_together(fake_frame):
+    b = cb.plan(
+        fake_frame,
+        title="最好的12个月？",
+        strategy="douyin",
+        size=(1080, 1920),
+        origin={"kind": "user_frame"},
+        locked=True,
+        options=cb.Options(recipe="photo_focus", accent="#5A8BFF", emphasis="12"),
+    )
+    assert b.design["typesetting"]["lines"] == ["最好的12个月？"]
+    english = brief(
+        fake_frame,
+        title="what is the biggest risk for open AI?",
+        size=(1280, 720),
+        options=cb.Options(recipe="tech_question", emphasis="biggest risk"),
+        centre=0.75,
+    )
+    lines = english.design["typesetting"]["lines"]
+    assert any("biggest risk" in line for line in lines) and any("open AI?" in line for line in lines)
+    assert "\n".join(lines) in cb.compile_prompt(english)
