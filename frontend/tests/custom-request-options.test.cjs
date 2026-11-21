@@ -64,9 +64,10 @@ test('all settings request paths strip drafts and reject malformed options befor
 test('advanced editor events reach the typed gateway settings with a password header input', () => {
   const React = require('react')
   const Password = props => React.createElement('input', { ...props, type: 'password' })
+  const Row = props => React.createElement('label', {}, props.children)
   const module = loadTs('CustomRequestOptions.tsx', {
     antd: { Input: { Password } }, '../../i18n': { t: x => x },
-    '../../ui': { Row: props => React.createElement('label', {}, props.children), Btn: props => React.createElement('button', props, props.children) },
+    '../../ui': { Row, Btn: props => React.createElement('button', props, props.children) },
   })
   let draft = ready()
   const render = () => module.default({ value: draft, onEdit: patch => { draft = { ...draft, ...patch } } })
@@ -78,6 +79,10 @@ test('advanced editor events reach the typed gateway settings with a password he
       if (found) return found
     }
   }
+  const rows = React.Children.toArray(render().props.children).filter(node => node.type === Row)
+  assert.equal(rows.length, 3)
+  assert.ok(rows.every(node => node.props.stack && node.props.wide), 'long labels must stack in the narrow dialog')
+  assert.equal(find(render(), '附加请求参数（JSON）').props.style.minHeight, 80)
   const header = find(render(), 'HTTP Headers（JSON）')
   assert.equal(header.type, Password)
   header.props.onChange({ target: { value: '{"X-Workspace":"fixture-value"}' } })
