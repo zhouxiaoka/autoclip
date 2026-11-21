@@ -24,7 +24,7 @@ def test_actual_render_completed_read_cannot_stop_card_poll_before_cover_finishe
     monkeypatch.setattr(jobs, 'request_ai_cover', lambda *a: None)
     store.change('p1', lambda data: data['output_variants'][1].update(strategy_id='douyin'))
     started, release = threading.Event(), threading.Event()
-    def design(*args):
+    def design(*args, **kwargs):
         started.set()
         assert release.wait(3), 'cover scheduling barrier was not released'
         if not cover_success:

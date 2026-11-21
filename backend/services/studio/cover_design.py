@@ -7,7 +7,9 @@ An AI cover (services/cover.py) can still replace it from the output card.
 """
 from __future__ import annotations
 
+import hashlib
 import io
+import re
 from pathlib import Path
 from typing import Any
 
@@ -84,7 +86,7 @@ def _question_times(rows: list[dict[str, Any]]) -> list[tuple[float, float]]:
     return [(row['start'], row['end']) for row in rows if row['text'].rstrip(' "”」』').endswith(QUESTION_END)]
 
 
-def _face_and_sharpness(frame_jpeg: bytes) -> tuple[float | None, float, bool]:
+def _face_and_sharpness(frame_jpeg: bytes, geometry=None) -> tuple[float | None, float, bool]:
     """(face centre x, sharpness of the face area or frame centre, face found). Works without OpenCV."""
     from PIL import Image, ImageFilter, ImageStat
     image = Image.open(io.BytesIO(frame_jpeg)).convert('L')
@@ -103,6 +105,8 @@ def _face_and_sharpness(frame_jpeg: bytes) -> tuple[float | None, float, bool]:
                 box, centre, found = (int(x), int(y), int(x + w), int(y + h)), (x + w / 2) / width, True
     except Exception:  # noqa: BLE001 - no detector: judge the frame centre
         box = None
+    if geometry is not None and box is not None:
+        geometry['face_box']=list(box)
     if box is None:
         width, height = image.size
         box = (width // 3, height // 6, width * 2 // 3, height * 2 // 3)
@@ -183,20 +187,25 @@ def _thumb(frame_jpeg: bytes, width: int = 384) -> str:
     return 'data:image/jpeg;base64,' + base64.b64encode(out.getvalue()).decode()
 
 
-def _candidates(video, start: float, shots, limit: int) -> list[tuple[bytes, float | None, float, bool]]:
+def _candidates(
+    video, start: float, shots, limit: int, shares=(0.35, 0.65)
+) -> list[tuple[bytes, float | None, float, bool, float]]:
     """Sharpest frame of each of the longest shots: (frame, face centre, sharpness, face found)."""
     from backend.services.cover import extract_frame_jpeg
+
     out = []
     for shot_start, shot_end in sorted(shots, key=lambda shot: shot[1] - shot[0], reverse=True)[:limit]:
         best = None
-        for share in (0.35, 0.65):
+        for share in shares:
             try:
-                frame = extract_frame_jpeg(video, at_sec=start + shot_start + (shot_end - shot_start) * share, max_width=1920)
+                frame = extract_frame_jpeg(
+                    video, at_sec=start + shot_start + (shot_end - shot_start) * share, max_width=1920
+                )
             except Exception:  # noqa: BLE001
                 continue
             centre, sharpness, found = _face_and_sharpness(frame)
             if best is None or (found, sharpness) > (best[3], best[2]):
-                best = (frame, centre, sharpness, found)
+                best = (frame, centre, sharpness, found, start + shot_start + (shot_end - shot_start) * share)
         if best:
             out.append(best)
     return out
@@ -224,8 +233,39 @@ def _choose_with_vision(candidates, guest: str, host: str) -> tuple[int, bool] |
     return None if not answer else (max(range(len(candidates)), key=lambda i: (candidates[i][3], candidates[i][2])), False)
 
 
-def pick_frame(video, scene: dict[str, Any], rows: list[dict[str, Any]], packaging: dict[str, Any] | None = None,
-               guest_hint: str = '') -> tuple[bytes, float | None, bool]:
+def _camera_frame(jpeg: bytes) -> bool:
+    """A mostly white or black text slide can outscore a camera shot on edge sharpness."""
+    from PIL import Image
+    image = Image.open(io.BytesIO(jpeg)).convert('L').resize((48, 32))
+    histogram = image.histogram()
+    return sum(histogram[25:226]) > image.width * image.height * .55
+
+
+def _answer_start(rows, start, end):
+    """Find where a transcribed question gives way to its answer, including a single long ASR cue."""
+    for row in reversed(rows):
+        text = str(row.get('text') or '').strip()
+        mark = max(text.rfind('?'), text.rfind('？'))
+        if mark < 0:
+            continue
+        at = row['start'] + (row['end'] - row['start']) * (mark + 1) / len(text)
+        if start <= at <= end - 1:
+            return at
+    return None
+
+
+def pick_frame(
+    video,
+    scene: dict[str, Any],
+    rows: list[dict[str, Any]],
+    packaging: dict[str, Any] | None = None,
+    guest_hint: str = "",
+    *,
+    local_revision: int | None = None,
+    trace=None,
+    context=None,
+    exclude_time=None,
+) -> tuple[bytes, float | None, bool]:
     """(frame, speaker centre, guest on screen) for the cover.
 
     A fixed point in the clip often caught a hand in motion or the host's camera, labelled with the
@@ -235,23 +275,108 @@ def pick_frame(video, scene: dict[str, Any], rows: list[dict[str, Any]], packagi
     """
     from backend.services.cover import extract_frame_jpeg
     from backend.services.studio import framing
-    start, length = scene['start'], scene['end'] - scene['start']
+
+    start, length = scene["start"], scene["end"] - scene["start"]
     shots = framing.split_shots(length, framing.detect_cuts(video, start, length))
-    candidates = _candidates(video, start, shots, VISION_CANDIDATES)
+    answer = _answer_start(rows, start, start + length)
+    if context is None and answer is not None:
+        # Use shots wholly inside the answer. A two-shot spanning the question can still show the host.
+        response_shots = [shot for shot in shots if start + shot[0] >= answer and shot[1] - shot[0] >= 0.5]
+        shots = response_shots or [(max(a, answer - start), b) for a, b in shots if start + b > answer + 0.5]
+    if context and len(shots) == 1 and length > 3:
+        # A stationary camera may still capture several different gestures or expressions.
+        a, b = shots[0]
+        step = (b - a) / 3
+        shots = [(a + i * step, a + (i + 1) * step) for i in range(3)]
+    if local_revision and answer is not None:
+        shares = ((0.48, 0.76), (0.25, 0.52), (0.36, 0.65))[(local_revision - 1) % 3]
+        candidates = _candidates(video, start, shots, VISION_CANDIDATES, shares)
+    else:
+        candidates = _candidates(video, start, shots, VISION_CANDIDATES)
+
+    editorial = None
+    cue = None
+    if context is not None:
+        from backend.services import cover_brief, cover_planner
+
+        title = cover_brief.choose_copy(context["title"], rows, context["locked"])
+        context = dict(context, title=title)
+        cue = next((row for row in rows if title and title.casefold() in row["text"].casefold()
+                    and row["end"] > start and row["start"] < start + length), None)
+        if cue:
+            a, b = max(start, cue["start"]) - start, min(start + length, cue["end"]) - start
+            if b > a:
+                targeted = _candidates(video, start, [(a, b)], 1, (.5,))
+                candidates = targeted + candidates
+        # Compare small RGB thumbnails, keeping different compositions at the same camera position.
+        from PIL import Image, ImageChops, ImageStat
+        unique, previews = [], []
+        for candidate in candidates:
+            preview = Image.open(io.BytesIO(candidate[0])).convert("RGB").resize((24, 16))
+            if any(max(ImageStat.Stat(ImageChops.difference(preview, other)).mean) < 4 for other in previews):
+                continue
+            unique.append(candidate)
+            previews.append(preview)
+        candidates = unique[:VISION_CANDIDATES]
+        if exclude_time is not None:
+            candidates = [c for c in candidates if abs(c[4] - exclude_time) > .15] or candidates
+        if candidates:
+            speakers = (packaging or {}).get("speakers") or []
+            hints = [dict(name=str(s.get("name") or "")[:80], role=str(s.get("role") or "")[:80])
+                     for s in speakers if isinstance(s, dict) and s.get("name")][:6]
+            editorial = cover_planner.inspect(candidates, context, rows, speaker_hints=hints)
+            if trace is not None and hints:
+                trace["speaker_hints"] = hints
+
+    def selected(candidate, is_guest, reason):
+        frame, centre, _, _, at = candidate
+        if trace is not None:
+            if editorial:
+                trace["editorial_plan"] = dict(editorial, frame_sha256=hashlib.sha256(frame).hexdigest())
+            trace.update(
+                kind="video_frame",
+                source_timestamp_sec=at,
+                selection_reason=reason,
+                clip_range=[start, start + length],
+                candidates=[dict(id=i, time=c[4], sharpness=c[2], face_found=c[3], centre=c[1],
+                                 frame_sha256=hashlib.sha256(c[0]).hexdigest()) for i, c in enumerate(candidates, 1)],
+            )
+        return frame, centre, is_guest
+
     if not candidates:
         at, _ = frame_time(scene)
+        if trace is not None:
+            trace.update(
+                kind="video_frame", source_timestamp_sec=at, selection_reason="片段内备用时间点", candidates=[]
+            )
         return extract_frame_jpeg(video, at_sec=at, max_width=1920), None, False
-    speakers = (packaging or {}).get('speakers') or []
-    guest = next((sp['name'] for sp in speakers if not any(w in (sp.get('role') or '').lower() for w in HOST)), '') or guest_hint
-    host = next((sp['name'] for sp in speakers if any(w in (sp.get('role') or '').lower() for w in HOST)), '')
-    chosen = _choose_with_vision(candidates, guest, host)
+    if editorial and editorial["status"] == "planned":
+        direction = editorial["direction"]
+        return selected(candidates[direction["best"] - 1], False, direction["reason"])
+    speakers = (packaging or {}).get("speakers") or []
+    guest = (
+        next((sp["name"] for sp in speakers if not any(w in (sp.get("role") or "").lower() for w in HOST)), "")
+        or guest_hint
+    )
+    host = next((sp["name"] for sp in speakers if any(w in (sp.get("role") or "").lower() for w in HOST)), "")
+    chosen = None if context is not None or local_revision is not None else _choose_with_vision(candidates, guest, host)
     if chosen is not None:
         index, is_guest = chosen
-        frame, centre, _, _ = candidates[index]
-        return frame, centre, is_guest
-    questions = _question_times(rows)
-    frame, centre, _, _ = max(candidates, key=lambda c: (c[3], c[2]))
-    return frame, centre, False
+        return selected(candidates[index], is_guest, "视觉选帧：对照该片段嘉宾和主持人")
+    eligible = [c for c in candidates if c[3]] or [c for c in candidates if _camera_frame(c[0])] or candidates
+    if cue:
+        in_cue = [c for c in eligible if cue["start"] <= c[4] < cue["end"]]
+        if in_cue:
+            return selected(max(in_cue, key=lambda c: c[2]), False, "批准标题对应原话时段的清晰镜头")
+    if answer is not None:
+        # The sustained answer shot outranks momentary listener reactions and wide cutaways.
+        after = [c for c in eligible if c[4] >= answer]
+        if after:
+            return selected(after[(local_revision or 0) % len(after)], False, "提问后回答段中的清晰帧")
+        return selected(eligible[0], False, "按片段内可用镜头选择")
+    else:
+        eligible.sort(key=lambda c: c[2], reverse=True)
+        return selected(eligible[(local_revision or 0) % len(eligible)], False, '按真实镜头与清晰度选择')
 
 
 def _crop(image, width: int, height: int, centre: float | None):
@@ -381,37 +506,40 @@ def design(frame_jpeg: bytes, *, width: int, height: int, title_lines: list[str]
     return out.getvalue()
 
 
-def nameplate(image, name: str, role: str = '', palette: str | None = None):
-    """Our own, always-correct nameplate on an AI cover (image models invent names)."""
-    from PIL import ImageDraw
-    from backend.services.studio.packaging_render import PALETTES
-    accent = _rgb(PALETTES.get(palette or 'azure', PALETTES['azure'])[0])
-    image = image.convert('RGB')
-    draw = ImageDraw.Draw(image)
-    width, height = image.size
-    portrait = height > width
-    margin = round(width * (0.07 if portrait else 0.05))
-    name_font = _font(round(width * (0.042 if portrait else 0.026)), 'Bold')
-    role_font = _font(round(width * (0.028 if portrait else 0.017)), 'Regular')
-    base = height - round(height * (0.08 if portrait else 0.1))
-    text_w = max(draw.textlength(name, font=name_font), draw.textlength(role, font=role_font) if role else 0)
-    pad = round(name_font.size * 0.45)
-    top = base - name_font.size - pad
-    bottom = base + (role_font.size + 12 if role else 0) + pad
-    draw.rectangle([margin, top, margin + 8 + pad * 2 + text_w + 16, bottom], fill=(18, 18, 18))
-    draw.rectangle([margin, top, margin + 8, bottom], fill=accent)
-    draw.text((margin + 8 + pad + 8, base - name_font.size), name, font=name_font, fill=(236, 234, 230))
-    if role:
-        draw.text((margin + 8 + pad + 8, base + 6), role, font=role_font, fill=(190, 190, 190))
-    return image
+def keeps_scene(reference: bytes, candidate) -> bool:
+    """Reject gross studio-backdrop substitutions in the model artwork relative to the actual shot."""
+    from PIL import Image
+    def extremes(image):
+        hist = image.convert('L').resize((64, 64)).histogram()
+        return sum(hist[:25]) / 4096, sum(hist[225:]) / 4096
+    original = extremes(Image.open(io.BytesIO(reference)))
+    changed = extremes(candidate)
+    return all(new - old < .42 for old, new in zip(original, changed))
+
+
+def headline_lines(title: str) -> list[str]:
+    """Prefer a complete pull quote on a small cover. Keep the publishing title intact."""
+    title = ' '.join(title.split())
+    if len(title) > 55:
+        quotes = re.findall(r'“([^”]+)”|‘(.+?)’(?=$|[.,:;!?—\s])|"([^"]+)"|「([^」]+)」', title)
+        phrases = [next(part for part in match if part) for match in quotes]
+        if phrases:
+            short = [q for q in phrases if len(q.split()) <= 5 and len(q) <= 28]
+            title = min(short or phrases, key=len)
+    if len(title) < 12:
+        return [title]
+    cuts = [m.start() for m in re.finditer(r'\s+', title)]
+    if not cuts:
+        cuts = [i for i in range(1, len(title)) if '\u3400' <= title[i] <= '\u9fff']
+    if not cuts:
+        return [title]
+    cut = min(cuts, key=lambda i: abs(i - len(title) / 2))
+    return [title[:cut].rstrip(), title[cut:].lstrip()]
 
 
 def title_lines_for(draft: dict[str, Any], post_title: str, strategy_id: str) -> tuple[list[str], int]:
     """The video's own title lines when it has packaging, else the post title split in two."""
     packaging = draft.get('packaging') or {}
     if packaging.get('title_lines'):
-        return list(packaging['title_lines'])[:2], int(packaging.get('title_accent_line', 1))
-    from backend.services.studio.caption_layout import lines_for
-    zh = not post_title.isascii()
-    lines = lines_for(post_title, 11 if zh else 22 * 0.55) or [post_title]
-    return lines[:2], 1
+        return list(packaging['title_lines']), int(packaging.get('title_accent_line', 1))
+    return headline_lines(post_title), 1

@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Icon, fmtDuration } from '../../ui'
-import { studioApi } from './api'
+import { exportPoster, studioApi } from './api'
+import { trackOutputShare } from '../../analytics/studio'
 import { draftExportState, type ExportStatus } from './draftExportState'
 import StudioDownloadLink from './StudioDownloadLink'
-import { ExportCoverButton } from './ExportCover'
-import { Draft, RenderJob, draftDuration, languages } from './types'
+import PublishKit from './PublishKit'
+import { Draft, PostCopy, RenderJob, draftDuration, languages } from './types'
 
 const statusLabels: Record<ExportStatus, string> = {
   draft: '待导出', queued: '排队中', rendering: '正在导出',
@@ -22,6 +23,13 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const { status, completed, active, failure, previous } = draftExportState(draft, jobs)
   const thumbnail = studioApi.thumbnail(projectId, draft.id, draft.revision, completed?.job_id)
   const [failedThumbnail, setFailedThumbnail] = useState('')
+  const [changedCover, setChangedCover] = useState<{ id: string; stamp: number }>()
+  const jobId = completed?.job_id
+  const coverStamp = changedCover && changedCover.id === jobId ? changedCover.stamp : 0
+  const coverChanged = useCallback(() => { if (jobId) setChangedCover({ id: jobId, stamp: Date.now() }) }, [jobId])
+  const [saved, setSaved] = useState<{ id: string; post: PostCopy }>()
+  const post = saved && saved.id === jobId ? saved.post : completed?.post
+  const poster = completed && exportPoster(projectId, completed, coverStamp)
   const thumbnailLabel = completed ? t('当前 V{{revision}} 成片画面', { revision: draft.revision }) : t('原片缩略图 · 包装效果以导出为准')
   const language = draft.language === 'source' ? t('原语言') : languages.find(l => l.value === draft.language)?.label ?? draft.language
   const aspect = t(draft.aspect === 'portrait' ? '9:16 竖屏' : draft.aspect === 'landscape' ? '16:9 横屏' : '原画幅')
@@ -29,9 +37,9 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const description = draft.hook || draft.scenes[0]?.evidence
 
   return <article className="ac-card studio-output-card" aria-label={draft.title}>
-    {completed ? <div className="studio-variant-thumb" title={thumbnailLabel}>
+    {completed ? <div className="studio-variant-thumb" title={poster ? t('封面') : thumbnailLabel}>
       <video className="studio-variant-video" aria-label={t('播放成片')} controls preload="metadata"
-        poster={thumbnail} src={studioApi.video(projectId, completed.job_id)} />
+        poster={poster || thumbnail} src={studioApi.video(projectId, completed.job_id)} />
       <span className="ac-tag ac-tag--br">{fmtDuration(completed.result?.duration ?? draftDuration(draft))}</span>
     </div> :
       <button type="button" className="ac-card-thumb studio-thumb studio-variant-thumb" onClick={onEdit}
@@ -60,7 +68,9 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
       </div></div>
       {completed && <details className="studio-publish-tools">
         <summary>{t('发布工具')}</summary>
-        <ExportCoverButton projectId={projectId} job={completed} />
+        <PublishKit projectId={projectId} job={completed} post={post || { title: completed.title, description: draft.hook || '', tags: [] }}
+          onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption' })}
+          onPostChange={value => setSaved({ id: completed.job_id, post: value })} coverStamp={coverStamp} onCoverChanged={coverChanged} />
         <Btn size="sm" variant="cta" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>{t('发布')}</Btn>
       </details>}
     </div>

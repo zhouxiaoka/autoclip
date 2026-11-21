@@ -192,4 +192,7 @@
 .studio-export-cover b { font-size:14px; }
 .studio-export-cover [role=status] { color:var(--ac-sub); font-size:13px; }
 .studio-export-cover img { display:block; max-width:65%; max-height:180px; object-fit:contain; border-radius:6px; }
+.studio-export-cover .studio-cover-fields { flex: 1 0 100%; }
+.studio-cover-fields label { font-size: 13px; color: var(--ac-sub); }
+.studio-cover-fields label:first-child { display: grid; gap: 4px; width: 100%; }
 .studio-export-cover .studio-error { flex-basis:100%; }

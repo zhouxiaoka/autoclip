@@ -526,7 +526,7 @@ def inert_worker_services(project, monkeypatch):
     monkeypatch.setattr(jobs, '_posts_for', lambda *a: {})
     monkeypatch.setattr(jobs, 'render_draft', lambda *a, **k: {'path': 'retry.mp4'})
     monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=True))
-    monkeypatch.setattr(publish_kit, 'ai_cover', lambda *a: True)
+    monkeypatch.setattr(publish_kit, 'ai_cover', lambda *args, **kwargs: True)
     return plan
 
 
@@ -923,3 +923,20 @@ def test_malformed_optional_saved_links_are_ignored_without_rewriting_state(proj
     assert project.client.get('/projects/').status_code == 200
     assert project.path.read_bytes() == original
     assert store.read('p1')['jobs'][0]['variant_links'] == links
+
+
+def test_legacy_variant_without_platform_keeps_cover_and_writes_no_guessed_slot(project, monkeypatch):
+    from backend.services.studio import publish_kit
+
+    executor = GatedCalls()
+    monkeypatch.setattr(jobs, 'cover_executor', executor)
+    monkeypatch.setattr(publish_kit, 'cd_meta_path', lambda *args: pytest.fail('no identified platform slot'))
+    try:
+        jobs.request_ai_cover('p1', 'ready', allow_local=True)
+        executor.drain()
+        variant = store.read('p1')['output_variants'][0]
+        assert variant['status'] == 'completed'
+        assert variant['cover_job']['status'] == 'failed'
+        assert variant['cover'] == 'keep.jpg'
+    finally:
+        executor.close()

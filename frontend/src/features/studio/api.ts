@@ -1,3 +1,4 @@
+import type { CoverDesign, CoverView } from '../../publish/coverApi'
 import { captureBusinessEvent } from '../../analytics/posthog'
 import { safeStudioProperties, telemetryId, type AttemptReceipt, type Properties } from '../../analytics/workflow'
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
@@ -23,6 +24,15 @@ export function draftProperties(draft?: Partial<Draft>): Properties {
 type RetryReceipt = { attempt?: AttemptReceipt | null }
 /** One key per click: the same request re-sent returns the same receipt (backend idempotency). */
 const retryKey = () => `r-${telemetryId()}`
+
+export function exportCoverSlot(job: RenderJob) {
+  return job.result && job.result.height > job.result.width ? 'douyin' : 'bilibili'
+}
+
+export function exportPoster(projectId: string, job: RenderJob, stamp = 0) {
+  if (!job.cover_revision && !stamp) return undefined
+  return `${api.defaults.baseURL}/publish/covers/${projectId}/clips/studio-${job.job_id}/file?platform=${exportCoverSlot(job)}&t=${stamp || job.cover_revision}`
+}
 
 export const studioApi = {
   preparePreview: (pid: string): Promise<SourcePreview> => api.post(`/studio/${pid}/source-preview`),
@@ -67,9 +77,12 @@ signal); every HTTP answer (even a 500) is seen. */
       workflow.watchAttempt(pid, result.attempt, props)
     }, { ...workflow.context(pid), retry_kind: 'same' }).then(result => result.variant),
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
+  kitUrl: (path: string) => `${api.defaults.baseURL}${path}`,
+  updateExportPost: (pid: string, jobId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/jobs/${jobId}/post`, post), undefined, workflow.context(pid)),
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
   updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post), undefined, workflow.context(pid)),
-  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/regenerate`), (job: NonNullable<OutputVariant['cover_job']>, props) => {
+  variantCoverDesign: (pid: string, variantId: string): Promise<CoverView> => api.get(`/studio/${pid}/output-variants/${variantId}/cover/design`),
+  redesignVariantCover: (pid: string, variantId: string, body?: { title?: string; design: CoverDesign }): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/regenerate`, body), (job: NonNullable<OutputVariant['cover_job']>, props) => {
     workflow.watch('studio-cover', job.job_id, pid, undefined, props)
     for (const watch of workflow.list().filter(w => w.kind === 'studio-cover' && w.projectId === pid && w.id === job.job_id)) workflow.observeCoverJob(watch, job)
   }, workflow.context(pid)),
