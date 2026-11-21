@@ -516,6 +516,8 @@ class LLMManager:
             or ""
         )
         key = str(getattr(provider, "api_key", "") or "")
+        if getattr(provider, "kwargs", {}).get("http_headers"):
+            key = str(getattr(provider, "_configured_api_key", key) or "")
         catalog = analysis_catalog(
             identity=route.identity if isinstance(route.identity, dict) else {},
             base_url=base,
@@ -567,10 +569,12 @@ class LLMManager:
         if not consume_chunk_call():
             raise error
         catalog, base, key = self._analysis_endpoint(route)
+        headers = getattr(route.provider, 'kwargs', {}).get('http_headers')
+        auth_options = {'extra_headers': headers} if headers else {}
         failed = sent or asked
         alt = resolve_available_analysis_model(
             base_url=base, api_key=key, provider=catalog,
-            failed_model=failed, exclude=(asked, sent),
+            failed_model=failed, exclude=(asked, sent), **auth_options,
         )
         if not alt or alt == failed:
             raise error
@@ -580,7 +584,7 @@ class LLMManager:
         except Exception:
             raise
         else:
-            remember_model(catalog, base, key, asked, alt, purpose="analysis")
+            remember_model(catalog, base, key, asked, alt, purpose="analysis", **auth_options)
             return response, chosen
         finally:
             llm_telemetry.reset_retry_count(token)
@@ -609,8 +613,10 @@ class LLMManager:
         saved = str(info.get("model") or getattr(provider, "model_name", "") or "").strip()
         asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved
         catalog, base, key = self._analysis_endpoint(route)
+        headers = getattr(provider, 'kwargs', {}).get('http_headers')
+        auth_options = {'extra_headers': headers} if headers else {}
         allow_substitute = route.settings.get("model_source") != "user"
-        cached = remembered_model(catalog, base, key, asked, purpose="analysis") if asked and allow_substitute else None
+        cached = remembered_model(catalog, base, key, asked, purpose="analysis", **auth_options) if asked and allow_substitute else None
         if cached:
             override = cached
         sent = cached or asked

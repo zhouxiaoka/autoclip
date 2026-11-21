@@ -17,7 +17,7 @@ from typing import Mapping, Optional, Sequence
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-# (purpose, provider, host, key digest, saved model) -> substitute id
+# (purpose, provider, endpoint digest, credential digest, saved model) -> substitute id
 _remembered: dict[tuple[str, str, str, str, str], str] = {}
 # purpose + saved id -> {purpose, saved_model, replacement}. Model ids only.
 _notices: dict[tuple[str, str, str, str, str], dict[str, str]] = {}
@@ -33,13 +33,17 @@ def clear_remembered_models() -> None:
         _lists.clear()
 
 
-def _digest(api_key: str) -> str:
-    return hashlib.sha256((api_key or "").encode()).hexdigest()[:16]
+def _digest(api_key: str, extra_headers: Optional[Mapping[str, str]] = None) -> str:
+    if not extra_headers:
+        return hashlib.sha256((api_key or "").encode()).hexdigest()[:16]
+    import json
+    identity = [api_key or "", {name.lower(): value for name, value in extra_headers.items()}]
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def _host(base_url: str) -> str:
-    from backend.core.llm_telemetry import hostname_of_base_url
-    return hostname_of_base_url(base_url) or ""
+def _endpoint_scope(base_url: str) -> str:
+    # Gateways may distinguish accounts by URL path or port, not just hostname.
+    return hashlib.sha256((base_url or "").strip().rstrip("/").encode()).hexdigest()[:16]
 
 
 def provider_for_endpoint(config: Mapping) -> str:
@@ -55,35 +59,35 @@ def provider_for_endpoint(config: Mapping) -> str:
     return "compatible"
 
 
-def _slot(provider: str, base_url: str, api_key: str, saved_model: str) -> tuple[str, str, str, str]:
+def _slot(provider: str, base_url: str, api_key: str, saved_model: str, extra_headers=None) -> tuple[str, str, str, str]:
     return (
         (provider or "compatible").strip().lower(),
-        _host(base_url),
-        _digest(api_key),
+        _endpoint_scope(base_url),
+        _digest(api_key, extra_headers),
         (saved_model or "").strip(),
     )
 
 
-def remembered_model(provider: str, base_url: str, api_key: str, saved_model: str, *, purpose: str = "vision") -> Optional[str]:
+def remembered_model(provider: str, base_url: str, api_key: str, saved_model: str, *, purpose: str = "vision", extra_headers=None) -> Optional[str]:
     saved = (saved_model or "").strip()
     with _lock:
-        found = _remembered.get((purpose, *_slot(provider, base_url, api_key, saved)))
+        found = _remembered.get((purpose, *_slot(provider, base_url, api_key, saved, extra_headers)))
     if found and found != saved:
         return found
     return None
 
 
 def remember_model(
-    provider: str, base_url: str, api_key: str, saved_model: str, substitute: str, *, purpose: str = "",
+    provider: str, base_url: str, api_key: str, saved_model: str, substitute: str, *, purpose: str = "", extra_headers=None,
 ) -> None:
     saved = (saved_model or "").strip()
     alt = (substitute or "").strip()
     if not saved or not alt or alt == saved:
         return
     with _lock:
-        _remembered[(purpose or "vision", *_slot(provider, base_url, api_key, saved))] = alt
+        _remembered[(purpose or "vision", *_slot(provider, base_url, api_key, saved, extra_headers))] = alt
         if purpose in {"analysis", "vision", "ocr"}:
-            _notices[(purpose, *_slot(provider, base_url, api_key, saved))] = {
+            _notices[(purpose, *_slot(provider, base_url, api_key, saved, extra_headers))] = {
                 "purpose": purpose, "saved_model": saved, "replacement": alt,
             }
 
@@ -95,14 +99,14 @@ def substitution_notice(purpose: str, provider: str, base_url: str, api_key: str
         return dict(notice) if notice else None
 
 
-def _cached_account_list(*, base_url: str, api_key: str, provider: str, http):
+def _cached_account_list(*, base_url: str, api_key: str, provider: str, http, extra_headers=None):
     """One successful ``/models`` read per account for a minute. Failures are not cached."""
     from backend.core.provider_model_fetch import list_account_models
 
     key = (
         (provider or "compatible").strip().lower(),
-        _host(base_url),
-        _digest(api_key),
+        _endpoint_scope(base_url),
+        _digest(api_key, extra_headers),
     )
     now = time.monotonic()
     with _lock:
@@ -114,6 +118,7 @@ def _cached_account_list(*, base_url: str, api_key: str, provider: str, http):
         api_key=api_key,
         provider=provider or "compatible",
         http=http,
+        **({'extra_headers': extra_headers} if extra_headers else {}),
     )
     if getattr(listed, "ok", False):
         with _lock:
@@ -173,13 +178,14 @@ def resolve_available_analysis_model(
     failed_model: str,
     exclude: Sequence[str] = (),
     http=None,
+    extra_headers=None,
 ) -> Optional[str]:
     """One live-list lookup for a text call. ``None`` when no other chat model is listed."""
     from backend.core.llm_telemetry import sanitize_model
 
     try:
         listed = _cached_account_list(
-            base_url=base_url, api_key=api_key, provider=provider, http=http,
+            base_url=base_url, api_key=api_key, provider=provider, http=http, extra_headers=extra_headers,
         )
     except Exception:  # noqa: BLE001 — a list failure must not replace the original model error
         logger.info("text model list unavailable; not substituting")
@@ -221,13 +227,14 @@ def resolve_available_model(
     failed_model: str,
     exclude: Sequence[str] = (),
     http=None,
+    extra_headers=None,
 ) -> Optional[str]:
     """One live-list lookup. ``None`` when the list cannot be read or has no other vision model."""
     from backend.core.llm_telemetry import sanitize_model
 
     try:
         listed = _cached_account_list(
-            base_url=base_url, api_key=api_key, provider=provider, http=http,
+            base_url=base_url, api_key=api_key, provider=provider, http=http, extra_headers=extra_headers,
         )
     except Exception:  # noqa: BLE001 — a list failure must not replace the original model error
         logger.info("vision model list unavailable; not substituting")

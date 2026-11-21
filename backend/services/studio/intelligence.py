@@ -172,8 +172,9 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
     saved_model = model
     provider = provider_for_endpoint({'base_url': base, 'identity': identity})
+    auth_options = {'extra_headers': config['http_headers']} if config.get('http_headers') else {}
     allow_substitute = config.get('model_source') != 'user'
-    cached = remembered_model(provider, base, key, saved_model) if allow_substitute else None
+    cached = remembered_model(provider, base, key, saved_model, **auth_options) if allow_substitute else None
     if cached:
         model = cached
     from backend.core.model_catalog import known_text_only
@@ -279,7 +280,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                     tried_substitute = True
                     alt = resolve_available_model(
                         base_url=base, api_key=key, provider=provider,
-                        failed_model=model, exclude=(saved_model, model),
+                        failed_model=model, exclude=(saved_model, model), **auth_options,
                     )
                     if alt and alt != model:
                         _telem['retries'] += 1
@@ -312,7 +313,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
             _telem['result'] = result
             if model != saved_model:
-                remember_model(provider, base, key, saved_model, model, purpose='vision')
+                remember_model(provider, base, key, saved_model, model, purpose='vision', **auth_options)
             from backend.core import llm_usage
             llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
                              prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),

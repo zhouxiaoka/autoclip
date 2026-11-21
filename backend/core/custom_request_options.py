@@ -79,7 +79,10 @@ def apply_chat_options(payload: dict, config) -> dict:
     if options.get('reasoning_effort'):
         body.setdefault('reasoning_effort', options['reasoning_effort'])
     if options.get('extra_body'):
-        body['extra_body'] = {**options['extra_body'], **(body.get('extra_body') or {})}
+        extra = {**options['extra_body'], **(body.get('extra_body') or {})}
+        # The SDK merges extra_body LAST, unlike raw HTTP. Remove top-level collisions
+        # here so explicit call fields win identically on both transports.
+        body['extra_body'] = {key: value for key, value in extra.items() if key not in body}
     return body
 
 

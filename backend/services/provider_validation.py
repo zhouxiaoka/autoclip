@@ -275,6 +275,13 @@ def _non_stream_completion(payload: Any) -> bool:
     return bool(_completion_text(choices[0].get('message')))
 
 
+def _chat_headers(api_key: str, options=None):
+    from backend.core.custom_request_options import merge_headers
+    custom = (options or {}).get('http_headers')
+    auth = {'Authorization': 'Bearer ' + (api_key or 'EMPTY')} if api_key or not custom else {}
+    return merge_headers({**auth, 'Content-Type': 'application/json'}, custom)
+
+
 def _has_reasoning_output(payload: Any) -> bool:
     """True when a 200 completion spent its token budget on reasoning/thinking before visible content."""
     if not isinstance(payload, dict):
@@ -337,7 +344,7 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *,
     )
     from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
-    from backend.core.custom_request_options import apply_chat_options, merge_headers
+    from backend.core.custom_request_options import apply_chat_options
     payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, apply_chat_options({
         'model': model,
         'messages': [{'role': 'user', 'content': 'ok'}],
@@ -346,7 +353,7 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *,
     # Hosts such as APIMart default to text/event-stream unless this is false.
     payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
-    headers = merge_headers({'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}, (options or {}).get('http_headers'))
+    headers = _chat_headers(api_key, options)
     from backend.core import gemini_transport
     native = gemini_transport.is_official_gemini(provider, base)
     if native:
@@ -739,7 +746,7 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
         token_param_kwargs,
     )
 
-    from backend.core.custom_request_options import apply_chat_options, merge_headers
+    from backend.core.custom_request_options import apply_chat_options
     payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, apply_chat_options({
         'model': model,
         'messages': [{'role': 'user', 'content': full_input}],
@@ -749,7 +756,7 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
     # Prefer JSON object mode when the gateway understands it; ignore 400 and retry once without.
     payload['response_format'] = {'type': 'json_object'}
     url = base.rstrip('/') + '/chat/completions'
-    headers = merge_headers({'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}, (options or {}).get('http_headers'))
+    headers = _chat_headers(api_key, options)
     from backend.core import gemini_transport
     native = gemini_transport.is_official_gemini(provider, base)
     if native:

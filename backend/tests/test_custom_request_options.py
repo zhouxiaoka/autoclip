@@ -169,6 +169,7 @@ def test_header_only_gateway_discovery_quick_trial_sdk_and_vision(gateway, monke
     assert len(posts) >= 6
     for _, _, headers, body in posts:
         assert {key.lower(): value for key, value in headers.items()}.get('x-workspace') == 'fixture-private-value'
+        assert not any(key.lower() == 'authorization' for key in headers)
         assert body['model'] == 'fixture-model'
         assert body['reasoning_effort'] == 'high'
         assert body['provider_options'] == {'thinking': True}

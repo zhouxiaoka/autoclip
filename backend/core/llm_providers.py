@@ -602,6 +602,7 @@ class OpenAIProvider(LLMProvider):
     def __init__(self, api_key: str, model_name: str = "gpt-4o-mini", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
         self.base_url = normalize_base_url(kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL"))
+        self._configured_api_key = api_key
         self.is_custom_endpoint = bool(self.base_url) and self.base_url != OPENAI_OFFICIAL_BASE_URL
         if not api_key and self.is_custom_endpoint:
             api_key = OPENAI_COMPATIBLE_PLACEHOLDER_KEY
@@ -621,9 +622,16 @@ class OpenAIProvider(LLMProvider):
                     client_kwargs["http_client"] = http_client
             if kwargs.get('http_headers'):
                 import httpx
-                client_kwargs['default_headers'] = dict(kwargs['http_headers'])
+                custom_headers = dict(kwargs['http_headers'])
+
+                def apply_headers(request):
+                    # Apply after the SDK builds its defaults; HTTPX replaces case-insensitively.
+                    if not self._configured_api_key:
+                        request.headers.pop('Authorization', None)  # no synthetic bearer for header-only auth
+                    request.headers.update(custom_headers)
                 # Custom authorization headers must not follow a redirect to another endpoint.
-                client_kwargs['http_client'] = httpx.Client(trust_env=not is_local_url(self.base_url), follow_redirects=False)
+                client_kwargs['http_client'] = httpx.Client(trust_env=not is_local_url(self.base_url), follow_redirects=False,
+                                                           event_hooks={'request': [apply_headers]})
             self.client = openai.OpenAI(**client_kwargs)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
@@ -638,7 +646,7 @@ class OpenAIProvider(LLMProvider):
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
                 **{key: value for key, value in kwargs.items() if key != "stream"},
-            }, self.kwargs)))
+            }, getattr(self, 'kwargs', {}))))
             # A long think used to die on a silent socket. Stream when the host
             # can; a refusal or a single JSON body is assembled the same way.
             payload["stream"] = True
