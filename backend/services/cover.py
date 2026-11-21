@@ -615,6 +615,17 @@ def generate_cover(
         else previous.get("headline") or clip.get("generated_title") or clip.get("title") or ""
     )
     locked = title is not None or previous.get("brief", {}).get("copy", {}).get("mode") == "locked"
+    if previous.get("brief", {}).get("source", {}).get("allow_alternate_frame") is False and (
+        options.change_frame or options.frame_time is not None
+    ):
+        raise ModelCoverRejected("本次封面已锁定参考帧")
+    from backend.services import cover_planner
+    old_brief = previous.get("brief") or {}
+    ctx = cover_planner.context(proposed, platform, (spec["width"], spec["height"]), options, locked=locked,
+                                previous=old_brief.get("design", {}).get("composition_intent", ""))
+    if force_local:
+        ctx["local_only"] = True
+    exclude_time = old_brief.get("source", {}).get("source_timestamp_sec") if options.change_frame else None
     source = {}
     frame = None
     centre = None
@@ -624,7 +635,6 @@ def generate_cover(
         source = dict(previous.get("brief", {}).get("source", {}))
         source["evidence"] = previous.get("brief", {}).get("content", {}).get("evidence", [])
         centre = source.get("centre")
-    video, at = resolve_clip_frame(project_id, clip_id)
     if options.frame_time is not None:
         from backend.services.publish_export import find_source_video
 
@@ -639,8 +649,11 @@ def generate_cover(
     if frame is None and clip.get("source_type") == "studio":
         from backend.services.studio.publishing import cover_source_frame
 
+        from backend.core.project_cancellation import ProjectDeleted
         try:
-            frame, centre = cover_source_frame(project_id, clip["studio_job_id"], revision, source)
+            frame, centre = cover_source_frame(project_id, clip["studio_job_id"], revision, source, context=ctx, exclude_time=exclude_time)
+        except ProjectDeleted:
+            raise
         except (FileNotFoundError, CoverError, OSError, ValueError):
             pass
     if frame is None:
@@ -648,9 +661,9 @@ def generate_cover(
 
         start = to_seconds(clip.get("start_time") or "0")
         end = to_seconds(clip.get("end_time") or "0")
+        video, at = resolve_clip_frame(project_id, clip_id)
         if options.change_frame and end > start:
             at = start + (end - start) * (0.36, 0.58, 0.75)[revision % 3]
-        frame = extract_frame_jpeg(video, at_sec=at)
         source = dict(
             kind="export_frame" if clip.get("source_type") == "studio" else "video_frame",
             asset_id=clip_id,
@@ -659,10 +672,12 @@ def generate_cover(
             clip_range=[start, end],
             evidence=_scene_rows(project_id, dict(start=start, end=end)),
         )
-    if previous.get("brief", {}).get("source", {}).get("allow_alternate_frame") is False and (
-        options.change_frame or options.frame_time is not None
-    ):
-        raise ModelCoverRejected("本次封面已锁定参考帧")
+        if end > start and clip.get("source_type") != "studio":
+            frame, centre, _ = cb.cd.pick_frame(video, dict(start=start, end=end), source["evidence"],
+                                                 local_revision=revision, context=ctx, trace=source,
+                                                 exclude_time=exclude_time)
+        else:
+            frame = extract_frame_jpeg(video, at_sec=at)
     rows = source.pop("evidence", [])
     proposed = cb.choose_copy(proposed, rows, locked)
     if centre is None:
@@ -670,6 +685,7 @@ def generate_cover(
     brief = cb.plan(
         frame,
         title=proposed,
+        editorial_context=ctx,
         strategy=platform,
         size=(spec["width"], spec["height"]),
         origin=source,

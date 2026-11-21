@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.services.studio import cover_design as cd
 from backend.core.llm_telemetry import sanitize_model
 
-VERSION = "brief-1"
+VERSION = "brief-6"
 Recipe = Literal["auto", "photo_focus", "culture_editorial", "tech_question", "bold_statement"]
 Mode = Literal["crop_grade_text_only", "editorial_edit"]
 
@@ -59,7 +59,8 @@ class CoverBrief(BaseModel):
             raise ValueError("原帧模式不能重绘或替换场景")
         if self.status == "ready":
             text = self.copy_spec["exact_text"]
-            if not text or norm(" ".join(self.copy_spec["lines"])) != norm(text):
+            lines = self.copy_spec["lines"]
+            if not text or (norm(" ".join(lines)) != norm(text) and "".join(lines) != text):
                 raise ValueError("锁定文案与指定行不一致")
             for emphasis in self.copy_spec["emphasis"]:
                 if not 1 <= emphasis["occurrence"] <= text.count(emphasis["text"]):
@@ -123,6 +124,7 @@ def plan(
     locked=False,
     secondary=(),
     revision=0,
+    editorial_context=None,
 ):
     opts = options or Options()
     evidence = [r for r in rows if r.get("text")]
@@ -215,6 +217,16 @@ def plan(
             palette = (palette[0], "#FFD694")
         elif recipe == "culture_editorial" and green >= red:
             palette = (palette[0], "#FFD994")
+    direction = None
+    if editorial_context and frame and status == "ready":
+        from backend.services import cover_planner
+        editorial = cover_planner.bound(frame, origin, dict(editorial_context, title=title), rows)
+        origin = dict(origin, editorial_plan=editorial)
+        if editorial["status"] == "planned":
+            direction = editorial["direction"]
+            layout = direction["text_zone"]
+            palette = (palette[0], direction["accent"])
+            emphasis = opts.emphasis or direction["emphasis"]
     path = typeface(recipe, chinese)
     if recipe == "culture_editorial" and path == cd.FONT:
         issues.append(
@@ -248,8 +260,8 @@ def plan(
         copy_spec=dict(
             mode="locked" if locked else "extractive",
             exact_text=title,
-            lines=title.splitlines(),
-            line_breaks_locked="\n" in title,
+            lines=direction["lines"] if direction else title.splitlines(),
+            line_breaks_locked=bool(direction) or "\n" in title,
             emphasis=[dict(text=emphasis, occurrence=1)] if emphasis else [],
             language="zh" if chinese else "en",
             secondary_text=list(filter(None, secondary)),
@@ -298,6 +310,10 @@ def plan(
         ),
     )
 
+    if direction:
+        brief.design["composition_intent"] = direction["composition"]
+        brief.design["rationale"].update(typography=direction["typography"], framing=direction["reason"],
+                                        color=direction["color_reason"])
     if frame and brief.status == "ready":
         try:
             brief.design["typesetting"] = _measure(brief)
@@ -309,30 +325,52 @@ def plan(
 
 def compile_prompt(b):
     design, copy, spec = b.design, b.copy_spec, b.export_spec
-    allowed = ["裁切、调光和排字"]
+    direction = {
+        "photo_focus": "人物访谈的视觉重点是说话那一刻的神情。顺着人物的视线，在现场暗部或安静的背景中安排标题，让读者从眼神自然读到整句话。标题用笔画饱满的粗黑体，字组紧凑，重音鲜明。",
+        "tech_question": "把问题的铺垫和真正让人想回答的那半句分出轻重，用紧凑的粗黑体托住问句。让人物的表情与问句相呼应，保留疑问和限定词。",
+        "culture_editorial": "保留现场光色，让眼神或原有的手势带出叙述。标题使用有粗细变化的衬线字，沿场景留白展开，强调色落在承载主题的词组上。",
+        "bold_statement": "用紧实的窄粗体容纳完整观点，将重音落在关键短语上。保留长词和否定词，让原有的姿态与文字在缩略图上都能辨认。",
+    }[design["recipe"]]
+    planned = b.source.get("editorial_plan") or {}
+    if planned.get("status") == "planned":
+        shot = planned["direction"]
+        direction = "\n".join([f"此帧主体与朝向：{shot['subject']}", f"取景边界：{shot['crop_boundary']}",
+                               f"文字区域 {shot['text_zone']}。构图与阅读顺序：{shot['composition']}",
+                               f"字体与行间层级：{shot['typography']}", f"色彩依据：{shot['color_reason']}"])
+    elif b.source.get("editorial_plan"):
+        direction += (f" 本帧排版依据：{design['composition_intent']}。"
+                      f"字体选择：{design['rationale']['typography']}。"
+                      "以照片中可见的主体边界为摄影截止线，根据真实画面微调，保留原有现场明暗。")
+    regions = design.get("protected_regions", [])
+    framing = ["沿用参考图的主体、衣着、表情、动作和原现场的光线。"]
+    if "visible_shoulders_and_chest" in regions:
+        framing.append("把原片当作一幅已经裁好的半身摄影：发顶完整，双肩可见，胸口刚到输入照片下沿就结束。把这条下沿当作摄影截止线；以下仅用取自现场的暗色作为纸面，不得在纸面接续衣服轮廓。严禁向下续画躯干、衣袖、手臂或衣褶。")
+    if "right_look_room" in regions:
+        framing.append("人物偏左，保住发梢，头顶上方的空场收至一小条，约一只眼睛到眉毛的距离。右侧标题首行落在视线的延长线上，与眼睛大致同高。脸的最右轮廓到首字留半个主标题字宽，末字到画幅右边也留至少半个字宽。版心挤时整组标题用窄体并适当缩小，仍保持在脸旁。")
+    framing.append("画外的手、手指、身体或道具不得补画。通过取景避开源片边缘的标志，四角干净，禁止搬移或复制角标。")
+    allowed = ["裁切、调光、排字"]
     if b.permissions["allow_cutout"]:
         allowed.append("可沿真实轮廓抠图")
     if b.permissions["allow_background_replace"]:
         allowed.append("可替换为取自原场景的色调背景")
-    emphasis = "、".join(e["text"] for e in copy["emphasis"]) or "无"
-    typeset = design.get("typesetting") or {}
-    text = "\n".join(typeset.get("lines") or [copy["exact_text"], *copy["secondary_text"]])
-    placement = design["composition_intent"]
-    if typeset:
-        x, y = typeset["text_origin"]
-        placement = f"文字从画幅左侧 {x / spec['width']:.0%}、顶部 {y / spec['height']:.0%} 开始；参考字号约为短边的 {typeset['font_size'] / min(spec['width'], spec['height']):.0%}，按下列行序排字"
-
-    return "\n".join(
-        [
-            "编辑参考图，参考图是唯一的人物与场景来源。保留脸、衣着、表情、视线和动作。",
-            "仅允许：" + "；".join(allowed) + "。禁止添加人物、道具或新动作。",
-            f"{design['rationale']['typography']}。{placement}，避开眼睛和重要手势。",
-            f"字体 {design['font_family']}，主色 {design['palette']['text']}，强调 {emphasis} 用 {design['palette']['accent']}。",
-            "唯一批准的文案如下，保留标点、词间空格与否定词，只呈现一次：",
-            text,
-            f"交付排好字的 {spec['width']}×{spec['height']} 封面。左右各留 7%，底部留 8%。设计说明和姓名不得入画。",
-        ]
-    )
+    palette = design["palette"]
+    emphasis = "、".join(e["text"] for e in copy["emphasis"])
+    color = f"标题主色 {palette['text']}。"
+    if emphasis:
+        color += f"将「{emphasis}」作为一个完整的字组，用同一纯色 {palette['accent']} 一次填满其中每个字形；组内不混入主色，不渐变，其余字保持主色。"
+    wording = copy["lines"] if copy.get("line_breaks_locked") else [copy["exact_text"]]
+    type_direction = "文字采用印刷油墨的平涂硬边，底图选均匀暗部；如需压光，调整整片背景明度，字边周围保持与邻近底图一致。禁用白色光晕、雾状白底、描边和阴影。"
+    if planned.get("status") != "planned" and copy.get("line_breaks_locked") and len(wording) == 2 and b.content.get("claim_type") == "question":
+        type_direction += "严格按文末换行。第一行用常规字重，相当于 Regular 400，字高约为第二行的三分之二；第二行用窄黑体 Heavy 900，厚实，标点与末词同字号同基线。两行左齐，末尾问号完整入画。"
+    return "\n".join([
+        f"以提供的真实视频帧为唯一摄影素材，直接交付一张排好字、可发布的 {spec['width']}×{spec['height']} 封面。",
+        direction,
+        "".join(framing),
+        "按以上构图在目标画幅内取景排字。缩到手机列表大小，主体与标题仍要一眼可读；避免四面加框的小照片、独立大标题栏和装饰性描边。",
+        color, type_direction,
+        "允许的编辑：" + "、".join(allowed) + "。画面只出现以下批准文案一次，保留原字、数字及标点：",
+        *wording, *copy["secondary_text"],
+    ])
 
 
 def _wrap(text, font, width, emphasis):
@@ -397,7 +435,7 @@ def _measure(b):
             maxh = min(maxh, room)
     path = typeface(d["recipe"], c["language"] == "zh")
     size = int(min(w, h) * (0.16 if d["recipe"] == "bold_statement" else 0.145 if h > w else 0.14))
-    content = "\n".join([c["exact_text"], *c["secondary_text"]])
+    content = "\n".join([*c["lines"], *c["secondary_text"]])
     size = round(size * (1, 0.94, 1.04)[d["revision"] % 3])
     emphasis = c["emphasis"][0]["text"] if c["emphasis"] else ""
     # A short locked Chinese headline reads better as one line than as a one-character tail.
@@ -469,7 +507,7 @@ def render(frame, b):
     x, y = typeset["text_origin"]
     side = typeset["overlay"]
     font = _font(typeface(d["recipe"], c["language"] == "zh"), typeset["font_size"], d["recipe"])
-    content = "\n".join([c["exact_text"], *c["secondary_text"]])
+    content = "\n".join([*c["lines"], *c["secondary_text"]])
     img = ImageOps.fit(
         Image.open(io.BytesIO(frame)).convert("RGB"),
         (w, h),
@@ -674,7 +712,8 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
                         model=cfg.model,
                         prompt=req.prompt,
                     )
-                    audit.update(attempts=attempts)
+                    audit.update(attempts=attempts, model_original_sha256=hashlib.sha256(image).hexdigest())
+                    audit["_original_bytes"] = image
                     return data, audit
                 reason = "text_unavailable" if verify is None else "text_mismatch"
                 if verify is None:
@@ -734,6 +773,12 @@ def save(meta_path, token, data, frame, metadata):
         versions = meta_path.parent / "versions"
         versions.mkdir(exist_ok=True)
         img_name, frame_name = token + "-cover.jpg", token + "-frame.jpg"
+        metadata = dict(metadata)
+        original = metadata.pop("_original_bytes", None)
+        if original is not None:
+            extension = Image.open(io.BytesIO(original)).format.lower()
+            metadata["model_original_file"] = f"{token}-original.{extension}"
+            atomic(versions / metadata["model_original_file"], original)
         atomic(versions / img_name, data)
         atomic(versions / frame_name, frame)
         atomic(
@@ -799,5 +844,8 @@ def selected_candidate(video, source, at):
     match = next((c for c in candidates if c["time"] == at), None)
     if match is None:
         raise ValueError("候选镜头已变化，请刷新后重试")
+    frame = extract_frame_jpeg(video, at_sec=at, max_width=1920)
+    if match.get("frame_sha256") and match["frame_sha256"] != hashlib.sha256(frame).hexdigest():
+        raise ValueError("候选镜头已变化，请刷新后重试")
     source.update(source_timestamp_sec=at, selection_reason="用户选定片段内候选镜头")
-    return extract_frame_jpeg(video, at_sec=at, max_width=1920), match["centre"]
+    return frame, match["centre"]

@@ -7,6 +7,7 @@ An AI cover (services/cover.py) can still replace it from the output card.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import re
 from pathlib import Path
@@ -262,6 +263,8 @@ def pick_frame(
     *,
     local_revision: int | None = None,
     trace=None,
+    context=None,
+    exclude_time=None,
 ) -> tuple[bytes, float | None, bool]:
     """(frame, speaker centre, guest on screen) for the cover.
 
@@ -276,25 +279,61 @@ def pick_frame(
     start, length = scene["start"], scene["end"] - scene["start"]
     shots = framing.split_shots(length, framing.detect_cuts(video, start, length))
     answer = _answer_start(rows, start, start + length)
-    if answer is not None:
+    if context is None and answer is not None:
         # Use shots wholly inside the answer. A two-shot spanning the question can still show the host.
         response_shots = [shot for shot in shots if start + shot[0] >= answer and shot[1] - shot[0] >= 0.5]
         shots = response_shots or [(max(a, answer - start), b) for a, b in shots if start + b > answer + 0.5]
+    if context and len(shots) == 1 and length > 3:
+        # A stationary camera may still capture several different gestures or expressions.
+        a, b = shots[0]
+        step = (b - a) / 3
+        shots = [(a + i * step, a + (i + 1) * step) for i in range(3)]
     if local_revision and answer is not None:
         shares = ((0.48, 0.76), (0.25, 0.52), (0.36, 0.65))[(local_revision - 1) % 3]
         candidates = _candidates(video, start, shots, VISION_CANDIDATES, shares)
     else:
         candidates = _candidates(video, start, shots, VISION_CANDIDATES)
 
+    editorial = None
+    if context is not None:
+        from backend.services import cover_brief, cover_planner
+
+        title = cover_brief.choose_copy(context["title"], rows, context["locked"])
+        context = dict(context, title=title)
+        cue = next((row for row in rows if title and title.casefold() in row["text"].casefold()
+                    and row["end"] > start and row["start"] < start + length), None)
+        if cue:
+            a, b = max(start, cue["start"]) - start, min(start + length, cue["end"]) - start
+            if b > a:
+                targeted = _candidates(video, start, [(a, b)], 1, (.5,))
+                candidates = targeted + candidates
+        # Compare small RGB thumbnails, keeping different compositions at the same camera position.
+        from PIL import Image, ImageChops, ImageStat
+        unique, previews = [], []
+        for candidate in candidates:
+            preview = Image.open(io.BytesIO(candidate[0])).convert("RGB").resize((24, 16))
+            if any(max(ImageStat.Stat(ImageChops.difference(preview, other)).mean) < 4 for other in previews):
+                continue
+            unique.append(candidate)
+            previews.append(preview)
+        candidates = unique[:VISION_CANDIDATES]
+        if exclude_time is not None:
+            candidates = [c for c in candidates if abs(c[4] - exclude_time) > .15] or candidates
+        if candidates:
+            editorial = cover_planner.inspect(candidates, context, rows)
+
     def selected(candidate, is_guest, reason):
         frame, centre, _, _, at = candidate
         if trace is not None:
+            if editorial:
+                trace["editorial_plan"] = dict(editorial, frame_sha256=hashlib.sha256(frame).hexdigest())
             trace.update(
                 kind="video_frame",
                 source_timestamp_sec=at,
                 selection_reason=reason,
                 clip_range=[start, start + length],
-                candidates=[dict(time=c[4], sharpness=c[2], face_found=c[3], centre=c[1]) for c in candidates],
+                candidates=[dict(id=i, time=c[4], sharpness=c[2], face_found=c[3], centre=c[1],
+                                 frame_sha256=hashlib.sha256(c[0]).hexdigest()) for i, c in enumerate(candidates, 1)],
             )
         return frame, centre, is_guest
 
@@ -305,20 +344,26 @@ def pick_frame(
                 kind="video_frame", source_timestamp_sec=at, selection_reason="片段内备用时间点", candidates=[]
             )
         return extract_frame_jpeg(video, at_sec=at, max_width=1920), None, False
+    if editorial and editorial["status"] == "planned":
+        direction = editorial["direction"]
+        return selected(candidates[direction["best"] - 1], False, direction["reason"])
     speakers = (packaging or {}).get("speakers") or []
     guest = (
         next((sp["name"] for sp in speakers if not any(w in (sp.get("role") or "").lower() for w in HOST)), "")
         or guest_hint
     )
     host = next((sp["name"] for sp in speakers if any(w in (sp.get("role") or "").lower() for w in HOST)), "")
-    chosen = None if local_revision is not None else _choose_with_vision(candidates, guest, host)
+    chosen = None if context is not None or local_revision is not None else _choose_with_vision(candidates, guest, host)
     if chosen is not None:
         index, is_guest = chosen
         return selected(candidates[index], is_guest, "视觉选帧：对照该片段嘉宾和主持人")
     eligible = [c for c in candidates if c[3]] or [c for c in candidates if _camera_frame(c[0])] or candidates
     if answer is not None:
         # The sustained answer shot outranks momentary listener reactions and wide cutaways.
-        return selected(eligible[0], False, "提问后持续回答镜头中的清晰帧")
+        after = [c for c in eligible if c[4] >= answer]
+        if after:
+            return selected(after[(local_revision or 0) % len(after)], False, "提问后回答段中的清晰帧")
+        return selected(eligible[0], False, "按片段内可用镜头选择")
     else:
         eligible.sort(key=lambda c: c[2], reverse=True)
         return selected(eligible[(local_revision or 0) % len(eligible)], False, '按真实镜头与清晰度选择')

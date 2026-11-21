@@ -92,6 +92,7 @@ def test_wrong_text_retries_with_same_photo_and_delivers_target_size(data_dir, f
         meta = json.loads(publish_kit.cd_meta_path("p1", "render", "xiaohongshu").read_text())
         artifact = publish_kit.kit_cover_path("p1", "render", "xiaohongshu")
     assert len(requests) == 2 and all(req.reference == fake_frame for req in requests)
+    assert (artifact.parent / meta["model_original_file"]).read_bytes() == fake_frame
     assert meta["prompt"] == requests[-1].prompt
     assert meta["visual_review"] == "pending" and meta["checks"]["text"] == "passed"
     with Image.open(artifact) as img:
@@ -236,4 +237,18 @@ def test_mobile_typesetting_keeps_units_and_short_emphasis_together(fake_frame):
     )
     lines = english.design["typesetting"]["lines"]
     assert any("biggest risk" in line for line in lines) and any("open AI?" in line for line in lines)
-    assert "\n".join(lines) in cb.compile_prompt(english)
+    assert english.copy_spec["exact_text"] in cb.compile_prompt(english)
+
+
+def test_model_request_is_independent_of_local_poster_geometry(fake_frame):
+    b = brief(fake_frame)
+    original = cb.compile_prompt(b)
+    b.design.update(composition_intent="LOCAL CROP GUIDE", layout="photo_above_caption")
+    b.design["typesetting"].update(lines=["LOCAL PROOF"], font_size=7, text_origin=[1, 2])
+    b.design["rationale"]["typography"] = "LOCAL CAPTION BLOCK"
+    assert cb.compile_prompt(b) == original
+    assert b.copy_spec["exact_text"] in original
+    b.design["protected_regions"] = ["visible_shoulders_and_chest", "right_look_room"]
+    directed = cb.compile_prompt(b)
+    assert all(word in directed for word in ("双肩", "胸口", "右侧"))
+    assert "LOCAL" not in directed

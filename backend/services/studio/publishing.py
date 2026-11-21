@@ -60,7 +60,7 @@ def output_variant_meta(project_id: str, variant_id: str):
             'post': variant.get('post') or {}}
 
 
-def cover_source_frame(project_id, job_id, revision, trace=None):
+def cover_source_frame(project_id, job_id, revision, trace=None, *, context=None, exclude_time=None):
     """Select an original frame inside an exported scene, before captions, padding and overlays."""
     from backend.services.publish_export import find_source_video
     from backend.services.studio import cover_design as cd
@@ -71,13 +71,12 @@ def cover_source_frame(project_id, job_id, revision, trace=None):
     if not scenes:
         raise FileNotFoundError("成片没有来源片段")
     video = find_source_video(project_id)
-    scene = scenes[revision % len(scenes)]
-    from backend.services.studio.publish_kit import _scene_rows
+    from backend.services.studio.publish_kit import cover_scene
 
-    rows = _scene_rows(project_id, scene)
+    scene, rows = cover_scene(project_id, scenes, (context or {}).get("title", ""), revision)
     if trace is not None:
         trace.update(asset_id="raw/input", evidence=rows)
-    frame, centre, _ = cd.pick_frame(video, scene, rows, local_revision=revision, trace=trace)
+    frame, centre, _ = cd.pick_frame(video, scene, rows, local_revision=revision, trace=trace, context=context, exclude_time=exclude_time)
     return frame, centre if centre is not None else scene.get('crop_x')
 
 

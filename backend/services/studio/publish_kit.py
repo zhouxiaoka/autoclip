@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from backend.services import cover_brief as cb
+from backend.services import cover_brief as cb, cover_planner
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +53,14 @@ def design_cover(project_id, video, draft, job_id, strategy_id, post_title, vari
     from backend.services.studio import cover_design as cd
 
     path = cd_meta_path(project_id, job_id, strategy_id, variant_id)
-    token = cb.begin(path)
-    old = _metadata(path)
-    scene = draft["scenes"][0]
-    rows = _scene_rows(project_id, scene)
+    from backend.services.studio import store
+    with store.lock:
+        old = _metadata(path)
+        # A render job and variant identify an immutable output; keep its later user edits.
+        if old.get("brief") and kit_cover_path(project_id, job_id, strategy_id, variant_id).is_file():
+            return True
+        token = cb.begin(path)
     source = dict(asset_id="raw/input")
-    frame, centre, _ = cd.pick_frame(video, scene, rows, draft.get("packaging") or {}, trace=source)
     info = _probe(video)
     size = cd.size_for(strategy_id, info.get("width") or 1920, info.get("height") or 1080)
     proposed = (
@@ -69,10 +71,14 @@ def design_cover(project_id, video, draft, job_id, strategy_id, post_title, vari
     from backend.services.cover import load_config
 
     options = cb.Options.model_validate(old.get("options") or {"mode": load_config().design_mode})
+    scene, rows = cover_scene(project_id, draft["scenes"], proposed)
+    ctx = cover_planner.context(cb.choose_copy(proposed, rows, False), strategy_id, size, options)
+    frame, centre, _ = cd.pick_frame(video, scene, rows, draft.get("packaging") or {}, trace=source, context=ctx)
     brief = cb.plan(
         frame,
-        title=cb.choose_copy(proposed, rows, False),
+        title=ctx["title"],
         locked=False,
+        editorial_context=ctx,
         rows=rows,
         size=size,
         origin=source,
@@ -80,14 +86,6 @@ def design_cover(project_id, video, draft, job_id, strategy_id, post_title, vari
         centre=centre,
         strategy=strategy_id,
     )
-    # A repeat finalization must not replace an already generated revision of the same brief.
-    cfg = load_config()
-    cache_key = cb.fingerprint(brief, cfg.provider, cfg.model)
-    if (
-        old.get("planning_fingerprint") == cache_key
-        and kit_cover_path(project_id, job_id, strategy_id, variant_id).is_file()
-    ):
-        return True
     _deliver(project_id, job_id, strategy_id, frame, brief, options, token, False, variant_id)
     return True
 
@@ -101,6 +99,21 @@ def _scene_rows(project_id: str, scene: dict[str, Any]) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001 - without rows every shot counts as the guest's
         return []
     return [row for row in rows if row['end'] > scene['start'] and row['start'] < scene['end']]
+
+
+def cover_scene(project_id, scenes, title, revision=0):
+    """Prefer a scene that contains the approved words, then the existing version order."""
+    ordered = scenes[revision % len(scenes):] + scenes[:revision % len(scenes)]
+    rows = _scene_rows(project_id, {"start": min(s["start"] for s in scenes), "end": max(s["end"] for s in scenes)})
+    best = None
+    for scene in ordered:
+        evidence = [r for r in rows if r["end"] > scene["start"] and r["start"] < scene["end"]]
+        text = cb.norm(" ".join(r["text"] for r in evidence)).casefold()
+        if title and cb.norm(title).casefold() in text:
+            return scene, evidence
+        if best is None:
+            best = scene, evidence
+    return best
 
 
 def frame_path(project_id: str, job_id: str, strategy_id: str, variant_id=None) -> Path:
@@ -211,6 +224,17 @@ def _redesign(
     source = dict(old.get("source") or {})
     rows = (old.get("content") or {}).get("evidence", [])
     job = next(j for j in store.read(project_id)["jobs"] if j["job_id"] == job_id)
+    result = job.get("result") or {}
+    size = cd.size_for(strategy_id, result.get("width") or 1920, result.get("height") or 1080)
+    previous_copy = old.get("copy") or {}
+    locked = title is not None or previous_copy.get("mode") == "locked"
+    proposed = (
+        title
+        if title is not None
+        else previous_copy.get("exact_text") or cb.join_lines(meta.get("lines") or []) or job.get("title", "")
+    )
+    prior = "" if reuse else old.get("design", {}).get("composition_intent", "")
+    ctx = cover_planner.context(proposed, strategy_id, size, opts, locked=locked, previous=prior)
     if source.get("allow_alternate_frame") is False and (opts.change_frame or opts.frame_time is not None):
         raise ValueError("本次封面已锁定参考帧")
     if opts.frame_time is not None:
@@ -229,9 +253,13 @@ def _redesign(
             )
     else:
         source = {}
+        from backend.core.project_cancellation import ProjectDeleted
         try:
-            frame, centre = cover_source_frame(project_id, job_id, revision, source)
+            frame, centre = cover_source_frame(project_id, job_id, revision, source, context=ctx,
+                                               exclude_time=old.get("source", {}).get("source_timestamp_sec") if opts.change_frame else None)
             rows = source.pop("evidence", [])
+        except ProjectDeleted:
+            raise
         except (FileNotFoundError, cover.CoverError, OSError, ValueError):
             video, at = cover.resolve_clip_frame(project_id, clip_id(job_id))
             frame = cover.extract_frame_jpeg(video, at_sec=at)
@@ -242,21 +270,13 @@ def _redesign(
                 source_timestamp_sec=at,
                 selection_reason="从已导出的当前成片截取",
             )
-    result = job.get("result") or {}
-    size = cd.size_for(strategy_id, result.get("width") or 1920, result.get("height") or 1080)
-    previous_copy = old.get("copy") or {}
-    locked = title is not None or previous_copy.get("mode") == "locked"
-    proposed = (
-        title
-        if title is not None
-        else previous_copy.get("exact_text") or cb.join_lines(meta.get("lines") or []) or job.get("title", "")
-    )
     brief = cb.plan(
         frame,
         title=cb.choose_copy(proposed, rows, locked),
         rows=rows,
         locked=locked,
         origin=source,
+        editorial_context=ctx,
         options=opts,
         centre=centre,
         strategy=strategy_id,
