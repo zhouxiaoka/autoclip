@@ -10,6 +10,7 @@ FFmpeg 可执行路径解析工具
 应用外直接跑脚本时，桌面壳不会设置 AUTOCLIP_FFMPEG_PATH，所以要自己找到安装目录里的二进制。
 """
 
+import importlib.util
 import logging
 import os
 import shutil
@@ -57,8 +58,26 @@ def bundled_candidates(base: str, executable: str | None = None, platform_name: 
         seen.add(key)
         found.append(path)
 
+    if base == "node" and executable is None:
+        try:
+            spec = importlib.util.find_spec("playwright")
+        except (ImportError, ValueError, OSError):
+            spec = None
+        if spec and spec.submodule_search_locations:
+            for loc in spec.submodule_search_locations:
+                add(Path(loc) / "driver" / filename)
+
     for parent in exe.parents:
         if parent.name == "python":
+            if base == "node":
+                add(parent / "Lib" / "site-packages" / "playwright" / "driver" / filename)
+                lib_dir = parent / "lib"
+                if lib_dir.is_dir():
+                    try:
+                        for match in sorted(lib_dir.glob(f"python*/site-packages/playwright/driver/{filename}")):
+                            add(match)
+                    except OSError:
+                        pass
             add(parent.parent / "ffmpeg" / filename)
         if parent.name == "resources":
             add(parent / "ffmpeg" / filename)
@@ -122,15 +141,34 @@ def get_ffprobe_path() -> str:
 
 
 JS_RUNTIMES = ("deno", "node", "bun", "quickjs")
+_JS_RUNTIME_BINARIES = {
+    "deno": ("deno",),
+    "node": ("node",),
+    "bun": ("bun",),
+    "quickjs": ("qjs", "quickjs"),
+}
 
 
 def ytdlp_js_runtimes() -> dict:
     """YouTube 现在要先解 JS 校验（yt-dlp-ejs）才能拿到视频流。
 
     yt-dlp 默认只启用 deno，用户机器上多半没有；装了 node / bun / quickjs 也会被当成不可用，
-    报 "The page needs to be reloaded"。把本机能找到的运行时都交给它，按顺序择优使用。
+    报 "The page needs to be reloaded"。桌面安装包自带 playwright/driver/node[.exe]，优先交给
+    yt-dlp（不依赖用户机器装过 Node/Deno，也不受老旧 PATH node 版本影响），再合并 PATH 上可用的运行时。
     """
-    found = {name: {"path": path} for name in JS_RUNTIMES if (path := shutil.which(name))}
+    found: dict[str, dict[str, str]] = {}
+    for name in JS_RUNTIMES:
+        path = None
+        if name == "node":
+            path = next((str(candidate) for candidate in bundled_candidates("node") if candidate.is_file()), None)
+        if not path:
+            for cmd in _JS_RUNTIME_BINARIES[name]:
+                hit = shutil.which(cmd)
+                if hit:
+                    path = hit
+                    break
+        if path:
+            found[name] = {"path": path}
     return {"js_runtimes": found} if found else {}
 
 
