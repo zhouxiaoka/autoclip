@@ -62,8 +62,7 @@ class AccountModelList:
     # Connection-test telemetry only: integer upstream status and a coarse network kind.
     http_status: int = 0
     network_kind: str = ""
-    # Live capability from the account list. Only ``multimodal`` is stored: a Text
-    # tag never vetoes the name heuristic. Not part of the public API payload.
+    # Internal eligibility for recovery, classified from the same rows as settings.
     capabilities: dict[str, str] = field(default_factory=dict)
 
     def as_api(self) -> dict:
@@ -130,9 +129,7 @@ def normalize_model_id(raw: Any) -> str:
     return name
 
 
-_NON_CHAT_CATEGORIES = frozenset({"image", "video", "audio"})
 _VISION_TAGS = frozenset({"vision", "omni"})
-_CHAT_TAGS = frozenset({"text", "vision", "omni"})
 
 
 def capability_from_tags(tags: Any) -> str | None:
@@ -151,47 +148,15 @@ def capability_from_tags(tags: Any) -> str | None:
     return None
 
 
-def apimart_listing_entry(item: Any) -> tuple[str, str | None] | None:
-    """One APIMart ``/v1/models`` row. None drops image, video, audio, and non-chat tags."""
-    if isinstance(item, str):
-        name = normalize_model_id(item)
-        return (name, None) if name else None
-    if not isinstance(item, Mapping):
-        return None
-    name = normalize_model_id(item.get("id") or item.get("name"))
-    if not name:
-        return None
-    from backend.core.model_catalog import is_non_chat_family
-    category = str(item.get("category") or "").strip().lower()
-    if category in _NON_CHAT_CATEGORIES or is_non_chat_family(name):
-        return None
-    tags = item.get("capability_tags")
-    capability = capability_from_tags(tags)
-    if isinstance(tags, list) and tags and capability is None:
-        lowered = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
-        if lowered and not (lowered & _CHAT_TAGS):
-            return None
-    return name, capability
-
-
 def _page_models(payload: Any, protocol: str, provider: str) -> tuple[list[str], dict[str, str]]:
-    if (provider or "").strip().lower() != "apimart":
-        return extract_model_ids(payload, protocol=protocol), {}
-    ids: list[str] = []
-    capabilities: dict[str, str] = {}
-    seen: set[str] = set()
-    for item in _payload_items(payload, protocol):
-        entry = apimart_listing_entry(item)
-        if not entry:
-            continue
-        name, capability = entry
-        if name in seen:
-            continue
-        seen.add(name)
-        ids.append(name)
-        if capability:
-            capabilities[name] = capability
-    return ids, capabilities
+    from backend.core.model_registry import listed_chat_capabilities
+    items = _payload_items(payload, protocol)
+    ids = extract_model_ids(payload, protocol=protocol)
+    classified = listed_chat_capabilities(provider, items)
+    if provider == 'apimart':
+        # Its expanded list also contains video and audio products.
+        ids = [name for name in ids if name in classified]
+    return ids, classified
 
 
 def _stamp_provider_query(url: str, provider: str) -> str:

@@ -86,13 +86,20 @@ export function failedCheck(connection: Connection, purpose: Role, model: string
   return connection.validation_status === 'failed' || !!connection.failed_model_checks?.some(item => item.model === model && item.purpose === purpose)
 }
 
-export function hasFailedSelection(s: ModelSettings): boolean {
-  return (['analysis', 'vision', 'transcription', 'cover'] as const).some(purpose => {
-    if ((purpose === 'cover' && !s.cover_enabled) || (purpose === 'vision' && s.analysis_mode !== 'visual' && !s.vision)) return false
+export function failedSelection(s: ModelSettings) {
+  for (const purpose of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if ((purpose === 'cover' && !s.cover_enabled) || (purpose === 'vision' && s.analysis_mode !== 'visual' && !s.vision)) continue
     const binding = purpose === 'vision' ? s.vision || s.analysis : s[purpose]
     const connection = s.connections.find(c => c.id === binding?.connection_id)
-    return !!(binding && connection && failedCheck(connection, purpose, binding.model))
-  })
+    if (binding && connection && failedCheck(connection, purpose, binding.model)) {
+      return { model: binding.model, account: connection.validation_status === 'failed' }
+    }
+  }
+  return null
+}
+
+export function hasFailedSelection(s: ModelSettings): boolean {
+  return !!failedSelection(s)
 }
 
 export function applyValidation(s: ModelSettings, id: string, result: ValidationResult, model?: string, purpose: Role = 'analysis', checkedVision = false): ModelSettings {

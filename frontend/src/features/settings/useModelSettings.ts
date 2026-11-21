@@ -10,6 +10,7 @@ import { bindingCapability, modelSettingsApi, type Connection, type FetchListRes
 import { quickConnectPatch } from './quickConnect'
 import { preserveFixedAssignments, recommendProviderSetup } from './providerModelSetup'
 import { applyModelDefaults, syncFollowingCover } from './modelDefaults'
+import { enabledModelIds } from './modelVisibility'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
 import { assignAnalysis, catalogDraftConnection, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
@@ -180,7 +181,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   // and a rediscovery of the loaded document does not count as an edit.
   useEffect(() => {
     if (!settings) return
-    const timer = window.setTimeout(() => settings.connections.forEach(c => { void discover(c, false, 'edit') }), 650)
+    const timer = window.setTimeout(() => settingsRef.current?.connections.forEach(c => { void discover(c, false, 'edit') }), 650)
     return () => window.clearTimeout(timer)
   }, [signature])
 
@@ -197,6 +198,27 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     setTestWarning(current => (current?.id === connection.id ? null : current))
     update(logic.editConnection(settings, connection.id, patch))
     setLists(old => { const next = { ...old }; delete next[connection.id]; return next })
+  }
+  const declareModel = (connection: Connection, id: string, role: 'analysis' | 'vision' | 'cover' | '') => {
+    if (!settings) return
+    const current = lists[connection.id]
+    const entry = current?.models.find(row => row.id === id)
+    if (!entry?.manual_roles || (role && !entry.manual_roles.includes(role))) return
+    const offers = (connection.custom_models || []).filter(offer => offer.id !== id)
+    if (role) offers.push({
+      ...emptyOffer(id), types: role === 'cover' ? ['image'] : ['language'], vision: role === 'vision',
+      scenarios: role === 'vision' ? ['analysis', 'vision'] : [role],
+    })
+    const enabled = new Set(enabledModelIds(settings, connection, current.models))
+    if (role) enabled.add(id)
+    const next = { ...connection, custom_models: offers, enabled_model_ids: [...enabled] }
+    const models = current.models.map(row => row.id !== id ? row : {
+      ...row, kind: 'other' as const, capability: null, capability_source: undefined, analysis: false, image: false,
+    })
+    versions.current[connection.id] = (versions.current[connection.id] || 0) + 1
+    setBusy(old => ({ ...old, [connection.id]: false }))
+    setLists(old => ({ ...old, [connection.id]: mergeCustomList(next, { ...current, models }) }))
+    update({ connections: settings.connections.map(c => c.id === next.id ? next : c) })
   }
   const chooseProvider = (role: Role, provider: ProviderKey) => {
     if (!settings) return
@@ -286,15 +308,17 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     return analysis.length ? [...analysis, ...live.filter(id => !analysis.includes(id))] : live
   }
 
+  // ID-only responses do not establish what a model supports. Retain evidence from discovery.
+  const listedRows = (ids: string[], previous?: ModelList) => {
+    const known = new Map(previous?.models.map(row => [row.id, row]))
+    return ids.map(id => known.get(id) ?? { id, kind: 'other' as const, capability: null, analysis: false, image: false })
+  }
+
   const backfillModels = (connection: Connection, listing?: { models?: string[]; recommended?: Record<string, string[]> }) => {
     const ids = orderedIds(listing)
     if (ids.length) {
       setLists(old => {
-        // The validation response contains IDs only. Keep known capabilities until discovery completes.
-        const known = new Map(old[connection.id]?.models.map(entry => [entry.id, entry]))
-        const models = ids.map(id => known.get(id) ?? {
-          id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id),
-        })
+        const models = listedRows(ids, old[connection.id])
         return { ...old, [connection.id]: mergeCustomList(connection, {
           models, source: 'live', preview: false, updated_at: Date.now(),
         }) }
@@ -314,7 +338,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
         setLists(old => ({
           ...old,
           [connection.id]: mergeCustomList(connection, {
-            models: orderedIds(listing).map(id => ({ id, capability: null, analysis: !isImageMarker(id), image: isImageMarker(id) })),
+            models: listedRows(orderedIds(listing), old[connection.id]),
             source: listing.source === 'cache' || listing.source === 'catalog' ? listing.source : 'live',
             preview: false,
             updated_at: Date.now(),
@@ -800,7 +824,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
     settings, lists, busy, listErrors, dirty, dirtyRef, conflicted, saving: saving || matching, testing, error, configureProvider, testWarning, setError, main, keyHints,
-    load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
+    load, discover, fetchModels, update, editConnection, declareModel, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test, cancelTrial,
     testingKind, lastTrialByConnection,

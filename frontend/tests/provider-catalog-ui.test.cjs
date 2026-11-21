@@ -365,6 +365,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
 
 test('provider detail uses two-column connect/models layout without analysis ModelPicker', () => {
   const Detail = loadTs('ProviderDetail.tsx', {
+    react: { ...React, useState: initial => [initial, () => {}] },
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },

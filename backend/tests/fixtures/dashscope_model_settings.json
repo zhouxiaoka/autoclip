@@ -11,6 +11,6 @@
     {"id": "qwen-audio-3.1-asr-flash", "kind": "asr", "analysis": false, "image": false, "capability": null, "asr": true, "asr_supported": true, "asr_preview": false},
     {"id": "fixture-alpha", "kind": "language", "analysis": true, "image": false, "capability": "multimodal"},
     {"id": "fixture-beta", "kind": "image", "analysis": false, "image": true, "capability": "text"},
-    {"id": "fixture-max-new", "kind": "language", "analysis": true, "image": false, "capability": null}
+    {"id": "fixture-max-new", "kind": "other", "analysis": false, "image": false, "capability": null}
   ]
 }

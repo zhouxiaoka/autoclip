@@ -717,7 +717,7 @@ def default_ocr_model(
         )
         if not alt:
             return ""
-        cached = remembered_model(catalog, models_base, api_key, alt)
+        cached = remembered_model(catalog, models_base, api_key, alt, purpose="ocr")
         return cached or alt
     if is_seedream(provider=kind, model=model, base_url=base_url):
         return SEEDREAM_DEFAULT_OCR
@@ -824,7 +824,7 @@ def read_image_text(
         resolve_available_model,
     )
     if saved:
-        current = remembered_model(catalog, models_base, api_key, saved) or saved
+        current = remembered_model(catalog, models_base, api_key, saved, purpose="ocr") or saved
     else:
         current = default_ocr_model(kind, model=model, base_url=base_url, api_key=api_key, http=http)
     if not current:
@@ -871,9 +871,9 @@ def read_image_text(
     data = _raise_for_status(resp)
     # Remember only an id that answered, so the next cover does not repeat the 404.
     if saved and current != saved:
-        remember_model(catalog, models_base, api_key, saved, current)
+        remember_model(catalog, models_base, api_key, saved, current, purpose="ocr")
     if replaced and replaced != current:
-        remember_model(catalog, models_base, api_key, replaced, current)
+        remember_model(catalog, models_base, api_key, replaced, current, purpose="ocr")
     if kind == "dashscope":
         return _text_from_dashscope_ocr(data)
     return _text_from_chat_ocr(data)

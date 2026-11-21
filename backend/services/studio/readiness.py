@@ -66,8 +66,9 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
     from backend.core.model_catalog import is_image_model
     if is_image_model(label):
         return _check(False, 'image_model_in_analysis', 'settings_ai', label=label, trial_ok=trial)
-    if ai_models.failed_check(connection, 'analysis', label):
-        return _check(False, 'validation_failed', 'settings_ai', label=label, trial_ok=trial)
+    failure = ai_models.failure_scope(connection, 'analysis', label)
+    if failure:
+        return _check(False, failure, 'settings_ai', label=label, trial_ok=trial)
     return _check(True, 'configured', label=label, trial_ok=trial)
 
 
@@ -90,8 +91,6 @@ def ensure_analysis_usable() -> None:
     if check['code'] == 'image_model_in_analysis':
         from backend.services.provider_validation import IMAGE_MODEL_IN_ANALYSIS_HINT
         raise UserFacingError(IMAGE_MODEL_IN_ANALYSIS_HINT)
-    if check['code'] == 'validation_failed':
-        raise UserFacingError('当前模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
     if ai_models.vision_follow_lacks_capability(settings):
         from backend.services.provider_validation import VISION_BLOCK_MESSAGE
         raise UserFacingError(VISION_BLOCK_MESSAGE)
@@ -128,7 +127,10 @@ def _transcription(settings: ai_models.ModelSettings) -> dict:
     connection = next((item for item in settings.connections if item.id == choice.connection_id), None)
     label = f'云端 {choice.model}'.strip() if choice.model else '云端转写'
     trial = _trial_ok(connection)
-    if choice.model and _connection_ready(connection) and not ai_models.failed_check(connection, 'transcription', choice.model):
+    if choice.model and _connection_ready(connection):
+        failure = ai_models.failure_scope(connection, 'transcription', choice.model)
+        if failure:
+            return _check(False, failure, 'settings_transcription', label=choice.model, trial_ok=trial)
         return _check(True, 'cloud_configured', label=label, trial_ok=trial)
     return _check(False, 'cloud_not_configured', 'settings_transcription', label=label, trial_ok=trial)
 
@@ -162,10 +164,11 @@ def _visual(settings: ai_models.ModelSettings, mode: str | None = None) -> dict:
     if mode == 'subtitle':
         return _check(True, 'not_required', label='未启用')
     connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
-    if connection and ai_models.failed_check(connection, 'vision', vision_label):
+    failure = ai_models.failure_scope(connection, 'vision', vision_label) if connection else None
+    if failure:
         if mode == 'auto':
             return _check(True, 'optional', label='未启用')
-        return _check(False, 'validation_failed', 'settings_vision', label=vision_label or None)
+        return _check(False, failure, 'settings_vision', label=vision_label or None)
     if ai_models.vision_follow_lacks_capability(settings):
         return _check(False, 'vision_unsupported', 'settings_vision', label=vision_label or None)
     if mode != 'visual':

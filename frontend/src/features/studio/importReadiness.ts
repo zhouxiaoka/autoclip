@@ -118,7 +118,8 @@ export function repairDestination(repair: RepairAction): string | null {
 export function asrReadinessProperties(report: ImportReadiness | null, hasSubtitle: boolean): Record<string, unknown> {
   const checks = report && report.checks
   const transcription = checks && checks.transcription
-  const code = transcription && typeof transcription.code === 'string' ? transcription.code : undefined
+  const reason = transcription?.code
+  const code = reason === 'validation_failed' || reason === 'model_validation_failed' ? 'cloud_not_configured' : reason
   let provider = 'whisper_local'
   if (typeof code === 'string' && code.indexOf('sensevoice') === 0) provider = 'sensevoice_local'
   else if (typeof code === 'string' && code.indexOf('cloud') === 0) provider = 'cloud'

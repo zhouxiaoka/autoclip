@@ -414,8 +414,15 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
 
 
 def failed_check(connection: Connection, purpose: Scenario, model: str) -> bool:
-    return connection.validation_status == 'failed' or any(
-        check.purpose == purpose and check.model == model for check in connection.failed_model_checks)
+    return failure_scope(connection, purpose, model) is not None
+
+
+def failure_scope(connection: Connection, purpose: Scenario, model: str) -> str | None:
+    if connection.validation_status == 'failed':
+        return 'validation_failed'
+    if any(check.purpose == purpose and check.model == model for check in connection.failed_model_checks):
+        return 'model_validation_failed'
+    return None
 
 
 def transcription_needs_repair(settings: ModelSettings) -> bool:
@@ -436,8 +443,12 @@ def ensure_runtime_bindings(settings: ModelSettings, *, require_vision: bool = F
             continue
         connection = connection_for(settings, binding)
         required = purpose == 'analysis' or require_vision or settings.analysis_mode == 'visual'
-        if required and failed_check(connection, purpose, binding.model):
-            raise ValueError('当前模型连接未通过校验。请到「设置 → 服务商与模型」更换型号或重新测试。')
+        if required:
+            failure = failure_scope(connection, purpose, binding.model)
+            if failure == 'model_validation_failed':
+                raise ValueError(f'型号 {binding.model} 未通过校验，请更换型号或重新测试。')
+            if failure:
+                raise ValueError('当前模型连接未通过校验。请到「设置 → 服务商与模型」检查密钥或接口地址。')
 
 
 def require_analysis(settings: ModelSettings) -> Assignment:
@@ -490,29 +501,17 @@ def image_endpoint(connection: Connection) -> dict:
 
 
 def capability(settings: ModelSettings, assignment: Assignment) -> str | None:
-    """The one capability answer for a binding: readiness, the pipeline, save checks and
-    the settings list all use this. A name classified as text-only stays text even when
-    a live list or an explicit multimodal flag says otherwise. Other explicit
-    multimodal/text choices win; auto asks the provider and catalog metadata first,
-    then (for named providers, not a generic compatible gateway) the model-name rules
-    in supports_vision (gpt-5.x, gpt-6.x, o1/o3/o4-mini ...). auto never turns an
-    unknown name into "text": it stays None, which simply means "not confirmed to see images"."""
+    """Resolve an explicit choice or discover capabilities for the selected account.
+    Unrecognized models keep an unknown capability until the user declares a purpose.
+    """
     from backend.core.model_catalog import known_text_only
     if known_text_only(assignment.model):
         return 'text'
     if assignment.capability != 'auto':
         return assignment.capability
     from backend.core.model_registry import lookup_capability
-    known = lookup_capability(connection_for(settings, assignment), assignment.model)
-    if known:
-        return known
     connection = connection_for(settings, assignment)
-    if connection is None or connection.provider == 'compatible':
-        # A self-hosted "compatible" gateway can alias any name; keep requiring
-        # provider metadata or an explicit choice there.
-        return None
-    from backend.core.model_catalog import supports_vision
-    return 'multimodal' if supports_vision(assignment.model) else None
+    return lookup_capability(connection, assignment.model) if connection else None
 
 
 def sees_images(settings: ModelSettings, assignment: Assignment | None) -> bool:
@@ -553,10 +552,10 @@ def vision_endpoint(settings: ModelSettings) -> dict | None:
     return chat_endpoint(connection_for(settings, binding), binding.model)
 
 
-def _analysis_substitution_notice(settings: ModelSettings) -> dict | None:
+def _substitution_notice(settings: ModelSettings, purpose: str) -> dict | None:
     from backend.core.model_recovery import analysis_catalog, substitution_notice
     from backend.services.studio.failure_identity import connection_identity
-    binding = settings.analysis
+    binding = settings.analysis if purpose == 'analysis' else vision_follow_binding(settings)
     if not binding or binding.model_source != 'preset':
         return None
     try:
@@ -566,7 +565,8 @@ def _analysis_substitution_notice(settings: ModelSettings) -> dict | None:
         return None  # An incomplete endpoint can still be opened and repaired in Settings.
     provider = analysis_catalog(identity=connection_identity(connection, binding.model),
                                 base_url=endpoint['base_url'], named=[connection.provider])
-    return substitution_notice('analysis', provider, endpoint['base_url'], endpoint['api_key'], binding.model)
+    notice = substitution_notice(purpose, provider, endpoint['base_url'], endpoint['api_key'], binding.model)
+    return {**notice, 'connection_id': connection.id} if notice else None
 
 
 def public(settings: ModelSettings) -> dict:
@@ -589,8 +589,9 @@ def public(settings: ModelSettings) -> dict:
             value.setdefault('migration_warnings', []).append('transcription_configuration_invalid')
     value['transcription_needs_repair'] = transcription_needs_repair(settings)
     value['saved'] = path().exists() and 'settings_configuration_invalid' not in settings._migration_warnings
-    if notice := _analysis_substitution_notice(settings):
-        value['model_substitutions'] = [notice]
+    substitutions = [notice for purpose in ('analysis', 'vision') if (notice := _substitution_notice(settings, purpose))]
+    if substitutions:
+        value['model_substitutions'] = substitutions
     for c in value['connections']:
         key = c.pop('api_key') or ''
         c['has_key'] = bool(key)
