@@ -262,6 +262,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
   }
   const m = { settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
   const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
     './AddCustomProviderDialog': { default: () => null },
     react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {}, useRef: initial => ({ current: initial }) },
     'react-i18next': { useTranslation: () => {} },
@@ -325,6 +326,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
       update: () => {}, save: async () => ({}),
     }
     const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
       './AddCustomProviderDialog': { default: () => null },
       react: {
         ...React,
@@ -561,6 +563,27 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === 'API 密钥'))
     assert.ok(flatten(tree).some(n => n.type === 'button' && /one_click|一键获取/.test(textOf(n))))
   }
+})
+
+test('leaving the key field to save does not invalidate the model list or repeat a key edit', () => {
+  const Fields = loadTs('ProviderFields.tsx', {
+    react: { ...React, useState: () => [false, () => {}] },
+    antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
+    '../../i18n': i18n, '../../ui': ui, '../../utils/externalLinks': {}, '../../analytics/events': {},
+  }).default
+  const connection = { id: 'account', provider: 'dashscope', base_url: '', has_key: true }
+  const edits = []
+  const field = () => flatten(Fields({
+    connection, hideProvider: true, placement: 'settings_model',
+    onEdit: patch => { edits.push(patch.api_key); Object.assign(connection, patch) },
+  })).find(node => node.type === 'password').props
+  const event = value => ({ target: { value } })
+  field().onBlur(event(''))
+  field().onChange(event(' example-key '))
+  field().onBlur(event('example-key'))
+  field().onBlur(event('autofilled-key'))
+  field().onChange(event(''))
+  assert.deepEqual(edits, ['example-key', 'autofilled-key', undefined])
 })
 
 test('pasting an OpenRouter key into its compatible connection stays in the field (#621)', () => {

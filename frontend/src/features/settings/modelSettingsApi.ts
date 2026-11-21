@@ -20,6 +20,7 @@ export interface Connection {
   image_base_url: string
   validation_status?: 'ok' | 'failed' | 'unchecked' | 'transient'
   validation_error_type?: string
+  failed_model_checks?: { purpose: 'analysis' | 'vision' | 'transcription' | 'cover'; model: string }[]
   /** 1.5.9 3B: ISO stamp while retry is locked after insufficient_quota. */
   quota_exhausted_at?: string | null
   /** F2 trial-run card state — F5 import area reads the same fields. */
@@ -37,8 +38,10 @@ export interface Connection {
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: Source }
 export interface ModelSettings {
+  revision?: number
   version: 1
   saved?: boolean
+  transcription_needs_repair?: boolean
   migration_warnings?: string[]
   model_substitutions?: { purpose: string; saved_model: string; replacement: string }[]
   catalog_version?: number
@@ -75,9 +78,18 @@ export interface FetchListResult {
   message_key?: string
   base_url_host?: string
 }
+const editableFields = [
+  'connections', 'analysis', 'vision', 'transcription', 'cover', 'cover_enabled', 'cover_follows_analysis',
+  'prefer_local_cover', 'allow_send_frame', 'analysis_mode', 'allow_visual_screening', 'chunk_size',
+  'min_score_threshold', 'max_clips_per_collection', 'seen_notices',
+] as const
+
 export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
-  save: (value: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', value),
+  save: (value: ModelSettings, baseline?: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', {
+    ...value,
+    edited_fields: baseline && editableFields.filter(key => JSON.stringify(value[key]) !== JSON.stringify(baseline[key])),
+  }),
   discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
   test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis', probeKind: 'quick' | 'trial' = 'quick', opts?: { signal?: AbortSignal; language?: 'zh' | 'en' }) =>
     api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose, probe_kind: probeKind, language: opts?.language || 'zh' }, opts?.signal ? { signal: opts.signal } : undefined),

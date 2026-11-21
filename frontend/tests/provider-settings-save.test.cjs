@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
-function settingsHook(initial, transport, requireCloudTranscription = false, guideBus) {
+function settingsHook(initial, transport, requireCloudTranscription = false, guideBus, notifySettingsSaved = () => {}) {
   let cursor = 0
   const slots = []
   const mountEffects = []
@@ -26,7 +26,7 @@ function settingsHook(initial, transport, requireCloudTranscription = false, gui
     antd: { message: { success() {}, error() {} } },
     '../../i18n': { t: text => text },
     '../studio/api': { errorText: () => 'redacted' },
-    '../studio/settingsReturn': { notifySettingsSaved() {} },
+    '../studio/settingsReturn': { notifySettingsSaved },
     '../../analytics/experience': {
       beginExperience: () => () => {},
       beginDebouncedEditDiscovery: () => () => {},
@@ -67,6 +67,24 @@ const whisperSettings = () => ({
   chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
 })
 
+test('only a usable saved analysis selection returns the user to production', async () => {
+  const base = whisperSettings()
+  for (const [settings, expected] of [
+    [{ ...base, analysis: null }, 0],
+    [{ ...base, connections: [{ ...base.connections[0], validation_status: 'failed', validation_error_type: 'invalid_key' }] }, 0],
+    [{ ...base, analysis_mode: 'visual' }, 0],
+    [base, 1],
+  ]) {
+    let writes = 0, notifications = 0
+    const render = settingsHook(settings, { save: async value => { writes++; return value } },
+      false, undefined, () => { notifications++ })
+    await render().load()
+    assert.equal((await render().save()).ok, true)
+    assert.equal(writes, 1)
+    assert.equal(notifications, expected)
+  }
+})
+
 test('the save that follows a pending cloud choice persists Bailian transcription', async () => {
   const slots = loadTs('defaultModelSlots.ts', { '../../i18n': { t: text => text } })
   let persisted
@@ -92,6 +110,7 @@ test('the save that follows a pending cloud choice persists Bailian transcriptio
 test('one-key setup validates the account and commits four assignments in one write', async () => {
   const writes = []
   const initial = whisperSettings()
+  initial.transcription.model_source = 'preset'
   const render = settingsHook(initial, {
     discover: async () => ({ source: 'live', models: [
       { id: 'qwen-plus', analysis: true, capability: 'text' },
@@ -113,6 +132,27 @@ test('one-key setup validates the account and commits four assignments in one wr
   assert.equal(saved.cover_enabled, true)
   assert.equal(saved.allow_send_frame, false)
   assert.equal(saved.transcription.provider, 'cloud')
+})
+
+test('catalog-only setup releases a following cover on the previous account', async () => {
+  const initial = whisperSettings()
+  initial.analysis.model_source = 'preset'
+  initial.cover = { ...initial.analysis, model: 'qwen-image-2.1-pro' }
+  initial.cover_enabled = true
+  initial.cover_follows_analysis = true
+  const other = { ...initial.connections[0], id: 'other', provider: 'openai', base_url: 'https://api.openai.com/v1' }
+  initial.connections.push(other)
+  let written
+  const render = settingsHook(initial, {
+    test: async () => ({ ok: true }),
+    save: async value => { written = value; return { ...value, saved: true } },
+  })
+  await render().load()
+  assert.equal((await render().configureProvider(other)).ok, true)
+  assert.equal(written.analysis.connection_id, 'other')
+  assert.equal(written.cover, null)
+  assert.equal(written.cover_enabled, false)
+  assert.equal(written.connections.length, 2)
 })
 
 for (const cause of ['invalid key', 'missing cloud ASR']) {
@@ -190,9 +230,12 @@ test('catalog tests and first save use the chosen model, and saving never starts
   assert.deepEqual(calls, [['gpt-5-mini', 'quick'], ['gpt-5-mini', 'trial']])
   render().update({ analysis: { ...render().settings.analysis, model: 'changed-model' } })
   assert.equal((await render().save()).ok, true)
-  assert.deepEqual(calls.slice(2), [['changed-model', 'quick']])
-  assert.equal(writes[1].connections[0].validation_status, 'transient')
+  assert.equal(calls.length, 2, 'saving a selection makes no model request')
+  assert.equal(writes[1].analysis.model, 'changed-model')
   assert.equal(writes[1].connections[0].api_key, 'fixture')
+  await render().testCatalogProvider('openai')
+  assert.deepEqual(calls.slice(2), [['changed-model', 'quick']])
+  assert.equal(render().settings.connections[0].validation_status, 'transient')
 })
 
 test('OpenRouter key guide discovers an analysis model before the first save (#621)', async () => {
@@ -259,5 +302,8 @@ test('saving during a provider list refresh reuses the validated vision capabili
   assert.deepEqual(calls, [[model, true, 'quick']])
   render().editConnection(render().main, { api_key: 'rotated-fixture' })
   await render().save()
-  assert.equal(calls.length, 2, 'new credentials require a new check')
+  assert.equal(calls.length, 1)
+  assert.equal(render().main.validation_status, 'unchecked', 'new credentials were saved without a check')
+  await render().testCatalogProvider('openai')
+  assert.equal(calls.length, 2)
 })

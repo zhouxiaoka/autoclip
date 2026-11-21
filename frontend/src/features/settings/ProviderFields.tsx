@@ -51,6 +51,10 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const showHint = liveHint && liveHint !== key
   const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || ((failed || transient) && errorType) || ''
   const keyLink = sponsorKeyLink(key)
+  const editKey = (value: string) => {
+    const next = value.trim()
+    if (next !== (connection.api_key ?? '')) onEdit({ api_key: next || (connection.has_key ? undefined : '') })
+  }
   const addressEditable = canEditAddress(key)
   const officialHostsOnly = key === 'deepseek' || key === 'gemini' || key === 'api88' || key === 'infistar'
   return <>
@@ -76,8 +80,8 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
               const text = event.clipboardData?.getData('text') || ''
               if (text && offerPastedKey(text, key || connection.provider, connection.base_url)) event.preventDefault()
             }}
-            onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
-            onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
+            onChange={e => editKey(e.target.value)}
+            onBlur={e => editKey(e.target.value)} />
           {(() => {
             const promo = connection.provider === 'apimart' || connection.provider === 'api88' || connection.provider === 'infistar' ? connection.provider : null
             const href = promo ? promotionRegisterUrl(promo, preset?.sponsor?.registerUrl || '') : null

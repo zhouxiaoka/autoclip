@@ -189,8 +189,10 @@ def load_config() -> CoverConfig:
     settings = ai.load()
     if settings:
         binding = settings.cover
-        endpoint = ai.image_endpoint(ai.connection_for(settings, binding)) if binding else {}
-        return CoverConfig(enabled=settings.cover_enabled, model=binding.model if binding else '',
+        connection = ai.connection_for(settings, binding) if binding else None
+        endpoint = ai.image_endpoint(connection) if connection else {}
+        enabled = bool(binding and connection and settings.cover_enabled and not ai.failed_check(connection, 'cover', binding.model))
+        return CoverConfig(enabled=enabled, model=binding.model if binding else '',
                            provider=endpoint.get('provider', 'openai'), base_url=endpoint.get('base_url', ''),
                            api_key=endpoint.get('api_key', ''), allow_send_frame=settings.allow_send_frame,
                            ocr_model=settings.cover_ocr_model,

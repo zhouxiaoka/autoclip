@@ -20,7 +20,7 @@ _lock = threading.Lock()
 # (provider, host, key digest, saved model) -> substitute id
 _remembered: dict[tuple[str, str, str, str], str] = {}
 # purpose + saved id -> {purpose, saved_model, replacement}. Model ids only.
-_notices: dict[tuple[str, str], dict[str, str]] = {}
+_notices: dict[tuple[str, str, str, str, str], dict[str, str]] = {}
 # Successful account lists, 60s. A timeout is not stored.
 _LIST_TTL_S = 60.0
 _lists: dict[tuple[str, str, str], tuple[float, object]] = {}
@@ -83,18 +83,16 @@ def remember_model(
     with _lock:
         _remembered[_slot(provider, base_url, api_key, saved)] = alt
         if purpose in {"analysis", "vision", "ocr"}:
-            _notices[(purpose, saved)] = {
+            _notices[(purpose, *_slot(provider, base_url, api_key, saved))] = {
                 "purpose": purpose, "saved_model": saved, "replacement": alt,
             }
 
 
-def substitution_notices(purpose: str = "") -> list[dict[str, str]]:
-    """In-process swaps. Ids only: no keys, hosts, or response text."""
+def substitution_notice(purpose: str, provider: str, base_url: str, api_key: str, saved_model: str):
+    """Only show a substitution observed for the selected account and purpose."""
     with _lock:
-        items = [dict(item) for item in _notices.values()]
-    if purpose:
-        return [item for item in items if item["purpose"] == purpose]
-    return items
+        notice = _notices.get((purpose, *_slot(provider, base_url, api_key, saved_model)))
+        return dict(notice) if notice else None
 
 
 def _cached_account_list(*, base_url: str, api_key: str, provider: str, http):

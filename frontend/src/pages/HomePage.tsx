@@ -169,7 +169,7 @@ export default function HomePage() {
           capability: aiSettings.analysis?.capability || 'auto',
           model_source: 'user',
         },
-      })))
+      })), forSave(aiSettings))
       setAiSettings(saved)
       if (managed) await studioApi.retry(projectId, { scope: 'project', retry_kind: 'switch_model' })
       else await projectApi.retryProcessing(projectId)

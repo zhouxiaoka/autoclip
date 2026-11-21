@@ -7,7 +7,7 @@ import { t } from '../../i18n'
  * `vision === null` follows analysis and warns when that model has no vision.
  * There is no video purpose slot.
  */
-import { connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
+import { failedCheck, connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
 export { modelHasVision } from './modelSettingsLogic'
 import { listFromOffers } from './customProvider'
 import { enabledModelIds } from './modelVisibility'
@@ -84,7 +84,7 @@ function addOffer(byId: Record<string, ModelOffer[]>, offer: ModelOffer) {
   byId[offer.modelId] = list
 }
 
-/** Fixed choices can be validated on save. Smart routing requires a verified account list. */
+/** Fixed choices need a configured account. Smart routing requires a verified account list. */
 export function collectModelGroups(settings: ModelSettings, lists: Record<string, ModelList>, purpose: PurposeId): ModelGroup[] {
   const byId: Record<string, ModelOffer[]> = Object.create(null)
   for (const connection of settings.connections) {
@@ -114,7 +114,7 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
       if ((purpose === 'analysis' || purpose === 'vision') && isImageModel(modelId)) continue
       addOffer(byId, {
         modelId, provider, connectionId: connection.id, displayName: displayName(connection),
-        connected: verified, selectable: connection.validation_status !== 'failed',
+        connected: verified && !failedCheck(connection, purpose, modelId), selectable: !failedCheck(connection, purpose, modelId),
       })
     }
   }
@@ -154,7 +154,9 @@ function connectionName(settings: ModelSettings, id?: string): string | undefine
 }
 
 export function slotSummary(settings: ModelSettings, _lists: Record<string, ModelList>, purpose: PurposeId): SlotLine {
-  if (purpose === 'cover' && !settings.cover_enabled) return { kind: 'off' }
+  if (purpose === 'cover' && !settings.cover_enabled) {
+    return { kind: settings.prefer_local_cover || settings.cover?.model ? 'off' : 'empty' }
+  }
   if (purpose === 'vision' && !settings.vision) {
     return settings.analysis?.model ? { kind: 'follow', model: settings.analysis.model } : { kind: 'empty' }
   }
@@ -179,7 +181,7 @@ function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: 
   const connection = settings.connections.find(row => row.id === connectionId)
   if (!connection || !endpointProviderReady(connection)) return settings
   if (purpose === 'transcription') {
-    return { ...settings, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
+    return { ...settings, transcription_needs_repair: false, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
   }
   if (purpose === 'cover') {
     // E1: picking a fixed or smart cover model is an explicit provider choice → independent.
@@ -271,7 +273,8 @@ export function applyCloudTranscription(
     const preset = getProvider(providerId)
     const connection = preset ? findCatalogConnection(settings, preset) : undefined
     if (!preset || !connectionReadyForCloud(connection)) continue
-    const preferred = preset.candidates.asr || []
+    const visible = (id: string) => (!connection.enabled_model_ids || connection.enabled_model_ids.includes(id)) && !failedCheck(connection, 'transcription', id)
+    const preferred = (preset.candidates.asr || []).filter(visible)
     const list = lists[connection.id]
     const status = cloudListStatus(list)
     if (status === 'loading') {
@@ -285,7 +288,7 @@ export function applyCloudTranscription(
       continue
     }
     if (status !== 'ready' || !list) continue
-    const model = preferred.find(id => usableCloudAsr(list, id)) || ''
+    const model = preferred.find(id => usableCloudAsr(list, id)) || list.models.find(entry => visible(entry.id) && usableCloudAsr(list, entry.id))?.id || ''
     if (!model) continue
     return selectedCloud(settings, providerId, preset.short_name || preset.display_name, model, connection.id)
   }
@@ -322,7 +325,7 @@ export function cloudTranscriptionSavePatch(
 export function applyLocalTranscription(
   settings: ModelSettings, provider: 'whisper_local' | 'sensevoice_local', model: string,
 ): ModelSettings {
-  return { ...settings, transcription: { provider, model, model_source: 'user' } }
+  return { ...settings, transcription_needs_repair: false, transcription: { provider, model, model_source: 'user' } }
 }
 
 /** Enums and booleans only — never model ids, keys, URLs, or user content. */

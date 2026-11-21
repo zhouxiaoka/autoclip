@@ -39,11 +39,15 @@ test('replacing the key removes retired routes on that account while preserving 
   assert.equal(next.cover, null)
   assert.equal(next.transcription.provider, 'whisper_local')
 })
-test('a cover retained on a different provider stays independently usable after a text-only switch', () => {
-  const previous = { ...base, cover_enabled: true, cover_follows_analysis: true, cover: { connection_id: 'old', model: 'existing-cover' } }
-  const next = recommendProviderSetup(previous, connection, { source: 'live', models: [list.models[0]] })
-  assert.equal(next.cover, previous.cover)
-  assert.equal(next.cover_follows_analysis, false)
+test('switching accounts cannot convert a following cover into a hidden independent route', () => {
+  for (const follow of [true, false]) {
+    const previous = { ...base, analysis: { connection_id: 'old', model: 'old-chat', model_source: 'preset' },
+      cover_enabled: true, cover_follows_analysis: follow, cover: { connection_id: 'old', model: 'existing-cover', model_source: 'preset' } }
+    const next = recommendProviderSetup(previous, connection, { source: 'live', models: [list.models[0]] })
+    assert.equal(next.cover, follow ? null : previous.cover)
+    assert.equal(next.cover_enabled, !follow)
+    assert.equal(next.cover_follows_analysis, false)
+  }
 })
 
 test('a saved local-only choice survives one-key setup even when an image model is available', () => {
@@ -51,4 +55,18 @@ test('a saved local-only choice survives one-key setup even when an image model 
   assert.equal(next.cover.model, 'gpt-image-1')
   assert.equal(next.cover_enabled, false)
   assert.equal(next.allow_send_frame, false)
+})
+
+test('one-key keeps manually assigned purposes and the chosen account, even when another account advertises the same model', () => {
+  const manual = { connection_id: 'old', model: 'vision', model_source: 'user' }
+  const speech = { provider: 'whisper_local', model: 'base', model_source: 'user' }
+  const before = { ...base, analysis: manual, transcription: speech, cover: { ...manual, model: 'art' }, cover_enabled: true, cover_follows_analysis: false }
+  const next = recommendProviderSetup(before, connection, list)
+  assert.equal(next.analysis, before.analysis)
+  assert.equal(next.transcription, speech)
+  assert.equal(next.cover, before.cover)
+  assert.equal(next.cover_follows_analysis, false)
+  assert.equal(next.vision.connection_id, connection.id)
+  const same = recommendProviderSetup({ ...base, analysis: { ...manual, connection_id: connection.id } }, connection, list)
+  assert.equal(same.analysis.model_source, 'user')
 })

@@ -39,7 +39,7 @@ export interface SubmissionOptions {
 }
 
 /** Analysis is missing a usable model. A failed validation stays on the import zone. */
-export const NOT_CONFIGURED_CODES = ['not_configured', 'no_model', 'invalid_connection'] as const
+export const NOT_CONFIGURED_CODES = ['not_configured', 'invalid_connection'] as const
 
 export function analysisNeedsSetup(report: ImportReadiness | null | undefined): boolean {
   const analysis = report?.checks?.analysis

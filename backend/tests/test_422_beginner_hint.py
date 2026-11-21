@@ -42,9 +42,11 @@ def test_overlong_key_says_key_too_long_in_chinese(client):
 
 
 def test_object_level_error_drops_value_error_prefix(client):
-    response = client.put("/api/v1/settings/ai-models", json=_cfg(cover_enabled=True, cover=None))
+    payload = _cfg()
+    payload["connections"].append(dict(payload["connections"][0]))
+    response = client.put("/api/v1/settings/ai-models", json=payload)
     messages = _messages(response)
-    assert messages == ["请选择封面生图模型"]
+    assert messages == ["服务连接 ID 不能重复"]
     assert "Value error" not in response.text.split('"input"')[0]
 
 

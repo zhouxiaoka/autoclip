@@ -33,6 +33,7 @@ import './studio.css'
 import './quick-output.css'
 
 function issueCopy(item: ReadinessIssue) {
+  if (item.code === 'no_model') return t('服务商已保存，请选择精彩片段分析模型。')
   if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
   if (item.key === 'analysis' && item.code === 'image_model_in_analysis') return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model: item.label || '' })
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
@@ -50,6 +51,7 @@ function issueCopy(item: ReadinessIssue) {
 }
 
 function repairLabel(item: ReadinessIssue) {
+  if (item.code === 'no_model') return t('选择分析模型')
   if (item.repair === 'settings_ai') return (item.code === 'validation_failed' || item.code === 'image_model_in_analysis') ? t('去设置修改') : t('连接 AI 服务')
   if (item.repair === 'install_whisper') return item.model ? t('下载转写模型') : t('安装 Whisper')
   if (item.repair === 'settings_transcription') return t('转写设置')
@@ -98,6 +100,7 @@ function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
   if (reason === 'analysis') {
     const code = readiness?.checks?.analysis?.code
+    if (code === 'no_model') return t('服务商已保存，请选择精彩片段分析模型。')
     if (code === 'image_model_in_analysis') {
       const model = readiness?.checks?.analysis?.label || ''
       return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model })
@@ -304,7 +307,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       return
     }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
-    const destination = repairDestination(item.repair)
+    const destination = item.code === 'no_model' ? '/settings?section=analysis' : repairDestination(item.repair)
     if (destination) openSettings(destination)
   }
   // #418 rewrite: the one install-recovery controller (shared with the confirm page): install -> download ->

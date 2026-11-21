@@ -20,7 +20,9 @@ MODELS = {
     'grok': ['grok-imagine-image-2.0', 'grok-imagine-image', 'grok-imagine-image-quality'],
     'glm': ['glm-image', 'cogview-4-250304', 'cogview-4', 'cogview-3-flash'],
     'dashscope': [
-        'qwen-image-3.0-pro', 'qwen-image-3.0', 'qwen-image-2.0-pro', 'qwen-image-2.0',
+        # Native multimodal-generation supports both 2.1 IDs for text-to-image.
+        # https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference
+        'qwen-image-3.0-pro', 'qwen-image-3.0', 'qwen-image-2.1-pro', 'qwen-image-2.1-turbo', 'qwen-image-2.0-pro', 'qwen-image-2.0',
         'qwen-image-2.0-pro-2026-06-22', 'qwen-image-2.0-pro-2026-04-22', 'qwen-image-2.0-pro-2026-03-03', 'qwen-image-2.0-2026-03-03',
         'qwen-image-max', 'qwen-image-max-2025-12-30', 'qwen-image-plus', 'qwen-image-plus-2026-01-09', 'qwen-image',
         'wan2.7-image-pro', 'wan2.7-image', 'wan2.6-t2i', 'wan2.6-image', 'wan2.5-t2i-preview',

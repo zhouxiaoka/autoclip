@@ -116,6 +116,7 @@ def effective():
         return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
                 # the identity of THIS connection, frozen with the endpoint it resolves to.
                 'identity': settings_identity(settings, 'vision'),
+                'model_source': binding.model_source if binding else None,
                 'mode': 'custom' if settings.vision else 'text_model', 'source': 'connections',
                 'text_model': binding.model if binding else '', 'timeout': settings.vision_timeout}
     saved = _saved()

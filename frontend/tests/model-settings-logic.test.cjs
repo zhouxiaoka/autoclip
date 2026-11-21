@@ -334,7 +334,8 @@ test('save validation reports the first blocking field in page order and prunes 
   const ok = { ...noModel, analysis: { connection_id: 'a', model: 'qwen3.8-flash', capability: 'auto' } }
   assert.equal(logic.saveIssue(ok), null)
   const cover = { ...ok, cover_enabled: true, cover: logic.cleanBinding('a') }
-  assert.deepEqual(plain(logic.saveIssue(cover)), { role: 'cover', reason: 'model' })
+  assert.equal(logic.saveIssue(cover), null)
+  assert.equal(logic.forSave(cover).cover_enabled, false)
   const cloud = { ...ok, transcription: { provider: 'cloud', connection_id: 'a', model: '' } }
   assert.deepEqual(plain(logic.saveIssue(cloud)), { role: 'transcription', reason: 'model' })
   const doc = logic.forSave({ ...ok, connections: [...ok.connections, conn('blank', 'compatible')], cover: { connection_id: 'a', model: '', capability: 'auto' } })
@@ -361,15 +362,12 @@ test('save validation reports the first blocking field in page order and prunes 
   assert.equal(local.connections.map(c => c.id).includes('ollama'), true)
 })
 
-test('AI covers fall back to frames only when the service has no image model at all', () => {
+test('saving an unassigned cover never requires discovery or records a local-frame preference', () => {
   const state = { ...fresh(), cover_enabled: true, cover: null, connections: [conn('legacy-analysis', 'deepseek', { api_key: 'k' })] }
-  const textOnly = { 'legacy-analysis': { models: [{ id: 'deepseek-flash', capability: 'text', analysis: true }], source: 'live' } }
-  const fallback = logic.coverFallback(state, textOnly)
-  assert.deepEqual([fallback.cover_enabled, fallback.cover], [false, null])
-  assert.equal(logic.saveIssue({ ...fallback, analysis: { connection_id: 'legacy-analysis', model: 'deepseek-flash', capability: 'auto' } }), null)
-  const withImages = { 'legacy-analysis': { models, source: 'live' } }
-  assert.equal(logic.coverFallback(state, withImages).cover_enabled, true, 'a missing choice with images available is still reported')
-  assert.equal(logic.coverFallback(state, {}).cover_enabled, true, 'no list yet: keep the choice')
+  const doc = logic.forSave(state)
+  assert.deepEqual([doc.cover_enabled, doc.cover, doc.cover_follows_analysis], [false, null, false])
+  assert.equal(!!doc.prefer_local_cover, false)
+  assert.equal(logic.saveIssue(state), null)
   const filled = defaults.applyModelDefaults(state, state.connections[0], models, false)
   assert.equal(filled.cover.model, 'wanx2.1-t2i-turbo', 'cover switched on before the list arrived is filled without the first-run flag')
 })
@@ -420,4 +418,19 @@ test('D1: setCoverModel on null cover is independent even on analysis connection
   })
   assert.equal(switched.cover.connection_id, 'a')
   assert.equal(switched.cover_follows_analysis, false)
+})
+
+test('a failed test belongs to its account, exact model and purpose', () => {
+  const initial = { connections: [{ id: 'a', validation_status: 'ok' }, { id: 'b', validation_status: 'ok' }] }
+  const failed = logic.applyValidation(initial, 'a', { result: 'failed', error_type: 'model_not_found' }, 'A', 'analysis')
+  const [account, other] = failed.connections
+  assert.equal(account.validation_status, 'ok')
+  assert.equal(logic.failedCheck(account, 'analysis', 'A'), true)
+  assert.equal(logic.failedCheck(account, 'analysis', 'B'), false)
+  assert.equal(logic.failedCheck(account, 'vision', 'A'), false)
+  assert.equal(logic.failedCheck(other, 'analysis', 'A'), false)
+  const recovered = logic.applyValidation(failed, 'a', { ok: true }, 'A', 'analysis')
+  assert.equal(logic.failedCheck(recovered.connections[0], 'analysis', 'A'), false)
+  const invalid = logic.applyValidation(initial, 'a', { result: 'failed', error_type: 'invalid_key' }, 'A')
+  assert.equal(logic.failedCheck(invalid.connections[0], 'analysis', 'B'), true)
 })

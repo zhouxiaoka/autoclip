@@ -220,7 +220,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
         capability: aiSettings.analysis?.capability || 'auto',
         model_source: 'user',
       },
-    })))
+    })), forSave(aiSettings))
     setAiSettings(saved)
     await studioApi.retry(project.id, { retry_kind: 'switch_model' })
   }

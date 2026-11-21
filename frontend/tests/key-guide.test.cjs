@@ -190,7 +190,6 @@ test('invalid-key saves still persist and the success toast is not the invalid p
   const toastAt = hook.indexOf("toast.kind === 'invalid'")
   assert.ok(saveAt > 0 && toastAt > saveAt)
   assert.match(hook, /settings\.key_guide\.invalid_saved/)
-  assert.ok(hook.includes('if (!failed && !visionFailed) notifySettingsSaved()'))
   assert.equal((hook.match(/telemetryProvider\(/g) || []).length, 5)
   assert.equal(/console\.(log|debug|info|warn|error)\([^)]*apiKey/.test(hook), false)
 })

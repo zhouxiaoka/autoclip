@@ -42,6 +42,23 @@ test('four purpose slots and no video purpose', () => {
   assert.deepEqual(plain(slots.COMING_SOON), ['配音 · 语音合成', '配乐 · 音乐'])
 })
 
+test('Bailian account models retain their purpose and fixed account through save', () => {
+  const { expected } = require('../../backend/tests/fixtures/dashscope_model_settings.json')
+  const state = settings({ connections: [conn('ds', 'dashscope', { enabled_model_ids: expected.map(m => m.id) })] })
+  const account = { ds: { source: 'live', models: expected } }
+  let next = state
+  for (const [purpose, model] of Object.entries({ analysis: 'qwen4-max', vision: 'qwen4-max',
+    transcription: 'qwen-audio-3.1-asr-flash', cover: 'qwen-image-2.1-pro' })) {
+    const groups = slots.collectModelGroups(next, account, purpose)
+    assert.ok(groups.some(g => g.modelId === model && g.offers.some(o => o.connectionId === 'ds' && o.selectable)))
+    if (purpose === 'vision' || purpose === 'cover') assert.ok(!groups.some(g => g.modelId === 'fixture-max-new'))
+    next = slots.applyFixedSelection(next, purpose, model, 'ds')
+    assert.equal(next[purpose].model_source, 'user')
+  }
+  assert.equal(logic.saveIssue(next), null)
+  assert.equal(logic.forSave(next).allow_send_frame, false)
+})
+
 test('old files without model_source count as user; empty slots are preset', () => {
   assert.equal(slots.resolvedModelSource({ model: 'qwen-plus' }), 'user')
   assert.equal(slots.resolvedModelSource({ model: '' }), 'preset')
@@ -473,4 +490,15 @@ test('configured Bailian and DeepSeek analysis models can be chosen before an ac
     assert.equal(slots.collectModelGroups(settings({ connections: [c] }), {}, 'analysis')
       .some(g => g.offers.some(o => o.selectable)), false)
   }
+})
+
+test('hiding a model keeps its active assignment but excludes it from pickers and cloud-ASR shortcuts', () => {
+  const state = settings({ connections: [conn('ds', 'dashscope', { enabled_model_ids: [] })] })
+  assert.equal(slots.collectModelGroups(state, lists, 'analysis').length, 0)
+  assert.equal(slots.slotSummary(state, lists, 'analysis').model, 'qwen-plus')
+  const asr = { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true }
+  const live = { ds: { source: 'live', models: [asr] } }
+  assert.equal(slots.applyCloudTranscription(state, live).kind, 'add')
+  assert.equal(slots.cloudTranscriptionSavePatch(true, state, live), undefined)
+  assert.notEqual(slots.applyCloudTranscription(state).kind, 'selected')
 })
