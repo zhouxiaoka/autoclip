@@ -238,3 +238,13 @@ def test_local_question_cover_prioritizes_the_approved_question_cue(
     )
     assert photo == candidates[0][0]
     assert trace["source_timestamp_sec"] < 3.0
+
+
+def test_per_line_type_directions_from_visual_provider_reach_image_prompt(setup_plan):
+    _, reply, calls = setup_plan
+    reply["typography"] = ["第一行使用细黑体", "第二行使用窄粗黑体"]
+    _, brief = pick()
+    assert len(calls) == 1
+    assert brief.source["editorial_plan"]["status"] == "planned"
+    prompt = cb.compile_prompt(brief)
+    assert "第一行使用细黑体" in prompt and "第二行使用窄粗黑体" in prompt

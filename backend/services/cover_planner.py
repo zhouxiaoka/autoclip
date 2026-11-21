@@ -6,7 +6,7 @@ import hashlib
 import json
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from backend.services.studio import cover_design as cd, intelligence
 
@@ -27,6 +27,17 @@ class Direction(BaseModel):
     typography: Note
     color_reason: Note
     accent: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+
+    @field_validator("typography", mode="before")
+    @classmethod
+    def join_line_directions(cls, value):
+        # Providers may describe each headline line separately. Retain their order
+        # and let the same bounded Note validator check the combined instruction.
+        if isinstance(value, list) and 1 <= len(value) <= 4 and all(
+            isinstance(line, str) and line.strip() for line in value
+        ):
+            return "；".join(line.strip() for line in value)
+        return value
 
 
 TASK = """你是这一条视频的封面编辑。观看编号照片，结合时间对应的原话、目标平台和画幅，决定谁或什么承载标题。
