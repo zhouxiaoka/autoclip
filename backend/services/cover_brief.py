@@ -9,6 +9,7 @@ import os
 import re
 import uuid
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -657,6 +658,28 @@ def atomic(path, data):
         tmp.unlink(missing_ok=True)
 
 
+def _repair_prompt(b, fidelity):
+    aspect_names = {
+        "identity": "人物身份或五官", "hands": "原帧外的手或改变的手势", "pose": "姿态",
+        "orientation": "人物朝向", "facing": "人物朝向", "body_boundary": "超出原帧的躯干或衣袖",
+        "background": "现场背景",
+    }
+    issues = [aspect_names[key] for key in dict.fromkeys(fidelity.get("changed", []) + fidelity.get("uncertain", []))
+              if key in aspect_names]
+    observations = fidelity.get("observations") or {}
+    return "\n".join([
+        "修订同一张完整封面。图一是唯一真实的摄影原帧；图二是第一版封面，仅提供标题设计。",
+        "照图二保留标题的版面位置、逐行断句、字重、字号比例和强调色。批准标题：" + b.copy_spec["exact_text"],
+        "批准的副文案：" + " / ".join(b.copy_spec["secondary_text"]) if b.copy_spec["secondary_text"] else "无需副文案。",
+        "只修摄影部分。本次复核发现：" + "、".join(issues) + "。",
+        "现场对照记录（描述差异）：" + observations.get("evidence", ""),
+        "用图一的真实摄影内容替换图二有问题的区域。原帧截到胸口就收在胸口，原本不见的手、手臂和衣袖保持在画外。"
+        "不得为填满竖幅扩身、补墙、翻转人物。现场层架、灯光和物件以图一为准。"
+        "可以等比放大裁切图一以适配原版面。不要继承图二虚构的身体和现场，不要重复角标。",
+        "直接输出一张带完整标题的最终封面，保持图二画幅，不要对照图或说明。",
+    ])
+
+
 def make(b, frame, cfg, *, can_send, generate, check, previous=False):
     """Both producers use this decision, including the bounded edit retry and the same-frame fallback."""
     from backend.core.image_providers import ImageError, ImageRequest
@@ -694,11 +717,16 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
                 try:
                     image = generate(req)
                     data = fit_model(image, size)
-                    fidelity = cover_fidelity.compare(frame, image)
+                    fidelity = cover_fidelity.compare(frame, image, req.layout_reference)
                     comparisons.append(fidelity)
                     verify = None
                     if fidelity["status"] != "passed":
                         reason = "subject_changed" if fidelity["status"] == "failed" else "fidelity_unavailable"
+                        if fidelity.get("changed") == ["title_layout"]:
+                            reason = "cover_layout_changed"
+                        if attempts == 1 and (fidelity.get("changed") or fidelity.get("uncertain")):
+                            req = replace(req, prompt=_repair_prompt(b, fidelity), layout_reference=image)
+                            continue
                         break
                     verify = check(
                         data,
@@ -726,9 +754,8 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
                     audit["_original_bytes"] = image
                     return data, audit
                 reason = "text_unavailable" if verify is None else "text_mismatch"
-                if verify is None:
+                if verify is None or attempts == 2:
                     break
-                from dataclasses import replace
 
                 req = replace(
                     req,
@@ -738,7 +765,10 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
         else:
             reason = "frame_sending_disabled" if not can_send else "image_service_unavailable"
     local_layout_missing = not b.design.get("typesetting")
-    if previous and (attempts or local_layout_missing):
+    # A completed fidelity repair gets the same source-layout fallback on regeneration.
+    # If the service never delivered a revision, retain the existing published cover.
+    reviewed_repair = len(comparisons) == 2 and comparisons[0]["status"] != "passed"
+    if previous and (local_layout_missing or (attempts and not reviewed_repair)):
         audit = record(
             b,
             method="failed",

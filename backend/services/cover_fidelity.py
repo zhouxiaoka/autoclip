@@ -30,6 +30,7 @@ class Comparison(BaseModel):
     orientation: Finding
     body_boundary: Finding
     background: Finding
+    title_layout: Finding | None = None
     evidence: str = Field(min_length=1, max_length=600)
 
 
@@ -73,12 +74,14 @@ def _nose_offset(data: bytes) -> float | None:
     return round(float((nose - (eye_a + eye_b) / 2) @ axis) / span_squared, 4)
 
 
-def compare(source: bytes, artwork: bytes) -> dict:
+def compare(source: bytes, artwork: bytes, layout_reference: bytes | None = None) -> dict:
     audit = {
         "source_sha256": hashlib.sha256(source).hexdigest(),
         "candidate_sha256": hashlib.sha256(artwork).hexdigest(),
     }
-    if source == artwork:
+    if layout_reference:
+        audit["layout_sha256"] = hashlib.sha256(layout_reference).hexdigest()
+    if source == artwork and not layout_reference:
         return dict(audit, status="passed", method="identical_bytes")
     source_offset, art_offset = _nose_offset(source), _nose_offset(artwork)
     if source_offset is not None and art_offset is not None:
@@ -103,8 +106,16 @@ def compare(source: bytes, artwork: bytes) -> dict:
         audit.update(
             method="paired_vision", model=sanitize_model(config.get("model") or "")
         )
-        content = [{"type": "text", "text": PROMPT}]
-        for label, data in (("图一：真实源帧", source), ("图二：模型原图", artwork)):
+        instruction = PROMPT
+        images = [("图一：真实源帧", source), ("图二：待验收的封面", artwork)]
+        if layout_reference:
+            instruction += ("\n附第三张作为首版标题的排版样本。所有摄影判断只对比图一与图二。"
+                            "单独对比图二、三的标题断行、字重层级、强调色及在画幅中的位置。"
+                            "微小字距偏移可接受，明显换行、改变层级配色或挪到另一区域判 changed。"
+                            "返回额外字段 title_layout，取值 preserved/changed/uncertain，并在 evidence 中说明排版依据。")
+            images.append(("图三：第一次直出，仅对照标题排版", layout_reference))
+        content = [{"type": "text", "text": instruction}]
+        for label, data in images:
             content.extend(
                 [
                     {"type": "text", "text": label},
@@ -137,6 +148,9 @@ def compare(source: bytes, artwork: bytes) -> dict:
 
     changed = [field for field in ASPECTS if getattr(observed, field) == "changed"]
     uncertain = [field for field in ASPECTS if getattr(observed, field) == "uncertain"]
+    if layout_reference and observed.title_layout != "preserved":
+        findings = changed if observed.title_layout == "changed" else uncertain
+        findings.append("title_layout")
     if observed.cover_hands > observed.reference_hands and "hands" not in changed:
         changed.append("hands")
     if "uncertain" in (observed.reference_facing, observed.cover_facing):

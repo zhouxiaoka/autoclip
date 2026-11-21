@@ -2079,6 +2079,7 @@
   "本地视频处理失败，请确认素材完整、磁盘有空间后重试。": "Le traitement vidéo local a échoué. Vérifiez que le fichier est intact et qu'il reste de l'espace disque, puis réessayez.",
   "磁盘空间不足，请清理空间后重试。": "Le disque est plein. Libérez de l'espace et réessayez.",
   "文件已损坏，请重新下载或换一个文件。": "Le fichier est endommagé. Téléchargez-le à nouveau ou utilisez un autre fichier.",
+  "cover_layout_changed": "La disposition du titre a changé lors de la révision. La couverture utilise l’image source.",
   "subject_changed": "Le sujet ou le décor a changé. La couverture utilise l’image source.",
   "fidelity_unavailable": "La fidélité à l’image source n’a pas pu être vérifiée. La couverture utilise l’image source.",
   "生图失败，已改成本地排版或截帧": "La génération d'image a échoué. Une mise en page locale ou une image extraite est utilisée.",

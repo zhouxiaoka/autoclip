@@ -2079,6 +2079,7 @@
   "本地视频处理失败，请确认素材完整、磁盘有空间后重试。": "Local video processing failed. Check that the file is intact and the disk has space, then try again.",
   "磁盘空间不足，请清理空间后重试。": "The disk is full. Free some space and try again.",
   "文件已损坏，请重新下载或换一个文件。": "The file is damaged. Download it again or use another file.",
+  "cover_layout_changed": "The revision changed the title layout. The cover uses the original frame.",
   "subject_changed": "The subject or scene changed. The cover uses the original frame.",
   "fidelity_unavailable": "The match to the original frame could not be verified. The cover uses the original frame.",
   "生图失败，已改成本地排版或截帧": "Image generation failed. A local layout or a video frame is used instead.",

@@ -139,6 +139,11 @@ class ImageRequest:
     reference: bytes | None = None
     model: str = ""
     ocr_model: str = ""
+    layout_reference: bytes | None = None
+
+    @property
+    def references(self) -> tuple[bytes, ...]:
+        return tuple(image for image in (self.reference, self.layout_reference) if image)
 
 
 def openai_root(base_url: str) -> str:
@@ -363,8 +368,16 @@ def _post_json(
     return resp
 
 
+def _reference_mime(data: bytes) -> str:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
 def _reference_data_uri(reference: bytes) -> str:
-    return "data:image/jpeg;base64," + base64.b64encode(reference).decode("ascii")
+    return f"data:{_reference_mime(reference)};base64," + base64.b64encode(reference).decode("ascii")
 
 
 def generate_openai(
@@ -387,7 +400,7 @@ def generate_openai(
             "model": model,
             "prompt": request.prompt,
             "size": size,
-            "image": _reference_data_uri(request.reference),
+            "image": [_reference_data_uri(im) for im in request.references] if request.layout_reference else _reference_data_uri(request.reference),
             "response_format": "url",
             "watermark": False,
         }
@@ -395,12 +408,17 @@ def generate_openai(
         return _openai_image(_raise_for_status(resp, edit=True), http)
 
     if request.reference:
+        files = {"image": ("frame.jpg", request.reference, "image/jpeg")}
+        if request.layout_reference:
+            files = [("image[]", (f"reference-{i}.{_reference_mime(im).split('/')[-1]}", im, _reference_mime(im)))
+                     for i, im in enumerate(request.references, 1)]
+
         def edit(size: str):
             return http.post(
                 f"{root}/images/edits",
                 headers=headers,
                 data={"model": model, "prompt": request.prompt, "size": size, "n": "1"},
-                files={"image": ("frame.jpg", request.reference, "image/jpeg")},
+                files=files,
                 timeout=IMAGE_TIMEOUT,
             )
         resp = edit(size)
@@ -413,7 +431,7 @@ def generate_openai(
             data = _raise_for_status(resp, edit=True)
             return _openai_image(data, http)
         except ImageError as exc:
-            if not exc.unsupported_edit:
+            if not exc.unsupported_edit or request.layout_reference:
                 raise
             body = {
                 "model": model,
@@ -488,7 +506,7 @@ def generate_dashscope(
         if request.reference:
             if model in {'qwen-image', 'z-image-turbo'} or model.startswith(('qwen-image-plus', 'qwen-image-max')):
                 raise ImageError('该模型不支持参考帧', unsupported_edit=True)
-            content.insert(0, {'image': _reference_data_uri(request.reference)})
+            content[:0] = [{'image': _reference_data_uri(im)} for im in request.references]
         if modern_qwen:
             headers.pop('X-DashScope-Async', None)
         route = 'image-generation' if modern_wan else 'multimodal-generation'
@@ -511,6 +529,8 @@ def _generate_legacy_dashscope(*, api_key, base_url, request, session, cancel, p
     root, http = dashscope_root(base_url), session
     headers = {**_bearer(api_key, base_url), 'X-DashScope-Async': 'enable'}
     model = request.model.strip() or 'wanx2.1-t2i-turbo'
+    if request.layout_reference:
+        raise ImageError('该模型不支持双图修订', unsupported_edit=True)
     image_input: dict[str, Any] = {"prompt": request.prompt}
     if request.reference:
         image_input["ref_img"] = _reference_data_uri(request.reference)
@@ -556,7 +576,8 @@ def generate_gemini(*, api_key, base_url, request, session=None):
     http = _session_for(root, session)
     parts = [{'text': request.prompt}]
     if request.reference:
-        parts.insert(0, {'inlineData': {'mimeType': 'image/jpeg', 'data': base64.b64encode(request.reference).decode('ascii')}})
+        parts[:0] = [{'inlineData': {'mimeType': _reference_mime(im), 'data': base64.b64encode(im).decode('ascii')}}
+                     for im in request.references]
     response = http.post(f'{root}/models/{quote(request.model, safe="")}:generateContent',
         headers={'x-goog-api-key': api_key, 'Content-Type': 'application/json'},
         json={'contents': [{'role': 'user', 'parts': parts}], 'generationConfig': {
@@ -575,6 +596,8 @@ def generate_vendor_image(*, provider, api_key, base_url, request, session=None)
     http = _session_for(root, session)
     body = {'model': request.model, 'prompt': request.prompt}
     route = 'generations'
+    if request.layout_reference:
+        raise ImageError('该模型不支持双图修订', unsupported_edit=True)
     if provider == 'grok':
         body.update(aspect_ratio='9:16' if request.height > request.width else '16:9', response_format='b64_json', n=1)
         if request.reference:
@@ -603,7 +626,7 @@ def generate_fal(*, api_key: str, base_url: str, request: ImageRequest, session:
         model += "/edit" if request.reference else "/text-to-image"
     body: dict[str, Any] = {"prompt": request.prompt, "image_size": {"width": request.width, "height": request.height}}
     if request.reference:
-        body["image_urls"] = [_reference_data_uri(request.reference)]
+        body["image_urls"] = [_reference_data_uri(im) for im in request.references]
     resp = http.post(f"{root}/{model}", headers={"Authorization": f"Key {api_key}", "Content-Type": "application/json"},
                      json=body, timeout=IMAGE_TIMEOUT)
     data = _raise_for_status(resp, edit=bool(request.reference))
