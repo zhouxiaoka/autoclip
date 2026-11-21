@@ -338,7 +338,7 @@ def _encode_draft(
                         elif packaged:
                             from backend.services.studio import packaging_render
                             ass_path = folder / f'{i}.ass'
-                            ass_path.write_text(packaging_render.scene_ass(draft.packaging, draft.scenes, i), encoding='utf-8')
+                            ass_path.write_text(packaging_render.scene_ass(draft.packaging, draft.scenes, i, layout=draft.layout), encoding='utf-8')
                             built = packaging_render.scene_video_graph(draft, scene, i, ass_path, w, h)
                         else:
                             built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)

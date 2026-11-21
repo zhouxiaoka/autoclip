@@ -415,9 +415,77 @@ def dashscope_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> D
     return guarded
 
 
+_KNOWN_THINKING_RELAY_HOSTS = frozenset({
+    "apimart.ai",
+    "88api.ai",
+    "infistar.ai",
+    "infistar.cc",
+    "siliconflow.cn",
+    "openrouter.ai",
+})
+
+
+def is_known_thinking_relay(base_url: Optional[str]) -> bool:
+    """Known preset OpenAI-compatible gateways that route Qwen/DeepSeek hybrid thinking models."""
+    from urllib.parse import urlparse
+    raw = (base_url or "").strip()
+    if not raw:
+        return False
+    host = (urlparse(raw if "://" in raw else "https://" + raw).hostname or "").lower()
+    return any(host == suffix or host.endswith("." + suffix) for suffix in _KNOWN_THINKING_RELAY_HOSTS)
+
+
+def relay_thinking_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
+    """Disable default deep thinking for allowlisted Qwen/DeepSeek models on known preset relays.
+
+    Unknown custom proxies remain unchanged so strict proxies never receive unexpected keys.
+    If a known relay rejects the thinking parameter with HTTP 400, OpenAIProvider.call() strips
+    it and retries once.
+    """
+    if not is_known_thinking_relay(base_url):
+        return request
+    raw_model = (request.get("model") or "").strip().lower()
+    bare_model = raw_model.rsplit("/", 1)[-1]
+    if bare_model in QWEN_HYBRID_THINKING_MODELS:
+        guarded = dict(request)
+        extra = dict(guarded.get("extra_body") or {})
+        extra.setdefault("enable_thinking", False)
+        guarded["extra_body"] = extra
+        return guarded
+    if bare_model.startswith("deepseek-") and "reasoner" not in bare_model and "r1" not in bare_model and "thinking" not in bare_model:
+        guarded = dict(request)
+        extra = dict(guarded.get("extra_body") or {})
+        extra.setdefault("thinking", {"type": "disabled"})
+        guarded["extra_body"] = extra
+        if guarded.get("max_tokens") is None:
+            guarded["max_tokens"] = DEEPSEEK_COMPLETION_TOKEN_CAP
+        return guarded
+    return request
+
+
+def _strip_thinking_extra_body(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    extra = payload.get("extra_body")
+    if not isinstance(extra, dict) or not any(k in extra for k in ("enable_thinking", "thinking")):
+        return None
+    stripped_extra = {k: v for k, v in extra.items() if k not in ("enable_thinking", "thinking")}
+    cleaned = dict(payload)
+    if stripped_extra:
+        cleaned["extra_body"] = stripped_extra
+    else:
+        cleaned.pop("extra_body", None)
+    return cleaned
+
+
+def _rejects_thinking_param(error: Any) -> bool:
+    if getattr(error, "status_code", None) != 400:
+        return False
+    text = str(error or "").lower()
+    return any(tok in text for tok in ("enable_thinking", "thinking", "extra_body", "unrecognized", "unknown parameter", "unsupported"))
+
+
 def guarded_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
-    """所有 OpenAI 兼容文字请求都经过这里：DeepSeek 与百炼 Qwen 的思考开关。"""
-    return dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request))
+    """所有 OpenAI 兼容文字请求都经过这里：DeepSeek、百炼 Qwen 与已知预设中转站的思考开关。"""
+    return relay_thinking_chat_kwargs(base_url, dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request)))
 
 
 def http_chat_body(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -573,18 +641,25 @@ class OpenAIProvider(LLMProvider):
             try:
                 response = create_openai_chat(
                     client, payload, request_timeout, lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
-            except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
-                if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
-                        or not asks_for_max_completion_tokens(error):
+            except Exception as error:  # noqa: BLE001 - retry targeted HTTP 400 compatibility rejections once
+                retry_payload = None
+                if payload.get("max_tokens") is not None and getattr(error, "status_code", None) == 400 \
+                        and asks_for_max_completion_tokens(error):
+                    retry_payload = to_max_completion_tokens(payload)
+                    logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", sanitize_model(model))
+                elif _rejects_thinking_param(error):
+                    retry_payload = _strip_thinking_extra_body(payload)
+                    if retry_payload is not None:
+                        logger.info("接口拒绝关闭思考参数，移除 thinking/enable_thinking 后重试一次 (%s)", sanitize_model(model))
+                if retry_payload is None:
                     raise
                 # The manager reserved the first SDK call, not this compatibility
                 # resend. Reserve its SDK retries too before issuing another request.
                 from backend.core.llm_degrade import consume_chunk_call
                 if not consume_chunk_call():
                     raise
-                logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", sanitize_model(model))
                 response = create_openai_chat(
-                    client, to_max_completion_tokens(payload),
+                    client, retry_payload,
                     _budget_request_timeout(LLM_READ_TIMEOUT_SEC),
                     lambda: _budget_request_timeout(LLM_READ_TIMEOUT_SEC))
             collected = collect_sdk(response)

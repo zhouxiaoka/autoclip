@@ -9,6 +9,9 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
+/// Event emitted to the webview when auto-restarts are exhausted after repeated crashes.
+pub const BACKEND_CRASHED_EVENT: &str = "backend-crashed";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendStatus {
     pub is_running: bool,
@@ -554,6 +557,47 @@ impl BackendManager {
         }
     }
 
+    /// Reap a child whose stdout closed before printing `PORT=`.
+    /// Waiting briefly avoids a race where EOF arrives before the OS marks the child exited,
+    /// which would otherwise leave `status.is_running = true, port = 0` permanently stuck.
+    fn wait_for_early_exit(
+        process: &Arc<Mutex<Option<Child>>>,
+    ) -> (bool, Option<std::process::ExitStatus>) {
+        for attempt in 0..40 {
+            let poll = {
+                let mut process_guard = process.lock().unwrap();
+                if let Some(child) = process_guard.as_mut() {
+                    match child.try_wait() {
+                        Ok(None) => None,
+                        Ok(Some(st)) => {
+                            *process_guard = None;
+                            Some((true, Some(st)))
+                        }
+                        Err(_) => {
+                            *process_guard = None;
+                            Some((true, None))
+                        }
+                    }
+                } else {
+                    Some((true, None))
+                }
+            };
+            if let Some(result) = poll {
+                return result;
+            }
+            if attempt < 39 {
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+        // Stdout closed without emitting PORT= and the process still did not exit; kill & reap it.
+        let mut process_guard = process.lock().unwrap();
+        if let Some(mut child) = process_guard.take() {
+            let _ = child.kill();
+            return (true, child.wait().ok());
+        }
+        (true, None)
+    }
+
     /// Process died before `PORT=` (or the health loop has not taken over). Same guard as a later crash.
     fn restart_if_unexpected_exit(
         app_handle: &AppHandle,
@@ -567,26 +611,7 @@ impl BackendManager {
         marker_dir: Option<&std::path::Path>,
         instance_id: &str,
     ) {
-        let mut exit_status = None;
-        let exited = {
-            let mut process_guard = process.lock().unwrap();
-            if let Some(child) = process_guard.as_mut() {
-                match child.try_wait() {
-                    Ok(None) => false,
-                    Ok(Some(st)) => {
-                        exit_status = Some(st);
-                        *process_guard = None;
-                        true
-                    }
-                    Err(_) => {
-                        *process_guard = None;
-                        true
-                    }
-                }
-            } else {
-                true
-            }
-        };
+        let (exited, exit_status) = Self::wait_for_early_exit(process);
         if !exited || launch_replaced(generation, launch_generation) {
             return;
         }
@@ -597,6 +622,10 @@ impl BackendManager {
                     let _ = record_crash_exit(dir, instance_id, &crash_marker_text(st));
                 }
                 let _ = claim_dead_launch(status, generation, launch_generation);
+                let _ = app_handle.emit(
+                    BACKEND_CRASHED_EVENT,
+                    serde_json::json!({ "restarts": already, "reason": "restarts_exhausted" }),
+                );
             }
             return;
         }
@@ -686,6 +715,10 @@ impl BackendManager {
                             let _ = record_crash_exit(dir, &instance_id, &crash_marker_text(st));
                         }
                         let _ = claim_dead_launch(&status, &generation, launch_generation);
+                        let _ = app_handle.emit(
+                            BACKEND_CRASHED_EVENT,
+                            serde_json::json!({ "restarts": already, "reason": "restarts_exhausted" }),
+                        );
                     }
                     break;
                 }
@@ -1097,5 +1130,14 @@ mod shutdown_intent_tests {
         let write = health.find("record_crash_exit(").unwrap();
         let start = health.rfind(".start(app_handle.clone())").unwrap();
         assert!(decision < write && write < start, "write marker after should_auto_restart, before start()");
+    }
+
+    #[test]
+    fn exhausted_crashes_emit_backend_crashed_and_early_eof_is_reaped() {
+        assert_eq!(super::BACKEND_CRASHED_EVENT, "backend-crashed");
+        let src = include_str!("backend_manager.rs");
+        assert!(src.contains("fn wait_for_early_exit("));
+        let emit_count = src.matches("BACKEND_CRASHED_EVENT,").count();
+        assert!(emit_count >= 2, "both early-exit and health-loop exhaustion must emit backend-crashed");
     }
 }

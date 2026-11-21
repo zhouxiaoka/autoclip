@@ -7,8 +7,9 @@ import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
-import { receiptFailureInfo } from './failureAction'
+import { diagnoseInsteadOfRetry, pageFailureAction, presentedFailure, RECHARGE_LABEL, receiptFailureInfo } from './failureAction'
 import { countPreservedResults, presentFailure, resolveFailureCause } from './failurePresentation'
+import { openExternalLink } from '../../utils/externalLinks'
 import DiagnosePanel from './DiagnosePanel'
 import SwitchModelDialog from './SwitchModelDialog'
 import { listSwitchModelOptions, usableConnectionCount } from './switchModelOptions'
@@ -210,6 +211,18 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const detailView = resumeAfterSettings && presented.primary && (presented.primary.id === 'settings' || presented.primary.id === 'quota_check' || presented.primary.id === 'install_transcription')
     ? { ...presented, primary: { id: 'retry_production' as const, label: '重试制作' } }
     : presented
+  const failureInfo = { ...resolvedCause, error: resolvedCause.error || workspace.analysis?.error }
+  const failureBilling = presentedFailure(failureInfo, detailView.reason).billing
+  const rawFailureAction = pageFailureAction(failureInfo)
+  const rechargeUrl = preservedCount === 0 && detailView.primary?.id === 'quota_check' && rawFailureAction.kind === 'recharge' && /^https?:\/\//i.test(rawFailureAction.destination || '')
+    ? (rawFailureAction.destination as string)
+    : ''
+  const rechargeLabel = rawFailureAction.kind === 'recharge' ? (rawFailureAction.label || RECHARGE_LABEL) : RECHARGE_LABEL
+  const isRetryPrimary = preservedCount === 0 && (detailView.primary?.id === 'retry' || detailView.primary?.id === 'retry_production')
+  const resumePoint = isRetryPrimary && workspace.resume_point?.point && workspace.resume_point.point !== 'none'
+    ? workspace.resume_point
+    : null
+  const escalateDiagnose = isRetryPrimary && diagnoseInsteadOfRetry(workspace.generation?.repeat_failure)
   const switchModelAndRetry = async (choice: { connectionId: string; model: string }) => {
     if (!aiSettings) return
     const saved = await modelSettingsApi.save(forSave(syncFollowingCover(aiSettings, {
@@ -293,17 +306,23 @@ export default function StudioResults({ project, children, onCreateCollection, o
         <b>{t(detailView.status)}</b>
         <p className="ac-failure-reason">{detailView.step ? <>{t(detailView.step)}：{t(detailView.reason)}</> : t(detailView.reason)}</p>
         <p className="ac-failure-outcome">{t(detailView.outcome, { count: preservedCount })}</p>
-        {detailView.primary && <Btn variant="cta" disabled={!!busy} loading={busy==='retry-analysis'} onClick={() => {
-          const action = detailView.primary
-          if (!action || busy) return
-          if (action.id === 'view_results') { document.querySelector('.studio-result-grid')?.scrollIntoView({ block: 'start' }); return }
-          if (action.id === 'settings' || action.id === 'quota_check' || action.id === 'install_transcription') { navigate(settingsReturnUrl(action.destination || '/settings?section=analysis', project.id)); return }
-          if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
-          if (action.id === 'change_video') { navigate('/'); return }
-          if (action.id === 'switch_model') { setSwitchOpen(true); return }
-          void act('retry-analysis', async () => { await studioApi.retry(project.id, { retry_kind: 'same' }) })
-        }}>{t(detailView.primary.label)}</Btn>}
-        <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>
+        {failureBilling && <p className="studio-billing">{t(failureBilling)}</p>}
+        <div className="studio-actions">
+          {escalateDiagnose && <Btn variant="cta" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn>}
+          {detailView.primary && <Btn variant={escalateDiagnose ? undefined : 'cta'} disabled={!!busy} loading={busy==='retry-analysis'} onClick={() => {
+            const action = detailView.primary
+            if (!action || busy) return
+            if (action.id === 'view_results') { document.querySelector('.studio-result-grid')?.scrollIntoView({ block: 'start' }); return }
+            if (action.id === 'settings' || action.id === 'quota_check' || action.id === 'install_transcription') { navigate(settingsReturnUrl(action.destination || '/settings?section=analysis', project.id)); return }
+            if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
+            if (action.id === 'change_video') { navigate('/'); return }
+            if (action.id === 'switch_model') { setSwitchOpen(true); return }
+            void act('retry-analysis', async () => { await studioApi.retry(project.id, { retry_kind: 'same' }) })
+          }}>{t(resumePoint?.label || detailView.primary.label)}</Btn>}
+          {rechargeUrl && <Btn disabled={!!busy} onClick={() => void openExternalLink(rechargeUrl)}>{t(rechargeLabel)}</Btn>}
+          {resumePoint && <Btn disabled={!!busy} loading={busy==='retry-fresh'} onClick={() => void act('retry-fresh', async () => { await studioApi.retry(project.id, { retry_kind: 'same', fresh: true }) })}>{t('从头重做')}</Btn>}
+        </div>
+        {!escalateDiagnose && <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>}
       </div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
       <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} onViewed={() => setViewedProject(project.id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}

@@ -8,13 +8,30 @@ import { isDesktopMode } from '../../utils/desktopMode'
 import { useProjectStore } from '../../store/useProjectStore'
 import { Btn, Dialog } from '../../ui'
 import { t } from '../../i18n'
-import { projectIsProducing, type KeepAwakeProjectLike } from './keepAwake'
+import { getKeepAwakeController, projectIsProducing, type KeepAwakeProjectLike } from './keepAwake'
 
 type ClosePayload = { from?: 'window' | 'tray' | string }
+type GuardProjectLike = KeepAwakeProjectLike & { id?: string }
 
-/** Same producing signal as keep-awake — not only DB status===processing. */
-export function runningCount(projects: KeepAwakeProjectLike[]): number {
-  return projects.filter(projectIsProducing).length
+/** Same producing signal as keep-awake — includes both projects list and active detail-page workspace/statusbar sources. */
+export function runningCount(projects: GuardProjectLike[], activeSources?: Map<string, boolean>): number {
+  const activeIds = new Set<string>()
+  let anonymous = 0
+  for (const project of projects) {
+    if (!projectIsProducing(project)) continue
+    if (project.id) activeIds.add(String(project.id))
+    else anonymous += 1
+  }
+  if (activeSources) {
+    for (const [key, producing] of activeSources.entries()) {
+      if (!producing || key === 'projects') continue
+      const sep = key.indexOf(':')
+      const id = sep >= 0 ? key.slice(sep + 1) : key
+      if (id) activeIds.add(id)
+      else anonymous += 1
+    }
+  }
+  return activeIds.size + anonymous
 }
 
 async function invokeQuit(choice: 'background' | 'quit') {
@@ -42,7 +59,7 @@ export default function QuitGuard() {
       const { listen } = await import('@tauri-apps/api/event')
       unlisten = await listen<ClosePayload>('close-requested', () => {
         if (cancelled) return
-        const nextCount = runningCount(useProjectStore.getState().projects)
+        const nextCount = runningCount(useProjectStore.getState().projects, getKeepAwakeController().getSources())
         if (nextCount <= 0) {
           emitQuitPrompt('quit', 0)
           void invokeQuit('quit')

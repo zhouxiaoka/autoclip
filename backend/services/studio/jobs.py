@@ -1678,7 +1678,9 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
         # Blur stays blur. Burned-in captions stay on the classic fallback. A classic
         # import never sets rank_fallback, so an explicit interview window stays.
         if rank_fallback and framed != 'full_frame_captions' and layout == 'window':
-            layout = 'crop'
+            # When speaker detection ran and confirmed no face track (full_frame), keep full width on
+            # a blurred 9:16 backdrop instead of blindly center-cropping off subjects/slides.
+            layout = 'blur' if framed == 'full_frame' else 'crop'
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(generation))
         derived_drafts.append(draft.model_dump())
         variants.append({
@@ -2112,7 +2114,7 @@ def _produce_on_demand(project_id, variant_id):
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         layout = value.get('layout') if framed else None
         if portrait_crop and framed != 'full_frame_captions' and layout == 'window':
-            layout = 'crop'
+            layout = 'blur' if framed == 'full_frame' else 'crop'
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 
         def ready(data):
