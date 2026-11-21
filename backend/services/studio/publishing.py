@@ -76,7 +76,8 @@ def cover_source_frame(project_id, job_id, revision, trace=None, *, context=None
     scene, rows = cover_scene(project_id, scenes, (context or {}).get("title", ""), revision)
     if trace is not None:
         trace.update(asset_id="raw/input", evidence=rows)
-    frame, centre, _ = cd.pick_frame(video, scene, rows, local_revision=revision, trace=trace, context=context, exclude_time=exclude_time)
+    frame, centre, _ = cd.pick_frame(video, scene, rows, draft.get("packaging") or {},
+                                      local_revision=revision, trace=trace, context=context, exclude_time=exclude_time)
     return frame, centre if centre is not None else scene.get('crop_x')
 
 

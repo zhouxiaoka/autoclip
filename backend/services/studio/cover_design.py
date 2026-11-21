@@ -295,6 +295,7 @@ def pick_frame(
         candidates = _candidates(video, start, shots, VISION_CANDIDATES)
 
     editorial = None
+    cue = None
     if context is not None:
         from backend.services import cover_brief, cover_planner
 
@@ -320,7 +321,12 @@ def pick_frame(
         if exclude_time is not None:
             candidates = [c for c in candidates if abs(c[4] - exclude_time) > .15] or candidates
         if candidates:
-            editorial = cover_planner.inspect(candidates, context, rows)
+            speakers = (packaging or {}).get("speakers") or []
+            hints = [dict(name=str(s.get("name") or "")[:80], role=str(s.get("role") or "")[:80])
+                     for s in speakers if isinstance(s, dict) and s.get("name")][:6]
+            editorial = cover_planner.inspect(candidates, context, rows, speaker_hints=hints)
+            if trace is not None and hints:
+                trace["speaker_hints"] = hints
 
     def selected(candidate, is_guest, reason):
         frame, centre, _, _, at = candidate
@@ -358,6 +364,10 @@ def pick_frame(
         index, is_guest = chosen
         return selected(candidates[index], is_guest, "视觉选帧：对照该片段嘉宾和主持人")
     eligible = [c for c in candidates if c[3]] or [c for c in candidates if _camera_frame(c[0])] or candidates
+    if cue:
+        in_cue = [c for c in eligible if cue["start"] <= c[4] < cue["end"]]
+        if in_cue:
+            return selected(max(in_cue, key=lambda c: c[2]), False, "批准标题对应原话时段的清晰镜头")
     if answer is not None:
         # The sustained answer shot outranks momentary listener reactions and wide cutaways.
         after = [c for c in eligible if c[4] >= answer]

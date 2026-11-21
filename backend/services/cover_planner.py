@@ -83,7 +83,7 @@ def key(ctx, rows):
     return hashlib.sha256(data.encode()).hexdigest()
 
 
-def inspect(candidates, ctx, rows):
+def inspect(candidates, ctx, rows, *, speaker_hints=()):
     from backend.core import llm_usage
     from backend.core.project_cancellation import ProjectDeleted
     from backend.services.studio.vision_settings import effective
@@ -91,7 +91,9 @@ def inspect(candidates, ctx, rows):
     audit = {"context_key": key(ctx, rows)}
     if ctx.get("local_only") or not intelligence.source_frame_analysis_allowed():
         return dict(audit, status="local_only")
-    payload = dict(**ctx, transcript=cues(rows, ctx["title"]))
+    payload = dict(
+        **ctx, transcript=cues(rows, ctx["title"]), speaker_hints=list(speaker_hints)
+    )
     content = [
         {"type": "text", "text": TASK + "\n" + json.dumps(payload, ensure_ascii=False)}
     ]
@@ -170,6 +172,9 @@ def bound(frame, source, ctx, rows):
     if old.get("context_key") == key(ctx, rows) and old.get("frame_sha256") == digest:
         return old
     result = inspect(
-        [(frame, None, 0.0, False, source.get("source_timestamp_sec"))], ctx, rows
+        [(frame, None, 0.0, False, source.get("source_timestamp_sec"))],
+        ctx,
+        rows,
+        speaker_hints=source.get("speaker_hints") or [],
     )
     return dict(result, frame_sha256=digest)

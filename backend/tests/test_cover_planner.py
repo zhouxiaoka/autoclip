@@ -216,3 +216,25 @@ def test_studio_first_cover_then_automatic_model_job_reuses_decision(
     kit.design_cover("fixture", None, draft, "render", "douyin", title, "variant")
     assert kit.ai_cover(*args, variant_id="variant", reuse=True) == "model"
     assert len(calls) == len(requests) == 1
+
+
+def test_local_question_cover_prioritizes_the_approved_question_cue(
+    setup_plan, monkeypatch
+):
+    from backend.services import cover_planner as planner
+
+    candidates, _, _ = setup_plan
+    rows = [
+        {"start": 0.5, "end": 3.0, "text": "What changed?"},
+        {"start": 3.0, "end": 8.0, "text": "Our approach changed."},
+    ]
+    monkeypatch.setattr(intelligence, "source_frame_analysis_allowed", lambda: False)
+    ctx = planner.context(
+        "What changed?", "youtube_long", (1280, 720), cb.Options(), locked=True
+    )
+    trace = {}
+    photo, _, _ = cd.pick_frame(
+        None, {"start": 0.0, "end": 8.0}, rows, context=ctx, trace=trace
+    )
+    assert photo == candidates[0][0]
+    assert trace["source_timestamp_sec"] < 3.0
