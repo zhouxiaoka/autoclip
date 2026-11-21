@@ -159,6 +159,8 @@ def test_layout_reader_binds_lines_to_the_approved_title(monkeypatch, lines, val
     from backend.services import cover_fidelity
     def vision(content, config):
         assert len([item for item in content if item["type"] == "image_url"]) == 1
+        if "定位首版" in content[0]["text"]:
+            return {"bbox": [150, 120, 850, 400]}
         return dict(bbox_pct=[5, 5, 60, 35], align="left", emphasis="better", emphasis_color="#aa2222",
                     lines=[dict(text=line, weight="bold", color="#ffffff", height_pct=8) for line in lines])
     monkeypatch.setattr(intelligence, "source_frame_analysis_allowed", lambda: True)
