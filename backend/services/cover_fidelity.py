@@ -70,9 +70,53 @@ def _box_percent(box):
     return tuple(x / scale for x in (left, top, right, bottom))
 
 
+def _bind_title_lines(layout, title):
+    # A raster glyph has no Unicode width. Always put the approved punctuation back in the prompt.
+    width_map = str.maketrans({chr(i): chr(i - 0xFEE0) for i in range(0xFF01, 0xFF5F)})
+    approved = " ".join(title.split())
+    remaining = approved
+    for line in layout.lines:
+        observed = " ".join(line.text.split())
+        actual = remaining[:len(observed)]
+        if actual.translate(width_map) != observed.translate(width_map):
+            return False
+        line.text = actual
+        remaining = remaining[len(actual):].lstrip()
+    return not remaining and layout.emphasis in approved
+
+
+def _measure_title_ink(crop, layout, bounds, full_height):
+    """Refine alignment only when the measured ink resolves into the same number of lines."""
+    import numpy as np
+
+    l, t, r, b = bounds
+    tile = crop.crop((int(l * crop.width / 100), int(t * crop.height / 100),
+                      min(crop.width, int(r * crop.width / 100) + 1), min(crop.height, int(b * crop.height / 100) + 1)))
+    if min(tile.size) < 8:
+        return
+    pixels = np.asarray(tile, dtype=np.int16)
+    mask = np.zeros(pixels.shape[:2], dtype=bool)
+    for color in {line.color for line in layout.lines} | {layout.emphasis_color}:
+        ink = tuple(bytes.fromhex(color[1:]))
+        mask |= np.abs(pixels - ink).max(axis=2) < 36
+    rows = np.flatnonzero(mask.sum(axis=1) > .10 * tile.width)
+    groups = [g for g in np.split(rows, np.flatnonzero(np.diff(rows) > max(2, .009 * tile.height)) + 1)
+              if len(g) >= 4]
+    if len(groups) != len(layout.lines):
+        return
+    edges = []
+    for line, group in zip(layout.lines, groups):
+        edges.append(np.quantile(np.nonzero(mask[group])[1], [.025, .975]))
+        line.height_pct = round((group[-1] - group[0] + 1) * 100 / full_height, 2)
+    edges = np.array(edges)
+    spreads = {"left": np.ptp(edges[:, 0]), "center": np.ptp(edges.mean(axis=1)), "right": np.ptp(edges[:, 1])}
+    best, runner_up, _ = sorted(spreads, key=spreads.get)
+    if spreads[best] < .07 * tile.width and spreads[runner_up] - spreads[best] > .035 * tile.width:
+        layout.align = best
+
+
 def read_title_layout(artwork: bytes, title: str) -> TitleLayout | None:
     from PIL import Image
-    from backend.services.cover_brief import matches
 
     if not intelligence.source_frame_analysis_allowed():
         return None
@@ -110,12 +154,12 @@ def read_title_layout(artwork: bytes, title: str) -> TitleLayout | None:
                            round((y0 + b / 100 * crop.height) / height * 100, 1))
         for line in layout.lines:
             line.height_pct = round(line.height_pct * crop.height / height, 2)
+        _measure_title_ink(crop, layout, (l, t, r, b), height)
     except ProjectDeleted:
         raise
     except (intelligence.VisionRequestError, intelligence.UserFacingError, OSError, ValueError, KeyError, TypeError):
         return None
-    lines = [line.text for line in layout.lines]
-    if any(matches(sep.join(lines), title) for sep in ("", " ")) and layout.emphasis in title:
+    if _bind_title_lines(layout, title):
         return layout
     return None
 

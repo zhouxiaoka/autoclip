@@ -166,3 +166,12 @@ def test_layout_reader_binds_lines_to_the_approved_title(monkeypatch, lines, val
     monkeypatch.setattr(intelligence, "source_frame_analysis_allowed", lambda: True)
     monkeypatch.setattr(intelligence, "vision_call", vision)
     assert bool(cover_fidelity.read_title_layout(jpeg("#765"), "A better question?")) == valid
+
+
+def test_bind_measured_lines_restores_fullwidth_punctuation():
+    from backend.services.cover_fidelity import TitleLayout, _bind_title_lines
+    layout = TitleLayout(bbox_pct=[40, 6, 96, 24], align="right", emphasis="12", emphasis_color="#4488ff",
+                         lines=[dict(text=t, color="#ffffff", weight="bold", height_pct=8)
+                                for t in ("最好的", "12个月?")])
+    assert _bind_title_lines(layout, "最好的12个月？") and layout.lines[-1].text == "12个月？"
+    assert not _bind_title_lines(layout, "最好的13个月？")
