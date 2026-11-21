@@ -1,0 +1,37 @@
+{
+  "analysis": {
+    "status": "failed",
+    "phase": "screening",
+    "error": "应用刚重启，这次制作已中断，请重试。",
+    "error_code": "service_restarted",
+    "failure_stage": "screening",
+    "crash_stage": "screening",
+    "crash_exit": "sigkill",
+    "crash_uptime_bucket": "lt_10m",
+    "crash_rss_bucket": "lt_1g",
+    "crash_disk_bucket": "ge_5g",
+    "crash_has_fault": false,
+    "shutdown_kind": "crash",
+    "billable_calls_before_failure": 0
+  },
+  "generation": {
+    "status": "failed",
+    "error": "应用刚重启，这次制作已中断，请重试。",
+    "error_code": "service_restarted",
+    "failure_stage": "screening",
+    "restart_reason": "crash",
+    "crash_stage": "screening",
+    "crash_exit": "sigkill",
+    "crash_uptime_bucket": "lt_10m",
+    "crash_rss_bucket": "lt_1g",
+    "crash_disk_bucket": "ge_5g",
+    "crash_has_fault": false,
+    "shutdown_kind": "crash",
+    "billable_calls_before_failure": 0
+  },
+  "top_status": null,
+  "has_crash_stage": true,
+  "has_restart_reason": true,
+  "has_应用刚重启": false,
+  "has_重新生成": false
+}

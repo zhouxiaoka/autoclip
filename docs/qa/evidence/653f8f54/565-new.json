@@ -1,0 +1,24 @@
+{
+  "signin": {
+    "code": "source_blocked",
+    "stage": "ingest",
+    "product_sentence": "这个视频当前无法访问，可能是私密、地区或年龄限制，或网站要求登录确认。请换一个公开视频，或在导入时选择已登录的浏览器读取 Cookie。",
+    "logged_in": false
+  },
+  "seedream_readiness": {
+    "ready": false,
+    "code": "image_model_in_analysis",
+    "trial_ok": null,
+    "analysis_ok": false,
+    "transcription_ok": false,
+    "ffmpeg_ok": true
+  },
+  "seedream_trial": {
+    "probe_kind": "trial",
+    "ok": false,
+    "error_code": "image_model_in_analysis",
+    "trial_passed": null
+  },
+  "fixture": "localhost seed connection, not a real upstream",
+  "ui_shell": "modified bundle already isolated; original GUI not launched"
+}
