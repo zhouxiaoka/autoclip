@@ -14,6 +14,15 @@ def jpeg(color):
     return out.getvalue()
 
 
+def mock_title_layout(monkeypatch):
+    from backend.services import cover_fidelity
+    layout = cover_fidelity.TitleLayout(
+        bbox_pct=(8, 16, 55, 32), align="left", emphasis="better", emphasis_color="#2288aa",
+        lines=[dict(text="A better question?", color="#ffffff", weight="bold", height_pct=6)],
+    )
+    monkeypatch.setattr(cover_fidelity, "read_title_layout", lambda *_: layout)
+
+
 @pytest.mark.parametrize(
     ("change", "expected"),
     [
@@ -41,6 +50,7 @@ def test_comparison_controls_model_adoption_after_ocr(monkeypatch, change, expec
         evidence="两图主体和背景特征可见。",
     )
     calls = []
+    mock_title_layout(monkeypatch)
 
     def vision(content, config):
         calls.append(
@@ -100,9 +110,10 @@ def test_opposite_single_face_landmarks_veto_even_without_visual_service(monkeyp
 
 @pytest.mark.parametrize("previous", [False, True])
 @pytest.mark.parametrize("repaired", ["preserved", "changed", "uncertain"])
-def test_repair_sends_source_and_rejected_layout_then_rechecks(monkeypatch, repaired, previous):
+def test_repair_sends_only_source_and_reads_rejected_layout_then_rechecks(monkeypatch, repaired, previous):
     frame, first, second = [jpeg(color) for color in ("#543", "#654", "#765")]
     generated, checked = [], []
+    mock_title_layout(monkeypatch)
 
     def generate(request):
         generated.append(request)
@@ -122,8 +133,8 @@ def test_repair_sends_source_and_rejected_layout_then_rechecks(monkeypatch, repa
     _, audit = cb.make(brief(frame), frame, cover.CoverConfig(enabled=True, base_url="fixture", model="offline"),
                        can_send=True, generate=generate, check=lambda *_: True, previous=previous)
     assert len(generated) == 2
-    assert generated[1].reference == frame and generated[1].layout_reference == first
-    assert "底边新增两只手" in generated[1].prompt
+    assert generated[1].reference == frame and not getattr(generated[1], "layout_reference", None)
+    assert "可见 0 只手" in generated[1].prompt and "#2288aa" in generated[1].prompt
     assert checked == [(frame, first, None), (frame, second, first)]
     assert audit["result"] == ("model" if repaired == "preserved" else "local_design")
 
@@ -137,7 +148,19 @@ def test_repair_layout_must_be_visible_to_the_verifier(monkeypatch, layout, stat
         assert len([item for item in content if item["type"] == "image_url"]) == 3
         return dict(dict.fromkeys(cover_fidelity.ASPECTS, "preserved"),
                     reference_hands=0, cover_hands=0, reference_facing="left", cover_facing="left",
-                    title_layout=layout, evidence="核对原帧的照片及首版标题")
+                    title_layout=layout, photo_quality="preserved", evidence="核对原帧的照片及首版标题")
     monkeypatch.setattr(intelligence, "source_frame_analysis_allowed", lambda: True)
     monkeypatch.setattr(intelligence, "vision_call", vision)
     assert cover_fidelity.compare(frame, artwork, first)["status"] == status
+
+
+@pytest.mark.parametrize(("lines", "valid"), [(["A better", "question?"], True), (["A worse", "question?"], False)])
+def test_layout_reader_binds_lines_to_the_approved_title(monkeypatch, lines, valid):
+    from backend.services import cover_fidelity
+    def vision(content, config):
+        assert len([item for item in content if item["type"] == "image_url"]) == 1
+        return dict(bbox_pct=[5, 5, 60, 35], align="left", emphasis="better", emphasis_color="#aa2222",
+                    lines=[dict(text=line, weight="bold", color="#ffffff", height_pct=8) for line in lines])
+    monkeypatch.setattr(intelligence, "source_frame_analysis_allowed", lambda: True)
+    monkeypatch.setattr(intelligence, "vision_call", vision)
+    assert bool(cover_fidelity.read_title_layout(jpeg("#765"), "A better question?")) == valid

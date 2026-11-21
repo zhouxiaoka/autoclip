@@ -543,22 +543,3 @@ def test_reopening_an_export_reuses_its_running_cover_job(data_dir, monkeypatch)
         while cover.get_job(first['job_id'])['status'] == 'running' and time.monotonic() < deadline:
             time.sleep(.01)
     assert cover.get_job(first['job_id'])['status'] == 'completed'
-
-
-def test_dashscope_repair_wire_keeps_photo_and_layout_in_order():
-    from backend.core.image_providers import ImageRequest, generate_dashscope
-    import base64
-
-    frame = _jpeg()
-    buf = io.BytesIO()
-    Image.new("RGB", (64, 72)).save(buf, format="PNG")
-    layout = buf.getvalue()
-    session = _Session([_Resp(payload={"output": {"results": [{"b64_image": base64.b64encode(frame).decode()}]}})])
-    req = ImageRequest("repair", 720, 1280, reference=frame, model="qwen-image-2.0", layout_reference=layout)
-    assert generate_dashscope(api_key="fixture", base_url="", request=req, session=session) == frame
-    content = session.calls[0][2]["json"]["input"]["messages"][0]["content"]
-    assert [item["image"] for item in content[:-1]] == [
-        "data:image/jpeg;base64," + base64.b64encode(frame).decode(),
-        "data:image/png;base64," + base64.b64encode(layout).decode(),
-    ]
-    assert content[-1] == {"text": "repair"}

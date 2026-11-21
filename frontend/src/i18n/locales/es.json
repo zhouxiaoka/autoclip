@@ -2079,6 +2079,7 @@
   "本地视频处理失败，请确认素材完整、磁盘有空间后重试。": "Falló el procesamiento local del vídeo. Comprueba que el archivo está entero y hay espacio en disco, y vuelve a intentarlo.",
   "磁盘空间不足，请清理空间后重试。": "No queda espacio en el disco. Libera espacio y vuelve a intentarlo.",
   "文件已损坏，请重新下载或换一个文件。": "El archivo está dañado. Descárgalo de nuevo o usa otro archivo.",
+  "cover_photo_degraded": "La revisión redujo la calidad de la foto. La portada usa el fotograma original.",
   "cover_layout_changed": "La revisión cambió el diseño del título. La portada usa el fotograma original.",
   "subject_changed": "El sujeto o el entorno cambió. La portada usa el fotograma original.",
   "fidelity_unavailable": "No se pudo verificar la fidelidad al original. La portada usa el fotograma original.",

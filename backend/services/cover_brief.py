@@ -658,7 +658,7 @@ def atomic(path, data):
         tmp.unlink(missing_ok=True)
 
 
-def _repair_prompt(b, fidelity):
+def _repair_prompt(b, fidelity, layout):
     aspect_names = {
         "identity": "人物身份或五官", "hands": "原帧外的手或改变的手势", "pose": "姿态",
         "orientation": "人物朝向", "facing": "人物朝向", "body_boundary": "超出原帧的躯干或衣袖",
@@ -667,17 +667,27 @@ def _repair_prompt(b, fidelity):
     issues = [aspect_names[key] for key in dict.fromkeys(fidelity.get("changed", []) + fidelity.get("uncertain", []))
               if key in aspect_names]
     observations = fidelity.get("observations") or {}
-    return "\n".join([
-        "修订同一张完整封面。图一是唯一真实的摄影原帧；图二是第一版封面，仅提供标题设计。",
-        "照图二保留标题的版面位置、逐行断句、字重、字号比例和强调色。批准标题：" + b.copy_spec["exact_text"],
-        "批准的副文案：" + " / ".join(b.copy_spec["secondary_text"]) if b.copy_spec["secondary_text"] else "无需副文案。",
-        "只修摄影部分。本次复核发现：" + "、".join(issues) + "。",
-        "现场对照记录（描述差异）：" + observations.get("evidence", ""),
-        "用图一的真实摄影内容替换图二有问题的区域。原帧截到胸口就收在胸口，原本不见的手、手臂和衣袖保持在画外。"
-        "不得为填满竖幅扩身、补墙、翻转人物。现场层架、灯光和物件以图一为准。"
-        "可以等比放大裁切图一以适配原版面。不要继承图二虚构的身体和现场，不要重复角标。",
-        "直接输出一张带完整标题的最终封面，保持图二画幅，不要对照图或说明。",
-    ])
+    left, top, right, bottom = layout.bbox_pct
+    instructions = [
+        "直接制作一张可发布的完整摄影封面。唯一输入照片就是最终封面的摄影原件。"
+        "把原照片当作锁定的照片图层，保持现场纹理、光线、衣服与脸部细节。通过同一张照片的等比裁切适配画幅，"
+        "保持主体朝向和照片下边缘，不能从胸像拉远成为半身像。如果空间不足，使用纯色排版边栏，摄影区域停在原帧边界。",
+        "现场核对要点：" + "、".join(issues) + "。"
+        "辨认可见的面部和手臂边缘及人物背后可对应的物件，保持原样。不要重新布光、锐化、叠加颗粒或美术滤镜。",
+        "批准标题：" + b.copy_spec["exact_text"],
+        f"画幅 {b.export_spec['width']}×{b.export_spec['height']}。标题墨迹范围约为画宽 {left:g}% 至 {right:g}%，"
+        f"画高 {top:g}% 至 {bottom:g}%。对齐方式 {layout.align}。按下列行序排字，保持层级和行间距：",
+    ]
+    for i, line in enumerate(layout.lines, 1):
+        instructions.append(f"第{i}行「{line.text}」 字重 {line.weight}，字高约为画高 {line.height_pct:g}%，基色 {line.color}。")
+    if layout.emphasis:
+        instructions.append(f"「{layout.emphasis}」整体使用 {layout.emphasis_color}，保留其原有断行。")
+    if isinstance(observations.get("reference_hands"), int):
+        instructions.append(f"源帧中可见 {observations['reference_hands']} 只手。不得增加手、手指、衣袖或躯干。")
+    if b.copy_spec["secondary_text"]:
+        instructions.append("批准的副文案：" + " / ".join(b.copy_spec["secondary_text"]))
+    instructions.append("直接交付一张带上述标题的成品。版式参数和摄影说明不出现在画内。")
+    return "\n".join(instructions)
 
 
 def make(b, frame, cfg, *, can_send, generate, check, previous=False):
@@ -694,6 +704,7 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
     verify = None
     attempts = 0
     comparisons = []
+    layout_reference = None
     if b.status == "constraint_conflict":
         raise ValueError(b.issues[-1]["message"])
     if b.status == "needs_source_validation":
@@ -717,15 +728,23 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
                 try:
                     image = generate(req)
                     data = fit_model(image, size)
-                    fidelity = cover_fidelity.compare(frame, image, req.layout_reference)
+                    fidelity = cover_fidelity.compare(frame, image, layout_reference)
                     comparisons.append(fidelity)
                     verify = None
                     if fidelity["status"] != "passed":
                         reason = "subject_changed" if fidelity["status"] == "failed" else "fidelity_unavailable"
                         if fidelity.get("changed") == ["title_layout"]:
                             reason = "cover_layout_changed"
+                        if fidelity.get("changed") == ["photo_quality"]:
+                            reason = "cover_photo_degraded"
                         if attempts == 1 and (fidelity.get("changed") or fidelity.get("uncertain")):
-                            req = replace(req, prompt=_repair_prompt(b, fidelity), layout_reference=image)
+                            layout = cover_fidelity.read_title_layout(image, b.copy_spec["exact_text"])
+                            if layout is None:
+                                fidelity["title_layout_read"] = "unavailable"
+                                break
+                            fidelity["title_layout_read"] = layout.model_dump()
+                            layout_reference = image  # Verification only. The generator receives the original frame.
+                            req = replace(req, prompt=_repair_prompt(b, fidelity, layout))
                             continue
                         break
                     verify = check(
