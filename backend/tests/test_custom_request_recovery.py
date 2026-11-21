@@ -80,19 +80,20 @@ def gateway():
         thread.join(timeout=5)
 
 
+@pytest.mark.parametrize('api_key', ['', 'fixture-api-key'])
 @pytest.mark.parametrize('name', ['Authorization', 'authorization', 'AUTHORIZATION'])
-def test_sdk_custom_authorization_is_one_case_insensitive_override(gateway, name):
+def test_sdk_custom_authorization_is_one_case_insensitive_override(gateway, name, api_key):
     from backend.core.llm_providers import OpenAIProvider
     from backend.services import ai_model_settings as ai
     from backend.services import provider_validation as validation
     base, records, _ = gateway
     connection = ai.Connection(id='custom', name='Custom', provider='compatible', base_url=base,
-                               api_key='', http_headers={name: 'Bearer fixture-override'})
+                               api_key=api_key, http_headers={name: 'Bearer fixture-override'})
     # The actual quick-test request already handles case-insensitive overrides.
     assert validation.validate_connection(connection, 'gpt-4o-mini').ok
     probe_record = next(row for row in records if row['method'] == 'POST')
     assert probe_record['authorization_count'] == 1
-    provider = OpenAIProvider(api_key='', model_name='gpt-4o-mini', base_url=base,
+    provider = OpenAIProvider(api_key=api_key, model_name='gpt-4o-mini', base_url=base,
                               http_headers=connection.http_headers)
     try:
         assert json.loads(provider.call('fixture', max_tokens=16).content)['color'] == 'red'
@@ -100,6 +101,7 @@ def test_sdk_custom_authorization_is_one_case_insensitive_override(gateway, name
         provider.client.close()
     sdk_record = records[-1]
     assert sdk_record['authorization_count'] == 1, 'SDK sends duplicate case-variant Authorization fields'
+    assert {key.lower(): value for key, value in sdk_record['headers'].items()}['authorization'] == 'Bearer fixture-override'
 
 
 def test_sdk_explicit_call_temperature_wins_over_connection_extra_body(gateway):
@@ -178,3 +180,26 @@ def test_recovery_caches_are_scoped_to_endpoint_and_case_insensitive_headers(mon
     assert recovery.remembered_model('compatible', 'http://127.0.0.1:12345/v1', '', 'retired', extra_headers=second) is None
     assert recovery.remembered_model('compatible', 'http://127.0.0.1:12346/v1', '', 'retired', extra_headers=first) is None
     assert 'fixture-first' not in repr(recovery._lists) + repr(recovery._remembered)
+
+
+def test_header_only_auth_with_official_url_never_contacts_public_provider(monkeypatch):
+    import httpx
+    from backend.core.llm_providers import OpenAIProvider
+    requests = []
+    def send(self, request):
+        requests.append(request)
+        body = json.loads(request.content)
+        chunk = {'id': 'fixture', 'object': 'chat.completion.chunk', 'created': 1,
+                 'model': body['model'], 'choices': [{'index': 0, 'delta': {'content': 'fixture-ok'}, 'finish_reason': 'stop'}]}
+        return httpx.Response(200, request=request, headers={'Content-Type': 'text/event-stream'},
+                              content=('data: ' + json.dumps(chunk) + '\n\ndata: [DONE]\n\n').encode())
+    # Intercept beneath Client.send so real request hooks still run, but no socket can open.
+    monkeypatch.setattr(httpx.Client, '_send_single_request', send)
+    provider = OpenAIProvider(api_key='', model_name='gpt-4o-mini', base_url='https://api.openai.com/v1',
+                              http_headers={'authorization': 'Bearer fixture-official-header'})
+    try:
+        assert provider.call('fixture', max_tokens=16).content == 'fixture-ok'
+    finally:
+        provider.client.close()
+    assert len(requests) == 1
+    assert requests[0].headers.get_list('authorization') == ['Bearer fixture-official-header']

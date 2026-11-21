@@ -604,7 +604,7 @@ class OpenAIProvider(LLMProvider):
         self.base_url = normalize_base_url(kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL"))
         self._configured_api_key = api_key
         self.is_custom_endpoint = bool(self.base_url) and self.base_url != OPENAI_OFFICIAL_BASE_URL
-        if not api_key and self.is_custom_endpoint:
+        if not api_key and (self.is_custom_endpoint or kwargs.get('http_headers')):
             api_key = OPENAI_COMPATIBLE_PLACEHOLDER_KEY
             self.api_key = api_key
         try:
