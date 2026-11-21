@@ -142,6 +142,8 @@ async def parse_youtube_video(
                     cmd,
                     capture_output=True,
                     text=True,
+                    encoding='utf-8',
+                    errors='ignore',
                     timeout=60,
                     cwd=str(get_data_directory()),
                     env=env

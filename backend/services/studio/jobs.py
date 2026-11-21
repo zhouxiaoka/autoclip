@@ -402,10 +402,17 @@ def _classify_landed_source(video, options=None):
         raise failure
 
 
+_NON_SPEECH_SUBTITLE_KEYS = frozenset({'danmaku', 'live_chat'})
+
+
 def _platform_subtitle_code(info):
-    """Language-matched manual subtitle code from yt-dlp info (not auto-captions)."""
+    """Language-matched manual subtitle code from yt-dlp info (not auto-captions or danmaku)."""
     language = str((info or {}).get('language') or '').lower()
-    manual = (info or {}).get('subtitles') or {}
+    manual = {
+        c: tracks
+        for c, tracks in ((info or {}).get('subtitles') or {}).items()
+        if str(c).lower() not in _NON_SPEECH_SUBTITLE_KEYS
+    }
     return next(
         (c for c in manual if language and (c.lower() == language or c.lower().split('-')[0] == language)),
         None,

@@ -21,7 +21,7 @@ import { CLOUD_TRANSCRIPTION_DESTINATION, analysisNeedsSetup, asrReadinessProper
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
 import { hasSuccessHistory, readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
-import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldArmAutostart, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
+import { claimBackgroundWhisperInstall, extractImportUrl, importUrlKind, isVideoFile, shouldArmAutostart, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
 import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
@@ -36,6 +36,11 @@ function validationHint(check?: ReadinessCheck | null) {
   if (check?.code === 'model_validation_failed') return t('型号 {{model}} 未通过校验，请更换型号或重新测试。', { model: check.label || '' })
   if (check?.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
   return ''
+}
+
+const parseImportUrl = (raw: string): string | null => {
+  if (typeof extractImportUrl === 'function') return extractImportUrl(raw)
+  return importUrlKind(raw) ? raw.trim() : null
 }
 
 function issueCopy(item: ReadinessIssue) {
@@ -172,7 +177,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const visualOn = useFlag('pkg_template_picker_visual') === true
   const [browser, setBrowser] = useState(restored?.browser || '')
   const [cookieAssistLocal, setCookieAssistLocal] = useState(false)
-  const assist = cookieAssistLocal || cookieAssistFromLocation(typeof window === 'undefined' ? '' : (window.location?.search || ''))
+  const assist = cookieAssistLocal || cookieAssistFromLocation(
+    typeof window === 'undefined' ? '' : (window.location?.search || ''),
+    typeof window === 'undefined' ? '' : (window.location?.hash || ''),
+  )
   const browserRef = useRef<HTMLSelectElement | null>(null)
   useEffect(() => {
     if (!assist) return
@@ -298,9 +306,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       if (target instanceof HTMLElement && target.closest('.ac-import-setup')) return
       if (target instanceof HTMLElement && target.closest('input, textarea, [contenteditable="true"]') && !target.closest('.ac-creative-import')) return
       const text = event.clipboardData?.getData('text') || ''
-      if (!importUrlKind(text) || !shouldAutoStart(pasteFlag, 'paste')) return
+      const extracted = parseImportUrl(text)
+      if (!extracted || !shouldAutoStart(pasteFlag, 'paste')) return
       event.preventDefault()
-      arm('paste', { url: text.trim() })
+      arm('paste', { url: extracted })
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
@@ -371,12 +380,16 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     setPreviewLoading(false)
   }
   const inspectInFlight = useRef<{ url: string; ticket: number; promise: Promise<UrlInspectPreview | null> } | null>(null)
+  const inspectTimedOut = useRef(false)
+  const previewBrowserRef = useRef('')
   const inspect = async (nextUrl: string, _trigger: 'paste' | 'drop' | 'blur' = 'paste') => {
-    const trimmed = nextUrl.trim()
+    const trimmed = parseImportUrl(nextUrl) || nextUrl.trim()
     if (!importUrlKind(trimmed)) { clearPreview(); return null }
-    if (previewUrlRef.current === trimmed && urlPreview) return urlPreview
+    if (previewUrlRef.current === trimmed && previewBrowserRef.current === (browser || '') && urlPreview) return urlPreview
     const ticket = ++previewTicket.current
     previewUrlRef.current = trimmed
+    previewBrowserRef.current = browser || ''
+    inspectTimedOut.current = false
     setPreviewLoading(true)
     setPending(null)
     try {
@@ -397,6 +410,9 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     } catch (e) {
       if (ticket !== previewTicket.current) return null
       setUrlPreview(null)
+      const errObj = e as { code?: string; response?: { status?: number } } | null
+      const status = errObj?.response?.status
+      inspectTimedOut.current = status === 504 || errObj?.code === 'ECONNABORTED' || errObj?.code === 'ETIMEDOUT'
       const code = errorCode(e)
       const message = t(errorText(e))
       if (browserCookieRecovery(code, errorText(e))) {
@@ -464,10 +480,13 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     if (starting.current) return
     if (trigger === 'button') setPending(null)
     let preview = urlPreview
-    if (source === 'link' && url.trim() && !preview) {
-      preview = await runInspect(url.trim(), 'blur')
-      if (!preview || starting.current) return
-      if (preview.preview_route === 'local_transcription'
+    const normalizedUrl = source === 'link' ? (parseImportUrl(url) || url.trim()) : ''
+    if (source === 'link' && normalizedUrl && normalizedUrl !== url) setUrl(normalizedUrl)
+    if (source === 'link' && normalizedUrl && !preview) {
+      preview = await runInspect(normalizedUrl, 'blur')
+      if (starting.current) return
+      if (!preview && !inspectTimedOut.current) return
+      if (preview?.preview_route === 'local_transcription'
         && readiness?.checks?.transcription?.ok === false
         && !subtitle
         && !readiness?.checks?.transcription?.skippable
@@ -532,7 +551,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       if (subtitle) body.append('subtitle', subtitle)
       body.append('name', file && source === 'file' ? file.name.replace(/\.[^.]+$/, '') : t("智能剪辑"))
       if (source === 'file' && file) body.append('video', file)
-      else { body.append('url', url.trim()); if (browser) body.append('browser', browser) }
+      else { body.append('url', normalizedUrl || url.trim()); if (browser) body.append('browser', browser) }
       body.append('features', JSON.stringify(featureSnapshot()))
       body.append('flow_id', flowId)
       const skippedWhisper = allowLink && source !== 'file' && !!readiness && !readiness?.checks?.transcription?.ok && !subtitle
@@ -577,7 +596,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     const dropped = [...event.dataTransfer.files].find(item => isVideoFile(item))
     if (dropped) { arm('drop', { file: dropped }); return }
     const text = event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain')
-    if (importUrlKind(text)) arm('paste', { url: text.trim() })
+    const extracted = parseImportUrl(text)
+    if (extracted) arm('paste', { url: extracted })
   }
   const names = platforms.map(platformLabel).join(uiLocale().toLowerCase().startsWith('zh') ? '、' : ', ')
   const youtubeLongOnlyTooShort = longGate.durationSec != null && longGate.durationSec < YOUTUBE_LONG_MIN_SEC && platforms.length > 0 && platforms.every(platform => platform === 'youtube_long')

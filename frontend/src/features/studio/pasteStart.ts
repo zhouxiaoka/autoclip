@@ -18,6 +18,20 @@ export function importUrlKind(text: string): 'youtube' | 'bilibili' | null {
   return null
 }
 
+const URL_TOKEN = /https?:\/\/[^\s"'<>`]+/gi
+const TRAILING_PUNCT = /[.,;:!?)\]】》」"'、，。！？]+$/
+
+/** Extract a single supported YouTube/Bilibili URL from plain links or share text (e.g. Bilibili `【标题】 https://b23.tv/...`). */
+export function extractImportUrl(text: string): string | null {
+  const raw = (text || '').trim()
+  if (!raw) return null
+  const matches = raw.match(URL_TOKEN)
+  if (!matches || matches.length !== 1) return null
+  const candidate = matches[0].replace(TRAILING_PUNCT, '')
+  const upgraded = candidate.replace(/^http:\/\//i, 'https://')
+  return importUrlKind(upgraded) ? upgraded : null
+}
+
 export function isVideoFile(file: { name?: string; type?: string } | null | undefined): boolean {
   if (!file) return false
   return /^video\//.test(file.type || '') || VIDEO.test(file.name || '')

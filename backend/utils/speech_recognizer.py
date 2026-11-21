@@ -538,7 +538,7 @@ class SpeechRecognizer:
                 str(audio_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=300)
             
             if result.returncode != 0:
                 raise SpeechRecognitionError(f"音频提取失败: {result.stderr}")

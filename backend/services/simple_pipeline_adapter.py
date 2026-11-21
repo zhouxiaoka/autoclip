@@ -73,7 +73,7 @@ def _cut_audio_window(video: Path, start: float, end: float, out_wav: Path) -> P
         '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1',
         str(out_wav),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600)
     if result.returncode != 0 or not out_wav.is_file():
         raise PipelineFailure('SUBTITLE', f'按时间窗口提取音频失败: {(result.stderr or "")[-400:]}', code='source_window_cut_failed')
     return out_wav

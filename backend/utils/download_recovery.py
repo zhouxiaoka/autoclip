@@ -43,22 +43,33 @@ SOURCE_ACCESS_HINT = '这个视频当前无法访问，可能是私密、地区�
 # Codes and matchers live in download_failure_observe so contract checks need no yt_dlp.
 
 
+_COOKIE_LOCK_OR_DPAPI_TOKENS = (
+    'dpapi', 'v20', 'app-bound', 'app_bound', 'decrypt',
+    'could not copy', 'permission denied', 'winerror 32', 'database is locked',
+)
+
+
 def _browser_cookie_permission_failure(error):
-    """Recognize yt-dlp's typed cookie wrapper, not arbitrary permission errors."""
+    """Recognize yt-dlp's typed CookieLoadError from locked DB or Windows DPAPI/v20 encryption."""
     pending, seen = [error], set()
-    cookie_failure = permission_failure = False
+    cookie_failure = permission_or_dpapi = False
     while pending:
         current = pending.pop()
         if not isinstance(current, BaseException) or id(current) in seen:
             continue
         seen.add(id(current))
-        cookie_failure |= isinstance(current, CookieLoadError)
-        permission_failure |= isinstance(current, PermissionError)
+        if isinstance(current, CookieLoadError):
+            cookie_failure = True
+            msg = str(current).lower()
+            if any(tok in msg for tok in _COOKIE_LOCK_OR_DPAPI_TOKENS):
+                permission_or_dpapi = True
+        if isinstance(current, PermissionError):
+            permission_or_dpapi = True
         pending.extend((current.__cause__, current.__context__))
         info = getattr(current, 'exc_info', None)
         if isinstance(info, tuple) and len(info) > 1:
             pending.append(info[1])
-    return cookie_failure and permission_failure
+    return cookie_failure and permission_or_dpapi
 
 
 def file_access_backoff(n=0) -> float:
