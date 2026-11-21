@@ -17,14 +17,14 @@ test('every output card shows its publish kit and uses the designed cover as the
 test('post copy is pasted as title, description, then hashtags; the kit saves natively on desktop',()=>{
  assert.match(kit,/\[post\.title, post\.description, post\.tags\.map\(tag => `#\$\{tag\}`\)\.join\(' '\)\]\.filter\(Boolean\)\.join\('\\n\\n'\)/)
  assert.match(kit,/observeStudioDownload\(\(\) => saveLocalFile\(kitPath\)/)
- assert.match(kit,/studioDownloadRequested\(projectId, variant\.render_job_id, props\)/)
+ assert.match(kit,/studioDownloadRequested\(projectId, jobId, props\)/)
  assert.match(kit,/studioApi\.redesignVariantCover\(projectId, variant\.id\)/)
  assert.match(kit,/studioApi\.variantCoverJob\(projectId, variant\.id\)/)
 })
 
 test('the publish page starts from the output kit: copy, hashtags and the matching cover slot',()=>{
- assert.match(publish,/setTitle\(variant\.post\.title\)/)
- assert.match(publish,/setDescription\(\[variant\.post\.description, variant\.post\.tags\.map/)
+ assert.match(publish,/setTitle\(post\.title\)/)
+ assert.match(publish,/setDescription\(\[post\.description, post\.tags\.map/)
  assert.match(publish,/coverApi\.get\(projectId, clipId, coverSlot\)/)
 })
 

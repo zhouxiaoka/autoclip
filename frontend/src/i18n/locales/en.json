@@ -787,6 +787,7 @@
   "OpenAI 兼容时填写。通义万相可留空。": "Required for OpenAI-compatible endpoints. Leave blank for Wanxiang.",
   "校对模型": "Proofread model",
   "多模态模型读图核对标题。可留空。": "A multimodal model reads the image to check the title. Optional.",
+  "仅本次将所选视频帧发送给封面模型": "Send the selected video frame to the cover model for this request only",
   "允许上传参考帧": "Allow sending a reference frame",
   "打开后，会把视频截帧发给生图服务做参考。默认关闭。": "When on, a video frame is sent to the image service as a reference. Off by default.",
   "允许": "Allow",

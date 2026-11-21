@@ -7,9 +7,9 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import StudioDownloadLink from '../features/studio/StudioDownloadLink'
 import type { RenderJob } from '../features/studio/types'
 import './publish-clip.css'
-import { studioApi } from '../features/studio/api'
+import { exportCoverSlot, exportPoster, studioApi } from '../features/studio/api'
 import { outputVariantPublishTarget } from '../features/studio/outputVariantPublish'
-import { projectApi } from '../services/api'
+import { mediaUrl, projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { publishGuideHref } from '../publish/guide'
@@ -149,11 +149,13 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
           setStudioExport(exported)
           // An automatic output arrives with its publish kit: start from its copy and cover.
           const variant = (workspace.output_variants || []).find(item => item.id === variantTarget.uploadPost)
-          if (variant?.post) {
-            nextTitle = variant.post.title || nextTitle
-            setTitle(variant.post.title)
-            setDescription([variant.post.description, variant.post.tags.map(tag => `#${tag}`).join(' ')].filter(Boolean).join('\n\n'))
+          const post = variant?.post || exported.post
+          if (post) {
+            nextTitle = post.title || nextTitle
+            setTitle(post.title)
+            setDescription([post.description, post.tags.map(tag => `#${tag}`).join(' ')].filter(Boolean).join('\n\n'))
           }
+          if (!variant) coverSlot = exportCoverSlot(exported)
           if (variant && !['bilibili', 'youtube_long', 'original'].includes(variant.strategy_id)) coverSlot = 'douyin'
         }
         setClipTitle(nextTitle)
@@ -425,6 +427,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
   const showMedia = !loading && (studioJobId ? !!exported : !!clipId)
   const settingsLink = () => navigate('/settings?section=publish')
 
+  const coverImage = cover?.url?.startsWith('/api/v1/') ? mediaUrl(cover.url.slice('/api/v1'.length)) : cover?.url
   return (
     <div className="ac-page publish-clip-page">
       <header>
@@ -439,7 +442,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
         {showMedia && <section className="publish-media" aria-label={t('视频预览')}>
           <video key={clipId} controls playsInline preload="metadata" aria-label={clipTitle || t('视频预览')}
             src={exported ? studioApi.video(projectId, exported.job_id) : projectApi.getClipVideoUrl(projectId, clipId)}
-            poster={exported ? studioApi.thumbnail(projectId, exported.draft_id, exported.revision, exported.job_id) : undefined} />
+            poster={coverImage || (exported ? exportPoster(projectId, exported) || studioApi.thumbnail(projectId, exported.draft_id, exported.revision, exported.job_id) : undefined)} />
           <div className="publish-media-info">
             {exported && <p className="publish-revision"><StatusDot tone="ok" label={t('已导出')} /> · V{exported.revision}</p>}
             <h2>{clipTitle || t("切片")}</h2>
@@ -512,7 +515,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
                       border: '1px solid var(--ac-line)',
                     }}>
                       {cover?.url ? (
-                        <img src={cover.url} alt={t("封面")} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        <img src={coverImage || undefined} alt={t("封面")} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       ) : (
                         <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--ac-muted)', fontSize: 13 }}>
                           {coverBusy ? t("正在生成封面") : t("还没有封面")}

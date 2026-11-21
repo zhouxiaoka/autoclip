@@ -76,7 +76,7 @@ const isTauriRuntime = () => (
 
 // 打包后的桌面页在 tauri://localhost（macOS）或 http://tauri.localhost。
 // 根路径 /api/v1 会打到壳页面，打不到本机后端。开发时 base 仍是 /api/v1，走 Vite 代理。
-const mediaUrl = (path: string): string => {
+export const mediaUrl = (path: string): string => {
   const base = apiConfigManager.getBaseUrl().replace(/\/$/, '')
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }

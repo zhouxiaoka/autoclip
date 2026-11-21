@@ -94,6 +94,9 @@ def test_card_api_returns_and_polls_the_same_platform_cover_task(client, monkeyp
     submitted = []
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *args, **kwargs: submitted.append(args))
     started = client.post('/studio/p1/output-variants/v/cover/ai')
+    if not allow_frame:
+        assert started.status_code == 409 and not submitted
+        return
     assert started.status_code == 200
     assert client.post('/studio/p1/output-variants/v/cover/ai').json() == started.json()
     assert client.get('/studio/p1/output-variants/v/cover/ai').json() == started.json()
@@ -107,26 +110,25 @@ def test_card_api_rejects_ai_when_image_model_is_disabled(client, monkeypatch):
     assert client.post('/studio/p1/output-variants/v/cover/ai').status_code == 409
 
 
-@pytest.mark.parametrize('allow_frame', [False, True])
-def test_redesign_returns_the_new_cover_over_http_with_optional_reference(client, monkeypatch, allow_frame):
+def test_redesign_returns_the_model_jpeg_verbatim_over_http(client, monkeypatch):
     import io
     import json
     from PIL import Image
     from backend.core import image_providers
 
     store.write('p1', _completed_output())
-    config = cover.CoverConfig(enabled=True, model='test-image', api_key='fixture', allow_send_frame=allow_frame)
+    config = cover.CoverConfig(enabled=True, model='test-image', api_key='fixture', allow_send_frame=True)
     monkeypatch.setattr(cover, 'load_config', lambda: config)
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
     encoded = io.BytesIO()
-    Image.new('RGB', (48, 64), 'navy').save(encoded, 'PNG')
+    Image.new('RGB', (48, 64), 'navy').save(encoded, 'JPEG')
     reference = encoded.getvalue()
     args = ('p1', 'render', 'xiaohongshu')
     publish_kit.frame_path(*args).write_bytes(reference)
     publish_kit.cd_meta_path(*args).write_text(json.dumps({'lines': ['Headline'], 'accent': 0}))
 
     def image_model(*, request, **_):
-        assert request.reference == (reference if allow_frame else None)
+        assert request.reference == reference
         assert request.model == 'test-image'
         return reference
 
@@ -138,11 +140,12 @@ def test_redesign_returns_the_new_cover_over_http_with_optional_reference(client
     assert client.get(url + '/ai').json()['job_id'] == job.json()['job_id']
     response = client.get(url)
     assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
+    assert response.content == reference
     with Image.open(io.BytesIO(response.content)) as image:
-        assert image.size == (1080, 1440)
+        assert image.size == (48, 64)  # preserve the model artwork even when its resolution differs
 
 
-@pytest.mark.parametrize(('automatic', 'model_fails'), [(True, False), (False, False), (True, True)])
+@pytest.mark.parametrize(('automatic', 'model_fails'), [(True, False), (False, False), (True, True), (False, True)])
 def test_default_export_and_regeneration_make_distinct_local_jpegs(client, root, source, monkeypatch, automatic, model_fails):
     import io
     import shutil
@@ -161,11 +164,8 @@ def test_default_export_and_regeneration_make_distinct_local_jpegs(client, root,
     shutil.copyfile(source, output / f'{job_id}.mp4')
     config = cover.CoverConfig(enabled=model_fails, api_key='fixture' if model_fails else '', model='fixture')
     monkeypatch.setattr(cover, 'load_config', lambda: config)
-    model_requests = []
     def generate_image(**kwargs):
-        assert model_fails and kwargs['request'].reference is None
-        model_requests.append(kwargs['request'].model)
-        raise image_providers.ImageError('offline fixture rejects the request')
+        pytest.fail('a default studio cover may never send an unreferenced image request')
     monkeypatch.setattr(image_providers, 'generate_image', generate_image)
     monkeypatch.setattr(jobs, 'source', lambda _: source)
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
@@ -192,7 +192,6 @@ def test_default_export_and_regeneration_make_distinct_local_jpegs(client, root,
         assert previous.size == current.size
         assert ImageChops.difference(previous, current).getbbox(), 'regeneration repeated the same image'
         previous = current
-    assert len(model_requests) == (3 if model_fails else 0)
 
 
 def test_kit_http_download_cleans_up_the_archive(client, root, monkeypatch):
@@ -212,3 +211,30 @@ def test_kit_http_download_cleans_up_the_archive(client, root, monkeypatch):
     response = client.get('/studio/p1/output-variants/v/kit')
     assert response.status_code == 200 and response.content.startswith(b'PK')
     assert len(created) == 1 and not created[0].exists()
+
+
+def test_manual_export_has_editable_copy_and_its_own_matching_kit(client, root):
+    import io
+    import zipfile
+    from backend.services.studio import publishing
+    job_id = 'a' * 32
+    job = {'job_id': job_id, 'status': 'completed', 'title': 'Original', 'snapshot': {'hook': 'From the draft'},
+           'result': {'height': 1920, 'width': 1080}}
+    store.write('p1', {'jobs': [job]})
+    video = root / 'output' / 'studio' / f'{job_id}.mp4'
+    video.parent.mkdir(parents=True, exist_ok=True)
+    video.write_bytes(b'versioned video')
+    path = publishing.export_cover_file('p1', job)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b'actual cover')
+    public = client.get('/studio/p1').json()['jobs'][0]
+    assert public['post']['description'] == 'From the draft'
+    assert public['cover_revision'] == str(path.stat().st_mtime_ns)
+    post = {'title': 'Edited', 'description': 'Ready to publish', 'tags': ['interview']}
+    base = f'/studio/p1/jobs/{job_id}'
+    assert client.put(base + '/post', json=post).json() == post
+    assert client.get('/studio/p1').json()['jobs'][0]['post'] == post
+    with zipfile.ZipFile(io.BytesIO(client.get(base + '/kit').content)) as archive:
+        assert archive.read('Edited.mp4') == video.read_bytes()
+        assert archive.read('Edited 封面.jpg') == path.read_bytes()
+        assert '#interview' in archive.read('Edited 发布文案.txt').decode()

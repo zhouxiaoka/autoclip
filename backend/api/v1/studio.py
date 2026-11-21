@@ -400,10 +400,10 @@ async def template_recommend(
 def workspace(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
     from backend.services.studio import attempts
-    from backend.services.studio import pipeline_resume
+    from backend.services.studio import pipeline_resume, publishing
     data = attempts.public_workspace(call(store.recover, project_id))
     resume_point = pipeline_resume.resume_point_for_project(project_id)
-    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [publishing.public_job(project_id, j) for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):
@@ -671,20 +671,42 @@ def update_output_variant_post(project_id: str, variant_id: str, body: PostCopy,
     return call(jobs.update_post, project_id, variant_id, body)
 
 
+@router.put('/{project_id}/jobs/{job_id}/post')
+def update_export_post(project_id: str, job_id: str, body: PostCopy, db: Session = Depends(get_db)):
+    from backend.services.studio import publishing
+    project_or_404(project_id, db)
+    return call(publishing.save_export_post, project_id, job_id, body)
+
+
+@router.get('/{project_id}/jobs/{job_id}/kit')
+def export_job_kit(project_id: str, job_id: str, db: Session = Depends(get_db)):
+    from backend.services.studio import publishing
+    project_or_404(project_id, db)
+    job = call(publishing.completed_job, call(store.read, project_id), job_id)
+    cover = publishing.export_cover_file(project_id, job)
+    return _kit_response(project_id, job, cover if cover.is_file() else None, publishing.export_post(job),
+                         'Studio', english=(job.get('snapshot') or {}).get('language') == 'en')
+
+
 @router.get('/{project_id}/output-variants/{variant_id}/kit')
 def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(get_db)):
-    from urllib.parse import quote
     from backend.services.platform_strategy import platform_strategy
     from backend.services.studio import publish_kit
     project_or_404(project_id, db)
     variant, job = _variant_job(project_id, variant_id)
-    video = store.directory(project_id) / 'output' / 'studio' / f"{job['job_id']}.mp4"
-    if not video.is_file():
-        raise HTTPException(404, '成片文件已移除')
     cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
     post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
     strategy = platform_strategy(variant['strategy_id'])
-    path, name = publish_kit.kit_file(video, cover, post, strategy.label, english=strategy.audience_language == 'en')
+    return _kit_response(project_id, job, cover, post, strategy.label, english=strategy.audience_language == 'en')
+
+
+def _kit_response(project_id, job, cover, post, label, *, english):
+    from urllib.parse import quote
+    from backend.services.studio import publish_kit
+    video = store.directory(project_id) / 'output' / 'studio' / f"{job['job_id']}.mp4"
+    if not video.is_file():
+        raise HTTPException(404, '成片文件已移除')
+    path, name = publish_kit.kit_file(video, cover, post, label, english=english)
     return FileResponse(path, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"},
                         background=BackgroundTask(path.unlink, missing_ok=True))
 

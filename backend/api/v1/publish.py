@@ -79,6 +79,7 @@ class CoverGenerateBody(BaseModel):
     badge: str | None = None
     content_type: str | None = Field(None, description="knowledge / interview / game / vlog / general")
     force_local: bool = False
+    allow_reference_once: bool = False
     sync: bool = Field(False, description="True 时同步生成（测试用）；默认后台任务")
 
 
@@ -327,7 +328,7 @@ async def get_clip_cover_file(project_id: str, clip_id: str, platform: str = "bi
     path = cover_svc.cover_path(project_id, clip_id, platform)
     if not path.exists() or path.stat().st_size <= 0:
         raise HTTPException(status_code=404, detail="还没有这张封面")
-    return FileResponse(path, media_type="image/jpeg", filename=f"{clip_id}_{platform}.jpg")
+    return FileResponse(path, media_type="image/jpeg", filename=f"{clip_id}_{platform}.jpg", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/covers/{project_id}/clips/{clip_id}")
@@ -349,6 +350,7 @@ async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerat
                 badge=body.badge,
                 content_type=body.content_type,
                 force_local=body.force_local,
+                **({"allow_reference_once": True} if body.allow_reference_once else {}),
             )
         except Exception as e:  # noqa: BLE001
             raise _cover_error(e)
@@ -361,6 +363,7 @@ async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerat
         badge=body.badge,
         content_type=body.content_type,
         force_local=body.force_local,
+        **({"allow_reference_once": True} if body.allow_reference_once else {}),
     )
 
 

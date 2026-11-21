@@ -1274,7 +1274,7 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
     """Share one tracked AI task between automatic covers and requests from the output card."""
     from backend.services import cover
     cfg = cover.load_config()
-    use_model = cfg.enabled and cfg.configured
+    use_model = cfg.enabled and cfg.configured and cfg.allow_send_frame
     if not (use_model or allow_local):
         return None
     job_id = uuid.uuid4().hex
@@ -1297,9 +1297,7 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
             return None
         if claimed['job_id'] == job_id:
             try:
-                mode = 'prefer_model' if allow_local else 'ai'
-                if not use_model:
-                    mode = 'local'
+                mode = 'ai' if use_model else 'local'
                 cover_executor.submit(_ai_cover_job, project_id, variant_id, job_id, mode=mode, _io_receipt=('cover', variant_id, job_id))
             except Exception as error:  # noqa: BLE001 - preserve the ready video and designed cover
                 store.remember_submission_rejection(project_id, ('cover', variant_id, job_id), error_code=studio_error_code(error))
@@ -1338,16 +1336,10 @@ def _ai_cover_job(project_id, variant_id, job_id, *, mode='ai'):
         if task.get('job_id') != job_id:
             return
         args = (project_id, task.get('render_job_id') or variant['render_job_id'], variant['strategy_id'])
-        if mode != 'local':
-            try:
-                with llm_usage.timed('ai_cover'):
-                    made = publish_kit.ai_cover(*args)
-            except Exception as error:
-                store.raise_owned_read_error(error)
-                if mode == 'ai':
-                    raise
-                logger.warning('Cover model failed, retrying locally: %s', type(error).__name__)
-        if not made and mode != 'ai':
+        if mode == 'ai':
+            with llm_usage.timed('ai_cover'):
+                made = publish_kit.ai_cover(*args)
+        else:
             publish_kit.redesign_local_cover(*args)
             cover_kind, made = 'design', True
     except Exception as error:  # noqa: BLE001 - the designed cover stays

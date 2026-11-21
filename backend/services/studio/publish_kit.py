@@ -118,43 +118,31 @@ def cd_meta_path(project_id: str, job_id: str, strategy_id: str) -> Path:
     return cover.cover_dir(project_id, clip_id(job_id)) / f'kit-{strategy_id}.json'
 
 
-# One house style for every AI cover: an editorial magazine cover for interview content.
-# Layout per platform slot; colour from the clip's own palette so cover and video match.
-AI_LAYOUT = {
-    'xiaohongshu': ('3:4 vertical Xiaohongshu note cover', 'title stacked in the top 40%, subject below and slightly off-centre'),
-    'douyin': ('9:16 vertical Douyin video cover', 'title stacked in the upper third, subject filling the lower two thirds'),
-    'tiktok': ('9:16 vertical TikTok cover', 'title stacked in the upper third, subject filling the lower two thirds'),
-    'instagram_reels': ('9:16 vertical Instagram Reels cover', 'title stacked in the upper third, subject filling the lower two thirds'),
-    'youtube_shorts': ('9:16 vertical YouTube Shorts cover', 'title stacked in the upper third, subject filling the lower two thirds'),
-    'youtube_long': ('16:9 YouTube thumbnail', 'subject on one side (head and shoulders, large), title stacked on the other side'),
-    'bilibili': ('16:10 Bilibili video cover', 'subject on one side (head and shoulders, large), title stacked on the other side'),
-}
-
-
-def ai_prompt(strategy_id: str, lines: list[str], accent: int, name: str, palette: str | None = None, *, has_reference: bool = True) -> str:
-    from backend.services.platform_strategy import platform_strategy
+def reference_prompt(strategy_id: str, lines: list[str], palette: str | None = None, *, subtitle='', badge='') -> str:
     from backend.services.studio.packaging_render import PALETTES
-    slot, layout = AI_LAYOUT.get(strategy_id, AI_LAYOUT['douyin'])
-    colour = '#' + PALETTES.get(palette or 'azure', PALETTES['azure'])[0]
-    keyword = lines[accent] if 0 <= accent < len(lines) and len(lines) > 1 else lines[-1]
-    english = platform_strategy(strategy_id).audience_language == 'en'
-    title = ' / '.join(lines)
-    concept = (f'Keep the person in the reference image{" (" + name + ")" if name else ""} identifiable: preserve the face, '
-               'age and clothing. Separate the subject from the background with soft directional light.'
-               if has_reference else
-               'Use an editorial illustration or a striking visual metaphor specific to the headline. '
-               'Do not invent a portrait, face or identity for the speaker.')
-    return (
-        f'Design a {slot} in a premium editorial magazine-cover style for this video. {concept} '
-        f'Use one strong focal point, clear negative space and a restrained palette. Layout: {layout}. '
-        f'Typography: a heavy condensed sans-serif headline, {"set in English" if english else "set in Simplified Chinese"}, '
-        f'stacked in short lines exactly reading "{title}"; the words "{keyword}" sit on a solid {colour} colour block (or in {colour}), '
-        f'the rest in off-white; strong hierarchy, generous margins, nothing touching the edges, the face never covered. '
-        f'Keep every letter inside the central 88% of the width and below the top 5% of the height; never crop or cut off text. '
-        f'Do not write any names or labels; the only text is the headline. '
-        f'Spell every character exactly as given; no other words, no watermark, no logo, no subtitles, no UI elements. '
-        f'High contrast, crisp and clean, designed to stand out in a feed and earn the click.'
-    )
+    portrait = strategy_id not in ('bilibili', 'youtube_long', 'original')
+    aspect = '3:4' if strategy_id == 'xiaohongshu' else '9:16' if portrait else '16:10' if strategy_id == 'bilibili' else '16:9'
+    composition = ('以头肩近景构图，保留完整头顶和下巴，顺着视线方向留空间。'
+                   '标题放在头顶上方原场景的暗部，字与发际线拉开距离。'
+                   if portrait else '让主体和标题分别占据画面两侧；保持视线前方的空间，把标题放在原场景较安静的一侧。')
+    title = ''.join(lines) if all(not re.search(r'[A-Za-z]', line) for line in lines) else ' '.join(lines)
+    accent = PALETTES.get(palette or 'azure', PALETTES['azure'])[0]
+    number = re.search(r'\d+(?:[.,]\d+)*', title)
+    emphasis = f'仅把标题中的 {number.group()} 设为' if number else '仅给一个关键词使用'
+    brief = [
+        f'为随附的视频帧设计一张可直接发布的 {aspect} 专题封面。在同一张图里完成摄影构图、调色和最终排字。',
+        f'主标题原文（只出现一次）：{title}',
+        '把观众的注意力先引到画面主体，再读完这一句标题。访谈封面以参考帧中正在回答的人为主角；保留他的表情、视线、发型、衣着和身后的现场。素材没有人物时，保留画面中原本的主体。',
+        composition + '保留背景里的光源、物体轮廓和冷暖层次。边缘需要扩展时延续同一场景。不要换成影棚、纯白背景或插画。',
+        f'标题用粗无衬线字，短标题排一行，空间不足时按词意分成两行。字色用暖白，{emphasis} #{accent}。文字贴合原场景明暗，四周留出安全边距，脸部和发际线保持清晰。',
+        '逐字保留标题中的数字、单位和标点。标题不要以副标题、英文翻译或背景装饰的形式重复。不要添加姓名、引号、平台标识、尺寸说明或水印。',
+    ]
+    if subtitle:
+        brief.append('指定副标题（只出现一次）：' + subtitle)
+    if badge:
+        brief.append('指定角标（只出现一次）：' + badge)
+    brief.append('交付一张已经排好字的完整封面。缩到手机卡片大小时，仍要能认出主体并一眼读清标题。')
+    return '\n'.join(brief)
 
 
 def _title_ok(image: bytes, lines: list[str]) -> bool | None:
@@ -174,40 +162,8 @@ def _title_ok(image: bytes, lines: list[str]) -> bool | None:
     except Exception:  # noqa: BLE001
         return None
     squash = lambda text: re.sub(r'[\s\W_]+', '', str(text)).lower()  # noqa: E731
-    return squash(''.join(lines)) in squash(answer.get('text', ''))
-
-
-def _fit(image, size: tuple[int, int]):
-    """Pad, never crop: a model that ignores the size must not lose the edges of its headline.
-
-    The gap is filled by stretching the image's outermost pixels, blurred and feathered into it, so a
-    2:3 image on a 9:16 cover reads as one picture instead of sitting between flat bars. Only an
-    edge a few pixels deep is reused: mirroring more would echo the headline into the gap.
-    """
-    from PIL import Image, ImageFilter, ImageOps
-    width, height = size
-    contained = ImageOps.contain(image, size, method=Image.Resampling.LANCZOS)
-    x, y = (width - contained.width) // 2, (height - contained.height) // 2
-    if (x, y) == (0, 0):
-        return contained.resize(size, Image.Resampling.LANCZOS)
-    canvas = Image.new('RGB', size)
-    canvas.paste(contained, (x, y))
-    edge, cw, ch = 4, contained.width, contained.height
-    if y:
-        bottom = height - y - ch
-        canvas.paste(contained.crop((0, 0, cw, edge)).resize((cw, y)), (x, 0))
-        canvas.paste(contained.crop((0, ch - edge, cw, ch)).resize((cw, bottom)), (x, y + ch))
-    else:
-        right = width - x - cw
-        canvas.paste(contained.crop((0, 0, edge, ch)).resize((x, ch)), (0, y))
-        canvas.paste(contained.crop((cw - edge, 0, cw, ch)).resize((right, ch)), (x + cw, y))
-    blurred = canvas.filter(ImageFilter.GaussianBlur(28)).point(lambda value: int(value * .8))
-    feather = max(8, min(48, (y or x) // 2))
-    mask = Image.new('L', size, 255)
-    sharp = (x, y + feather, x + cw, y + ch - feather) if y else (x + feather, y, x + cw - feather, y + ch)
-    mask.paste(0, sharp)
-    mask = mask.filter(ImageFilter.GaussianBlur(feather / 2))
-    return Image.composite(blurred, canvas, mask)
+    expected = squash(''.join(lines))
+    return bool(expected and squash(answer.get('text', '')).count(expected) == 1)
 
 
 def redesign_local_cover(project_id: str, job_id: str, strategy_id: str) -> None:
@@ -224,27 +180,28 @@ def redesign_local_cover(project_id: str, job_id: str, strategy_id: str) -> None
     meta_path = cd_meta_path(project_id, job_id, strategy_id)
     meta = json.loads(meta_path.read_text(encoding='utf-8')) if meta_path.is_file() else {}
     revision = int(meta.get('layout_version') or 0) + 1
-    # Use the immutable export so redoing a cover still works after moving the source.
-    # A different still must not inherit a guest nameplate identified on the original frame.
+    from backend.services.studio.publishing import cover_source_frame
     guest = None
+    centre = None
     try:
-        video, default_at = cover.resolve_clip_frame(project_id, clip_id(job_id))
-        duration = result.get('duration') or 0
-        at = duration * (0.35, 0.58, 0.72)[(revision - 1) % 3] if duration > 0 else default_at
-        frame = cover.extract_frame_jpeg(video, at_sec=at)
-    except (FileNotFoundError, cover.CoverError):
-        if not saved_frame.is_file():
-            raise
-        frame = saved_frame.read_bytes()
-        if meta.get('guest') and meta.get('name'):
-            guest = (meta['name'], meta.get('role', ''))
+        frame, centre = cover_source_frame(project_id, job_id, revision)
+    except (FileNotFoundError, cover.CoverError, OSError, ValueError):
+        if saved_frame.is_file():
+            frame = saved_frame.read_bytes()
+            if meta.get('guest') and meta.get('name'):
+                guest = (meta['name'], meta.get('role', ''))
+        else:
+            video, default_at = cover.resolve_clip_frame(project_id, clip_id(job_id))
+            duration = result.get('duration') or 0
+            at = duration * (0.35, 0.58, 0.72)[(revision - 1) % 3] if duration > 0 else default_at
+            frame = cover.extract_frame_jpeg(video, at_sec=at)
     palettes = list(PALETTES)
     previous = meta.get('palette') or 'azure'
     palette = palettes[(palettes.index(previous) + 1) % len(palettes)] if previous in palettes else 'azure'
     if not meta.get('lines'):
         meta['lines'], meta['accent'] = cd.title_lines_for(job.get('snapshot') or {}, job['title'], strategy_id)
     jpeg = cd.design(frame, width=width, height=height, title_lines=meta['lines'], accent_line=meta['accent'],
-                     palette=palette, speaker=guest)
+                     palette=palette, speaker=guest, crop_centre=centre)
     _atomic_write(kit_cover_path(project_id, job_id, strategy_id), jpeg)
     _atomic_write(meta_path, json.dumps({**meta, 'palette': palette, 'layout_version': revision}, ensure_ascii=False).encode('utf-8'))
     if strategy_id != 'xiaohongshu':
@@ -256,7 +213,7 @@ def redesign_local_cover(project_id: str, job_id: str, strategy_id: str) -> None
 def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
     """Generate the AI cover for one variant from its designed cover's frame and title; True when stored."""
     from PIL import Image
-    from backend.core.image_providers import ImageError, ImageRequest, generate_image
+    from backend.core.image_providers import ImageRequest, generate_image
     from backend.services import cover
     from backend.services.studio import cover_design as cd
     cfg = cover.load_config()
@@ -274,37 +231,22 @@ def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
         meta = {'lines': lines, 'accent': accent}
     width, height = cd.size_for(strategy_id)
     reference = frame_file.read_bytes() if cfg.allow_send_frame and frame_file.is_file() else None
-    def generate(reference_bytes, correction=''):
-        prompt = ai_prompt(strategy_id, meta['lines'], meta['accent'], meta.get('name', ''), meta.get('palette'),
-                           has_reference=reference_bytes is not None)
-        request = ImageRequest(prompt=prompt + correction, width=width, height=height, reference=reference_bytes, model=cfg.model)
-        return generate_image(provider=cfg.provider, api_key=cfg.api_key, base_url=cfg.base_url, request=request)
-
-    correction = ''
-    for attempt in range(2):
-        try:
-            image = generate(reference, correction)
-        except ImageError as error:
-            if reference is None or not error.unsupported_edit:
-                return False
-            reference = None
-            image = generate(None, correction)
-        if _title_ok(image, meta['lines']) is not False:
-            break
-        correction = ' The previous attempt misspelled the headline. Render it character by character exactly.'
-    else:
-        return False  # the title stayed wrong twice: keep the designed cover
-    generated = Image.open(io.BytesIO(image)).convert('RGB')
-    fitted = _fit(generated, (width, height))
-    if reference is not None and meta.get('guest') and meta.get('name'):
-        fitted = cd.nameplate(fitted, meta['name'], meta.get('role', ''), meta.get('palette'))
-    out = io.BytesIO()
-    fitted.save(out, format='JPEG', quality=92)
-    _atomic_write(kit_cover_path(project_id, job_id, strategy_id), out.getvalue())
+    if reference is None:
+        return False
+    prompt = reference_prompt(strategy_id, meta['lines'], meta.get('palette'))
+    request = ImageRequest(prompt=prompt, width=width, height=height, reference=reference, model=cfg.model)
+    image = generate_image(provider=cfg.provider, api_key=cfg.api_key, base_url=cfg.base_url, request=request)
+    with Image.open(io.BytesIO(image)) as artwork:
+        if not cd.keeps_scene(reference, artwork):
+            return False
+    jpeg = cover.delivery_jpeg(image)
+    if _title_ok(jpeg, meta['lines']) is False:
+        return False
+    _atomic_write(kit_cover_path(project_id, job_id, strategy_id), jpeg)
     if height != 1440:  # the publish slot is 9:16 / 16:9; Xiaohongshu's 3:4 stays kit-only
         slot = _publish_slot(strategy_id)
-        _atomic_write(cover.cover_path(project_id, clip_id(job_id), slot), out.getvalue())
-        cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'model' if reference is not None else 'model_bg', 'title': ' '.join(meta['lines'])})
+        _atomic_write(cover.cover_path(project_id, clip_id(job_id), slot), jpeg)
+        cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'model', 'title': ' '.join(meta['lines'])})
     return True
 
 

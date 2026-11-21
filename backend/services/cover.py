@@ -59,6 +59,10 @@ class CoverError(RuntimeError):
         self.status_code = status_code
 
 
+class ModelCoverRejected(CoverError):
+    """The model result must not replace the current Studio cover."""
+
+
 @dataclass
 class CoverConfig:
     enabled: bool = False
@@ -507,6 +511,18 @@ def fit_jpeg(image: bytes, width: int, height: int) -> bytes:
     return out.getvalue()
 
 
+def delivery_jpeg(image: bytes) -> bytes:
+    """Keep the model's complete composition at native resolution for JPEG consumers."""
+    from PIL import Image
+    with Image.open(io.BytesIO(image)) as artwork:
+        if artwork.format == 'JPEG':
+            artwork.verify()
+            return image
+        out = io.BytesIO()
+        artwork.convert('RGB').save(out, format='JPEG', quality=96, subsampling=0)
+        return out.getvalue()
+
+
 def _normalize_ocr(text: str) -> str:
     return re.sub(r"[\s\W_]+", "", text or "", flags=re.UNICODE).lower()
 
@@ -518,7 +534,7 @@ def title_matches(ocr_text: str, title_lines: list[str]) -> bool:
     needed = [_normalize_ocr(line) for line in title_lines if _normalize_ocr(line)]
     if not needed:
         return True
-    return all(part in hay for part in needed)
+    return all(part in hay for part in needed) and hay.count("".join(needed)) <= 1
 
 
 def resolve_clip_frame(project_id: str, clip_id: str) -> tuple[Path, float]:
@@ -560,6 +576,7 @@ def get_cover(project_id: str, clip_id: str, platform: str = "bilibili") -> dict
         "url": f"/api/v1/publish/covers/{project_id}/clips/{clip_id}/file?platform={platform}&t={path.stat().st_mtime_ns}",
         "method": meta.get("method") or "unknown",
         "title": meta.get("title") or "",
+        "headline": meta.get("headline") or "",
         "subtitle": meta.get("subtitle") or "",
         "badge": meta.get("badge") or "",
         "content_type": meta.get("content_type") or "general",
@@ -605,6 +622,7 @@ def generate_cover(
     badge: str | None = None,
     content_type: str | None = None,
     force_local: bool = False,
+    allow_reference_once: bool = False,
     session: Any = None,
     cancel: threading.Event | None = None,
     poll_interval: float = 1.5,
@@ -621,7 +639,11 @@ def generate_cover(
     kind = (content_type or infer_content_type(title_text, sub_text)).strip().lower()
     if kind not in CONTENT_TYPES:
         kind = "general"
-    lines = split_title(title_text)
+    studio_export = clip.get('source_type') == 'studio'
+    from backend.services.studio import cover_design
+    lines = cover_design.headline_lines(title_text) if studio_export else split_title(title_text)
+    from backend.services.studio.publish_kit import reference_prompt
+    design_prompt = reference_prompt(platform, lines, subtitle=sub_text, badge=badge_text) if studio_export else None
     cfg = load_config()
     warning = None
     warning_detail = None
@@ -634,17 +656,33 @@ def generate_cover(
         start = to_seconds(clip.get("start_time") or "0")
         at = start + clip['duration_sec'] * (0.35, 0.58, 0.72)[(layout_version - 1) % 3]
     frame: bytes | None = None
-    try:
-        frame = extract_frame_jpeg(video, at_sec=at)
-    except CoverError as exc:
-        logger.warning("参考帧截取失败: %s", exc)
+    centre = None
+    if studio_export and not force_local:
+        from backend.services.studio.publishing import cover_source_frame
+        try:
+            frame, centre = cover_source_frame(project_id, clip['studio_job_id'], layout_version)
+        except (FileNotFoundError, CoverError, OSError, ValueError):
+            pass  # A moved original must not prevent designing from the saved export.
+    if frame is None:
+        try:
+            frame = extract_frame_jpeg(video, at_sec=at)
+        except CoverError as exc:
+            logger.warning("参考帧截取失败: %s", exc)
 
-    # 未同意上传参考帧时仍可文生图；同意后才把截帧送给第三方。
+    def local_design():
+        if studio_export and not (sub_text or badge_text):
+            return cover_design.design(frame, width=spec['width'], height=spec['height'],
+                                       title_lines=lines, accent_line=1, crop_centre=centre,
+                                       palette=('azure', 'amber', 'coral')[layout_version % 3])
+        return overlay_title(frame, title_lines=lines, subtitle=sub_text, badge=badge_text,
+                             layout_version=layout_version, width=spec['width'], height=spec['height'])
+
     use_model = not force_local and cfg.enabled and cfg.configured
-    send_frame = bool(use_model and cfg.allow_send_frame and frame is not None)
-
+    send_frame = bool(use_model and (cfg.allow_send_frame or allow_reference_once) and frame is not None)
+    if studio_export and not send_frame:
+        use_model = False
     if use_model:
-        prompt = build_prompt(
+        prompt = design_prompt or build_prompt(
             title_lines=lines,
             subtitle=sub_text,
             badge=badge_text,
@@ -668,13 +706,20 @@ def generate_cover(
             try:
                 generated = generate_image(request=request, **options)
             except ImageError as error:
-                if not send_frame or not error.unsupported_edit:
+                if studio_export or not send_frame or not error.unsupported_edit:
                     raise
                 send_frame = False
                 prompt = build_prompt(title_lines=lines, subtitle=sub_text, badge=badge_text,
                                       platform=platform, content_type=kind, has_reference=False)
                 generated = generate_image(request=replace(request, reference=None, prompt=prompt), **options)
-            fitted = fit_jpeg(generated, spec["width"], spec["height"])
+            if studio_export:
+                from PIL import Image
+                with Image.open(io.BytesIO(generated)) as artwork:
+                    if not cover_design.keeps_scene(frame, artwork):
+                        raise ModelCoverRejected('模型生成的封面与参考场景差异过大')
+                fitted = delivery_jpeg(generated)
+            else:
+                fitted = fit_jpeg(generated, spec["width"], spec["height"])
             ok_text = True
             if cfg.ocr_model or cfg.provider:
                 try:
@@ -683,6 +728,8 @@ def generate_cover(
                 except ImageError as exc:
                     logger.info("封面 OCR 跳过: %s", exc)
                     ok_text = True
+            if not ok_text and studio_export:
+                raise ModelCoverRejected('模型生成的封面标题有误')
             if not ok_text:
                 # 重试一次：无参考帧纯文生图，或换本地排版
                 retry_req = ImageRequest(
@@ -717,20 +764,16 @@ def generate_cover(
                 warning = COVER_TITLE_FALLBACK
                 warning_detail = None
                 if frame is not None:
-                    jpeg = overlay_title(
-                        frame, title_lines=lines, subtitle=sub_text, badge=badge_text, layout_version=layout_version,
-                        width=spec["width"], height=spec["height"],
-                    )
+                    jpeg = local_design()
                     method = "local_overlay"
         except ImageError as exc:
+            if studio_export:
+                raise ModelCoverRejected(user_visible_error(exc)) from exc
             warning, warning_detail = _image_fallback(exc)
             logger.warning("封面生图失败: %s", exc)
             if frame is not None:
                 try:
-                    jpeg = overlay_title(
-                        frame, title_lines=lines, subtitle=sub_text, badge=badge_text, layout_version=layout_version,
-                        width=spec["width"], height=spec["height"],
-                    )
+                    jpeg = local_design()
                     method = "local_overlay"
                 except Exception as overlay_exc:  # noqa: BLE001
                     logger.warning("本地排版失败: %s", overlay_exc)
@@ -738,10 +781,7 @@ def generate_cover(
     if jpeg is None and frame is not None and not force_local:
         # 未开生图或模型不可用：本地排版叠在截帧上
         try:
-            jpeg = overlay_title(
-                frame, title_lines=lines, subtitle=sub_text, badge=badge_text, layout_version=layout_version,
-                width=spec["width"], height=spec["height"],
-            )
+            jpeg = local_design()
             method = "local_overlay"
             if warning is None and not (cfg.enabled and cfg.configured):
                 warning = None
@@ -766,16 +806,20 @@ def generate_cover(
         os.replace(temporary, out)
     finally:
         temporary.unlink(missing_ok=True)
+    from PIL import Image
+    with Image.open(io.BytesIO(jpeg)) as saved:
+        saved_width, saved_height = saved.size
     meta = {
         "method": method,
         "layout_version": layout_version,
         "title": title_text,
+        "headline": (" " if any(" " in line for line in lines) or title_text.isascii() else "").join(lines),
         "subtitle": sub_text,
         "badge": badge_text,
         "content_type": kind,
         "platform": platform,
-        "width": spec["width"],
-        "height": spec["height"],
+        "width": saved_width,
+        "height": saved_height,
         "warning": warning,
         "warning_detail": warning_detail,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -788,6 +832,7 @@ def generate_cover(
         "url": f"/api/v1/publish/covers/{project_id}/clips/{clip_id}/file?platform={platform}&t={int(time.time())}",
         "method": method,
         "title": title_text,
+        "headline": (" " if any(" " in line for line in lines) or title_text.isascii() else "").join(lines),
         "subtitle": sub_text,
         "badge": badge_text,
         "content_type": kind,
@@ -851,9 +896,12 @@ def start_generate(
     badge: str | None = None,
     content_type: str | None = None,
     force_local: bool = False,
+    allow_reference_once: bool = False,
 ) -> dict[str, Any]:
     params = dict(project_id=project_id, clip_id=clip_id, platform=normalize_platform(platform),
                   title=title, subtitle=subtitle, badge=badge, content_type=content_type, force_local=force_local)
+    if allow_reference_once:
+        params['allow_reference_once'] = True
     key = tuple(params.items())
     with _jobs_lock:
         active = _jobs.get(_active_requests.get(key))
@@ -880,6 +928,9 @@ def _run_job(job_id: str, params: dict[str, Any]) -> None:
     try:
         result = generate_cover(cancel=_cancel.get(job_id), **params)
         job.update(status="completed", result=result)
+        _remember_job(job)
+    except ModelCoverRejected as exc:
+        job.update(status="failed", error=user_visible_error(exc))
         _remember_job(job)
     except CoverError as exc:
         if str(exc) == "已取消":

@@ -787,6 +787,7 @@
   "OpenAI 兼容时填写。通义万相可留空。": "Preencha em endpoints compatíveis com OpenAI. Deixe vazio para Wanxiang.",
   "校对模型": "Modelo de revisão",
   "多模态模型读图核对标题。可留空。": "Um modelo multimodal lê a imagem para conferir o título. Opcional.",
+  "仅本次将所选视频帧发送给封面模型": "Enviar o quadro selecionado ao modelo de capas apenas desta vez",
   "允许上传参考帧": "Permitir enviar um frame de referência",
   "打开后，会把视频截帧发给生图服务做参考。默认关闭。": "Quando ativo, envia um frame ao serviço de imagem como referência. Desligado por padrão.",
   "允许": "Permitir",

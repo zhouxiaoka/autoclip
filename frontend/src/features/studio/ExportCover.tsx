@@ -4,19 +4,19 @@ import { t } from '../../i18n'
 import { coverApi } from '../../publish/coverApi'
 import api from '../../services/api'
 import { Btn, Dialog } from '../../ui'
-import { studioApi } from './api'
+import { exportCoverSlot, studioApi } from './api'
 import { isDesktopDownload, saveLocalFile } from './nativeDownload'
 import type { OutputVariant, RenderJob } from './types'
 
 type Props = {
   projectId: string; job: RenderJob; variant?: OutputVariant
-  coverStamp?: number; onVariantCoverChanged?: () => void
+  coverStamp?: number; onCoverChanged?: () => void
 }
 
 /** Reads the cover made for this export. Older exports can generate their missing cover here. */
-export default function ExportCover({ projectId, job, variant, coverStamp = 0, onVariantCoverChanged }: Props) {
+export default function ExportCover({ projectId, job, variant, coverStamp = 0, onCoverChanged }: Props) {
   const clip = `studio-${job.job_id}`
-  const platform = job.result && job.result.height > job.result.width ? 'douyin' : 'bilibili'
+  const platform = exportCoverSlot(job)
   const [version, setVersion] = useState(coverStamp)
   const [failedUrl, setFailedUrl] = useState('')
   const [loadedUrl, setLoadedUrl] = useState('')
@@ -25,6 +25,19 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const [missingVariantFile, setMissingVariantFile] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [headline, setHeadline] = useState<string | null>(null)
+  const [savedTitle, setSavedTitle] = useState('')
+  const [askReference, setAskReference] = useState(false)
+  const [referenceOnce, setReferenceOnce] = useState(false)
+  useEffect(() => {
+    if (variant) return
+    let active = true
+    void coverApi.get(projectId, clip, platform).then(value => { if (active) setSavedTitle(value.headline || value.title || '') }).catch(() => {})
+    void coverApi.getConfig().then(value => {
+      if (active) setAskReference(value.enabled && value.configured && !value.allow_send_frame)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [projectId, clip, platform, variant])
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -53,8 +66,8 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
           if (task.variantId) {
             setUseVariantFile(true)
             setMissingVariantFile(false)
-            onVariantCoverChanged?.()
           }
+          onCoverChanged?.()
           setVersion(v => v + 1)
         }
         else setError(t('封面生成失败，请重试'))
@@ -66,7 +79,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
     }
     void check()
     return () => { closed = true; window.clearTimeout(timer) }
-  }, [projectId, task, onVariantCoverChanged])
+  }, [projectId, task, onCoverChanged])
 
   const generate = async () => {
     setBusy(true)
@@ -77,10 +90,11 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
         if (mounted.current) setTask({ id: result.job_id, variantId: variant.id })
         return
       }
-      const result = await coverApi.start(projectId, clip, { platform, title: job.title })
+      const result = await coverApi.start(projectId, clip, { platform, title: headline?.trim() || savedTitle || job.title, allow_reference_once: referenceOnce })
       if (!mounted.current) return
+      setReferenceOnce(false)
       if ('job_id' in result) setTask({ id: result.job_id })
-      else if (result.ok) setVersion(v => v + 1)
+      else if (result.ok) { setVersion(v => v + 1); onCoverChanged?.() }
       else setError(t('封面生成失败，请重试'))
     } catch {
       if (mounted.current) setError(t('封面生成失败，请重试'))
@@ -99,6 +113,11 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
     </div>
     {!pending && !missing && <img src={url} alt={t('封面')} onLoad={() => setLoadedUrl(url)} onError={() => { if (variantPath) setMissingVariantFile(true); else setFailedUrl(url) }} />}
     {!pending && variant?.cover_job?.status === 'failed' && !missing && <span className="studio-muted">{t('生图失败，已改成本地排版或截帧')}</span>}
+    {!variant && !pending && <div className="studio-cover-fields">
+      <label>{t('封面标题')}<input className="ac-input" value={headline ?? savedTitle} placeholder={job.title}
+        maxLength={100} onChange={e => setHeadline(e.target.value)} /></label>
+      {askReference && <label><input type="checkbox" checked={referenceOnce} onChange={e => setReferenceOnce(e.target.checked)} /> {t('仅本次将所选视频帧发送给封面模型')}</label>}
+    </div>}
     {error && <p className="studio-error" role="alert">{error}</p>}
   </section>
 }

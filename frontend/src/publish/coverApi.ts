@@ -24,6 +24,7 @@ export interface CoverView {
   path?: string
   method?: string
   title?: string
+  headline?: string
   subtitle?: string
   badge?: string
   content_type?: string
@@ -44,6 +45,7 @@ export interface CoverGenerateBody {
   subtitle?: string
   badge?: string
   content_type?: string
+  allow_reference_once?: boolean
   force_local?: boolean
   sync?: boolean
 }

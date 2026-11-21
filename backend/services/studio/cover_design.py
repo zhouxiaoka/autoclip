@@ -8,6 +8,7 @@ An AI cover (services/cover.py) can still replace it from the output card.
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 from typing import Any
 
@@ -183,13 +184,13 @@ def _thumb(frame_jpeg: bytes, width: int = 384) -> str:
     return 'data:image/jpeg;base64,' + base64.b64encode(out.getvalue()).decode()
 
 
-def _candidates(video, start: float, shots, limit: int) -> list[tuple[bytes, float | None, float, bool]]:
+def _candidates(video, start: float, shots, limit: int, shares=(0.35, 0.65)) -> list[tuple[bytes, float | None, float, bool]]:
     """Sharpest frame of each of the longest shots: (frame, face centre, sharpness, face found)."""
     from backend.services.cover import extract_frame_jpeg
     out = []
     for shot_start, shot_end in sorted(shots, key=lambda shot: shot[1] - shot[0], reverse=True)[:limit]:
         best = None
-        for share in (0.35, 0.65):
+        for share in shares:
             try:
                 frame = extract_frame_jpeg(video, at_sec=start + shot_start + (shot_end - shot_start) * share, max_width=1920)
             except Exception:  # noqa: BLE001
@@ -224,8 +225,29 @@ def _choose_with_vision(candidates, guest: str, host: str) -> tuple[int, bool] |
     return None if not answer else (max(range(len(candidates)), key=lambda i: (candidates[i][3], candidates[i][2])), False)
 
 
+def _camera_frame(jpeg: bytes) -> bool:
+    """A mostly white or black text slide can outscore a camera shot on edge sharpness."""
+    from PIL import Image
+    image = Image.open(io.BytesIO(jpeg)).convert('L').resize((48, 32))
+    histogram = image.histogram()
+    return sum(histogram[25:226]) > image.width * image.height * .55
+
+
+def _answer_start(rows, start, end):
+    """Find where a transcribed question gives way to its answer, including a single long ASR cue."""
+    for row in reversed(rows):
+        text = str(row.get('text') or '').strip()
+        mark = max(text.rfind('?'), text.rfind('？'))
+        if mark < 0:
+            continue
+        at = row['start'] + (row['end'] - row['start']) * (mark + 1) / len(text)
+        if start <= at <= end - 1:
+            return at
+    return None
+
+
 def pick_frame(video, scene: dict[str, Any], rows: list[dict[str, Any]], packaging: dict[str, Any] | None = None,
-               guest_hint: str = '') -> tuple[bytes, float | None, bool]:
+               guest_hint: str = '', *, local_revision: int | None = None) -> tuple[bytes, float | None, bool]:
     """(frame, speaker centre, guest on screen) for the cover.
 
     A fixed point in the clip often caught a hand in motion or the host's camera, labelled with the
@@ -237,20 +259,34 @@ def pick_frame(video, scene: dict[str, Any], rows: list[dict[str, Any]], packagi
     from backend.services.studio import framing
     start, length = scene['start'], scene['end'] - scene['start']
     shots = framing.split_shots(length, framing.detect_cuts(video, start, length))
-    candidates = _candidates(video, start, shots, VISION_CANDIDATES)
+    answer = _answer_start(rows, start, start + length)
+    if answer is not None:
+        # Use shots wholly inside the answer. A two-shot spanning the question can still show the host.
+        response_shots = [shot for shot in shots if start + shot[0] >= answer and shot[1] - shot[0] >= .5]
+        shots = response_shots or [(max(a, answer - start), b) for a, b in shots if start + b > answer + .5]
+    if local_revision and answer is not None:
+        shares = ((.48, .76), (.25, .52), (.36, .65))[(local_revision - 1) % 3]
+        candidates = _candidates(video, start, shots, VISION_CANDIDATES, shares)
+    else:
+        candidates = _candidates(video, start, shots, VISION_CANDIDATES)
     if not candidates:
         at, _ = frame_time(scene)
         return extract_frame_jpeg(video, at_sec=at, max_width=1920), None, False
     speakers = (packaging or {}).get('speakers') or []
     guest = next((sp['name'] for sp in speakers if not any(w in (sp.get('role') or '').lower() for w in HOST)), '') or guest_hint
     host = next((sp['name'] for sp in speakers if any(w in (sp.get('role') or '').lower() for w in HOST)), '')
-    chosen = _choose_with_vision(candidates, guest, host)
+    chosen = None if local_revision is not None else _choose_with_vision(candidates, guest, host)
     if chosen is not None:
         index, is_guest = chosen
         frame, centre, _, _ = candidates[index]
         return frame, centre, is_guest
-    questions = _question_times(rows)
-    frame, centre, _, _ = max(candidates, key=lambda c: (c[3], c[2]))
+    eligible = [c for c in candidates if c[3]] or [c for c in candidates if _camera_frame(c[0])] or candidates
+    if answer is not None:
+        # The sustained answer shot outranks momentary listener reactions and wide cutaways.
+        frame, centre, _, _ = eligible[0]
+    else:
+        eligible.sort(key=lambda c: c[2], reverse=True)
+        frame, centre, _, _ = eligible[(local_revision or 0) % len(eligible)]
     return frame, centre, False
 
 
@@ -381,29 +417,35 @@ def design(frame_jpeg: bytes, *, width: int, height: int, title_lines: list[str]
     return out.getvalue()
 
 
-def nameplate(image, name: str, role: str = '', palette: str | None = None):
-    """Our own, always-correct nameplate on an AI cover (image models invent names)."""
-    from PIL import ImageDraw
-    from backend.services.studio.packaging_render import PALETTES
-    accent = _rgb(PALETTES.get(palette or 'azure', PALETTES['azure'])[0])
-    image = image.convert('RGB')
-    draw = ImageDraw.Draw(image)
-    width, height = image.size
-    portrait = height > width
-    margin = round(width * (0.07 if portrait else 0.05))
-    name_font = _font(round(width * (0.042 if portrait else 0.026)), 'Bold')
-    role_font = _font(round(width * (0.028 if portrait else 0.017)), 'Regular')
-    base = height - round(height * (0.08 if portrait else 0.1))
-    text_w = max(draw.textlength(name, font=name_font), draw.textlength(role, font=role_font) if role else 0)
-    pad = round(name_font.size * 0.45)
-    top = base - name_font.size - pad
-    bottom = base + (role_font.size + 12 if role else 0) + pad
-    draw.rectangle([margin, top, margin + 8 + pad * 2 + text_w + 16, bottom], fill=(18, 18, 18))
-    draw.rectangle([margin, top, margin + 8, bottom], fill=accent)
-    draw.text((margin + 8 + pad + 8, base - name_font.size), name, font=name_font, fill=(236, 234, 230))
-    if role:
-        draw.text((margin + 8 + pad + 8, base + 6), role, font=role_font, fill=(190, 190, 190))
-    return image
+def keeps_scene(reference: bytes, candidate) -> bool:
+    """Reject gross studio-backdrop substitutions in the model artwork relative to the actual shot."""
+    from PIL import Image
+    def extremes(image):
+        hist = image.convert('L').resize((64, 64)).histogram()
+        return sum(hist[:25]) / 4096, sum(hist[225:]) / 4096
+    original = extremes(Image.open(io.BytesIO(reference)))
+    changed = extremes(candidate)
+    return all(new - old < .42 for old, new in zip(original, changed))
+
+
+def headline_lines(title: str) -> list[str]:
+    """Prefer a complete pull quote on a small cover. Keep the publishing title intact."""
+    title = ' '.join(title.split())
+    if len(title) > 55:
+        quotes = re.findall(r'“([^”]+)”|‘(.+?)’(?=$|[.,:;!?—\s])|"([^"]+)"|「([^」]+)」', title)
+        phrases = [next(part for part in match if part) for match in quotes]
+        if phrases:
+            short = [q for q in phrases if len(q.split()) <= 5 and len(q) <= 28]
+            title = min(short or phrases, key=len)
+    if len(title) < 12:
+        return [title]
+    cuts = [m.start() for m in re.finditer(r'\s+', title)]
+    if not cuts:
+        cuts = [i for i in range(1, len(title)) if '\u3400' <= title[i] <= '\u9fff']
+    if not cuts:
+        return [title]
+    cut = min(cuts, key=lambda i: abs(i - len(title) / 2))
+    return [title[:cut].rstrip(), title[cut:].lstrip()]
 
 
 def title_lines_for(draft: dict[str, Any], post_title: str, strategy_id: str) -> tuple[list[str], int]:
@@ -411,7 +453,4 @@ def title_lines_for(draft: dict[str, Any], post_title: str, strategy_id: str) ->
     packaging = draft.get('packaging') or {}
     if packaging.get('title_lines'):
         return list(packaging['title_lines'])[:2], int(packaging.get('title_accent_line', 1))
-    from backend.services.studio.caption_layout import lines_for
-    zh = not post_title.isascii()
-    lines = lines_for(post_title, 11 if zh else 22 * 0.55) or [post_title]
-    return lines[:2], 1
+    return headline_lines(post_title), 1
