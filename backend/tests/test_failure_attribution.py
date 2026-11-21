@@ -3335,7 +3335,8 @@ one SQL adapter for every success-rate test."""
 
 pytest.importorskip('duckdb')
 WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00'", 'internal_cohort_id': '641509',
-          'release_1_5_7': "'2026-10-01 00:00:00'"}
+          'release_1_5_7': "'2026-10-01 00:00:00'", 'release_1_5_8': "'2026-10-01 00:00:00'",
+          'release_1_5_9': "'2026-10-01 00:00:00'"}
 
 
 from backend.tests.test_cloud_asr import _asr_401, _on_disk, _real_store_jobs  # noqa: E402

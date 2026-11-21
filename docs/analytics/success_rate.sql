@@ -11,10 +11,12 @@
 --   {internal_cohort_id} 内部账号 cohort id（project 450605 当前为 641509）
 --   {release_1_5_7}      1.5.7 正式发布时间（UTC，含）。GitHub Release 的 published_at 形如
 --                        YYYY-MM-DDTHH:MM:SSZ，填成带单引号的 'YYYY-MM-DD HH:MM:SS'（去掉 T 和 Z）。
+--   {release_1_5_8}      1.5.8 正式发布时间（UTC，含）；格式同上。
+--   {release_1_5_9}      1.5.9 正式发布时间（UTC，含）；格式同上。
 --                        执行 RELEASE_CHECKLIST.md 3.5 Promote 的人，把它填进 PostHog 项目 450605
---                        看板「AutoClip｜1.5.7 出片成功率」里本文件的每一条 insight
---                        （version_releases 中 1.5.7 那一行的 released_at_text）。本文件不写死日期。
---                        空字符串 '' 表示还没填：这一版的事件全部不计入。1.5.6 及更早不在表里。
+--                        看板里本文件的每一条 insight（version_releases 对应版本的 released_at_text）。
+--                        本文件不写死日期。空字符串 '' 表示还没填：这一版的事件全部不计入。
+--                        1.5.6 及更早不在表里。
 --
 -- 定义：
 --   attempt  = 一次终态尝试，按 attempt_id 去重（取最后一条）；缺 attempt_id 的历史行按事件 uuid 计。
@@ -46,6 +48,10 @@
 -- 图 1：按日 按次 / 按流程 成功率（全量 + 产品）与 partial-delivery 率
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -119,6 +125,10 @@ ORDER BY dt;
 -- 图 2：按人（person_id）首次合格出片成功率（全量 + 产品）
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -162,6 +172,10 @@ FROM p;
 -- 图 3：失败身份（failure_stage × error_code × 归因），按 attempt 去重
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -198,6 +212,10 @@ ORDER BY attempts DESC;
 -- 图 4：模型请求上游错误（诊断，不是成功率分母）
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 )
 SELECT
   properties.provider AS provider,
@@ -221,6 +239,10 @@ ORDER BY events DESC;
 -- 与图 1 同一 base / chained / c；流程归到最后一次 attempt 的版本
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -293,6 +315,10 @@ ORDER BY app_version;
 -- 图 6：降级走字幕的成功出片（degrade_reason，不是失败；不进剔除列表），按 attempt 去重
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 )
 SELECT degrade_reason, count() AS attempts
 FROM (
@@ -323,6 +349,10 @@ ORDER BY attempts DESC;
 -- 缺 attempt_index_on_device 的历史行不进本图（M1 发版前无法判定「第一次」）。
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -356,6 +386,10 @@ FROM firsts;
 -- 图 8（M1）：从未成功占比（窗口内有出片终态、但窗口内无一次成功的设备）
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -389,6 +423,10 @@ WHERE attempts > 0;
 -- 产品口径剔除与图 1 的 user_x 一致；不改 F1 JSON schema。
 WITH version_releases AS (
   SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
 ), base AS (
   SELECT
     toString(coalesce(properties.attempt_id, toString(uuid))) AS aid,
@@ -440,17 +478,26 @@ ORDER BY success_rate DESC, devices DESC;
 -- 口径：与上图相同的 production / desktop / cohort / {date_from}/{date_to}。
 -- studio_generation_finished 且 error_code = service_restarted 且 restart_reason = crash。
 -- 属性均为枚举/分桶，无原始退出码。按事件计数（不再用 distinct_id）。
+WITH version_releases AS (
+  SELECT '1.5.7' AS app_version, {release_1_5_7} AS released_at_text
+  UNION ALL
+  SELECT '1.5.8' AS app_version, {release_1_5_8} AS released_at_text
+  UNION ALL
+  SELECT '1.5.9' AS app_version, {release_1_5_9} AS released_at_text
+)
 SELECT
   toString(properties.crash_exit) AS crash_exit,
   toString(properties.crash_stage) AS crash_stage,
   count() AS restarts
 FROM events
+LEFT JOIN version_releases vr ON vr.app_version = toString(properties.app_version)
 WHERE event = 'studio_generation_finished'
   AND toString(properties.analytics_environment) = 'production'
   AND toString(properties.runtime) = 'desktop'
   AND timestamp >= toDateTime({date_from}, 'UTC')
   AND timestamp < toDateTime({date_to}, 'UTC')
   AND person_id NOT IN COHORT {internal_cohort_id}
+  AND (vr.app_version IS NULL OR vr.app_version = '' OR (vr.released_at_text != '' AND timestamp >= toDateTime(nullIf(vr.released_at_text, ''), 'UTC')))
   AND toString(properties.error_code) = 'service_restarted'
   AND toString(properties.restart_reason) = 'crash'
 GROUP BY 1, 2

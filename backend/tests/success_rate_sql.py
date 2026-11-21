@@ -8,15 +8,18 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[2]
 SQL = (ROOT / 'docs/analytics/success_rate.sql').read_text(encoding='utf-8')
 PROPS = ('attempt_id', 'flow_id', 'retry_of', 'outcome', 'error_code', 'upstream_error_type', 'failure_stage',
-         'app_version', 'analytics_environment', 'runtime', 'provider', 'attempt_sequence')
+         'app_version', 'analytics_environment', 'runtime', 'provider', 'attempt_sequence',
+         'restart_reason', 'crash_exit', 'crash_stage')
 COHORT = 641509
-# release_1_5_7 is the fixture clock (DAY in the success-rate tests), not a production publish time.
-# The SQL file keeps the {release_1_5_7} token; callers overlay their own window when events are earlier.
+# release_1_5_7/8/9 are the fixture clock (DAY in the success-rate tests), not production publish times.
+# The SQL file keeps the {release_1_5_*} tokens; callers overlay their own window when events are earlier.
 PARAMS = {
     'date_from': "'2026-10-09 00:00:00'",
     'date_to': "'2026-10-16 00:00:00'",
     'internal_cohort_id': str(COHORT),
     'release_1_5_7': "'2026-10-12 08:00:00'",
+    'release_1_5_8': "'2026-10-12 08:00:00'",
+    'release_1_5_9': "'2026-10-12 08:00:00'",
 }
 
 

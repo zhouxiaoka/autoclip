@@ -270,9 +270,66 @@ def _non_stream_completion(payload: Any) -> bool:
     return bool(_completion_text(choices[0].get('message')))
 
 
+def _has_reasoning_output(payload: Any) -> bool:
+    """True when a 200 completion spent its token budget on reasoning/thinking before visible content."""
+    if not isinstance(payload, dict):
+        return False
+    choices = payload.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    choice = choices[0]
+    message = choice.get('message')
+    if isinstance(message, dict):
+        for field_name in ('reasoning_content', 'reasoning', 'thought'):
+            val = message.get(field_name)
+            if isinstance(val, str) and val.strip():
+                return True
+    return str(choice.get('finish_reason') or '').lower() in ('length', 'max_tokens', 'max_output_tokens')
+
+
+def _stream_only_400(text: str) -> bool:
+    blob = (text or '').lower()
+    return 'stream' in blob and any(
+        token in blob for token in ('only support', 'must be true', 'stream mode', 'streaming is required', 'requires stream')
+    )
+
+
+def _sse_completion_text(text: str) -> str:
+    """Extract visible assistant content from an OpenAI-compatible SSE stream body."""
+    import json as _json
+    parts: list[str] = []
+    for line in (text or '').splitlines():
+        stripped = line.strip()
+        if not stripped.startswith('data:'):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == '[DONE]':
+            continue
+        try:
+            chunk = _json.loads(data)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(chunk, dict):
+            continue
+        choices = chunk.get('choices')
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            continue
+        delta = choices[0].get('delta') or choices[0].get('message')
+        content = _completion_text(delta)
+        if content:
+            parts.append(content)
+    return ''.join(parts).strip()
+
+
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
-    from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
+    from backend.core.llm_providers import (
+        asks_for_max_completion_tokens,
+        guarded_chat_kwargs,
+        http_chat_body,
+        to_max_completion_tokens,
+        token_param_kwargs,
+    )
     from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
     payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
@@ -283,12 +340,42 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     # Hosts such as APIMart default to text/event-stream unless this is false.
     payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
+    headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    stream_retried = False
     try:
         with httpx.Client(timeout=PROBE_TIMEOUT, trust_env=not is_local_url(base)) as client:
-            response = client.post(
-                url, json=payload,
-                headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'},
-            )
+            response = client.post(url, json=payload, headers=headers)
+            # Relay / Azure / OpenRouter models that require max_completion_tokens on HTTP 400.
+            if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
+                payload = to_max_completion_tokens(payload)
+                if payload.get('max_completion_tokens', 0) < PROBE_REASONING_MAX_TOKENS:
+                    payload['max_completion_tokens'] = PROBE_REASONING_MAX_TOKENS
+                response = client.post(url, json=payload, headers=headers)
+            # Stream-only thinking models (e.g., DashScope qwq-plus) reject stream=False with 400.
+            if response.status_code == 400 and not payload.get('stream') and _stream_only_400(response.text or ''):
+                payload = dict(payload)
+                payload['stream'] = True
+                for key in ('max_tokens', 'max_completion_tokens'):
+                    if key in payload and payload[key] < PROBE_REASONING_MAX_TOKENS:
+                        payload[key] = PROBE_REASONING_MAX_TOKENS
+                stream_retried = True
+                response = client.post(url, json=payload, headers=headers)
+            # Reasoning/hybrid models on non-OpenAI hosts can exhaust PROBE_MAX_TOKENS inside reasoning_content.
+            if response.status_code == 200 and not stream_retried:
+                try:
+                    first_parsed = response.json()
+                except Exception:  # noqa: BLE001
+                    first_parsed = None
+                if (
+                    first_parsed is not None
+                    and not _non_stream_completion(first_parsed)
+                    and _has_reasoning_output(first_parsed)
+                ):
+                    token_key = 'max_completion_tokens' if 'max_completion_tokens' in payload else 'max_tokens'
+                    if int(payload.get(token_key) or 0) < PROBE_REASONING_MAX_TOKENS:
+                        retry_payload = dict(payload)
+                        retry_payload[token_key] = PROBE_REASONING_MAX_TOKENS
+                        response = client.post(url, json=retry_payload, headers=headers)
     except httpx.TimeoutException:
         return _with_detail(_classify(None, '', error_name='TimeoutError'))
     except httpx.RequestError as exc:
@@ -307,6 +394,10 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
         return _with_detail(html, status, upstream_code=upstream)
     if response.status_code >= 400:
         return _with_detail(_classify(response.status_code, text[:4000]), status, upstream_code=upstream)
+    if stream_retried:
+        if _sse_completion_text(text):
+            return None
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status, upstream_code=upstream)
     # A 200 SSE body used to look like success and then fail every real job.
     if 'text/event-stream' in content_type or text.lstrip().startswith('data:'):
         return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status, upstream_code=upstream)
@@ -566,14 +657,12 @@ def _srt_plain_text(srt: str) -> str:
 
 def _parse_trial_json(text: str) -> bool:
     """True when the body is parseable JSON with at least one topic title."""
-    import json
-    import re
+    from backend.services.studio.intelligence import decode_json
     raw = (text or '').strip()
     if not raw:
         return False
-    raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw, flags=re.IGNORECASE).strip()
     try:
-        data = json.loads(raw)
+        data = decode_json(raw)
     except Exception:  # noqa: BLE001
         return False
     if isinstance(data, list):
@@ -614,11 +703,22 @@ def _trial_estimate(avg_ms: int) -> tuple[int, float]:
     return n, minutes
 
 
+def _response_format_400(text: str) -> bool:
+    blob = (text or '').lower()
+    return any(token in blob for token in ('response_format', 'json_object', 'structured output', 'structured_output'))
+
+
 def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     """One chat completion for the trial. Returns timing + classification flags."""
     import time
     import httpx
-    from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
+    from backend.core.llm_providers import (
+        asks_for_max_completion_tokens,
+        guarded_chat_kwargs,
+        http_chat_body,
+        to_max_completion_tokens,
+        token_param_kwargs,
+    )
 
     payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
         'model': model,
@@ -634,7 +734,10 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     try:
         with httpx.Client(timeout=TRIAL_TIMEOUT, trust_env=not is_local_url(base)) as client:
             response = client.post(url, json=payload, headers=headers)
-            if response.status_code == 400 and 'response_format' in (response.text or '').lower():
+            if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
+                payload = to_max_completion_tokens(payload)
+                response = client.post(url, json=payload, headers=headers)
+            if response.status_code == 400 and 'response_format' in payload and _response_format_400(response.text or ''):
                 payload.pop('response_format', None)
                 response = client.post(url, json=payload, headers=headers)
     except httpx.TimeoutException:

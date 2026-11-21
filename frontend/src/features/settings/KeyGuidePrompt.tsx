@@ -110,7 +110,14 @@ export default function KeyGuidePrompt() {
       clearOffer()
       setDialogOpen(false)
       const presetQuery = custom ? '' : providerId
-      navigate(presetQuery ? `/settings?section=ai&provider=${encodeURIComponent(presetQuery)}` : '/settings?section=ai')
+      const currentSearch = typeof window !== 'undefined'
+        ? (window.location.hash.includes('?') ? window.location.hash.slice(window.location.hash.indexOf('?')) : window.location.search)
+        : ''
+      const keepReturn = new URLSearchParams(currentSearch).get('return_import') === '1'
+      const params = new URLSearchParams({ section: 'ai' })
+      if (presetQuery) params.set('provider', presetQuery)
+      if (keepReturn) params.set('return_import', '1')
+      navigate(`/settings?${params.toString()}`)
     } finally {
       setBusy(false)
     }

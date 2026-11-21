@@ -5,6 +5,7 @@ from backend.core.failure_attribution import ModelResponseInvalid
 import base64
 import json
 import math
+import re
 import subprocess
 import tempfile
 import time
@@ -43,11 +44,35 @@ def source_frame_analysis_allowed():
     except ValueError:
         return False
 
+_THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>[\s\S]*?</think>', re.IGNORECASE)
+_FENCED_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]*?)```', re.IGNORECASE)
+
+
 def decode_json(raw):
-    raw = raw.strip()
-    if raw.startswith('```'):
-        raw = raw.split('\n', 1)[1].rsplit('```', 1)[0].strip()
-    return json.loads(raw)
+    text = _THINK_BLOCK_RE.sub('', str(raw or '')).strip()
+    if not text:
+        raise ValueError('Empty JSON response')
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    for match in _FENCED_JSON_RE.finditer(text):
+        inner = match.group(1).strip()
+        if not inner:
+            continue
+        try:
+            return json.loads(inner)
+        except ValueError:
+            continue
+    decoder = json.JSONDecoder()
+    for index, ch in enumerate(text):
+        if ch in '{[':
+            try:
+                obj, _ = decoder.raw_decode(text, index)
+                return obj
+            except ValueError:
+                continue
+    raise ValueError('No valid JSON object or array found')
 
 def text_json(prompt, data):
     from backend.utils.llm_client import LLMClient
@@ -487,5 +512,5 @@ def make_drafts(events, prefs, instruction="", *, source_duration=None):
         hooks = plans.get('hooks', [])[:3]
         if not hooks:
             raise ModelResponseInvalid('模型未返回成片方案')
-        return [Draft(id=uuid.uuid4().hex, title=h['title'], hook=h['hook'], scenes=[scene], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', title_style='comic', title_template_version=6, subtitles=False, origin='visual-promo').model_dump() for h in hooks]
-    return [Draft(id=uuid.uuid4().hex, title=e.label, scenes=[e], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', subtitles=False, origin='visual-highlight').model_dump() for e in events]
+        return [{**Draft(id=uuid.uuid4().hex, title=h['title'], hook=h['hook'], scenes=[scene], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', title_style='comic', title_template_version=6, subtitles=False, origin='visual-promo').model_dump(), '_auto_score': round(1.0 - idx * 0.05, 4)} for idx, h in enumerate(hooks)]
+    return [{**Draft(id=uuid.uuid4().hex, title=e.label, scenes=[e], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', subtitles=False, origin='visual-highlight').model_dump(), '_auto_score': round(1.0 - idx * 0.05, 4)} for idx, e in enumerate(events)]

@@ -2282,5 +2282,6 @@
   "已隐藏": "Ocultos",
   "勾选要在选择器中显示的型号。隐藏型号后，已选用途仍会使用它。": "Elige qué modelos aparecen en las listas. Ocultarlos conserva sus asignaciones actuales.",
   "服务商已保存，请选择精彩片段分析模型。": "El proveedor está guardado. Elige un modelo para buscar momentos destacados.",
-  "选择分析模型": "Elegir modelo de análisis"
+  "选择分析模型": "Elegir modelo de análisis",
+  "本地后台服务多次意外退出，已暂停自动重启。请点击重启服务恢复使用。": "El servicio local en segundo plano se cerró inesperadamente varias veces y se pausó el reinicio automático. Haz clic en Reiniciar ahora para continuar."
 }

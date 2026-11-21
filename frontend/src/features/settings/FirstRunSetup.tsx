@@ -13,6 +13,7 @@ import { PROVIDERS } from './providers'
 import ModelPicker from './ModelPicker'
 import ProviderFields from './ProviderFields'
 import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogic'
+import { setClipboardBannerSuppressed } from './keyGuideBus'
 import { readSponsorPromo, subscribeSponsorPromo } from './sponsorPromoWatch'
 import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl, readPromoSnapshot, subscribePromoSnapshot } from './sponsorPromoState'
 import {
@@ -80,6 +81,11 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   useEffect(() => { if (openRequest > 0 && needed) setOpen(true) }, [openRequest])
   const presentation = useRef('')
   const showing = open && needed && !!settings
+  useEffect(() => {
+    if (!showing || step !== 'connect') return
+    setClipboardBannerSuppressed(true)
+    return () => setClipboardBannerSuppressed(false)
+  }, [showing, step])
   const translation = useTranslation() as { i18n?: { language?: string } } | void
   const language = translation && translation.i18n ? translation.i18n.language : undefined
   useEffect(() => {
@@ -125,7 +131,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   if (!settings || !needed) return null
 
   // Only the overlay closes. The import zone stays on the setup card until analysis is actually saved.
-  const later = () => { if (m.saving) return; action('later'); setOpen(false) }
+  const later = () => { if (m.saving) return; setConnectingAttempt(false); action('later'); setOpen(false) }
   const goSettings = () => {
     action('open_settings')
     setOpen(false)

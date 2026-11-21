@@ -145,6 +145,16 @@ pub fn run() {
                     crate::quit_guard::emit_close_requested(app, "menu");
                 }
             }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+                if !has_visible_windows {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.unminimize();
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
             tauri::RunEvent::Exit => {
                 let _ = app.state::<BackendManager>().stop();
             }

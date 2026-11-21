@@ -141,9 +141,15 @@ def check_for_analysis_settings() -> tuple[str, dict]:
         connection = next((c for c in settings.connections if c.id == binding.connection_id), None)
         if connection is None:
             return 'skipped', extras
+        base_url = getattr(connection, 'base_url', None) or ''
+        if not base_url:
+            try:
+                base_url = (ai_models.chat_endpoint(connection, '') or {}).get('base_url') or ''
+            except Exception:  # noqa: BLE001
+                base_url = ''
         result = check_quota(
             provider=getattr(connection, 'provider', None),
-            base_url=getattr(connection, 'base_url', None),
+            base_url=base_url or None,
             api_key=getattr(connection, 'api_key', None) or None,
         )
         extras['provider'] = getattr(connection, 'provider', None)

@@ -136,10 +136,10 @@ test('X1 two same-code failures lead with diagnose and keep retry secondary', ()
     const diagnose = buttons.find(button => button.children === '看看哪里不对')
     const retry = buttons.find(button => button.children === '重试')
     assert.ok(diagnose)
-    assert.equal(diagnose.variant, 'text')
+    assert.equal(diagnose.variant, 'cta')
     assert.ok(retry)
-    assert.equal(retry.variant, 'cta')
-    assert.ok(buttons.indexOf(retry) < buttons.indexOf(diagnose))
+    assert.equal(retry.variant, undefined)
+    assert.ok(buttons.indexOf(diagnose) < buttons.indexOf(retry))
   } finally {
     generationOverride.value = null
   }
@@ -444,7 +444,7 @@ test('a bare 错误 names the step, and a billable call adds the billing sentenc
   try {
     const html = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
     assert.match(html, new RegExp('分析：' + sentence))
-    assert.doesNotMatch(html, /本次已消耗/)
+    assert.match(html, new RegExp(guidance))
     assert.doesNotMatch(html, /<span class="studio-error">错误<\/span>/)
   } finally {
     generationOverride.value = null

@@ -95,11 +95,17 @@ probe = json.loads(subprocess.run([str(ffprobe), "-v", "error", "-show_format", 
 assert 0.5 <= float(probe["format"]["duration"]) <= 1.6, probe
 report["ffmpeg_clip"] = "passed"
 
-step("yt-dlp 拿到内置 ffmpeg")
+step("yt-dlp 拿到内置 ffmpeg 与 JS 运行时")
 from backend.utils.ffmpeg_utils import ytdlp_ffmpeg_options  # noqa: E402
+from yt_dlp.utils._jsruntime import NodeJsRuntime  # noqa: E402
 opts = ytdlp_ffmpeg_options()
 assert Path(opts.get("ffmpeg_location", "")).resolve() == ffmpeg.resolve(), opts
+node_path = (opts.get("js_runtimes") or {}).get("node", {}).get("path", "")
+assert node_path and Path(node_path).resolve().is_relative_to(resources / "python"), opts
+node_info = NodeJsRuntime(node_path).info
+assert node_info is not None and node_info.supported, node_info
 report["ytdlp_ffmpeg"] = "passed"
+report["ytdlp_js_runtime"] = f"node {node_info.version}"
 
 step("桌面应用启动" if args.launch_desktop else "桌面后端启动")
 if args.launch_desktop:

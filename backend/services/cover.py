@@ -401,10 +401,10 @@ def extract_frame_jpeg(video_path: Path, at_sec: float = 0.5, *, max_width: int 
             "-q:v", "3",
             str(out),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=30)
         if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
             cmd[cmd.index("-ss") + 1] = "0"
-            proc = subprocess.run(cmd, capture_output=True, text=True)
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=30)
         if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
             detail = (proc.stderr or proc.stdout or "").strip().splitlines()
             raise CoverError("截帧失败" + (f"：{detail[-1]}" if detail else ""))

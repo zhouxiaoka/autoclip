@@ -274,6 +274,10 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         _sync_variant_status(project_id, job_id, 'completed')
         _schedule_qa()
     except project_cancellation.JobStopped:
+        if render_saved:
+            with suspend_clip_job_budget():
+                _sync_variant_status(project_id, job_id, 'completed')
+            return
         with project_cancellation.record_stop():
             try:
                 update(status='cancelled', error_code='cancelled', duration_ms=round((monotonic() - started) * 1000))
@@ -402,10 +406,17 @@ def _classify_landed_source(video, options=None):
         raise failure
 
 
+_NON_SPEECH_SUBTITLE_KEYS = frozenset({'danmaku', 'live_chat'})
+
+
 def _platform_subtitle_code(info):
-    """Language-matched manual subtitle code from yt-dlp info (not auto-captions)."""
+    """Language-matched manual subtitle code from yt-dlp info (not auto-captions or danmaku)."""
     language = str((info or {}).get('language') or '').lower()
-    manual = (info or {}).get('subtitles') or {}
+    manual = {
+        c: tracks
+        for c, tracks in ((info or {}).get('subtitles') or {}).items()
+        if str(c).lower() not in _NON_SPEECH_SUBTITLE_KEYS
+    }
     return next(
         (c for c in manual if language and (c.lower() == language or c.lower().split('-')[0] == language)),
         None,
@@ -1667,7 +1678,9 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
         # Blur stays blur. Burned-in captions stay on the classic fallback. A classic
         # import never sets rank_fallback, so an explicit interview window stays.
         if rank_fallback and framed != 'full_frame_captions' and layout == 'window':
-            layout = 'crop'
+            # When speaker detection ran and confirmed no face track (full_frame), keep full width on
+            # a blurred 9:16 backdrop instead of blindly center-cropping off subjects/slides.
+            layout = 'blur' if framed == 'full_frame' else 'crop'
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(generation))
         derived_drafts.append(draft.model_dump())
         variants.append({
@@ -2089,13 +2102,20 @@ def _produce_on_demand(project_id, variant_id):
         video = source(project_id)
         burned = _source_has_burned_subtitles(project_id, video)
         strategy_id = variant['strategy_id']
-        value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
+        from backend.services.platform_strategy import platform_strategy
+        from backend.services.studio.template_choice import selected_template
+        chosen = selected_template(state.get('generation'))
+        portrait_crop = bool(chosen) and platform_strategy(strategy_id).aspect == 'portrait'
+        value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {}, portrait_crop)
         packaging_cache = {}
         _prefetch_packaging(project_id, [(strategy_id, value)], burned, packaging_cache)
         value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
         posts = _posts_for(project_id, [(strategy_id, value)], packaging_cache)
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
-        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
+        layout = value.get('layout') if framed else None
+        if portrait_crop and framed != 'full_frame_captions' and layout == 'window':
+            layout = 'blur' if framed == 'full_frame' else 'crop'
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 
         def ready(data):
             for index, item in enumerate(data['drafts']):

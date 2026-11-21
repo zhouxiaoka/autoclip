@@ -114,14 +114,15 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
       const transient = result.result === 'transient' || isRetryableUpstreamError(result.error_type || '')
       const scoped = !!model && !ok && !transient && !['invalid_key', 'bad_endpoint', 'insufficient_quota', 'console_host'].includes(result.error_type || '')
       const checkedPurpose = result.error_type === 'vision_unsupported' || result.error_code === 'vision_unsupported' ? 'vision' : purpose
+      const analysisOkVisionMiss = !ok && purpose === 'analysis' && checkedPurpose === 'vision'
       const failures = (c.failed_model_checks || []).filter(item => item.model !== model || (item.purpose !== checkedPurpose && !(ok && checkedVision && item.purpose === 'vision')))
       if (scoped && model) failures.push({ purpose: checkedPurpose, model })
       return {
         ...c,
         ...(model && (ok || scoped) ? { failed_model_checks: failures } : {}),
         base_url: url,
-        validation_status: ok ? 'ok' : scoped ? c.validation_status || 'unchecked' : transient ? 'transient' : 'failed',
-        validation_error_type: ok ? '' : scoped ? c.validation_error_type : result.error_type || 'unknown',
+        validation_status: (ok || analysisOkVisionMiss) ? 'ok' : scoped ? c.validation_status || 'unchecked' : transient ? 'transient' : 'failed',
+        validation_error_type: (ok || analysisOkVisionMiss) ? '' : scoped ? c.validation_error_type : result.error_type || 'unknown',
         // 1.5.9 3B/N3: successful test clears the lock; real insufficient_quota stamps it.
         ...(ok
           ? { quota_exhausted_at: null }
