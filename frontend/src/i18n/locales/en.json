@@ -2315,5 +2315,21 @@
   "Novita AI": "Novita AI",
   "PoYo AI": "PoYo AI",
   "Novita AI 推理平台。高性价比主流开源与闭源模型，接口地址已预设。": "Novita AI inference platform. Cost-effective open and frontier models, base URL preset.",
-  "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。": "PoYo AI gateway. One API key for language, image, and video models, base URL preset."
+  "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。": "PoYo AI gateway. One API key for language, image, and video models, base URL preset.",
+  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "By default, reasoning_effort is not sent; supported values depend on the provider.",
+  "推理强度": "Reasoning effort",
+  "清空 HTTP Headers": "Clear HTTP headers",
+  "填写字符串键值对。已保存的值不会返回；留空保留，{} 清空。": "Enter string key-value pairs. Saved values are not returned; leave blank to keep them, or use {} to clear.",
+  "附加请求参数（JSON）": "Extra request parameters (JSON)",
+  "极高": "Extra high",
+  "低": "Low",
+  "HTTP Headers（JSON）": "HTTP headers (JSON)",
+  "不推理": "No reasoning",
+  "最小": "Minimal",
+  "自定义请求设置无效，请检查 JSON 和保留字段。": "Invalid custom request settings. Check the JSON and reserved fields.",
+  "仅在服务商要求时填写。推理强度和附加参数用于此连接的文字与视觉请求。": "Fill these in only when required by your provider. Reasoning effort and extra parameters apply to this connection’s text and vision requests.",
+  "高级请求设置": "Advanced request settings",
+  "服务商默认": "Provider default",
+  "中": "Medium",
+  "填写服务商支持的 JSON 对象；不能覆盖模型、消息、流式设置或 token 上限。": "Enter a provider-supported JSON object; model, messages, streaming settings and token limits cannot be overridden."
 }

@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
 from backend.core.path_utils import get_data_directory
+from backend.core.custom_request_options import CustomRequestOptions, request_options
 from backend.services.model_settings_source import (
     NOTICE_PRESET_UPDATED,
     NOTICE_PURPOSE_RESET,
@@ -87,7 +88,7 @@ class FailedModelCheck(BaseModel):
     model: str = Field(min_length=1, max_length=200)
 
 
-class Connection(BaseModel):
+class Connection(CustomRequestOptions):
     # hide_input_in_errors: str(ValidationError) otherwise keeps the tail of a long api_key.
     model_config = ConfigDict(extra='ignore', hide_input_in_errors=True)
     id: str = Field(min_length=1, max_length=100)
@@ -478,7 +479,7 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
         # Other hosts (a relay or proxy someone set up in 1.4) are used exactly as entered.
         host = base.rstrip('/').removesuffix('/compatible-mode/v1').removesuffix('/api/v1')
         base = host + '/compatible-mode/v1'
-    return {'base_url': base, 'api_key': connection.api_key or '', 'model': model}
+    return {'base_url': base, 'api_key': connection.api_key or '', 'model': model, **request_options(connection)}
 
 
 def image_endpoint(connection: Connection) -> dict:
@@ -594,6 +595,7 @@ def public(settings: ModelSettings) -> dict:
     if substitutions:
         value['model_substitutions'] = substitutions
     for c in value['connections']:
+        c['has_http_headers'] = bool(c.pop('http_headers', None))
         key = c.pop('api_key') or ''
         c['has_key'] = bool(key)
         c['api_key_masked'] = (key[:3] + '…' + key[-3:]) if len(key) > 8 else ('••••' if key else '')
@@ -603,11 +605,15 @@ def public(settings: ModelSettings) -> dict:
 def resolve_secret(connection: Connection, previous: ModelSettings | None = None) -> Connection:
     previous = previous if previous is not None else load()
     old = next((c for c in previous.connections if c.id == connection.id), None) if previous else None
-    if connection.api_key is not None:
-        return connection
-    if old and old.api_key and (old.provider, old.base_url, old.image_base_url) != (connection.provider, connection.base_url, connection.image_base_url):
+    changed = old and (old.provider, old.base_url, old.image_base_url) != (connection.provider, connection.base_url, connection.image_base_url)
+    if connection.api_key is None and old and old.api_key and changed:
         raise ValueError('服务地址已改变，请重新填写 API Key')
-    return connection.model_copy(update={'api_key': old.api_key if old else ''})
+    if connection.http_headers is None and old and old.http_headers and changed:
+        raise ValueError('服务地址已改变，请重新填写 HTTP Headers')
+    return connection.model_copy(update={
+        'api_key': connection.api_key if connection.api_key is not None else old.api_key if old else '',
+        'http_headers': connection.http_headers if connection.http_headers is not None else old.http_headers if old else {},
+    })
 
 
 class SettingsConflict(ValueError):

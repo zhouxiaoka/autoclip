@@ -1,3 +1,4 @@
+import { requestOptionsIssue } from './customRequestOptions'
 import { useEffect, useRef, useState } from 'react'
 import { codeFromRequestError, codeFromResult, safeHttpStatus } from '../../analytics/connectionTestCode'
 import { message } from 'antd'
@@ -431,6 +432,11 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     if (!checked && (patch || base)) setSettings(current)
     const currentLists = checked ? { ...lists, [checked.connectionId]: checked.list } : lists
     const finish = beginExperience('provider_configuration_save', summary(current))
+    if (current.connections.some(c => requestOptionsIssue(c))) {
+      const text = t('自定义请求设置无效，请检查 JSON 和保留字段。')
+      finish('blocked', { error_code: 'validation' }); setError(text); message.error(text)
+      return { ok: false }
+    }
     const allowAccountOnly = placement === 'settings_model' && (!validateConnections || !current.analysis)
     const issue = logic.saveIssue(current, allowAccountOnly)
     if (issue) { finish('blocked', { reason: issue.reason, role: issue.role, error_code: 'validation' }); const text = issueText(issue); setError(text); message.error(text); return { ok: false, issue } }

@@ -67,10 +67,12 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
       const changedBase = next.base_url !== undefined && next.base_url !== c.base_url
       const changedAddress = changedBase || (next.image_base_url !== undefined && next.image_base_url !== c.image_base_url)
       const changedCreds = changedAddress || (next.api_key !== undefined && next.api_key !== c.api_key)
+        || ['http_headers', '_http_headers_text', 'reasoning_effort', 'extra_body', '_extra_body_text'].some(key => key in next)
       const merged = {
         ...c,
         ...next,
         ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
+        ...(changedAddress && c.has_http_headers && next.http_headers === undefined && next._http_headers_text === undefined ? { http_headers: {}, _http_headers_text: '{}', has_http_headers: false } : {}),
         ...(typeof next.api_key === 'string' ? { has_key: !!next.api_key } : {}),
         ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '', failed_model_checks: [] } : {}),
       }

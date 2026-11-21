@@ -2315,5 +2315,21 @@
   "Novita AI": "Novita AI",
   "PoYo AI": "PoYo AI",
   "Novita AI 推理平台。高性价比主流开源与闭源模型，接口地址已预设。": "Plataforma de inferencia Novita AI. Modelos abiertos y comerciales económicos, con URL base preconfigurada.",
-  "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。": "Pasarela PoYo AI. Una sola clave para modelos de lenguaje, imagen y video, con URL base preconfigurada."
+  "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。": "Pasarela PoYo AI. Una sola clave para modelos de lenguaje, imagen y video, con URL base preconfigurada.",
+  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Por defecto no se envía reasoning_effort; los valores admitidos dependen del proveedor.",
+  "推理强度": "Esfuerzo de razonamiento",
+  "清空 HTTP Headers": "Borrar cabeceras HTTP",
+  "填写字符串键值对。已保存的值不会返回；留空保留，{} 清空。": "Introduzca pares clave-valor de texto. Los valores guardados no se devuelven; deje vacío para conservarlos o use {} para borrarlos.",
+  "附加请求参数（JSON）": "Parámetros adicionales (JSON)",
+  "极高": "Muy alto",
+  "低": "Bajo",
+  "HTTP Headers（JSON）": "Cabeceras HTTP (JSON)",
+  "不推理": "Sin razonamiento",
+  "最小": "Mínimo",
+  "自定义请求设置无效，请检查 JSON 和保留字段。": "Ajustes de solicitud no válidos. Compruebe el JSON y los campos reservados.",
+  "仅在服务商要求时填写。推理强度和附加参数用于此连接的文字与视觉请求。": "Rellene estos campos solo si el proveedor lo requiere. El esfuerzo de razonamiento y los parámetros adicionales se aplican a las solicitudes de texto y visión de esta conexión.",
+  "高级请求设置": "Ajustes avanzados de solicitud",
+  "服务商默认": "Predeterminado del proveedor",
+  "中": "Medio",
+  "填写服务商支持的 JSON 对象；不能覆盖模型、消息、流式设置或 token 上限。": "Introduzca un objeto JSON admitido por el proveedor; no se pueden sobrescribir modelo, mensajes, streaming ni límites de tokens."
 }

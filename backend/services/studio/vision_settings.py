@@ -22,12 +22,13 @@ from typing import Literal
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from backend.core.path_utils import get_data_directory
+from backend.core.custom_request_options import CustomRequestOptions
 
 _lock = threading.RLock()
 VisionMode = Literal['text_model', 'custom']
 
 
-class VisionSettingsInput(BaseModel):
+class VisionSettingsInput(CustomRequestOptions):
     mode: VisionMode = 'custom'
     base_url: str = Field(default='', max_length=1000)
     model: str = Field(default='', max_length=200)
@@ -158,7 +159,9 @@ def merge(body: VisionSettingsInput):
     previous = _saved() or _environment() or {}
     if body.mode == 'text_model':
         return {'mode': 'text_model', 'timeout': body.timeout, 'verified': previous.get('verified')}
-    value = body.model_dump(exclude={'api_key', 'clear_key'})
+    value = body.model_dump(exclude={'api_key', 'clear_key', 'http_headers', 'reasoning_effort', 'extra_body'})
+    from backend.core.custom_request_options import request_options
+    value.update(request_options(body))
     old_key = previous.get('api_key', '') if previous.get('mode', 'custom') == 'custom' else ''
     value['api_key'] = '' if body.clear_key else body.api_key if body.api_key is not None else old_key
     value['verified'] = previous.get('verified')

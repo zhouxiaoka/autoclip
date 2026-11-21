@@ -190,11 +190,14 @@ def vision_call(content, config=None, *, allow_event_list=False):
             payload['enable_thinking'] = False
         # Long vision thinks keep the socket alive. A refusal or a JSON 2xx is read in load().
         payload['stream'] = True
-        return token_param_kwargs(name, base, payload)  # OpenAI o-series / gpt-5+ reject max_tokens (#333)
+        from backend.core.custom_request_options import apply_chat_options
+        from backend.core.llm_providers import http_chat_body
+        return http_chat_body(token_param_kwargs(name, base, apply_chat_options(payload, config)))
 
     body = build_body(model)
     native = gemini_transport.is_official_gemini(config.get('provider', ''), base)
-    headers = {**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}
+    from backend.core.custom_request_options import merge_headers
+    headers = merge_headers({**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}, config.get('http_headers'))
 
     def request(payload):
         if native:
@@ -209,7 +212,11 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
         def once(body):
             timeout = clip_job_read_timeout(float(config.get('timeout', 180)))
-            with urllib.request.urlopen(request(body), timeout=timeout) as response:
+            opener = urllib.request.urlopen
+            if config.get('http_headers'):
+                from backend.core.custom_request_options import no_redirect_open
+                opener = no_redirect_open
+            with opener(request(body), timeout=timeout) as response:
                 result = read_completion_response(response)
                 return gemini_transport.completion(result) if native else result
 

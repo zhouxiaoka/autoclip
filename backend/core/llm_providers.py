@@ -619,6 +619,11 @@ class OpenAIProvider(LLMProvider):
                 http_client = make_openai_http_client(self.base_url)
                 if http_client is not None:
                     client_kwargs["http_client"] = http_client
+            if kwargs.get('http_headers'):
+                import httpx
+                client_kwargs['default_headers'] = dict(kwargs['http_headers'])
+                # Custom authorization headers must not follow a redirect to another endpoint.
+                client_kwargs['http_client'] = httpx.Client(trust_env=not is_local_url(self.base_url), follow_redirects=False)
             self.client = openai.OpenAI(**client_kwargs)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
@@ -628,11 +633,12 @@ class OpenAIProvider(LLMProvider):
         try:
             model = self.request_model()
             full_input = self._build_full_input(prompt, input_data)
-            payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, {
+            from backend.core.custom_request_options import apply_chat_options
+            payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, apply_chat_options({
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
                 **{key: value for key, value in kwargs.items() if key != "stream"},
-            }))
+            }, self.kwargs)))
             # A long think used to die on a silent socket. Stream when the host
             # can; a refusal or a single JSON body is assembled the same way.
             payload["stream"] = True

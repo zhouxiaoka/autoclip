@@ -6,6 +6,7 @@ import { cleanupBaseUrl, normalizeProviderBaseUrl } from './providerUrl'
 import type { Connection, ModelEntry, ModelList, ModelSettings } from './modelSettingsApi'
 import { cleanBinding } from './modelSettingsLogic'
 import { isConsoleHost } from './providerAccess'
+import { requestOptionsIssue, type CustomRequestDraft } from './customRequestOptions'
 
 export const CUSTOM_PROTOCOL = 'openai_compatible' as const
 export type CustomProtocol = typeof CUSTOM_PROTOCOL
@@ -25,7 +26,7 @@ export type CustomModelOffer = {
   enabled: boolean
 }
 
-export type CustomProviderDraft = {
+export type CustomProviderDraft = CustomRequestDraft & {
   name: string
   protocol: CustomProtocol
   base_url: string
@@ -33,7 +34,7 @@ export type CustomProviderDraft = {
   models: CustomModelOffer[]
 }
 
-export type DraftIssue = 'name' | 'url' | 'models' | 'model_id' | 'duplicate'
+export type DraftIssue = 'name' | 'url' | 'models' | 'model_id' | 'duplicate' | 'request_options'
 
 export const emptyDraft = (): CustomProviderDraft => ({
   name: '',
@@ -167,6 +168,7 @@ export function draftIssue(draft: CustomProviderDraft): Exclude<DraftIssue, 'mod
   if (!draft.name.trim()) return 'name'
   if (draftUrlIssue(draft.base_url)) return 'url'
   if (!draft.models.some(model => model.enabled && model.id.trim())) return 'models'
+  if (requestOptionsIssue(draft)) return 'request_options'
   return null
 }
 
@@ -187,6 +189,7 @@ export function toConnection(draft: CustomProviderDraft, id: string = crypto.ran
     image_api: 'auto',
     image_base_url: '',
     custom_models: enabledOffers(draft),
+    ...Object.fromEntries(Object.entries(draft).filter(([key]) => ['http_headers', 'has_http_headers', 'reasoning_effort', 'extra_body', '_http_headers_text', '_extra_body_text'].includes(key))),
   }
 }
 

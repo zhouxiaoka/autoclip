@@ -3,11 +3,12 @@ import { buildApiUrl } from '../../utils/apiConfig'
 import type { ValidationResult } from './providerAccess'
 
 import type { CustomModelOffer } from './customProvider'
+import { wireRequestOptions, type CustomRequestDraft } from './customRequestOptions'
 
 export type Capability = 'auto' | 'multimodal' | 'text'
 export type Source = 'preset' | 'user'
 export type ModelSource = Source
-export interface Connection {
+export interface Connection extends CustomRequestDraft {
   id: string
   name: string
   provider: string
@@ -88,13 +89,13 @@ const editableFields = [
 export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
   save: (value: ModelSettings, baseline?: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', {
-    ...value,
+    ...value, connections: value.connections.map(wireRequestOptions),
     edited_fields: baseline && editableFields.filter(key => JSON.stringify(value[key]) !== JSON.stringify(baseline[key])),
   }),
-  discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
+  discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection: wireRequestOptions(connection), refresh }),
   test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis', probeKind: 'quick' | 'trial' = 'quick', opts?: { signal?: AbortSignal; language?: 'zh' | 'en' }) =>
-    api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose, probe_kind: probeKind, language: opts?.language || 'zh' }, opts?.signal ? { signal: opts.signal } : undefined),
-  fetchList: (connection: Connection) => api.post<unknown, FetchListResult>('/settings/ai-models/fetch-list', { connection }),
+    api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection: wireRequestOptions(connection), model, vision, purpose, probe_kind: probeKind, language: opts?.language || 'zh' }, opts?.signal ? { signal: opts.signal } : undefined),
+  fetchList: (connection: Connection) => api.post<unknown, FetchListResult>('/settings/ai-models/fetch-list', { connection: wireRequestOptions(connection) }),
   /** T3: stream Ollama pull progress. Caller reads the Response body as SSE. */
   ollamaPull: (model: string, baseUrl: string, signal?: AbortSignal) =>
     fetch(buildApiUrl('/settings/ollama/pull'), {

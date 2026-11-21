@@ -220,6 +220,7 @@ class LLMManager:
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
         route_identity: Dict[str, Any] = {}
+        custom_request_options = {}
         from backend.services import ai_model_settings as ai
         try:
             configured = ai.load()
@@ -230,7 +231,9 @@ class LLMManager:
             connection = ai.connection_for(configured, binding)
             endpoint = ai.chat_endpoint(connection, binding.model)
             from backend.services.studio.failure_identity import connection_identity
+            from backend.core.custom_request_options import request_options
             route_identity = connection_identity(connection, binding.model)
+            custom_request_options = request_options(endpoint)
             source = getattr(binding, 'model_source', None) or getattr(binding, 'source', None)
             if source not in ('preset', 'user'):
                 source = 'user'
@@ -242,6 +245,7 @@ class LLMManager:
                                     min_score_threshold=configured.min_score_threshold,
                                     max_clips_per_collection=configured.max_clips_per_collection)
         self._route_identity = route_identity  # kept off settings: settings.json is saved verbatim
+        self._custom_request_options = custom_request_options  # header secrets must stay out of legacy settings
         # Failed loads must remain retryable; never mark a broken assignment as loaded.
         self._settings_mtime = self._current_settings_mtime()
         self._settings_hash = self._current_settings_hash()
@@ -387,8 +391,10 @@ class LLMManager:
         """提供商构造参数：OpenAI 兼容接口的 base_url；通义千问国际站也复用同一个字段（走兼容模式）"""
         if provider_type == ProviderType.OPENAI:
             base_url = (self.settings.get("openai_base_url") or "").strip()
-            if base_url:
-                return {"base_url": base_url}
+            from backend.core.custom_request_options import request_options
+            options = request_options(getattr(self, '_custom_request_options', None) or {})
+            if base_url or options:
+                return {**({'base_url': base_url} if base_url else {}), **options}
         if provider_type == ProviderType.DASHSCOPE:
             base_url = (self.settings.get("dashscope_base_url") or "").strip()
             if base_url:
