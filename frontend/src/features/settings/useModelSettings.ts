@@ -175,6 +175,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       replace(next)
     }
     if (connection) void discover(connection, false, 'provider_change')
+    return connection?.id
   }
   const assignAnalysisConnection = (connection: Connection) => {
     if (!settings) return
@@ -487,25 +488,22 @@ export function useModelSettings(placement: Placement = 'settings_model') {
 
   const testCatalogProvider = async (
     presetId: string,
-    draft?: Partial<Connection>,
+    displayedConnection: Connection,
     probeKind: 'quick' | 'trial' = 'quick',
   ) => {
     if (!settings) return
     const preset = catalogPreset(presetId)
     if (!preset) return
-    const ensured = ensureCatalogConnection(settings, preset)
-    let next = ensured.settings
-    let connection = ensured.connection
+    const existing = settings.connections.find(row => row.id === displayedConnection.id)
+    const ensured = existing
+      ? { settings, connection: existing }
+      : ensureCatalogConnection(settings, preset)
+    const { connection } = ensured
     if (!connection) return
-    const patch: Partial<Connection> = { ...(draft || {}) }
-    if (!(patch.base_url ?? connection.base_url)?.trim() && preset.base_url) {
-      patch.base_url = preset.base_url
-    }
-    if (Object.keys(patch).length) {
-      next = logic.editConnection(next, connection.id, patch)
-      connection = next.connections.find(row => row.id === connection!.id) || connection
-    }
-    if (!connection.base_url.trim() && preset.protocol !== 'local') {
+    const next = existing && !settings.analysis && preset.capabilities.includes('language')
+      ? assignAnalysis(settings, existing)
+      : ensured.settings
+    if (!displayedConnection.base_url.trim() && preset.protocol !== 'local') {
       const text = t('请先填写接口地址。')
       setError(text)
       message.error(text)
