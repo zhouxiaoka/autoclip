@@ -42,3 +42,11 @@ class ObsCall(Base):
     signature = Column(String(64), nullable=False)
     process = Column(String(36), nullable=False)
     result = Column(Text, nullable=True)
+
+
+class ObsReplayFile(Base):
+    """Recording identity observed at stop, for a later explicit import."""
+    __tablename__ = 'obs_replay_files'
+    capture_id = Column(String(36), primary_key=True)
+    directory = Column(Text, nullable=False)
+    identity = Column(String(64), nullable=False)

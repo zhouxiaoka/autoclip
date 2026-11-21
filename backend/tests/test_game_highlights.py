@@ -577,3 +577,36 @@ def test_unreadable_elimination_field_can_reuse_location_but_not_other_counts(tm
         return {"values": [5,5,5,5,6,6,7,7]}
     monkeypatch.setattr(games, "_read_counter_grid", read)
     assert games._review_eliminations(tmp_path/"video", scene, row, box)[0] == (5,7)
+
+
+def test_long_commentary_keeps_late_sentences_within_source_cue(tmp_path, monkeypatch):
+    text = "Move slowly through the room. " * 32 + "The switch lights up and the door opens."
+    (tmp_path / "input.srt").write_text(f"1\n00:00:00,000 --> 00:01:40,000\n{text}\n")
+    rows = []
+
+    def nominate(prompt, payload):
+        rows.extend(json.loads(payload)["cues"])
+        return {"events": [dict(action=94, reaction=99, score=91, label="Door opens",
+                                outcome="play", quote="the door opens")]}
+
+    monkeypatch.setattr(intelligence, "text_json", nominate)
+    games.subtitle_drafts(tmp_path / "video.mp4", Preferences(goal="highlight"), 100)
+    assert " ".join(row[2] for row in rows) == text
+    assert 80 < rows[-1][0] < rows[-1][1] == 100
+
+
+@pytest.mark.parametrize("impact", ["unexpected_reaction", "demonstration"])
+def test_commentary_pair_needs_matching_local_speech_and_ordered_frames(tmp_path, monkeypatch, impact):
+    from backend.services.studio.models import Scene
+
+    scenes = [Scene(id=str(i), start=i*40, end=i*40+30) for i in range(3)]
+    monkeypatch.setattr(intelligence, "sample", lambda *a, **kw: [])
+    def review(phase, parts):
+        return {"reviews": [dict(id=s.id, outcome="action_feedback", impact=impact, frame=6,
+                                 before_frame=3, after_frame=6 if i != 2 else 2,
+                                 spoken_quote="the door flew open", proof="Closed then open", subject="Door opens")
+                            for i,s in enumerate(scenes)]}
+    monkeypatch.setattr(intelligence, "vision_call_at", review)
+    ranked = games.review_outcomes(tmp_path/"video", scenes, "en", commentary_selection={},
+                                   commentary_text={"0":"Whoa, the door flew open!", "1":"nothing yet", "2":"the door flew open"})
+    assert [scene.id for scene in ranked] == ["0"]

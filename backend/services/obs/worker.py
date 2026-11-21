@@ -8,6 +8,7 @@ import stat
 import subprocess
 import tempfile
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -22,13 +23,32 @@ from backend.services.studio import jobs, preflight, readiness, store
 from backend.services.studio.models import ImportOptions, import_project_data
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 from . import billing, settings
-from .models import ObsCall, ObsCapture
+from .models import ObsCall, ObsCapture, ObsReplayFile
 
 
-def save(capture, epoch):
+def recording_identity(path, st):
+    return hashlib.sha256(repr((str(path), stat_key(st))).encode()).hexdigest()
+
+
+def save_manual(capture, directory):
+    try:
+        root = Path(directory).resolve(strict=True)
+        path = Path(capture.path).resolve(strict=True)
+        info = path.stat()
+        if not path.is_relative_to(root) or not stat.S_ISREG(info.st_mode) or not info.st_size:
+            return
+    except (OSError, RuntimeError):
+        return
+    replay = ObsReplayFile(capture_id=capture.session_id, directory=str(root), identity=recording_identity(path, info))
+    save(capture, '', replay=replay)
+
+
+def save(capture, epoch, *, replay=None):
     with session_scope() as db:
         if db.get(ObsCapture, capture.session_id):
             return
+        if replay is not None:
+            db.add(replay)
         db.add(
             ObsCapture(
                 id=capture.session_id,
@@ -38,7 +58,7 @@ def save(capture, epoch):
                 duration=capture.duration,
                 created=time.time(),
                 epoch=epoch,
-                status='waiting',
+                status='available' if replay is not None else 'waiting',
             )
         )
         try:
@@ -78,12 +98,37 @@ def latest():
             }
 
 
+def replays():
+    with session_scope() as db:
+        rows = (db.query(ObsCapture, Project.id, ObsReplayFile.capture_id)
+                .outerjoin(Project, Project.id == ObsCapture.project_id)
+                .outerjoin(ObsReplayFile, ObsReplayFile.capture_id == ObsCapture.id)
+                .order_by(ObsCapture.created.desc(), ObsCapture.id).limit(100))
+        return [dict(id=c.id, saved_at=c.created, seconds=c.end - c.start, status=c.status,
+                     project_id=project_id, selectable=bool(manual_id and c.status in ('available', 'setup_required')))
+                for c, project_id, manual_id in rows]
+
+
+def request_manual(cid):
+    # Only an observed, manually selectable receipt can enter the worker queue.
+    with session_scope() as db:
+        db.execute(text('BEGIN IMMEDIATE'))
+        row = db.get(ObsCapture, cid)
+        if not row or not db.get(ObsReplayFile, cid):
+            return False
+        if row.status in ('available', 'setup_required'):
+            row.status = 'manual_waiting'
+            db.commit()
+            return True
+        return row.status in ('manual_waiting', 'manual_ready', 'dispatching', 'submitted')
+
+
 def pending():
     with session_scope() as db:
         return [
             row[0]
             for row in db.query(ObsCapture.id)
-            .filter(ObsCapture.status.in_(['waiting', 'ready']))
+            .filter(ObsCapture.status.in_(['waiting', 'ready', 'manual_waiting', 'manual_ready']))
             .order_by(ObsCapture.created)
             .all()
         ]
@@ -100,7 +145,7 @@ def stat_key(st):
     return st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns
 
 
-def copy_recording(path, folder, target, stopping=lambda: False):
+def copy_recording(path, folder, target, stopping=lambda: False, *, expected_identity=None):
     # Copy from the checked file handle and re-check its identity after copying.
     if not path.is_absolute() or path.suffix.lower() not in {'.mkv', '.mp4', '.mov', '.webm', '.avi'}:
         raise ValueError('unsupported recording')
@@ -108,7 +153,10 @@ def copy_recording(path, folder, target, stopping=lambda: False):
     resolved = path.resolve(strict=True)
     if not resolved.is_relative_to(root) or not stat.S_ISREG(resolved.stat().st_mode):
         raise ValueError('outside recording directory')
-    before = stat_key(resolved.stat())
+    observed = resolved.stat()
+    if expected_identity and recording_identity(resolved, observed) != expected_identity:
+        raise ValueError('recording replaced')
+    before = stat_key(observed)
     time.sleep(0.6)
     digest = hashlib.sha256()
     with resolved.open('rb') as source, target.open('xb') as output:
@@ -237,9 +285,10 @@ class SetupRequired(Exception):
     """The media is valid but Studio requires a model or transcription configuration."""
 
 
-def options():
+def options(*, manual=False):
     return ImportOptions(
         goal='auto',
+        replay_source='obs' if manual else None,
         platforms=['original'],
         aspect='original',
         duration=45,
@@ -251,15 +300,21 @@ def options():
 def process(cid, stopping=lambda: False):
     with session_scope() as db:
         row = db.get(ObsCapture, cid)
-        if not row or row.status not in ('waiting', 'ready'):
+        if not row or row.status not in ('waiting', 'ready', 'manual_waiting', 'manual_ready'):
+            return
+        manual = row.status in ('manual_waiting', 'manual_ready')
+        replay = db.get(ObsReplayFile, cid) if manual else None
+        if manual and not replay:
+            mark(cid, row.status, 'file_error')
             return
         cfg = settings.config(db)
-        if not cfg.consent or cfg.consent_epoch != row.epoch or settings.overview()[1] != cfg.consent:
+        if not manual and (not cfg.consent or cfg.consent_epoch != row.epoch or settings.overview()[1] != cfg.consent):
             mark(cid, row.status, 'paused')
             return
-        directory = cfg.directory
+        directory = replay.directory if manual else cfg.directory
+        expected = replay.identity if manual else None
         db.expunge(row)
-    if row.status == 'ready':
+    if row.status in ('ready', 'manual_ready'):
         dispatch(row)
         return
     staging = get_data_directory() / 'import-staging'
@@ -268,23 +323,23 @@ def process(cid, stopping=lambda: False):
         with tempfile.TemporaryDirectory(dir=staging, prefix='obs-') as temp:
             source = Path(row.path)
             staged = Path(temp) / ('recording' + source.suffix.lower())
-            key = copy_recording(source, directory, staged, stopping)
+            key = copy_recording(source, directory, staged, stopping, expected_identity=expected)
             staged = inspect_media(staged, row, stopping)
             if stopping():
                 return
-            pid = billing.project_id(cid)
+            pid = str(uuid.uuid4()) if manual else billing.project_id(cid)
             raw = store.directory(pid) / 'raw'
             path = raw / ('input' + staged.suffix)
             name = 'OBS · ' + datetime.fromtimestamp(row.created).strftime('%Y-%m-%d %H.%M')
-            data = import_project_data(name, options())
+            data = import_project_data(name, options(manual=manual))
             data.settings['import_source'] = 'obs'
             with session_scope() as db:
                 db.execute(text('BEGIN IMMEDIATE'))
                 current = db.get(ObsCapture, cid)
-                if current.status != 'waiting':
+                if current.status != row.status:
                     return
                 cfg = settings.config(db)
-                if not cfg.consent or cfg.consent_epoch != row.epoch or settings.overview()[1] != cfg.consent:
+                if not manual and (not cfg.consent or cfg.consent_epoch != row.epoch or settings.overview()[1] != cfg.consent):
                     current.status = 'paused'
                 elif db.query(ObsCapture).filter_by(file_key=key).first():
                     current.status = 'duplicate'
@@ -292,7 +347,7 @@ def process(cid, stopping=lambda: False):
                     fields = ProjectService.project_fields(data)
                     fields['video_path'] = str(path)
                     db.add(Project(id=pid, **fields))
-                    current.project_id, current.file_key, current.status = pid, key, 'ready'
+                    current.project_id, current.file_key, current.status = pid, key, 'manual_ready' if manual else 'ready'
                     db.flush()
                     raw.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(staged), str(path))
@@ -301,21 +356,22 @@ def process(cid, stopping=lambda: False):
         return
     except (OSError, subprocess.TimeoutExpired):
         if time.time() - row.created > 120:
-            mark(cid, 'waiting', 'file_error')
+            mark(cid, row.status, 'file_error')
     except SetupRequired:
-        mark(cid, 'waiting', 'setup_required')
+        mark(cid, row.status, 'setup_required')
     except (ValueError, subprocess.CalledProcessError):
-        mark(cid, 'waiting', 'file_error')
+        mark(cid, row.status, 'file_error')
 
 
 def dispatch(row):
     with session_scope() as db:
         db.execute(text('BEGIN IMMEDIATE'))
         current = db.get(ObsCapture, row.id)
-        if current.status != 'ready':
+        if current.status not in ('ready', 'manual_ready'):
             return
         cfg = settings.config(db)
-        if not db.get(Project, row.project_id) or not cfg.consent or cfg.consent_epoch != row.epoch:
+        manual = current.status == 'manual_ready'
+        if not db.get(Project, row.project_id) or (not manual and (not cfg.consent or cfg.consent_epoch != row.epoch)):
             current.status = 'paused'
             db.commit()
             return
@@ -324,7 +380,7 @@ def dispatch(row):
         current.dispatcher_start = psutil.Process().create_time()
         db.commit()
     try:
-        jobs.inspect_project(row.project_id, options(), None, None)
+        jobs.inspect_project(row.project_id, options(manual=manual), None, None)
         mark(row.id, 'dispatching', 'submitted')
     except Exception:
         # Studio may have already accepted work. Never submit this receipt again.

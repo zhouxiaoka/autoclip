@@ -81,3 +81,19 @@ async def automation(request: Request, body: Automation):
         raise HTTPException(409, 'consent_changed') from None
     monitor.changed.set()
     return {'saved': True}
+
+
+@router.get('/replays')
+def list_replays(request: Request):
+    monitor = request.app.state.obs
+    return {'connection': monitor.state, 'phase': monitor.phase, 'items': worker.replays()}
+
+
+@router.post('/replays/{capture_id}/generate', status_code=202)
+async def generate_replay(capture_id: str, request: Request):
+    import asyncio
+
+    if not await asyncio.to_thread(worker.request_manual, capture_id):
+        raise HTTPException(409, 'replay_unavailable')
+    request.app.state.obs.work.set()
+    return {'accepted': True}

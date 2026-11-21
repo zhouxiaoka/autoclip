@@ -328,6 +328,7 @@ class SourceWindow(BaseModel):
 class ImportOptions(BaseModel):
     model_config = ConfigDict(extra='forbid')
     goal: Literal['auto', 'content', 'highlight', 'promo'] = 'auto'
+    replay_source: Literal['obs', 'twitch_archive', 'youtube_file', 'twitch_file', 'kick_file', 'discord_file', 'other_file'] | None = None
     language: Language = 'source'
     aspect: Literal['original', 'portrait', 'landscape'] | None = None
     duration: int | None = Field(default=None, ge=10, le=120)

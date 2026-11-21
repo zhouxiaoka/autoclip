@@ -358,3 +358,91 @@ def test_cloud_audio_response_is_cached(isolated, tmp_path):
         first, _ = asr.request_chunk(client, connection, 'whisper-1', audio, 'auto')
         repeated, _ = asr.request_chunk(client, connection, 'whisper-1', audio, 'auto')
     assert first == repeated and requests == ['/v1/audio/transcriptions']
+
+
+@pytest.mark.real_media_probe
+def test_manual_replay_is_idle_until_selected_and_reopens_one_project(isolated, tmp_path, monkeypatch):
+    app = FastAPI()
+    app.state.obs = listener.Monitor()
+    app.include_router(obs.router, prefix='/obs')
+    client = TestClient(app)
+    src = tmp_path / 'finished.mp4'
+    subprocess.run(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=s=64x64:r=10:d=40',
+                    '-f', 'lavfi', '-i', 'anullsrc=r=16000', '-t', '40', '-c:v', 'libx264',
+                    '-c:a', 'aac', str(src)], check=True)
+    capture = Capture('observed', str(src), 2, 38, 40)
+    worker.save_manual(capture, tmp_path)
+    worker.save_manual(capture, tmp_path)
+    assert worker.pending() == []
+    initial = client.get('/obs/replays')
+    assert str(src) not in initial.text and initial.json()['items'][0]['selectable']
+    assert not settings.read()['consent']
+    start = '/obs/replays/observed/generate'
+    calls = []
+    monkeypatch.setattr(worker.jobs, 'inspect_project', lambda *args: calls.append(args))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(lambda _: client.post(start).status_code, range(2))) == [202, 202]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(worker.process, ['observed', 'observed']))
+        list(pool.map(worker.process, ['observed', 'observed']))
+    history = client.get('/obs/replays').json()['items']
+    assert len(history) == 1
+    assert history[0]['status'] == 'submitted' and not history[0]['selectable']
+    assert len(calls) == 1 and history[0]['project_id'] == calls[0][0]
+    assert calls[0][1].replay_source == 'obs' and calls[0][1].goal == 'auto'
+    assert not billing.is_obs(calls[0][0]) and worker.pending() == []
+    assert client.post(start).status_code == 202 and not worker.pending()
+    with database.session_scope() as db:
+        project = db.query(Project).one()
+        assert 34 < worker.preflight.probe_material(Path(project.video_path)).duration < 36
+        assert project.processing_config['import_source'] == 'obs'
+
+
+def test_replaced_manual_recording_never_spends_or_creates_project(isolated, tmp_path):
+    src = tmp_path / 'stream.mkv'
+    src.write_bytes(b'original')
+    worker.save_manual(Capture('session', str(src), 0, 20, 20), tmp_path)
+    assert worker.request_manual('session')
+    src.write_bytes(b'replaced file')
+    worker.process('session')
+    assert worker.latest() == {'status': 'file_error', 'project_id': None}
+    assert not worker.request_manual('session')
+    with database.session_scope() as db:
+        assert not db.query(Project).count() and not db.query(ObsCall).count()
+
+
+def test_connected_listener_saves_a_selectable_replay_only_after_both_stops(isolated, tmp_path, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    settings.connect(True, 4455, None)
+    monitor = listener.Monitor()
+    recording = tmp_path / 'session.mkv'
+    recording.write_bytes(b'fixture')
+    responses = {
+        'GetVersion': {'obsVersion': '31', 'obsWebSocketVersion': '5.5', 'availableRequests': ['GetRecordDirectory']},
+        'GetRecordDirectory': {'recordDirectory': str(tmp_path)},
+        'GetStreamStatus': {'outputActive': False}, 'GetRecordStatus': {'outputActive': False},
+    }
+    events = iter([('StreamStateChanged', 'STARTED'), ('RecordStateChanged', 'STARTED'),
+                   ('StreamStateChanged', 'STOPPED'), ('RecordStateChanged', 'STOPPED')])
+
+    class Socket:
+        async def recv(self):
+            kind, state = next(events)
+            if kind == 'RecordStateChanged' and state == 'STOPPED':
+                assert monitor.phase == 'waiting_recording' and worker.replays() == []
+                monitor.changed.set()
+            return json.dumps({'op': 5, 'd': {'eventType': kind, 'eventData': {
+                'outputState': listener.PREFIX + state, 'outputPath': str(recording)}}})
+
+    @asynccontextmanager
+    async def connection(*args, **kwargs):
+        yield Socket()
+
+    monkeypatch.setattr(listener, 'connect', connection)
+    monkeypatch.setattr(listener, 'identify', AsyncMock())
+    monkeypatch.setattr(listener, 'snapshot', AsyncMock(side_effect=lambda ws, name: responses[name]))
+    asyncio.run(monitor.observe(settings.read()))
+    rows = worker.replays()
+    assert len(rows) == 1 and rows[0]['selectable'] and rows[0]['project_id'] is None
+    assert not worker.pending()

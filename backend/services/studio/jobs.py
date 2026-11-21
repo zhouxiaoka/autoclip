@@ -1435,12 +1435,16 @@ def _auto_generate(project_id, plan):
                 data['events'] = events
             if coverage and 'selection' in coverage:
                 data['generation']['game_selection'] = coverage
+            if not variants:
+                return
             attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
             from backend.services.studio.failure_identity import carry_screening
             data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
+        if not variants:
+            raise UserFacingError('只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。')
         _dispatch_pending_variants(project_id)
     except Exception as error:
         with suspend_clip_job_budget():
@@ -1481,6 +1485,15 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
         base_drafts, events, coverage = produced
     else:
         base_drafts, events, coverage = produced, [], None
+    if (plan.get('content_type') == 'gameplay' and (plan.get('preferences') or {}).get('goal') == 'highlight'
+            and base_drafts and all(d.get('origin') in ('visual-highlight', 'subtitle-highlight')
+                                    and len(d['scenes']) == 1 for d in base_drafts)):
+        from backend.services.studio.game_edits import assemble_game_edits
+        base_drafts, reviewed = assemble_game_edits(base_drafts, video, plan)
+        if not events:
+            events = reviewed
+        if not base_drafts:
+            return [], [], events, coverage
     if min_sec and duration is not None:
         base_drafts = _ensure_long_coverage(base_drafts, duration, min_sec)
     variants = []

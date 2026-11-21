@@ -5,11 +5,11 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage, error = 'failure', message = 'screening') {
+function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, failureStage, error = 'failure', message = 'screening', workspaceFields = {}) {
   const workspace = {
     analysis: { status, phase, message, error, error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
-    drafts: [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
+    drafts: [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined, ...workspaceFields,
   }
   const exportsObject = {}
   const children = ({ children }) => React.createElement('div', null, children)
@@ -432,4 +432,18 @@ test('a bare 错误 names the step, and a billable call adds the billing sentenc
 test('1.5.7 results page has no control that appends platforms', () => {
   const html = render(true, 'rendering', 'completed')
   assert.doesNotMatch(html, /追加平台/)
+})
+
+test('gameplay review opens from rendered outputs even without visual events', () => {
+  const result = (content_type, variants) => render(true, 'done', 'completed', [], [], undefined, undefined, '', '', {
+    plan: { content_type }, output_variants: variants,
+  })
+  const playable = { id: 'winner', status: 'completed', render_job_id: 'render-1' }
+  assert.match(result('gameplay', [playable]), /回看游戏高光/)
+  assert.doesNotMatch(result('interview', [playable]), /回看游戏高光/)
+  assert.doesNotMatch(result('gameplay', [
+    { id: 'missing-file-id', status: 'completed' },
+    { id: 'failed', status: 'failed', render_job_id: 'failed-job' },
+    { id: 'pending', status: 'on_demand' },
+  ]), /回看游戏高光/)
 })

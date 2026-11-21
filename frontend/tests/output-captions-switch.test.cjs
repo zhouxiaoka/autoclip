@@ -118,7 +118,7 @@ function studioMocks(templates) {
       Btn: ({ children, onClick, disabled, loading }) => h('button', { type: 'button', onClick, disabled: !!(disabled || loading) }, children),
       Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label), Row,
     },
-    './PlatformPicker': { default: () => null },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: () => null },
     './api': { studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true }),
         readiness: async () => READY, readinessProbe: async () => READY, import: async () => ({ project_id: 'p' }) }, errorText: value => String(value), errorCode: () => undefined },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },

@@ -318,7 +318,7 @@ def _review_eliminations(video, scene, row, reference_box=None):
 
 
 def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection=None, evidence_times=None,
-                    wins_only=False, confirmed_wins=None, rollover_goals=(), commentary_selection=None):
+                    wins_only=False, confirmed_wins=None, rollover_goals=(), commentary_selection=None, commentary_text=None):
     """Compare final candidate windows on a common scale, using only their own frames."""
     reviewed = []
     fallback = {"zh": "游戏实况片段", "ja": "ゲームプレイ", "en": "Gameplay clip"}.get(
@@ -366,12 +366,21 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
             " 这是解说实况的候选。提名和原话仅帮你找操作，先看本玩家画面，再决定是否独立成片。"
             "每项返回impact：podium=从对局进入最终前三名结算（final_rank填本玩家最终整数名次），"
             "recovery=确有迫近的失败危险且通过可见操作摆脱，streak=连续多步形成明显超出普通一击的连锁，"
-            "elimination=明确的连续击败或关键对手淘汰，milestone=可核对的重大目标或奖励，其他为routine。"
+            "elimination=明确的连续击败或关键对手淘汰，milestone=可核对的重大目标或奖励，其他通常为routine。"
             "读本玩家的战绩、徽章、连击或状态前后变化；单次小连击、发光、一般涨分、进入局中前十、"
             "笑或说很精彩不能单独作为保留理由。普通落块＋特效也填routine。"
             "不可把对手的数字当成本方，不可把差一点全清、设想或上局成绩写成结果。"
             "在before_frame和after_frame填片内两个不同先后帧（1至8）；proof说明这两帧的状态和实际影响。"
             "无法在片内证实就填routine。subject写已核实的战果，勿用普通消行标题掩盖有凭据的连续击败、救局或长连击。"
+        )
+        prompt += (
+            " 另有两类可独立成片的片段，无需胜负结算。unexpected_reaction：同一连续场景中出现清晰的"
+            "意外操作、失误或反转，附近字幕能逐字指出主播对这件事的即时回应。无需露脸。"
+            "demonstration：字幕解释一项可重复的技巧，当前画面实际执行操作且可见对应的效果。"
+            "仅有口头建议、菜单罗列、无关背景画面或一般操作加泛泛感叹均为routine。"
+            "分别在before_frame和after_frame给出操作前与结果的依据；spoken_quote只抄本段字幕中与画面"
+            "对应的一小段连续原话，不翻译、不加省略号。只保留画面可证的事实，纠正提名夸大的结果，"
+            "不因未获胜而否定另有证据的意外或演示。"
         )
     if rollover_goals:
         prompt += (" 对照回绕目标：" + json.dumps(rollover_goals, ensure_ascii=False) +
@@ -380,7 +389,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                    "必须看见目标值之后回到初值，其他代码变成目标数字不能替代该转换。")
     if commentary_selection is not None:
         schema = dict(id="编号", outcome="match_win / milestone / action_feedback / placement / play / unclear", final_for_player=False, frame=5, proof="依据",
-                      subject="主句", detail="可选短语", core="极短主句", impact="podium / recovery / streak / elimination / milestone / routine",
+                      subject="主句", detail="可选短语", core="极短主句", impact="podium / recovery / streak / elimination / milestone / unexpected_reaction / demonstration / routine", spoken_quote="",
                       final_rank=None, before_frame=1, after_frame=8, same_match=False, elimination_counts=[None]*8, elimination_box=None, combo_before=None, combo_peak=None)
         prompt += (" 动作归属要核对本玩家的计数栏开头和末尾读数，尤其是 K.O.、徽章和连击计数。"
                    "即使提名猜错奖励，仍可保留画面证实的另一项战果，如淘汰数连续增加。"
@@ -407,6 +416,8 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                 cue = ""
                 if (selection is not None or commentary_selection is not None) and scene.evidence:
                     cue = " 待核验的提名线索（请忽略提名帧号，以本组8帧为准）：" + scene.evidence[:500]
+                if commentary_text and scene.id in commentary_text:
+                    cue += " 本段同期字幕（仅用于核对解说，不是画面证据）：" + commentary_text[scene.id]
                 if anchor is not None:
                     cue = (
                         " 此段位于声音变化附近，先核对游戏操作和反应是否均可见。额外返回独立短语 action、result、reaction。"
@@ -449,7 +460,7 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
             if commentary_selection is not None and outcome == row.get("impact"):
                 # Compatible reviewers sometimes copy the consequence into both
                 # fields. All frame, attribution and result checks still apply.
-                if outcome in ("recovery", "streak", "elimination"):
+                if outcome in ("recovery", "streak", "elimination", "unexpected_reaction", "demonstration"):
                     outcome = "action_feedback"
                 elif outcome == "podium":
                     outcome = "placement"
@@ -490,6 +501,12 @@ def review_outcomes(video, scenes, language, *, reaction_anchors=None, selection
                     tier = 2
                     if not ordered or impact not in ("recovery", "streak", "milestone"):
                         impact = "elimination"
+                elif supported and ordered and impact in ("unexpected_reaction", "demonstration"):
+                    quote = row.get("spoken_quote")
+                    local_text = (commentary_text or {}).get(scene.id, "")
+                    tier = 2 if (outcome in ("play", "action_feedback", "milestone") and
+                                 isinstance(quote, str) and len(quote.strip()) >= 3 and
+                                 quote.strip().casefold() in local_text.casefold()) else 0
                 elif supported and ordered and impact in ("recovery", "streak", "elimination", "milestone") and outcome in ("play", "action_feedback", "milestone"):
                     tier = 2
                 else:
@@ -875,20 +892,45 @@ def _recover_result_windows(video, rows, duration, prefs, ranked, confirmed):
         for win in recovered)]
 
 
+def _commentary_rows(path, duration):
+    """Preserve the entire ASR cue. Sub-cue times are estimates for scouting, verified on video."""
+    rows = []
+    for cue in pysrt.open(str(path), encoding="utf-8-sig"):
+        start = cue.start.ordinal / 1000
+        end = min(duration, cue.end.ordinal / 1000)
+        text = " ".join(cue.text.split())
+        if not text or start < 0 or start >= end:
+            continue
+        if end - start <= 12 and len(text) <= 240:
+            rows.append((start, end, text))
+            continue
+        # Prefer clause boundaries. Bound an unpunctuated passage as well, including CJK.
+        at = 0
+        while at < len(text):
+            stop = min(at + 180, len(text))
+            boundary = re.search(r"[.!?。！？]+(?=\s|$)|[。！？]+", text[at:stop])
+            if boundary:
+                stop = at + boundary.end()
+            elif stop < len(text):
+                space = text.rfind(" ", at + 1, stop + 1)
+                if space > at:
+                    stop = space
+            fragment = text[at:stop].strip()
+            if fragment:
+                rows.append((start + (end-start)*at/len(text), start + (end-start)*stop/len(text), fragment))
+            at = stop
+            while at < len(text) and text[at].isspace():
+                at += 1
+    return sorted(rows)
+
+
 def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False, selection_log=None):
     from backend.utils.speech_recognizer import generate_subtitle_for_video
 
     path = Path(video).parent / "input.srt"
     if not path.is_file():
         generate_subtitle_for_video(video, output_path=path)
-    rows = [
-        (s.start.ordinal / 1000, s.end.ordinal / 1000, s.text[:480])
-        for s in pysrt.open(str(path), encoding="utf-8-sig")
-        if s.text.strip()
-        and 0 <= s.start.ordinal < s.end.ordinal
-        and s.start.ordinal / 1000 < duration
-    ]
-    rows.sort()
+    rows = _commentary_rows(path, duration)
     prompt = (
         "从游戏直播解说中提名实际发生的高光。优先本局最重要的决胜、逆转、达成目标，"
         "其次是单次有结果的精彩操作。闲聊、假设会赢、下一局开场或复述旧局不独立成片。"
@@ -905,16 +947,26 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
     if auto_frame_review:
         prompt += (" 可额外提名第4个有实据的不同事件。优先注意短时间内连续击败、脱险、"
                    "长连击以及整局结算；前后相邻两句可能分别描述第一次及第二次击败。")
+        prompt += (
+            " 先判断素材讲法。自由探索或搞笑实况，优先意外操作→即时反应，包括有可见后果的失误，"
+            "即使没有输赢。不要把不同地点、不同时间发生的追击或相似操作合并。技巧解说优先找可用具体画面"
+            "检验的一次完整演示：起初的问题、角色采取的操作、状态变化或重新可用的结果。"
+            "按具体示范价值提名，空泛介绍和只有建议的片段跳过。每段材料不求数量，优先最清楚的例子。"
+            "这两类事件另返回kind=unexpected_reaction或demonstration，以及cut_start、cut_end，"
+            "用原片绝对秒覆盖这一句说明、实际操作及紧接的结果或吐槽，最长target_seconds，"
+            "到下个技巧或场景前就结束。action与reaction仍是该事件的两个时间锚点。长字幕拆句时间是近似值。"
+        )
     candidates = []
     # Partition by text volume as well as time, with neighbouring cues for events
     # that land at a partition boundary. Each call sees absolute source times.
+    window = max(180, min(720, duration / 6)) if auto_frame_review else 720
     i = 0
     while i < len(rows):
         j = i + 1
         chars = len(rows[i][2])
         while (
             j < len(rows)
-            and rows[j][0] - rows[i][0] < 720
+            and rows[j][0] - rows[i][0] < window
             and chars + len(rows[j][2]) < 16000
         ):
             chars += len(rows[j][2])
@@ -956,10 +1008,16 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
             spare = prefs.duration - (reaction - action)
             start = max(0, action - spare * 0.60)
             end = min(duration, reaction + spare * 0.40)
-            if item.get("retelling") is True:
+            cut_start, cut_end = item.get("cut_start"), item.get("cut_end")
+            if (auto_frame_review and item.get("kind") in ("unexpected_reaction", "demonstration")
+                    and type(cut_start) in (int, float) and type(cut_end) in (int, float)
+                    and 0 <= cut_start <= action <= reaction <= cut_end <= duration
+                    and 3 <= cut_end - cut_start <= prefs.duration):
+                start, end = cut_start, cut_end
+            elif item.get("retelling") is True:
                 onset = _reaction_onset(video, action, reaction, prefs.duration)
                 if onset is not None and onset < reaction:
-                    start = max(0, onset - 0.60 * prefs.duration)
+                    start = max(0, reaction - prefs.duration, min(action, onset - 0.60 * prefs.duration))
                     end = min(duration, start + prefs.duration)
             quote, outcome = item.get("quote"), item.get("outcome")
             nearby = " ".join(
@@ -982,6 +1040,7 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
     selected = []
     frames_allowed = auto_frame_review and intelligence.source_frame_analysis_allowed()
     anchors = {}
+    commentary_text = {}
     for _, _, start, end, label, quote, action, reaction in sorted(candidates, key=lambda c: (-c[0], -c[1])):
         if end <= start or any(
             min(end, s.end) - max(start, s.start)
@@ -993,6 +1052,7 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
         if frames_allowed:
             scene.evidence = f"{label} · {quote}" if quote else label
             anchors[scene.id] = (action, reaction)
+            commentary_text[scene.id] = " ".join(text for a, b, text in rows if b > start and a < end)
         selected.append(scene)
         if len(selected) == (18 if frames_allowed else 6):
             break
@@ -1000,7 +1060,7 @@ def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review
         confirmed = set()
         audit = {}
         selected = review_outcomes(video, selected, prefs.language, confirmed_wins=confirmed,
-                                   evidence_times=anchors, commentary_selection=audit)
+                                   evidence_times=anchors, commentary_selection=audit, commentary_text=commentary_text)
         selected = _recover_result_windows(video, rows, duration, prefs, selected, confirmed)
         if selection_log is not None:
             final_ids = {s.id for s in selected}

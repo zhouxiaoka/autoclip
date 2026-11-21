@@ -152,17 +152,13 @@ class Monitor:
                 if msg['op'] != 5:
                     continue
                 event = msg['d']
-                capture = outputs.event(
-                    event['eventType'],
-                    event['eventData'],
-                    armed=bool(
-                        cfg['consent']
-                        and self.supported
-                        and self.directory
-                        and Path(self.directory).resolve() == Path(cfg['directory'])
-                    ),
-                )
+                can_observe = bool(self.supported and self.directory)
+                capture = outputs.event(event['eventType'], event['eventData'], armed=can_observe)
                 self.phase, self.recording = outputs.status, outputs.recording
                 if capture:
-                    await asyncio.to_thread(worker.save, capture, cfg['consent_epoch'])
-                    self.work.set()
+                    automatic = cfg['consent'] and Path(self.directory).resolve() == Path(cfg['directory'])
+                    if automatic:
+                        await asyncio.to_thread(worker.save, capture, cfg['consent_epoch'])
+                        self.work.set()
+                    else:
+                        await asyncio.to_thread(worker.save_manual, capture, self.directory)

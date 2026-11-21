@@ -1515,7 +1515,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     antd: { Select: () => null },
     'react-router-dom': { useNavigate: () => navigate },
     '../../ui': { Btn, Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label) },
-    './PlatformPicker': { default: () => null },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: () => null },
     './api': { studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true, has_audio: true }), readiness, readinessProbe: signal => readiness(signal), import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },

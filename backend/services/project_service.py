@@ -349,8 +349,10 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                 
                 # Erase cached transcripts/model replies together with the project.
                 from backend.services.obs.billing import is_obs
-                if is_obs(project_id):
-                    from backend.services.obs.models import ObsCall, ObsCapture
+                if is_obs(project_id) or (project.processing_config or {}).get('import_source') == 'obs':
+                    from backend.services.obs.models import ObsCall, ObsCapture, ObsReplayFile
+                    capture_ids = self.db.query(ObsCapture.id).filter_by(project_id=project_id)
+                    self.db.query(ObsReplayFile).filter(ObsReplayFile.capture_id.in_(capture_ids)).delete(synchronize_session=False)
                     self.db.query(ObsCall).filter_by(project_id=project_id).delete()
                     self.db.query(ObsCapture).filter_by(project_id=project_id).update({'path': '', 'status': 'deleted'})
                 # 4. 删除项目记录

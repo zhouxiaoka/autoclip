@@ -6,6 +6,8 @@ import { Select } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
 import PlatformPicker from './PlatformPicker'
+import type { ChannelReplay } from './ChannelReplays'
+import LiveReplayPicker, { type ReplayFileSource } from './LiveReplayPicker'
 import { studioApi, errorText, errorCode } from './api'
 import { trackAsrReadiness, trackAutoChoiceOverridden, trackImportPreviewShown, trackOneClickStarted, trackOneClickUndone, trackQuickOutputPlatforms } from '../../analytics/studio'
 import { telemetryId } from '../../analytics/workflow'
@@ -129,6 +131,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     return typeof incoming === 'string' ? incoming : ''
   })
   const [file, setFile] = useState<File | null>(null)
+  const replayFile = useRef<{ file: File; source: ReplayFileSource; replay?: ChannelReplay } | null>(null)
+  const [remote, setRemote] = useState<ChannelReplay>()
+  const activeRemote = source === 'file' && !file ? remote : undefined
+  const replayOrigin = activeRemote ? 'twitch' : source === 'file' && replayFile.current?.file === file ? replayFile.current?.source : undefined
   const [subtitle, setSubtitle] = useState<File | null>(null)
   const [options, setOptions] = useState<ImportOptions>({...defaultImportOptions})
   const templatesOn = useFlag('pkg_templates_v1') === true
@@ -168,6 +174,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   /** Synchronous override so FormData sees the choice before setState flushes (T2). */
   const sourceWindowOverride = useRef<ImportOptions['source_window'] | undefined>(undefined)
   useEffect(() => {
+    if (activeRemote) {
+      const parts = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(activeRemote.duration ?? '')
+      const seconds = parts ? Number(parts[1] || 0) * 3600 + Number(parts[2] || 0) * 60 + Number(parts[3] || 0) : 0
+      setLongGate(prev => ({ ...prev, durationSec: seconds || null })); return
+    }
     if (source !== 'file' || !file) {
       setLongGate(prev => prev.durationSec == null ? prev : { ...prev, durationSec: null })
       return
@@ -185,7 +196,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     video.onerror = () => finish(null)
     video.src = objectUrl
     return () => { cancel = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [file, source])
+  }, [file, source, activeRemote])
   const platformSource = useRef<PlatformSource>(initialPlatforms.current.source)
   const overridden = useRef(false)
   const starting = useRef(false)
@@ -301,7 +312,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     const nextFile = next && 'file' in next ? next.file : file
     const nextUrl = next?.url ?? url
     const nextSource = next?.file ? 'file' : next?.url ? 'link' : source
-    if (nextSource === 'file' ? !nextFile : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
+    if (nextSource === 'file' ? !nextFile && !activeRemote : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
     const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
@@ -368,6 +379,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     // drop, global paste and the file picker all come through here; while a submit is running
     // (including its readiness re-check) the source is locked, so what is shown is what gets uploaded.
     if (starting.current) return
+    setRemote(undefined)
     if (next.file) {
       setFile(next.file); setUrl(''); setSource('file'); clearPreview()
       if (analysisBlocked) return
@@ -449,7 +461,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       setError('')
       const flowId = telemetryId()
       const body = new FormData()
-      body.append('goal', options.goal); body.append('language', options.language); body.append('instruction', options.instruction)
+      if (activeRemote?.direct_video_id) {
+        body.append('twitch_video_id', activeRemote.direct_video_id)
+        body.append('channel_replay_id', activeRemote.id)
+      } else if (replayOrigin && replayFile.current?.replay) body.append('channel_replay_id', replayFile.current.replay.id)
+      if (replayOrigin) body.append('replay_source', replayOrigin + '_file')
+      body.append('goal', replayOrigin ? 'auto' : options.goal); body.append('language', options.language); body.append('instruction', options.instruction)
       platforms.forEach(platform => body.append('platforms', platform))
       body.append('auto_start', 'true')
       body.append('portrait_style', options.portrait_style || 'auto')
@@ -470,7 +487,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       if (subtitle) body.append('subtitle', subtitle)
       body.append('name', file && source === 'file' ? file.name.replace(/\.[^.]+$/, '') : t("智能剪辑"))
       if (source === 'file' && file) body.append('video', file)
-      else { body.append('url', url.trim()); if (browser) body.append('browser', browser) }
+      else if (!activeRemote) { body.append('url', url.trim()); if (browser) body.append('browser', browser) }
       body.append('features', JSON.stringify(featureSnapshot()))
       body.append('flow_id', flowId)
       const skippedWhisper = allowLink && source !== 'file' && !!readiness && !readiness?.checks?.transcription?.ok && !subtitle
@@ -493,6 +510,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       // the backend gate sends a stable code; the prompt is chosen from it, never from the text.
       const code = errorCode(e)
       if (isRecoveryCode(code)) { setError(''); resumeSubmit.current = true; recover.open(code as string, readiness?.checks?.transcription?.model) }
+      else if (activeRemote && errorText(e) === 'channel_reconnect') setError(t('channels.reconnect'))
+      else if (activeRemote && ['channel_provider', 'channel_network', 'archive_unavailable', 'replay_download_failed', 'replay_download_busy', 'channel_mismatch'].includes(errorText(e))) setError(t('channels.directFailed'))
       else setError(t(errorText(e)))  // includes coded source refusals (source_unreadable ...): shown at once
     } finally { starting.current = false; setBusy(false) }
   }
@@ -507,10 +526,23 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   }
   const names = platforms.map(platformLabel).join(uiLocale().toLowerCase().startsWith('zh') ? '、' : ', ')
   const youtubeLongOnlyTooShort = longGate.durationSec != null && longGate.durationSec < YOUTUBE_LONG_MIN_SEC && platforms.length > 0 && platforms.every(platform => platform === 'youtube_long')
+  const replayPicker = <LiveReplayPicker disabled={busy} onOpen={() => { setPending(null); previewTicket.current++; setPreviewLoading(false) }} onRemote={replay => {
+    if (starting.current) return
+    setPending(null); clearPreview(); setFile(null); setUrl(''); setSubtitle(null); setSource('file')
+    replayFile.current = null; setRemote(replay); setError('')
+    sourceWindowOverride.current = undefined; firstWindowDecided.current = false
+  }} onFile={(picked, origin, replay) => {
+    if (starting.current) return
+    setPending(null); clearPreview(); setSource('file'); setFile(picked); setUrl(''); setSubtitle(null)
+    setRemote(undefined); replayFile.current = { file: picked, source: origin, replay }
+    setError(''); setLongGate({ open: false, durationSec: null, trigger: 'button' })
+    sourceWindowOverride.current = undefined; firstWindowDecided.current = false
+  }} />
   if (analysisBlocked) {
     return <section className="ac-creative-import">
       <div className="studio-import-box">
-        <ImportSetupCard onExample={onExample} exampleBusy={exampleBusy} keptMaterial={Boolean(url.trim() || file)} />
+        {replayPicker}
+        <ImportSetupCard onExample={onExample} exampleBusy={exampleBusy} keptMaterial={Boolean(url.trim() || file || activeRemote)} />
       </div>
     </section>
   }
@@ -518,17 +550,19 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     <h1 className="ac-title">{t("放入视频，直接生成可发布成片。")}</h1>
     <p className="studio-muted">{t("选择发布平台，AI 会自动挑选内容、完成剪辑与渲染。生成后可直接下载或继续编辑。")}</p>
     <div className="studio-import-box">
-      {dropZone ? <div className={`ac-dropzone${dragging ? ' is-hot' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+      {activeRemote ? <div className="studio-field"><strong>{activeRemote.title}</strong><div>Twitch <button type="button" className="studio-link" disabled={busy} onClick={() => setRemote(undefined)}>{t('移除')}</button></div></div> : dropZone ? <div className={`ac-dropzone${dragging ? ' is-hot' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
         <p className="ac-dropzone-title">{t('把链接或视频放在这里')}</p>
         <p className="ac-dropzone-hint">{t('粘贴链接，或拖入一个视频文件。')}</p>
         <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); clearPreview(); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} onBlur={event => { const value = event.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} disabled={busy}/></label>
         {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
         <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
       </div> : <>
-        <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>!busy&&setSource(v)} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
+        <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>{ if (!busy) { setRemote(undefined); setSource(v) } }} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
         {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>:<label className="studio-file"><span>{file?.name || t("选择一段视频")}</span><input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={e=>{ const picked = e.target.files?.[0] || null; setFile(picked); if (picked) arm('drop', { file: picked }) }}/><small>MP4 / MOV / MKV / WEBM / AVI</small></label>}
       </>}
       {templatesOn && visualOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <StyleProbeLine sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} />}
+      {replayPicker}
+      {replayOrigin && replayFile.current?.replay && <p>{replayFile.current.replay.title}</p>}
       {remembered ? <div className="ac-platform-line"><p>{t('为 {{names}} 制作', { names })}</p><button type="button" className="studio-link" disabled={busy} onClick={() => setPlatformOpen(open => !open)}>{t('改')}</button></div> : null}
       {(!remembered || platformOpen) && <PlatformPicker value={platforms} onChange={changePlatforms} disabled={busy}/>}
       {templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <TemplatePicker visual={visualOn} disabled={busy} value={options.html_template} sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} url={url} file={file} sourceKind={source === 'file' ? (file ? 'file' : 'none') : (url.trim() ? 'link' : 'none')} onChange={(html_template: HtmlTemplateChoice) => setOptions({...options, html_template})}/>}
@@ -576,7 +610,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec, platforms)}</p>}
       {assist && <details className="studio-details" open><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl assist browser={browser} busy={busy} onChange={setBrowser} selectRef={browserRef} /></details>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
-      <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
+      <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy && activeRemote?t('channels.directWorking'):busy?t("正在生成"):replayOrigin?t("replays.generate"):t("生成成片")}</Btn></div>
       <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
       {error&&<p className="studio-error" role="alert">{error}</p>}
     </div>

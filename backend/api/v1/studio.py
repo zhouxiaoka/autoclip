@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Optional, Literal
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, ConfigDict, Field
@@ -57,9 +57,13 @@ def validate_draft(project_id, draft):
 async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route: str = 'studio', goal: str | None = 'auto'):
     """Stage the upload outside any project and run the one preflight on it, in the threadpool.
     Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
+    staged = await stage_upload(video, first_chunk, ext)
+    return await _gate_staged(staged, srt_available, route, goal)
+
+
+async def _gate_staged(staged, srt_available, route, goal):
     from backend.services.studio import preflight
     from backend.api.v1 import transcription_gate
-    staged = await stage_upload(video, first_chunk, ext)
     try:
         subtitle = staged.with_suffix('.srt') if srt_available else None
         if subtitle is not None:
@@ -227,6 +231,7 @@ def test_vision_settings(body: vision_settings.VisionSettingsInput):
 
 @router.post('/import')
 async def import_visual(
+    request: Request,
     goal: Literal['auto', 'content', 'highlight', 'promo'] = Form('auto'),
     language: Language = Form('source'),
     aspect: Optional[Literal['original', 'portrait', 'landscape']] = Form(None),
@@ -243,12 +248,24 @@ async def import_visual(
     url: Optional[str] = Form(None),
     browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = Form(None),
     video: Optional[UploadFile] = File(None),
+    replay_source: Optional[Literal['youtube_file', 'twitch_file', 'kick_file', 'discord_file', 'other_file']] = Form(None),
+    channel_replay_id: Optional[uuid.UUID] = Form(None),
+    twitch_video_id: Optional[str] = Form(None, pattern=r'^[0-9]{1,20}$'),
     source_window_start: Optional[float] = Form(None, ge=0),
     source_window_end: Optional[float] = Form(None, gt=0),
     features: str = Form(''),
     db: Session = Depends(get_db),
 ):
-    if bool(url) == bool(video):
+    if channel_replay_id and (getattr(request.app.state, 'mode', None) != 'desktop' or replay_source not in ('youtube_file', 'twitch_file')):
+        raise HTTPException(422, 'invalid_replay_source')
+    if twitch_video_id:
+        from backend.services import replay_channels as channels, twitch_replay_media
+        if not (twitch_replay_media.enabled() and channel_replay_id and replay_source == 'twitch_file'
+                and video is None and url is None):
+            raise HTTPException(422, 'invalid_replay_source')
+    if replay_source and (not (video or twitch_video_id) or goal != 'auto'):
+        raise HTTPException(422, 'invalid_replay_source')
+    if not twitch_video_id and bool(url) == bool(video):
         raise HTTPException(422, '请提供一个视频链接或文件')
     from backend.services.studio import readiness
     call(readiness.ensure_analysis_usable)
@@ -275,6 +292,24 @@ async def import_visual(
         finally:
             await subtitle.close()
     staged = None
+    if twitch_video_id:
+        source = await run_in_threadpool(channels.twitch_selected_source, db, twitch_video_id, str(channel_replay_id))
+        if source.get('project_id'):
+            return {'project_id': source['project_id'], 'analysis_run_id': None}
+        db.rollback()  # Do not hold a read transaction while the VOD downloads.
+        staged = await run_in_threadpool(twitch_replay_media.stage, twitch_video_id, source['duration'],
+                                         store.get_projects_directory().parent / 'import-staging')
+        try:
+            current = await run_in_threadpool(channels.twitch_selected_source, db, twitch_video_id, str(channel_replay_id))
+            if current.get('project_id'):
+                staged.unlink(missing_ok=True)
+                return {'project_id': current['project_id'], 'analysis_run_id': None}
+            if current != source or await request.is_disconnected():
+                raise HTTPException(409, 'archive_unavailable')
+            staged = await _gate_staged(staged, subtitle_bytes is not None, 'studio', goal)
+        except BaseException:
+            staged.unlink(missing_ok=True)
+            raise
     if video:
         # 1.5.7: block before creating a project when local Whisper is required but missing.
         try:
@@ -290,30 +325,44 @@ async def import_visual(
                 'end': float(source_window_end),
             }
         prefs = ImportOptions(
-            goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+            goal=goal, replay_source='twitch_archive' if twitch_video_id else replay_source, language=language, aspect=aspect, duration=duration, instruction=instruction,
             platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
             recommended_template=recommended_template,
             branding={'outro_enabled': brand_outro_enabled},
             source_window=source_window,
         )
         from backend.services.studio.models import import_project_data
-        project = ProjectService(db).create_project(import_project_data(name.strip() or '智能剪辑', prefs, url=url, browser=browser))
+        data = import_project_data(name.strip() or '智能剪辑', prefs, url=url, browser=browser)
+        if prefs.replay_source:
+            data.settings['import_source'] = prefs.replay_source
+        if channel_replay_id:
+            from backend.services.replay_channels import claim
+            project, created = claim(db, replay_source.removesuffix('_file'), str(channel_replay_id), data)
+            if not created:
+                if staged is not None:
+                    staged.unlink(missing_ok=True)
+                if video:
+                    await video.close()
+                return {'project_id': str(project.id), 'analysis_run_id': None}
+        else:
+            project = ProjectService(db).create_project(data)
     except BaseException:
         if staged is not None:
             staged.unlink(missing_ok=True)
         raise
     pid = str(project.id)
+    source_saved = False
     try:
         # mkdir inside the try: a failure here still runs the staging cleanup below.
         raw = store.directory(pid) / 'raw'
         raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
-            if not video:
+            if not video and not twitch_video_id:
                 # Upload carried an SRT but no local video yet (URL path); still stamp origin.
                 from backend.services.studio import pipeline_resume
                 pipeline_resume.record_srt_origin(store.directory(pid) / 'metadata', 'attached')
-        if video:
+        if video or twitch_video_id:
             path = raw / ('input' + ext)
             if staged is not None:
                 import shutil
@@ -325,6 +374,7 @@ async def import_visual(
                         target.write(chunk)
             project.video_path = str(path)
             db.commit()
+            source_saved = True
             if subtitle_bytes is not None:
                 # P1 #6: user-attached SRT must survive 「从头重做」.
                 from backend.services.studio import pipeline_resume
@@ -341,8 +391,14 @@ async def import_visual(
                 snapshot = parsed
         run_id = call(jobs.inspect_project, pid, prefs, url, browser, features=snapshot)
     except Exception:
-        project.status = 'failed'
-        db.commit()
+        if channel_replay_id and not source_saved:
+            # The archive remains selectable if staging fails before a usable source exists.
+            db.rollback()
+            import shutil
+            shutil.rmtree(store.directory(pid), ignore_errors=True)
+        else:
+            project.status = 'failed'
+            db.commit()
         raise
     finally:
         if staged is not None:

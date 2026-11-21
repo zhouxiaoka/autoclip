@@ -60,7 +60,7 @@ export default function ObsSettings() {
   const activePhase = phase === 'checking' ? 'connected' : phase === 'idle' ? 'connected' : phase
   const recent = state?.latest
   const messages: Record<string, string> = {
-    waiting: 'checking', ready: 'checking', dispatching: 'dispatching', submitted: 'submitted',
+    manual_waiting: 'checking', manual_ready: 'checking', waiting: 'checking', ready: 'checking', dispatching: 'dispatching', submitted: 'submitted',
     file_error: 'file_error', setup_required: 'setup', deleted: 'deleted', paused: 'changed', duplicate: 'duplicate', uncertain: 'uncertain', limit: 'limitReached',
   }
   return <Section title="OBS Studio" description={t('obs.help')}>
@@ -84,7 +84,7 @@ export default function ObsSettings() {
           disabled={!state || busy || (!state.automatic && (!state.connected || !state.supported || !state.directory || !state.digest))}
           onChange={enabled => void save('automation', { enabled, revision: state?.revision, digest: state?.digest, max_calls: limit ?? state?.max_calls })} />
       </Row>
-      {recent && <Row label={t('obs.last')} hint={t('obs.' + (messages[recent.status] ?? 'unconfirmed'))}>
+      {recent && <Row label={t('obs.last')} hint={t(recent.status === 'available' ? 'replays.available' : 'obs.' + (messages[recent.status] ?? 'unconfirmed'))}>
         {recent.project_id && <Link to={'/project/' + recent.project_id}>{t('obs.review')}</Link>}
       </Row>}
       {error && <p role="alert">{t('obs.error')}</p>}

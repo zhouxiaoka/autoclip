@@ -1062,3 +1062,22 @@ def test_rejected_reservation_survives_a_denied_exact_rollback(client, source, m
         assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
     finally:
         blocked['active'] = False
+
+
+@pytest.mark.parametrize('replay_source', ['youtube_file', 'twitch_file', 'kick_file', 'discord_file', 'other_file'])
+def test_exported_replay_keeps_source_and_existing_game_project(client, source, monkeypatch, replay_source):
+    from backend.core import database
+    from backend.models.project import Project
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    response = client.post('/studio/import', data={'replay_source': replay_source, 'platforms': 'original'},
+                           files={'video': ('replay.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200, response.text
+    pid = response.json()['project_id']
+    state = client.get('/studio/' + pid).json()
+    assert state['plan']['content_type'] == 'gameplay'
+    assert state['plan']['preferences']['goal'] == 'highlight'
+    with database.session_scope() as db:
+        assert db.get(Project, pid).processing_config['import_source'] == replay_source
+    invalid = client.post('/studio/import', data={'replay_source': replay_source, 'url': 'https://youtu.be/example'})
+    assert invalid.status_code == 422
