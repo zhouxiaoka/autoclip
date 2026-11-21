@@ -282,7 +282,7 @@ class ModelSettings(BaseModel):
     # independent. Following covers move with analysis; independent ones never change provider.
     cover_follows_analysis: bool | None = None
     cover_design_mode: Literal["crop_grade_text_only","editorial_edit"] = "crop_grade_text_only"
-    allow_send_frame: bool = False
+    allow_send_frame: bool = True
     # 1 = saved by 1.5+, where AI covers are an explicit choice. 1.4 switched them on by itself at
     # first setup, and 1.5 generates one per output in the background (billed), so a file 1.4 wrote
     # reads with AI covers off; the chosen model stays, one click turns them back on.

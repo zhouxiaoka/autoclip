@@ -69,7 +69,7 @@ class CoverConfigBody(BaseModel):
     api_key: str | None = Field(None, description="不传则保留已有密钥")
     base_url: str | None = None
     ocr_model: str | None = None
-    allow_send_frame: bool | None = Field(None, description="是否允许把视频帧发给第三方生图服务，默认关")
+    allow_send_frame: bool | None = Field(None, description="是否允许把视频帧发给封面生图服务，默认开")
     mode: str | None = Field(None, description="text_model 跟随 AI 模型的服务商 / custom 单独配置")
 
 

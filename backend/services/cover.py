@@ -62,7 +62,7 @@ class CoverConfig:
     base_url: str = ""
     ocr_model: str = ""
     design_mode: str = "crop_grade_text_only"
-    allow_send_frame: bool = False
+    allow_send_frame: bool = True
     source: str = "none"
     # own / env / text_model：密钥是封面自己填的、环境变量，还是复用了「AI 模型」里同一家的 key
     key_source: str = "none"
@@ -231,7 +231,7 @@ def load_config() -> CoverConfig:
             api_key=service["api_key"] if service else "",
             base_url=service["base_url"] if service else "",
             ocr_model="",
-            allow_send_frame=bool(data.get("allow_send_frame", False)),
+            allow_send_frame=bool(data.get("allow_send_frame", True)),
             source="file" if data else "none",
             key_source="text_model" if service and service["api_key"] else "none",
             mode="text_model",
@@ -247,7 +247,7 @@ def load_config() -> CoverConfig:
         api_key=api_key,
         base_url=base_url,
         ocr_model=str(data.get("ocr_model") or "").strip(),
-        allow_send_frame=bool(data.get("allow_send_frame", False)),
+        allow_send_frame=bool(data.get("allow_send_frame", True)),
         source=source if (api_key or data or env_base or env_provider) else "none",
         key_source=key_source,
         mode="custom",

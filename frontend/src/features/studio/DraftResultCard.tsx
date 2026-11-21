@@ -36,7 +36,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const kind = draft.origin === 'visual-promo' ? t('推广成片') : draft.origin === 'visual-highlight' ? t('精彩高光') : ''
   const description = draft.hook || draft.scenes[0]?.evidence
 
-  return <article className="ac-card studio-output-card" aria-label={draft.title}>
+  return <article className="ac-card studio-output-card" aria-label={`${draft.title} · ${t(statusLabels[status])}`} data-draft-id={draft.id} data-draft-status={status}>
     {completed ? <div className="studio-variant-thumb" title={poster ? t('封面') : thumbnailLabel}>
       <video className="studio-variant-video" aria-label={t('播放成片')} controls preload="metadata"
         poster={poster || thumbnail} src={studioApi.video(projectId, completed.job_id)} />
@@ -63,8 +63,8 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
       <div className="ac-card-foot"><div className="ac-card-actions">
         {completed && <StudioDownloadLink className="studio-output-download" projectId={projectId} jobId={completed.job_id} />}
         {active ? <Btn size="sm" onClick={onHistory}>{t('查看进度')}</Btn>
-          : !completed && allowExport && <Btn size="sm" variant="cta" onClick={onExport}>{t(status === 'failed' ? '重试导出' : '导出成片')}</Btn>}
-        <Btn size="sm" onClick={onEdit}>{t('预览与修改')}</Btn>
+          : !completed && allowExport && <Btn size="sm" variant="cta" data-testid="draft-export-btn" data-draft-id={draft.id} aria-label={`${t(status === 'failed' ? '重试导出' : '导出成片')} · ${draft.title}`} onClick={onExport}>{t(status === 'failed' ? '重试导出' : '导出成片')}</Btn>}
+        <Btn size="sm" data-testid="draft-edit-btn" data-draft-id={draft.id} aria-label={`${t('预览与修改')} · ${draft.title}`} onClick={onEdit}>{t('预览与修改')}</Btn>
       </div></div>
       {completed && <details className="studio-publish-tools">
         <summary>{t('发布工具')}</summary>

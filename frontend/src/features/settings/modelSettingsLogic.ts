@@ -202,7 +202,14 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 /** Model picked in the cover section: stays following only when it is on the analysis connection. */
 export function setCoverModel(s: ModelSettings, connectionId: string, model: string): ModelSettings {
   // E1: an explicit cover model pick is independent; only 「跟随分析」 turns following on.
-  return { ...s, cover_enabled: true, prefer_local_cover: false, cover_follows_analysis: false, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
+  return {
+    ...s,
+    cover_enabled: true,
+    prefer_local_cover: false,
+    cover_follows_analysis: false,
+    cover_design_mode: 'editorial_edit',
+    cover: { ...cleanBinding(connectionId), model, model_source: 'user' },
+  }
 }
 
 export { coverFollowsAnalysis }

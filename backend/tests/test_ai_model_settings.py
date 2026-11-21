@@ -632,7 +632,7 @@ def test_dashscope_optional_cover_save_and_reopen(cover_model):
         assert reopened[role]['connection_id'] == 'legacy-analysis'
         assert reopened[role]['model'] == draft[role]['model']
         assert reopened[role]['model_source'] == 'user'
-    assert reopened['allow_send_frame'] is False and not reopened['prefer_local_cover']
+    assert reopened['allow_send_frame'] is True and not reopened['prefer_local_cover']
     assert [c.api_key for c in ai.load().connections] == [c.api_key for c in previous.connections]
     assert reopened['cover'] == (draft['cover'] if cover_model else None)
     cfg = cover.load_config()

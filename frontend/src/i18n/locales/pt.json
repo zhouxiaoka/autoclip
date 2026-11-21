@@ -2283,5 +2283,8 @@
   "勾选要在选择器中显示的型号。隐藏型号后，已选用途仍会使用它。": "Escolha os modelos visíveis nas listas. Ocultar um modelo mantém seus usos atuais.",
   "服务商已保存，请选择精彩片段分析模型。": "Provedor salvo. Escolha um modelo para identificar destaques.",
   "选择分析模型": "Escolher modelo de análise",
-  "本地后台服务多次意外退出，已暂停自动重启。请点击重启服务恢复使用。": "O serviço local em segundo plano encerrou inesperadamente várias vezes e a reinicialização automática foi pausada. Clique em Reiniciar agora para continuar."
+  "本地后台服务多次意外退出，已暂停自动重启。请点击重启服务恢复使用。": "O serviço local em segundo plano encerrou inesperadamente várias vezes e a reinicialização automática foi pausada. Clique em Reiniciar agora para continuar.",
+  "允许向封面生图模型上传参考帧": "Permitir enviar frames de referência ao modelo de capa",
+  "当前为「原帧排版」，不会调用所选生图模型；切到「模型编辑」后生效。": "O modo de composição no frame original está ativo, então o modelo de imagem escolhido não será chamado; alterne para Edição por modelo para usá-lo.",
+  "已关闭向封面生图模型上传参考帧，将仅使用本机排版，不会调用所选生图模型（不影响画面理解）。": "O envio de frames de referência ao modelo de capa está desativado, portanto apenas a composição local será usada (não afeta a análise visual)."
 }
