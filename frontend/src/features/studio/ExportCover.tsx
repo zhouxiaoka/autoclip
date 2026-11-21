@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
-import { coverApi } from '../../publish/coverApi'
+import { coverApi, type CoverDesign } from '../../publish/coverApi'
 import api from '../../services/api'
 import { Btn, Dialog } from '../../ui'
 import { exportCoverSlot, studioApi } from './api'
@@ -29,15 +29,27 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const [savedTitle, setSavedTitle] = useState('')
   const [askReference, setAskReference] = useState(false)
   const [referenceOnce, setReferenceOnce] = useState(false)
+  const [design, setDesign] = useState<CoverDesign>({ mode: 'crop_grade_text_only', recipe: 'auto' })
+  const [times, setTimes] = useState<number[]>([])
+  const [frameLocked, setFrameLocked] = useState(false)
+  const [warning, setWarning] = useState('')
+  const variantId = variant?.id
   useEffect(() => {
-    if (variant) return
     let active = true
-    void coverApi.get(projectId, clip, platform).then(value => { if (active) setSavedTitle(value.headline || value.title || '') }).catch(() => {})
-    void coverApi.getConfig().then(value => {
-      if (active) setAskReference(value.enabled && value.configured && !value.allow_send_frame)
-    }).catch(() => {})
+    const current = variantId ? studioApi.variantCoverDesign(projectId, variantId) : coverApi.get(projectId, clip, platform)
+    void Promise.all([current.catch(() => null), coverApi.getConfig().catch(() => null)]).then(([view, cfg]) => {
+      if (!active) return
+      setSavedTitle(view?.headline || view?.title || '')
+      setDesign(view?.options || { mode: cfg?.design_mode || 'crop_grade_text_only', recipe: 'auto' })
+      setTimes(view?.candidate_times || [])
+      setFrameLocked(!!view?.frame_locked)
+      setWarning(view?.warning === 'needs_source_validation' ? t('当前是截帧封面') :
+        view?.warning ? t('生图失败，已改成本地排版或截帧') : '')
+      setAskReference(!!cfg?.enabled && cfg.configured && !cfg.allow_send_frame)
+      setReferenceOnce(false)
+    })
     return () => { active = false }
-  }, [projectId, clip, platform, variant])
+  }, [projectId, clip, platform, variantId, version])
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -70,7 +82,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
           onCoverChanged?.()
           setVersion(v => v + 1)
         }
-        else setError(t('封面生成失败，请重试'))
+        else setError(state.error || t('封面生成失败，请重试'))
       } catch {
         if (closed) return
         setError(t('封面生成失败，请重试'))
@@ -86,11 +98,11 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
     setError('')
     try {
       if (variant) {
-        const result = await studioApi.redesignVariantCover(projectId, variant.id)
+        const result = await studioApi.redesignVariantCover(projectId, variant.id, { design, title: headline?.trim() || undefined })
         if (mounted.current) setTask({ id: result.job_id, variantId: variant.id })
         return
       }
-      const result = await coverApi.start(projectId, clip, { platform, title: headline?.trim() || savedTitle || job.title, allow_reference_once: referenceOnce })
+      const result = await coverApi.start(projectId, clip, { platform, design, title: headline?.trim() || undefined, allow_reference_once: referenceOnce })
       if (!mounted.current) return
       setReferenceOnce(false)
       if ('job_id' in result) setTask({ id: result.job_id })
@@ -112,11 +124,20 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
       {!pending && !missing && loadedUrl === url && <Btn size="sm" variant="text" onClick={generate}>{t('重新生成封面')}</Btn>}
     </div>
     {!pending && !missing && <img src={url} alt={t('封面')} onLoad={() => setLoadedUrl(url)} onError={() => { if (variantPath) setMissingVariantFile(true); else setFailedUrl(url) }} />}
-    {!pending && variant?.cover_job?.status === 'failed' && !missing && <span className="studio-muted">{t('生图失败，已改成本地排版或截帧')}</span>}
-    {!variant && !pending && <div className="studio-cover-fields">
+    {!pending && warning && <span role="status" className="studio-muted">{warning}</span>}
+    {!pending && <div className="studio-cover-fields">
       <label>{t('封面标题')}<input className="ac-input" value={headline ?? savedTitle} placeholder={job.title}
         maxLength={100} onChange={e => setHeadline(e.target.value)} /></label>
-      {askReference && <label><input type="checkbox" checked={referenceOnce} onChange={e => setReferenceOnce(e.target.checked)} /> {t('仅本次将所选视频帧发送给封面模型')}</label>}
+      <label>{t('封面风格')}<select value={design.recipe} onChange={e => setDesign({ ...design, recipe: e.target.value as CoverDesign['recipe'] })}>
+        {([['auto','自动'],['photo_focus','原帧排版'],['culture_editorial','文化访谈'],['tech_question','观点提问'],['bold_statement','鲜明态度']] as const)
+          .map(([value,label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
+      <label>{t('封面制作方式')}<select value={design.mode} onChange={e => setDesign({ ...design, mode: e.target.value as CoverDesign['mode'] })}>
+        <option value="crop_grade_text_only">{t('原帧排版')}</option><option value="editorial_edit">{t('模型编辑')}</option></select></label>
+      <label>{t('封面取帧')}<select disabled={frameLocked} value={design.frame_time ?? (design.change_frame ? 'next' : '')}
+        onChange={e => setDesign({ ...design, change_frame: e.target.value === 'next', frame_time: !e.target.value || e.target.value === 'next' ? undefined : Number(e.target.value) })}>
+        <option value="">{t('保留当前帧')}</option><option value="next">{t('重选镜头')}</option>
+        {times.map(at => <option key={at} value={at}>{at.toFixed(2)} s</option>)}</select></label>
+      {!variant && askReference && design.mode === 'editorial_edit' && <label><input type="checkbox" checked={referenceOnce} onChange={e => setReferenceOnce(e.target.checked)} /> {t('仅本次将所选视频帧发送给封面模型')}</label>}
     </div>}
     {error && <p className="studio-error" role="alert">{error}</p>}
   </section>

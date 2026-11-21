@@ -75,7 +75,7 @@ def test_reference_prompt_requests_a_finished_cover():
     title = '最好的12个月？'
     prompt = publish_kit.reference_prompt('douyin', [title])
     assert prompt.count(title) == 1
-    assert '9:16' in prompt and '已经排好字的完整封面' in prompt
+    assert '1080×1920' in prompt and '排好字' in prompt
 
 
 def test_disk_kit_contains_the_whole_video_without_an_in_memory_archive(tmp_path, monkeypatch):

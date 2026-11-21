@@ -1,3 +1,4 @@
+import ExportCover from '../features/studio/ExportCover'
 import { socialPublishObserved, socialPublishOutcome } from '../analytics/studio'
 import { workflow } from '../analytics/observer'
 import i18n, { t } from '../i18n'
@@ -5,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import StudioDownloadLink from '../features/studio/StudioDownloadLink'
-import type { RenderJob } from '../features/studio/types'
+import type { OutputVariant, RenderJob } from '../features/studio/types'
 import './publish-clip.css'
 import { exportCoverSlot, exportPoster, studioApi } from '../features/studio/api'
 import { outputVariantPublishTarget } from '../features/studio/outputVariantPublish'
@@ -90,6 +91,8 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
   useTranslation()
   const studioJobId = /^studio-[a-f0-9]{32}$/.test(clipId) ? clipId.slice(7) : null
   const variantTarget = outputVariantPublishTarget(search)
+  const [studioVariant, setStudioVariant] = useState<OutputVariant | undefined>()
+  const [coverRevision, setCoverRevision] = useState(0)
   const [studioExport, setStudioExport] = useState<RenderJob | null>(null)
   const navigate = useNavigate()
   const runId = useRef(0)
@@ -149,6 +152,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
           setStudioExport(exported)
           // An automatic output arrives with its publish kit: start from its copy and cover.
           const variant = (workspace.output_variants || []).find(item => item.id === variantTarget.uploadPost)
+          setStudioVariant(variant)
           const post = variant?.post || exported.post
           if (post) {
             nextTitle = post.title || nextTitle
@@ -163,8 +167,8 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
         setConfigured(cfg.configured)
         setBiliConfigured(bili.configured)
         try {
-          const existing = await coverApi.get(projectId, clipId, coverSlot)
-          if (!cancelled && runId.current === session && existing.ok && existing.url) {
+          const existing = variantTarget.uploadPost ? null : await coverApi.get(projectId, clipId, coverSlot)
+          if (!cancelled && runId.current === session && existing?.ok && existing.url) {
             setCover(existing)
             if (existing.title) setCoverTitle(existing.title)
             if (existing.subtitle) setCoverSubtitle(existing.subtitle)
@@ -208,12 +212,12 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
   // Covers are on by default: make one as soon as the page is ready so the user sees it instead of an empty box.
   const autoCover = useRef(false)
   useEffect(() => {
-    if (loading || !ready || error || cover || coverBusy || autoCover.current) return
+    if (studioJobId || loading || !ready || error || cover || coverBusy || autoCover.current) return
     autoCover.current = true
-    void generateCover()
-  }, [loading, ready, error, cover, coverBusy])
+    void generateCover(true)
+  }, [studioJobId, loading, ready, error, cover, coverBusy])
 
-  const generateCover = async () => {
+  const generateCover = async (automatic = false) => {
     if (!projectId || !clipId || coverBusy) return
     const session = ++coverJob.current
     setCoverBusy(true)
@@ -221,7 +225,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
     try {
       const started = await coverApi.start(projectId, clipId, {
         platform: coverPlatform(selected),
-        title: (coverTitle || title).trim() || undefined,
+        title: automatic ? undefined : (coverTitle || title).trim() || undefined,
         subtitle: coverSubtitle.trim() || undefined,
         badge: coverBadge.trim() || undefined,
       })
@@ -442,7 +446,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
         {showMedia && <section className="publish-media" aria-label={t('视频预览')}>
           <video key={clipId} controls playsInline preload="metadata" aria-label={clipTitle || t('视频预览')}
             src={exported ? studioApi.video(projectId, exported.job_id) : projectApi.getClipVideoUrl(projectId, clipId)}
-            poster={coverImage || (exported ? exportPoster(projectId, exported) || studioApi.thumbnail(projectId, exported.draft_id, exported.revision, exported.job_id) : undefined)} />
+            poster={(studioVariant && studioVariant.render_job_id === studioJobId ? studioApi.variantCover(projectId, studioVariant.id,coverRevision) : coverImage) || (exported ? exportPoster(projectId, exported) || studioApi.thumbnail(projectId, exported.draft_id, exported.revision, exported.job_id) : undefined)} />
           <div className="publish-media-info">
             {exported && <p className="publish-revision"><StatusDot tone="ok" label={t('已导出')} /> · V{exported.revision}</p>}
             <h2>{clipTitle || t("切片")}</h2>
@@ -504,7 +508,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
                   <textarea className="ac-input ac-textarea" style={{ minHeight: 88 }} aria-label={t("描述")} value={description} onChange={(e) => setDescription(e.target.value)} />
                 </Row>
                 <Row stack label={t("封面")} hint={t("生图失败或未生成时，投稿会自动截帧，不会卡住发布。")}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+                  {exported ? <ExportCover projectId={projectId} job={exported} variant={studioVariant} onCoverChanged={() => setCoverRevision(v=>v+1)} /> : <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
                     <div style={{
                       width: '100%',
                       maxWidth: 360,
@@ -535,7 +539,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
                     {cover?.method === 'frame' && !coverHint && (
                       <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{t("当前是截帧封面")}</p>
                     )}
-                  </div>
+                  </div>}
                 </Row>
               </>
             )}

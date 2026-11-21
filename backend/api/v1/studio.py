@@ -21,6 +21,7 @@ from backend.models.project import Project
 from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
+from backend.services.cover_brief import Options as CoverOptions
 from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
 from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest, PostCopy
@@ -627,7 +628,7 @@ def output_variant_cover(project_id: str, variant_id: str, db: Session = Depends
     from backend.services.studio import publish_kit
     project_or_404(project_id, db)
     variant, job = _variant_job(project_id, variant_id)
-    path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'],variant_id)
     if path is None:
         raise HTTPException(404, '封面尚未生成')
     return FileResponse(path, media_type='image/jpeg', filename=f"{job['job_id']}-cover.jpg",
@@ -648,13 +649,47 @@ def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session 
     return job
 
 
+class CoverRedesignBody(BaseModel):
+    title: str | None = None
+    design: CoverOptions | None = None
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/cover/design')
+def get_variant_cover_design(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from backend.services.studio import publish_kit
+
+    project_or_404(project_id, db)
+    variant, job = _variant_job(project_id, variant_id)
+    meta = publish_kit._metadata(
+        publish_kit.cd_meta_path(project_id, job["job_id"], variant["strategy_id"], variant_id)
+    )
+    brief = meta.get("brief") or {}
+    return dict(
+        frame_locked=brief.get("source", {}).get("allow_alternate_frame") is False,
+        options=meta.get("options"),
+        headline=brief.get("copy", {}).get("exact_text"),
+        candidate_times=[c["time"] for c in brief.get("source", {}).get("candidates", [])],
+        warning=meta.get("fallback_reason"),
+    )
+
+
 @router.post('/{project_id}/output-variants/{variant_id}/cover/regenerate')
-def regenerate_output_variant_cover(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+def regenerate_output_variant_cover(
+    project_id: str, variant_id: str, body: CoverRedesignBody | None = None, db: Session = Depends(get_db)
+):
     project_or_404(project_id, db)
     _, job = _variant_job(project_id, variant_id)
-    task = call(jobs.request_ai_cover, project_id, variant_id, job['job_id'], allow_local=True)
+    task = call(
+        jobs.request_ai_cover,
+        project_id,
+        variant_id,
+        job["job_id"],
+        allow_local=True,
+        options=body.design if body else None,
+        title=body.title if body else None,
+    )
     if task is None:
-        raise HTTPException(409, '成片版本已更新，请刷新重试')
+        raise HTTPException(409, "成片版本已更新，请刷新重试")
     return task
 
 
@@ -694,7 +729,7 @@ def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(g
     from backend.services.studio import publish_kit
     project_or_404(project_id, db)
     variant, job = _variant_job(project_id, variant_id)
-    cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'],variant_id)
     post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
     strategy = platform_strategy(variant['strategy_id'])
     return _kit_response(project_id, job, cover, post, strategy.label, english=strategy.audience_language == 'en')

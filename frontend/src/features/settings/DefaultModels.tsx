@@ -131,6 +131,11 @@ export default function DefaultModels({ settings, lists, onChange, transcription
           {slot.id === 'cover' && !settings.cover?.model && !settings.prefer_local_cover && (
             <p className="ac-note">{t('封面模型可稍后选择，其他设置可先保存。')}</p>
           )}
+          {slot.id === 'cover' && <label className="ac-note">{t('封面制作方式')}
+            <select value={settings.cover_design_mode || 'crop_grade_text_only'} onChange={event => onChange({ ...settings,
+              cover_design_mode: event.target.value as ModelSettings['cover_design_mode'] })}>
+              <option value="crop_grade_text_only">{t('原帧排版')}</option><option value="editorial_edit">{t('模型编辑')}</option>
+            </select></label>}
           {slot.id === 'cover' && settings.cover_enabled && settings.cover?.model && (
             <label className="ac-note"><input type="checkbox" checked={settings.allow_send_frame}
               onChange={event => onChange({ ...settings, allow_send_frame: event.target.checked })} /> {t('允许上传参考帧')}</label>

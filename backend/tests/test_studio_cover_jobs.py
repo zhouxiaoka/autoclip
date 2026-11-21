@@ -35,7 +35,7 @@ def test_double_click_and_automatic_request_share_one_paid_task(cover_state, mon
 def test_the_task_uses_the_exact_platform_and_reports_failure_without_losing_the_cover(cover_state, monkeypatch, made):
     received = []
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
-    monkeypatch.setattr(publish_kit, 'ai_cover', lambda *args: received.append(args) or made)
+    monkeypatch.setattr(publish_kit, 'ai_cover', lambda *args, **kwargs: received.append(args) or made)
     result = jobs.request_ai_cover('p', 'v')
     assert received == [('p', 'render', 'xiaohongshu')]
     assert result['status'] == ('completed' if made else 'failed')
@@ -75,9 +75,10 @@ def test_failed_atomic_cover_write_leaves_the_previous_cover_usable(tmp_path, mo
     target.write_bytes(b'previous-complete-image')
     def disk_error(*_):
         raise OSError('disk full')
-    monkeypatch.setattr(publish_kit.os, 'replace', disk_error)
+    from backend.services import cover_brief
+    monkeypatch.setattr(cover_brief.os, 'replace', disk_error)
     with pytest.raises(OSError):
-        publish_kit._atomic_write(target, b'new-image')
+        cover_brief.atomic(target, b'new-image')
     assert target.read_bytes() == b'previous-complete-image'
     assert list(tmp_path.iterdir()) == [target]
 
@@ -121,7 +122,7 @@ def test_redesign_returns_the_model_jpeg_verbatim_over_http(client, monkeypatch)
     monkeypatch.setattr(cover, 'load_config', lambda: config)
     monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
     encoded = io.BytesIO()
-    Image.new('RGB', (48, 64), 'navy').save(encoded, 'JPEG')
+    Image.new('RGB', (1080, 1440), 'navy').save(encoded, 'JPEG')
     reference = encoded.getvalue()
     args = ('p1', 'render', 'xiaohongshu')
     publish_kit.frame_path(*args).write_bytes(reference)
@@ -135,14 +136,14 @@ def test_redesign_returns_the_model_jpeg_verbatim_over_http(client, monkeypatch)
     monkeypatch.setattr(image_providers, 'generate_image', image_model)
     monkeypatch.setattr(publish_kit, '_title_ok', lambda *_: True)
     url = '/studio/p1/output-variants/v/cover'
-    job = client.post(url + '/regenerate')
+    job = client.post(url + '/regenerate',json={'title':'Headline','design':{'mode':'editorial_edit'}})
     assert job.status_code == 200 and job.json()['status'] == 'completed'
     assert client.get(url + '/ai').json()['job_id'] == job.json()['job_id']
     response = client.get(url)
     assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
     assert response.content == reference
     with Image.open(io.BytesIO(response.content)) as image:
-        assert image.size == (48, 64)  # preserve the model artwork even when its resolution differs
+        assert image.size == (1080, 1440)
 
 
 @pytest.mark.parametrize(('automatic', 'model_fails'), [(True, False), (False, False), (True, True), (False, True)])
@@ -182,7 +183,7 @@ def test_default_export_and_regeneration_make_distinct_local_jpegs(client, root,
     previous = image()
     for _ in range(2):
         if automatic:
-            response = client.post(url + '/regenerate')
+            response = client.post(url + '/regenerate',json={'title':title})
             assert response.status_code == 200, response.text
             assert response.json()['status'] == 'completed'
             assert store.read('p1')['output_variants'][0]['cover'] == 'design'

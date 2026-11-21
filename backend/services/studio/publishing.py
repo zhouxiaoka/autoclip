@@ -14,7 +14,9 @@ def export_post(job):
 def export_cover_file(project_id, job):
     result = job.get('result') or {}
     slot = 'douyin' if (result.get('height') or 0) > (result.get('width') or 0) else 'bilibili'
-    return store.directory(project_id) / 'output' / 'covers' / (PREFIX + job['job_id']) / (slot + '.jpg')
+    from backend.services.cover_brief import stored_path
+    root = store.directory(project_id) / 'output' / 'covers' / (PREFIX + job['job_id'])
+    return stored_path(root / (slot + '.json'), root / (slot + '.jpg'))
 
 
 def public_job(project_id, job):
@@ -58,19 +60,24 @@ def output_variant_meta(project_id: str, variant_id: str):
             'post': variant.get('post') or {}}
 
 
-def cover_source_frame(project_id, job_id, revision):
+def cover_source_frame(project_id, job_id, revision, trace=None):
     """Select an original frame inside an exported scene, before captions, padding and overlays."""
     from backend.services.publish_export import find_source_video
     from backend.services.studio import cover_design as cd
+
     job = completed_job(store.read(project_id), job_id)
-    draft = job.get('snapshot') or {}
-    scenes = draft.get('scenes') or []
+    draft = job.get("snapshot") or {}
+    scenes = draft.get("scenes") or []
     if not scenes:
-        raise FileNotFoundError('成片没有来源片段')
+        raise FileNotFoundError("成片没有来源片段")
     video = find_source_video(project_id)
     scene = scenes[revision % len(scenes)]
     from backend.services.studio.publish_kit import _scene_rows
-    frame, centre, _ = cd.pick_frame(video, scene, _scene_rows(project_id, scene), local_revision=revision)
+
+    rows = _scene_rows(project_id, scene)
+    if trace is not None:
+        trace.update(asset_id="raw/input", evidence=rows)
+    frame, centre, _ = cd.pick_frame(video, scene, rows, local_revision=revision, trace=trace)
     return frame, centre if centre is not None else scene.get('crop_x')
 
 

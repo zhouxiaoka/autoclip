@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from backend.services import bilibili_publisher as bili
 from backend.services import cover as cover_svc
+from backend.services.cover_brief import Options
 from backend.services import upload_post_publisher as up
 
 router = APIRouter(prefix="/publish", tags=["publish"])
@@ -73,6 +74,7 @@ class CoverConfigBody(BaseModel):
 
 
 class CoverGenerateBody(BaseModel):
+    design: Options | None = None
     platform: str = Field("bilibili", description="bilibili 横屏 / douyin 竖屏")
     title: str | None = None
     subtitle: str | None = None
@@ -334,6 +336,7 @@ async def get_clip_cover_file(project_id: str, clip_id: str, platform: str = "bi
 @router.post("/covers/{project_id}/clips/{clip_id}")
 async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerateBody):
     from backend.services.publish_export import load_clip_meta
+
     try:
         load_clip_meta(project_id, clip_id)
     except FileNotFoundError as e:
@@ -350,6 +353,7 @@ async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerat
                 badge=body.badge,
                 content_type=body.content_type,
                 force_local=body.force_local,
+                **({"design_options": body.design.model_dump_json()} if body.design else {}),
                 **({"allow_reference_once": True} if body.allow_reference_once else {}),
             )
         except Exception as e:  # noqa: BLE001
@@ -363,6 +367,7 @@ async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerat
         badge=body.badge,
         content_type=body.content_type,
         force_local=body.force_local,
+        **({"design_options": body.design.model_dump_json()} if body.design else {}),
         **({"allow_reference_once": True} if body.allow_reference_once else {}),
     )
 

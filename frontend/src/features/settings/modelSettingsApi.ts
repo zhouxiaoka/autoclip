@@ -57,6 +57,7 @@ export interface ModelSettings {
   cover_enabled: boolean
   /** Explicit "cover follows analysis"; absent only in documents older than the flag. */
   cover_follows_analysis?: boolean | null
+  cover_design_mode?: 'crop_grade_text_only' | 'editorial_edit'
   allow_send_frame: boolean
   analysis_mode: 'auto' | 'subtitle' | 'visual'
   allow_visual_screening: boolean

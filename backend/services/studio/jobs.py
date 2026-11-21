@@ -1239,7 +1239,7 @@ def _design_covers(project_id, draft, job_id):
         try:
             clip = publish_kit.clip_id(job_id)
             if not cover.get_cover(project_id, clip, platform):
-                cover.generate_cover(project_id=project_id, clip_id=clip, platform=platform, title=job['title'])
+                cover.generate_cover(project_id=project_id, clip_id=clip, platform=platform)
         except Exception as error:  # The saved video is usable and its cover can be retried.
             logger.warning('Export cover failed: %s', type(error).__name__)
         return
@@ -1247,12 +1247,12 @@ def _design_covers(project_id, draft, job_id):
     for variant in targets:
         try:
             publish_kit.design_cover(project_id, source(project_id), draft.model_dump() if hasattr(draft, 'model_dump') else draft,
-                                     job_id, variant['strategy_id'], (variant.get('post') or {}).get('title', ''))
+                                     job_id, variant['strategy_id'], (variant.get('post') or {}).get('title', ''), variant_id=variant['id'])
             designed.append(variant['id'])
         except Exception as error:  # Use the exported video if the original frame is unavailable.
             store.raise_owned_read_error(error)
             try:
-                publish_kit.redesign_local_cover(project_id, job_id, variant['strategy_id'])
+                publish_kit.redesign_local_cover(project_id, job_id, variant['strategy_id'],variant_id=variant['id'])
                 designed.append(variant['id'])
             except Exception as fallback_error:
                 store.raise_owned_read_error(fallback_error)
@@ -1270,39 +1270,74 @@ def _design_covers(project_id, draft, job_id):
 cover_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='studio-cover')
 
 
-def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=False):
+def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=False, options=None, title=None):
     """Share one tracked AI task between automatic covers and requests from the output card."""
     from backend.services import cover
+
     cfg = cover.load_config()
-    use_model = cfg.enabled and cfg.configured and cfg.allow_send_frame
+    from backend.services import cover_brief as cb
+    from backend.services.studio import publish_kit
+
+    explicit = render_job_id is None and not allow_local
+    if explicit and options is None:
+        options = cb.Options(mode="editorial_edit")
+    mode = options.mode if options else getattr(cfg, "design_mode", "crop_grade_text_only")
+    use_model = mode == "editorial_edit" and cfg.enabled and cfg.configured and cfg.allow_send_frame
     if not (use_model or allow_local):
         return None
     job_id = uuid.uuid4().hex
 
     def claim(data):
-        variant = next((item for item in data['output_variants'] if item['id'] == variant_id), None)
+        variant = next((item for item in data["output_variants"] if item["id"] == variant_id), None)
         if variant is None:
-            raise FileNotFoundError('成片版本不存在')
-        if render_job_id and variant.get('render_job_id') != render_job_id:
+            raise FileNotFoundError("成片版本不存在")
+        if render_job_id and variant.get("render_job_id") != render_job_id:
             return None
-        active = variant.get('cover_job')
-        if active and active.get('render_job_id', variant.get('render_job_id')) == variant.get('render_job_id') and active['status'] in ('queued', 'running'):
+        active = variant.get("cover_job")
+        signature = [title, options.model_dump() if options else None]
+        if (
+            active
+            and active.get("design_request") == signature
+            and active.get("render_job_id", variant.get("render_job_id")) == variant.get("render_job_id")
+            and active["status"] in ("queued", "running")
+        ):
             return active
-        variant['cover_job'] = {'job_id': job_id, 'render_job_id': variant.get('render_job_id'), 'status': 'queued', 'instance': store.INSTANCE}
-        return variant['cover_job']
+        variant["cover_job"] = {
+            "job_id": job_id,
+            "render_job_id": variant.get("render_job_id"),
+            "status": "queued",
+            "instance": store.INSTANCE,
+        }
+        variant["cover_job"]["reuse"] = bool(render_job_id and not allow_local)
+        variant["cover_job"]["design_request"] = signature
+        variant["cover_job"]["design_token"] = cb.begin(
+            publish_kit.cd_meta_path(project_id, variant.get("render_job_id"), variant["strategy_id"], variant_id)
+        )
+        return variant["cover_job"]
 
     with store.lock:
         claimed = store.change(project_id, claim)
         if not claimed:
             return None
-        if claimed['job_id'] == job_id:
+        if claimed["job_id"] == job_id:
             try:
-                mode = 'ai' if use_model else 'local'
-                cover_executor.submit(_ai_cover_job, project_id, variant_id, job_id, mode=mode, _io_receipt=('cover', variant_id, job_id))
+                mode = "ai" if use_model else "local"
+                cover_executor.submit(
+                    _ai_cover_job,
+                    project_id,
+                    variant_id,
+                    job_id,
+                    mode=mode,
+                    _io_receipt=("cover", variant_id, job_id),
+                )
             except Exception as error:  # noqa: BLE001 - preserve the ready video and designed cover
-                store.remember_submission_rejection(project_id, ('cover', variant_id, job_id), error_code=studio_error_code(error))
-                logger.warning('AI cover dispatch failed: %s', type(error).__name__)
-                _update_cover_job(project_id, variant_id, job_id, status='failed', error='AI 封面任务未能启动，请重试')
+                store.remember_submission_rejection(
+                    project_id, ("cover", variant_id, job_id), error_code=studio_error_code(error)
+                )
+                logger.warning("AI cover dispatch failed: %s", type(error).__name__)
+                _update_cover_job(
+                    project_id, variant_id, job_id, status="failed", error="AI 封面任务未能启动，请重试"
+                )
         return ai_cover_status(project_id, variant_id)
 
 
@@ -1310,7 +1345,7 @@ def ai_cover_status(project_id, variant_id):
     variant = next((item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id), None)
     if variant is None or not variant.get('cover_job'):
         raise FileNotFoundError('封面任务不存在')
-    return {key: value for key, value in variant['cover_job'].items() if key != 'instance'}
+    return {key: value for key, value in variant['cover_job'].items() if key not in ('instance','design_request','design_token','reuse')}
 
 
 def _update_cover_job(project_id, variant_id, job_id, *, cover_kind='ai', **values):
@@ -1325,29 +1360,49 @@ def _update_cover_job(project_id, variant_id, job_id, *, cover_kind='ai', **valu
 
 
 @_tracked('ai_cover')
-def _ai_cover_job(project_id, variant_id, job_id, *, mode='ai'):
+def _ai_cover_job(project_id, variant_id, job_id, *, mode="ai"):
     from backend.services.studio import publish_kit
+
     made = False
-    cover_kind = 'ai'
+    cover_kind = "ai"
     try:
-        _update_cover_job(project_id, variant_id, job_id, status='running')
-        variant = next(item for item in store.read(project_id).get('output_variants', []) if item['id'] == variant_id)
-        task = variant.get('cover_job') or {}
-        if task.get('job_id') != job_id:
+        _update_cover_job(project_id, variant_id, job_id, status="running")
+        variant = next(
+            item for item in store.read(project_id).get("output_variants", []) if item["id"] == variant_id
+        )
+        task = variant.get("cover_job") or {}
+        if task.get("job_id") != job_id:
             return
-        args = (project_id, task.get('render_job_id') or variant['render_job_id'], variant['strategy_id'])
-        if mode == 'ai':
-            with llm_usage.timed('ai_cover'):
-                made = publish_kit.ai_cover(*args)
+        args = (project_id, task.get("render_job_id") or variant["render_job_id"], variant["strategy_id"])
+        from backend.services import cover_brief as cb
+
+        title, values = task.get("design_request") or (None, None)
+        params = dict(
+            title=title,
+            variant_id=variant_id,
+            reuse=task.get("reuse", False),
+            options=cb.Options.model_validate(values) if values else None,
+            request_token=task.get("design_token"),
+        )
+        if mode == "ai":
+            with llm_usage.timed("ai_cover"):
+                result = publish_kit.ai_cover(*args, **params)
+                made = bool(result)
+                cover_kind = "design" if result in ("local_design", "source_frame") else "ai"
         else:
-            publish_kit.redesign_local_cover(*args)
-            cover_kind, made = 'design', True
+            publish_kit.redesign_local_cover(*args, **params)
+            cover_kind, made = "design", True
     except Exception as error:  # noqa: BLE001 - the designed cover stays
         store.raise_owned_read_error(error)
-        logger.warning('AI cover job failed: %s', type(error).__name__)
+        logger.warning("AI cover job failed: %s", type(error).__name__)
         made = False
-    _update_cover_job(project_id, variant_id, job_id, cover_kind=cover_kind, **({'status': 'completed'} if made else
-                      {'status': 'failed', 'error': 'AI 封面未生成，已保留原封面'}))
+    _update_cover_job(
+        project_id,
+        variant_id,
+        job_id,
+        cover_kind=cover_kind,
+        **({"status": "completed"} if made else {"status": "failed", "error": "AI 封面未生成，已保留原封面"}),
+    )
 
 
 def update_post(project_id, variant_id, post):
