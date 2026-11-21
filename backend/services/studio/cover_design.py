@@ -98,7 +98,8 @@ def _face_and_sharpness(frame_jpeg: bytes, geometry=None) -> tuple[float | None,
             import numpy as np
             pixels = cv2.imdecode(np.frombuffer(frame_jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
             height, width = pixels.shape[:2]
-            _, faces = framing._detector(cv2, width, height).detect(pixels)
+            with framing._detector_lock:
+                _, faces = framing._detector(cv2, width, height).detect(pixels)
             faces = [f for f in (faces if faces is not None else []) if f[2] >= framing.MIN_FACE * width]
             if faces:
                 x, y, w, h = (float(v) for v in max(faces, key=lambda f: f[2] * f[3])[:4])

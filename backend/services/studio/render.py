@@ -105,18 +105,29 @@ def _apply_cue_translation(hook, entries, title, aligned):
 
 
 def _translate_hook_and_cues(language, hook, entries, warnings):
-    """Translate by cue number. One retry, then source text fills any gap."""
+    """Translate by cue number. One retry within a bounded budget, then source text fills any gap."""
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget
+
     payload = [{'n': index, 'text': entry.get('text', '')} for index, entry in enumerate(entries, start=1)]
     source_count = len(entries)
     best = None
-    for _ in range(2):
-        title, aligned, returned = _parse_translated_cues(text_json(
-            _SUBTITLE_TRANSLATION_PROMPT, {'language': language, 'title': hook, 'cues': payload},
-        ), source_count)
-        if len(aligned) == source_count and returned == source_count:
-            return _apply_cue_translation(hook, entries, title, aligned)
-        if best is None or len(aligned) >= len(best[1]):
-            best = (title, aligned, returned)
+    try:
+        with clip_step_budget(300):
+            for _ in range(2):
+                title, aligned, returned = _parse_translated_cues(text_json(
+                    _SUBTITLE_TRANSLATION_PROMPT, {'language': language, 'title': hook, 'cues': payload},
+                ), source_count)
+                if len(aligned) == source_count and returned == source_count:
+                    return _apply_cue_translation(hook, entries, title, aligned)
+                if best is None or len(aligned) >= len(best[1]):
+                    best = (title, aligned, returned)
+    except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped, project_cancellation.ServiceRestarted, JobDurationExceeded):
+        raise
+    except Exception as error:  # noqa: BLE001 - keep rendering with source captions on transient LLM failure
+        logger.warning('subtitle translation failed, keeping source captions: %s', type(error).__name__)
+        if best is None:
+            warnings.append('部分字幕未能翻译，已保留原文')
+            return hook
     title, aligned, returned = best
     missing = source_count - len(aligned)
     logger.warning(

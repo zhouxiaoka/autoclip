@@ -76,7 +76,7 @@ export default function QuitGuard() {
   return (
     <Dialog
       open={open}
-      onClose={() => choose('background')}
+      onClose={() => setOpen(false)}
       title={t('正在制作 {{count}} 个项目', { count })}
       description={t('退出会中断正在进行的制作。可以选择后台继续，完成后会通知你。')}
       footer={

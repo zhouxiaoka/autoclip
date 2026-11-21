@@ -84,7 +84,14 @@ const SettingsPage: React.FC = () => {
       <div className="ac-settings" style={{ marginTop: 36 }}>
         <nav className="ac-settings-nav" aria-label={t("设置分类")}>
           {NAV.map((n) => (
-            <button key={n.key} aria-current={active === n.key} onClick={() => navigate(`/settings?section=${n.key}${new URLSearchParams(location.search).get('return_import') === '1' ? '&return_import=1' : ''}`, { replace: true, state: location.state })}>{n.label}</button>
+            <button key={n.key} aria-current={active === n.key} onClick={() => {
+              const cur = new URLSearchParams(location.search)
+              const next = new URLSearchParams({ section: n.key })
+              if (cur.get('return_import') === '1') next.set('return_import', '1')
+              const returnProject = cur.get('return_project')
+              if (returnProject) next.set('return_project', returnProject)
+              navigate(`/settings?${next.toString()}`, { replace: true, state: location.state })
+            }}>{n.label}</button>
           ))}
         </nav>
 

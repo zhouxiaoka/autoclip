@@ -892,9 +892,16 @@ def settle_generation(data):
         return  # this attempt stamped nothing; do not record it completed from other rounds
     pool = data['output_variants'] if scope is None else scope
     variants = [item for item in pool if item['status'] != 'on_demand']
-    if all(item['status'] in ('completed', 'failed') for item in variants):
+    if all(item['status'] in ('completed', 'failed', 'cancelled') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
-        outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
+        failed_items = [item for item in variants if item['status'] == 'failed']
+        cancelled_items = [item for item in variants if item['status'] == 'cancelled']
+        outcome = (
+            'completed' if completed and len(completed) == len(variants)
+            else 'partial' if completed
+            else 'cancelled' if cancelled_items and not failed_items
+            else 'failed'
+        )
         from backend.core.failure_codes import sentry_codes
         jobs = {job['job_id']: job for job in data.get('jobs', [])}
         # one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
@@ -910,7 +917,7 @@ def settle_generation(data):
         if not variants:
             failures.append({'error_code': 'validation'})
         ranked = rank_failures(failures)
-        code = ranked[0]['error_code'] if ranked else None
+        code = ranked[0]['error_code'] if ranked else ('cancelled' if outcome == 'cancelled' else None)
         secondary = {}
         if len(ranked) > 1:
             secondary = {'secondary_error_codes': [f['error_code'] for f in ranked[1:]],
