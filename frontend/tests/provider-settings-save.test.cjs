@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
-function settingsHook(initial, transport, requireCloudTranscription = false, guideBus) {
+function settingsHook(initial, transport, requireCloudTranscription = false, guideBus, notifySettingsSaved = () => {}) {
   let cursor = 0
   const slots = []
   const mountEffects = []
@@ -26,7 +26,7 @@ function settingsHook(initial, transport, requireCloudTranscription = false, gui
     antd: { message: { success() {}, error() {} } },
     '../../i18n': { t: text => text },
     '../studio/api': { errorText: () => 'redacted' },
-    '../studio/settingsReturn': { notifySettingsSaved() {} },
+    '../studio/settingsReturn': { notifySettingsSaved },
     '../../analytics/experience': {
       beginExperience: () => () => {},
       beginDebouncedEditDiscovery: () => () => {},
@@ -65,6 +65,24 @@ const whisperSettings = () => ({
   transcription: { provider: 'whisper_local', model: 'base', model_source: 'user' },
   allow_send_frame: false, analysis_mode: 'subtitle', allow_visual_screening: false,
   chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
+})
+
+test('only a usable saved analysis selection returns the user to production', async () => {
+  const base = whisperSettings()
+  for (const [settings, expected] of [
+    [{ ...base, analysis: null }, 0],
+    [{ ...base, connections: [{ ...base.connections[0], validation_status: 'failed', validation_error_type: 'invalid_key' }] }, 0],
+    [{ ...base, analysis_mode: 'visual' }, 0],
+    [base, 1],
+  ]) {
+    let writes = 0, notifications = 0
+    const render = settingsHook(settings, { save: async value => { writes++; return value } },
+      false, undefined, () => { notifications++ })
+    await render().load()
+    assert.equal((await render().save()).ok, true)
+    assert.equal(writes, 1)
+    assert.equal(notifications, expected)
+  }
 })
 
 test('the save that follows a pending cloud choice persists Bailian transcription', async () => {

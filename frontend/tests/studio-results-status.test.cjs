@@ -352,7 +352,7 @@ test('R22 #173: the real listener returns to the project on the one save notific
   r.notifySettingsSaved(win)                        // the function production calls after a validated save
   assert.deepEqual(navigated, ['/project/p-1?continue=1'])
   const hook = fs.readFileSync(path.join(__dirname, '../src/features/settings/useModelSettings.ts'), 'utf8')
-  assert.ok(hook.includes('if (!failed && !visionFailed) notifySettingsSaved()'))
+  assert.equal((hook.match(/\bnotifySettingsSaved\(\)/g) || []).length, 1)
   assert.equal(/dispatchEvent|function notifySaved/.test(hook), false, 'no second notification implementation')
   const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8')
   assert.ok(app.includes('<SettingsReturnListener />'))
