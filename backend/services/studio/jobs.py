@@ -1310,9 +1310,10 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
         }
         variant["cover_job"]["reuse"] = bool(render_job_id and not allow_local)
         variant["cover_job"]["design_request"] = signature
-        variant["cover_job"]["design_token"] = cb.begin(
-            publish_kit.cd_meta_path(project_id, variant.get("render_job_id"), variant["strategy_id"], variant_id)
-        )
+        # Legacy records may have no rendered output yet. They have no cover slot to reserve.
+        if variant.get("render_job_id") and variant.get("strategy_id"):
+            slot = publish_kit.cd_meta_path(project_id, variant["render_job_id"], variant["strategy_id"], variant_id)
+            variant["cover_job"]["design_token"] = cb.begin(slot)
         return variant["cover_job"]
 
     with store.lock:
@@ -1373,7 +1374,12 @@ def _ai_cover_job(project_id, variant_id, job_id, *, mode="ai"):
         task = variant.get("cover_job") or {}
         if task.get("job_id") != job_id:
             return
-        args = (project_id, task.get("render_job_id") or variant["render_job_id"], variant["strategy_id"])
+        render_id = task.get("render_job_id", variant.get("render_job_id"))
+        strategy_id = variant.get("strategy_id")
+        if not render_id or not strategy_id or render_id != variant.get("render_job_id"):
+            _update_cover_job(project_id, variant_id, job_id, status="failed", error="成片版本缺少可用的渲染记录")
+            return
+        args = (project_id, render_id, strategy_id)
         from backend.services import cover_brief as cb
 
         title, values = task.get("design_request") or (None, None)
