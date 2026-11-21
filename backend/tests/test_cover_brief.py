@@ -252,3 +252,22 @@ def test_model_request_is_independent_of_local_poster_geometry(fake_frame):
     directed = cb.compile_prompt(b)
     assert all(word in directed for word in ("双肩", "胸口", "右侧"))
     assert "LOCAL" not in directed
+
+
+def test_local_face_collision_does_not_block_editorial_image_request(fake_frame, monkeypatch):
+    def collision(_brief):
+        raise ValueError("画幅与文字要求冲突，无法保留清晰脸部")
+
+    monkeypatch.setattr(cb, "_measure", collision)
+    b = brief(fake_frame)
+    assert b.status == "ready"
+    cfg = cover.CoverConfig(enabled=True, base_url="fixture", model="offline")
+    def make_image(can_send, previous=False):
+        return cb.make(b, fake_frame, cfg, can_send=can_send, generate=lambda req: req.reference,
+                       check=lambda *_: True, previous=previous)
+    assert make_image(True)[1]["result"] == "model"
+    assert make_image(False)[1]["result"] == "source_frame"
+    with pytest.raises(cb.Rejected):
+        make_image(False, previous=True)
+    local = brief(fake_frame, options=cb.Options(mode="crop_grade_text_only"))
+    assert local.status == "constraint_conflict"

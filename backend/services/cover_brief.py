@@ -318,8 +318,12 @@ def plan(
         try:
             brief.design["typesetting"] = _measure(brief)
         except ValueError as error:
-            brief.status = "constraint_conflict"
-            brief.issues.append(dict(code="typesetting", severity="error", message=str(error)))
+            # The local typesetter uses a fixed crop. The image editor composes its own canvas.
+            if opts.mode == "editorial_edit":
+                brief.issues.append(dict(code="local_typesetting", severity="warning", message=str(error)))
+            else:
+                brief.status = "constraint_conflict"
+                brief.issues.append(dict(code="typesetting", severity="error", message=str(error)))
     return brief
 
 
@@ -727,7 +731,8 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
             prompt = req.prompt if attempts == 2 else prompt
         else:
             reason = "frame_sending_disabled" if not can_send else "image_service_unavailable"
-    if previous and attempts:
+    local_layout_missing = not b.design.get("typesetting")
+    if previous and (attempts or local_layout_missing):
         audit = record(
             b,
             method="failed",
@@ -738,7 +743,12 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
             reason=reason,
         )
         audit["attempts"] = attempts
-        raise Rejected("模型结果未通过验证，已保留原封面", audit)
+        raise Rejected("模型结果未通过验证，已保留原封面" if attempts else "无法在原帧上排版，已保留原封面", audit)
+    if local_layout_missing:
+        audit = record(b, method="source_frame", check="unavailable", reason=reason or "local_typesetting",
+                       prompt=prompt, provider=cfg.provider if attempts else "", model=cfg.model if attempts else "")
+        audit["attempts"] = attempts
+        return fit_model(frame, size), audit
     image, transform = render(frame, b)
     audit = record(
         b,
