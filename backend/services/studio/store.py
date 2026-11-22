@@ -994,6 +994,11 @@ def settle_attempt(data, kind='finish', previous=None, **kw):
         if current.get('phase') in ('production', 'rendering') and current.get('status') in ('completed', 'failed', 'partial'):
             return False
         data['analysis'] = {**attempt_identity(current, generation), **kw['analysis']}
+        if generation and not generation.get('auto_start') and generation.get('status') in ('awaiting_confirmation', 'production', 'screening'):
+            analysis_status = kw['analysis'].get('status')
+            if analysis_status in ('completed', 'failed', 'partial'):
+                generation['status'] = analysis_status
+                generation['finished_at'] = now()
         return True
     if kind != 'fail' or terminal:
         return False

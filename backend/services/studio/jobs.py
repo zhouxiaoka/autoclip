@@ -859,6 +859,76 @@ def _distinct_ranges(picked, bounds):
     return [(picked[i][0], *kept[i]) for i in sorted(kept)]
 
 
+def _drafts_from_content_clips(
+    project_id,
+    clips,
+    prefs,
+    source_duration,
+    window=None,
+    *,
+    origin='auto-content',
+    include_score=True,
+):
+    from backend.utils.text_processor import TextProcessor
+    picked = []
+    for clip in clips or []:
+        if not isinstance(clip, dict):
+            continue
+        try:
+            start = float(clip.get('start_time_seconds')) if clip.get('start_time_seconds') is not None else TextProcessor.time_to_seconds(clip['start_time'])
+            end = float(clip.get('end_time_seconds')) if clip.get('end_time_seconds') is not None else TextProcessor.time_to_seconds(clip['end_time'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        picked.append((clip, start, end))
+    if not picked:
+        return []
+    bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
+    win_start = win_end = None
+    if isinstance(window, dict) and window.get('end') is not None:
+        try:
+            win_start = float(window.get('start', 0) or 0)
+            win_end = float(window['end'])
+            if win_end <= win_start:
+                win_start = win_end = None
+        except (TypeError, ValueError):
+            win_start = win_end = None
+    drafts = []
+    for clip, start, end in _distinct_ranges(picked, bounds):
+        # Transcript timestamps can run past the final video frame. Keep valid content
+        # from that clip, and never let one invalid range discard the whole batch.
+        if source_duration > 0:
+            end = min(end, source_duration)
+        # T2: drop clips that fall entirely outside the requested source_window.
+        if win_start is not None and win_end is not None:
+            if end <= win_start or start >= win_end:
+                continue
+            start = max(start, win_start)
+            end = min(end, win_end)
+            if end <= start:
+                continue
+        try:
+            scene = Scene(
+                id=uuid.uuid4().hex,
+                label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
+                start=start,
+                end=end,
+                evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
+            )
+            if source_duration > 0:
+                intelligence.validate_scenes([scene], source_duration)
+        except (KeyError, TypeError, ValueError):
+            continue
+        row = Draft(
+            id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin=origin,
+            language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
+            subtitles=True,
+        ).model_dump()
+        if include_score:
+            row[SCORE_KEY] = _score(clip)
+        drafts.append(row)
+    return drafts
+
+
 def _content_drafts(project_id, plan, video, platforms=()):
     """Create drafts once from the selected content route, before platform derivation."""
     route = plan.get('recommended_analysis', 'subtitle')
@@ -869,56 +939,16 @@ def _content_drafts(project_id, plan, video, platforms=()):
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
         clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
-        from backend.utils.text_processor import TextProcessor
-        picked = []
-        for clip in clips:
-            try:
-                start = float(clip.get('start_time_seconds')) if clip.get('start_time_seconds') is not None else TextProcessor.time_to_seconds(clip['start_time'])
-                end = float(clip.get('end_time_seconds')) if clip.get('end_time_seconds') is not None else TextProcessor.time_to_seconds(clip['end_time'])
-            except (KeyError, TypeError, ValueError):
-                continue
-            picked.append((clip, start, end))
-        bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
         source_duration = float(intelligence._probe(video).get('duration') or 0)
-        window = (plan.get('overrides') or {}).get('source_window')
-        win_start = win_end = None
-        if isinstance(window, dict) and window.get('end') is not None:
-            try:
-                win_start = float(window.get('start', 0) or 0)
-                win_end = float(window['end'])
-                if win_end <= win_start:
-                    win_start = win_end = None
-            except (TypeError, ValueError):
-                win_start = win_end = None
-        drafts = []
-        for clip, start, end in _distinct_ranges(picked, bounds):
-            # Transcript timestamps can run past the final video frame. Keep valid content
-            # from that clip, and never let one invalid range discard the whole batch.
-            end = min(end, source_duration)
-            # T2: drop clips that fall entirely outside the requested source_window.
-            if win_start is not None and win_end is not None:
-                if end <= win_start or start >= win_end:
-                    continue
-                start = max(start, win_start)
-                end = min(end, win_end)
-                if end <= start:
-                    continue
-            try:
-                scene = Scene(
-                    id=uuid.uuid4().hex,
-                    label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
-                    start=start,
-                    end=end,
-                    evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
-                )
-                intelligence.validate_scenes([scene], source_duration)
-            except (KeyError, TypeError, ValueError):
-                continue
-            drafts.append({**Draft(
-                id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
-                language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
-                subtitles=True,
-            ).model_dump(), SCORE_KEY: _score(clip)})
+        drafts = _drafts_from_content_clips(
+            project_id,
+            clips,
+            prefs,
+            source_duration,
+            window=(plan.get('overrides') or {}).get('source_window'),
+            origin='auto-content',
+            include_score=True,
+        )
         if not drafts:
             raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
         return drafts
@@ -2471,6 +2501,8 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
     plan = state['plan']
     from backend.services.studio.failure_identity import phase_identity
     state['analysis'] = {**phase_identity('production', plan, plan['selected_goals']), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+    if isinstance(state.get('generation'), dict) and not state['generation'].get('auto_start') and state['generation'].get('status') == 'awaiting_confirmation':
+        state['generation']['status'] = 'production'
     # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
     pending = attempts.current(state)
     if retry:
@@ -2498,7 +2530,7 @@ def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=Non
 
 
 def _untracked_subtitle_crop(draft):
-    return (draft.get('origin') == 'subtitle-highlight' and draft.get('aspect') == 'portrait'
+    return (draft.get('origin') in ('subtitle-highlight', 'subtitle-content') and draft.get('aspect') == 'portrait'
             and draft.get('layout') == 'crop' and not any(
                 scene.get('crop_track') or scene.get('crop_x') is not None for scene in draft.get('scenes', [])))
 
@@ -2585,6 +2617,21 @@ def _produce_selected(project_id, plan, *, restore_source=None):
                         except Exception as error:
                             subtitle_error = error
                             raise
+                    if goal == 'content':
+                        drafts = []
+                        if subtitle_clips:
+                            source_duration = float(intelligence._probe(video).get('duration') or 0)
+                            drafts = _drafts_from_content_clips(
+                                project_id,
+                                subtitle_clips,
+                                prefs,
+                                source_duration,
+                                window=(plan.get('overrides') or {}).get('source_window'),
+                                origin='subtitle-content',
+                                include_score=False,
+                            )
+                            if drafts:
+                                store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                     if goal == 'highlight':
                         from backend.services.studio.subtitle_highlights import make_highlights
                         drafts = make_highlights(subtitle_clips, prefs, intelligence._probe(video).get('duration'))
@@ -2594,7 +2641,7 @@ def _produce_selected(project_id, plan, *, restore_source=None):
                         drafts = make_promos(project_id, subtitle_clips, prefs, intelligence._probe(video).get('duration'), instruction)
                         store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                     mark_project(project_id, 'processing')
-                    result_count += len(subtitle_clips) if goal == 'content' else len(drafts)
+                    result_count += len(drafts) if (goal != 'content' or drafts) else len(subtitle_clips)
                     succeeded_goals.append(goal)
                     continue
                 if plan.get('confirmed_analysis', 'subtitle') != 'visual':

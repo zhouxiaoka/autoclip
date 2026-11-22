@@ -36,6 +36,21 @@ export function coverWarningMessage(
   return t('生图失败，已改成本地排版或截帧')
 }
 
+export function coverStatusMessages(
+  warning?: string | null,
+  cfg?: { enabled?: boolean; configured?: boolean; allow_send_frame?: boolean } | null,
+): string[] {
+  const primary = coverWarningMessage(warning, cfg)
+  const messages = primary ? [primary] : []
+  const optOut = cfg?.enabled && cfg?.configured && cfg.allow_send_frame === false
+    ? t('已关闭上传参考帧，当前使用本地排版封面')
+    : ''
+  if (optOut && warning === 'needs_source_validation' && !messages.includes(optOut)) {
+    messages.push(optOut)
+  }
+  return messages
+}
+
 /** Reads the cover made for this export. Older exports can generate their missing cover here. */
 export default function ExportCover({ projectId, job, variant, coverStamp = 0, onCoverChanged }: Props) {
   const clip = `studio-${job.job_id}`
@@ -55,6 +70,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const [times, setTimes] = useState<number[]>([])
   const [frameLocked, setFrameLocked] = useState(false)
   const [warning, setWarning] = useState('')
+  const [statusNotices, setStatusNotices] = useState<string[]>([])
   const variantId = variant?.id
   useEffect(() => {
     let active = true
@@ -66,6 +82,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
       setTimes(view?.candidate_times || [])
       setFrameLocked(!!view?.frame_locked)
       setWarning(coverWarningMessage(view?.warning, cfg))
+      setStatusNotices(coverStatusMessages(view?.warning, cfg))
       setAskReference(!!cfg?.enabled && cfg.configured && !cfg.allow_send_frame)
       setReferenceOnce(false)
     })
@@ -144,7 +161,9 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
       {!pending && !missing && loadedUrl === url && <Btn size="sm" variant="text" onClick={generate}>{t('重新生成封面')}</Btn>}
     </div>
     {!pending && !missing && <img src={url} alt={t('封面')} onLoad={() => setLoadedUrl(url)} onError={() => { if (variantPath) setMissingVariantFile(true); else setFailedUrl(url) }} />}
-    {!pending && warning && <span role="status" className="studio-muted">{warning}</span>}
+    {!pending && (statusNotices.length > 0 ? statusNotices : (warning ? [warning] : [])).map(note => (
+      <span key={note} role="status" className="studio-muted">{note}</span>
+    ))}
     {!pending && <div className="studio-cover-fields">
       <label>{t('封面标题')}<input className="ac-input" value={headline ?? savedTitle} placeholder={job.title}
         maxLength={100} onChange={e => setHeadline(e.target.value)} /></label>
