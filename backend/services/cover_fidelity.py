@@ -87,7 +87,10 @@ def _bind_title_lines(layout, title):
 
 def _measure_title_ink(crop, layout, bounds, full_height):
     """Refine alignment only when the measured ink resolves into the same number of lines."""
-    import numpy as np
+    try:
+        import numpy as np
+    except ImportError:
+        return
 
     l, t, r, b = bounds
     tile = crop.crop((int(l * crop.width / 100), int(t * crop.height / 100),

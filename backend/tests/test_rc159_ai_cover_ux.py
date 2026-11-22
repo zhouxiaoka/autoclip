@@ -134,3 +134,28 @@ def test_variant_request_ai_cover_honors_allow_reference_once_when_global_opt_ou
     status = jobs.ai_cover_status(project_id, variant_id)
     assert status["status"] == "completed"
     assert "allow_reference_once" not in status
+
+
+def test_measure_title_ink_skips_cleanly_without_numpy(monkeypatch):
+    import builtins
+    from backend.services import cover_fidelity
+
+    real_import = builtins.__import__
+
+    def block_numpy(name, *args, **kwargs):
+        if name == "numpy" or name.startswith("numpy."):
+            raise ModuleNotFoundError("No module named 'numpy'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", block_numpy)
+    crop = Image.new("RGB", (200, 100), (20, 20, 20))
+    layout = cover_fidelity.TitleLayout(
+        bbox_pct=(10, 10, 90, 90),
+        align="left",
+        lines=[cover_fidelity.TitleLine(text="测试标题", color="#FFFFFF", weight="bold", height_pct=10.0)],
+        emphasis="",
+        emphasis_color="#FFFFFF",
+    )
+    # Must not raise ModuleNotFoundError on Windows portable Python builds without numpy
+    cover_fidelity._measure_title_ink(crop, layout, (10, 10, 90, 90), 1080)
+    assert layout.align == "left"
