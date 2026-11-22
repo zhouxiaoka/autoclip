@@ -13,7 +13,8 @@ function history(i18n){
   'react-i18next':{useTranslation:()=>({t:s=>i18n.t(s)})},
   '../../i18n':{t:s=>i18n.t(s),getLocale:()=>i18n.language},
   '../../ui':{Dialog:p=>React.createElement('section',null,p.children),ProgressLine:()=>null},
-  'react-router-dom':{Link:p=>React.createElement('a',null,p.children)},
+  'react-router-dom':{Link:p=>React.createElement('a',{href:p.to},p.children)},
+  './outputVariantPublish':require('./load-ts.cjs').loadTs(path.join(root,'outputVariantPublish.ts')),
   './StudioDownloadLink':{default:()=>null},
  }
  runInSandbox(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
@@ -22,13 +23,14 @@ function history(i18n){
 test('export history renders localized server warnings/restart errors in all eight languages, retaining source titles and unknown errors',async()=>{
  const i=createInstance();await i.init({resources:Object.fromEntries(langs.map(l=>[l,{translation:catalogs[l]}])),lng:'en',fallbackLng:'en',keySeparator:false,nsSeparator:false,interpolation:{escapeValue:false}})
  const History=history(i),title='原素材没有音轨，本次导出无声',unknown='decoder failed at frame 42'
- const base={title,revision:2,created_at:'2026-09-25T00:00:00Z'}
+ const base={title,draft_id:'draft-2',revision:2,created_at:'2026-09-25T00:00:00Z'}
  const table=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../backend/core/failure_messages.json'),'utf8'))
  const restart=table.service_restarted
  const jobs=[{...base,job_id:'ok',status:'completed',result:{warnings:[title]}},{...base,job_id:'restart',status:'failed',error:restart},{...base,job_id:'unknown',status:'failed',error:unknown}]
  for(const lang of langs){
   await i.changeLanguage(lang)
   const html=renderToStaticMarkup(React.createElement(History,{open:true,onClose(){},projectId:'p',jobs}))
+  assert.ok(html.includes('/project/p/studio/draft-2?publish=ok'),lang+' publish link')
   assert.ok(html.includes('<b>'+title+'</b>'),lang+' source title preserved')
   assert.ok(html.includes(catalogs[lang][title]),lang+' warning')
   assert.ok(html.includes(catalogs[lang][restart].replaceAll("'", '&#x27;')),lang+' restart')
