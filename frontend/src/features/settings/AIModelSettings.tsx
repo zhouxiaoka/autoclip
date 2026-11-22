@@ -262,7 +262,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving || m.testing}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
-        : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
+        : selected ? <ProviderDetail key={selected.id} preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <header className="ac-settings-ai-head">
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
           <Btn variant="text" size="sm" onClick={() => requestClipboardScan()}>{t('settings.key_guide.detect')}</Btn>

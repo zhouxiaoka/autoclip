@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ModelEntry } from './modelSettingsApi'
 import { t } from '../../i18n'
 import { Btn, Icon, Row, StatusDot } from '../../ui'
@@ -57,15 +57,18 @@ export default function ProviderDetail({
   onBack: () => void
 }) {
   const { settings, lists, busy, listErrors } = m
+  const editingConnectionId = useRef<string | undefined>(undefined)
   if (!settings) return null
   const kind = connectKind(preset)
-  const persisted = findCatalogConnection(settings, preset)
-  const draft = persisted || catalogDraftConnection(preset)
-  const connection = draft && {
-    ...draft,
-    base_url: draft.base_url || preset.base_url || '',
-  }
-  const connected = isCatalogConnected(settings, preset, asrReady)
+  // Editing base_url may move the connection out of the catalog preset match,
+  // so keep tracking the same connection by id during editing.
+  const persisted = editingConnectionId.current
+    ? settings.connections.find(row => row.id === editingConnectionId.current)
+    : findCatalogConnection(settings, preset)
+  const connection = persisted && !persisted.base_url && !editingConnectionId.current && preset.base_url
+    ? { ...persisted, base_url: preset.base_url }
+    : persisted || catalogDraftConnection(preset)
+  const connected = isCatalogConnected(settings, preset, asrReady, persisted)
   const list = connection ? lists[connection.id] : undefined
   // Only a real (live/cache, non-preview) fetch shows models; catalog/preview reference IDs would mislead.
   const fetched = !!list && list.preview !== true && list.source !== 'catalog'
@@ -90,17 +93,17 @@ export default function ProviderDetail({
   }
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
-    if (persisted) m.editConnection(persisted, patch)
-    else m.ensureCatalogProvider(preset.id, patch)
+    if (persisted) {
+      if (patch.base_url !== undefined) editingConnectionId.current = persisted.id
+      m.editConnection(persisted, patch)
+    } else {
+      editingConnectionId.current = m.ensureCatalogProvider(preset.id, patch)
+    }
   }
 
   const onTest = () => {
     if (!connection) return
-    void m.testCatalogProvider(preset.id, {
-      api_key: connection.api_key,
-      base_url: connection.base_url,
-      has_key: connection.has_key,
-    }, 'quick')
+    void m.testCatalogProvider(preset.id, connection, 'quick')
   }
 
   const showModels = kind !== 'local_asr' && kind !== 'guide'
@@ -112,7 +115,7 @@ export default function ProviderDetail({
   const status = connection?.validation_status
   const testDisabled = !connection || testing || (
     preset.auth === 'api_key' && !(connection.api_key || '').trim() && !connection.has_key
-  ) || (!connection.base_url.trim() && !preset.base_url && preset.protocol !== 'local')
+  ) || !connection.base_url.trim()
 
   return (
     <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6-stack" data-sponsor={showPromo ? '1' : undefined}>
@@ -135,7 +138,7 @@ export default function ProviderDetail({
             </span>
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
-          {!connected && isCatalogConfigured(settings, preset) && <span className="ac-badge">{t('已配置')}</span>}
+          {!connected && isCatalogConfigured(settings, preset, persisted) && <span className="ac-badge">{t('已配置')}</span>}
         </h3>
         {/* Active promotion hides the long hint. A removed or stopped sponsor keeps the neutral caps. */}
         {!showPromo && <p className="ac-note">{t(preset.sponsor ? NEUTRAL_PROVIDER_COPY : preset.hint)}</p>}
@@ -215,14 +218,7 @@ export default function ProviderDetail({
                         {t('快速测试')}
                       </Btn>
                     )}
-                    <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing && m.testingKind === 'trial'} onClick={() => {
-                      if (!connection) return
-                      void m.testCatalogProvider(preset.id, {
-                        api_key: connection.api_key,
-                        base_url: connection.base_url,
-                        has_key: connection.has_key,
-                      }, 'trial')
-                    }}>
+                    <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing && m.testingKind === 'trial'} onClick={() => void m.testCatalogProvider(preset.id, connection, 'trial')}>
                       {t('试跑一段')}
                     </Btn>
                     {persisted && persisted.has_key && m.clearConnectionKey && (

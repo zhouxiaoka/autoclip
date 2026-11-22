@@ -134,19 +134,18 @@ export function sensevoiceAsrReady(status?: { status?: string } | null): boolean
 }
 
 /** Credentials (or a keyless connection) are configuration, not proof of connectivity. */
-export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset): boolean {
-  const connection = findCatalogConnection(settings, preset)
+export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset, connection = findCatalogConnection(settings, preset)): boolean {
   if (!connection || !endpointProviderReady(connection)) return false
   if (!preset.base_url && preset.protocol !== 'local') return true
   if (preset.auth === 'none') return true
   return !!(connection.api_key?.trim() || connection.has_key)
 }
 
-export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
+export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}, connection = findCatalogConnection(settings, preset)): boolean {
   // Readiness describes the installed engine, independently of the current ASR selection.
   if (preset.id === 'whisper') return !!asrReady.whisper
   if (preset.id === 'sensevoice') return !!asrReady.sensevoice
-  return isCatalogConfigured(settings, preset) && findCatalogConnection(settings, preset)?.validation_status === 'ok'
+  return isCatalogConfigured(settings, preset, connection) && connection?.validation_status === 'ok'
 }
 
 export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: string): ModelSettings {
@@ -235,7 +234,7 @@ export function matchedCatalogPreset(connection: Connection): ProviderPreset | u
   const host = catalogHost(connection.base_url)
   if (!host) return undefined
   return catalogProviders().find(preset => (
-    catalogHost(preset.base_url) === host && OPENAI_LIKE.has(preset.protocol)
+    preset.id !== 'openai' && catalogHost(preset.base_url) === host && OPENAI_LIKE.has(preset.protocol)
   ))
 }
 
