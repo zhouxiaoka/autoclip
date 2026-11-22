@@ -91,3 +91,20 @@ test('actual local compatible presets also keep the advanced area closed by defa
     assert.ok(secondary(tree))
   }
 })
+
+test('saved compatible official connections keep their original edit identities with native accounts present', () => {
+  const preset = catalog.catalogPreset('openai')
+  for (const nativePresent of [false, true]) {
+    const saved = connection({ id: 'saved-compatible', base_url: 'https://api.openai.com/v1', has_http_headers: true, extra_body: { provider_options: 'saved' } })
+    const native = connection({ id: 'native-openai', provider: 'openai', base_url: 'https://api.openai.com/v1' })
+    const { tree, edits, ensured } = renderDetail(preset, nativePresent ? [native, saved] : [saved])
+    const editor = secondary(tree)
+    assert.equal(editor.props.value.id, saved.id)
+    assert.ok(flatten(tree).includes(saved.name))
+    assert.equal(editor.props.value.has_http_headers, true)
+    editor.props.onEdit({ reasoning_effort: 'low' })
+    assert.equal(edits[0][0], saved)
+    assert.deepEqual(edits[0][1], { reasoning_effort: 'low' })
+    assert.deepEqual(ensured, [])
+  }
+})

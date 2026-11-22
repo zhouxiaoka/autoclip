@@ -13,7 +13,7 @@ import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
 import TrialRunPanel from './TrialRunPanel'
 import {
-  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
+  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected, matchedCatalogPreset,
   type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
@@ -70,6 +70,10 @@ export default function ProviderDetail({
   const connection = persisted && !persisted.base_url && !editingConnectionId.current && preset.base_url
     ? { ...persisted, base_url: preset.base_url }
     : persisted || catalogDraftConnection(preset)
+  const compatible = (row: NonNullable<typeof connection>) => row.provider === 'compatible' || presetKey(row) === 'compatible'
+  // A native catalog form may not select a saved compatible account on the same service.
+  const savedAdvanced = settings.connections.filter(row => compatible(row) && (row.id === persisted?.id || matchedCatalogPreset(row)?.id === preset.id))
+  const advancedConnections = savedAdvanced.length ? savedAdvanced : connection && compatible(connection) ? [connection] : []
   const connected = isCatalogConnected(settings, preset, asrReady, persisted)
   const list = connection ? lists[connection.id] : undefined
   // Only a real (live/cache, non-preview) fetch shows models; catalog/preview reference IDs would mislead.
@@ -312,10 +316,17 @@ export default function ProviderDetail({
             )}
           </section>
         )}
-        {connection && (connection.provider === 'compatible' || presetKey(connection) === 'compatible') && (
+        {advancedConnections.length > 0 && (
           <details className="ac-disclosure ac-provider-detail-card" data-panel="advanced">
             <summary>{t('高级')}</summary>
-            <CustomRequestOptions value={connection} onEdit={persistEdit} />
+            {advancedConnections.map(row => <div key={row.id} data-request-connection-id={row.id}>
+              {(advancedConnections.length > 1 || row.id !== connection?.id) && <p className="ac-note">{row.name}</p>}
+              <CustomRequestOptions value={row} onEdit={patch => {
+                const saved = settings.connections.find(item => item.id === row.id)
+                if (saved) m.editConnection(saved, patch)
+                else persistEdit(patch)
+              }} />
+            </div>)}
           </details>
         )}
       </div>
