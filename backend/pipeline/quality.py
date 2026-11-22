@@ -355,6 +355,7 @@ def refine_timeline(items: Sequence[Dict[str, Any]], srt_entries: Sequence[Dict[
                     report["merged"].append({"kept": _title(prev), "absorbed": _title(it), "reason": "重叠且无法后移"})
                     continue
         merged.append(it)
+    merged = _enforce_order(merged, cues, report)
 
     # 3) 时长下限 / 上限（在 cue 边界上）
     if cues:
@@ -439,6 +440,30 @@ def refine_timeline(items: Sequence[Dict[str, Any]], srt_entries: Sequence[Dict[
         report["snap_offset_p50"] = so[len(so) // 2]
         report["snap_offset_p90"] = so[min(len(so) - 1, int(len(so) * 0.9))]
     return out, report
+
+
+def _enforce_order(intervals: List[Dict[str, Any]], cues: List[_Cue],
+                   report: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Keep the deduped intervals in time order with no overlap.
+
+    合并和小重叠后移都会把前一段的终点往后推，而已比较过的后一段仍留在原位，于是输出里
+    能出现嵌在邻居范围内的片段（导出的两条切片互相覆盖）。前一段已经取走那段内容，所以
+    后一段从它的终点开始，回到 cue 边界；起点被推到终点之后的片段没有内容可留。
+    """
+    out: List[Dict[str, Any]] = []
+    for it in intervals:
+        if out and it["_s"] < out[-1]["_e"]:
+            it["_s"] = out[-1]["_e"]
+            if cues:
+                it["_si"] = next((i for i, cue in enumerate(cues) if cue.start >= it["_s"] - 1e-9), it["_si"])
+            if "shift_start" not in it["_ops"]:
+                it["_ops"].append("shift_start")
+        if it["_e"] <= it["_s"]:
+            if report is not None:
+                report["dropped"].append({"outline": _title(it), "reason": "已被前一段覆盖，没有剩余内容"})
+            continue
+        out.append(it)
+    return out
 
 
 def _title(it: Dict[str, Any]) -> str:
