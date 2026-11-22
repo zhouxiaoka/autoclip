@@ -21,6 +21,7 @@ from backend.models.project import Project
 from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
+from backend.services.cover_brief import Options as CoverOptions
 from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
 from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest, PostCopy
@@ -400,10 +401,10 @@ async def template_recommend(
 def workspace(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
     from backend.services.studio import attempts
-    from backend.services.studio import pipeline_resume
+    from backend.services.studio import pipeline_resume, publishing
     data = attempts.public_workspace(call(store.recover, project_id))
     resume_point = pipeline_resume.resume_point_for_project(project_id)
-    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [publishing.public_job(project_id, j) for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):
@@ -555,6 +556,13 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             video = jobs.source(project_id)
             call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
+        if 'html_template' not in body.model_fields_set:
+            # Editing another preference must keep the previous template. Explicit null clears it.
+            saved = previous_config.get('smart_import') or {}
+            retained = {key: saved[key] for key in ('html_template', 'recommended_template')
+                        if key not in body.model_fields_set and saved.get(key)}
+            if retained:
+                body = ImportOptions.model_validate({**body.model_dump(), **retained})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
         try:
@@ -620,10 +628,11 @@ def output_variant_cover(project_id: str, variant_id: str, db: Session = Depends
     from backend.services.studio import publish_kit
     project_or_404(project_id, db)
     variant, job = _variant_job(project_id, variant_id)
-    path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'],variant_id)
     if path is None:
         raise HTTPException(404, '封面尚未生成')
-    return FileResponse(path, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+    return FileResponse(path, media_type='image/jpeg', filename=f"{job['job_id']}-cover.jpg",
+                        content_disposition_type='inline', headers={'Cache-Control': 'no-store'})
 
 
 @router.post('/{project_id}/output-variants/{variant_id}/cover/ai')
@@ -634,12 +643,54 @@ def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session 
     cfg = cover.load_config()
     if not (cfg.enabled and cfg.configured):
         raise HTTPException(409, '请先在设置里开启 AI 封面并选择图像模型')
-    if not cfg.allow_send_frame:
-        raise HTTPException(409, '请先在设置里允许发送参考帧')
     job = call(jobs.request_ai_cover, project_id, variant_id)
     if job is None:
         raise HTTPException(409, '请先检查 AI 封面设置')
     return job
+
+
+class CoverRedesignBody(BaseModel):
+    title: str | None = None
+    design: CoverOptions | None = None
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/cover/design')
+def get_variant_cover_design(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from backend.services.studio import publish_kit
+
+    project_or_404(project_id, db)
+    variant, job = _variant_job(project_id, variant_id)
+    meta = publish_kit._metadata(
+        publish_kit.cd_meta_path(project_id, job["job_id"], variant["strategy_id"], variant_id)
+    )
+    brief = meta.get("brief") or {}
+    return dict(
+        frame_locked=brief.get("source", {}).get("allow_alternate_frame") is False,
+        options=meta.get("options"),
+        headline=brief.get("copy", {}).get("exact_text"),
+        candidate_times=[c["time"] for c in brief.get("source", {}).get("candidates", [])],
+        warning=meta.get("fallback_reason"),
+    )
+
+
+@router.post('/{project_id}/output-variants/{variant_id}/cover/regenerate')
+def regenerate_output_variant_cover(
+    project_id: str, variant_id: str, body: CoverRedesignBody | None = None, db: Session = Depends(get_db)
+):
+    project_or_404(project_id, db)
+    _, job = _variant_job(project_id, variant_id)
+    task = call(
+        jobs.request_ai_cover,
+        project_id,
+        variant_id,
+        job["job_id"],
+        allow_local=True,
+        options=body.design if body else None,
+        title=body.title if body else None,
+    )
+    if task is None:
+        raise HTTPException(409, "成片版本已更新，请刷新重试")
+    return task
 
 
 @router.get('/{project_id}/output-variants/{variant_id}/cover/ai')
@@ -655,20 +706,42 @@ def update_output_variant_post(project_id: str, variant_id: str, body: PostCopy,
     return call(jobs.update_post, project_id, variant_id, body)
 
 
+@router.put('/{project_id}/jobs/{job_id}/post')
+def update_export_post(project_id: str, job_id: str, body: PostCopy, db: Session = Depends(get_db)):
+    from backend.services.studio import publishing
+    project_or_404(project_id, db)
+    return call(publishing.save_export_post, project_id, job_id, body)
+
+
+@router.get('/{project_id}/jobs/{job_id}/kit')
+def export_job_kit(project_id: str, job_id: str, db: Session = Depends(get_db)):
+    from backend.services.studio import publishing
+    project_or_404(project_id, db)
+    job = call(publishing.completed_job, call(store.read, project_id), job_id)
+    cover = publishing.export_cover_file(project_id, job)
+    return _kit_response(project_id, job, cover if cover.is_file() else None, publishing.export_post(job),
+                         'Studio', english=(job.get('snapshot') or {}).get('language') == 'en')
+
+
 @router.get('/{project_id}/output-variants/{variant_id}/kit')
 def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(get_db)):
-    from urllib.parse import quote
     from backend.services.platform_strategy import platform_strategy
     from backend.services.studio import publish_kit
     project_or_404(project_id, db)
     variant, job = _variant_job(project_id, variant_id)
+    cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'],variant_id)
+    post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
+    strategy = platform_strategy(variant['strategy_id'])
+    return _kit_response(project_id, job, cover, post, strategy.label, english=strategy.audience_language == 'en')
+
+
+def _kit_response(project_id, job, cover, post, label, *, english):
+    from urllib.parse import quote
+    from backend.services.studio import publish_kit
     video = store.directory(project_id) / 'output' / 'studio' / f"{job['job_id']}.mp4"
     if not video.is_file():
         raise HTTPException(404, '成片文件已移除')
-    cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
-    post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
-    strategy = platform_strategy(variant['strategy_id'])
-    path, name = publish_kit.kit_file(video, cover, post, strategy.label, english=strategy.audience_language == 'en')
+    path, name = publish_kit.kit_file(video, cover, post, label, english=english)
     return FileResponse(path, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"},
                         background=BackgroundTask(path.unlink, missing_ok=True))
 
@@ -755,13 +828,28 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
     return candidate
 
 @router.get('/{project_id}/subtitles')
-def subtitles(project_id: str, db: Session = Depends(get_db)):
-    """Subtitle cues in seconds, for the editor's styled preview overlay."""
+def subtitles(project_id: str, db: Session = Depends(get_db), draft_id: Optional[str] = None,
+              width: int = Query(1080, ge=1, le=32768), height: int = Query(1920, ge=1, le=32768),
+              style: Literal['clean', 'box', 'bold', 'accent'] = 'clean'):
+    """Preview readable pages on the source clock, including saved translated captions."""
     from backend.pipeline.quality import to_seconds
-    from backend.services.publish_export import _load_srt_entries
+    from backend.services.publish_export import _load_srt_entries, subtitle_line_limit
+    from backend.services.studio.caption_layout import timed_screens
     project_or_404(project_id, db)
-    entries = _load_srt_entries(project_id)
-    return {'cues': [{'start': to_seconds(e['start_time']), 'end': to_seconds(e['end_time']), 'text': e.get('text', '')} for e in entries]}
+    package = None
+    if draft_id:
+        draft = next((d for d in store.read(project_id)['drafts'] if d['id'] == draft_id), None)
+        package = (draft or {}).get('packaging')
+    if package and package.get('cues'):
+        rows = [(c['start'], c['end'], c['text']) for c in package['cues']]
+    else:
+        rows = [(to_seconds(e['start_time']), to_seconds(e['end_time']), e.get('text') or '')
+                for e in _load_srt_entries(project_id)]
+    limit = subtitle_line_limit(width, height, style)
+    return {'cues': [{'start': a, 'end': b, 'text': page.replace('\\N', '\n')}
+                     for start, end, text in rows if end > start
+                     for a, b, page, _ in timed_screens(text, start, end, limit)]}
+
 
 @router.get('/framing/status')
 def framing_status():
@@ -809,6 +897,9 @@ def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = Non
     )
     if variant:
         return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)), **jobs.template_export_kwargs(variant))
+    if (draft.aspect == 'portrait' and draft.html_template
+            and not any(item.get('draft_id') == draft_id for item in state.get('output_variants', []))):
+        return call(jobs.export, project_id, draft, html_template=draft.html_template)
     return call(jobs.export, project_id, draft)
 
 @router.get('/{project_id}/exports/{job_id}/video')

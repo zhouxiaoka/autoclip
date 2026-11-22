@@ -1523,7 +1523,6 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     '../../analytics/experience': { trackExperience() {} },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
-    './ReadinessLine': { default: 'readiness-line' },
     './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: () => null },

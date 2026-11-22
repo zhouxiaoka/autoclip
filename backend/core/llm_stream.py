@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextvars
 import json
 import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -409,16 +410,46 @@ def post_chat_completion(
         _close(again)
 
 
+_buffered_completion = contextvars.ContextVar('buffered_completion', default=False)
+
+
+@contextmanager
+def buffered_completion():
+    """Retry a stalled structured stream as one JSON body, scoped to this call."""
+    token = _buffered_completion.set(True)
+    try:
+        yield
+    finally:
+        _buffered_completion.reset(token)
+
+
 def create_openai_chat(client: Any, payload: dict[str, Any], timeout: Any, refresh_timeout) -> Any:
     """SDK create. A stream rejection retries once as a single JSON completion."""
     def once(body: dict[str, Any], limit: Any) -> Any:
         call = {} if limit is None else {"timeout": limit}
-        return client.chat.completions.create(**body, **call)
+        from backend.core.job_budget import budget_expired
+        started = time.monotonic()
+        if _buffered_completion.get():
+            # Request a single JSON document, but open its HTTP body lazily so the
+            # watchdog can still interrupt a read after the headers have arrived.
+            with client.chat.completions.with_streaming_response.create(
+                **{**body, "stream": False}, **call
+            ) as response:
+                with budget_watch(response.http_response):
+                    return response.parse()
+        try:
+            return client.chat.completions.create(**body, **call)
+        except Exception:
+            if budget_expired():
+                phase = 'open_stream' if body.get('stream') else 'completion'
+                logger.warning('LLM deadline phase=%s elapsed_ms=%d abort=no_response_handle',
+                               phase, round((time.monotonic() - started) * 1000))
+            raise
 
     try:
         return once(payload, timeout)
     except Exception as error:  # noqa: BLE001 - only a stream refusal is retried here
-        if payload.get("stream") is not True or not exception_rejects_stream(error):
+        if _buffered_completion.get() or payload.get("stream") is not True or not exception_rejects_stream(error):
             raise
         from backend.core.llm_degrade import consume_chunk_call
         if not consume_chunk_call():
@@ -439,11 +470,15 @@ def budget_watch(response: Any) -> Iterator[None]:
     # A new thread starts with an empty context. Keep this job's budget visible.
     ctx = contextvars.copy_context()
     stop = threading.Event()
+    started = time.monotonic()
+    abort = 'not_requested'
 
     def run() -> None:
+        nonlocal abort
         while not stop.is_set():
             if ctx.run(budget_expired):
-                _abort_stream(response)
+                abort = 'in_progress'
+                abort = _abort_stream(response)
                 return
             if stop.wait(0.25):
                 return
@@ -455,6 +490,12 @@ def budget_watch(response: Any) -> Iterator[None]:
     finally:
         stop.set()
         thread.join(timeout=1.0)
+        if budget_expired():
+            raw = getattr(response, 'response', response)
+            status = getattr(raw, 'status_code', None)
+            logger.warning('LLM deadline phase=response_body http_status=%s elapsed_ms=%d abort=%s',
+                           status if type(status) is int else 'unavailable',
+                           round((time.monotonic() - started) * 1000), abort)
 
 
 def _consume_chunks(response: Any) -> CollectedChat:
@@ -742,7 +783,7 @@ def _http_error(status: int, body: Any) -> RuntimeError:
     return error
 
 
-def _abort_stream(obj: Any) -> None:
+def _abort_stream(obj: Any) -> str:
     """Wake a blocked HTTP/1 SDK read before closing its response.
 
     Closing a socket from the watchdog thread need not interrupt a recv already
@@ -750,6 +791,7 @@ def _abort_stream(obj: Any) -> None:
     extensions. Shutdown is safe for an in-flight HTTP/1 connection; never do it
     to HTTP/2, whose connection may carry unrelated requests.
     """
+    shutdown = False
     try:
         import socket
         raw = getattr(obj, 'response', obj)
@@ -759,19 +801,22 @@ def _abort_stream(obj: Any) -> None:
             sock = network.get_extra_info('socket') if network is not None else None
             if sock is not None:
                 sock.shutdown(socket.SHUT_RDWR)
+                shutdown = True
     except Exception:  # noqa: BLE001 - unknown SDKs retain their normal close path
         pass
-    _close(obj)
+    closed = _close(obj)
+    return 'socket_shutdown' if shutdown else ('close_returned' if closed else 'close_unconfirmed')
 
 
-def _close(obj: Any) -> None:
+def _close(obj: Any) -> bool:
     close = getattr(obj, "close", None)
     if not callable(close):
-        return
+        return False
     try:
         close()
+        return True
     except Exception:  # noqa: BLE001
-        return
+        return False
 
 
 def _flatten(body: Any) -> str:

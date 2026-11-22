@@ -629,6 +629,71 @@ def global_urlopen_telemetry_mixes(root: Path = ROOT) -> list[str]:
     return sorted(found)
 
 
+_LEGACY_ORPHAN_COMPONENTS = frozenset({
+    'frontend/src/features/studio/FailureActions.tsx',
+    'frontend/src/features/settings/EndpointProviderSetup.tsx',
+})
+
+
+def tauri_invoke_contracts(root: Path = ROOT) -> list[str]:
+    """Every literal invoke('cmd') in frontend/src must match src-tauri/src/lib.rs generate_handler!."""
+    lib_rs = root / 'src-tauri/src/lib.rs'
+    if not lib_rs.is_file():
+        return []
+    text = lib_rs.read_text(encoding='utf-8')
+    match = re.search(r'generate_handler!\[(.*?)\]', text, re.S)
+    if not match:
+        return ['src-tauri/src/lib.rs: missing generate_handler![]']
+    handlers = {
+        item.strip().split('::')[-1]
+        for item in match.group(1).split(',')
+        if item.strip()
+    }
+    hits: list[str] = []
+    src_root = root / 'frontend/src'
+    if not src_root.is_dir():
+        return []
+    for path in sorted(src_root.rglob('*.ts*')):
+        if not path.is_file():
+            continue
+        body = path.read_text(encoding='utf-8', errors='ignore')
+        for call in re.finditer(r"\binvoke(?:<[^>]+>)?\(\s*['\"]([a-z0-9_]+)['\"]", body):
+            cmd = call.group(1)
+            if cmd not in handlers:
+                line = body[:call.start()].count('\n') + 1
+                hits.append(f'{path.relative_to(root).as_posix()}:{line}: unregistered Tauri invoke({cmd!r})')
+    return hits
+
+
+def orphaned_ui_components(root: Path = ROOT) -> list[str]:
+    """Block newly orphaned feature .tsx components in studio/ and settings/."""
+    src_root = root / 'frontend/src'
+    if not src_root.is_dir():
+        return []
+    all_ts = {
+        p: p.read_text(encoding='utf-8', errors='ignore')
+        for p in src_root.rglob('*.ts*')
+        if p.is_file()
+    }
+    hits: list[str] = []
+    for sub in ('frontend/src/features/studio', 'frontend/src/features/settings'):
+        folder = root / sub
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.glob('*.tsx')):
+            rel = path.relative_to(root).as_posix()
+            if rel in _LEGACY_ORPHAN_COMPONENTS:
+                continue
+            stem = path.stem
+            pattern = re.compile(
+                rf"from\s+['\"][^'\"]*/{re.escape(stem)}(?:\.tsx?)?['\"]"
+                rf"|import\s*\(\s*['\"][^'\"]*/{re.escape(stem)}(?:\.tsx?)?['\"]\s*\)"
+            )
+            if not any(other != path and pattern.search(txt) for other, txt in all_ts.items()):
+                hits.append(f'{rel}: unreferenced feature component')
+    return hits
+
+
 def main() -> int:
     base = os.environ.get('GITHUB_BASE_REF', '')
     if base:
@@ -666,6 +731,12 @@ def main() -> int:
             '记录之前要确认 event 是字符串；只想断言 PostHog 时，patch 发出事件的那个模块的 urllib.request，'
             '不要 patch 进程全局的 urllib.request.urlopen。\n' + '\n'.join(mixes)
         )
+    tauri_hits = tauri_invoke_contracts()
+    if tauri_hits:
+        problems.append('未注册的 Tauri invoke 命令:\n' + '\n'.join(tauri_hits))
+    orphan_hits = orphaned_ui_components()
+    if orphan_hits:
+        problems.append('新增孤立 UI 组件（0 引用）:\n' + '\n'.join(orphan_hits))
     if problems:
         print('\n\n'.join(problems), file=sys.stderr)
         return 1

@@ -366,6 +366,7 @@ async function mount(server, override = {}) {
     'i18n': { t, getLocale: () => 'zh' }, 'ui': { Btn, StatusDot: ({ label }) => h('span', null, label), Section: ({ title, description, right, children }) => h('section', null, h('h2', null, title), h('p', { className: 'desc' }, description), right, children), Dialog: empty, fmtDuration: String },
     'features/studio/api': { studioApi: { get: async () => { gets.page++; return JSON.parse(JSON.stringify(server.state)) }, source: () => '' }, errorText: String },
     'features/studio/ExportHistory': { __esModule: true, default: empty }, 'features/studio/DraftResultCard': { __esModule: true, default: empty },
+    'features/studio/PlanSummary': { __esModule: true, default: empty }, 'features/studio/PlanEditDialog': { __esModule: true, default: empty },
     'features/studio/OutputVariantCard': { __esModule: true, default: empty }, 'features/studio/PlatformPicker': { __esModule: true, default: empty },
     'features/studio/noticeRuntime': { clearCompletionBadge: async () => {}, subscribeCompletionNotice: () => () => {}, noteWorkspaceCompletion() {} },
     'features/studio/overrides': { followOutputLeave: () => () => {} },
@@ -466,7 +467,7 @@ test('retry page (DOM): the mounted page adopts the open retry attempt, the obse
   assert.ok(r.text.includes('这次制作未完成'), '(b) failure block rendered')
   // rate_limited is SWITCHABLE; with 0 usable connections the page prefers ADD_PROVIDER_HINT over vision auth copy.
   assert.ok(!r.text.includes('建议再加一个服务商'), '(b) rate limit is not rewritten as add-a-provider for run_id ' + RUN)
-  assert.ok(r.text.includes('提供商限制了请求频率或额度'), '(b) the rate-limit reason stays')
+  assert.ok(r.text.includes('请求过于频繁，请稍后重试。'), '(b) the rate-limit reason and retry guidance stay')
   assert.ok(!r.text.includes('secret-ish raw text'), '(b) never the raw upstream text')
   assert.ok(r.text.includes('查看已有结果'), '(b) the kept output is the one primary action')
   assert.equal(r.hasSettings, false)

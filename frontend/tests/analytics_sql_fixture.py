@@ -150,8 +150,11 @@ process.stdout.write(JSON.stringify(events))
         self.assertNotIn('now()', body)
         self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 10)  # + M1 7/8/9 + 1.5.9 figure 10
         self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 10)
-        self.assertEqual(body.count('{release_1_5_7}'), 9)
-        self.assertNotIn("SELECT '1.5.7' AS app_version, '20", body)
+        self.assertEqual(body.count('{release_1_5_7}'), 10)
+        self.assertEqual(body.count('{release_1_5_8}'), 10)
+        self.assertEqual(body.count('{release_1_5_9}'), 10)
+        for ver in ('1.5.7', '1.5.8', '1.5.9'):
+            self.assertNotIn(f"SELECT '{ver}' AS app_version, '20", body)
         self.assertIn('partial_delivery_rate', body)
         # per-flow = last attempt of the retry chain (retry_of -> root flow_id).
         self.assertEqual(v4['flow_definition']['retry_link_property'], 'retry_of')
@@ -237,6 +240,19 @@ process.stdout.write(JSON.stringify(events))
                             ('studio_delivery.sql', 0)):
             with self.subTest(query=name, index=index):
                 self.assertEqual(self.db.execute(queries(name)[index]).fetchall(), [])
+
+    def test_value_funnel_and_ux_results_follow_v4_production_cohort_hygiene(self):
+        for filename, expected_panels in (('value_funnel.sql', 3), ('ux_results.sql', 1)):
+            raw = (ROOT / 'docs/analytics' / filename).read_text(encoding='utf-8')
+            text = '\n'.join(line for line in raw.splitlines() if not line.lstrip().startswith('--'))
+            self.assertEqual(text.count("toString(e.properties.analytics_environment) = 'production'"), expected_panels, filename)
+            self.assertEqual(text.count("toString(e.properties.runtime) = 'desktop'"), expected_panels, filename)
+            self.assertEqual(text.count('person_id NOT IN COHORT {internal_cohort_id}'), expected_panels, filename)
+            self.assertEqual(text.count('{date_from}'), expected_panels, filename)
+            self.assertEqual(text.count('{release_1_5_9}'), expected_panels, filename)
+            self.assertNotIn('now()', text, filename)
+            self.assertNotIn('distinct_id', text, filename)
+            self.assertIn('studio_output_played', text, filename)
 
 
 if __name__ == '__main__':

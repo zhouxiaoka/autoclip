@@ -13,6 +13,7 @@ import SettingsReturnListener from './features/studio/SettingsReturnListener'
 import KeyGuidePrompt from './features/settings/KeyGuidePrompt'
 import QuitGuard from './features/studio/quitGuard'
 import KeepAwakeGuard from './features/studio/KeepAwakeGuard'
+import BackendCrashBanner from './desktop/BackendCrashBanner'
 import { startKeyGuideWatch } from './features/settings/keyGuideWatch'
 import { refreshSponsorPromo, startSponsorPromoWatch } from './features/settings/sponsorPromoWatch'
 import Header from './components/Header'
@@ -54,6 +55,7 @@ function App() {
         <KeyGuidePrompt />
         <QuitGuard />
         <KeepAwakeGuard />
+        <BackendCrashBanner />
         <Content>
           <Routes>
             <Route path="/" element={<HomePage />} />

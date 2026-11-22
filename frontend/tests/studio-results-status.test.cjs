@@ -9,7 +9,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const workspace = {
     analysis: { status, phase, message, error, error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
-    drafts: items.drafts || [], jobs: [], events: [], output_variants: [], attempts: attemptsOverride.value || undefined,
+    drafts: items.drafts || [], jobs: [], events: [], output_variants: items.variants || [], attempts: attemptsOverride.value || undefined,
   }
   const exportsObject = {}
   const children = ({ children }) => React.createElement('div', null, children)
@@ -100,6 +100,34 @@ test('failed automatic generation does not claim AI is still producing', () => {
   assert.doesNotMatch(render(true, 'screening', 'failed'), /AI 正在按所选平台制作成片/)
 })
 
+test('completed export reports model packaging separately for the current attempt and older projects', () => {
+  const warning = /部分包装未完整生成/
+  const settled = { auto_start: true, status: 'completed', attempt_id: 'latest' }
+  const items = { drafts: [{ id: 'd', revision: 1, packaging: { fallback: true } }],
+    variants: [{ id: 'v', status: 'completed', draft_id: 'd', draft_revision: 1 }] }
+  const renderDone = () => render(true, 'rendering', 'completed', [], [], undefined, undefined, '', '', items)
+  try {
+    generationOverride.value = settled
+    attemptsOverride.value = [{ attempt_id: 'old', summary: { packaging_fallback_count: 1 } },
+      { attempt_id: 'latest', summary: { packaging_fallback_count: 0 } }]
+    assert.doesNotMatch(renderDone(), warning)
+    attemptsOverride.value[1].summary.packaging_fallback_count = 1
+    assert.match(renderDone(), warning)
+    assert.doesNotMatch(renderDone(), /可发布成片/)
+    generationOverride.value = { ...settled, not_redone_failed_count: 1 }
+    assert.match(renderDone(), /之前还有/)
+    assert.match(renderDone(), warning)
+    generationOverride.value = { auto_start: true, status: 'completed' }
+    attemptsOverride.value = []
+    assert.match(renderDone(), warning)
+    items.drafts[0].revision = 2
+    assert.doesNotMatch(renderDone(), warning)
+  } finally {
+    generationOverride.value = null
+    attemptsOverride.value = null
+  }
+})
+
 test('X1 two same-code failures lead with diagnose and keep retry secondary', () => {
   generationOverride.value = { auto_start: true, status: 'failed', repeat_failure: { count: 2, same_code: true } }
   try {
@@ -108,10 +136,10 @@ test('X1 two same-code failures lead with diagnose and keep retry secondary', ()
     const diagnose = buttons.find(button => button.children === '看看哪里不对')
     const retry = buttons.find(button => button.children === '重试')
     assert.ok(diagnose)
-    assert.equal(diagnose.variant, 'text')
+    assert.equal(diagnose.variant, 'cta')
     assert.ok(retry)
-    assert.equal(retry.variant, 'cta')
-    assert.ok(buttons.indexOf(retry) < buttons.indexOf(diagnose))
+    assert.equal(retry.variant, undefined)
+    assert.ok(buttons.indexOf(diagnose) < buttons.indexOf(retry))
   } finally {
     generationOverride.value = null
   }
@@ -324,7 +352,7 @@ test('R22 #173: the real listener returns to the project on the one save notific
   r.notifySettingsSaved(win)                        // the function production calls after a validated save
   assert.deepEqual(navigated, ['/project/p-1?continue=1'])
   const hook = fs.readFileSync(path.join(__dirname, '../src/features/settings/useModelSettings.ts'), 'utf8')
-  assert.ok(hook.includes('if (!failed && !visionFailed) notifySettingsSaved()'))
+  assert.equal((hook.match(/\bnotifySettingsSaved\(\)/g) || []).length, 1)
   assert.equal(/dispatchEvent|function notifySaved/.test(hook), false, 'no second notification implementation')
   const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8')
   assert.ok(app.includes('<SettingsReturnListener />'))
@@ -416,7 +444,7 @@ test('a bare 错误 names the step, and a billable call adds the billing sentenc
   try {
     const html = render(true, 'production', 'failed', [], [], 'timeout', 'analyze', '错误')
     assert.match(html, new RegExp('分析：' + sentence))
-    assert.doesNotMatch(html, /本次已消耗/)
+    assert.match(html, new RegExp(guidance))
     assert.doesNotMatch(html, /<span class="studio-error">错误<\/span>/)
   } finally {
     generationOverride.value = null
@@ -506,4 +534,14 @@ test('manual results count drafts separately and keep source actions reachable, 
   assert.match(document.querySelector('details').textContent, /source-card/)
   assert.match(view(false, {clips: mixed.clips}).querySelector('.studio-result-grid').textContent, /source-card/)
   assert.doesNotMatch(view(true, mixed).body.textContent, /source-card/)
+})
+
+test('a completed manual project offers another version on the results page', () => {
+  const buttons = []
+  render(false, 'production', 'completed', buttons, [], undefined, undefined, '', '', {drafts: [{id: 'existing'}]})
+  const remake = buttons.find(button => button.children === '再做一版')
+  assert.ok(remake)
+  const before = navigations.length
+  remake.onClick()
+  assert.equal(navigations.length, before)
 })

@@ -7,8 +7,9 @@ import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { sourceFailure } from './importReadiness'
 import { browserCookieRecovery, stageBrowserCookieRecovery } from './browserCookieRecovery'
-import { receiptFailureInfo } from './failureAction'
+import { diagnoseInsteadOfRetry, pageFailureAction, presentedFailure, RECHARGE_LABEL, receiptFailureInfo } from './failureAction'
 import { countPreservedResults, presentFailure, resolveFailureCause } from './failurePresentation'
+import { openExternalLink } from '../../utils/externalLinks'
 import DiagnosePanel from './DiagnosePanel'
 import SwitchModelDialog from './SwitchModelDialog'
 import { listSwitchModelOptions, usableConnectionCount } from './switchModelOptions'
@@ -21,6 +22,8 @@ import { settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
 import { Scene, Draft } from './types'
 import ExportHistory from './ExportHistory'
+import PlanEditDialog from './PlanEditDialog'
+import PlanSummary from './PlanSummary'
 import DraftResultCard from './DraftResultCard'
 import OutputVariantCard from './OutputVariantCard'
 import { platformLabel } from './platformLabel'
@@ -44,6 +47,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const location = useLocation()
   const resumeAfterSettings = new URLSearchParams(location.search || '').get('continue') === '1'
   const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
+  const [remaking, setRemaking] = useState(false)
   const [history, setHistory] = useState(false)
   const [busy,setBusy] = useState('')
   const busyRef = useRef('')
@@ -80,10 +84,17 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const cookieRecovery = workspace.analysis?.status === 'failed' && browserCookieRecovery(failedCode, workspace.analysis?.error)
   // the generation status covers this round only; earlier rounds' failures stay listed (count from settle)
   const notRedone = workspace.generation?.not_redone_failed_count || 0
-  const generationDescription = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
-    : workspace.generation?.status === 'completed' ? t('已按所选平台生成可发布成片。')
+  const attemptId = workspace.generation?.attempt_id
+  const fallbackCount = workspace.attempts?.find(receipt => receipt.attempt_id === attemptId)?.summary?.packaging_fallback_count
+  const incompletePackaging = (workspace.generation?.status === 'completed' || workspace.generation?.status === 'partial') &&
+    (attemptId ? typeof fallbackCount === 'number' && fallbackCount > 0 : workspace.output_variants?.some(variant =>
+      variant.status === 'completed' && workspace.drafts.some(draft =>
+        draft.id === variant.draft_id && draft.revision === variant.draft_revision && draft.packaging?.fallback)))
+  const outputStatus = workspace.generation?.status === 'completed' && notRedone > 0 ? t('本次重跑已完成，之前还有 {{count}} 条未完成版本可重试。', { count: notRedone })
+    : workspace.generation?.status === 'completed' ? t(incompletePackaging ? '已导出 · 可下载' : '已按所选平台生成可发布成片。')
     : workspace.generation?.status === 'partial' ? t('部分成片已完成，未完成版本可稍后重试。')
       : workspace.generation?.status === 'failed' ? t(sourceUnusable ? '这个素材无法使用' : '这次制作未完成') : t('AI 正在按所选平台制作成片。')
+  const generationDescription = incompletePackaging ? `${outputStatus} ${t('部分包装未完整生成，详情见下方成片。')}` : outputStatus
   const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
   const variantJob = (jobId?: string) => workspace.jobs.find(job => job.job_id === jobId)
   const latest = useRef(workspace)
@@ -112,7 +123,10 @@ export default function StudioResults({ project, children, onCreateCollection, o
   }, [project.id])
   // A retry whose response was lost is still watched: the open generation attempt on the snapshot is the source.
   useEffect(()=>{workflow.adoptOpenAttempt(project.id, workspace)},[project.id, workspace.attempts])
-  useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
+  useEffect(() => {
+    const status = workspace.analysis?.status
+    if (status === 'awaiting_confirmation' || (status && status !== 'running' && project.status !== 'completed')) onReload()
+  }, [workspace.analysis?.status])
   const act = async (key: string, fn:()=>Promise<void>) => {
     if (busyRef.current) return
     busyRef.current = key
@@ -197,6 +211,18 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const detailView = resumeAfterSettings && presented.primary && (presented.primary.id === 'settings' || presented.primary.id === 'quota_check' || presented.primary.id === 'install_transcription')
     ? { ...presented, primary: { id: 'retry_production' as const, label: '重试制作' } }
     : presented
+  const failureInfo = { ...resolvedCause, error: resolvedCause.error || workspace.analysis?.error }
+  const failureBilling = presentedFailure(failureInfo, detailView.reason).billing
+  const rawFailureAction = pageFailureAction(failureInfo)
+  const rechargeUrl = preservedCount === 0 && detailView.primary?.id === 'quota_check' && rawFailureAction.kind === 'recharge' && /^https?:\/\//i.test(rawFailureAction.destination || '')
+    ? (rawFailureAction.destination as string)
+    : ''
+  const rechargeLabel = rawFailureAction.kind === 'recharge' ? (rawFailureAction.label || RECHARGE_LABEL) : RECHARGE_LABEL
+  const isRetryPrimary = preservedCount === 0 && (detailView.primary?.id === 'retry' || detailView.primary?.id === 'retry_production')
+  const resumePoint = isRetryPrimary && workspace.resume_point?.point && workspace.resume_point.point !== 'none'
+    ? workspace.resume_point
+    : null
+  const escalateDiagnose = isRetryPrimary && diagnoseInsteadOfRetry(workspace.generation?.repeat_failure)
   const switchModelAndRetry = async (choice: { connectionId: string; model: string }) => {
     if (!aiSettings) return
     const saved = await modelSettingsApi.save(forSave(syncFollowingCover(aiSettings, {
@@ -207,7 +233,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
         capability: aiSettings.analysis?.capability || 'auto',
         model_source: 'user',
       },
-    })))
+    })), forSave(aiSettings))
     setAiSettings(saved)
     await studioApi.retry(project.id, { retry_kind: 'switch_model' })
   }
@@ -251,9 +277,16 @@ export default function StudioResults({ project, children, onCreateCollection, o
         <Btn size="sm" variant="text" onClick={() => setShowFullImportTip(false)}>{t('知道了')}</Btn>
       </div>
     </div>}
-    {managed && !automatic && !hideLegacy && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}
+    {remaking && <PlanEditDialog remake projectId={project.id} plan={workspace.plan} onClose={() => setRemaking(false)}
+      onSubmitted={() => { setRemaking(false); refresh() }} />}
+    {managed && !automatic && workspace.analysis?.status === 'awaiting_confirmation' && workspace.plan &&
+      <PlanSummary key={workspace.plan.id} projectId={project.id} plan={workspace.plan} remake
+        status={workspace.analysis.status} onChanged={refresh} />}
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
-    {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={automatic ? generationDescription : showDraftList ? undefined : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
+    {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={automatic ? generationDescription : showDraftList ? (sourceDuration != null ? t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) }) : undefined) : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions">
+        {managed && loaded && !automatic && !hideLegacy && workspace.analysis?.status !== 'awaiting_confirmation' &&
+          <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={() => { noteLegacy('plan_adjust'); setRemaking(true) }}>{t('再做一版')}</Btn>}
+        <Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {progress && <div className="ac-empty studio-processing">
         <div className="studio-progress" role="progressbar" aria-busy={progress.indeterminate || undefined} aria-valuenow={progress.indeterminate ? undefined : progress.percent} aria-valuemin={progress.indeterminate ? undefined : 0} aria-valuemax={progress.indeterminate ? undefined : 100} aria-valuetext={t(progress.label)}>
           <div className="studio-progress-track"><div className={`studio-progress-fill${progress.indeterminate ? ' studio-progress-fill--busy' : ''}`} style={progress.indeterminate ? undefined : { width: `${progress.percent}%` }} /></div>
@@ -269,26 +302,32 @@ export default function StudioResults({ project, children, onCreateCollection, o
         {progress.detail && progress.detail !== progress.label && <p className="studio-muted">{t(progress.detail)}</p>}
         {workspace.analysis?.phase==='screening'&&!automatic?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}
       </div>}
-      {workspace.analysis?.status==='failed' && <div className="ac-failure-summary" role="alert">
+      {taskFailed && <div className="ac-failure-summary" role="alert">
         <b>{t(detailView.status)}</b>
         <p className="ac-failure-reason">{detailView.step ? <>{t(detailView.step)}：{t(detailView.reason)}</> : t(detailView.reason)}</p>
         <p className="ac-failure-outcome">{t(detailView.outcome, { count: preservedCount })}</p>
-        {detailView.primary && <Btn variant="cta" disabled={!!busy} loading={busy==='retry-analysis'} onClick={() => {
-          const action = detailView.primary
-          if (!action || busy) return
-          if (action.id === 'view_results') { document.querySelector('.studio-result-grid')?.scrollIntoView({ block: 'start' }); return }
-          if (action.id === 'settings' || action.id === 'quota_check' || action.id === 'install_transcription') { navigate(settingsReturnUrl(action.destination || '/settings?section=analysis', project.id)); return }
-          if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
-          if (action.id === 'change_video') { navigate('/'); return }
-          if (action.id === 'switch_model') { setSwitchOpen(true); return }
-          void act('retry-analysis', async () => { await studioApi.retry(project.id, { retry_kind: 'same' }) })
-        }}>{t(detailView.primary.label)}</Btn>}
-        <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>
+        {failureBilling && <p className="studio-billing">{t(failureBilling)}</p>}
+        <div className="studio-actions">
+          {escalateDiagnose && <Btn variant="cta" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn>}
+          {detailView.primary && <Btn variant={escalateDiagnose ? undefined : 'cta'} disabled={!!busy} loading={busy==='retry-analysis'} onClick={() => {
+            const action = detailView.primary
+            if (!action || busy) return
+            if (action.id === 'view_results') { document.querySelector('.studio-result-grid')?.scrollIntoView({ block: 'start' }); return }
+            if (action.id === 'settings' || action.id === 'quota_check' || action.id === 'install_transcription') { navigate(settingsReturnUrl(action.destination || '/settings?section=analysis', project.id)); return }
+            if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
+            if (action.id === 'change_video') { navigate('/'); return }
+            if (action.id === 'switch_model') { setSwitchOpen(true); return }
+            void act('retry-analysis', async () => { await studioApi.retry(project.id, { retry_kind: 'same' }) })
+          }}>{t(resumePoint?.label || detailView.primary.label)}</Btn>}
+          {rechargeUrl && <Btn disabled={!!busy} onClick={() => void openExternalLink(rechargeUrl)}>{t(rechargeLabel)}</Btn>}
+          {resumePoint && <Btn disabled={!!busy} loading={busy==='retry-fresh'} onClick={() => void act('retry-fresh', async () => { await studioApi.retry(project.id, { retry_kind: 'same', fresh: true }) })}>{t('从头重做')}</Btn>}
+        </div>
+        {!escalateDiagnose && <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>}
       </div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
-      <div className={showDraftList ? "studio-result-grid studio-draft-list" : "ac-grid-3 studio-result-grid"}>{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} onViewed={() => setViewedProject(project.id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
+      <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} onViewed={() => setViewedProject(project.id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
         onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} allowExport={!hideLegacy} onExport={()=>{ noteLegacy('export_confirm'); setExporting(d) }} onHistory={()=>setHistory(true)} />)}{loaded && !automatic && !showDraftList && children}</div>
-      {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&!sourceUnusable&&!cookieRecovery&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
+      {!loading&&!error&&!taskFailed&&workspace.generation?.status!=='rendering'&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&!sourceUnusable&&!cookieRecovery&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
     </Section>}
     {showMorePlatform && genDone && <div className="studio-more-platform" role="status" data-testid="t1-more-platform">
       <p className="studio-muted">{morePlatformId === 'xiaohongshu' ? t('也可以再做一个小红书版本') : morePlatformId === 'youtube_shorts' ? t('也可以再做一个 Shorts 版本') : t('也可以再做一个{{platform}}版本', { platform: morePlatformLabel })}</p>

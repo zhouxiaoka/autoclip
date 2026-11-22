@@ -58,7 +58,8 @@ pub fn run() {
             set_keep_awake,
             crate::tray::set_tray_language,
             crate::quit_guard::quit_guard_ready,
-            save_local_download
+            save_local_download,
+            reveal_in_folder
         ])
         .manage(BackendManager::new())
         .manage(crate::quit_guard::QuitGuardState::new())
@@ -143,6 +144,16 @@ pub fn run() {
                 ) {
                     api.prevent_exit();
                     crate::quit_guard::emit_close_requested(app, "menu");
+                }
+            }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+                if !has_visible_windows {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.unminimize();
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
                 }
             }
             tauri::RunEvent::Exit => {

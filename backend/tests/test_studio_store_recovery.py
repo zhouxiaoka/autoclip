@@ -27,6 +27,8 @@ def test_transient_windows_reader_does_not_lose_render_state(state_path, monkeyp
     replace = store.os.replace
     calls = []
     def busy_once(src, dst):
+        if dst != state_path:
+            return replace(src, dst)
         calls.append((src, dst))
         if len(calls) == 1:
             raise windows_busy(code)
@@ -68,8 +70,11 @@ def test_persistent_windows_denial_is_bounded_and_keeps_previous_state(state_pat
 
 def test_other_permission_error_is_not_retried_or_swallowed(state_path, monkeypatch):
     original = state_path.read_bytes()
+    replace = store.os.replace
     calls = []
     def denied(src, dst):
+        if dst != state_path:
+            return replace(src, dst)
         calls.append(True)
         raise PermissionError('synthetic permanent denial')
     monkeypatch.setattr(store.os, 'replace', denied)

@@ -162,6 +162,16 @@ function button(tree, label) {
   return tree.find(node => node.type === 'button' && node.props?.children === label)
 }
 
+test('optional vision leaves a configured import ready to generate without a status strip', async () => {
+  const view = render({ report: report({
+    analysis: { ...check(true, 'configured', 'none'), label: 'qwen-plus' },
+    visual: { ...check(true, 'optional', 'none'), label: '未启用' },
+  }) })
+  assert.equal(view.tree.some(node => node.type === 'readiness-line' || node.props?.className === 'studio-readiness'), false)
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 1)
+})
+
 test('the banner installs whisper and blocks an unready import', async () => {
   const failing = report({
     transcription: check(false, 'whisper_not_installed', 'install_whisper'),
@@ -187,14 +197,15 @@ test('the banner installs whisper and blocks an unready import', async () => {
 })
 
 test('an unconfigured analysis model replaces the import zone and keeps a failed validation on it', () => {
-  for (const code of ['not_configured', 'no_model', 'invalid_connection']) {
+  assert.equal(readiness.analysisNeedsSetup({ checks: { analysis: { ok: false, code: 'no_model' } } }), false)
+  for (const code of ['not_configured', 'invalid_connection']) {
     const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
     assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), true, code)
     assert.equal(view.tree.some(node => node.type === 'textarea'), false, code)
     assert.equal(button(view.tree, '生成成片'), undefined, code)
     assert.equal(readiness.analysisNeedsSetup(report({ analysis: check(false, code, 'settings_ai') })), true, code)
   }
-  for (const code of ['validation_failed', 'settings_invalid']) {
+  for (const code of ['validation_failed', 'model_validation_failed', 'settings_invalid']) {
     const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
     assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), false, code)
     assert.ok(button(view.tree, '生成成片'), code)
@@ -215,6 +226,14 @@ test('a failed provider check blocks generation and points at model settings', a
   assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('未通过校验')))
   await button(view.tree, '去设置修改').props.onClick()
   assert.deepEqual(view.navigations, ['/settings?section=ai&return_import=1'])
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
+test('a failed model check names the selection and offers a model-level repair', async () => {
+  const failing = report({ analysis: { ...check(false, 'model_validation_failed', 'settings_ai'), label: 'qwen4-max' } })
+  const view = render({ report: failing })
+  assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label).includes('更换型号')))
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.calls.length, 0)
 })
@@ -338,9 +357,11 @@ test('R21: the desktop follows the backend skippable flag instead of inferring t
   const missing = check(false, 'whisper_not_installed', 'install_whisper')
   const skippable = { ...report({ transcription: { ...missing, skippable: true } }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(skippable, false, true, { source: 'file' }), null)
+  assert.equal(readiness.visibleIssues(skippable, false, { source: 'file' }).length, 0)
   // visual mode without the flag (e.g. no vision model): blocked like any other missing transcriber
   const visualOnly = { ...report({ transcription: missing }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(visualOnly, false, true, { source: 'file' }), 'transcription')
+  assert.equal(readiness.visibleIssues(visualOnly, false, { source: 'file' })[0].key, 'transcription')
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/importReadiness.ts'), 'utf8')
   assert.doesNotMatch(source, /analysis_mode === 'visual'/)
 })

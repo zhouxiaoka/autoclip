@@ -40,6 +40,49 @@ class ProjectRepository(BaseRepository[Project]):
         """
         return self.find_by(project_type=category)
     
+    def get_all(self, skip: int = 0, limit: int = 100) -> List[Project]:
+        """获取项目列表（按创建时间倒序，最新项目优先）"""
+        return (
+            self.db.query(self.model)
+            .order_by(desc(self.model.created_at), desc(self.model.id))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def list_paginated(
+        self,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> tuple[List[Project], int]:
+        """分页查询项目，始终按创建时间倒序返回，避免页大小截断隐藏最新项目。"""
+        query = self.db.query(self.model)
+        if filters:
+            status = filters.get("status")
+            if status is not None:
+                status_val = getattr(status, "value", status)
+                query = query.filter(self.model.status == ProjectStatus(status_val))
+            project_type = filters.get("project_type")
+            if project_type is not None:
+                type_val = getattr(project_type, "value", project_type)
+                query = query.filter(self.model.project_type == ProjectType(type_val))
+            search = filters.get("search")
+            if isinstance(search, str) and search.strip():
+                pattern = f"%{search.strip()}%"
+                query = query.filter(
+                    self.model.name.ilike(pattern) | self.model.description.ilike(pattern)
+                )
+        total = query.count()
+        items = (
+            query.order_by(desc(self.model.created_at), desc(self.model.updated_at), desc(self.model.id))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
     def get_recent_projects(self, limit: int = 10) -> List[Project]:
         """
         获取最近创建的项目

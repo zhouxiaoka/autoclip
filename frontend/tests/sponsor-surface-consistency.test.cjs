@@ -49,7 +49,7 @@ test('setup choice uses a remote default that is not first, and falls back when 
   const state = loadTs('sponsorPromoState.ts')
   const providers = loadTs('providers.ts', { '../../i18n': i18n, './sponsorPromoState': state })
   const listed = providers.recommendedSetupProviders()
-  assert.equal(listed[0], 'apimart')
+  assert.deepEqual([...listed].slice(0, 3), ['deepseek', 'dashscope', 'apimart'])
   assert.equal(listed.includes('api88'), false)
   assert.equal(state.promotionSetupChoice(['deepseek', 'apimart']), 'deepseek')
 
@@ -64,13 +64,13 @@ test('setup choice uses a remote default that is not first, and falls back when 
   const stopped = providers.recommendedSetupProviders()
   assert.equal(stopped.includes('apimart'), false)
   assert.equal(stopped.includes('api88'), true)
-  assert.equal(stopped[0], 'api88')
-  assert.equal(state.promotionSetupChoice(stopped), 'api88')
+  assert.deepEqual([...stopped].slice(0, 3), ['deepseek', 'dashscope', 'api88'])
+  assert.equal(state.promotionSetupChoice(stopped), 'deepseek')
 
   state.writePromoSnapshot(promoView({ defaultChoice: 'other', choices: ['api88', 'other'] }))
   assert.equal(state.promotionSetupChoice(providers.recommendedSetupProviders()), providers.recommendedSetupProviders()[0])
   state.writePromoSnapshot(promoView({ defaultChoice: 'missing', choices: ['api88', 'other'] }))
-  assert.equal(state.promotionSetupChoice(providers.recommendedSetupProviders()), 'api88')
+  assert.equal(state.promotionSetupChoice(providers.recommendedSetupProviders()), providers.recommendedSetupProviders()[0])
   state.writePromoSnapshot(promoView({
     choices: ['other'],
     defaultChoice: 'api88',
@@ -243,7 +243,7 @@ test('import card preselects the remote default and a late default cannot move a
     const root = createRoot(host)
     await act(async () => { root.render(React.createElement(Card)) })
     const checked = () => [...host.querySelectorAll('[role="radio"]')].find(node => node.getAttribute('aria-checked') === 'true')
-    assert.equal(checked().textContent.includes('APIMart'), true)
+    assert.equal(checked().textContent.includes('DeepSeek'), true)
     assert.equal([...host.querySelectorAll('[role="radio"]')].some(node => node.textContent.includes('88API')), false)
     await act(async () => { publish(promoView({ defaultChoice: 'apimart', statuses: { apimart: 'healthy', api88: 'healthy' } })) })
     assert.equal(checked().textContent.includes('APIMart'), true)

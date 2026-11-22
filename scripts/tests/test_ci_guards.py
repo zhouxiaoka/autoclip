@@ -250,6 +250,34 @@ def test_vision(monkeypatch):
         backend = {name: command for name, command, _ in quality_gate.checks('backend', sys.executable)}
         self.assertIn('scripts/ci_guards.py', backend['python_correctness'])
 
+    def test_tauri_invoke_contracts_blocks_unregistered_commands(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'src-tauri/src').mkdir(parents=True)
+            (root / 'frontend/src/desktop').mkdir(parents=True)
+            (root / 'src-tauri/src/lib.rs').write_text(
+                'tauri::generate_handler![restart_backend_service, reveal_in_folder]\n',
+                encoding='utf-8',
+            )
+            (root / 'frontend/src/desktop/Banner.tsx').write_text(
+                "invoke('restart_backend_service'); invoke('missing_cmd');\n",
+                encoding='utf-8',
+            )
+            hits = ci_guards.tauri_invoke_contracts(root)
+            self.assertEqual(len(hits), 1)
+            self.assertIn('missing_cmd', hits[0])
+
+    def test_orphaned_ui_components_blocks_new_dead_feature_components(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'frontend/src/features/studio').mkdir(parents=True)
+            (root / 'frontend/src/features/studio/UsedCard.tsx').write_text('export default function UsedCard() {}\n', encoding='utf-8')
+            (root / 'frontend/src/features/studio/DeadCard.tsx').write_text('export default function DeadCard() {}\n', encoding='utf-8')
+            (root / 'frontend/src/features/studio/Page.tsx').write_text("import UsedCard from './UsedCard'\n", encoding='utf-8')
+            hits = ci_guards.orphaned_ui_components(root)
+            self.assertTrue(any('DeadCard.tsx' in h for h in hits))
+            self.assertFalse(any('UsedCard.tsx' in h for h in hits))
+
 
 if __name__ == '__main__':
     unittest.main()

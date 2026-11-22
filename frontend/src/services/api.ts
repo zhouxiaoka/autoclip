@@ -76,7 +76,7 @@ const isTauriRuntime = () => (
 
 // 打包后的桌面页在 tauri://localhost（macOS）或 http://tauri.localhost。
 // 根路径 /api/v1 会打到壳页面，打不到本机后端。开发时 base 仍是 /api/v1，走 Vite 代理。
-const mediaUrl = (path: string): string => {
+export const mediaUrl = (path: string): string => {
   const base = apiConfigManager.getBaseUrl().replace(/\/$/, '')
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
@@ -407,13 +407,32 @@ export const projectApi = {
     return api.get('/video-categories')
   },
 
-  // 获取所有项目
+  // 获取所有项目（按后端最新优先分页拉取，避免项目数超过默认页大小时看不到新项目）
   getProjects: async (): Promise<Project[]> => {
-    const response = await api.get('/projects/')
-    // 处理分页响应结构，返回items数组
-    const projects = (response as any).items || response || []
-    if (Array.isArray(projects)) projects.forEach(p => workflow.rememberProject(p.id, projectProperties(p)))
-    return projects
+    const first = await api.get('/projects/', { params: { page: 1, size: 100 } })
+    const items: Project[] = Array.isArray((first as any)?.items)
+      ? [...(first as any).items]
+      : Array.isArray(first)
+        ? [...first]
+        : []
+    const pagination = (first as any)?.pagination
+    if (pagination?.has_next) {
+      const maxPages = Math.min(Number(pagination.pages) || 1, 5)
+      for (let page = 2; page <= maxPages; page += 1) {
+        const next = await api.get('/projects/', { params: { page, size: 100 } })
+        const nextItems = Array.isArray((next as any)?.items) ? (next as any).items : []
+        items.push(...nextItems)
+        if (!(next as any)?.pagination?.has_next) break
+      }
+    }
+    const seen = new Set<string>()
+    const deduped = items.filter(p => {
+      if (!p?.id || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+    deduped.forEach(p => workflow.rememberProject(p.id, projectProperties(p)))
+    return deduped
   },
 
   // 获取单个项目

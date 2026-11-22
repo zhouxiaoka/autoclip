@@ -105,8 +105,8 @@ function recommendedCompare(a: ProviderKey, b: ProviderKey): number {
   const right = promotionRank(b)
   if (left !== null && right !== null && left !== right) return left - right
   return compareRecommended(
-    { sponsor: PROVIDERS[a].sponsor, success_tier: PROVIDERS[a].success_tier, success_rate: qualityFor(a)?.success_rate },
-    { sponsor: PROVIDERS[b].sponsor, success_tier: PROVIDERS[b].success_tier, success_rate: qualityFor(b)?.success_rate },
+    { sponsor: Boolean(PROVIDERS[a].sponsor) || promotionCurrentlyPromoted(a), success_tier: PROVIDERS[a].success_tier, success_rate: qualityFor(a)?.success_rate },
+    { sponsor: Boolean(PROVIDERS[b].sponsor) || promotionCurrentlyPromoted(b), success_tier: PROVIDERS[b].success_tier, success_rate: qualityFor(b)?.success_rate },
   )
 }
 

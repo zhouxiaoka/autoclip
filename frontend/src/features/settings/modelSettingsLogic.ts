@@ -38,22 +38,12 @@ export const needsSetup = (s: ModelSettings) => {
 
 /**
  * Loaded document → editable state. On first run nothing is pre-selected: the user picks a provider and
- * the recommendation follows the key. Covers are designed locally (free) until the user picks an image
- * model themselves: no account with any image service is assumed.
+ * the recommendation follows the models available to that key.
  */
 export function prepareLoaded(value: ModelSettings): ModelSettings {
   if (value.migration_warnings?.length) return value
   if (!needsSetup(value)) return value
-  return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false, allow_send_frame: true }
-}
-
-/** AI covers are opt-in; once chosen, a service without any image model falls back to the designed cover instead of blocking save. */
-export function coverFallback(s: ModelSettings, lists: Record<string, ModelList>): ModelSettings {
-  if (!s.cover_enabled || s.cover?.model) return s
-  const connection = connectionOf(s, 'cover') || mainConnection(s)
-  const list = connection && lists[connection.id]
-  if (list && !list.models.some(m => m.image)) return { ...s, cover_enabled: false, cover: null }
-  return s
+  return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false }
 }
 
 export const newConnection = (provider: ProviderKey, id: string = crypto.randomUUID()): Connection => {
@@ -70,20 +60,21 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
   if (typeof next.api_key === 'string') next.api_key = next.api_key.trim()
   if (typeof next.base_url === 'string') next.base_url = collapseSpaces(next.base_url)
   if (typeof next.image_base_url === 'string') next.image_base_url = collapseSpaces(next.image_base_url)
-  const changedAddress = next.base_url !== undefined || next.image_base_url !== undefined
-  const changedCreds = changedAddress || next.api_key !== undefined
   return {
     ...s,
     connections: s.connections.map(c => {
       if (c.id !== id) return c
+      const changedBase = next.base_url !== undefined && next.base_url !== c.base_url
+      const changedAddress = changedBase || (next.image_base_url !== undefined && next.image_base_url !== c.image_base_url)
+      const changedCreds = changedAddress || (next.api_key !== undefined && next.api_key !== c.api_key)
       const merged = {
         ...c,
         ...next,
         ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
-        ...(typeof next.api_key === 'string' && next.api_key ? { has_key: true } : {}),
-        ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '' } : {}),
+        ...(typeof next.api_key === 'string' ? { has_key: !!next.api_key } : {}),
+        ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '', failed_model_checks: [] } : {}),
       }
-      if (next.base_url !== undefined) {
+      if (changedBase) {
         merged.base_url_source = c.provider === 'compatible' || merged.base_url ? 'user' : 'preset'
       }
       return merged
@@ -91,7 +82,64 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
   }
 }
 
-export function applyValidation(s: ModelSettings, id: string, result: ValidationResult): ModelSettings {
+/** Explicitly clear the saved API key for one connection without removing its endpoint row. */
+export function clearConnectionKey(s: ModelSettings, id: string): ModelSettings {
+  return {
+    ...s,
+    connections: s.connections.map(c => c.id !== id ? c : {
+      ...c,
+      api_key: '',
+      has_key: false,
+      api_key_masked: '',
+      validation_status: 'unchecked' as const,
+      validation_error_type: '',
+      failed_model_checks: [],
+    }),
+  }
+}
+
+/** Remove one connection and cleanly detach any role bindings that pointed to it. */
+export function removeConnection(s: ModelSettings, id: string): ModelSettings {
+  const analysis = s.analysis?.connection_id === id ? null : s.analysis
+  const vision = s.vision?.connection_id === id ? null : s.vision
+  const coverRemoved = s.cover?.connection_id === id
+  const cover = coverRemoved ? null : s.cover
+  const transcription = s.transcription?.provider === 'cloud' && s.transcription.connection_id === id
+    ? { provider: 'whisper_local' as const, model: 'base', model_source: 'preset' as const }
+    : s.transcription
+  return {
+    ...s,
+    connections: s.connections.filter(c => c.id !== id),
+    analysis,
+    vision,
+    cover,
+    cover_enabled: coverRemoved ? false : s.cover_enabled,
+    cover_follows_analysis: coverRemoved ? false : s.cover_follows_analysis,
+    transcription,
+  }
+}
+
+export function failedCheck(connection: Connection, purpose: Role, model: string) {
+  return connection.validation_status === 'failed' || !!connection.failed_model_checks?.some(item => item.model === model && item.purpose === purpose)
+}
+
+export function failedSelection(s: ModelSettings) {
+  for (const purpose of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if ((purpose === 'cover' && !s.cover_enabled) || (purpose === 'vision' && s.analysis_mode !== 'visual' && !s.vision)) continue
+    const binding = purpose === 'vision' ? s.vision || s.analysis : s[purpose]
+    const connection = s.connections.find(c => c.id === binding?.connection_id)
+    if (binding && connection && failedCheck(connection, purpose, binding.model)) {
+      return { model: binding.model, account: connection.validation_status === 'failed' }
+    }
+  }
+  return null
+}
+
+export function hasFailedSelection(s: ModelSettings): boolean {
+  return !!failedSelection(s)
+}
+
+export function applyValidation(s: ModelSettings, id: string, result: ValidationResult, model?: string, purpose: Role = 'analysis', checkedVision = false): ModelSettings {
   const ok = passed(result)
   return {
     ...s,
@@ -100,11 +148,18 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
       const url = result.normalized_base_url && presetKey(c) === 'compatible' ? result.normalized_base_url : c.base_url
       const trialFailed = result.probe_kind === 'trial' && result.trial_passed === false
       const trialPassed = result.probe_kind === 'trial' && result.trial_passed === true
+      const transient = result.result === 'transient' || isRetryableUpstreamError(result.error_type || '')
+      const scoped = !!model && !ok && !transient && !['invalid_key', 'bad_endpoint', 'insufficient_quota', 'console_host'].includes(result.error_type || '')
+      const checkedPurpose = result.error_type === 'vision_unsupported' || result.error_code === 'vision_unsupported' ? 'vision' : purpose
+      const analysisOkVisionMiss = !ok && purpose === 'analysis' && checkedPurpose === 'vision'
+      const failures = (c.failed_model_checks || []).filter(item => item.model !== model || (item.purpose !== checkedPurpose && !(ok && checkedVision && item.purpose === 'vision')))
+      if (scoped && model) failures.push({ purpose: checkedPurpose, model })
       return {
         ...c,
+        ...(model && (ok || scoped) ? { failed_model_checks: failures } : {}),
         base_url: url,
-        validation_status: ok ? 'ok' : result.result === 'transient' || isRetryableUpstreamError(result.error_type || '') ? 'transient' : 'failed',
-        validation_error_type: ok ? '' : (result.error_type || 'unknown'),
+        validation_status: (ok || analysisOkVisionMiss) ? 'ok' : scoped ? c.validation_status || 'unchecked' : transient ? 'transient' : 'failed',
+        validation_error_type: (ok || analysisOkVisionMiss) ? '' : scoped ? c.validation_error_type : result.error_type || 'unknown',
         // 1.5.9 3B/N3: successful test clears the lock; real insufficient_quota stamps it.
         ...(ok
           ? { quota_exhausted_at: null }
@@ -163,9 +218,9 @@ export function setCoverSeparate(
 
 export function setCoverEnabled(s: ModelSettings, enabled: boolean, lists: Record<string, ModelList>): ModelSettings {
   const main = mainConnection(s)
-  if (!enabled) return { ...s, cover_enabled: false }
+  if (!enabled) return { ...s, cover_enabled: false, prefer_local_cover: true }
   if (main && !endpointProviderReady(main)) return s
-  return { ...s, cover_enabled: true, ...(!s.cover && main ? { cover_follows_analysis: true, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
+  return { ...s, cover_enabled: true, prefer_local_cover: false, ...(!s.cover && main ? { cover_follows_analysis: true, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
 }
 
 /** The "画面识别" switch: on = smart selection (multimodal models sample frames), off = subtitles only. */
@@ -184,7 +239,14 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 /** Model picked in the cover section: stays following only when it is on the analysis connection. */
 export function setCoverModel(s: ModelSettings, connectionId: string, model: string): ModelSettings {
   // E1: an explicit cover model pick is independent; only 「跟随分析」 turns following on.
-  return { ...s, cover_enabled: true, cover_follows_analysis: false, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
+  return {
+    ...s,
+    cover_enabled: true,
+    prefer_local_cover: false,
+    cover_follows_analysis: false,
+    cover_design_mode: 'editorial_edit',
+    cover: { ...cleanBinding(connectionId), model, model_source: 'user' },
+  }
 }
 
 export { coverFollowsAnalysis }
@@ -217,11 +279,13 @@ export function visionFollowLacksCapability(s: ModelSettings, lists: Record<stri
 export { VISION_HINT_KEY }
 
 /** First blocking problem before save, in page order. */
-export function saveIssue(s: ModelSettings): SaveIssue | null {
+export function saveIssue(s: ModelSettings, allowAccountOnly = false): SaveIssue | null {
   for (const role of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if (role === 'analysis' && allowAccountOnly && !s.analysis?.model.trim()
+        && s.connections.some(c => persistableConnection(c, new Set()))) continue
     if (role === 'vision' && !s.vision) continue
     if (role === 'transcription' && s.transcription?.provider !== 'cloud') continue
-    if (role === 'cover' && !s.cover_enabled) continue
+    if (role === 'cover' && (!s.cover_enabled || !s.cover?.model.trim())) continue
     const binding = s[role]
     const connection = s.connections.find(c => c.id === binding?.connection_id)
     if (!connection) return { role, reason: 'provider' }
@@ -260,11 +324,14 @@ export function validationTargets(s: ModelSettings): { role: Role; connection: C
 
 /** Document to send: drop unused blank drafts; keep compatible rows that already have a URL. */
 export function forSave(s: ModelSettings): ModelSettings {
-  const cover = !s.cover_enabled && !s.cover?.model ? null : s.cover
+  const cover = s.cover?.model.trim() ? s.cover : null
   const active = new Set([s.analysis?.connection_id, s.vision?.connection_id, cover?.connection_id, s.transcription?.connection_id])
   return {
     ...s,
     cover,
+    analysis: s.analysis?.model.trim() ? s.analysis : null,
+    cover_enabled: !!cover && s.cover_enabled,
+    cover_follows_analysis: cover ? s.cover_follows_analysis : false,
     connections: s.connections
       .filter(c => persistableConnection(c, active))
       .map(c => ({

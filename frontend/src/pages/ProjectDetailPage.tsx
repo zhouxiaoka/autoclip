@@ -135,9 +135,11 @@ const ProjectDetailPage: React.FC = () => {
           if (version !== loadVersion.current) return
           console.error('Failed to load clips/collections:', err)
           setCurrentProject(project)
+          upsertProject(project)
         }
       } else {
         setCurrentProject(project)
+        upsertProject(project)
       }
     } catch (err) {
       if (version !== loadVersion.current) return

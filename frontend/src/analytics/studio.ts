@@ -114,6 +114,11 @@ export function trackOutputShare(projectId: string, properties: { share_target: 
   captureBusinessEvent('studio_output_shared', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
+/** First play of a rendered output video on a result card; enum properties only. */
+export function trackOutputPlayed(projectId: string, properties: VariantProperties = {}) {
+  captureBusinessEvent('studio_output_played', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
+}
+
 /** Anonymous three-level rating; free text is never collected. */
 export function trackOutputRating(projectId: string, properties: { output_rating: 'ready' | 'needs_edit' | 'unusable' } & VariantProperties) {
   captureBusinessEvent('studio_output_rated', safeStudioProperties({ ...workflow.context(projectId), ...properties }))

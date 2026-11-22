@@ -538,7 +538,7 @@ class SpeechRecognizer:
                 str(audio_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=300)
             
             if result.returncode != 0:
                 raise SpeechRecognitionError(f"音频提取失败: {result.stderr}")
@@ -1121,11 +1121,21 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         raise SpeechRecognitionError(NO_AUDIO_MESSAGE)
     # 创建配置。本地导入会带上设置里的时间戳 / 超时 / 密钥；缺了这些参数会在进 Whisper 之前 TypeError。
     from backend.services.ai_model_settings import load as load_model_settings
+    from backend.services.cloud_transcription import clear_asr_info, record_asr_info
+    clear_asr_info()
     model_settings = load_model_settings()
     selection = model_settings.transcription if model_settings else None
     if method == 'sensevoice_local' or method == 'auto' and selection and selection.provider == 'sensevoice_local':
+        from backend.core import llm_usage
         from backend.services.sensevoice_runtime import transcribe
-        return transcribe(Path(video_path), output_path, language, timeout)
+        started = time.monotonic()
+        logger.info('Local ASR started: provider=sensevoice_local model=SenseVoiceSmall language=%s', language)
+        result = transcribe(Path(video_path), output_path, language, timeout)
+        elapsed = round(time.monotonic() - started, 2)
+        record_asr_info(asr_provider='sensevoice_local', asr_model='SenseVoiceSmall', asr_route='local')
+        llm_usage.record_asr('sensevoice_local', 'SenseVoiceSmall', route='local', seconds=elapsed)
+        logger.info('Local ASR completed: provider=sensevoice_local model=SenseVoiceSmall seconds=%.2f', elapsed)
+        return result
     if method == 'auto' and selection and selection.provider == 'cloud':
         from backend.services.cloud_transcription import transcribe
         return transcribe(Path(video_path), output_path, model_settings, language, timeout)
@@ -1171,7 +1181,15 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         else:
             raise SpeechRecognitionError("没有可用的语音识别服务，请安装whisper或配置API密钥")
     
-    return recognizer.generate_subtitle(video_path, output_path, config)
+    from backend.core import llm_usage
+    started = time.monotonic()
+    logger.info('Local ASR started: provider=%s model=%s language=%s', config.method.value, config.model, language)
+    result = recognizer.generate_subtitle(video_path, output_path, config)
+    elapsed = round(time.monotonic() - started, 2)
+    record_asr_info(asr_provider=config.method.value, asr_model=str(config.model or ''), asr_route='local')
+    llm_usage.record_asr(config.method.value, str(config.model or ''), route='local', seconds=elapsed)
+    logger.info('Local ASR completed: provider=%s model=%s seconds=%.2f', config.method.value, config.model, elapsed)
+    return result
 
 
 def get_available_speech_recognition_methods() -> Dict[str, bool]:

@@ -132,6 +132,7 @@
 
 /* Keep the publish cover at its original ratio too. */
 .studio-post-cover {
+  display: block;
   border: 1px solid var(--ac-line);
   border-radius: 10px;
   flex: none;
@@ -212,7 +213,7 @@
 
 .studio-output-card .studio-post-body {
   gap: 10px;
-  min-height: 132px;
+  min-height: 0;
 }
 
 .studio-output-card .studio-post-cover {
@@ -267,22 +268,50 @@
   -webkit-line-clamp: 2;
 }
 
-.studio-output-card .studio-post-actions {
+.studio-post-edit label {
   display: grid;
-  gap: 2px 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 8px;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ac-sub);
 }
 
-.studio-output-card .studio-post-actions > * {
-  border-radius: 6px;
+.studio-post-edit .ac-textarea { resize: vertical; }
+.studio-output-card .studio-post-actions { gap: 8px 12px; margin-top: 12px; }
+.studio-cover-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 10px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--ac-line);
   font-size: 12px;
-  justify-content: flex-start;
-  line-height: 1.4;
-  min-height: 30px;
-  padding: 5px 0;
-  text-align: left;
+  color: var(--ac-sub);
 }
+.studio-cover-tools .ac-btn { padding-inline: 0; }
+.studio-cover-preview {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  max-width: 40%;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-sub);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.studio-cover-preview .studio-post-cover { max-width: 100%; }
+.studio-cover-preview:hover { color: var(--ac-ink); text-decoration: underline; }
+.studio-cover-preview:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.studio-publish-tools > .ac-btn--cta { display: flex; width: 100%; margin-top: 12px; }
 
 .studio-output-card .ac-card-foot {
   margin-top: auto;
@@ -443,7 +472,7 @@
 }
 
 .studio-style-picker {
-  --style-card: 150px;
+  --style-card: 128px;
   --style-gap: 22px;
   display: flex;
   flex-direction: column;
@@ -472,7 +501,8 @@
 
 .studio-style-row {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--style-card)), 1fr));
   gap: var(--style-gap);
   align-items: flex-start;
   margin: 0;
@@ -482,8 +512,7 @@
 .studio-style-card {
   position: relative;
   z-index: 1;
-  width: var(--style-card);
-  flex: 0 0 var(--style-card);
+  min-width: 0;
   border-radius: 16px;
   cursor: pointer;
   outline: none;
@@ -814,7 +843,7 @@
 .ac-welcome-play:hover, .ac-welcome-play:focus-visible { background: white; color: #211d19; }
 .ac-welcome-play:disabled { opacity: .65; cursor: wait; }
 @media (max-width: 760px) {
-  .ac-home-content:has(.ac-welcome) { padding: 28px 22px !important; }
+  .ac-home-content:has(.ac-welcome, .ac-creative-import) { padding: 28px 22px !important; }
   .ac-welcome { grid-template-columns: 1fr; margin: 20px auto; max-width: 540px; gap: 32px; }
   .ac-welcome-copy h1 { white-space: normal; }
   .ac-welcome-sample { aspect-ratio: 1.78; }

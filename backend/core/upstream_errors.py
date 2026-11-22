@@ -163,6 +163,14 @@ def classify_upstream_error(
     )
 
 
+def classify_provider_429(body: str) -> ClassifiedUpstreamError:
+    """A provider 429 is transient unless its response identifies exhausted quota."""
+    classified = classify_upstream_error(429, body)
+    if classified.error_type is UpstreamErrorType.INSUFFICIENT_QUOTA:
+        return classified
+    return classify_upstream_error(429)
+
+
 def classify_exception(error: BaseException, *, finish_reason: str | None = None) -> ClassifiedUpstreamError:
     """从常见 SDK 异常取出状态码和响应体再分类。不改变异常、不重试。"""
     status, body = http_error_parts(error)

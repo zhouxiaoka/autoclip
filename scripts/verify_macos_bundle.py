@@ -48,6 +48,14 @@ assert Path(backend.__file__).resolve().is_relative_to(resources), "Backend impo
 from backend.core.event_catalog import catalog_path, load_catalog
 assert catalog_path() == resources/'backend/core/event_catalog.json'
 assert load_catalog().get('events'), 'Bundled event catalog is unreadable'
+from backend.utils.ffmpeg_utils import ytdlp_ffmpeg_options
+from yt_dlp.utils._jsruntime import NodeJsRuntime
+ytdlp_opts = ytdlp_ffmpeg_options()
+assert Path(ytdlp_opts.get('ffmpeg_location', '')).resolve() == (resources/'ffmpeg/ffmpeg').resolve(), ytdlp_opts
+node_path = (ytdlp_opts.get('js_runtimes') or {}).get('node', {}).get('path', '')
+assert node_path and Path(node_path).resolve().is_relative_to(resources/'python'), ytdlp_opts
+node_info = NodeJsRuntime(node_path).info
+assert node_info is not None and node_info.supported, node_info
 from backend.services.studio.models import Draft,Scene
 from backend.services.studio.render import render_draft
 from backend.services.studio.store import directory

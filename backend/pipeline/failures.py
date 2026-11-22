@@ -251,6 +251,10 @@ def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> Pip
             "到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
             code="subtitle_setup",
         )
+    if code in {"validation_failed", "model_validation_failed"}:
+        action = ("请在转写设置中检查账号密钥或接口地址。" if code == "validation_failed"
+                  else "请更换转写型号或重新测试。")
+        return PipelineFailure(stage, "所选云端转写未通过校验。", action, code="provider_error")
     if code == "cloud_not_configured":
         return PipelineFailure(
             stage,

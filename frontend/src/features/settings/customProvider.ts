@@ -193,7 +193,10 @@ export function toConnection(draft: CustomProviderDraft, id: string = crypto.ran
 export function listFromOffers(offers: CustomModelOffer[], verified: ModelEntry[] = []): ModelList {
   return {
     models: offers.filter(offer => offer.enabled).map(offer => ({
+      ...verified.find(model => model.id === offer.id),
       id: offer.id,
+      capability_source: 'custom',
+      kind: offer.types.includes('image') ? 'image' : offer.types.includes('language') ? 'language' : offer.types.includes('asr') ? 'asr' : undefined,
       capability: offer.vision ? 'multimodal' : offer.types.includes('language') ? 'text' : null,
       analysis: offer.scenarios.includes('analysis') || offer.types.includes('language'),
       image: offer.types.includes('image') || offer.scenarios.includes('cover'),

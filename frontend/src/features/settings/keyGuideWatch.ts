@@ -92,13 +92,19 @@ export async function scanClipboard(source: 'focus' | 'button'): Promise<'offere
   return 'offered'
 }
 
+const dismissedSessionKeys = new Set<string>()
+
 export async function dismissCurrentOffer(key: string) {
+  if (key) dismissedSessionKeys.add(key.trim())
   remember(await fingerprint(key))
 }
 
-export function offerPastedKey(text: string, currentProviderId: string): boolean {
+export function offerPastedKey(text: string, currentProviderId: string, baseUrl = ''): boolean {
   const offer = offerFromText(text, 'paste')
-  if (!offer?.hintedProviderId || offer.hintedProviderId === currentProviderId) return false
+  if (!offer) return false
+  if (dismissedSessionKeys.has(offer.key.trim())) return false
+  const current = currentProviderId === 'compatible' ? inferProviderId('', baseUrl, targets).providerId : currentProviderId
+  if (!offer.hintedProviderId || offer.hintedProviderId === current) return false
   publishOffer(offer)
   return true
 }

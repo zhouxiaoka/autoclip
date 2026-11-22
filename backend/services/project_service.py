@@ -190,8 +190,22 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if filters:
             filter_data = filters.model_dump()
             filter_dict = {k: v for k, v in filter_data.items() if v is not None}
-        
-        items, pagination_response = self.get_paginated(pagination, filter_dict)
+
+        skip = (pagination.page - 1) * pagination.size
+        items, total = self.repository.list_paginated(
+            skip=skip,
+            limit=pagination.size,
+            filters=filter_dict or None,
+        )
+        pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+        pagination_response = PaginationResponse(
+            page=pagination.page,
+            size=pagination.size,
+            total=total,
+            pages=pages,
+            has_next=pagination.page < pages,
+            has_prev=pagination.page > 1,
+        )
         
         # Convert to response schemas
         project_responses = []

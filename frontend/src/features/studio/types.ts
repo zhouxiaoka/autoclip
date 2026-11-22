@@ -1,3 +1,4 @@
+import type { HtmlTemplateChoice } from './editingStyle'
 import type { AttemptReceipt } from '../../analytics/workflow'
 export type Goal = 'content' | 'highlight' | 'promo'
 export type Language = 'source' | 'zh' | 'en' | 'ja'
@@ -60,6 +61,7 @@ export interface Packaging {
   tags: { at: number; text: string }[]; tags_enabled: boolean; captions_enabled?: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
+  fallback_captions?: 'source' | 'translated' | null
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
   mood?: 'calm' | 'serious' | 'bold' | 'warm' | 'playful' | null
   palette?: 'azure' | 'amber' | 'coral' | 'mint' | 'lemon' | 'rose' | 'lilac' | null
@@ -72,6 +74,7 @@ export interface Draft {
   subtitles: boolean; subtitle_style?: SubtitleStyle; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
   /** Automatic template packaging; kept as-is on save so edits never drop it. */
+  html_template?: HtmlTemplateChoice | null
   packaging?: Packaging | null
 }
 export interface QaCheck { checker: 'avsync' | 'face' | 'loudness' | 'jitter' | 'ending'; outcome: 'pass' | 'fail' | 'skip'; bucket: string; duration_ms: number }
@@ -79,7 +82,12 @@ export interface QaReport { schema_version: 1; mode: 'shadow'; duration_ms: numb
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
+  post?: PostCopy
+  cover_revision?: string
+  cover_pending?: boolean
   brand_outro?: boolean
+  requested_template?: HtmlTemplateChoice
+  html_template?: HtmlTemplateChoice
   result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean; template_render?: { template?: string } }
   qa?: QaReport | null
 }
@@ -166,6 +174,7 @@ export function portraitDesign(draft: Draft): Draft {
 export interface SourceWindow { start: number; end: number }
 
 export interface ImportOptions {
+  auto_start?: boolean
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
@@ -185,6 +194,8 @@ export interface ImportPlan {
   id: string; source_duration?:number; suggested_goals: Goal[]; selected_goals?: Goal[]
   mode: 'ai' | 'manual' | 'fallback' | 'local'; content_type: string; reason: string; confidence: number
   preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
+  confirmed_preferences?: ImportPlan['preferences']
+  goal_preferences?: Partial<Record<Goal, ImportPlan['preferences']>>
   overrides: ImportOptions
 }
 export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:'', portrait_style:'auto'}

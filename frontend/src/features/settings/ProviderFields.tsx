@@ -51,6 +51,10 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const showHint = liveHint && liveHint !== key
   const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || ((failed || transient) && errorType) || ''
   const keyLink = sponsorKeyLink(key)
+  const editKey = (value: string) => {
+    const next = value.trim()
+    if (next !== (connection.api_key ?? '')) onEdit({ api_key: next || (connection.has_key ? undefined : '') })
+  }
   const addressEditable = canEditAddress(key)
   const officialHostsOnly = key === 'deepseek' || key === 'gemini' || key === 'api88' || key === 'infistar'
   return <>
@@ -74,10 +78,13 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             placeholder={connection.has_key ? t('已保存；留空则不改') : preset?.placeholder || 'sk-…'}
             onPaste={event => {
               const text = event.clipboardData?.getData('text') || ''
-              if (text && offerPastedKey(text, key || connection.provider)) event.preventDefault()
+              if (text && offerPastedKey(text, key || connection.provider, connection.base_url)) event.preventDefault()
             }}
-            onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
-            onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
+            onChange={e => editKey(e.target.value)}
+            onBlur={e => editKey(e.target.value)} />
+          {connection.has_key && connection.api_key_masked && !connection.api_key && (
+            <span className="ac-hint" data-testid="masked-api-key">{t('当前已保存密钥：{{masked}}', { masked: connection.api_key_masked })}</span>
+          )}
           {(() => {
             const promo = connection.provider === 'apimart' || connection.provider === 'api88' || connection.provider === 'infistar' ? connection.provider : null
             const href = promo ? promotionRegisterUrl(promo, preset?.sponsor?.registerUrl || '') : null

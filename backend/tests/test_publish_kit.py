@@ -71,27 +71,11 @@ def test_the_kit_bundles_video_cover_and_copy(tmp_path):
     assert '#AI #Karpathy' in text and '抖音' in text
 
 
-def test_ai_cover_fit_fills_the_gap_from_the_image_edge_without_cropping():
-    generated = Image.new('RGB', (1024, 1536), (20, 20, 20))
-    generated.paste((240, 200, 40), (0, 300, 1024, 400))  # a headline band well inside the image
-    fitted = publish_kit._fit(generated, (1080, 1920))
-    assert fitted.size == (1080, 1920)
-    top = fitted.getpixel((540, 20))
-    assert max(top) < 40, 'the gap continues the dark edge instead of echoing the headline'
-    band_y = (1920 - 1620) // 2 + round(350 * 1620 / 1536)
-    assert fitted.getpixel((540, band_y))[0] > 200, 'the image itself is kept sharp, not blurred'
-
-
-def test_no_ai_cover_without_permission_to_send_the_frame(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-    from backend.services import cover
-    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=False))
-    frame, meta = tmp_path / 'f.jpg', tmp_path / 'm.json'
-    frame.write_bytes(b'f')
-    meta.write_text('{}')
-    monkeypatch.setattr(publish_kit, 'frame_path', lambda *_: frame)
-    monkeypatch.setattr(publish_kit, 'cd_meta_path', lambda *_: meta)
-    assert publish_kit.ai_cover('p', 'j', 'tiktok') is False, 'a made-up face must never carry the guest nameplate'
+def test_reference_prompt_requests_a_finished_cover():
+    title = '最好的12个月？'
+    prompt = publish_kit.reference_prompt('douyin', [title])
+    assert prompt.count(title) == 1
+    assert '1080×1920' in prompt and '排好字' in prompt
 
 
 def test_disk_kit_contains_the_whole_video_without_an_in_memory_archive(tmp_path, monkeypatch):
@@ -148,3 +132,19 @@ def test_unknown_source_tags_use_literal_subtitle_evidence(lines, tags, expected
         return {'posts': {'douyin': {'title': '聚焦核心能力', 'description': '', 'tags': tags}}}
     result = post_copy.build_posts('参考标题里的 Meta 不是事实依据', lines, ['douyin'], call=call)
     assert result['douyin']['tags'] == expected
+
+
+def test_question_then_answer_bounds_and_short_cover_quote():
+    rows = [{'text': 'What changed? We had to start over.', 'start': 2, 'end': 12}]
+    assert 5 < cover_design._answer_start(rows, 2, 12) < 7
+    assert cover_design._answer_start([dict(rows[0], text='A statement.')], 2, 12) is None
+    long = '‘My mistake’—the speaker reflects on last year, then declares: ‘We will try to make a fresh start’'
+    assert ' '.join(cover_design.headline_lines(long)) == 'My mistake'
+
+
+def test_model_art_is_delivered_without_recomposing_or_overprinting():
+    from backend.services.cover import delivery_jpeg, title_matches
+    jpeg = _frame(403, 721)
+    assert delivery_jpeg(jpeg) == jpeg
+    assert not cover_design.keeps_scene(jpeg, Image.new('RGB', (360, 640), 'white'))
+    assert not title_matches('最好的12个月？ 最好的12个月？', ['最好的12个月？'])

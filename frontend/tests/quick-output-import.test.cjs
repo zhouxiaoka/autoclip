@@ -32,7 +32,6 @@ test('quick import submits platform targets, branding and auto-starts to results
   '../../analytics/flags':{useFlag:()=>false,flagEnabled:()=>false,flagValue:()=>'button',flagAssigned:()=>false,featureSnapshot:()=>({pkg_templates_v1:false})},
   './TemplatePicker':{default:'template-picker',templateImportFields:()=>({})},
   './StyleProbeLine':{default:'style-probe'},
-  './ReadinessLine':{default:'readiness-line'},
   './editingStyleSession':{readStyle:()=>({key:'',status:'idle',result:null,latencyMs:0})},
   './platformLabel':{platformLabel:id=>id},'./platformMemory':{hasSuccessHistory:()=>false,readRememberedPlatforms:()=>null,resolvePlatforms:()=>({platforms:['douyin'],source:'user'}),samePlatforms:()=>true,takeReuseImport:()=>null,writeRememberedPlatforms(){}},
   './pasteStart':{claimBackgroundWhisperInstall:()=>false,importUrlKind: text => { try { const u = new URL(String(text||'').trim()); if (u.protocol!=='https:') return null; const h=u.hostname.toLowerCase(); if (h==='youtu.be'||h==='youtube.com'||h.endsWith('.youtube.com')) return 'youtube'; if (h==='b23.tv'||h==='bilibili.com'||h.endsWith('.bilibili.com')) return 'bilibili'; return null } catch { return null } },isVideoFile:()=>false,shouldArmAutostart: () => false, shouldAutoStart:()=>false,shouldBackgroundInstallWhisper:()=>false,UNDO_MS:3000},
@@ -347,7 +346,18 @@ test('leaving for cloud transcription preserves the original video and an attach
       transcriberMissing: true, navigate: route => routes.push(route),
     })
     await React.act(async () => { buttonText(view.host, '文件导入').click() })
+    const picker = view.host.querySelector('input[aria-label="视频文件"]')
+    assert.equal(picker.hidden, true, 'the OS file input must not add an untranslated row')
+    let pickerClicks = 0
+    picker.addEventListener('click', () => { pickerClicks++ })
+    await React.act(async () => { buttonText(view.host, '选择一段视频').click() })
+    assert.equal(pickerClicks, 1)
     await chooseFile(window, React.act, view)
+    await React.act(async () => { buttonText(view.host, '换一个视频').click() })
+    assert.equal(pickerClicks, 2)
+    Object.defineProperty(picker, 'files', { configurable: true, value: [] })
+    await React.act(async () => { picker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    assert.match(view.host.textContent, /short\.mp4/)
     await React.act(async () => { buttonText(view.host, '改用云端转写').click() })
     assert.equal(routes[0], '/settings?section=speech&provider=cloud&return_import=1')
     await view.remount()
@@ -404,7 +414,6 @@ async function mountImport(window, React, h, calls, options = {}) {
     './ImportSetupCard': { default: () => null },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
-    './ReadinessLine': { default: 'readiness-line' },
     './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: () => null },

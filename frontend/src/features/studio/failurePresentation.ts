@@ -222,7 +222,7 @@ function primaryFor(input: PresentInput): PrimaryAction {
   if (upstream === 'insufficient_quota' || code === 'insufficient_quota') {
     return { id: 'quota_check', label: QUOTA_RETRY_CHECK_BALANCE, destination: settingsDestination(input.failure_stage) }
   }
-  if (code === 'llm_not_configured' || code === 'llm_auth_invalid' || code === 'invalid_key' || code === 'authentication' || upstream === 'invalid_key' || upstream === 'permission_denied') {
+  if (code === 'llm_not_configured' || code === 'llm_auth_invalid' || code === 'invalid_key' || code === 'authentication' || code === 'bad_endpoint' || upstream === 'invalid_key' || upstream === 'permission_denied' || upstream === 'bad_endpoint') {
     return { id: 'settings', label: '去设置', destination: settingsDestination(input.failure_stage) }
   }
   const connections = Number(input.connectionCount)

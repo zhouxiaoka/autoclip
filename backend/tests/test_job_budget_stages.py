@@ -262,7 +262,7 @@ def test_render_ffmpeg_wall_time_does_not_spend_clip_budget(isolated, monkeypatc
 
 def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isolated, monkeypatch):
     from backend.core import job_budget
-    from backend.services.studio import intelligence
+    from backend.services.studio import intelligence, packaging
     now = [100.0]
     monkeypatch.setattr(job_budget.time, 'monotonic', lambda: now[0])
     draft = {'id': 'd1', 'title': 'Title', 'scenes': [{'id': 's1', 'label': 'Scene', 'start': 0.0, 'end': 12.0}]}
@@ -281,7 +281,7 @@ def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isol
     monkeypatch.setattr(jobs, '_posts_for', lambda *args: {})
     calls = []
     def slow(*args):
-        calls.append(True)
+        calls.append((args[0] == packaging.PROMPT, job_budget.clip_job_read_timeout(1000)))
         while not job_budget.budget_expired():
             now[0] += 30
         raise JobDurationExceeded()
@@ -293,4 +293,7 @@ def test_on_demand_packaging_timeout_persists_fallback_and_reaches_dispatch(isol
     assert state['output_variants'][0]['status'] == 'queued'
     pack = state['drafts'][0]['packaging']
     assert pack['fallback'] and pack['cues'][0]['text'] == 'Source words remain available'
-    assert dispatched == ['ondemand-step-budget'] and calls == [True]
+    assert dispatched == ['ondemand-step-budget']
+    assert calls == [(True, 120), (True, 120), (False, 60)]
+    assert now[0] == 100.0 + packaging.PACKAGING_BUDGET_SEC
+    assert pack['fallback_captions'] == 'source'

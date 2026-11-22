@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'
+import { createHashRouter, RouterProvider } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import { theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -75,6 +75,8 @@ function Root() {
   )
 }
 
+const router = createHashRouter([{ path: '*', element: <Root /> }])
+
 function ThemedApp() {
   useTranslation()
   const { theme } = useTheme()
@@ -106,9 +108,7 @@ function ThemedApp() {
     }}
     >
     <React.StrictMode>
-      <HashRouter>
-        <Root />
-      </HashRouter>
+      <RouterProvider router={router} />
     </React.StrictMode>
     </ConfigProvider>
   )

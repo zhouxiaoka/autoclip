@@ -26,8 +26,11 @@ export function errorText(error: unknown) {
   return (error as Error)?.message || '请求失败，请重试'
 }
 
-/** Stable machine code of a coded 422 ({ detail: { code } }), or undefined. Never derived from message text. */
+/** Stable machine code of a coded 422 ({ detail: { code } } or { detail: { error_code } }), or undefined. Never derived from message text. */
 export function errorCode(error: unknown): string | undefined {
   const detail = (error as any)?.response?.data?.detail
-  return detail && !Array.isArray(detail) && typeof detail === 'object' && typeof detail.code === 'string' ? detail.code : undefined
+  if (!detail || Array.isArray(detail) || typeof detail !== 'object') return undefined
+  if (typeof detail.code === 'string') return detail.code
+  if (typeof detail.error_code === 'string') return detail.error_code
+  return undefined
 }

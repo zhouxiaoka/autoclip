@@ -19,6 +19,7 @@ from backend.core.provider_presets import (
     default_models_map,
     get_provider,
     image_catalog_map,
+    iter_providers,
     provider_labels_map,
 )
 
@@ -83,6 +84,20 @@ def known_text_only(model: str) -> bool:
     return any(marker in name for marker in _TEXT_ONLY_MARKERS)
 
 
+_CATALOG_VISION_IDS = {
+    model.lower() for preset in iter_providers()
+    for model in (*preset.candidates['vision'], *(preset.catalog or ()))
+    if model in preset.candidates['vision'] or _openai_vision(model.lower()) or any(marker in model.lower() for marker in _VISION_MARKERS)
+} | {
+    'qwen3-vl-plus', 'qwen3-vl-flash', 'claude-haiku-5-5', 'claude-sonnet-5-5',
+    'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5.5', 'gpt-6.1-sol', 'o1', 'o3', 'o3-pro', 'o4-mini',
+}
+
+
+def catalog_vision_model(model: str) -> bool:
+    return model.lower() in _CATALOG_VISION_IDS and not known_text_only(model)
+
+
 def supports_vision(model: str) -> bool:
     name = (model or "").strip().lower()
     # Explicitly verified official model IDs; these no longer carry a -vl suffix.
@@ -93,7 +108,9 @@ def supports_vision(model: str) -> bool:
     openai = _openai_vision(name)
     if openai is not None:
         return openai
-    return any(m in name for m in _VISION_MARKERS)
+    # Marker rules apply only to IDs in the shipped catalog. A gateway alias
+    # containing "vision" or "-vl" alone is not evidence of image input.
+    return name in _CATALOG_VISION_IDS
 
 
 # ---- 封面生图：跟着文本模型的服务商走，同一个 key ----

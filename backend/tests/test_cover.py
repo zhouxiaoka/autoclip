@@ -268,18 +268,18 @@ def test_cover_generation_logs_redact_key_shaped_model(
     else:
         _project(data_dir)
         monkeypatch.setattr(cover, "load_config", lambda: cover.CoverConfig(
-            enabled=True, provider="openai", api_key="fixture-key", model=model,
+            enabled=True, provider="openai", api_key="fixture-key", model=model, allow_send_frame=True, design_mode="editorial_edit",
         ))
         monkeypatch.setattr(cover, "verify_endpoint", lambda cfg: {})
         monkeypatch.setattr(cover, "read_image_text", lambda **kwargs: "fixture title")
         result = cover.generate_cover(
             project_id="p1", clip_id="1", title="fixture title", session=session,
         )
-        assert result["ok"] and result["method"] == "model_bg"
+        assert result["ok"] and result["method"] == "model"
 
     # Only diagnostics are redacted; the provider still receives the selected model.
     assert len(session.calls) == 1
-    assert session.calls[0][2]["json"]["model"] == model
+    assert (session.calls[0][2].get("json") or session.calls[0][2]["data"])["model"] == model
     assert "封面生图 provider=openai" in caplog.text
     assert model not in caplog.text
     assert f"model={expected_model}" in caplog.text
@@ -330,7 +330,7 @@ def test_model_failure_falls_back_to_local_or_frame(data_dir, fake_frame, monkey
 
     monkeypatch.setattr("backend.services.cover.generate_image", boom)
     result = cover_svc.generate_cover(
-        project_id="p1", clip_id="1", title="翻盘高光", content_type="game",
+        project_id="p1", clip_id="1", title="翻盘高光", content_type="game", design_options='{"mode":"editorial_edit"}',
     )
     assert result["ok"]
     assert result["method"] in ("local_overlay", "frame")
@@ -434,7 +434,12 @@ def test_gemini_cover_uses_native_multimodal_request():
     assert args['json']['generationConfig']['responseModalities'] == ['TEXT', 'IMAGE']
 
 
-@pytest.mark.parametrize('model,route,asynchronous', [('qwen-image-2.0', 'multimodal-generation', False), ('wan2.7-image', 'image-generation', True), ('wan2.6-t2i', 'image-generation', True)])
+@pytest.mark.parametrize('model,route,asynchronous', [
+    ('qwen-image-2.0', 'multimodal-generation', False),
+    ('qwen-image-2.1-pro', 'multimodal-generation', False),
+    ('wan2.7-image', 'image-generation', True),
+    ('wan2.6-t2i', 'image-generation', True),
+])
 def test_modern_dashscope_routes_and_extracts_images(model, route, asynchronous):
     from backend.core.image_providers import generate_image, ImageRequest
     image = _jpeg()
@@ -446,6 +451,7 @@ def test_modern_dashscope_routes_and_extracts_images(model, route, asynchronous)
     args = session.calls[0][2]
     assert session.calls[0][1].endswith(f'/services/aigc/{route}/generation')
     assert ('X-DashScope-Async' in args['headers']) == asynchronous
+    assert args['json']['model'] == model
     assert args['json']['input']['messages'][0]['content'] == [{'text': 'cover'}]
     assert args['json']['parameters']['n'] == 1
 
@@ -475,7 +481,7 @@ def test_request_failure_still_produces_local_cover_without_private_error(data_d
         def post(self, *args, **kwargs):
             calls.append(1)
             raise getattr(requests.exceptions, failure)('private-url synthetic-key private-provider-body')
-    result = cover.generate_cover(project_id='p1', clip_id='1', title='采访观点', session=BrokenSession())
+    result = cover.generate_cover(project_id='p1', clip_id='1', title='采访观点', design_options='{"mode":"editorial_edit"}', session=BrokenSession())
     assert result['ok'] and result['method'] in ('local_overlay', 'frame')
     assert Path(result['path']).read_bytes().startswith(b'\xff\xd8')
     assert len(calls) == 1  # A failed paid request is not replayed automatically.
@@ -499,8 +505,9 @@ def test_ocr_connection_failure_preserves_already_generated_cover(data_dir, fake
             if len(calls) == 1:
                 return _Resp(200, {'data': [{'b64_json': base64.b64encode(_jpeg()).decode()}]})
             raise requests.exceptions.ConnectionError('private-url synthetic-key')
-    result = cover.generate_cover(project_id='p1', clip_id='1', title='采访观点', session=InterruptedOCR())
-    assert result['ok'] and result['method'] == 'model'
+    result = cover.generate_cover(project_id='p1', clip_id='1', title='采访观点', design_options='{"mode":"editorial_edit"}',session=InterruptedOCR())
+    assert result['ok'] and result['method'] == 'local_overlay'
+    assert cover.read_cover_meta('p1','1','bilibili')['model_text_validation']=='unavailable'
     assert len(calls) == 2
     assert Path(result['path']).read_bytes().startswith(b'\xff\xd8')
 
@@ -513,3 +520,26 @@ def test_unexpected_image_programming_failure_is_not_hidden_as_network(data_dir,
     with pytest.raises(RuntimeError, match='synthetic programming defect'):
         generate_image(provider='openai', api_key='synthetic-key', base_url='',
                        request=ImageRequest('cover', 1080, 1920), session=DefectiveSession())
+
+
+def test_reopening_an_export_reuses_its_running_cover_job(data_dir, monkeypatch):
+    from backend.services import cover
+    from threading import Event
+    started, finish = Event(), Event()
+    def generate(**kwargs):
+        started.set()
+        assert finish.wait(5)
+        return {'ok': True}
+    monkeypatch.setattr(cover, 'generate_cover', generate)
+    first = cover.start_generate(project_id='p1', clip_id='studio-test', title='Saved title')
+    try:
+        assert started.wait(3)
+        second = cover.start_generate(project_id='p1', clip_id='studio-test', title='Saved title')
+        assert second['job_id'] == first['job_id']
+    finally:
+        finish.set()
+        import time
+        deadline = time.monotonic() + 3
+        while cover.get_job(first['job_id'])['status'] == 'running' and time.monotonic() < deadline:
+            time.sleep(.01)
+    assert cover.get_job(first['job_id'])['status'] == 'completed'

@@ -114,7 +114,7 @@ def status(project_id: str, *, export_kits: bool = False) -> dict:
         if variant['status'] == 'completed' and job.get('status') == 'completed' and video.is_file():
             row['video_path'] = str(video)
             row['result'] = job.get('result')
-            cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+            cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'],variant['id'])
             row['cover_path'] = str(cover) if cover else None
             if export_kits:
                 post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}

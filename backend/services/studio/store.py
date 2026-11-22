@@ -467,6 +467,8 @@ def read(project_id: str):
             scope[1]['read_error'] = error
         raise
     data = json.loads(contents)
+    from backend.services.studio.template_choice import restore_manual_draft_templates
+    restore_manual_draft_templates(data)
     data.setdefault('schema_version', 1)
     data.setdefault('drafts', [])
     data.setdefault('events', [])
@@ -890,9 +892,16 @@ def settle_generation(data):
         return  # this attempt stamped nothing; do not record it completed from other rounds
     pool = data['output_variants'] if scope is None else scope
     variants = [item for item in pool if item['status'] != 'on_demand']
-    if all(item['status'] in ('completed', 'failed') for item in variants):
+    if all(item['status'] in ('completed', 'failed', 'cancelled') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
-        outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
+        failed_items = [item for item in variants if item['status'] == 'failed']
+        cancelled_items = [item for item in variants if item['status'] == 'cancelled']
+        outcome = (
+            'completed' if completed and len(completed) == len(variants)
+            else 'partial' if completed
+            else 'cancelled' if cancelled_items and not failed_items
+            else 'failed'
+        )
         from backend.core.failure_codes import sentry_codes
         jobs = {job['job_id']: job for job in data.get('jobs', [])}
         # one primary cause via failure_attribution (PM rule), no 'multiple' (it entered the denominator).
@@ -908,7 +917,7 @@ def settle_generation(data):
         if not variants:
             failures.append({'error_code': 'validation'})
         ranked = rank_failures(failures)
-        code = ranked[0]['error_code'] if ranked else None
+        code = ranked[0]['error_code'] if ranked else ('cancelled' if outcome == 'cancelled' else None)
         secondary = {}
         if len(ranked) > 1:
             secondary = {'secondary_error_codes': [f['error_code'] for f in ranked[1:]],
@@ -1223,6 +1232,9 @@ def save_draft(project_id, draft, *, create=False):
         if existing and existing['revision'] != draft.revision:
             raise ConflictError('草稿已在另一窗口修改，请重新加载后再保存')
         value = draft.model_dump()
+        if 'html_template' not in draft.model_fields_set:
+            from backend.services.studio.template_choice import manual_draft_template
+            value['html_template'] = existing.get('html_template') if existing else manual_draft_template(data)
         value.update(revision=existing['revision'] + 1 if existing else 1, updated_at=now())
         data['drafts'] = [d for d in data['drafts'] if d['id'] != draft.id] + [value]
         return value
@@ -1239,6 +1251,8 @@ def duplicate_draft(project_id, request):
         if request.draft.revision > parent['revision']:
             raise ConflictError('来源版本无效，请重新加载后再试')
         value = request.draft.model_dump()
+        if 'html_template' not in request.draft.model_fields_set:
+            value['html_template'] = parent.get('html_template')
         value.update(id=uuid.uuid4().hex, title=request.title, language=request.language,
                      revision=1, updated_at=now(), origin=parent.get('origin', 'manual'),
                      parent_draft_id=parent['id'], parent_revision=request.draft.revision)
@@ -1256,7 +1270,9 @@ def open_legacy_editor(project_id, draft, source_key, *, reuse_existing):
             linked = next((d for d in data['drafts'] if d['id'] == links.get(source_key)), None)
             if linked is not None:
                 return linked
+        from backend.services.studio.template_choice import manual_draft_template
         result = draft.model_dump()
+        result['html_template'] = manual_draft_template(data)
         result.update(revision=1, updated_at=now())
         data['drafts'].append(result)
         if reuse_existing:

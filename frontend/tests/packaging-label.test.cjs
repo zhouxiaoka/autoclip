@@ -32,3 +32,8 @@ test('bilingual label respects captions_enabled (r12 #23): same packaging on/off
  assert.equal(m.exports.packagingLabel({...p,captions_enabled:true}),'访谈式 · 中英字幕')
  assert.equal(m.exports.packagingLabel({...p,captions_enabled:false}),'访谈式')
 })
+test('partial styling reports the actual caption recovery',()=>{
+ const hint = m.exports.packagingFallbackHint
+ assert.equal(hint({...pack,fallback_captions:'source',cues:[{text:'Source'}]}),'包装样式未完整生成，已保留原文字幕，缺少译文')
+ assert.equal(hint({...pack,fallback_captions:'translated',cues:[{text:'译文'}]}),'包装样式未完整生成，已保留翻译字幕')
+})

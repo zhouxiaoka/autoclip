@@ -33,6 +33,7 @@ function renderCloud(saveResult) {
     chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
   }
   const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
     __globals: {
       window: {
         setInterval() { return 1 },

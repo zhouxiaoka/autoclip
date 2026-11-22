@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from backend.services import bilibili_publisher as bili
 from backend.services import cover as cover_svc
+from backend.services.cover_brief import Options
 from backend.services import upload_post_publisher as up
 
 router = APIRouter(prefix="/publish", tags=["publish"])
@@ -68,17 +69,19 @@ class CoverConfigBody(BaseModel):
     api_key: str | None = Field(None, description="不传则保留已有密钥")
     base_url: str | None = None
     ocr_model: str | None = None
-    allow_send_frame: bool | None = Field(None, description="是否允许把视频帧发给第三方生图服务，默认关")
+    allow_send_frame: bool | None = Field(None, description="是否允许把视频帧发给封面生图服务，默认开")
     mode: str | None = Field(None, description="text_model 跟随 AI 模型的服务商 / custom 单独配置")
 
 
 class CoverGenerateBody(BaseModel):
+    design: Options | None = None
     platform: str = Field("bilibili", description="bilibili 横屏 / douyin 竖屏")
     title: str | None = None
     subtitle: str | None = None
     badge: str | None = None
     content_type: str | None = Field(None, description="knowledge / interview / game / vlog / general")
     force_local: bool = False
+    allow_reference_once: bool = False
     sync: bool = Field(False, description="True 时同步生成（测试用）；默认后台任务")
 
 
@@ -327,12 +330,13 @@ async def get_clip_cover_file(project_id: str, clip_id: str, platform: str = "bi
     path = cover_svc.cover_path(project_id, clip_id, platform)
     if not path.exists() or path.stat().st_size <= 0:
         raise HTTPException(status_code=404, detail="还没有这张封面")
-    return FileResponse(path, media_type="image/jpeg", filename=f"{clip_id}_{platform}.jpg")
+    return FileResponse(path, media_type="image/jpeg", filename=f"{clip_id}_{platform}.jpg", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/covers/{project_id}/clips/{clip_id}")
 async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerateBody):
     from backend.services.publish_export import load_clip_meta
+
     try:
         load_clip_meta(project_id, clip_id)
     except FileNotFoundError as e:
@@ -349,6 +353,8 @@ async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerat
                 badge=body.badge,
                 content_type=body.content_type,
                 force_local=body.force_local,
+                **({"design_options": body.design.model_dump_json()} if body.design else {}),
+                **({"allow_reference_once": True} if body.allow_reference_once else {}),
             )
         except Exception as e:  # noqa: BLE001
             raise _cover_error(e)
@@ -361,6 +367,8 @@ async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerat
         badge=body.badge,
         content_type=body.content_type,
         force_local=body.force_local,
+        **({"design_options": body.design.model_dump_json()} if body.design else {}),
+        **({"allow_reference_once": True} if body.allow_reference_once else {}),
     )
 
 

@@ -590,7 +590,8 @@ class LLMManager:
         saved = str(info.get("model") or getattr(provider, "model_name", "") or "").strip()
         asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved
         catalog, base, key = self._analysis_endpoint(route)
-        cached = remembered_model(catalog, base, key, asked) if asked else None
+        allow_substitute = route.settings.get("model_source") != "user"
+        cached = remembered_model(catalog, base, key, asked, purpose="analysis") if asked and allow_substitute else None
         if cached:
             override = cached
         sent = cached or asked
@@ -598,6 +599,8 @@ class LLMManager:
             try:
                 response, chosen = self._invoke_text(route, prompt, input_data, override, kwargs)
             except Exception as error:
+                if not allow_substitute:
+                    raise
                 response, chosen = self._retry_missing_text_model(
                     error, route, prompt, input_data, kwargs, asked=asked, sent=sent,
                 )

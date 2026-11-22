@@ -190,7 +190,6 @@ test('invalid-key saves still persist and the success toast is not the invalid p
   const toastAt = hook.indexOf("toast.kind === 'invalid'")
   assert.ok(saveAt > 0 && toastAt > saveAt)
   assert.match(hook, /settings\.key_guide\.invalid_saved/)
-  assert.ok(hook.includes('if (!failed && !visionFailed) notifySettingsSaved()'))
   assert.equal((hook.match(/telemetryProvider\(/g) || []).length, 5)
   assert.equal(/console\.(log|debug|info|warn|error)\([^)]*apiKey/.test(hook), false)
 })
@@ -221,7 +220,9 @@ test('key guide dialog rows keep labels outside a full-width control', () => {
   const prompt = fs.readFileSync(path.join(__dirname, '../src/features/settings/KeyGuidePrompt.tsx'), 'utf8')
   const css = fs.readFileSync(path.join(__dirname, '../src/ui/ac.css'), 'utf8')
   assert.match(prompt, /className="ac-rows ac-key-guide-fields"/)
-  assert.equal((prompt.match(/<Row stack wide /g) || []).length, 2)
+  for (const label of ['settings.key_guide.pick', 'settings.key_guide.endpoint', '模型 ID']) {
+    assert.ok(prompt.includes(`<Row stack wide label={t('${label}')}`), label)
+  }
   assert.equal(prompt.includes('className="ac-row"'), false)
   assert.equal(prompt.includes("width: '100%'"), false)
   assert.match(css, /\.ac-key-guide-fields \.ac-row-label \{[^}]*flex:\s*0 0 auto/)

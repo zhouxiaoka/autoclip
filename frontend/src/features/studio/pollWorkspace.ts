@@ -5,8 +5,8 @@ export const OFFLINE_RETRY_MS = 10_000
 
 export function workInProgress(data: Workspace): boolean {
   // A backup being prepared has no render job yet, and a rendered one is still getting its cover.
-  return data.analysis?.status === 'running' || data.jobs.some(j => j.status === 'queued' || j.status === 'running')
-    || (data.output_variants || []).some(v => v.status === 'preparing' || v.status === 'queued' || v.status === 'running')
+  return data.analysis?.status === 'running' || data.jobs.some(j => j.status === 'queued' || j.status === 'running' || !!j.cover_pending)
+    || (data.output_variants || []).some(v => v.status === 'preparing' || v.status === 'queued' || v.status === 'running' || v.cover_job?.status === 'queued' || v.cover_job?.status === 'running')
 }
 
 // Observe only: retrying this read must never start analysis or rendering.

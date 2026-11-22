@@ -68,10 +68,19 @@ def get_sponsor_promo(
     return client.view(trigger=trigger or 'settings')
 
 
+class ModelSettingsUpdate(ai_models.ModelSettings):
+    edited_fields: set[str] | None = None
+
+
 @router.put('/ai-models')
-def put_ai_models(body: ai_models.ModelSettings):
+def put_ai_models(body: ModelSettingsUpdate):
     try:
-        return ai_models.save(body)
+        saved = ai_models.save(body, edited_fields=body.edited_fields)
+        from backend.core import quota_precheck
+        quota_precheck.clear_cache()
+        return saved
+    except ai_models.SettingsConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         from backend.core.log_redaction import redact_text
         raise HTTPException(status_code=422, detail=redact_text(str(exc))) from exc
@@ -224,22 +233,41 @@ def test_connection_assignment(body: ConnectionTestRequest):
                 probe_kind=probe,
                 language=body.language,
             )
+        if result.ok:
+            from backend.core import quota_precheck
+            quota_precheck.clear_cache()
         if (body.vision or body.purpose == 'vision') and body.purpose in ('analysis', 'vision') and result.ok:
             from backend.services.studio.vision_settings import test, VisionSettingsInput
-            from backend.core.connection_test_codes import vision_error_code
+            from backend.core.connection_test_codes import safe_http_status, vision_error_code
+            from backend.core.failure_codes import UserFacingError
+            from backend.services.studio.intelligence import VisionRequestError
+            from backend.services.provider_validation import VISION_BLOCK_MESSAGE
             endpoint = ai_models.chat_endpoint(connection, body.model)
             from backend.services.studio.failure_identity import connection_identity
             from backend.services.studio.vision_settings import testing_identity
             # the tested connection's own identity, never inferred from its hostname.
-            with testing_identity(connection_identity(connection, body.model)):
-                vision = test(VisionSettingsInput(mode='custom', **endpoint))
-            if not (vision.get('success') or vision.get('ok')):
-                from backend.core.upstream_errors import hint_key_for
+            vision = None
+            vision_status = None
+            try:
+                with testing_identity(connection_identity(connection, body.model)):
+                    vision = test(VisionSettingsInput(mode='custom', **endpoint))
+            except VisionRequestError as exc:
+                vision_status = exc.http_status
+                if (
+                    exc.http_status in (401, 402, 403, 429)
+                    or (exc.http_status is not None and 500 <= exc.http_status <= 599)
+                    or exc.code in ('timeout', 'connection')
+                ):
+                    raise
+            except (UserFacingError, ValueError):
+                vision = {'ok': False}
+            if not (isinstance(vision, dict) and (vision.get('success') or vision.get('ok'))):
                 payload = result.as_api()
                 payload.update(
                     success=False, ok=False, result='failed',
-                    error_type='unknown', hint_key=hint_key_for('unknown'),
-                    error_code=vision_error_code(vision), http_status=None, config_source=source,
+                    error_type='vision_unsupported', hint_key=VISION_BLOCK_MESSAGE,
+                    error_code=vision_error_code(vision),
+                    http_status=safe_http_status(vision_status), config_source=source,
                 )
                 return payload
         return {**result.as_api(), 'config_source': source}

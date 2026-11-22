@@ -48,20 +48,20 @@ test('Infistar gateway address survives save and validation without switching do
   }
 })
 
-test('first run: nothing is pre-selected; choosing a provider fills the recommendation, covers stay local', () => {
+test('first run: nothing is pre-selected; choosing a provider fills the recommendation including an available image model', () => {
   const value = logic.prepareLoaded(fresh())
   assert.equal(logic.needsSetup(value), true)
   assert.deepEqual([value.analysis, value.cover, value.vision], [null, null, null], 'no provider is pre-selected on first run')
   assert.equal(value.analysis_mode, 'auto')
-  assert.deepEqual([value.cover_enabled, value.allow_send_frame], [false, true], 'covers are designed locally until the user picks an image model')
+  assert.deepEqual([value.cover_enabled, value.allow_send_frame], [false, false], 'no model selected and no reference frame permission')
   assert.deepEqual(plain(logic.saveIssue(value)), { role: 'analysis', reason: 'provider' })
   const chosen = logic.chooseProvider(value, 'analysis', 'dashscope', {}, true)
   assert.equal(chosen.connection.id, 'legacy-analysis', 'the legacy connection of that provider is reused')
   assert.equal(chosen.settings.analysis.model, '')
   const filled = defaults.applyModelDefaults(chosen.settings, chosen.connection, models, true)
   assert.equal(filled.analysis.model, 'qwen3.8-flash')
-  assert.equal(filled.cover_enabled, false)
-  assert.equal(filled.cover, null)
+  assert.equal(filled.cover_enabled, true)
+  assert.ok(filled.cover.model)
 })
 
 test('setup is not needed once credentials exist, even before the new document is saved', () => {
@@ -183,7 +183,8 @@ test('a cached live list fills the recommendation immediately when switching pro
   const lists = { b: { models: [{ id: 'gpt-5-mini', capability: 'multimodal', analysis: true }, { id: 'dall-e-3', image: true }], source: 'live', preview: false } }
   const result = logic.chooseProvider({ ...fresh(), connections: [conn('a', 'dashscope'), conn('b', 'openai', { has_key: true })] }, 'analysis', 'openai', lists, true)
   assert.equal(result.settings.analysis.model, 'gpt-5-mini')
-  assert.equal(result.settings.cover_enabled, false, 'choosing a text provider never switches AI covers on')
+  assert.equal(result.settings.cover_enabled, true)
+  assert.equal(result.settings.cover.model, 'dall-e-3')
 })
 
 for (const entry of ['legacy', 'catalog']) {
@@ -333,7 +334,8 @@ test('save validation reports the first blocking field in page order and prunes 
   const ok = { ...noModel, analysis: { connection_id: 'a', model: 'qwen3.8-flash', capability: 'auto' } }
   assert.equal(logic.saveIssue(ok), null)
   const cover = { ...ok, cover_enabled: true, cover: logic.cleanBinding('a') }
-  assert.deepEqual(plain(logic.saveIssue(cover)), { role: 'cover', reason: 'model' })
+  assert.equal(logic.saveIssue(cover), null)
+  assert.equal(logic.forSave(cover).cover_enabled, false)
   const cloud = { ...ok, transcription: { provider: 'cloud', connection_id: 'a', model: '' } }
   assert.deepEqual(plain(logic.saveIssue(cloud)), { role: 'transcription', reason: 'model' })
   const doc = logic.forSave({ ...ok, connections: [...ok.connections, conn('blank', 'compatible')], cover: { connection_id: 'a', model: '', capability: 'auto' } })
@@ -360,15 +362,12 @@ test('save validation reports the first blocking field in page order and prunes 
   assert.equal(local.connections.map(c => c.id).includes('ollama'), true)
 })
 
-test('AI covers fall back to frames only when the service has no image model at all', () => {
+test('saving an unassigned cover never requires discovery or records a local-frame preference', () => {
   const state = { ...fresh(), cover_enabled: true, cover: null, connections: [conn('legacy-analysis', 'deepseek', { api_key: 'k' })] }
-  const textOnly = { 'legacy-analysis': { models: [{ id: 'deepseek-flash', capability: 'text', analysis: true }], source: 'live' } }
-  const fallback = logic.coverFallback(state, textOnly)
-  assert.deepEqual([fallback.cover_enabled, fallback.cover], [false, null])
-  assert.equal(logic.saveIssue({ ...fallback, analysis: { connection_id: 'legacy-analysis', model: 'deepseek-flash', capability: 'auto' } }), null)
-  const withImages = { 'legacy-analysis': { models, source: 'live' } }
-  assert.equal(logic.coverFallback(state, withImages).cover_enabled, true, 'a missing choice with images available is still reported')
-  assert.equal(logic.coverFallback(state, {}).cover_enabled, true, 'no list yet: keep the choice')
+  const doc = logic.forSave(state)
+  assert.deepEqual([doc.cover_enabled, doc.cover, doc.cover_follows_analysis], [false, null, false])
+  assert.equal(!!doc.prefer_local_cover, false)
+  assert.equal(logic.saveIssue(state), null)
   const filled = defaults.applyModelDefaults(state, state.connections[0], models, false)
   assert.equal(filled.cover.model, 'wanx2.1-t2i-turbo', 'cover switched on before the list arrived is filled without the first-run flag')
 })
@@ -419,4 +418,19 @@ test('D1: setCoverModel on null cover is independent even on analysis connection
   })
   assert.equal(switched.cover.connection_id, 'a')
   assert.equal(switched.cover_follows_analysis, false)
+})
+
+test('a failed test belongs to its account, exact model and purpose', () => {
+  const initial = { connections: [{ id: 'a', validation_status: 'ok' }, { id: 'b', validation_status: 'ok' }] }
+  const failed = logic.applyValidation(initial, 'a', { result: 'failed', error_type: 'model_not_found' }, 'A', 'analysis')
+  const [account, other] = failed.connections
+  assert.equal(account.validation_status, 'ok')
+  assert.equal(logic.failedCheck(account, 'analysis', 'A'), true)
+  assert.equal(logic.failedCheck(account, 'analysis', 'B'), false)
+  assert.equal(logic.failedCheck(account, 'vision', 'A'), false)
+  assert.equal(logic.failedCheck(other, 'analysis', 'A'), false)
+  const recovered = logic.applyValidation(failed, 'a', { ok: true }, 'A', 'analysis')
+  assert.equal(logic.failedCheck(recovered.connections[0], 'analysis', 'A'), false)
+  const invalid = logic.applyValidation(initial, 'a', { result: 'failed', error_type: 'invalid_key' }, 'A')
+  assert.equal(logic.failedCheck(invalid.connections[0], 'analysis', 'B'), true)
 })

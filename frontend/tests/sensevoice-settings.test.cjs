@@ -31,6 +31,7 @@ test('DefaultModels switches local ASR engines without a cloud connection', () =
   const updates = []
   const Select = () => null
   const DefaultModels = loadTs('DefaultModels.tsx', {
+    react: { ...React, useState: initial => [initial, () => {}] },
     antd: { Select },
     'react-i18next': { useTranslation: () => {} },
     '../../i18n': i18n,
@@ -52,6 +53,22 @@ test('DefaultModels switches local ASR engines without a cloud connection', () =
   assert.equal(settings.transcription.model, 'base')
   assert.equal(settings.transcription.model_source, 'user')
   assert.ok(updates.length >= 2)
+})
+
+test('the cover model card can grant and revoke frame uploads independently of the model', () => {
+  const DefaultModels = loadTs('DefaultModels.tsx', {
+    react: { ...React, useState: initial => [initial, () => {}] },
+    antd: { Select: () => null }, 'react-i18next': { useTranslation() {} }, '../../i18n': i18n,
+  }).default
+  let settings = { connections: [], cover_enabled: true, allow_send_frame: false, cover: { model: 'fixture-image' } }
+  const control = () => flatten(DefaultModels({ settings, lists: {}, onChange(next) { settings = next } }))
+    .find(node => node?.type === 'input' && node.props.type === 'checkbox')
+  assert.equal(control().props.checked, false)
+  control().props.onChange({ target: { checked: true } })
+  assert.equal(control().props.checked, true)
+  control().props.onChange({ target: { checked: false } })
+  assert.equal(control().props.checked, false)
+  assert.equal(settings.cover.model, 'fixture-image')
 })
 
 test('overview no longer mounts legacy Vision/Cover/Transcription sections', () => {

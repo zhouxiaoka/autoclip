@@ -47,6 +47,10 @@ def stage(name: str):
         _stage.reset(token)
 
 
+def current_stage() -> str:
+    return _stage.get()
+
+
 def set_stage(name: str) -> None:
     """Name the step for the rest of a sequential run (the pipeline steps)."""
     from backend.core.project_cancellation import checkpoint
@@ -84,6 +88,45 @@ def record(model: str | None, usage: dict[str, Any] | None, *, prompt_chars: int
         pass  # accounting never blocks output
 
 
+def record_asr(
+    provider: str | None,
+    model: str | None,
+    *,
+    route: str = '',
+    seconds: float = 0.0,
+    chunks: int = 0,
+    segments: int = 0,
+    host: str = '',
+    stage_name: str = 'transcribe',
+) -> None:
+    """Record actual ASR provider/model provenance without polluting LLM token totals."""
+    from backend.core.project_cancellation import current_cancelled
+    if current_cancelled():
+        return
+    path = _sink.get()
+    if path is None:
+        return
+    row = {
+        'at': round(time.time(), 1),
+        'kind': 'asr',
+        'stage': stage_name,
+        'provider': provider or '',
+        'model': model or '',
+        'route': route or '',
+        'host': host or '',
+        'chunks': int(chunks),
+        'segments': int(segments),
+        'seconds': round(float(seconds), 2),
+    }
+    try:
+        with _lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open('a', encoding='utf-8') as handle:
+                handle.write(json.dumps(row, ensure_ascii=False) + '\n')
+    except OSError:
+        pass  # accounting never blocks output
+
+
 def summary(project_id: str) -> dict[str, Any]:
     """Calls and tokens per stage plus totals for one project."""
     stages: dict[str, dict[str, Any]] = {}
@@ -96,7 +139,7 @@ def summary(project_id: str) -> dict[str, Any]:
             row = json.loads(line)
         except ValueError:
             continue
-        if row.get('kind') == 'timing':
+        if row.get('kind') in ('timing', 'asr'):
             continue
         item = stages.setdefault(row.get('stage', 'other'), {'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0, 'estimated_calls': 0})
         item['calls'] += 1

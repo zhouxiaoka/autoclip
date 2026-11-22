@@ -42,8 +42,9 @@ export function syncFollowingCover(before: ModelSettings, next: ModelSettings): 
   return value
 }
 
-export function applyModelDefaults(settings: ModelSettings, connection: Connection, models: ModelEntry[], _autoCover: boolean): ModelSettings {
+export function applyModelDefaults(settings: ModelSettings, connection: Connection, models: ModelEntry[], autoCover: boolean): ModelSettings {
   if (!endpointProviderReady(connection)) return settings
+  models = models.filter(model => !connection.enabled_model_ids || connection.enabled_model_ids.includes(model.id))
   const value = { ...settings }
   for (const role of ['analysis', 'vision', 'cover'] as const) {
     const binding = value[role]
@@ -52,11 +53,13 @@ export function applyModelDefaults(settings: ModelSettings, connection: Connecti
     const model = defaultModel(connection.provider, eligible, role === 'cover', role === 'vision' ? 'vision' : 'analysis')
     if (model) value[role] = { ...binding, model, model_source: binding.model_source || 'preset' }
   }
-  // AI covers switched on by the user before a model list arrived: fill the recommended image model.
-  // Never switched on automatically: without the user's choice, covers are designed locally.
-  if (value.cover_enabled && !value.cover && value.analysis?.connection_id === connection.id) {
+  if ((value.cover_enabled || (autoCover && !value.prefer_local_cover)) && !value.cover && value.analysis?.connection_id === connection.id) {
     const model = defaultModel(connection.provider, models, true)
-    if (model) { value.cover = { connection_id: connection.id, model, capability: 'auto', model_source: 'preset' }; value.cover_follows_analysis = true }
+    if (model) {
+      value.cover = { connection_id: connection.id, model, capability: 'auto', model_source: 'preset' }
+      value.cover_enabled = true
+      value.cover_follows_analysis = true
+    }
   }
   if (value.transcription?.provider === 'cloud' && value.transcription.connection_id === connection.id && !value.transcription.model) {
     const fitting = models.filter(m => m.asr && m.asr_supported && !m.asr_preview)

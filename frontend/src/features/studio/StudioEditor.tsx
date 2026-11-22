@@ -7,6 +7,7 @@ import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText, type SourcePreview } from './api'
 import { useWorkspace } from './useWorkspace'
 import PlayerBar from './PlayerBar'
+import ExportCover, { ExportCoverButton } from './ExportCover'
 import { CropPoint, Draft, Scene, SubtitleCue, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign, cropAt, frameModeAt, patchShot } from './types'
 import CandidatePicker from './CandidatePicker'
 import TitleArtwork from './TitleArtwork'
@@ -15,7 +16,7 @@ import { titlePresets, isArtworkStyle } from './titlePresets'
 import DraftSettingsPanel, { type FramingState } from './DraftSettingsPanel'
 import { draftExportState } from './draftExportState'
 import { savedDraftOverrides } from './overrides'
-import { flagAssigned } from '../../analytics/flags'
+import { flagAssigned, useFlag } from '../../analytics/flags'
 import { trackAutoChoiceOverridden } from '../../analytics/studio'
 import './studio.css'
 import { effectiveSubtitles } from './subtitleState'
@@ -28,6 +29,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const templatesOn = useFlag('pkg_templates_v1') === true
   const variantId = searchParams.get('variant') || undefined
   const { workspace, error: loadError, loading, refresh } = useWorkspace(projectId)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -39,6 +41,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [selected, setSelected] = useState(0)
   const [picker, setPicker] = useState<number | 'append' | null>(null)
   const [sourceDuration, setSourceDuration] = useState<number>()
+  const [sourceSize, setSourceSize] = useState({ width: 1920, height: 1080 })
   const [showVariant, setShowVariant] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showRendered, setShowRendered] = useState(false)
@@ -51,11 +54,20 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [renderedDuration, setRenderedDuration] = useState(0)
   const [framing, setFraming] = useState<FramingState>({ busy: false })
   useEffect(() => {
-    const controller = new AbortController()
-    studioApi.subtitles(projectId, controller.signal).then(v => setCues(v.cues)).catch(() => setCues([]))
     studioApi.framingStatus().then(status => setFraming(f => ({ ...f, status }))).catch(() => undefined)
-    return () => controller.abort()
   }, [projectId])
+  const aspect = draft?.aspect
+  const width = aspect === 'original' ? sourceSize.width : aspect === 'portrait' ? 1080 : 1920
+  const height = aspect === 'original' ? sourceSize.height : aspect === 'portrait' ? 1920 : 1080
+  useEffect(() => {
+    if (!aspect) return
+    const controller = new AbortController()
+    setCues([])
+    studioApi.subtitles(projectId, draftId, width, height, draft?.subtitle_style, controller.signal)
+      .then(v => { if (!controller.signal.aborted) setCues(v.cues) })
+      .catch(() => { if (!controller.signal.aborted) setCues([]) })
+    return () => controller.abort()
+  }, [projectId, draftId, aspect, width, height, draft?.subtitle_style, draft?.revision])
   useEffect(() => {
     if (framing.status?.status !== 'installing') return
     const timer = window.setInterval(() => {
@@ -132,7 +144,8 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const playLength = showRendered ? renderedDuration : scene ? scene.end - scene.start : 0
   const togglePlay = () => { const v = video.current; if (!v) return; if (v.paused) void v.play().catch(() => undefined); else v.pause() }
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
-  const exportState = draft ? draftExportState(draft, jobs) : undefined
+  const standalone = !workspace.output_variants?.some(item => item.draft_id === draftId)
+  const exportState = draft ? draftExportState(draft, jobs, standalone) : undefined
   const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
   const active = jobs.find(j => j.status === 'queued' || j.status === 'running')
 
@@ -144,7 +157,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     try {
       const cached = JSON.parse(localStorage.getItem(localKey) || 'null') as Draft | null
       if (cached && cached.revision === server.revision && cached.id === server.id && !draftError(cached)) {
-        setDraft(cached); setNotice("已恢复本机暂存的修改，请保存后导出"); return
+        setDraft({ ...server, ...cached }); setNotice("已恢复本机暂存的修改，请保存后导出"); return
       }
     } catch { /* A damaged local cache must never hide the server draft. */ }
     setDraft(server)
@@ -193,11 +206,12 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   if (!draft) return <div className="ac-page"><button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button><div className="ac-empty"><b>{loading ? t("加载成片草稿…") : t("无法打开草稿")}</b>{loadError || (!loading && t("草稿不存在或已移除"))}<Btn onClick={refresh}>{t("重试")}</Btn></div></div>
   const subtitlesOn = effectiveSubtitles(draft)
   const previewUrl = currentJob?.status === 'completed' ? studioApi.video(projectId, currentJob.job_id) : ''
+  const coverVariant = workspace.output_variants?.find(v => v.render_job_id === currentJob?.job_id && (!variantId || v.id === variantId))
   const activeCue = cues.find(c => c.start <= currentTime && currentTime < c.end)
   const updateScene = (i: number, update: Partial<Scene>) => patch({ scenes: draft.scenes.map((s, index) => index === i ? {...s,...update} : s) })
   return <div className="ac-page studio-editor-page">
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button>
-    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{t("导出成片")}</Btn></div></header>
+    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{previewUrl ? t("查看已导出") : t("导出成片")}</Btn></div></header>
     {loadError && <p className="studio-error">{t("任务状态暂时无法更新：")}{t(loadError)}</p>}
     {!showRendered && (sourcePreview.status !== 'completed' || playbackError) && <details open={playbackError || ['queued', 'running', 'failed'].includes(sourcePreview.status)} className="studio-muted">
       <summary>{t('生成兼容预览')}</summary>
@@ -208,7 +222,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section className="studio-editor-main"><div className="studio-editor-sticky"><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>
-          <video ref={video} preload="metadata" playsInline muted={muted} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop' || frameModeAt(scene, currentTime)==='fit'?'contain':'cover', objectPosition:`${cropAt(scene, currentTime, draft.crop_x ?? .5)*100}% 50%`}} onClick={togglePlay} onLoadedMetadata={() => { const v = video.current; if (!v) return; if (showRendered) setRenderedDuration(v.duration); else if (scene) { setSourceDuration(v.duration); v.currentTime = scene.start } }} onTimeUpdate={() => {const v=video.current; if(!v) return; setCurrentTime(v.currentTime); if(scene && !showRendered && (v.currentTime>=scene.end || v.currentTime<scene.start-.25)) {if(v.currentTime>=scene.end) v.pause(); v.currentTime=scene.start}}} />
+          <video ref={video} preload="metadata" playsInline muted={muted} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop' || frameModeAt(scene, currentTime)==='fit'?'contain':'cover', objectPosition:`${cropAt(scene, currentTime, draft.crop_x ?? .5)*100}% 50%`}} onClick={togglePlay} onLoadedMetadata={() => { const v = video.current; if (!v) return; if (showRendered) setRenderedDuration(v.duration); else if (scene) { setSourceDuration(v.duration); if (v.videoWidth && v.videoHeight) setSourceSize({width:v.videoWidth, height:v.videoHeight}); v.currentTime = scene.start } }} onTimeUpdate={() => {const v=video.current; if(!v) return; setCurrentTime(v.currentTime); if(scene && !showRendered && (v.currentTime>=scene.end || v.currentTime<scene.start-.25)) {if(v.currentTime>=scene.end) v.pause(); v.currentTime=scene.start}}} />
           {!showRendered && subtitlesOn && activeCue && <div className={`studio-caption-overlay studio-caption studio-caption--${draft.subtitle_style || 'clean'}`}>{activeCue.text}</div>}
           {!showRendered && selected===0 && draft.hook && !artworkStyle && <div className={`studio-hook studio-hook--${draft.title_style || 'plain'}`}>{draft.hook}</div>}
           {!showRendered && selected===0 && draft.hook && artworkStyle && <TitleArtwork projectId={projectId} draft={draft}/>}
@@ -224,10 +238,9 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
         {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>{t("起点（秒）")}<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>{t("终点（秒）")}<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" onClick={() => setPicker(i)}>{t("替换")}</Btn><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>{t("上移")}</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>{t("下移")}</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>{t("移除")}</Btn></div></div>)}
       </details>
       </section>
-      <DraftSettingsPanel draft={draft} patch={patch} scene={scene} currentTime={currentTime} onShot={setShot}
+      <DraftSettingsPanel templateEditable={templatesOn && standalone} draft={draft} patch={patch} scene={scene} currentTime={currentTime} onShot={setShot}
         framing={framing} onAutoFrame={() => void autoFrame()} onInstallFraming={() => void installFraming()} onPortrait={applyPortrait}
-        coverHref={previewUrl && currentJob ? `/project/${projectId}/publish/studio-${currentJob.job_id}` : undefined}
-        onOpenCover={href => navigate(href)} /></div>
+        coverControl={previewUrl && currentJob ? <ExportCoverButton projectId={projectId} job={currentJob} variant={coverVariant} /> : undefined} /></div>
     </fieldset>
     {active && <div className="studio-render-state"><ProgressLine percent={active.percent}/><span className="studio-muted">{active.status==='queued'?t("等待渲染"):t("渲染成片")} · {active.percent}%</span></div>}
     {currentJob?.status==='failed' && <p className="studio-error" role="alert">{t(currentJob.error || '')}</p>}
@@ -245,9 +258,10 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
       navigate(`/project/${projectId}/studio/${created.id}`)
     }} />
     <Dialog open={!!suggestion} onClose={()=>setSuggestion(null)} title={t("查看文案修改")} description={t("确认后应用到当前草稿，镜头与声音保持原设置。")} footer={<div className="studio-actions"><Btn onClick={()=>setSuggestion(null)}>{t("保留原稿")}</Btn><Btn variant="cta" onClick={()=>{setUndo(draft);setDraft(suggestion);setSuggestion(null);setShowRendered(false)}}>{t("应用修改")}</Btn></div>}><p>{suggestion?.title}</p><p>{suggestion?.hook || t("无开头文字")}</p></Dialog>
-    <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title={t("导出成片")} description={t("保存当前修改并渲染；已有输出会保留在导出记录。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>{t("关闭")}</Btn>{previewUrl && <Btn onClick={()=>navigate(`/project/${projectId}/publish/studio-${currentJob!.job_id}`)}>{t("发布这版成片")}</Btn>}{previewUrl ? <StudioDownloadLink className="ac-btn ac-btn--cta" projectId={projectId} jobId={currentJob!.job_id}/> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("确认导出")}</Btn>}</div>}>
-      <Row label={t("成片")}>{draft.title}</Row><Row label={t("格式")}>MP4 · 30 fps</Row><Row label={t("画幅")}>{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':t("保持原尺寸")}</Row><Row label={t("文字语言")}>{draft.language==='source' ? t('原语言') : languages.find(l=>l.value===draft.language)?.label}</Row>
-      <Row label={t("片头标题")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style||'plain'))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{subtitlesOn?t("字幕压进画面"):t("已关闭")}</Row><Row label={t("封面")} hint={t("渲染完成后，在发布页按平台生成带标题的封面。")}>{previewUrl && currentJob && <Btn size="sm" variant="text" onClick={()=>navigate(`/project/${projectId}/publish/studio-${currentJob.job_id}`)}>{t("去生成")}</Btn>}</Row>
+    <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title={previewUrl ? t("已导出成片") : t("导出成片")} description={previewUrl ? t("当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。") : t("保存当前修改并渲染；已有输出会保留在导出记录。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>{t("关闭")}</Btn>{previewUrl && <Btn loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("重新渲染")}</Btn>}{previewUrl && <Btn onClick={()=>navigate(`/project/${projectId}/publish/studio-${currentJob!.job_id}`)}>{t("发布这版成片")}</Btn>}{previewUrl ? <StudioDownloadLink className="ac-btn ac-btn--cta" projectId={projectId} jobId={currentJob!.job_id}/> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("确认导出")}</Btn>}</div>}>
+      <div className="ac-row studio-export-title"><b>{t("成片")}</b><span title={draft.title}>{draft.title}</span></div><Row label={t("格式")}>MP4 · 30 fps</Row><Row label={t("画幅")}>{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':t("保持原尺寸")}</Row><Row label={t("文字语言")}>{draft.language==='source' ? t('原语言') : languages.find(l=>l.value===draft.language)?.label}</Row>
+      <Row label={t("片头标题")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style||'plain'))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{subtitlesOn?t("字幕压进画面"):t("已关闭")}</Row>
+      {showExport && previewUrl && currentJob ? <ExportCover key={currentJob.job_id} projectId={projectId} job={currentJob} variant={coverVariant} /> : <Row label={t("封面")}>{t("导出时自动生成")}</Row>}
       {currentJob?.status==='completed' && !!currentJob.result?.warnings?.length && <div role="status" className="studio-muted">{currentJob.result.warnings.map(w=><p key={w}>{t(w)}</p>)}</div>}
       {active && <ProgressLine percent={active.percent}/>}<p className="studio-muted">{previewUrl?t("当前版本已渲染完成，可以直接下载。"):t("任务在后台继续，关闭面板不会取消渲染。")}</p>{error && <p className="studio-error">{error}</p>}{currentJob?.status==='failed'&&<p className="studio-error">{t(currentJob.error || '')}</p>}
     </Dialog>
