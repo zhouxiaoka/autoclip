@@ -1,6 +1,8 @@
 """Locks for review-round filenames, review ids in notes, and catalog error codes."""
+import io
 import json
 import os
+from contextlib import redirect_stderr
 from pathlib import Path
 import sys
 import tempfile
@@ -126,6 +128,121 @@ class CiGuardTests(unittest.TestCase):
         self.assertEqual(ci_guards._bucket('backend/tests/test_store_lock.py'), 'tests')
         self.assertEqual(ci_guards._bucket('docs/TESTING_ACCEPTANCE.md'), 'docs')
         self.assertEqual(ci_guards._bucket('frontend/tests/api-retry.test.cjs'), 'tests')
+
+    def test_directory_casefold_catches_parent_segments_only(self):
+        self.assertEqual(ci_guards.directory_casefold_collisions([
+            'frontend/src/features/diagnostics/FailureHint.tsx',
+            'frontend/src/features/diagnostics/failureHint.ts',
+        ]), [])
+        self.assertEqual(ci_guards.directory_casefold_collisions(['docs/Readme.md', 'docs/readme.md']), [])
+        self.assertEqual(ci_guards.directory_casefold_collisions(['a/Foo.ts', 'b/foo.ts']), [])
+        self.assertEqual(ci_guards.directory_casefold_collisions(['Foo/a.ts', 'Foo/b.ts']), [])
+        different = ci_guards.directory_casefold_collisions(['Foo/a.ts', 'foo/b.ts'])
+        self.assertTrue(any('Foo' in row and 'foo' in row for row in different), different)
+        nested = ci_guards.directory_casefold_collisions([
+            'frontend/src/features/diagnostics/FailureHint.tsx',
+            'frontend/src/Features/diagnostics/other.ts',
+        ])
+        self.assertTrue(any('features' in row and 'Features' in row for row in nested), nested)
+        file_dir = ci_guards.directory_casefold_collisions(['Foo', 'foo/a.ts'])
+        self.assertTrue(any('Foo' in row and 'foo' in row for row in file_dir), file_dir)
+        self.assertEqual(ci_guards.directory_casefold_collisions(ci_guards.tracked_paths()), [])
+
+    def test_global_urlopen_capture_must_drop_bodies_without_an_event(self):
+        broken = '''
+import json
+def test_settle(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
+    posted = []
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        raise OSError("tests do not send")
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    body = posted[0]
+    assert body["event"] == "studio_generation_finished"
+'''
+        counted = '''
+import json
+def test_rejected(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
+    calls = []
+    def rejected(req, timeout=0):
+        calls.append(json.loads(req.data.decode()))
+        raise OSError("no")
+    monkeypatch.setattr("urllib.request.urlopen", rejected)
+    assert len(calls) == 1
+'''
+        guarded = '''
+import json
+def test_settle(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
+    posted = []
+    def fake(req, timeout=0):
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get("event"), str):
+            posted.append(body)
+        raise OSError("tests do not send")
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    assert posted[0]["event"] == "studio_generation_finished"
+'''
+        module_local = '''
+import json
+def test_post(monkeypatch):
+    posted = []
+    def urlopen(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+    monkeypatch.setattr(telem.urllib.request, "urlopen", urlopen)
+    assert posted[0]["event"] == "studio_generation_finished"
+'''
+        vision = '''
+import json
+import urllib.request
+def test_vision(monkeypatch):
+    sent = []
+    def fake_urlopen(req, timeout=None):
+        payload = json.loads(req.data)
+        sent.append(payload)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert sent[0]["model"] == "vision"
+'''
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sample = root / 'backend' / 'tests' / 'test_mix.py'
+            sample.parent.mkdir(parents=True)
+            sample.write_text(broken, encoding='utf-8')
+            flagged = ci_guards.global_urlopen_telemetry_mixes(root)
+            self.assertTrue(any('test_mix.py' in row and 'PostHog' in row for row in flagged), flagged)
+            sample.write_text(counted, encoding='utf-8')
+            self.assertTrue(ci_guards.global_urlopen_telemetry_mixes(root))
+            sample.write_text(guarded, encoding='utf-8')
+            self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(root), [])
+            sample.write_text(module_local, encoding='utf-8')
+            self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(root), [])
+            sample.write_text(vision, encoding='utf-8')
+            self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(root), [])
+        self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(), [])
+
+    def test_new_guards_name_the_root_cause(self):
+        stderr = io.StringIO()
+        with patch.object(ci_guards, 'review_filenames', return_value=[]), \
+                patch.object(ci_guards, 'review_notes', return_value=[]), \
+                patch.object(ci_guards, 'error_code_literals', return_value=[]), \
+                patch.object(ci_guards, 'handwritten_error_code_sets', return_value=[]), \
+                patch.object(ci_guards, 'catalog_sentence_copies', return_value=[]), \
+                patch.object(ci_guards, 'tracked_paths', return_value=['Foo/a.ts', 'foo/b.ts']), \
+                patch.object(ci_guards, 'global_urlopen_telemetry_mixes', return_value=[
+                    'backend/tests/test_mix.py:4: 未过滤的 JSON body 被当成 PostHog 事件',
+                ]), \
+                patch.dict(os.environ, {'GITHUB_BASE_REF': ''}):
+            with redirect_stderr(stderr):
+                code = ci_guards.main()
+        text = stderr.getvalue()
+        self.assertEqual(code, 1)
+        self.assertIn('casefold', text)
+        self.assertIn('Foo', text)
+        self.assertIn('foo', text)
+        self.assertIn('不要 patch 进程全局的 urllib.request.urlopen', text)
+        self.assertIn('test_mix.py:4', text)
 
     def test_contracts_job_runs_the_guard(self):
         commands = {name: command for name, command, _ in quality_gate.checks('contracts', sys.executable)}
