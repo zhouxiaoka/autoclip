@@ -24,6 +24,42 @@ function finiteJson(value: unknown, depth = 0): boolean {
   return object(value) && Object.values(value).every(item => finiteJson(item, depth + 1))
 }
 
+export interface HeaderEntry { name: string; value: string }
+
+/** Read flat string pairs without collapsing duplicate names during JSON.parse. */
+export function parseHeaderEntries(text: string): HeaderEntry[] {
+  const data: unknown = JSON.parse(text)
+  if (!object(data)) throw new Error('Invalid header object')
+  const entries: HeaderEntry[] = []
+  let index = text.indexOf('{') + 1
+  const whitespace = () => { while (/\s/.test(text[index] || '') && index < text.length) index++ }
+  const string = (): string => {
+    whitespace()
+    if (text[index] !== '"') throw new Error('Headers require strings')
+    const start = index++
+    while (index < text.length) {
+      if (text[index] === '\\') { index += 2; continue }
+      if (text[index++] === '"') return JSON.parse(text.slice(start, index)) as string
+    }
+    throw new Error('Invalid header string')
+  }
+  whitespace()
+  while (text[index] !== '}') {
+    const name = string()
+    whitespace()
+    if (text[index++] !== ':') throw new Error('Invalid header pair')
+    entries.push({ name, value: string() })
+    whitespace()
+    if (text[index] === '}') break
+    if (text[index++] !== ',') throw new Error('Invalid header object')
+  }
+  return entries
+}
+
+export function headerEntriesText(entries: HeaderEntry[]): string {
+  return `{${entries.map(({ name, value }) => `${JSON.stringify(name)}:${JSON.stringify(value)}`).join(',')}}`
+}
+
 function parsed(value: CustomRequestDraft) {
   const headers = value._http_headers_text === undefined ? value.http_headers
     : value._http_headers_text.trim() ? JSON.parse(value._http_headers_text) : value.has_http_headers ? undefined : {}
@@ -41,8 +77,13 @@ export function requestOptionsIssue(value: CustomRequestDraft): 'headers' | 'bod
   } catch { return 'headers' }
   if (headers !== undefined && headers !== null) {
     if (!object(headers) || Object.keys(headers).length > 32) return 'headers'
+    let entries: HeaderEntry[]
+    try {
+      entries = value._http_headers_text?.trim() ? parseHeaderEntries(value._http_headers_text) : Object.entries(headers).map(([name, text]) => ({ name, value: text as string }))
+    } catch { return 'headers' }
+    if (entries.length > 32) return 'headers'
     const seen = new Set<string>()
-    for (const [name, text] of Object.entries(headers)) {
+    for (const { name, value: text } of entries) {
       const lower = name.toLowerCase()
       if (!HEADER_NAME.test(name) || BLOCKED_HEADERS.has(lower) || seen.has(lower)) return 'headers'
       if (typeof text !== 'string' || text.length > 4096 || /[^\x20-\x7e]/.test(text)) return 'headers'
