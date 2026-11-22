@@ -98,8 +98,45 @@ def key(ctx, rows):
     return hashlib.sha256(data.encode()).hexdigest()
 
 
+def _evaluate_direction(reply, candidates, ctx):
+    """Validate model reply against schema and editorial constraints without side effects."""
+    try:
+        direction = Direction.model_validate(reply)
+    except ValidationError:
+        status = (
+            "no_suitable_frame"
+            if isinstance(reply, dict) and reply.get("best") == 0
+            else "invalid_direction"
+        )
+        return status, None, "schema"
+    i, alt = direction.best, direction.runner_up
+    multiple = len(candidates) > 1
+    title = ctx["title"]
+    same_text = (
+        direction.lines == title.splitlines()
+        if "\n" in title
+        else title in ("".join(direction.lines), " ".join(direction.lines))
+    )
+    alternate_valid = (
+        (1 <= alt <= len(candidates) and alt != i and bool(direction.rejection))
+        if multiple
+        else alt == 0
+    )
+    design = ctx["design"]
+    if (
+        (design["accent"] and direction.accent.lower() != design["accent"].lower())
+        or (design["emphasis"] and direction.emphasis != design["emphasis"])
+        or i > len(candidates)
+        or not alternate_valid
+        or not same_text
+        or direction.emphasis not in title
+    ):
+        return "invalid_direction", None, "editorial"
+    return "planned", direction, ""
+
+
 def inspect(candidates, ctx, rows, *, speaker_hints=()):
-    from backend.core import llm_usage
+    from backend.core import llm_telemetry, llm_usage
     from backend.core.project_cancellation import ProjectDeleted
     from backend.services.studio.vision_settings import effective
 
@@ -124,8 +161,33 @@ def inspect(candidates, ctx, rows, *, speaker_hints=()):
                 {"type": "image_url", "image_url": {"url": cd._thumb(frame)}},
             ]
         )
+    degrade_recorded = False
+
+    def _record_degrade_once() -> None:
+        nonlocal degrade_recorded
+        if not degrade_recorded:
+            degrade_recorded = True
+            llm_telemetry.increment_degrade_count()
+
+    def _before_vision_emit(parsed_reply, vision_error) -> None:
+        if vision_error is not None:
+            if isinstance(
+                vision_error,
+                (
+                    intelligence.VisionRequestError,
+                    intelligence.UserFacingError,
+                    OSError,
+                    ValueError,
+                ),
+            ):
+                _record_degrade_once()
+            return
+        status_check, _direction, _reason = _evaluate_direction(parsed_reply, candidates, ctx)
+        if status_check == "invalid_direction":
+            _record_degrade_once()
+
     try:
-        with llm_usage.stage("cover_frame"):
+        with llm_usage.stage("cover_frame"), intelligence.vision_degrade_hook(_before_vision_emit):
             # Do not reuse the 1000-token quick_screening cap: 6 candidate frames plus
             # a 13-field editorial direction easily exceeds 1000 tokens (especially on
             # models that allocate reasoning tokens), causing output_truncated.
@@ -138,10 +200,8 @@ def inspect(candidates, ctx, rows, *, speaker_hints=()):
         OSError,
         ValueError,
     ) as exc:
-        from backend.core import llm_telemetry
-
         error_code = getattr(exc, "code", "") or ""
-        llm_telemetry.increment_degrade_count()
+        _record_degrade_once()
         logger.warning(
             "Cover planner vision failed: error_type=%s error_code=%s http_status=%s",
             type(exc).__name__,
@@ -154,47 +214,16 @@ def inspect(candidates, ctx, rows, *, speaker_hints=()):
             error_type=type(exc).__name__,
             error_code=error_code,
         )
-    try:
-        direction = Direction.model_validate(reply)
-    except ValidationError:
-        status = (
-            "no_suitable_frame"
-            if isinstance(reply, dict) and reply.get("best") == 0
-            else "invalid_direction"
-        )
+    status, direction, reject_kind = _evaluate_direction(reply, candidates, ctx)
+    if status != "planned" or direction is None:
         if status == "invalid_direction":
-            from backend.core import llm_telemetry
-
-            llm_telemetry.increment_degrade_count()
-            logger.warning("Cover planner returned unusable direction: status=%s", status)
+            _record_degrade_once()
+            if reject_kind == "editorial":
+                logger.warning("Cover planner direction rejected by editorial checks: status=invalid_direction")
+            else:
+                logger.warning("Cover planner returned unusable direction: status=%s", status)
         return dict(audit, status=status)
     i, alt = direction.best, direction.runner_up
-    multiple = len(candidates) > 1
-    title = ctx["title"]
-    same_text = (
-        direction.lines == title.splitlines()
-        if "\n" in title
-        else title in ("".join(direction.lines), " ".join(direction.lines))
-    )
-    alternate_valid = (
-        (1 <= alt <= len(candidates) and alt != i and bool(direction.rejection))
-        if multiple
-        else alt == 0
-    )
-    design = ctx["design"]
-    if (
-        (design["accent"] and direction.accent.lower() != design["accent"].lower())
-        or (design["emphasis"] and direction.emphasis != design["emphasis"])
-        or i > len(candidates)
-        or not alternate_valid
-        or not same_text
-        or direction.emphasis not in title
-    ):
-        from backend.core import llm_telemetry
-
-        llm_telemetry.increment_degrade_count()
-        logger.warning("Cover planner direction rejected by editorial checks: status=invalid_direction")
-        return dict(audit, status="invalid_direction")
     frame = candidates[i - 1][0]
     return dict(
         audit,

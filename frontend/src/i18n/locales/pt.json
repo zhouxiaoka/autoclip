@@ -2296,5 +2296,9 @@
   "删除此服务商": "Remover provedor",
   "高级：显示智能回退选项": "Avançado: mostrar opções de fallback inteligente",
   "打开所在文件夹": "Mostrar na pasta",
-  "无法打开所在文件夹": "Não foi possível abrir a pasta"
+  "无法打开所在文件夹": "Não foi possível abrir a pasta",
+  "查看已导出": "Ver exportado",
+  "已导出成片": "Vídeo exportado",
+  "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "Esta versão já foi renderizada. Você pode baixar o vídeo existente ou renderizar uma nova cópia.",
+  "重新渲染": "Renderizar novamente"
 }

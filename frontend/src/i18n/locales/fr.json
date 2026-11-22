@@ -2296,5 +2296,9 @@
   "删除此服务商": "Supprimer ce fournisseur",
   "高级：显示智能回退选项": "Avancé : afficher les options de secours intelligent",
   "打开所在文件夹": "Afficher dans le dossier",
-  "无法打开所在文件夹": "Impossible d’ouvrir le dossier"
+  "无法打开所在文件夹": "Impossible d’ouvrir le dossier",
+  "查看已导出": "Voir l’export",
+  "已导出成片": "Vidéo exportée",
+  "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "Cette version est déjà rendue. Vous pouvez télécharger la vidéo existante ou relancer un nouveau rendu.",
+  "重新渲染": "Relancer le rendu"
 }

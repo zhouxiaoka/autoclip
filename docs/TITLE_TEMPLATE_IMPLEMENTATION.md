@@ -26,6 +26,7 @@
 - 选择卡片使用设计图裁出的本地 WebP，360×240；来源哈希和裁切框在 `frontend/src/assets/title-presets/manifest.json`。卡片明确标注为设计参考。
 - `POST /studio/{project_id}/title-preview` 用真实文案返回PNG；不保存、不调用模型。前端防抖、取消过时请求并释放 Blob URL。
 - 导出使用相同字层与草稿快照。构图预览是静态布局；入场、翻译、字幕时序以实际渲染视频为准。
+- 杂志风（`editorial`）HTML 包装模板左下角的页脚角标固定显示 `原片 <src_start_tc>`（当存在 `issue` 字段时为 `<issue> · 原片 <src_start_tc>`），用于标注该片段在原素材中的起始时间码（例如片段从原片开头截取时显示 `原片 0:00`），属于静态出处角标而非随播放滚动的动态时间码（实现见 `backend/assets/templates/editorial/template.js` 与 `backend/services/studio/overlay_fill.py`）。
 - 磨砂的字层和背景遮罩来自同一个函数，预览使用 CSS backdrop-filter，导出使用 FFmpeg RGB maskedmerge。两种模糊实现会有细微观感差异。
 - 参数进入草稿和不可变导出快照；前端 `titlePresets.ts` 集中维护模板清单、合法版本和设计缩略图。
 - 缺字幕/缺音轨保留可导出的结果并显示具体提示；失败任务可重试，旧成片保留。
