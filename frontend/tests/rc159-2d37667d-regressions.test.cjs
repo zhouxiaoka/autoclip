@@ -181,3 +181,36 @@ test('StudioDownloadLink reveal button uses dedicated full-row class so card act
   const css = read('src/features/studio/quick-output.css')
   assert.match(css, /\.studio-output-card \.ac-card-actions > \.studio-reveal-link\s*\{[\s\S]*grid-column:\s*1 \/ -1/)
 })
+
+test('ExportCover consistently shows reference-frame opt-out notice even when view.warning is needs_source_validation', () => {
+  const coverSrc = read('src/features/studio/ExportCover.tsx')
+  assert.match(coverSrc, /export function coverStatusMessages\(/)
+  const mod = loadTs(path.join(__dirname, '../src/features/studio/ExportCover.tsx'), {
+    react: {},
+    antd: { message: {} },
+    '../../i18n': { t: s => s },
+    '../../publish/coverApi': { coverApi: {} },
+    '../../services/api': { default: { defaults: { baseURL: '' } } },
+    '../../ui': { Btn: () => null, Dialog: () => null },
+    './api': { exportCoverSlot: () => 'douyin', studioApi: {} },
+    './nativeDownload': { isDesktopDownload: () => false, saveLocalFile: async () => {} },
+  })
+  const optOutCfg = { enabled: true, configured: true, allow_send_frame: false }
+  const msgs = (warning, cfg) => Array.from(mod.coverStatusMessages(warning, cfg))
+  // View Cover surface with needs_source_validation AND opt-out enabled -> MUST include opt-out notice without hiding source-frame status
+  assert.deepEqual(msgs('needs_source_validation', optOutCfg), [
+    '当前是截帧封面',
+    '已关闭上传参考帧，当前使用本地排版封面',
+  ])
+  // Exported dialog / crop_grade_text_only with opt-out enabled -> single opt-out notice, no duplicate
+  assert.deepEqual(msgs(null, optOutCfg), ['已关闭上传参考帧，当前使用本地排版封面'])
+  assert.deepEqual(msgs('frame_sending_disabled', optOutCfg), ['已关闭上传参考帧，当前使用本地排版封面'])
+  // Without opt-out config -> only source-frame notice
+  assert.deepEqual(msgs('needs_source_validation', { enabled: true, configured: true, allow_send_frame: true }), [
+    '当前是截帧封面',
+  ])
+  // Real failure -> never show opt-out notice alongside failure
+  assert.deepEqual(msgs('image_service_unavailable', optOutCfg), [
+    '生图失败，已改成本地排版或截帧',
+  ])
+})
