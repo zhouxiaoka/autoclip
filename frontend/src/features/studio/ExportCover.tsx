@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { coverApi, type CoverDesign } from '../../publish/coverApi'
@@ -21,7 +21,6 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const [failedUrl, setFailedUrl] = useState('')
   const [loadedUrl, setLoadedUrl] = useState('')
   const [task, setTask] = useState<{ id: string; variantId?: string } | null>(null)
-  const [useVariantFile, setUseVariantFile] = useState(coverStamp > 0)
   const [missingVariantFile, setMissingVariantFile] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -56,7 +55,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const variantPath = variant && (variant.cover || useVariantFile) && !missingVariantFile
+  const variantPath = variant && !missingVariantFile
     ? `/studio/${projectId}/output-variants/${variant.id}/cover` : ''
   const path = variantPath || `/publish/covers/${projectId}/clips/${clip}/file?platform=${platform}`
   const url = `${api.defaults.baseURL}${path}${path.includes('?') ? '&' : '?'}v=${variant?.cover || ''}-${version}`
@@ -77,7 +76,6 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
         }
         if (state.status === 'completed') {
           if (task.variantId) {
-            setUseVariantFile(true)
             setMissingVariantFile(false)
           }
           onCoverChanged?.()
@@ -144,13 +142,28 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   </section>
 }
 
-export function ExportCoverButton({ children, ...props }: Props & { children?: ReactNode }) {
+export function ExportCoverButton(props: Props) {
+  const { projectId, job, variant, coverStamp = 0 } = props
   const [open, setOpen] = useState(false)
+  const [failedVariant, setFailedVariant] = useState('')
+  const [failedFile, setFailedFile] = useState('')
+  const [updated, setUpdated] = useState(0)
+  const { onCoverChanged } = props
+  const refresh = useCallback(() => { setUpdated(Date.now()); onCoverChanged?.() }, [onCoverChanged])
+  const stamp = Math.max(coverStamp, updated)
+  const version = stamp || job.cover_revision || ''
+  const variantUrl = variant && studioApi.variantCover(projectId, variant.id, stamp)
+  const fallback = studioApi.kitUrl(`/publish/covers/${projectId}/clips/studio-${job.job_id}/file?platform=${exportCoverSlot(job)}&v=${encodeURIComponent(version)}`)
+  const src = variantUrl && variantUrl !== failedVariant ? variantUrl : fallback
   return <><button type="button" className="studio-cover-preview" aria-haspopup="dialog" onClick={() => setOpen(true)}>
-      {children}<span>{t('查看封面')}</span>
+      {failedFile !== src && <img src={src} alt="" onError={() => {
+        if (src === variantUrl) setFailedVariant(src)
+        else setFailedFile(src)
+      }} />}
+      <span>{t(failedFile === src ? '生成封面' : '查看封面')}</span>
     </button>
-    {open && <Dialog open onClose={() => setOpen(false)} title={t('查看封面')}>
-      <ExportCover key={props.job.job_id} {...props} />
+    {open && <Dialog open onClose={() => setOpen(false)} title={t('封面')}>
+      <ExportCover key={job.job_id} {...props} coverStamp={stamp} onCoverChanged={refresh} />
     </Dialog>}
   </>
 }

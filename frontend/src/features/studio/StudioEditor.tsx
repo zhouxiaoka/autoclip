@@ -6,6 +6,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText, type SourcePreview } from './api'
 import { useWorkspace } from './useWorkspace'
+import StudioPublishPreview from './StudioPublishPreview'
+import { outputAnalytics, studioPublishPreviewPath } from './outputVariantPublish'
 import PlayerBar from './PlayerBar'
 import ExportCover, { ExportCoverButton } from './ExportCover'
 import { CropPoint, Draft, Scene, SubtitleCue, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign, cropAt, frameModeAt, patchShot } from './types'
@@ -28,10 +30,11 @@ export default function StudioEditor() {
 function Editor({ projectId, draftId }: { projectId: string; draftId: string }) {
   useTranslation()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const publishJobId = searchParams.get('publish')
   const templatesOn = useFlag('pkg_templates_v1') === true
   const variantId = searchParams.get('variant') || undefined
-  const { workspace, error: loadError, loading, refresh } = useWorkspace(projectId)
+  const { workspace, error: loadError, loading, loaded, refresh } = useWorkspace(projectId)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saved, setSaved] = useState('')
   const [busy, setBusy] = useState('')
@@ -116,10 +119,10 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   // Once the runtime lands (or the user switches to a cropped layout), frame automatically the first time.
   const cropping = !!draft && draft.aspect !== 'original' && draft.layout === 'crop'
   useEffect(() => {
-    if (!cropping || framing.busy || framing.result || framing.status?.status !== 'installed') return
+    if (publishJobId || !cropping || framing.busy || framing.result || framing.status?.status !== 'installed') return
     if (draft?.scenes.some(s => s.crop_x != null || s.crop_track?.length)) return
     void autoFrame(undefined, 'auto')
-  }, [cropping, framing.status?.status])
+  }, [cropping, framing.status?.status, publishJobId])
   /** Edit only the shot under the playhead; the rest of the scene's track stays as detected. */
   const setShot = (sceneId: string, changes: Partial<CropPoint>) => {
     if (draft) patch({ scenes: draft.scenes.map(sc => sc.id === sceneId ? { ...patchShot(sc, currentTime, changes, draft.crop_x ?? .5), framing_source: sc.framing_source || 'manual', framing_adjusted: true } : sc) })
@@ -144,8 +147,11 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const playLength = showRendered ? renderedDuration : scene ? scene.end - scene.start : 0
   const togglePlay = () => { const v = video.current; if (!v) return; if (v.paused) void v.play().catch(() => undefined); else v.pause() }
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
+  const selectedVariant = variantId ? workspace.output_variants?.find(v => v.id === variantId && v.draft_id === draftId) : undefined
+  const editJobId = searchParams.get('export') || selectedVariant?.render_job_id
+  const versionJobs = editJobId ? jobs.filter(j => j.job_id === editJobId) : jobs
   const standalone = !workspace.output_variants?.some(item => item.draft_id === draftId)
-  const exportState = draft ? draftExportState(draft, jobs, standalone) : undefined
+  const exportState = draft ? draftExportState(draft, versionJobs, standalone) : undefined
   const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
   const active = jobs.find(j => j.status === 'queued' || j.status === 'running')
 
@@ -195,13 +201,24 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const render = async () => {
     await perform('render', async () => {
       const savedDraft = await save()
-      await studioApi.export(projectId, savedDraft.id, savedDraft.revision, savedDraft, variantId)
+      const job = await studioApi.export(projectId, savedDraft.id, savedDraft.revision, savedDraft, variantId)
+      setSearchParams({ ...(variantId && { variant: variantId }), export: job.job_id }, { replace: true })
       refresh(); setNotice("渲染已开始，可以离开页面，之后在导出记录查看")
     })
   }
   const rewrite = async () => {
     if (!draft || !instruction.trim()) return
     await perform('rewrite', async () => setSuggestion(await studioApi.rewrite(projectId, draft, instruction.trim())))
+  }
+  if (publishJobId && loaded) {
+    const publishedDraft = workspace.drafts.find(item => item.id === draftId)
+    const job = jobs.find(j => j.job_id === publishJobId && j.status === 'completed')
+    const edit = () => setSearchParams({ ...(variantId && { variant: variantId }), ...(job && { export: job.job_id }) })
+    if (!job || (variantId && selectedVariant?.render_job_id !== job.job_id)) {
+      return <div className="ac-page"><p>{t('成片暂不可用')}</p><Btn onClick={edit}>{t('预览与修改')}</Btn></div>
+    }
+    return <StudioPublishPreview key={`${job.job_id}:${variantId || ''}`} projectId={projectId} draft={publishedDraft} job={job}
+      variant={selectedVariant} onEdit={publishedDraft ? edit : undefined} onRefresh={refresh} analytics={selectedVariant ? outputAnalytics(selectedVariant, publishedDraft, job, workspace.generation || undefined) : {}} />
   }
   if (!draft) return <div className="ac-page"><button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button><div className="ac-empty"><b>{loading ? t("加载成片草稿…") : t("无法打开草稿")}</b>{loadError || (!loading && t("草稿不存在或已移除"))}<Btn onClick={refresh}>{t("重试")}</Btn></div></div>
   const subtitlesOn = effectiveSubtitles(draft)
@@ -211,7 +228,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const updateScene = (i: number, update: Partial<Scene>) => patch({ scenes: draft.scenes.map((s, index) => index === i ? {...s,...update} : s) })
   return <div className="ac-page studio-editor-page">
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button>
-    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{previewUrl ? t("查看已导出") : t("导出成片")}</Btn></div></header>
+    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant={previewUrl ? undefined : 'cta'} disabled={!!busy} onClick={() => setShowExport(true)}>{previewUrl ? t("查看已导出") : t("导出成片")}</Btn>{previewUrl && currentJob && <Btn variant="cta" onClick={() => navigate(studioPublishPreviewPath(projectId, draftId, currentJob.job_id, coverVariant?.id))}>{t('发布')}</Btn>}</div></header>
     {loadError && <p className="studio-error">{t("任务状态暂时无法更新：")}{t(loadError)}</p>}
     {!showRendered && (sourcePreview.status !== 'completed' || playbackError) && <details open={playbackError || ['queued', 'running', 'failed'].includes(sourcePreview.status)} className="studio-muted">
       <summary>{t('生成兼容预览')}</summary>
@@ -258,7 +275,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
       navigate(`/project/${projectId}/studio/${created.id}`)
     }} />
     <Dialog open={!!suggestion} onClose={()=>setSuggestion(null)} title={t("查看文案修改")} description={t("确认后应用到当前草稿，镜头与声音保持原设置。")} footer={<div className="studio-actions"><Btn onClick={()=>setSuggestion(null)}>{t("保留原稿")}</Btn><Btn variant="cta" onClick={()=>{setUndo(draft);setDraft(suggestion);setSuggestion(null);setShowRendered(false)}}>{t("应用修改")}</Btn></div>}><p>{suggestion?.title}</p><p>{suggestion?.hook || t("无开头文字")}</p></Dialog>
-    <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title={previewUrl ? t("已导出成片") : t("导出成片")} description={previewUrl ? t("当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。") : t("保存当前修改并渲染；已有输出会保留在导出记录。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>{t("关闭")}</Btn>{previewUrl && <Btn loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("重新渲染")}</Btn>}{previewUrl && <Btn onClick={()=>navigate(`/project/${projectId}/publish/studio-${currentJob!.job_id}`)}>{t("发布这版成片")}</Btn>}{previewUrl ? <StudioDownloadLink className="ac-btn ac-btn--cta" projectId={projectId} jobId={currentJob!.job_id}/> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("确认导出")}</Btn>}</div>}>
+    <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title={previewUrl ? t("已导出成片") : t("导出成片")} description={previewUrl ? t("当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。") : t("保存当前修改并渲染；已有输出会保留在导出记录。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>{t("关闭")}</Btn>{previewUrl && <Btn loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("重新渲染")}</Btn>}{previewUrl && <Btn onClick={()=>{setShowExport(false); navigate(studioPublishPreviewPath(projectId, draftId, currentJob!.job_id, coverVariant?.id))}}>{t("发布这版成片")}</Btn>}{previewUrl ? <StudioDownloadLink className="ac-btn ac-btn--cta" projectId={projectId} jobId={currentJob!.job_id}/> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("确认导出")}</Btn>}</div>}>
       <div className="ac-row studio-export-title"><b>{t("成片")}</b><span title={draft.title}>{draft.title}</span></div><Row label={t("格式")}>MP4 · 30 fps</Row><Row label={t("画幅")}>{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':t("保持原尺寸")}</Row><Row label={t("文字语言")}>{draft.language==='source' ? t('原语言') : languages.find(l=>l.value===draft.language)?.label}</Row>
       <Row label={t("片头标题")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style||'plain'))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{subtitlesOn?t("字幕压进画面"):t("已关闭")}</Row>
       {showExport && previewUrl && currentJob ? <ExportCover key={currentJob.job_id} projectId={projectId} job={currentJob} variant={coverVariant} /> : <Row label={t("封面")}>{t("导出时自动生成")}</Row>}
