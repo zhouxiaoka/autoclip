@@ -3,7 +3,7 @@
  * Driven by backend/presets/provider_presets.json. No React, no telemetry payloads.
  */
 import { PROVIDERS, type ProviderKey } from './providers'
-import { promotionEligible, promotionRank } from './sponsorPromoState'
+import { promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 import { compareRecommended, displayCatalogGroup, qualityFor } from './providerQuality'
 import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
 import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
@@ -86,8 +86,8 @@ export function groupCatalog(presets: ProviderPreset[]): Record<ProviderGroupId,
     const right = promotionRank(b.id)
     if (left !== null && right !== null && left !== right) return left - right
     return compareRecommended(
-      { sponsor: a.sponsor, success_tier: a.success_tier, success_rate: qualityFor(a.id)?.success_rate },
-      { sponsor: b.sponsor, success_tier: b.success_tier, success_rate: qualityFor(b.id)?.success_rate },
+      { sponsor: Boolean(a.sponsor) || promotionCurrentlyPromoted(a.id), success_tier: a.success_tier, success_rate: qualityFor(a.id)?.success_rate },
+      { sponsor: Boolean(b.sponsor) || promotionCurrentlyPromoted(b.id), success_tier: b.success_tier, success_rate: qualityFor(b.id)?.success_rate },
     )
   })
   return groups

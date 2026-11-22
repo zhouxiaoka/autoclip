@@ -1278,7 +1278,8 @@ def _design_covers(project_id, draft, job_id):
         request_ai_cover(project_id, variant['id'], job_id)
 
 
-cover_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='studio-cover')
+# Cap background cover work to 1 worker so PIL/OpenCV jobs do not spike RAM alongside renders on 8GB machines.
+cover_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-cover')
 
 
 def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=False, options=None, title=None):

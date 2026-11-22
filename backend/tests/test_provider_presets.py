@@ -45,7 +45,7 @@ def test_catalog_has_forty_grouped_providers():
     groups = {}
     for item in catalog.providers.values():
         groups[item.group] = groups.get(item.group, 0) + 1
-    assert groups == {"recommended": 1, "popular": 12, "local": 4, "more": 23}
+    assert groups == {"recommended": 1, "popular": 11, "local": 4, "more": 24}
     assert set(catalog.providers) >= {
         "api88", "infistar", "apimart", "deepseek", "dashscope", "siliconflow", "seed", "glm",
         "kimi", "minimax-cn", "xiaomi", "openai", "gemini", "whisper", "sensevoice",

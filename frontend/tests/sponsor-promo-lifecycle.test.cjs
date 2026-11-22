@@ -115,7 +115,7 @@ test('an out of service sponsor is not upsold, and an existing provider stays li
   const listed = providers.recommendedSetupProviders()
   assert.equal(listed.includes('apimart'), false)
   assert.equal(listed.includes('api88'), true)
-  assert.equal(listed[0], 'api88')
+  assert.deepEqual([...listed].slice(0, 3), ['deepseek', 'dashscope', 'api88'])
   assert.equal(providers.PROVIDERS.apimart === undefined, false)
   const grouped = catalog.groupCatalog(catalog.catalogProviders())
   assert.equal(grouped.recommended.some(item => item.id === 'apimart'), false)

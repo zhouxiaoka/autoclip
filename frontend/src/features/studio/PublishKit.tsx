@@ -81,8 +81,8 @@ export default function PublishKit({ projectId, variant, job, post, onPostChange
         desktop: isDesktopDownload(),
         strategyId: variant.strategy_id,
         hasCover: !!variant.cover || coverStamp > 0,
-        saveVideo: () => saveStudioExport(projectId, variant.render_job_id!),
-        saveCover: () => saveLocalFile(coverPath),
+        saveVideo: async () => { await saveStudioExport(projectId, variant.render_job_id!) },
+        saveCover: async () => { await saveLocalFile(coverPath) },
         requestDownload: artifact => studioDownloadRequested(projectId, variant.render_job_id, { ...analytics, strategy_id: variant.strategy_id, artifact_type: artifact }),
         observeDownload: (action, artifact) => observeStudioDownload(action, projectId, variant.render_job_id, { ...analytics, strategy_id: variant.strategy_id, artifact_type: artifact }),
         openBrowser: kind => {

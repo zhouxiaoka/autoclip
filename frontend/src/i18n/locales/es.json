@@ -2286,5 +2286,15 @@
   "本地后台服务多次意外退出，已暂停自动重启。请点击重启服务恢复使用。": "El servicio local en segundo plano se cerró inesperadamente varias veces y se pausó el reinicio automático. Haz clic en Reiniciar ahora para continuar.",
   "允许向封面生图模型上传参考帧": "Permitir enviar fotogramas de referencia al modelo de portada",
   "当前为「原帧排版」，不会调用所选生图模型；切到「模型编辑」后生效。": "El modo de composición sobre fotograma original está activo, así que no se llamará al modelo de imagen elegido; cambia a Edición con modelo para usarlo.",
-  "已关闭向封面生图模型上传参考帧，将仅使用本机排版，不会调用所选生图模型（不影响画面理解）。": "El envío de fotogramas de referencia al modelo de portada está desactivado, por lo que solo se usará la composición local (no afecta al análisis visual)."
+  "已关闭向封面生图模型上传参考帧，将仅使用本机排版，不会调用所选生图模型（不影响画面理解）。": "El envío de fotogramas de referencia al modelo de portada está desactivado, por lo que solo se usará la composición local (no afecta al análisis visual).",
+  "百度千帆。国内 OpenAI 兼容接口。": "Baidu Qianfan. Punto de conexión compatible con OpenAI en China.",
+  "腾讯混元。国内 OpenAI 兼容接口。": "Tencent Hunyuan. Punto de conexión compatible con OpenAI en China.",
+  "当前已保存密钥：{{masked}}": "Clave guardada: {{masked}}",
+  "测试并启用": "Probar y activar",
+  "更多操作": "Más acciones",
+  "清除已保存密钥": "Borrar clave guardada",
+  "删除此服务商": "Eliminar proveedor",
+  "高级：显示智能回退选项": "Avanzado: mostrar opciones de respaldo inteligente",
+  "打开所在文件夹": "Mostrar en la carpeta",
+  "无法打开所在文件夹": "No se pudo abrir la carpeta"
 }

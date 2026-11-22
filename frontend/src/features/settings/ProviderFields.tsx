@@ -82,6 +82,9 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             }}
             onChange={e => editKey(e.target.value)}
             onBlur={e => editKey(e.target.value)} />
+          {connection.has_key && connection.api_key_masked && !connection.api_key && (
+            <span className="ac-hint" data-testid="masked-api-key">{t('当前已保存密钥：{{masked}}', { masked: connection.api_key_masked })}</span>
+          )}
           {(() => {
             const promo = connection.provider === 'apimart' || connection.provider === 'api88' || connection.provider === 'infistar' ? connection.provider : null
             const href = promo ? promotionRegisterUrl(promo, preset?.sponsor?.registerUrl || '') : null

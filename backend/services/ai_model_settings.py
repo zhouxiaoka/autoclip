@@ -641,7 +641,7 @@ def save(settings: ModelSettings, *, edited_fields: set[str] | None = None) -> d
         })
         if transcription_needs_repair(resolved) and (resolved.transcription != previous.transcription or not transcription_needs_repair(previous)):
             raise ValueError('该 ASR 模型的字幕时间戳接口尚未适配，请选择其他转写模型')
-        if not resolved.analysis and not resolved.connections:
+        if not resolved.analysis and not resolved.connections and not previous.connections:
             raise ValueError('请选择高光分析模型')
         from backend.core.model_catalog import is_image_model
         from backend.services.provider_validation import IMAGE_MODEL_IN_ANALYSIS_HINT

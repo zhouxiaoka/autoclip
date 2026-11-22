@@ -51,7 +51,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   const cards = nodes.filter(node => node.props && node.props['data-provider-id'])
   const recommended = nodes.find(node => node.props && node.props['data-provider-group'] === 'recommended')
   const recommendedIds = flatten(recommended).filter(node => node.props && node.props['data-provider-id']).map(node => node.props['data-provider-id'])
-  assert.deepEqual(recommendedIds, ['apimart', 'deepseek', 'dashscope'])
+  assert.deepEqual(recommendedIds, ['deepseek', 'dashscope', 'apimart'])
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'api88'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'deepseek'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'whisper'))

@@ -33,13 +33,17 @@ function link({ desktop = true, save } = {}) {
  const file = path.resolve(__dirname, '../src/features/studio/StudioDownloadLink.tsx')
  const mocks = {
   react: { useRef: value => { const ref={current:value};refs.push(ref);return ref }, useState: value => [value,()=>{}] },
-  'react/jsx-runtime': { jsx: (_type,props)=>props },
+  'react/jsx-runtime': {
+   Fragment: Symbol('Fragment'),
+   jsx: (_type,props)=>props,
+   jsxs: (_type,props)=>Array.isArray(props?.children) ? props.children[0] : props,
+  },
   'react-i18next': { useTranslation: ()=>({t:key=>key}) },
   antd: { message: { success:()=>calls.push('success'),error:()=>calls.push('error') } },
   '../../analytics/studio': { studioDownloadRequested:()=>calls.push('intent'), observeStudioDownload:async action=>{calls.push('intent');return action()} },
   '../../desktop/sentry': { captureStudioException:()=>{} },
   './api': { studioApi:{video:()=>'/immutable.mp4?download=true'} },
-  './nativeDownload': { isDesktopDownload:()=>desktop,saveStudioExport:save|| (async()=>{}) },
+  './nativeDownload': { isDesktopDownload:()=>desktop,saveStudioExport:save|| (async()=>''), revealInFolder: async p => calls.push(['reveal', p]) },
   './overrides': { markOutputTaken() {} },
  }
  const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText
@@ -61,4 +65,13 @@ test('native failure leaves the link retryable without reporting success',async(
 
 test('backend readiness timeout does not invoke a stale or relative native URL',async()=>{
  const x=load({ready:false,readyResult:false});await assert.rejects(x.saveStudioExport('p','j'),/Backend not ready/);assert.deepEqual(x.calls,['ready'])
+})
+
+test('desktop save returns local path and revealInFolder invokes reveal_in_folder',async()=>{
+ const x=load({result:{sizeBytes:128,path:'/Users/demo/Downloads/clip.mp4'}})
+ const saved=await x.saveStudioExport('p','j')
+ assert.equal(saved,'/Users/demo/Downloads/clip.mp4')
+ await x.revealInFolder(saved)
+ assert.equal(x.calls[1].name,'reveal_in_folder')
+ assert.equal(x.calls[1].path,'/Users/demo/Downloads/clip.mp4')
 })

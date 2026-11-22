@@ -264,6 +264,28 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const setCoverEnabled = (enabled: boolean) => { autoCover.current = false; if (settings) replace(logic.setCoverEnabled(settings, enabled, lists)) }
   const setCoverModel = (connectionId: string, model: string) => { if (!settings) return; autoCover.current = false; replace(logic.setCoverModel(settings, connectionId, model)) }
   const setVisual = (enabled: boolean) => { if (settings) replace(logic.setVisual(settings, enabled)) }
+  const clearConnectionKey = async (id: string) => {
+    if (!settings) return
+    const cleared = logic.clearConnectionKey(settings, id)
+    const next = logic.saveIssue(cleared, true)
+      ? {
+          ...cleared,
+          analysis: cleared.analysis?.connection_id === id ? null : cleared.analysis,
+          vision: cleared.vision?.connection_id === id ? null : cleared.vision,
+          cover: cleared.cover?.connection_id === id ? null : cleared.cover,
+          cover_enabled: cleared.cover?.connection_id === id ? false : cleared.cover_enabled,
+          cover_follows_analysis: cleared.cover?.connection_id === id ? false : cleared.cover_follows_analysis,
+        }
+      : cleared
+    replace(next)
+    await save(undefined, next, undefined, false)
+  }
+  const removeConnection = async (id: string) => {
+    if (!settings) return
+    const next = logic.removeConnection(settings, id)
+    replace(next)
+    await save(undefined, next, undefined, false)
+  }
   const addCustomProvider = (draft: CustomProviderDraft) => {
     if (!settings) return
     const next = applyCustomProvider(settings, draft)
@@ -842,7 +864,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     settings, lists, busy, listErrors, dirty, dirtyRef, conflicted, saving: saving || matching, testing, error, configureProvider, testWarning, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, declareModel, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
-    setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test, cancelTrial,
+    setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, clearConnectionKey, removeConnection, save, test, cancelTrial,
     testingKind, lastTrialByConnection,
   }
 }

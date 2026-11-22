@@ -445,7 +445,7 @@
     "minimax-cn": {
       "display_name": "MiniMax",
       "short_name": "MiniMax",
-      "group": "popular",
+      "group": "more",
       "protocol": "anthropic-messages",
       "base_url": "https://api.minimaxi.com/anthropic",
       "docs_url": "https://platform.minimaxi.com",
@@ -1151,7 +1151,7 @@
       "base_url": "https://qianfan.baidubce.com/v2",
       "docs_url": "https://console.bce.baidu.com/qianfan",
       "api_key_setting": "qianfan_api_key",
-      "hint": "百度千帆。国内公开文档常见地址，上线前须核实。",
+      "hint": "百度千帆。国内 OpenAI 兼容接口。",
       "kind": "preset",
       "candidates": {
         "analysis": [],
@@ -1173,7 +1173,7 @@
       "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
       "docs_url": "https://cloud.tencent.com/product/hunyuan",
       "api_key_setting": "hunyuan_api_key",
-      "hint": "腾讯混元。国内公开文档常见地址，上线前须核实。",
+      "hint": "腾讯混元。国内 OpenAI 兼容接口。",
       "kind": "preset",
       "candidates": {
         "analysis": [],

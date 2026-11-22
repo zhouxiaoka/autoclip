@@ -241,6 +241,19 @@ process.stdout.write(JSON.stringify(events))
             with self.subTest(query=name, index=index):
                 self.assertEqual(self.db.execute(queries(name)[index]).fetchall(), [])
 
+    def test_value_funnel_and_ux_results_follow_v4_production_cohort_hygiene(self):
+        for filename, expected_panels in (('value_funnel.sql', 3), ('ux_results.sql', 1)):
+            raw = (ROOT / 'docs/analytics' / filename).read_text(encoding='utf-8')
+            text = '\n'.join(line for line in raw.splitlines() if not line.lstrip().startswith('--'))
+            self.assertEqual(text.count("toString(e.properties.analytics_environment) = 'production'"), expected_panels, filename)
+            self.assertEqual(text.count("toString(e.properties.runtime) = 'desktop'"), expected_panels, filename)
+            self.assertEqual(text.count('person_id NOT IN COHORT {internal_cohort_id}'), expected_panels, filename)
+            self.assertEqual(text.count('{date_from}'), expected_panels, filename)
+            self.assertEqual(text.count('{release_1_5_9}'), expected_panels, filename)
+            self.assertNotIn('now()', text, filename)
+            self.assertNotIn('distinct_id', text, filename)
+            self.assertIn('studio_output_played', text, filename)
+
 
 if __name__ == '__main__':
     unittest.main()

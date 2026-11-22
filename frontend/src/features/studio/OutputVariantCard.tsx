@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
-import { trackOutputShare, type VariantProperties } from '../../analytics/studio'
+import { trackOutputPlayed, trackOutputShare, type VariantProperties } from '../../analytics/studio'
 import { flagAssigned, useFlag } from '../../analytics/flags'
 import { clipReason } from './clipReason'
 import StudioDownloadLink from './StudioDownloadLink'
@@ -32,6 +32,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   useEffect(() => setEditedPost(null), [variant.post])
   const post = editedPost || variant.post
   const [asking, setAsking] = useState(false)
+  const playedRef = useRef(false)
   const [coverStamp, setCoverStamp] = useState(0)
   const coverChanged = useCallback(() => setCoverStamp(Date.now()), [])
   const showReason = useFlag('clip_reasons') === true
@@ -60,7 +61,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
     setAsking(true)
   }
   return <article className="ac-card studio-output-card" aria-label={post?.title || draft?.title || t('正在准备成片')}>
-    <div className="studio-variant-thumb" title={productionDetails}>{completed && variant.render_job_id ? <video className="studio-variant-video" aria-label={t('播放成片')} onPlay={onViewed} controls preload="metadata" poster={(variant.cover || coverStamp) ? studioApi.variantCover(projectId, variant.id, coverStamp) : undefined} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}{!completed && <span className="ac-tag studio-output-progress" role="status">{failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}</span>}</div>
+    <div className="studio-variant-thumb" title={productionDetails}>{completed && variant.render_job_id ? <video className="studio-variant-video" aria-label={t('播放成片')} onPlay={() => { if (!playedRef.current) { playedRef.current = true; trackOutputPlayed(projectId, analytics) } onViewed?.() }} controls preload="metadata" poster={(variant.cover || coverStamp) ? studioApi.variantCover(projectId, variant.id, coverStamp) : undefined} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}{!completed && <span className="ac-tag studio-output-progress" role="status">{failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}</span>}</div>
     <div className="ac-card-body">
       <h2 className="ac-card-title">{post?.title || draft?.title || t('正在准备成片')}</h2>
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}

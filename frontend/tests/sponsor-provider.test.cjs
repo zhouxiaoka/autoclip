@@ -24,7 +24,7 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     './providerUrl': load('providerUrl.ts', {}),
   }).default
   const options = providers.providerPickerOptions()
-  assert.deepEqual(Array.from(options[0].options, p => p.value), ['apimart', 'deepseek', 'dashscope'])
+  assert.deepEqual(Array.from(options[0].options, p => p.value), ['deepseek', 'dashscope', 'apimart'])
   assert.equal(providers.PROVIDERS.api88.sponsor, undefined)
   assert.equal(providers.PROVIDERS.infistar.sponsor, undefined)
   assert.equal(providers.PROVIDERS.infistar.cloud.baseUrl, 'https://infistar.cc/v1')

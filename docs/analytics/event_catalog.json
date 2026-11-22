@@ -1299,6 +1299,10 @@
       "status": "keep",
       "domain": "studio"
     },
+    "studio_output_played": {
+      "status": "keep",
+      "domain": "studio"
+    },
     "studio_output_rated": {
       "status": "keep",
       "domain": "studio"
