@@ -1,6 +1,7 @@
 import { USER_CAUSE_ERROR_CODES, USER_CAUSE_UPSTREAM_TYPES, USER_MESSAGES } from '../../analytics/failureCodes'
 import { getProvider } from '../settings/providerPresets'
-import { USER_CAUSE_REASONS, llmFailureText } from '../../utils/llmFailure'
+import { readPromoSnapshot } from '../settings/sponsorPromoState'
+import { USER_CAUSE_REASONS, ingestConnectionCopy, llmFailureText } from '../../utils/llmFailure'
 /**
  * 1.5.7 failed-state action. User-attributable causes (bad/expired key, no balance, no model
  * configured, key lacks permission) cannot be fixed by retrying: show 「去设置」 instead.
@@ -53,7 +54,7 @@ export const SWITCHABLE_UPSTREAM = [
 ] as const
 
 /** Known sponsor catalog ids for insufficient_quota → recharge (X3). */
-export const SPONSOR_PROVIDERS = ['api88', 'infistar', 'apimart'] as const
+export const SPONSOR_PROVIDERS = ['apimart'] as const
 
 export const ADD_PROVIDER_HINT = '建议再加一个服务商'
 export const RECHARGE_LABEL = '去充值'
@@ -83,6 +84,9 @@ export function rechargeTarget(provider?: string | null): {
 } | null {
   const key = (provider || '').trim().toLowerCase()
   if (!key) return null
+  const snap = readPromoSnapshot()
+  if (snap?.statuses?.[key] === 'out_of_service') return null
+  if (snap && isIn(SPONSOR_PROVIDERS, key) && !snap.choices.includes(key)) return null
   const row = getProvider(key)
   if (!row) return null
   if (isIn(SPONSOR_PROVIDERS, key) && row.sponsor) {
@@ -145,7 +149,15 @@ const MATERIAL_CODES = [
 
 const isIn = (list: readonly string[], value?: string | null): value is string => !!value && list.includes(value)
 
+/** Import page: a download timeout is not a model-settings failure. Reads stage here so the page does not. */
+export function downloadConnectionFailure(analysis?: { error_code?: string | null; failure_stage?: string | null } | null): boolean {
+  return ingestConnectionCopy(analysis?.error_code, null, analysis?.failure_stage) != null
+}
+
 export function suggestedAction(code?: string | null, upstream?: string | null, stage?: string | null): SuggestedAction | null {
+  if (ingestConnectionCopy(code, upstream, stage)) {
+    return { id: 'change_material', label: '换一个视频', kind: 'home', destination: '/' }
+  }
   if (code === 'service_restarted') {
     return { id: 'keep_window', label: '保持窗口打开，或缩短素材', kind: 'note' }
   }
@@ -276,22 +288,22 @@ const BARE_FAILURE = new Set(['', '错误', '失败', 'Error', 'error', '处理�
 const DOWNLOAD_CODES = new Set(['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found', 'source_blocked', 'file_locked', 'source_unsupported'])
 const TRANSCRIBE_STAGES = new Set(['subtitle', 'transcribe'])
 const ANALYZE_STAGES = new Set(['analyze', 'outline', 'timeline', 'scoring', 'title', 'clustering', 'vision', 'highlight'])
+const PRODUCE_STAGES = new Set(['render', 'export', 'production', 'dispatch'])
 
-/** The four steps a beginner can act on: download / transcribe / analyze / produce. */
-export function failureStep(stage?: string | null, phase?: string | null, code?: string | null): '下载' | '转写' | '分析' | '制作' {
-  if (code && (DOWNLOAD_CODES.has(code) || code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup')) {
-    return code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup' ? '转写' : '下载'
-  }
-  const key = (stage || '').toLowerCase()
+export type FailureStep = '下载' | '转写' | '分析' | '制作' | '筛选'
+
+/** Label a recorded stage. A missing stage stays unlabeled; phase alone is not a guess. */
+export function failureStep(stage?: string | null, _phase?: string | null, code?: string | null): FailureStep | null {
+  const key = (stage || '').trim().toLowerCase()
+  if (key === 'screening') return '筛选'
   if (TRANSCRIBE_STAGES.has(key)) return '转写'
   if (ANALYZE_STAGES.has(key)) return '分析'
-  if (key === 'render' || key === 'export' || phase === 'rendering') return '制作'
-  if (key === 'ingest' || key === 'screening') return '下载'
-  // Screening without a model code is still the download/read step. Production is analysis
-  // until rendering starts. A model failure during screening names the analysis step.
-  if (phase === 'screening') return code ? '分析' : '下载'
-  if (phase === 'production') return '分析'
-  return '制作'
+  if (PRODUCE_STAGES.has(key)) return '制作'
+  if (key === 'ingest' || key === 'download') return '下载'
+  if (key) return null
+  if (code && (code.startsWith('whisper_') || code === 'transcription_empty' || code === 'subtitle_setup')) return '转写'
+  if (code && DOWNLOAD_CODES.has(code)) return '下载'
+  return null
 }
 
 export function readableFailure(error?: string | null, code?: string | null, upstream?: string | null): string {
@@ -319,9 +331,10 @@ export function quotaBillingCopy(info: Pick<PageFailureInfo, 'upstream_error_typ
   return parts.join(' ')
 }
 
-export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: '下载' | '转写' | '分析' | '制作'; reason: string; billing: string | null } {
-  const raw = (message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
-  const reason = BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw
+export function presentedFailure(info: PageFailureInfo & { error?: string | null }, message?: string | null): { step: FailureStep | null; reason: string; billing: string | null } {
+  const ingest = ingestConnectionCopy(info.error_code, info.upstream_error_type, info.failure_stage)
+  const raw = (ingest ?? message ?? readableFailure(info.error, info.error_code, info.upstream_error_type)).trim()
+  const reason = ingest || (BARE_FAILURE.has(raw) ? readableFailure(info.error, info.error_code, info.upstream_error_type) : raw)
   const count = Number(info.billable_calls_before_failure)
   const quotaBilling = quotaBillingCopy(info)
   return {
@@ -345,8 +358,8 @@ export function analysisPageFailure(
 }
 
 /** User sentence for a settled page cause. The fine upstream type stays inside this reader. */
-export function pageFailureText(info: { error?: string | null; error_code?: string | null; upstream_error_type?: string | null }): string {
-  return llmFailureText(info.error, info.error_code, info.upstream_error_type)
+export function pageFailureText(info: { error?: string | null; error_code?: string | null; upstream_error_type?: string | null; failure_stage?: string | null }): string {
+  return llmFailureText(info.error, info.error_code, info.upstream_error_type, info.failure_stage)
 }
 
 export function analysisFailureText(

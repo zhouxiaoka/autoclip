@@ -16,7 +16,7 @@ test('one copy action keeps platform post copy without adding a product credit',
  assert.doesNotMatch(kit,/shareCaption|用 AutoClip 剪的|Made with AutoClip/)
  assert.doesNotMatch(card,/复制分享文案|shareCaption/)
  assert.match(kit,/onCopied\(\)/)
- assert.match(card,/trackOutputShare\(projectId, \{ share_target: 'copy_caption', \.\.\.analytics \}\)/)
+ assert.match(read('src/features/studio/StudioPublishPreview.tsx'),/trackOutputShare\(projectId, \{ share_target: 'copy_caption', \.\.\.analytics \}\)/)
 })
 
 test('rating is asked after a successful download at most once per project and once a week',()=>{

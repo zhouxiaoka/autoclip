@@ -412,6 +412,24 @@ def _delete_broken(snapshot: Path, items: List[_BrokenFile]) -> None:
             _unlink(blobs / f"{etag}.incomplete", name)
 
 
+_PROGRESS_POLL_SECONDS = 1.0
+
+
+def _downloaded_blob_bytes(cache_dir: Path) -> int:
+    blobs = cache_dir / "blobs"
+    total = 0
+    try:
+        for entry in blobs.iterdir():
+            try:
+                if entry.is_file() and not entry.is_symlink():
+                    total += entry.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        return 0
+    return total
+
+
 def _fetch_snapshot(snapshot_download, args: dict, repo_id: str, endpoint: str) -> str:
     """One normal download, then at most one more after the bad files have been deleted."""
     snapshot = Path(snapshot_download(**args))
@@ -479,12 +497,19 @@ class WhisperModelManager:
         status = self._check_model_status(model_name)
         with self._lock:
             st = self._download_state.get(model_name, {})
+            progress = st.get("progress")
+        if status == ModelStatus.DOWNLOADING:
+            downloaded = _downloaded_blob_bytes(self._model_cache_dir(model_name))
+            if downloaded > 0:
+                expected = max(1, int(cfg.get("size_bytes") or (145 * 1024 * 1024)))
+                live_pct = min(99, max(1, int((downloaded * 100) / expected)))
+                progress = max(int(progress or 0), live_pct)
         return ModelInfo(
             name=model_name,
             size=cfg["size"], size_bytes=cfg["size_bytes"],
             description=cfg["description"], accuracy=cfg["accuracy"], speed=cfg["speed"],
             status=status, repo_id=cfg["repo_id"],
-            download_progress=st.get("progress"),
+            download_progress=progress,
             local_path=str(self._model_cache_dir(model_name)) if status == ModelStatus.DOWNLOADED else None,
             error_message=st.get("error"),
             error_code=st.get("error_code"),

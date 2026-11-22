@@ -52,7 +52,7 @@ def _shown(text, code):
 def user_visible_error(error):
     from backend.pipeline.failures import PipelineFailure
     if type(error).__name__ == "JobDurationExceeded":
-        return _shown(str(error), "timeout")
+        return _shown(str(error), "job_budget")
     if isinstance(error, PipelineFailure):
         return _shown(error.user_message(), error.code or "unknown")
     local = _local_sentence_code(error)

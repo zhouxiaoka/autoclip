@@ -2163,6 +2163,7 @@ NOT_SNAPSHOT_READERS = {
     ('backend/services/studio/store.py', 'settle_attempt'): 'writes the caller failure_stage onto the one terminal record',
     ('backend/services/studio/store.py', 'settle_generation'): 'ranks variant failures for the generation cause',
     ('backend/services/studio/store.py', '_ensure_failure_identity'): "normalizes the job's own error_code/stage",
+    ('backend/services/studio/project_completion.py', '_failure'): 'copies the chosen attempt cause onto the project index',
     ('backend/services/studio/store.py', 'fill'): "normalizes the job's own error_code/stage",
     ('backend/services/studio/vision_settings.py', '*'): 'vision settings',
     ('backend/api/v1/settings.py', 'get_settings'): 'model settings page',
@@ -2204,6 +2205,12 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function pageSuggestedAction(',
              'export function readableFailure(',
              'export function failureStep(',
+             'export function resolveFailureCause(',
+             'export function presentFailure(',
+             'function fixableSecondary(',
+             'export function briefReason(',
+             'function reasonFor(',
+             'function primaryFor(',
              'export function connectionUsableForSwitch(',
              'export function usableConnectionCount(',
              'export function analysisProviderId(',
@@ -2216,6 +2223,7 @@ TS_EXEMPT = ('export function pickAttribution(', 'export function isFailedTermin
              'export function builtinSecPerSourceMin(',
              'export function rechargeTarget(',
              'export function failureAction(',
+             'export function downloadConnectionFailure(',
              'export function suggestedAction(',
              'export function failurePlan(',
              'export default function StudioResults(',
@@ -3327,7 +3335,8 @@ one SQL adapter for every success-rate test."""
 
 pytest.importorskip('duckdb')
 WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00'", 'internal_cohort_id': '641509',
-          'release_1_5_7': "'2026-10-01 00:00:00'"}
+          'release_1_5_7': "'2026-10-01 00:00:00'", 'release_1_5_8': "'2026-10-01 00:00:00'",
+          'release_1_5_9': "'2026-10-01 00:00:00'"}
 
 
 from backend.tests.test_cloud_asr import _asr_401, _on_disk, _real_store_jobs  # noqa: E402

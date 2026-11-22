@@ -193,7 +193,8 @@ def _subtitle_blockers(video: Path, duration: float, options: ImportOptions, con
     """
     from backend.pipeline import media_precheck
     from backend.services.studio import preflight
-    srt_attached = (video.parent / 'input.srt').is_file()
+    from backend.utils.text_processor import TextProcessor
+    srt_attached = TextProcessor.has_usable_srt(video.parent / 'input.srt')
     # #351: the subtitle-route verdict is the one classify_source; audio is only looked up when it matters.
     audio = None if srt_attached or media_precheck.too_short(duration) else media_precheck.has_audio(video)
     probe = preflight.MaterialProbe(preflight.ProbeState.READABLE, Path(video), duration, audio)
@@ -232,10 +233,11 @@ def _require_local_transcription(video: Path, analysis_mode: str) -> None:
     An attached or platform ``input.srt`` is already a subtitle route, so it skips
     the check. Visual mode does not need ASR; callers pass the saved analysis mode.
     """
+    from backend.utils.text_processor import TextProcessor
     from backend.services.studio import readiness
     readiness.require_transcription(
         stage='SUBTITLE',
-        srt_available=(video.parent / 'input.srt').is_file(),
+        srt_available=TextProcessor.has_usable_srt(video.parent / 'input.srt'),
         analysis_mode=analysis_mode,
     )
 

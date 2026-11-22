@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "autoclip-diagnostics-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  // Live production resources. Do not attach any other product bucket.
+  // Worker: https://autoclip-diagnostics-api.autoclip-val-3f71ee83.workers.dev
+  "triggers": { "crons": ["17 * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DIAGNOSTICS_DB",
+      "database_name": "autoclip-diagnostics-meta",
+      "database_id": "91ac62f9-8b47-4f88-af93-08c2706caace",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DIAGNOSTICS_BUCKET",
+      "bucket_name": "autoclip-diagnostics"
+    }
+  ],
+  "vars": {
+    "LANDED_BYTES_CAP": "4294967296",
+    "INFLIGHT_BYTES_CAP": "2147483648",
+    "RETENTION_SECONDS": "1209600",
+    "INCOMPLETE_SECONDS": "86400",
+    "MANIFEST_MAX": "262144",
+    "SUBTITLE_MAX": "2097152",
+    "EXCERPT_MAX": "209715200",
+    "ORIGINAL_MAX": "2147483648",
+    "RATE_PER_HOUR": "20",
+    "PART_TTL_SECONDS": "900",
+    "PART_BYTES": "8388608",
+    "R2_BUCKET_NAME": "autoclip-diagnostics",
+    "QUOTA_APPROVAL": "pending"
+  }
+}

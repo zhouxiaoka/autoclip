@@ -11,6 +11,7 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.analytics_environment = 'validation'
   AND properties.app_version = 'VERSION_UNDER_TEST'
   AND properties.runtime = 'desktop'
+  -- setup_presented counts the provider chooser. Sample-only users also appear in pageviews.
   AND event IN ('$pageview', 'setup_presented', 'app_installed', 'app_opened', 'app_updated')
 GROUP BY event, os, arch
 ORDER BY event, os, arch;
@@ -31,6 +32,7 @@ GROUP BY event, outcome, error_code
 ORDER BY event, outcome;
 
 -- Run separately: missing failure codes are a coverage defect, never a cause category.
+-- One-key setup probes one shared credential. Count provider validations per connection, not per model role.
 SELECT count() AS failed_events,
        countIf(properties.error_code IS NULL OR toString(properties.error_code) = '') AS missing_error_code,
        uniq(distinct_id) AS devices

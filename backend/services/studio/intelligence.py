@@ -4,7 +4,9 @@ from backend.core.llm_stream import StreamError
 from backend.core.failure_attribution import ModelResponseInvalid  
 import base64
 import json
+import logging
 import math
+import re
 import subprocess
 import tempfile
 import time
@@ -18,6 +20,8 @@ from pydantic import Field
 from backend.services.studio.models import Scene, Draft, Preferences
 from backend.services.publish_export import _probe
 from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+
+logger = logging.getLogger(__name__)
 
 
 def visual_config():
@@ -43,11 +47,35 @@ def source_frame_analysis_allowed():
     except ValueError:
         return False
 
+_THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>[\s\S]*?</think>', re.IGNORECASE)
+_FENCED_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]*?)```', re.IGNORECASE)
+
+
 def decode_json(raw):
-    raw = raw.strip()
-    if raw.startswith('```'):
-        raw = raw.split('\n', 1)[1].rsplit('```', 1)[0].strip()
-    return json.loads(raw)
+    text = _THINK_BLOCK_RE.sub('', str(raw or '')).strip()
+    if not text:
+        raise ValueError('Empty JSON response')
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    for match in _FENCED_JSON_RE.finditer(text):
+        inner = match.group(1).strip()
+        if not inner:
+            continue
+        try:
+            return json.loads(inner)
+        except ValueError:
+            continue
+    decoder = json.JSONDecoder()
+    for index, ch in enumerate(text):
+        if ch in '{[':
+            try:
+                obj, _ = decoder.raw_decode(text, index)
+                return obj
+            except ValueError:
+                continue
+    raise ValueError('No valid JSON object or array found')
 
 def text_json(prompt, data):
     from backend.utils.llm_client import LLMClient
@@ -111,6 +139,22 @@ def _http_error_detail(error) -> str:
     return detail
 
 
+from contextlib import contextmanager
+import contextvars
+
+_vision_before_emit_hook: contextvars.ContextVar = contextvars.ContextVar('vision_before_emit_hook', default=None)
+
+
+@contextmanager
+def vision_degrade_hook(callback):
+    """Run ``callback(parsed_value, error)`` inside vision_call before llm_request_finished emits."""
+    token = _vision_before_emit_hook.set(callback)
+    try:
+        yield
+    finally:
+        _vision_before_emit_hook.reset(token)
+
+
 def vision_call(content, config=None, *, allow_event_list=False):
     from backend.core.project_cancellation import checkpoint
     checkpoint()  # the project was deleted: no more paid calls for it (RC156 #12)
@@ -127,13 +171,15 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
     saved_model = model
     provider = provider_for_endpoint({'base_url': base, 'identity': identity})
-    cached = remembered_model(provider, base, key, saved_model)
+    allow_substitute = config.get('model_source') != 'user'
+    cached = remembered_model(provider, base, key, saved_model) if allow_substitute else None
     if cached:
         model = cached
     from backend.core.model_catalog import known_text_only
 
     def build_body(name):
-        payload = {'model': name, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
+        max_tokens = int(config['max_tokens']) if config.get('max_tokens') else (1000 if config.get('quick_screening') else 4000)
+        payload = {'model': name, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': max_tokens}
         # Structured visual observation must finish within the bounded request budget.
         # Other compatible providers must not receive Seed-specific parameters.
         if name.lower().startswith('doubao-seed'):
@@ -173,7 +219,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
             raise
 
     started = time.monotonic()
-    _telem = {'retries': 0, 'result': None, 'error': None}
+    _telem = {'retries': 0, 'result': None, 'parsed': None, 'error': None}
     from backend.core.llm_emit import begin_logical_call
     begin_logical_call()  # E2: each vision call counts its own retry once
 
@@ -216,7 +262,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
                 info = classify_upstream_error(status, detail)
                 # The saved id is gone. Ask the account list once and retry that call once.
-                if not tried_substitute and info.error_type is UpstreamErrorType.MODEL_NOT_FOUND:
+                if allow_substitute and not tried_substitute and info.error_type is UpstreamErrorType.MODEL_NOT_FOUND:
                     tried_substitute = True
                     alt = resolve_available_model(
                         base_url=base, api_key=key, provider=provider,
@@ -253,7 +299,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
             _telem['result'] = result
             if model != saved_model:
-                remember_model(provider, base, key, saved_model, model)
+                remember_model(provider, base, key, saved_model, model, purpose='vision')
             from backend.core import llm_usage
             llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
                              prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),
@@ -275,6 +321,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                     value = {'events': value}
                 if not isinstance(value, dict):
                     raise ValueError('Expected a JSON object')
+                _telem['parsed'] = value
                 return value
             except (VisionRequestError, UserFacingError):
                 raise
@@ -284,7 +331,43 @@ def vision_call(content, config=None, *, allow_event_list=False):
         _telem['error'] = error
         raise
     finally:
+        from backend.core import llm_usage
         from backend.core.llm_telemetry import emit_vision_request
+        err = _telem['error']
+        elapsed = getattr(err, 'elapsed_seconds', None)
+        if elapsed is None:
+            try:
+                elapsed = time.monotonic() - started
+            except StopIteration:
+                elapsed = 0.0
+        elapsed = round(float(elapsed), 2)
+        images_count = sum(1 for part in content if isinstance(part, dict) and part.get('type') == 'image_url')
+        stage_name = llm_usage.current_stage()
+        res_obj = _telem['result'] if isinstance(_telem['result'], dict) else {}
+        usage_obj = res_obj.get('usage') if isinstance(res_obj.get('usage'), dict) else {}
+        comp_chars = len(str(((res_obj.get('choices') or [{}])[0].get('message') or {}).get('content') or '')) if res_obj else 0
+        if err is None:
+            logger.info(
+                "Vision call completed: stage=%s model=%s images=%d prompt_tokens=%s completion_tokens=%s completion_chars=%d elapsed_s=%.2f",
+                stage_name, model, images_count,
+                usage_obj.get('prompt_tokens', usage_obj.get('input_tokens')),
+                usage_obj.get('completion_tokens', usage_obj.get('output_tokens')),
+                comp_chars, elapsed,
+            )
+        else:
+            logger.warning(
+                "Vision call failed: stage=%s model=%s images=%d error_type=%s error_code=%s http_status=%s completion_tokens=%s completion_chars=%d elapsed_s=%.2f",
+                stage_name, model, images_count, type(err).__name__,
+                getattr(err, 'code', ''), getattr(err, 'http_status', None),
+                usage_obj.get('completion_tokens', usage_obj.get('output_tokens')),
+                comp_chars, elapsed,
+            )
+        before_emit = _vision_before_emit_hook.get()
+        if callable(before_emit):
+            try:
+                before_emit(_telem['parsed'], _telem['error'])
+            except Exception:  # noqa: BLE001 - degrade hooks must never drop request telemetry
+                logger.warning("Vision before-emit hook failed", exc_info=True)
         sent = config if model == config.get('model') else {**config, 'model': model}
         emit_vision_request(config=sent, started=started, error=_telem['error'], result=_telem['result'], retries=_telem['retries'], identity=identity)
 
@@ -486,5 +569,5 @@ def make_drafts(events, prefs, instruction="", *, source_duration=None):
         hooks = plans.get('hooks', [])[:3]
         if not hooks:
             raise ModelResponseInvalid('模型未返回成片方案')
-        return [Draft(id=uuid.uuid4().hex, title=h['title'], hook=h['hook'], scenes=[scene], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', title_style='comic', title_template_version=6, subtitles=False, origin='visual-promo').model_dump() for h in hooks]
-    return [Draft(id=uuid.uuid4().hex, title=e.label, scenes=[e], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', subtitles=False, origin='visual-highlight').model_dump() for e in events]
+        return [{**Draft(id=uuid.uuid4().hex, title=h['title'], hook=h['hook'], scenes=[scene], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', title_style='comic', title_template_version=6, subtitles=False, origin='visual-promo').model_dump(), '_auto_score': round(1.0 - idx * 0.05, 4)} for idx, h in enumerate(hooks)]
+    return [{**Draft(id=uuid.uuid4().hex, title=e.label, scenes=[e], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', subtitles=False, origin='visual-highlight').model_dump(), '_auto_score': round(1.0 - idx * 0.05, 4)} for idx, e in enumerate(events)]

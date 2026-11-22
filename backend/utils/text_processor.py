@@ -202,6 +202,18 @@ class TextProcessor:
         return chunks
 
     @staticmethod
+    def has_usable_srt(path: Path | None) -> bool:
+        """A file is usable only with a parsed, nonempty cue and a positive time span."""
+        if path is None or not Path(path).is_file():
+            return False
+        for cue in TextProcessor.parse_srt(Path(path)):
+            start = pysrt.SubRipTime.from_string(cue['start_time']).ordinal
+            end = pysrt.SubRipTime.from_string(cue['end_time']).ordinal
+            if cue['text'].strip() and 0 <= start < end:
+                return True
+        return False
+
+    @staticmethod
     def parse_srt(srt_path: Path) -> List[Dict]:
         """
         解析SRT字幕文件
@@ -315,4 +327,4 @@ class TextProcessor:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}" 
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"

@@ -33,6 +33,35 @@ pub fn is_held() -> bool {
     HELD.load(Ordering::SeqCst)
 }
 
+/// Tray tip follows the lock, not whether a project is still producing.
+/// The previous success string stays visible on a failed release and during the
+/// frontend's grace delay, so it must not say production is running.
+pub fn keep_awake_tooltip(held: bool) -> &'static str {
+    if held {
+        "AutoClip — 已阻止休眠"
+    } else {
+        "AutoClip"
+    }
+}
+
+/// Drop the stored assertion id only after the release call returns success.
+/// A non-zero IOPM status leaves the id in place so a later retry releases the
+/// same assertion instead of reporting an empty slot as success.
+pub(crate) fn release_assertion_slot(
+    slot: &mut Option<u32>,
+    release_id: impl FnOnce(u32) -> i32,
+) -> Result<(), String> {
+    let Some(id) = *slot else {
+        return Ok(());
+    };
+    let status = release_id(id);
+    if status != 0 {
+        return Err(format!("IOPMAssertionRelease failed: {status}"));
+    }
+    *slot = None;
+    Ok(())
+}
+
 #[cfg(windows)]
 fn acquire() -> Result<(), String> {
     use windows_sys::Win32::System::Power::{
@@ -127,13 +156,7 @@ mod mac {
 
     pub fn release() -> Result<(), String> {
         let mut slot = ASSERTION.lock().map_err(|e| e.to_string())?;
-        if let Some(id) = slot.take() {
-            let status = unsafe { IOPMAssertionRelease(id) };
-            if status != 0 {
-                return Err(format!("IOPMAssertionRelease failed: {status}"));
-            }
-        }
-        Ok(())
+        crate::power::release_assertion_slot(&mut slot, |id| unsafe { IOPMAssertionRelease(id) })
     }
 }
 
@@ -175,6 +198,54 @@ mod tests {
 
     /// P2 #15: Win ES is thread-bound; the Tauri command must stay sync so it
     /// runs on the main thread with acquire/release.
+    #[test]
+    fn failed_iopm_release_keeps_the_id_until_success() {
+        let mut slot = Some(1u32);
+        let mut seen = Vec::new();
+        let err = release_assertion_slot(&mut slot, |id| {
+            seen.push(id);
+            5
+        })
+        .unwrap_err();
+        assert!(err.contains("5"), "{err}");
+        assert_eq!(slot, Some(1));
+        release_assertion_slot(&mut slot, |id| {
+            seen.push(id);
+            0
+        })
+        .unwrap();
+        assert_eq!(slot, None);
+        assert_eq!(seen, vec![1, 1]);
+    }
+
+    #[test]
+    fn held_clears_only_after_the_same_id_is_released() {
+        let mut held = true;
+        let mut slot = Some(1u32);
+        assert!(release_assertion_slot(&mut slot, |_| 5).is_err());
+        assert!(held);
+        assert_eq!(slot, Some(1));
+        release_assertion_slot(&mut slot, |_| 0).unwrap();
+        held = false;
+        assert!(!held);
+        assert_eq!(slot, None);
+        slot = Some(1);
+        let kept = slot.unwrap_or_else(|| {
+            slot = Some(2);
+            2
+        });
+        assert_eq!(kept, 1);
+        assert_eq!(slot, Some(1));
+    }
+
+    #[test]
+    fn tooltip_names_the_lock_and_not_production() {
+        let on = keep_awake_tooltip(true);
+        assert!(!on.contains("制作中"), "{on}");
+        assert!(on.contains("阻止休眠"), "{on}");
+        assert_eq!(keep_awake_tooltip(false), "AutoClip");
+    }
+
     #[test]
     fn tauri_set_keep_awake_command_is_not_async() {
         let src = include_str!("commands.rs");

@@ -27,7 +27,7 @@
 
 ## 3. 源码检查：一个入口
 
-在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci`（必装：后端测试 `test_success_rate.py` 会调用 node 和 `frontend/node_modules/typescript`，缺了直接失败，不会 skip）；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
+在隔离 checkout 安装 `requirements.txt` 与 `requirements-test.txt`（固定 Ruff / NumPy 测试依赖）、前端 `npm ci` 与诊断服务 `npm ci --prefix services/diagnostics-api`（服务 SQL 回归使用 Node 22.22+ 内置 SQLite；必装：后端测试 `test_success_rate.py` 会调用 node 和 `frontend/node_modules/typescript`，缺了直接失败，不会 skip）；媒体测试需要 ffmpeg/ffprobe 和中文字体。然后运行：
 
 ```bash
 python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
@@ -40,6 +40,7 @@ python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
 | contracts | 版本一致、八语 README/链接、发布验收校验器的负例回归、审查轮次文件名和注释、目录外的错误码 |
 | backend | 媒体测试依赖就绪、Python 正确性 lint（E9/F63/F7/F82）、全部后端 pytest、离线剪辑质量约束 |
 | frontend | ESLint、TypeScript、全部前端测试、生产构建（禁止测试时上传 sourcemap） |
+| diagnostics | 诊断 Worker 类型检查、生产 D1 SQL 事务/回滚、创建丢响应清理和刷新协议回归（无云端调用） |
 | CI 额外项 | Windows IOCP/进程树/桌面编译、真实 YuNet 并发检测与 SenseVoice 状态文件、安装 wheel 的取景/字体、源码启动与停止、Docker 生产/开发链路 |
 
 runner 创建临时数据库、配置、日志和隐私关闭文件，清空继承的供应商凭据与监控 DSN/公开采集 key，并隔离 Redis 地址。测试须使用 mock 或本机协议 fixture，禁止调用付费模型；真实模型调用移到产品验收，先明确素材、供应商、模型和费用预算。runner 会保留失败状态，不会被后续成功覆盖。缺依赖也算失败；退出码非零就不能宣称通过。
@@ -47,6 +48,10 @@ runner 创建临时数据库、配置、日志和隐私关闭文件，清空继�
 外部 Upload-Post HTTP 探测默认跳过（仅验证无效 key 的只读响应，不投稿）；需要时单独用 `AUTOCLIP_LIVE_NETWORK_TESTS=1` 运行并记录网络结果。源码门槛固定关闭该探测，使用 loopback 测试；Windows IOCP 在其他平台的 skip 由 Windows job 补验，不能当成通过。runner 读取本次 pytest 的 JUnit 结果，只允许这两类跳过；缺 NumPy、OpenCV、ffmpeg、字体等导致其他用例跳过时，整个检查失败。OpenCV 仅加入测试依赖，真实 YuNet 回归交替检测示例人物和空画面；共享检测器曾在并发时把不同素材的结果混在一起，不能用 mock 替代该回归。
 
 当前通用 Ruff 的格式/未使用导入等存量问题仍以 advisory 报告；会造成运行错误的正确性规则已独立阻断。处理存量风格问题应分批提交，不在紧急补丁里混入大范围整理。
+
+macOS 没有 Windows Job Object / Linux PDEATHSIG 对应的硬杀父进程约束，现有 `test_pip_dies_when_backend_is_killed_hard` 在该平台的明确跳过不代表该能力通过。源码 gate 仅在同一轮 `test_pip_child_guard` 的 SIGTERM、主动取消、正常关闭清理三项均执行通过时，允许这一条及 Windows 汇总模块导入的同名用例跳过；缺依赖、其他理由、缺少或失败的替代清理证据仍阻断。Windows/Linux 的硬杀回归仍须真实执行，双平台安装包验收要求不变。
+
+本机预览回归需提供实际 Chrome 路径（macOS 可设置 `CHROME_BIN=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`）。wheel 安装测试在 POSIX 使用与 `python -m venv` 一致的符号链接解释器，避免复制可搬移解释器后丢失动态库；仍需离开源码树实际安装 wheel 并加载资源。损坏音频夹具先封装合法 MP4，再按音频包位置损坏尾部 payload，以保持容器可读并实际触发产品的全文件解码校验。
 
 Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/真实离线转写，以及三平台 SenseVoice 实际安装、模型下载与离线转写。原有这两套工作流只有 PR 路径触发，不能当成 tag 已验证；现在复用为构建的依赖，校验器核对目标构建中的实际 job。开发 Python 上的真实转写仍须由最终安装包产品矩阵补验。
 
@@ -74,6 +79,14 @@ Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/�
 包的 SHA-256 必须来自 Release 下载文件；每个平台记录系统、机器/虚拟化、portable Python、供应商/模型（不含 key）、输入素材类型和费用。离线 loopback 完整流水线不能填写“真实模型通过”。已有 case 可复用方法与合法素材；换包、重打构建或改变代码，只重跑受影响断言。已经真实通过且未受影响的断言按下面的影响承接合同保留原执行证据。当前安装包、构建与验收回执身份始终重新精确核对；未完成场景不能借复用填成通过。
 
 Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `VITE_TELEMETRY_VALIDATION=true`；受控后端进程使用 `AUTOCLIP_BUILD_ENVIRONMENT=validation` 并明确标记测试 scope，见 [监控说明](analytics/STUDIO_MONITORING.md)）；它是同一提交的补充证据，**不替代最终生产安装包**。桌面启动器会注入 production/development，验收时需核查实际事件标签。生产包检查版本标记与关闭采集，validation 检查最终收数。不要把验收事件塞入生产成功率。
+
+1.5.9 包装回归在两个平台各跑一次。从已确认的竖版手动高光项目恢复，核对原方案选择、草稿、编辑保存、导出任务与画面中的模板和字幕。原方案为经典或没有可归属的历史选择时，先验证原样导出，再在编辑页选择设计模板，核对两份成片。新建项目用英文口播和中文受众验证完整包装，分别记录模板渲染、结构化包装及译文。另用隔离服务让包装流停在响应头前或响应体中，分别核对实际请求次数、耗时、终止记录、译文或原文保留以及界面提示。降级用例通过仍需完整包装用例单独通过。
+
+首页失败恢复回归：打开已有的手动确认项目，其中 4 个候选片段都短于 20 秒。项目列表应显示实际数量和最低时长。点击「重试制作」后停留在列表，同一份素材沿用上次确认的目标、分析方式和画幅；快速连点只提交一次。validation 中核对新 production 回执沿用 flow、指向失败的父 attempt，按现有 `studio_production_finished` 口径去重。初筛阶段失败的项目重试后仍需首次确认方案。
+
+升级回归使用已保留 Step 1 和旧 20 秒画像的项目。15 秒连续字幕候选须按当前 10 秒下限出片。对已确认的链接项目，移走本机源视频、保留随附字幕，卡片重试须重新下载并沿用原方案。额度耗尽从导入、确认和重试入口都应显示额度原因，同地址、相同前缀的两把测试密钥独立判定。
+
+诊断验收在隔离目录验证先本地保存再提交、重复保存与队列满时的片段清理、保存成功显示目录、磁盘失败可重试。转码期间首页仍能刷新。重启能接续未完成的上传和删除。服务端离线夹具让新建诊断与定时清理重叠，核对新文件保留、过期无归属文件清理。发版前还须按 [多 Agent 防回归与外部依赖清单](MULTI_AGENT_GUARDRAILS.md) 核对生产诊断接收服务与 PostHog 看板。
 
 自动制作在生成版本前失败的恢复验收，还需从真实结果页确认重试入口，修正前置条件后沿用原素材和所选平台完成出片；validation 收数应保留同一 flow、不同 attempt 的失败与成功，各尝试重复观察只入库一次。
 

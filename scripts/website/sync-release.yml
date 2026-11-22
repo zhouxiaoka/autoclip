@@ -1,8 +1,10 @@
-# 官网版本号 / 下载链接 / 安装包体积 跟主仓库 Release 自动同步。三个触发源，任一即可：
-#   1. repository_dispatch  —— 主仓库 desktop-build.yml 发版成功后推过来（需在主仓库配 WEBSITE_DISPATCH_TOKEN）
-#   2. schedule             —— 每天兜底一次，即使没配 token 也不会长期落后
-#   3. workflow_dispatch    —— 手动，可指定 tag
-# 有改动就直接提交到 main，GitHub Pages 约一分钟后生效。
+# 官网「当前正式版」跟主仓库 GitHub Latest 同步。三个触发源，任一即可：
+#   1. repository_dispatch  —— 主仓库 promote-release.yml 转正或撤回后推过来（需 WEBSITE_DISPATCH_TOKEN）
+#   2. schedule             —— 每天兜底一次；没配 token 时最多落后到下一次成功的 cron
+#   3. workflow_dispatch    —— 手动，可指定已转正的 tag；留空取 Latest
+# 只接受非 draft、非 prerelease。预发布 / RC、安装包缺失或 Release API 失败时脚本非 0 退出，
+# 不提交、不请求 Pages 构建，线上保持上一份成功同步的正式版。
+# 打 tag 只出 Pre-release，不会走这条同步。
 name: Sync release info
 
 on:
@@ -19,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 concurrency:
   group: sync-release
@@ -29,21 +32,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Sync index.html to the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.client_payload.tag || inputs.tag || '' }}
-        run: python3 scripts/sync_release.py $TAG
+        run: |
+          args=()
+          if [[ -n "$TAG" ]]; then
+            args+=("$TAG")
+          fi
+          python3 scripts/sync_release.py "${args[@]}"
+
+      - name: Prove release slots and history stay consistent
+        run: python3 -m unittest discover -s scripts -p '*_test.py'
 
       - name: Commit and push if changed
         run: |
-          if git diff --quiet; then
+          paths=(index.html en data/release.json llms.txt llms-full.txt guides/publish/index.html sitemap.xml)
+          if git diff --quiet -- "${paths[@]}"; then
             echo "官网已是最新"; exit 0
           fi
-          VER=$(grep -oE 'releases/download/v[0-9]+\.[0-9]+\.[0-9]+/' index.html | head -1 | grep -oE 'v[0-9.]+')
+          VER=$(python3 -c 'import json; print(json.load(open("data/release.json"))["tag"])')
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          git commit -m "chore: sync download links to AutoClip $VER"
+          git add "${paths[@]}"
+          git commit -m "chore: sync public release info to AutoClip $VER"
           git push
+
+      # GITHUB_TOKEN 推送不会触发 Pages；显式请求构建，也允许重跑恢复部署。
+      - name: Rebuild GitHub Pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"

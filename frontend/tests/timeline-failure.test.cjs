@@ -20,7 +20,7 @@ const { classifyLlmKeyFailure } = require('./load-ts.cjs').loadTs(path.join(__di
 const { classifySubtitleFailure } = load('../src/utils/subtitleFailure.ts')
 
 // 与 backend empty_timeline_failure().user_message() 一致；CLI 会把它写进 last_error。
-const LAST_ERROR = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
+const LAST_ERROR = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 10 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
 const PROGRESS = `处理失败：${LAST_ERROR}`
 
 test('classifies the stable code and a last_error that has no code', () => {
@@ -68,8 +68,9 @@ test('#428 weak-local empty intervals are not an empty timeline and keep the sho
   assert.doesNotMatch(backend, /自动重试已经用完/)
   const detail = fs.readFileSync(path.join(__dirname, '../src/pages/ProjectDetailPage.tsx'), 'utf8')
   const card = fs.readFileSync(path.join(__dirname, '../src/components/ProjectCard.tsx'), 'utf8')
+  const presentation = fs.readFileSync(path.join(__dirname, '../src/features/studio/failurePresentation.ts'), 'utf8')
   assert.doesNotMatch(detail, /weakLocalTimelineFailure/)
-  assert.match(card, /去配置模型/)
+  assert.match(presentation, /去配置模型/)
   assert.match(card, /切换并重试/)
 })
 
@@ -78,6 +79,6 @@ test('failure screens do not route an empty timeline to Settings → Model', () 
   const card = fs.readFileSync(path.join(__dirname, '../src/components/ProjectCard.tsx'), 'utf8')
   assert.match(detail, /classifyTimelineEmpty/)
   assert.match(detail, /!timelineEmpty && classifyLlmKeyFailure/)
-  assert.match(card, /classifyTimelineEmpty/)
-  assert.match(card, /!timelineEmpty && classifyLlmKeyFailure/)
+  assert.match(card, /presentFailure/)
+  assert.doesNotMatch(card, /section=model/)
 })

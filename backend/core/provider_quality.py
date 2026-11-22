@@ -236,14 +236,25 @@ def public_fields(provider_id: Optional[str]) -> Dict[str, Optional[str]]:
     return row.as_public()
 
 
-def display_catalog_group(group: str, *, sponsor: bool, success_tier_value: Optional[str]) -> str:
+# Packaged quality list only. These ids are not quality-promoted while the
+# bundled catalog has no sponsor block. A signed view can still list them.
+_PACKAGED_QUALITY_HOLD = frozenset({"api88", "infistar"})
+
+
+def display_catalog_group(group: str, *, sponsor: bool, success_tier_value: Optional[str], provider_id: Optional[str] = None) -> str:
     """Where a catalog card is shown.
 
     Stored ``group`` stays in the catalog JSON. A low tier never enters
     recommended (it falls into 热门 / popular, unless it is local or more).
     Sponsors that are not low stay in recommended. Popular high/mid rows are
-    promoted after the sponsors. Local mid rows stay local.
+    promoted after the sponsors. Local mid rows stay local. An id in
+    ``_PACKAGED_QUALITY_HOLD`` stays neutral in this packaged list. That hold
+    does not decide whether a signed promotion may list the id.
     """
+    if provider_id in _PACKAGED_QUALITY_HOLD and not sponsor:
+        if group in {"local", "more"}:
+            return group
+        return "popular"
     if success_tier_value == "low":
         if group == "local":
             return "local"
@@ -258,22 +269,28 @@ def display_catalog_group(group: str, *, sponsor: bool, success_tier_value: Opti
 
 
 def recommended_provider_ids() -> list[str]:
-    """Sponsors pinned in catalog order, then non-sponsors by success tier and rate."""
+    """Measured high-tier providers first, then sponsors in catalog order, then other recommended."""
     from backend.core.provider_presets import get_catalog
 
     ranked: list[tuple[tuple, str]] = []
     for index, preset in enumerate(get_catalog().providers.values()):
         row = quality_for(preset.id)
         tier = row.success_tier if row else None
-        shown = display_catalog_group(preset.group, sponsor=bool(preset.sponsor), success_tier_value=tier)
+        shown = display_catalog_group(
+            preset.group, sponsor=bool(preset.sponsor), success_tier_value=tier, provider_id=preset.id,
+        )
         if shown != "recommended":
             continue
-        if preset.sponsor:
-            key = (0, index, 0, 0.0)
+        if not preset.sponsor and tier == "high":
+            rank = _TIER_RANK.get(tier or "", 9)
+            rate = -(row.success_rate if row else 0.0)
+            key = (0, rank, rate, index)
+        elif preset.sponsor:
+            key = (1, index, 0.0, index)
         else:
             rank = _TIER_RANK.get(tier or "", 9)
             rate = -(row.success_rate if row else 0.0)
-            key = (1, rank, rate, index)
+            key = (2, rank, rate, index)
         ranked.append((key, preset.id))
     ranked.sort(key=lambda item: item[0])
     return [provider_id for _, provider_id in ranked]

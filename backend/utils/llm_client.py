@@ -34,6 +34,8 @@ except ImportError:
 
 from backend.core.llm_telemetry import sanitize_exception_text, log_safe_exception
 from backend.core.failure_logging import failure_logger
+from backend.core.job_budget import JobDurationExceeded
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
 
 logger = failure_logger(__name__)
 
@@ -57,6 +59,8 @@ class LLMClient:
         """
         try:
             return self.llm_manager.call(prompt, input_data)
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise
         except Exception as e:
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None
@@ -75,6 +79,8 @@ class LLMClient:
         """
         try:
             return self.llm_manager.call_with_retry(prompt, input_data, max_retries)
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise
         except Exception as e:
             logger.error("LLM重试调用失败: %s", sanitize_exception_text(e))
             raise log_safe_exception(e) from None
@@ -186,8 +192,8 @@ class LLMClient:
             json_str = re.sub(r"'([^']*?)'\s*:", r'"\1":', json_str)
             json_str = re.sub(r":\s*'([^']*?)'", r': "\1"', json_str)
             
-            # 5. 修复字段名没有引号的问题
-            json_str = re.sub(r'([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'"\1":', json_str)
+            # 5. 修复字段名没有引号的问题（只匹配对象起始/逗号后未加引号的键名，避免破坏已有引号键或字符串值内的冒号）
+            json_str = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', json_str)
             
             # 6. 修复可能的换行符问题
             json_str = re.sub(r'\n\s*\n', '\n', json_str)

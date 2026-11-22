@@ -27,9 +27,8 @@ export function stageBrowserCookieRecovery(sourceUrl?: string | null): string {
   return BROWSER_COOKIE_IMPORT_PATH
 }
 
-export function cookieAssistFromLocation(search: string): boolean {
-  // Hand-parsed so a vm test sandbox does not need URLSearchParams.
-  const query = (search.startsWith('?') ? search.slice(1) : search).split('#')[0]
+function hasCookieFocusQuery(raw: string): boolean {
+  const query = (raw.startsWith('?') ? raw.slice(1) : raw).split('#')[0]
   if (!query) return false
   try {
     for (const part of query.split('&')) {
@@ -43,6 +42,12 @@ export function cookieAssistFromLocation(search: string): boolean {
     return false
   }
   return false
+}
+
+export function cookieAssistFromLocation(search: string, hash = ''): boolean {
+  if (hasCookieFocusQuery(search || '')) return true
+  const qIndex = (hash || '').indexOf('?')
+  return qIndex >= 0 ? hasCookieFocusQuery(hash.slice(qIndex)) : false
 }
 
 export function stagedRecoveryUrl(): string {

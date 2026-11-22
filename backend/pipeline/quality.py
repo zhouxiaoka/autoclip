@@ -95,13 +95,38 @@ def _fmt_dur(sec: float) -> str:
     return f"{sec // 60} 分 {sec % 60} 秒"
 
 
+def format_shorter_than(actual: float, minimum: float) -> str:
+    """Render ``actual < minimum`` without rounding both sides to the same number.
+
+    ``.0f`` turned 19.88s < 20s into 「20s < 20s」. Add decimals until the printed
+    values still compare strictly, then drop trailing zeros.
+    """
+    for digits in range(0, 4):
+        left = f"{actual:.{digits}f}"
+        right = f"{minimum:.{digits}f}"
+        if float(left) < float(right):
+            return f"{_trim_fixed(left)}s < {_trim_fixed(right)}s"
+    return f"{actual:.4f}s < {minimum:.4f}s"
+
+
+def _trim_fixed(text: str) -> str:
+    if "." not in text:
+        return text
+    return text.rstrip("0").rstrip(".")
+
+
+# Subtitle/highlight floor for sources under 8 minutes. Container preflight and
+# subtitle-span filtering both read this through profile_for.
+SHORT_MIN_CLIP_SEC = 10
+
+
 def profile_for(total_sec: float) -> DurationProfile:
     """按总时长分档。数字是产品判断，不是实验结论——回归集起来后再调。"""
     total_sec = max(0.0, float(total_sec))
     if total_sec < 8 * 60:
         return DurationProfile(
             tier="short", total_sec=total_sec,
-            min_clip_sec=20, target_clip_sec=(30, 90), max_clip_sec=150,
+            min_clip_sec=SHORT_MIN_CLIP_SEC, target_clip_sec=(30, 90), max_clip_sec=150,
             topics_hint=(3, 6), min_keep=2, max_clips=6,
         )
     if total_sec < 30 * 60:
@@ -137,6 +162,9 @@ def load_profile(metadata_dir: Path) -> Optional[DurationProfile]:
         return None
     try:
         d = json.loads(path.read_text(encoding="utf-8"))
+        # A resumed extraction skips Step 1, which originally saved this tier's floor.
+        if d.get("tier") == "short" and d.get("min_clip_sec") == 20:
+            d["min_clip_sec"] = SHORT_MIN_CLIP_SEC
         d["target_clip_sec"] = tuple(d["target_clip_sec"])
         d["topics_hint"] = tuple(d["topics_hint"])
         return DurationProfile(**d)
@@ -406,7 +434,8 @@ def refine_timeline(items: Sequence[Dict[str, Any]], srt_entries: Sequence[Dict[
                 _merge_into(result[-1], it)
                 report["merged"].append({"kept": _title(result[-1]), "absorbed": _title(it), "reason": "过短，并入前一段"})
             else:
-                report["dropped"].append({"outline": _title(it), "reason": f"过短（{it['_e'] - it['_s']:.0f}s < {profile.min_clip_sec:.0f}s）且无法合并"})
+                length = it["_e"] - it["_s"]
+                report["dropped"].append({"outline": _title(it), "reason": f"过短（{format_shorter_than(length, profile.min_clip_sec)}）且无法合并"})
         merged = result
 
     # 5) 收尾：写回字段、重新编号

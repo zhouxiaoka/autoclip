@@ -12,20 +12,22 @@ export interface TranscriptionGatePromptProps {
   onRetry: () => void | Promise<void>
   /** Ready: start the same import / confirmation again. */
   onContinue: () => void
+  onAttach?: () => void
   navigate: (to: string) => void
 }
 
 /** The one view of the install-recovery controller (#418 rewrite), used by the import page and the confirm page.
  * Every phase has an exit: install, wait with progress, continue, or retry / transcription settings. */
-export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetry, onContinue, navigate }: TranscriptionGatePromptProps) {
+export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetry, onContinue, navigate, onAttach }: TranscriptionGatePromptProps) {
   const settings = () => navigate(repairDestination('settings_transcription') as string)
   // #371: a background install stays inline while it runs; #404: once it failed or timed out it is shown, with retry.
   const ended = state.phase === 'failed' || state.phase === 'timeout'
   if (state.phase === 'idle' || (state.background && !ended)) return null
-  if (state.phase === 'install_required') return <div className="studio-readiness" role="alertdialog" aria-label={t('需要先安装本地转写')}>
-    <b>{t('需要先安装本地转写')}</b>
+  if (state.phase === 'install_required') return <div className="studio-readiness" role="alertdialog" aria-label={t(onAttach ? '选择字幕来源' : '需要先安装本地转写')}>
+    <b>{onAttach ? t('选择字幕来源') : t('需要先安装本地转写')}</b>
     <span>{t('视频没有字幕，需要本地转写组件（约 220 MB，国内约 15 分钟），或改用云端转写。')}</span>
     <div className="studio-actions">
+      {onAttach && <Btn size="sm" disabled={busy} onClick={onAttach}>{t('上传 SRT 字幕')}</Btn>}
       <Btn size="sm" disabled={busy} onClick={() => void onInstall()}>{t('一键安装')}</Btn>
       <Btn size="sm" disabled={busy} onClick={() => navigate(CLOUD_TRANSCRIPTION_DESTINATION)}>{t('改用云端转写')}</Btn>
     </div>

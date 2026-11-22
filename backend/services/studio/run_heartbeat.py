@@ -1,6 +1,8 @@
 """1.5.9: low-rate run heartbeat so a crash recovery can report stage/uptime/rss/disk buckets.
 
-Writes ``<marker_dir>/<instance>.hb`` as JSON every 15s while producing (60s when idle).
+Writes ``<marker_dir>/<instance>.hb`` as JSON every 15s while producing (60s when idle),
+and again as soon as the resolved stage changes. The writer thread owns the file;
+workers only update the in-memory stack. The file's ``pid`` is this process.
 Never takes ``store.lock`` and never runs on a request thread (A1-8). Sidecars are
 cleaned by ``shutdown_marker.release`` / ``prune``.
 """
@@ -23,6 +25,10 @@ _active_stages: dict[int, list[str]] = {}
 _started_at = time.monotonic()
 _thread: threading.Thread | None = None
 _stop = threading.Event()
+# Wakes the writer when the resolved stage changes. Workers must not fsync the
+# sidecar themselves: one thread keeps the 15s/60s cadence, and a stage change
+# does not wait out the idle sleep that hid screening behind a stale idle file.
+_pulse = threading.Event()
 _fault_handle = None  # kept open for faulthandler
 
 _STAGES = frozenset({'screening', 'download', 'subtitle', 'analyze', 'render', 'idle'})
@@ -49,6 +55,7 @@ def set_stage(stage: str) -> None:
     tid = threading.get_ident()
     with _lock:
         global _stage
+        previous = _stage
         stack = _active_stages.setdefault(tid, [])
         if value == 'idle':
             if stack:
@@ -58,6 +65,9 @@ def set_stage(stage: str) -> None:
         else:
             stack.append(value)
         _stage = _resolve_stage(_active_stages)
+        changed = _stage != previous
+    if changed:
+        _pulse.set()
 
 
 def current_stage() -> str:
@@ -144,6 +154,7 @@ def _payload(root: Path) -> dict:
         'free_disk_mb': _free_disk_mb(root),
         'stage': stage,
         'ffmpeg_children': _ffmpeg_children(),
+        'pid': os.getpid(),
     }
 
 
@@ -254,19 +265,35 @@ def enable_faulthandler(instance: str | None = None) -> None:
 
 
 def start(instance: str | None = None) -> None:
-    """Daemon heartbeat thread. Idempotent."""
+    """Daemon heartbeat thread. Idempotent.
+
+    The marker directory and instance are captured here. Later writes do not
+    follow a changed data dir or another process's instance file.
+    """
     global _thread, _started_at
+    from backend.services.studio.shutdown_marker import _root
+    try:
+        root = _root()
+    except Exception:  # noqa: BLE001 - heartbeat must never break startup
+        return
     with _lock:
         if _thread is not None and _thread.is_alive():
             return
         _started_at = time.monotonic()
         _stop.clear()
+        _pulse.clear()
 
         def run():
             while not _stop.is_set():
-                write_once(instance=instance)
+                # Clear before the snapshot so a change during the write is
+                # still visible and gets a second publish in this loop.
+                _pulse.clear()
+                write_once(root=root, instance=instance)
+                if _stop.is_set() or _pulse.is_set():
+                    continue
                 stage = current_stage()
-                _stop.wait(_INTERVAL_IDLE if stage == 'idle' else _INTERVAL_ACTIVE)
+                interval = _INTERVAL_IDLE if stage == 'idle' else _INTERVAL_ACTIVE
+                _pulse.wait(interval)
 
         _thread = threading.Thread(target=run, name='studio-run-heartbeat', daemon=True)
         _thread.start()
@@ -274,3 +301,4 @@ def start(instance: str | None = None) -> None:
 
 def stop() -> None:
     _stop.set()
+    _pulse.set()

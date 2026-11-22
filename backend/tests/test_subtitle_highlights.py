@@ -48,7 +48,9 @@ def test_combined_subtitle_outputs_share_one_attempt(root,source,monkeypatch,fai
     result=store.read('p1')
     assert len(calls)==1
     assert result['analysis']['status']==('failed' if fails else 'completed')
-    assert len(result['drafts'])==(0 if fails else 1)
+    assert len(result['drafts'])==(0 if fails else 2)
+    if not fails:
+        assert {d['origin'] for d in result['drafts']} == {'subtitle-content', 'subtitle-highlight'}
 
 from backend.tests.test_studio import client
 

@@ -76,7 +76,7 @@ const isTauriRuntime = () => (
 
 // 打包后的桌面页在 tauri://localhost（macOS）或 http://tauri.localhost。
 // 根路径 /api/v1 会打到壳页面，打不到本机后端。开发时 base 仍是 /api/v1，走 Vite 代理。
-const mediaUrl = (path: string): string => {
+export const mediaUrl = (path: string): string => {
   const base = apiConfigManager.getBaseUrl().replace(/\/$/, '')
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
@@ -340,6 +340,60 @@ export const settingsApi = {
   },
 }
 
+export interface DiagnosticsConsent {
+  diagnostics: boolean
+  media: boolean
+  full_original: boolean
+  epoch: number
+  text_version: string
+  purpose: string
+  not_for_training: boolean
+  diagnostics_at: string | null
+  endpoint_configured: boolean
+  notice_seen?: boolean
+  persisted?: boolean
+  unreadable?: boolean
+}
+
+export interface DiagnosticsPreview {
+  manifest: { source_link?: string; attempt?: { error_code?: string; failure_stage?: string; attempt_id?: string; sequence?: number }; run?: { provider?: string; model?: string; duration_ms?: number } }
+  files: { role: string; size_bytes?: number; duration_sec?: number; rejected?: string; limitation?: string }[]
+  consent: DiagnosticsConsent
+  excerpt_limitation: string
+  not_for_training: boolean
+}
+
+export interface DiagnosticsCase {
+  id: string
+  status: string
+  case_id?: string
+  error?: string
+  export_ready?: boolean
+  export_path?: string
+  deletable?: boolean
+}
+
+export const diagnosticsApi = {
+  consent: (): Promise<DiagnosticsConsent> => api.get('/diagnostics/consent'),
+  setConsent: (body: { diagnostics: boolean; media: boolean; full_original: boolean; informed: boolean }): Promise<DiagnosticsConsent> =>
+    api.put('/diagnostics/consent', body),
+  preview: (projectId: string, attemptId: string): Promise<DiagnosticsPreview> =>
+    api.get('/diagnostics/preview', { params: { project_id: projectId, attempt_id: attemptId } }),
+  submit: (body: {
+    project_id: string
+    attempt_id: string
+    roles: string[]
+    informed: boolean
+    full_original_ack?: boolean
+    subtitle_ack?: boolean
+    also_enable_background?: boolean
+    save_local?: boolean
+  }): Promise<DiagnosticsCase> =>
+    api.post('/diagnostics/submit', body),
+  getCase: (id: string): Promise<DiagnosticsCase> => api.get(`/diagnostics/cases/${encodeURIComponent(id)}`),
+  remove: (id: string): Promise<{ status: string }> => api.delete(`/diagnostics/cases/${id}`),
+}
+
 // 项目相关API
 /** Bundled project with real media; creating it does not require a model key. */
 export const exampleProjectApi = {
@@ -353,13 +407,32 @@ export const projectApi = {
     return api.get('/video-categories')
   },
 
-  // 获取所有项目
+  // 获取所有项目（按后端最新优先分页拉取，避免项目数超过默认页大小时看不到新项目）
   getProjects: async (): Promise<Project[]> => {
-    const response = await api.get('/projects/')
-    // 处理分页响应结构，返回items数组
-    const projects = (response as any).items || response || []
-    if (Array.isArray(projects)) projects.forEach(p => workflow.rememberProject(p.id, projectProperties(p)))
-    return projects
+    const first = await api.get('/projects/', { params: { page: 1, size: 100 } })
+    const items: Project[] = Array.isArray((first as any)?.items)
+      ? [...(first as any).items]
+      : Array.isArray(first)
+        ? [...first]
+        : []
+    const pagination = (first as any)?.pagination
+    if (pagination?.has_next) {
+      const maxPages = Math.min(Number(pagination.pages) || 1, 5)
+      for (let page = 2; page <= maxPages; page += 1) {
+        const next = await api.get('/projects/', { params: { page, size: 100 } })
+        const nextItems = Array.isArray((next as any)?.items) ? (next as any).items : []
+        items.push(...nextItems)
+        if (!(next as any)?.pagination?.has_next) break
+      }
+    }
+    const seen = new Set<string>()
+    const deduped = items.filter(p => {
+      if (!p?.id || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+    deduped.forEach(p => workflow.rememberProject(p.id, projectProperties(p)))
+    return deduped
   },
 
   // 获取单个项目

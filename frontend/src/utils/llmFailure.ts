@@ -8,12 +8,25 @@ export const LLM_AUTH_INVALID = 'llm_auth_invalid'
 export const STORE_LOCK_TIMEOUT = 'store_lock_timeout'
 export const STORE_LOCK_TIMEOUT_TEXT = '本机项目数据正被另一个 AutoClip 进程占用，请稍后重试；原素材已保留'
 
+/** Download/ingest ``connection`` copy. The catalog ``connection`` sentence is the model-service one. */
+export const INGEST_CONNECTION_REASON = '下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。'
+
+export function ingestConnectionCopy(code?: string | null, upstream?: string | null, stage?: string | null): string | null {
+  const step = (stage || '').toLowerCase()
+  if ((code === 'connection' || upstream === 'connection') && (step === 'ingest' || step === 'download')) {
+    return INGEST_CONNECTION_REASON
+  }
+  return null
+}
+
 /** The one user-cause reason table studio 「去设置」 reads. Project cards pass upstream when they have it. */
 export const USER_CAUSE_REASONS: Record<string, string> = Object.fromEntries(
   [...new Set([...USER_CAUSE_ERROR_CODES, ...USER_CAUSE_UPSTREAM_TYPES])].map(code => [code, USER_MESSAGES[code]]),
 )
 
-export function llmFailureText(error?: string | null, code?: string | null, upstream?: string | null): string {
+export function llmFailureText(error?: string | null, code?: string | null, upstream?: string | null, stage?: string | null): string {
+  const ingest = ingestConnectionCopy(code, upstream, stage)
+  if (ingest) return ingest
   if (code === STORE_LOCK_TIMEOUT) return STORE_LOCK_TIMEOUT_TEXT
   // 88API 403 quota used to be stored as llm_auth_invalid. The fine type, or a
   // sentence that already says 充值, must not be rewritten into 「密钥无效」.

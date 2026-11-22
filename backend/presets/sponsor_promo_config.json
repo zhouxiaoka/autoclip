@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "url": "",
+  "public_key": "",
+  "min_sequence": 0,
+  "max_bytes": 65536,
+  "timeout_seconds": 4,
+  "refresh_seconds": 21600
+}

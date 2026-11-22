@@ -2,7 +2,16 @@ import api from '../services/api'
 
 export type CoverProvider = 'openai' | 'seedream' | 'dashscope'
 
+export type DesignMode = 'crop_grade_text_only' | 'editorial_edit'
+export interface CoverDesign {
+  mode: DesignMode
+  recipe: 'auto' | 'photo_focus' | 'culture_editorial' | 'tech_question' | 'bold_statement'
+  change_frame?: boolean
+  frame_time?: number
+}
+
 export interface CoverConfigView {
+  design_mode?: DesignMode
   enabled: boolean
   provider: CoverProvider | string
   model: string
@@ -18,12 +27,16 @@ export interface CoverConfigView {
 }
 
 export interface CoverView {
+  options?: CoverDesign
+  candidate_times?: number[]
+  frame_locked?: boolean
   ok: boolean
   platform: string
   url?: string | null
   path?: string
   method?: string
   title?: string
+  headline?: string
   subtitle?: string
   badge?: string
   content_type?: string
@@ -39,11 +52,13 @@ export interface CoverJobView {
 }
 
 export interface CoverGenerateBody {
+  design?: CoverDesign
   platform?: string
   title?: string
   subtitle?: string
   badge?: string
   content_type?: string
+  allow_reference_once?: boolean
   force_local?: boolean
   sync?: boolean
 }

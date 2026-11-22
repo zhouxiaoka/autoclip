@@ -149,7 +149,6 @@ test('saving the first-run dialog makes the import page ready without a reload',
     '../../analytics/flags': { useFlag: () => false, flagEnabled: () => false, flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
     './TemplatePicker': { default: 'template-picker', templateImportFields: () => ({}) },
     './StyleProbeLine': { default: 'style-probe' },
-    './ReadinessLine': { default: 'readiness-line' },
     './editingStyleSession': { readStyle: () => ({ key: '', status: 'idle', result: null, latencyMs: 0 }) },
     '../../analytics/experience': { trackExperience() {} },
     './platformLabel': { platformLabel: id => id },
@@ -190,7 +189,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
   let settings = { saved: false, connections: [], analysis: null }
   const store = {
     settings,
-    busy: {},
+    busy: {}, lists: {}, listErrors: {},
     keyHints: {},
     saving: false,
     error: '',
@@ -199,7 +198,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
       store.settings = settings
     },
     editConnection() {},
-    save: async () => {
+    connect: async () => {
       settings = { ...settings, saved: true }
       store.settings = settings
       settingsReturn.notifySettingsSaved(window)
@@ -238,6 +237,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
     '../../utils/externalLinks': { openExternalLink() {} },
     './useQuickConnect': { useQuickConnect: () => store },
     './providers': providers,
+    './ModelPicker': { default: () => null },
     './ProviderFields': { default: () => React.createElement('div', { className: 'fields' }) },
     './modelSettingsLogic': {
       needsSetup: () => true,
@@ -249,7 +249,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
   const setup = () => { cursor = 0; return flatten(FirstRun({})) }
   setup().filter(node => node?.type === 'button').at(-1).props.onClick()
   const save = setup().filter(node => node?.type === 'button').at(-1)
-  assert.equal(save.props.children, '连接并保存')
+  assert.equal(save.props.children, '一键配置模型')
   save.props.onClick()
   await ticks()
 

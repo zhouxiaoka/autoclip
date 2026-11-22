@@ -39,6 +39,7 @@ from backend.core.upstream_errors import (
     UPSTREAM_ERROR_TYPES,
     ClassifiedUpstreamError,
     UpstreamErrorType,
+    classify_provider_429,
     classify_upstream_error,
     hint_key_for,
     is_retryable,
@@ -57,6 +58,26 @@ LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama
 # D2: selected name absent from a successful /models list. Non-blocking; also the i18n key.
 MODEL_NOT_LISTED_WARNING = '这个模型名不在服务器的模型列表里。请改选列表中已有的模型，否则后面生成时可能会失败。'
 VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。'
+
+# Local capability miss: an image/T2I id bound to the analysis (or vision) slot.
+IMAGE_MODEL_IN_ANALYSIS = 'image_model_in_analysis'
+# Fixed eight-locale i18n key — never embed a model id (that would break non-zh locales).
+IMAGE_MODEL_IN_ANALYSIS_HINT = '该模型是生图模型，只能用于封面，不能做分析。'
+
+
+def image_model_in_analysis_hint(model: str = '', recommend: str = '') -> str:
+    """Fixed catalog sentence. Put recommend in ValidationResult.recommended['analysis'];
+    frontend composes with analysisImageMisconfigCopy(model, recommend).
+    """
+    return IMAGE_MODEL_IN_ANALYSIS_HINT
+
+
+def _recommended_analysis_model(connection: ai_models.Connection) -> str:
+    try:
+        from backend.services.model_settings_source import recommended_model
+        return recommended_model(connection.provider, 'analysis') or ''
+    except Exception:
+        return ''
 
 
 @dataclass
@@ -89,11 +110,16 @@ class ValidationResult:
     trial_estimate_requests: Optional[int] = None
     trial_estimate_minutes: Optional[float] = None
     trial_passed: Optional[bool] = None
+    # Capability miss that is not an UpstreamErrorType (vision_unsupported / image_model_in_analysis).
+    # Carried as error_code while error_type stays 'unknown' so sanitize + known_validation_type keep it.
+    capability_error_code: str = ''
 
     @property
     def error_code(self) -> str:
         if self.ok:
             return ''
+        if self.capability_error_code:
+            return self.capability_error_code
         from backend.core.connection_test_codes import connection_test_error_code
         return connection_test_error_code(self.error_type, http_status=self.http_status,
                                           network_kind=self.network_kind, empty_key=self.empty_key,
@@ -244,9 +270,66 @@ def _non_stream_completion(payload: Any) -> bool:
     return bool(_completion_text(choices[0].get('message')))
 
 
+def _has_reasoning_output(payload: Any) -> bool:
+    """True when a 200 completion spent its token budget on reasoning/thinking before visible content."""
+    if not isinstance(payload, dict):
+        return False
+    choices = payload.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    choice = choices[0]
+    message = choice.get('message')
+    if isinstance(message, dict):
+        for field_name in ('reasoning_content', 'reasoning', 'thought'):
+            val = message.get(field_name)
+            if isinstance(val, str) and val.strip():
+                return True
+    return str(choice.get('finish_reason') or '').lower() in ('length', 'max_tokens', 'max_output_tokens')
+
+
+def _stream_only_400(text: str) -> bool:
+    blob = (text or '').lower()
+    return 'stream' in blob and any(
+        token in blob for token in ('only support', 'must be true', 'stream mode', 'streaming is required', 'requires stream')
+    )
+
+
+def _sse_completion_text(text: str) -> str:
+    """Extract visible assistant content from an OpenAI-compatible SSE stream body."""
+    import json as _json
+    parts: list[str] = []
+    for line in (text or '').splitlines():
+        stripped = line.strip()
+        if not stripped.startswith('data:'):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == '[DONE]':
+            continue
+        try:
+            chunk = _json.loads(data)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(chunk, dict):
+            continue
+        choices = chunk.get('choices')
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            continue
+        delta = choices[0].get('delta') or choices[0].get('message')
+        content = _completion_text(delta)
+        if content:
+            parts.append(content)
+    return ''.join(parts).strip()
+
+
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
-    from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
+    from backend.core.llm_providers import (
+        asks_for_max_completion_tokens,
+        guarded_chat_kwargs,
+        http_chat_body,
+        to_max_completion_tokens,
+        token_param_kwargs,
+    )
     from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
     payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
@@ -257,12 +340,42 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     # Hosts such as APIMart default to text/event-stream unless this is false.
     payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
+    headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    stream_retried = False
     try:
         with httpx.Client(timeout=PROBE_TIMEOUT, trust_env=not is_local_url(base)) as client:
-            response = client.post(
-                url, json=payload,
-                headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'},
-            )
+            response = client.post(url, json=payload, headers=headers)
+            # Relay / Azure / OpenRouter models that require max_completion_tokens on HTTP 400.
+            if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
+                payload = to_max_completion_tokens(payload)
+                if payload.get('max_completion_tokens', 0) < PROBE_REASONING_MAX_TOKENS:
+                    payload['max_completion_tokens'] = PROBE_REASONING_MAX_TOKENS
+                response = client.post(url, json=payload, headers=headers)
+            # Stream-only thinking models (e.g., DashScope qwq-plus) reject stream=False with 400.
+            if response.status_code == 400 and not payload.get('stream') and _stream_only_400(response.text or ''):
+                payload = dict(payload)
+                payload['stream'] = True
+                for key in ('max_tokens', 'max_completion_tokens'):
+                    if key in payload and payload[key] < PROBE_REASONING_MAX_TOKENS:
+                        payload[key] = PROBE_REASONING_MAX_TOKENS
+                stream_retried = True
+                response = client.post(url, json=payload, headers=headers)
+            # Reasoning/hybrid models on non-OpenAI hosts can exhaust PROBE_MAX_TOKENS inside reasoning_content.
+            if response.status_code == 200 and not stream_retried:
+                try:
+                    first_parsed = response.json()
+                except Exception:  # noqa: BLE001
+                    first_parsed = None
+                if (
+                    first_parsed is not None
+                    and not _non_stream_completion(first_parsed)
+                    and _has_reasoning_output(first_parsed)
+                ):
+                    token_key = 'max_completion_tokens' if 'max_completion_tokens' in payload else 'max_tokens'
+                    if int(payload.get(token_key) or 0) < PROBE_REASONING_MAX_TOKENS:
+                        retry_payload = dict(payload)
+                        retry_payload[token_key] = PROBE_REASONING_MAX_TOKENS
+                        response = client.post(url, json=retry_payload, headers=headers)
     except httpx.TimeoutException:
         return _with_detail(_classify(None, '', error_name='TimeoutError'))
     except httpx.RequestError as exc:
@@ -271,14 +384,20 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     status = response.status_code
     text = response.text or ''
     upstream = symbolic_error_code(text[:4000])
-    if response.status_code == 429 or 500 <= response.status_code <= 599:
-        return _with_detail(_as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE), status, upstream_code=upstream)
+    if status == 429:
+        return _with_detail(classify_provider_429(text[:4000]), status, upstream_code=upstream)
+    if 500 <= status <= 599:
+        return _with_detail(_as_type(UpstreamErrorType.UPSTREAM_UNAVAILABLE), status, upstream_code=upstream)
     content_type = (response.headers.get('content-type') or '').lower()
     html = _html_or_classify(response.status_code, text[:4000], content_type)
     if html:
         return _with_detail(html, status, upstream_code=upstream)
     if response.status_code >= 400:
         return _with_detail(_classify(response.status_code, text[:4000]), status, upstream_code=upstream)
+    if stream_retried:
+        if _sse_completion_text(text):
+            return None
+        return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status, upstream_code=upstream)
     # A 200 SSE body used to look like success and then fail every real job.
     if 'text/event-stream' in content_type or text.lstrip().startswith('data:'):
         return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status, upstream_code=upstream)
@@ -354,6 +473,30 @@ def validate_connection(
     connection: ai_models.Connection, model: str,
     *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
 ) -> ValidationResult:
+    # Analysis/vision chat probe must never fire for a pure image/T2I id (#565).
+    if purpose == 'analysis':
+        from backend.core.model_catalog import is_image_model
+        if is_image_model(model):
+            recommend = _recommended_analysis_model(connection)
+            base = ''
+            try:
+                base = ai_models.chat_endpoint(connection, model or 'unused')['base_url']
+            except Exception:
+                base = connection.base_url or ''
+            return ValidationResult(
+                ok=False,
+                result='failed',
+                # Like vision_unsupported: persistable upstream class is 'unknown'; code carries the miss.
+                error_type='unknown',
+                hint_key=IMAGE_MODEL_IN_ANALYSIS_HINT,
+                recommended={'analysis': [recommend]} if recommend else {},
+                capability_error_code=IMAGE_MODEL_IN_ANALYSIS,
+                normalized_base_url=base,
+                base_url_host=_host(base) if base else '',
+                empty_key=False,
+                # No trial lights: leave trial_* as None so the UI only shows validationCopy.
+                probe_kind='quick',
+            )
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     result = _validate_resolved(resolved, model, purpose=purpose)
     result.empty_key = not (resolved.api_key or '').strip()
@@ -514,14 +657,12 @@ def _srt_plain_text(srt: str) -> str:
 
 def _parse_trial_json(text: str) -> bool:
     """True when the body is parseable JSON with at least one topic title."""
-    import json
-    import re
+    from backend.services.studio.intelligence import decode_json
     raw = (text or '').strip()
     if not raw:
         return False
-    raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw, flags=re.IGNORECASE).strip()
     try:
-        data = json.loads(raw)
+        data = decode_json(raw)
     except Exception:  # noqa: BLE001
         return False
     if isinstance(data, list):
@@ -562,11 +703,22 @@ def _trial_estimate(avg_ms: int) -> tuple[int, float]:
     return n, minutes
 
 
+def _response_format_400(text: str) -> bool:
+    blob = (text or '').lower()
+    return any(token in blob for token in ('response_format', 'json_object', 'structured output', 'structured_output'))
+
+
 def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     """One chat completion for the trial. Returns timing + classification flags."""
     import time
     import httpx
-    from backend.core.llm_providers import guarded_chat_kwargs, http_chat_body, token_param_kwargs
+    from backend.core.llm_providers import (
+        asks_for_max_completion_tokens,
+        guarded_chat_kwargs,
+        http_chat_body,
+        to_max_completion_tokens,
+        token_param_kwargs,
+    )
 
     payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
         'model': model,
@@ -582,7 +734,10 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     try:
         with httpx.Client(timeout=TRIAL_TIMEOUT, trust_env=not is_local_url(base)) as client:
             response = client.post(url, json=payload, headers=headers)
-            if response.status_code == 400 and 'response_format' in (response.text or '').lower():
+            if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
+                payload = to_max_completion_tokens(payload)
+                response = client.post(url, json=payload, headers=headers)
+            if response.status_code == 400 and 'response_format' in payload and _response_format_400(response.text or ''):
                 payload.pop('response_format', None)
                 response = client.post(url, json=payload, headers=headers)
     except httpx.TimeoutException:
@@ -685,11 +840,13 @@ def validate_connection_with_probe(
     if probe_kind != 'trial' or purpose != 'analysis':
         return result
     if not result.ok:
-        # Address / key already failed — skip the expensive trial.
-        result.trial_passed = False
-        result.trial_context_ok = False
-        result.trial_json_ok = False
-        result.trial_rate_limited = False
+        # Address / key / kind already failed — skip the expensive trial.
+        # image_model_in_analysis leaves trial_* unset (no fake three lights).
+        if result.capability_error_code != IMAGE_MODEL_IN_ANALYSIS:
+            result.trial_passed = False
+            result.trial_context_ok = False
+            result.trial_json_ok = False
+            result.trial_rate_limited = False
         return result
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']

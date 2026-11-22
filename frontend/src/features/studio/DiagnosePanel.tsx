@@ -5,10 +5,11 @@ import { Btn, Dialog, StatusDot } from '../../ui'
 import { trackDiagnoseAction, trackDiagnoseOpened } from '../../analytics/studio'
 import { studioApi } from './api'
 import { pageSuggestedAction, presentedFailure, type PageFailureInfo, type SuggestedAction } from './failureAction'
+import { presentFailure, technicalCountText } from './failurePresentation'
 import type { ImportReadiness } from './importReadiness'
 import { openExample } from './openExample'
 
-type FailureInfo = PageFailureInfo & { error?: string | null }
+type FailureInfo = PageFailureInfo & { error?: string | null; llm_calls?: number | null }
 
 const CHECKS = [
   ['analysis', '分析模型'],
@@ -18,6 +19,14 @@ const CHECKS = [
 ] as const
 
 export type ReadinessRow = { key: string; tone: 'ok' | 'error' | 'muted'; name: string; status: string }
+
+/** Raw vendor or stack text for the detail panel. The card already shows a short sentence. */
+export function detailBeyond(shown: string | null | undefined, raw: string | null | undefined): string {
+  const full = (raw || '').trim()
+  const brief = (shown || '').trim()
+  if (!full || full === brief || brief.includes(full)) return ''
+  return full
+}
 
 /** Four readiness rows CreativeImport already probes: analysis, transcription, visual, ffmpeg. */
 export function readinessRows(report?: ImportReadiness | null): ReadinessRow[] {
@@ -45,6 +54,7 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
   const diagnosis = pageSuggestedAction(info)
   const suggestion = diagnosis.action
   const card = presentedFailure(info, reason)
+  const rawDetail = detailBeyond(card.reason, info.error)
   const report = readiness !== undefined ? readiness : fetched
 
   useEffect(() => {
@@ -97,7 +107,12 @@ export default function DiagnosePanel({ open, onClose, info, reason, onSettings,
         </div>)}
       </div>
       <p className="studio-muted">{t('上次失败')}</p>
-      <p className="studio-error">{t(card.step)}：{t(card.reason)}</p>
+      <p className="studio-error">{card.step ? <>{t(card.step)}：{t(card.reason)}</> : t(card.reason)}</p>
+      {rawDetail && <pre className="studio-error-raw">{rawDetail}</pre>}
+      {(() => {
+        const technical = technicalCountText(presentFailure({ llm_calls: info.llm_calls, billable_calls_before_failure: info.billable_calls_before_failure }))
+        return technical ? <p className="studio-muted">{t(technical, { requests: info.llm_calls, successes: info.billable_calls_before_failure })}</p> : null
+      })()}
       {suggestion && <>
         <p className="studio-muted">{t('建议先做这一步')}</p>
         {suggestion.kind === 'note'

@@ -72,6 +72,7 @@ build_frontend
 
 # ---- Tauri build ----
 echo "==> Building Tauri application (this takes a few minutes)"
+clean_shipped_bundles
 cd src-tauri
 # Skip the bundler-driven dmg step (it's flaky on macOS 26); we'll create the dmg ourselves
 cargo tauri build --bundles app

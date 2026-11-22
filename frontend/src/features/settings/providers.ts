@@ -1,6 +1,7 @@
 import { t } from '../../i18n'
 import { compareRecommended, pickerBucket, qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
 import { getCatalog, getProvider } from './providerPresets'
+import { promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 
 export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
@@ -35,7 +36,7 @@ const UI_KEYS: ProviderKey[] = [
 
 function groupFor(key: ProviderKey): ProviderGroup {
   if (key === 'compatible') return 'compatible'
-  if (key === 'api88' || key === 'infistar' || key === 'apimart') return 'sponsor'
+  if (key === 'apimart') return 'sponsor'
   if (key === 'ollama' || key === 'lmstudio') return 'local'
   return 'cloud'
 }
@@ -68,7 +69,7 @@ function fromPreset(key: Exclude<ProviderKey, 'compatible'>): ProviderEntry {
       ...measured,
     }
   }
-  if (row.sponsor && (key === 'api88' || key === 'infistar' || key === 'apimart')) {
+  if (row.sponsor && key === 'apimart') {
     entry.sponsor = {
       id: key,
       registerUrl: row.sponsor.register_url,
@@ -100,16 +101,28 @@ export const PROVIDERS: Record<ProviderKey, ProviderEntry> = UI_KEYS.reduce((acc
 }, {} as Record<ProviderKey, ProviderEntry>)
 
 function recommendedCompare(a: ProviderKey, b: ProviderKey): number {
+  const left = promotionRank(a)
+  const right = promotionRank(b)
+  if (left !== null && right !== null && left !== right) return left - right
   return compareRecommended(
-    { sponsor: PROVIDERS[a].sponsor, success_tier: PROVIDERS[a].success_tier, success_rate: qualityFor(a)?.success_rate },
-    { sponsor: PROVIDERS[b].sponsor, success_tier: PROVIDERS[b].success_tier, success_rate: qualityFor(b)?.success_rate },
+    { sponsor: Boolean(PROVIDERS[a].sponsor) || promotionCurrentlyPromoted(a), success_tier: PROVIDERS[a].success_tier, success_rate: qualityFor(a)?.success_rate },
+    { sponsor: Boolean(PROVIDERS[b].sponsor) || promotionCurrentlyPromoted(b), success_tier: PROVIDERS[b].success_tier, success_rate: qualityFor(b)?.success_rate },
   )
 }
 
-/** Sponsors stay first. High/mid official providers follow by success tier. Low tiers stay in 官方供应商. */
+function visibleBucket(key: ProviderKey): ProviderGroup {
+  if (promotionCurrentlyPromoted(key)) return 'sponsor'
+  const bucket = pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier)
+  if (bucket === 'sponsor' && !promotionEligible(key)) return 'cloud'
+  // No accepted promotion: a measured tier must not lift these into the chooser.
+  if ((key === 'api88' || key === 'infistar') && !promotionCurrentlyPromoted(key)) return 'cloud'
+  return bucket
+}
+
+/** New-user recommendations. A stopped or removed sponsor stays available in the neutral list. */
 export function recommendedSetupProviders(): ProviderKey[] {
   return (Object.keys(PROVIDERS) as ProviderKey[])
-    .filter(key => pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier) === 'sponsor')
+    .filter(key => visibleBucket(key) === 'sponsor')
     .sort(recommendedCompare)
 }
 
@@ -118,7 +131,7 @@ export const providerPickerOptions = () => PROVIDER_GROUPS
     label: group.label(),
     options: (Object.keys(PROVIDERS) as ProviderKey[])
       .filter((key) => {
-        if (pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier) !== group.key) return false
+        if (visibleBucket(key) !== group.key) return false
         if (key === 'compatible') return true
         const preset = getProvider(key)
         return !preset || !!preset.base_url.trim() || !!PROVIDERS[key].local

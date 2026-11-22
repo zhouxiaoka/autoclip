@@ -1,0 +1,16 @@
+{
+  "account": {"data": [{"id": "qwen4-max"}, {"id": "qwen-image-2.1-pro"}]},
+  "synthetic": [
+    {"id": "fixture-alpha", "input_modalities": ["text", "image"], "output_modalities": ["text"]},
+    {"id": "fixture-beta", "input_modalities": ["text"], "output_modalities": ["image"]},
+    {"id": "fixture-max-new"}
+  ],
+  "expected": [
+    {"id": "qwen4-max", "kind": "language", "analysis": true, "image": false, "capability": "multimodal"},
+    {"id": "qwen-image-2.1-pro", "kind": "image", "analysis": false, "image": true, "capability": null},
+    {"id": "qwen-audio-3.1-asr-flash", "kind": "asr", "analysis": false, "image": false, "capability": null, "asr": true, "asr_supported": true, "asr_preview": false},
+    {"id": "fixture-alpha", "kind": "language", "analysis": true, "image": false, "capability": "multimodal"},
+    {"id": "fixture-beta", "kind": "image", "analysis": false, "image": true, "capability": "text"},
+    {"id": "fixture-max-new", "kind": "other", "analysis": false, "image": false, "capability": null}
+  ]
+}

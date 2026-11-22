@@ -137,6 +137,64 @@ test('feedback dialog discloses developer delivery in every locale', () => {
   assert.ok(catalogs.en[key].includes('GitHub Issue'))
 })
 
+test('reverted caption-correction copy stays out while diagnostics copy stays in every locale', () => {
+  const kept = [
+    'settings.diagnostics.report',
+    'settings.diagnostics.report_hint',
+    '我们会收集本次错误信息，帮助改善体验，可在设置中关闭。',
+    '这次不会自动发送内容。可以在设置中打开。',
+    'settings.diagnostics.clip',
+    'settings.diagnostics.clip_hint',
+    'settings.diagnostics.original',
+    'settings.diagnostics.original_hint',
+    'settings.diagnostics.privacy', 'settings.diagnostics.privacy_use', 'settings.diagnostics.privacy_content', 'settings.diagnostics.privacy_video', 'settings.diagnostics.privacy_stop',
+    '提交诊断',
+    '看看将要发送的内容。这一次的素材需要逐项勾选，不会自动带上。本地视频在确认说明之后会压缩并上传短片段；完整原片默认关闭。视频链接只发送清洗后的链接，不发送下载下来的视频。已上传的诊断会在 14 天后自动删除。用于排查和改进，不会用于训练模型。',
+    '短片段（压缩后约 60 秒，有失败时间就围着它截取）',
+    '本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。',
+    '完整原片（这一次需要勾选）',
+    '字幕文本（默认不发送）',
+    '保存到本机',
+    '已保存到本机。',
+    '诊断已排队',
+    '诊断没有提交',
+    '已取消上传',
+    '删除已上传的诊断',
+    '以后的失败也自动发送脱敏诊断',
+    '只对打开这项之后的新失败生效，不会补传以前的失败。',
+    'settings.diagnostics.disabled',
+    '我将对照清单再提交',
+    '这次失败没有可关联的尝试编号，仍然可以写下反馈。',
+    '将随诊断一起发送的字段',
+    '不含 API 密钥、字幕正文、项目名或个人路径。自动发送的是脱敏诊断；完整原片和短片段可以单独关闭。',
+    '诊断设置没有保存，请重试。',
+  ]
+  const removed = [
+    '字幕翻译尚未完成，请检查后再发布',
+    '字幕翻译已完成，使用简化包装',
+    '片尾完整性需要复核，请预览最后一段',
+    '只重试字幕翻译',
+    '补译后请保存并重新导出，已有成片保留。',
+    '逐句校对',
+    '译文覆盖完整不代表意思正确。修改后请保存并重新导出。',
+    '选择字幕句子',
+    '原句',
+    '修改此句字幕',
+    '字幕不能为空',
+    '人工修改将随草稿保存，补译其他句子时保留。',
+    '试听原句',
+    '重译此句',
+    '草稿已修改，未应用迟到的翻译结果，请重试',
+    '原字幕或选段已变化，请核对人工修改后再重试',
+    '字幕句子不存在',
+    '此句重译未完成，原有字幕已保留，请稍后重试',
+  ]
+  for (const lang of langs) {
+    for (const key of kept) assert.ok(Object.hasOwn(catalogs[lang], key) && catalogs[lang][key].trim(), `${lang}: ${key}`)
+    for (const key of removed) assert.equal(Object.hasOwn(catalogs[lang], key), false, `${lang}: ${key}`)
+  }
+})
+
 test('feedback disclosure tells every locale that send goes through PostHog', () => {
   const keys = [
     '已收到。这句话会先到 PostHog，再公开出现在 GitHub。',

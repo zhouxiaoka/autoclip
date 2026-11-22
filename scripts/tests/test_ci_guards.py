@@ -1,6 +1,8 @@
 """Locks for review-round filenames, review ids in notes, and catalog error codes."""
+import io
 import json
 import os
+from contextlib import redirect_stderr
 from pathlib import Path
 import sys
 import tempfile
@@ -18,6 +20,18 @@ class CiGuardTests(unittest.TestCase):
     def test_status_codes_versions_and_ordinary_words_are_not_review_ids(self):
         for text in ('HTTP 500', 'status 404', 'version 1.5.7', 'Render the page', 'done', 'dongle'):
             self.assertIsNone(ci_guards._REVIEW_ID.search(text), text)
+
+    def test_casefold_names_do_not_share_a_resolver_hit(self):
+        spec = 'frontend/src/features/diagnostics/FailureHint'
+        broken = [spec + '.tsx', 'frontend/src/features/diagnostics/failureHint.ts']
+        self.assertTrue(ci_guards.casefold_collisions(broken))
+        self.assertEqual(ci_guards.resolve_casefolded(spec, broken), broken[1])
+        fixed = [spec + '.tsx', 'frontend/src/features/diagnostics/failureHintPolicy.ts']
+        self.assertEqual(ci_guards.casefold_collisions(fixed), [])
+        self.assertEqual(ci_guards.resolve_casefolded(spec, fixed), fixed[0])
+        self.assertTrue(ci_guards.casefold_collisions(['docs/Readme.md', 'docs/readme.md']))
+        self.assertEqual(ci_guards.casefold_collisions(['a/Foo.ts', 'b/foo.ts']), [])
+        self.assertEqual(ci_guards.casefold_collisions(ci_guards.tracked_paths()), [])
 
     def test_review_round_filenames(self):
         self.assertTrue(ci_guards._REVIEW_FILE.match('test_' + 'r12.py'))
@@ -115,11 +129,154 @@ class CiGuardTests(unittest.TestCase):
         self.assertEqual(ci_guards._bucket('docs/TESTING_ACCEPTANCE.md'), 'docs')
         self.assertEqual(ci_guards._bucket('frontend/tests/api-retry.test.cjs'), 'tests')
 
+    def test_directory_casefold_catches_parent_segments_only(self):
+        self.assertEqual(ci_guards.directory_casefold_collisions([
+            'frontend/src/features/diagnostics/FailureHint.tsx',
+            'frontend/src/features/diagnostics/failureHint.ts',
+        ]), [])
+        self.assertEqual(ci_guards.directory_casefold_collisions(['docs/Readme.md', 'docs/readme.md']), [])
+        self.assertEqual(ci_guards.directory_casefold_collisions(['a/Foo.ts', 'b/foo.ts']), [])
+        self.assertEqual(ci_guards.directory_casefold_collisions(['Foo/a.ts', 'Foo/b.ts']), [])
+        different = ci_guards.directory_casefold_collisions(['Foo/a.ts', 'foo/b.ts'])
+        self.assertTrue(any('Foo' in row and 'foo' in row for row in different), different)
+        nested = ci_guards.directory_casefold_collisions([
+            'frontend/src/features/diagnostics/FailureHint.tsx',
+            'frontend/src/Features/diagnostics/other.ts',
+        ])
+        self.assertTrue(any('features' in row and 'Features' in row for row in nested), nested)
+        file_dir = ci_guards.directory_casefold_collisions(['Foo', 'foo/a.ts'])
+        self.assertTrue(any('Foo' in row and 'foo' in row for row in file_dir), file_dir)
+        self.assertEqual(ci_guards.directory_casefold_collisions(ci_guards.tracked_paths()), [])
+
+    def test_global_urlopen_capture_must_drop_bodies_without_an_event(self):
+        broken = '''
+import json
+def test_settle(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
+    posted = []
+    def fake(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+        raise OSError("tests do not send")
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    body = posted[0]
+    assert body["event"] == "studio_generation_finished"
+'''
+        counted = '''
+import json
+def test_rejected(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
+    calls = []
+    def rejected(req, timeout=0):
+        calls.append(json.loads(req.data.decode()))
+        raise OSError("no")
+    monkeypatch.setattr("urllib.request.urlopen", rejected)
+    assert len(calls) == 1
+'''
+        guarded = '''
+import json
+def test_settle(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_POSTHOG_KEY", "phc_test")
+    posted = []
+    def fake(req, timeout=0):
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get("event"), str):
+            posted.append(body)
+        raise OSError("tests do not send")
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    assert posted[0]["event"] == "studio_generation_finished"
+'''
+        module_local = '''
+import json
+def test_post(monkeypatch):
+    posted = []
+    def urlopen(req, timeout=0):
+        posted.append(json.loads(req.data.decode()))
+    monkeypatch.setattr(telem.urllib.request, "urlopen", urlopen)
+    assert posted[0]["event"] == "studio_generation_finished"
+'''
+        vision = '''
+import json
+import urllib.request
+def test_vision(monkeypatch):
+    sent = []
+    def fake_urlopen(req, timeout=None):
+        payload = json.loads(req.data)
+        sent.append(payload)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert sent[0]["model"] == "vision"
+'''
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sample = root / 'backend' / 'tests' / 'test_mix.py'
+            sample.parent.mkdir(parents=True)
+            sample.write_text(broken, encoding='utf-8')
+            flagged = ci_guards.global_urlopen_telemetry_mixes(root)
+            self.assertTrue(any('test_mix.py' in row and 'PostHog' in row for row in flagged), flagged)
+            sample.write_text(counted, encoding='utf-8')
+            self.assertTrue(ci_guards.global_urlopen_telemetry_mixes(root))
+            sample.write_text(guarded, encoding='utf-8')
+            self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(root), [])
+            sample.write_text(module_local, encoding='utf-8')
+            self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(root), [])
+            sample.write_text(vision, encoding='utf-8')
+            self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(root), [])
+        self.assertEqual(ci_guards.global_urlopen_telemetry_mixes(), [])
+
+    def test_new_guards_name_the_root_cause(self):
+        stderr = io.StringIO()
+        with patch.object(ci_guards, 'review_filenames', return_value=[]), \
+                patch.object(ci_guards, 'review_notes', return_value=[]), \
+                patch.object(ci_guards, 'error_code_literals', return_value=[]), \
+                patch.object(ci_guards, 'handwritten_error_code_sets', return_value=[]), \
+                patch.object(ci_guards, 'catalog_sentence_copies', return_value=[]), \
+                patch.object(ci_guards, 'tracked_paths', return_value=['Foo/a.ts', 'foo/b.ts']), \
+                patch.object(ci_guards, 'global_urlopen_telemetry_mixes', return_value=[
+                    'backend/tests/test_mix.py:4: 未过滤的 JSON body 被当成 PostHog 事件',
+                ]), \
+                patch.dict(os.environ, {'GITHUB_BASE_REF': ''}):
+            with redirect_stderr(stderr):
+                code = ci_guards.main()
+        text = stderr.getvalue()
+        self.assertEqual(code, 1)
+        self.assertIn('casefold', text)
+        self.assertIn('Foo', text)
+        self.assertIn('foo', text)
+        self.assertIn('不要 patch 进程全局的 urllib.request.urlopen', text)
+        self.assertIn('test_mix.py:4', text)
+
     def test_contracts_job_runs_the_guard(self):
         commands = {name: command for name, command, _ in quality_gate.checks('contracts', sys.executable)}
         self.assertEqual(commands['ci_guards'][-1], 'scripts/ci_guards.py')
         backend = {name: command for name, command, _ in quality_gate.checks('backend', sys.executable)}
         self.assertIn('scripts/ci_guards.py', backend['python_correctness'])
+
+    def test_tauri_invoke_contracts_blocks_unregistered_commands(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'src-tauri/src').mkdir(parents=True)
+            (root / 'frontend/src/desktop').mkdir(parents=True)
+            (root / 'src-tauri/src/lib.rs').write_text(
+                'tauri::generate_handler![restart_backend_service, reveal_in_folder]\n',
+                encoding='utf-8',
+            )
+            (root / 'frontend/src/desktop/Banner.tsx').write_text(
+                "invoke('restart_backend_service'); invoke('missing_cmd');\n",
+                encoding='utf-8',
+            )
+            hits = ci_guards.tauri_invoke_contracts(root)
+            self.assertEqual(len(hits), 1)
+            self.assertIn('missing_cmd', hits[0])
+
+    def test_orphaned_ui_components_blocks_new_dead_feature_components(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'frontend/src/features/studio').mkdir(parents=True)
+            (root / 'frontend/src/features/studio/UsedCard.tsx').write_text('export default function UsedCard() {}\n', encoding='utf-8')
+            (root / 'frontend/src/features/studio/DeadCard.tsx').write_text('export default function DeadCard() {}\n', encoding='utf-8')
+            (root / 'frontend/src/features/studio/Page.tsx').write_text("import UsedCard from './UsedCard'\n", encoding='utf-8')
+            hits = ci_guards.orphaned_ui_components(root)
+            self.assertTrue(any('DeadCard.tsx' in h for h in hits))
+            self.assertFalse(any('UsedCard.tsx' in h for h in hits))
 
 
 if __name__ == '__main__':

@@ -296,7 +296,8 @@ else:
 
 ROOT = Path(__file__).resolve().parents[2]
 WINDOW = {'date_from': "'2026-10-01 00:00:00'", 'date_to': "'2026-11-01 00:00:00'", 'internal_cohort_id': '641509',
-          'release_1_5_7': "'2026-10-01 00:00:00'"}
+          'release_1_5_7': "'2026-10-01 00:00:00'", 'release_1_5_8': "'2026-10-01 00:00:00'",
+          'release_1_5_9': "'2026-10-01 00:00:00'"}
 
 
 @pytest.fixture
@@ -308,7 +309,9 @@ def env__r25_419_receipt_chain_duckdb(tmp_path, monkeypatch):
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get('event'), str):
+            posted.append(body)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
@@ -454,7 +457,9 @@ def test_real_backend_receipt_carries_the_frozen_reason_through_the_real_entry(m
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get('event'), str):
+            posted.append(body)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)
@@ -1170,3 +1175,99 @@ the round is the output it redid (redone_by_attempt); A's other outputs and B's 
     # only the output this retry redid; A's earlier completed output is not this round's. Was: variant_count 2.
     assert (data['generation']['status'], receipt['state'], receipt['summary']['variant_count']) == ('completed', 'completed', 1)
     assert data['generation']['not_redone_failed_count'] == 1          # B's failed output, still listed
+
+
+def test_card_retry_reuses_failed_confirmed_plan_once(env, monkeypatch):
+    from backend.api.v1 import studio as api
+
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    plan = store.read(pid)['plan']
+    flow.production_finished(pid, 'failed', 'timeline_empty')
+    project = type('Project', (), {'processing_config': {'smart_import': {'auto_start': False}}})()
+    monkeypatch.setattr(api, 'project_or_404', lambda *_: project)
+    body = api.RetryCommand(scope='project', idempotency_key='retry-card-once')
+    env.clear()
+    receipt = api.retry_command(pid, body, None)
+    assert api.retry_command(pid, body, None) == receipt
+    assert env == ['_produce_selected']
+    parent, retry = flow.receipts(pid)
+    assert retry['retry_of'] == parent['attempt_id']
+    assert retry['run_id'] == receipt['analysis_run_id']
+    assert store.read(pid)['plan'] == plan
+    assert store.read(pid)['analysis']['phase'] == 'production'
+
+
+def test_card_retry_of_failed_screening_never_uses_an_older_confirmed_plan(env, monkeypatch):
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    flow.production_finished(pid, 'failed')
+    jobs.inspect_project(pid, flow.MANUAL, retry={'key': 'screen-again'})
+    store.change(pid, lambda data: data['analysis'].update(status='failed', phase='screening'))
+    env.clear()
+    jobs.inspect_project(pid, flow.MANUAL, retry={'scope': 'project', 'key': 'card-retry'})
+    assert env == ['_inspect']
+    assert store.read(pid)['analysis']['phase'] == 'screening'
+
+
+def test_confirmed_card_retry_refused_before_dispatch_preserves_failed_attempt(env, monkeypatch):
+    from backend.services.studio import preflight
+
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    flow.production_finished(pid, 'failed')
+    previous = store.read(pid)
+
+    def refuse(*args):
+        raise ValueError('missing source')
+
+    monkeypatch.setattr(preflight, 'check', refuse)
+    env.clear()
+    with pytest.raises(ValueError, match='missing source'):
+        jobs.inspect_project(pid, flow.MANUAL, retry={'scope': 'project', 'key': 'card-preflight'})
+    assert env == []
+    assert store.read(pid) == previous
+
+
+def test_confirmed_retry_restores_link_source_and_keeps_plan(env, monkeypatch):
+    from types import SimpleNamespace
+    from backend.api.v1 import studio as api
+    from backend.services.studio import preflight
+
+    lookup = jobs.source
+    pid = flow.new_project()
+    jobs.inspect_project(pid, flow.MANUAL)
+    flow.confirm(pid, flow.awaiting_confirmation(pid), monkeypatch)
+    flow.production_finished(pid, 'failed')
+    plan = store.read(pid)['plan']
+    raw = store.directory(pid) / 'raw'
+    raw.mkdir(exist_ok=True)
+    (raw / 'input.srt').write_text('attached subtitle')
+    monkeypatch.setattr(jobs, 'source', lookup)
+    url = 'https://youtu.be/example'
+    project = SimpleNamespace(processing_config={'smart_import': {'auto_start': False}}, project_metadata={'source_url': url})
+    monkeypatch.setattr(api, 'project_or_404', lambda *_: project)
+    tasks = []
+    monkeypatch.setattr(jobs.executor, 'submit', lambda fn, *args, **kw: tasks.append((fn, args, kw)))
+    calls = []
+
+    def download(_pid, original, browser, import_options=None):
+        calls.append(('download', original))
+        (raw / 'input.mp4').write_bytes(b'restored')
+
+    monkeypatch.setattr(jobs, 'download', download)
+    monkeypatch.setattr(preflight, 'check', lambda *_: calls.append(('preflight', lookup(pid).name)))
+    monkeypatch.setattr(jobs, 'mark_project', lambda *a, **k: None)
+    monkeypatch.setattr(jobs, 'run_content', lambda *_: calls.append(('produce', lookup(pid).name)) or [{}])
+    body = api.RetryCommand(scope='project', idempotency_key='restore-known-source')
+    receipt = api.retry_command(pid, body, None)
+    assert api.retry_command(pid, body, None) == receipt
+    [(fn, args, kw)] = tasks
+    fn(*args, **kw)
+    assert calls == [('download', url), ('preflight', 'input.mp4'), ('produce', 'input.mp4')]
+    assert store.read(pid)['plan'] == plan
+    assert store.read(pid)['analysis']['status'] == 'completed'
+    assert (raw / 'input.srt').read_text() == 'attached subtitle'

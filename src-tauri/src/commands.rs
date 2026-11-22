@@ -116,6 +116,47 @@ pub async fn confirm_quit(app_handle: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn reveal_in_folder(path: String) -> Result<(), String> {
+    let target = validate_reveal_path(&path)?;
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", target.display()))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dir = target.parent().unwrap_or(&target);
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn validate_reveal_path(raw: &str) -> Result<std::path::PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("文件路径为空".to_string());
+    }
+    let path = std::path::PathBuf::from(trimmed);
+    if !path.is_absolute() || !path.exists() {
+        return Err("文件不存在或路径无效".to_string());
+    }
+    Ok(path)
+}
+
+#[tauri::command]
 pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDownload, String> {
     let parsed = local_http_url(&url)?;
     let response = local_client()?
@@ -389,6 +430,22 @@ mod download_tests {
         assert_eq!(path.file_name().unwrap(), "clip (1).mp4");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn reveal_path_rejects_empty_relative_or_missing_targets() {
+        use super::validate_reveal_path;
+        assert!(validate_reveal_path("").is_err());
+        assert!(validate_reveal_path("   ").is_err());
+        assert!(validate_reveal_path("relative/file.mp4").is_err());
+        assert!(validate_reveal_path("/nonexistent/path/for/autoclip_reveal_test.mp4").is_err());
+        let dir = std::env::temp_dir().join(format!("autoclip-reveal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("clip.mp4");
+        std::fs::write(&file, b"ok").unwrap();
+        assert_eq!(validate_reveal_path(file.to_str().unwrap()).unwrap(), file);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 
@@ -402,12 +459,7 @@ mod download_tests {
 pub fn set_keep_awake(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
     let held = crate::power::set_keep_awake(on)?;
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let tip = if held {
-            "AutoClip — 制作中，已阻止休眠"
-        } else {
-            "AutoClip"
-        };
-        let _ = tray.set_tooltip(Some(tip));
+        let _ = tray.set_tooltip(Some(crate::power::keep_awake_tooltip(held)));
     }
     Ok(held)
 }

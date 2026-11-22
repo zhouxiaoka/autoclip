@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Switch, message } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { settingsApi } from '../services/api'
+import { diagnosticsApi, settingsApi } from '../services/api'
 import AIModelSettings from '../features/settings/AIModelSettings'
 import OutputBrandingSetting from '../features/settings/OutputBrandingSetting'
 import OutputCaptionsSetting from '../features/settings/OutputCaptionsSetting'
@@ -38,6 +38,7 @@ const SECTION_ALIASES: Record<string, { section: SectionKey; anchor?: string }> 
   vision: { section: 'ai', anchor: 'ai-defaults-vision' },
   speech: { section: 'ai', anchor: 'ai-defaults-transcription' },
   cover: { section: 'ai', anchor: 'ai-defaults-cover' },
+  diagnostics: { section: 'app', anchor: 'diagnostics-settings' },
 }
 
 // Calm Premium settings — left nav + setting rows (see DESIGN.md → App Layer)
@@ -60,6 +61,12 @@ const SettingsPage: React.FC = () => {
     trackExperience('settings_section_viewed', { section: active, entry_source: location.state?.settingsEntry === 'home_setup' ? 'home_setup' : 'direct' })
   }, [active])
   useEffect(() => { setActive(initialSection) }, [initialSection])
+  useEffect(() => {
+    const anchor = SECTION_ALIASES[requested]?.anchor
+    if (!anchor || SECTION_ALIASES[requested]?.section !== active) return
+    const timer = window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }), 0)
+    return () => window.clearTimeout(timer)
+  }, [requested, active])
   return (
     <div className="ac-page">
       <header>
@@ -77,13 +84,20 @@ const SettingsPage: React.FC = () => {
       <div className="ac-settings" style={{ marginTop: 36 }}>
         <nav className="ac-settings-nav" aria-label={t("设置分类")}>
           {NAV.map((n) => (
-            <button key={n.key} aria-current={active === n.key} onClick={() => navigate(`/settings?section=${n.key}`, { replace: true })}>{n.label}</button>
+            <button key={n.key} aria-current={active === n.key} onClick={() => {
+              const cur = new URLSearchParams(location.search)
+              const next = new URLSearchParams({ section: n.key })
+              if (cur.get('return_import') === '1') next.set('return_import', '1')
+              const returnProject = cur.get('return_project')
+              if (returnProject) next.set('return_project', returnProject)
+              navigate(`/settings?${next.toString()}`, { replace: true, state: location.state })
+            }}>{n.label}</button>
           ))}
         </nav>
 
         <div className="ac-settings-body">
           <div hidden={active !== 'ai'}>
-            <AIModelSettings requestedSection={requested} requestedProvider={new URLSearchParams(location.search).get('provider') || ''} />
+            <AIModelSettings returnToImport={new URLSearchParams(location.search).get('return_import') === '1'} requestedSection={requested} requestedProvider={new URLSearchParams(location.search).get('provider') || ''} />
           </div>
 
           {/* ---------------- 应用 ---------------- */}
@@ -130,6 +144,10 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
+  const [helpDiagnostics, setHelpDiagnostics] = useState<boolean | null>(null)
+  const [helpError, setHelpError] = useState(false)
+  const [helpMedia, setHelpMedia] = useState(true)
+  const [helpOriginal, setHelpOriginal] = useState(false)
   const crashPreferenceChanged = useRef(false)
   const [version, setVersion] = useState('')
   const appUpdate = useAppUpdate()
@@ -155,11 +173,33 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         } catch {
           /* 后端未起或非桌面数据目录时用 localStorage */
         }
+        try {
+          const grant = await diagnosticsApi.consent()
+          if (active) {
+            setHelpError(false)
+            setHelpDiagnostics(grant.diagnostics)
+            setHelpMedia(grant.media)
+            setHelpOriginal(grant.full_original)
+          }
+        } catch {
+          if (active) setHelpError(true)
+        }
       } catch (err) {
         console.error('检查自动启动状态失败:', err)
       }
     })()
-    return () => { active = false }
+    const refreshDiagnostics = () => {
+      diagnosticsApi.consent().then((grant) => {
+        if (!active) return
+        setHelpError(false)
+        setHelpDiagnostics(grant.diagnostics)
+        setHelpMedia(grant.media)
+        setHelpOriginal(grant.full_original)
+      }).catch(() => { if (active) setHelpError(true) })
+    }
+    if (typeof window === 'undefined') return () => { active = false }
+    window.addEventListener('autoclip-diagnostics-consent', refreshDiagnostics)
+    return () => { active = false; window.removeEventListener('autoclip-diagnostics-consent', refreshDiagnostics) }
   }, [])
 
   const toggleAutostart = async (enabled: boolean) => {
@@ -181,6 +221,24 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const toggleKeepAwake = (enabled: boolean) => {
     setKeepAwake(enabled)
     getKeepAwakeController().onEnabledChange(enabled)
+  }
+
+  const saveDiagnostics = async (diagnostics: boolean, media: boolean, fullOriginal: boolean) => {
+    setHelpDiagnostics(diagnostics)
+    setHelpMedia(media)
+    setHelpOriginal(fullOriginal)
+    try {
+      const saved = await diagnosticsApi.setConsent({
+        diagnostics, media, full_original: fullOriginal, informed: true,
+      })
+      setHelpError(false)
+      setHelpDiagnostics(saved.diagnostics)
+      setHelpMedia(saved.media)
+      setHelpOriginal(saved.full_original)
+      if (!saved.diagnostics) message.info(t('settings.diagnostics.disabled'))
+    } catch {
+      message.warning(t('诊断设置没有保存，请重试。'))
+    }
   }
 
   const toggleCrashReports = async (enabled: boolean) => {
@@ -258,6 +316,40 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
+        <div id="diagnostics-settings">
+        {helpError && <>
+          <p className="ac-note">{t('诊断设置没有读出来。在确认前不会按默认打开上传。')}</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn size="sm" onClick={() => {
+              diagnosticsApi.consent().then((grant) => {
+                setHelpError(false)
+                setHelpDiagnostics(grant.diagnostics)
+                setHelpMedia(grant.media)
+                setHelpOriginal(grant.full_original)
+              }).catch(() => setHelpError(true))
+            }}>{t('重新读取')}</Btn>
+            <Btn size="sm" onClick={() => void saveDiagnostics(false, false, false)}>{t('关闭自动发送')}</Btn>
+          </div>
+        </>}
+        {!helpError && helpDiagnostics !== null && <>
+          <Row label={t("settings.diagnostics.report")} hint={t("settings.diagnostics.report_hint")}>
+            <Switch aria-label={t("settings.diagnostics.report")} checked={helpDiagnostics} onChange={(enabled) => void saveDiagnostics(enabled, enabled ? helpMedia : false, enabled && helpMedia ? helpOriginal : false)} />
+          </Row>
+          <Row label={t("settings.diagnostics.clip")} hint={t("settings.diagnostics.clip_hint")}>
+            <Switch aria-label={t("settings.diagnostics.clip")} checked={helpMedia} disabled={!helpDiagnostics} onChange={(enabled) => void saveDiagnostics(true, enabled, enabled ? helpOriginal : false)} />
+          </Row>
+          <Row label={t("settings.diagnostics.original")} hint={t("settings.diagnostics.original_hint")}>
+            <Switch aria-label={t("settings.diagnostics.original")} checked={helpOriginal} disabled={!helpDiagnostics || !helpMedia} onChange={(enabled) => void saveDiagnostics(true, true, enabled)} />
+          </Row>
+          <details className="ac-disclosure">
+            <summary>{t('settings.diagnostics.privacy')}</summary>
+            <p className="ac-note">{t('settings.diagnostics.privacy_use')}</p>
+            <p className="ac-note">{t('settings.diagnostics.privacy_content')}</p>
+            <p className="ac-note">{t('settings.diagnostics.privacy_video')}</p>
+            <p className="ac-note">{t('settings.diagnostics.privacy_stop')}</p>
+          </details>
+        </>}
+        </div>
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
         <ImportPreferenceSettings />

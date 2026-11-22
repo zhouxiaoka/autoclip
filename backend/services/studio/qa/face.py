@@ -225,48 +225,71 @@ def _grab_frames(path, times: list[float], timeout: float, width: int = 480) -> 
     checked against the request. Every output has its own named showinfo instance
     (`showinfo@g<index>`), and a pts is matched to its output by that name. The filtergraphs
     run in parallel, so the order of their log lines says nothing about which output they
-    belong to. A frame more than _PTS_SLOP from its requested time is dropped.
+    belong to. A frame more than _PTS_SLOP from its requested time is dropped. A timestamp
+    whose log line was torn is read again by itself; a distant pts stays dropped.
     """
     if not times:
         return []
-    import re
+    frames = _grab_once(path, times, timeout, width)
+    if len(times) == 1 or all(frame is not None for frame in frames):
+        return frames
+    for index, frame in enumerate(frames):
+        if frame is not None:
+            continue
+        again = _grab_once(path, [times[index]], timeout, width)
+        frames[index] = again[0] if again else None
+    return frames
+
+
+def _grab_once(path, times: list[float], timeout: float, width: int) -> list[bytes | None]:
     import shutil
     import tempfile
     from pathlib import Path
+
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
     folder = Path(tempfile.mkdtemp(prefix='ac-qa-'))
     cmd = [get_ffmpeg_path(), '-v', 'info', '-nostats']
     for when in times:
         cmd += ['-copyts', '-accurate_seek', '-ss', f'{max(0.0, when):.3f}', '-i', str(path)]
     for index in range(len(times)):
+        # checksum=0 keeps the pts line in one log record. Parallel graphs otherwise
+        # split it, and the frame is then indistinguishable from a missing seek.
+        # -update writes one image on FFmpeg 8, which warns and can skip a bare name.
         cmd += [
             '-map', f'{index}:v:0', '-an', '-frames:v', '1',
-            '-vf', f"scale={width}:-2,select=eq(n\\,0),showinfo@g{index}", '-q:v', '5', str(folder / f'{index}.jpg'),
+            '-vf', f"scale={width}:-2,select=eq(n\\,0),showinfo@g{index}=checksum=0",
+            '-q:v', '5', '-update', '1', str(folder / f'{index}.jpg'),
         ]
     try:
         proc = run(cmd, timeout)
-        stderr = proc.stderr or b''
-        if isinstance(stderr, str):
-            stderr = stderr.encode('utf-8', 'replace')
-        pts: dict[int, float] = {}
-        for label, value in re.findall(
-            rb'\[showinfo@g(\d+) @[^\]]*\]\s*n:\s*0\s+pts:\s*-?\d+\s+pts_time:\s*([0-9eE.+-]+)', stderr,
-        ):
-            try:
-                pts.setdefault(int(label), float(value))
-            except ValueError:
-                continue
-        frames: list[bytes | None] = []
-        for index, when in enumerate(times):
-            jpg = folder / f'{index}.jpg'
-            actual = pts.get(index)
-            if not jpg.is_file() or jpg.stat().st_size == 0 or actual is None or abs(actual - when) > _PTS_SLOP:
-                frames.append(None)
-                continue
-            frames.append(jpg.read_bytes())
-        return frames
+        return _frames_from_grab(folder, times, proc.stderr or b'')
     finally:
         shutil.rmtree(folder, ignore_errors=True)
+
+
+def _frames_from_grab(folder, times: list[float], stderr) -> list[bytes | None]:
+    import re
+    from pathlib import Path
+    folder = Path(folder)
+    if isinstance(stderr, str):
+        stderr = stderr.encode('utf-8', 'replace')
+    pts: dict[int, float] = {}
+    for label, value in re.findall(
+        rb'\[showinfo@g(\d+) @[^\]]*\]\s*n:\s*\d+\s+pts:\s*-?\d+\s+pts_time:\s*([0-9eE.+-]+)', stderr,
+    ):
+        try:
+            pts.setdefault(int(label), float(value))
+        except ValueError:
+            continue
+    frames: list[bytes | None] = []
+    for index, when in enumerate(times):
+        jpg = folder / f'{index}.jpg'
+        actual = pts.get(index)
+        if not jpg.is_file() or jpg.stat().st_size == 0 or actual is None or abs(actual - when) > _PTS_SLOP:
+            frames.append(None)
+            continue
+        frames.append(jpg.read_bytes())
+    return frames
 
 
 def _faces_in_jpeg(blob: bytes):

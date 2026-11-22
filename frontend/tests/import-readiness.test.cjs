@@ -120,7 +120,7 @@ function render(options = {}) {
     './api': {
       studioApi: {
         import: async body => { calls.push(body); if (options.importError) throw options.importError; return { project_id: 'project-1' } },
-        inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true }),
+        inspectUrl: async () => ({ title: 't', duration: 60, preview_route: options.withPlatformSubs ? 'platform_subtitle' : 'local_transcription', has_manual_subtitle: !!options.withPlatformSubs }),
         readiness: async () => { probes.push(1); if (options.probeFails) throw new Error('readiness down'); return options.probeValue === undefined ? value : options.probeValue },
       },
       errorText: realErrorText.errorText,
@@ -162,11 +162,21 @@ function button(tree, label) {
   return tree.find(node => node.type === 'button' && node.props?.children === label)
 }
 
+test('optional vision leaves a configured import ready to generate without a status strip', async () => {
+  const view = render({ report: report({
+    analysis: { ...check(true, 'configured', 'none'), label: 'qwen-plus' },
+    visual: { ...check(true, 'optional', 'none'), label: '未启用' },
+  }) })
+  assert.equal(view.tree.some(node => node.type === 'readiness-line' || node.props?.className === 'studio-readiness'), false)
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 1)
+})
+
 test('the banner installs whisper and blocks an unready import', async () => {
   const failing = report({
     transcription: check(false, 'whisper_not_installed', 'install_whisper'),
   })
-  const opened = render({ report: failing, blocked: true })
+  const opened = render({ report: failing })
   assert.ok(opened.tree.some(node => node.props?.className === 'studio-readiness'))
   assert.equal(opened.tree.some(node => node.type === ImportSetupCardMark), false)
   await button(opened.tree, '安装 Whisper').props.onClick()
@@ -187,14 +197,15 @@ test('the banner installs whisper and blocks an unready import', async () => {
 })
 
 test('an unconfigured analysis model replaces the import zone and keeps a failed validation on it', () => {
-  for (const code of ['not_configured', 'no_model', 'invalid_connection']) {
-    const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }), blocked: true })
+  assert.equal(readiness.analysisNeedsSetup({ checks: { analysis: { ok: false, code: 'no_model' } } }), false)
+  for (const code of ['not_configured', 'invalid_connection']) {
+    const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
     assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), true, code)
     assert.equal(view.tree.some(node => node.type === 'textarea'), false, code)
     assert.equal(button(view.tree, '生成成片'), undefined, code)
     assert.equal(readiness.analysisNeedsSetup(report({ analysis: check(false, code, 'settings_ai') })), true, code)
   }
-  for (const code of ['validation_failed', 'settings_invalid']) {
+  for (const code of ['validation_failed', 'model_validation_failed', 'settings_invalid']) {
     const view = render({ report: report({ analysis: check(false, code, 'settings_ai') }) })
     assert.equal(view.tree.some(node => node.type === ImportSetupCardMark), false, code)
     assert.ok(button(view.tree, '生成成片'), code)
@@ -214,7 +225,15 @@ test('a failed provider check blocks generation and points at model settings', a
   const view = render({ report: failing })
   assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('未通过校验')))
   await button(view.tree, '去设置修改').props.onClick()
-  assert.deepEqual(view.navigations, ['/settings?section=ai'])
+  assert.deepEqual(view.navigations, ['/settings?section=ai&return_import=1'])
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
+test('a failed model check names the selection and offers a model-level repair', async () => {
+  const failing = report({ analysis: { ...check(false, 'model_validation_failed', 'settings_ai'), label: 'qwen4-max' } })
+  const view = render({ report: failing })
+  assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label).includes('更换型号')))
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.calls.length, 0)
 })
@@ -222,7 +241,7 @@ test('a failed provider check blocks generation and points at model settings', a
 test('vision repair opens the vision settings section', async () => {
   const view = render({ report: report({ visual: check(false, 'not_configured', 'settings_vision') }) })
   await button(view.tree, '视觉设置').props.onClick()
-  assert.deepEqual(view.navigations, ['/settings?section=vision'])
+  assert.deepEqual(view.navigations, ['/settings?section=vision&return_import=1'])
 })
 
 test('B5: failed separate vision validation blocks generation and offers repair', async () => {
@@ -230,7 +249,7 @@ test('B5: failed separate vision validation blocks generation and offers repair'
   assert.equal(readiness.submissionBlock(failing, true, true), 'visual')
   const view = render({ report: failing, subtitle: { name: 'fixture.srt' } })
   await button(view.tree, '视觉设置').props.onClick()
-  assert.deepEqual(view.navigations, ['/settings?section=vision'])
+  assert.deepEqual(view.navigations, ['/settings?section=vision&return_import=1'])
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.calls.length, 0)
 })
@@ -241,7 +260,7 @@ test('a text-only vision follow blocks generation with a clear message', async (
   const view = render({ report: failing })
   assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('不能看图')))
   await button(view.tree, '视觉设置').props.onClick()
-  assert.deepEqual(view.navigations, ['/settings?section=vision'])
+  assert.deepEqual(view.navigations, ['/settings?section=vision&return_import=1'])
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.calls.length, 0)
 })
@@ -306,7 +325,7 @@ test('R19 #115: a re-check that recovers uses the fresh report (blocked by the l
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.probes.length, 1)
   assert.equal(view.calls.length, 0)
-  assert.equal(view.errors.at(-1), '还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
+  assert.ok(view.installs.includes('open:whisper_not_installed'))
 })
 
 const axios422 = detail => Object.assign(new Error('Request failed with status code 422'), { response: { status: 422, data: { detail } } })
@@ -338,9 +357,11 @@ test('R21: the desktop follows the backend skippable flag instead of inferring t
   const missing = check(false, 'whisper_not_installed', 'install_whisper')
   const skippable = { ...report({ transcription: { ...missing, skippable: true } }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(skippable, false, true, { source: 'file' }), null)
+  assert.equal(readiness.visibleIssues(skippable, false, { source: 'file' }).length, 0)
   // visual mode without the flag (e.g. no vision model): blocked like any other missing transcriber
   const visualOnly = { ...report({ transcription: missing }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(visualOnly, false, true, { source: 'file' }), 'transcription')
+  assert.equal(readiness.visibleIssues(visualOnly, false, { source: 'file' })[0].key, 'transcription')
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/importReadiness.ts'), 'utf8')
   assert.doesNotMatch(source, /analysis_mode === 'visual'/)
 })
@@ -363,4 +384,18 @@ test('R22 #212: a whisper failure offers transcription settings (install entry),
   for (const code of ['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found']) {
     assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '换一个视频', to: '/' })
   }
+})
+
+test('a matching platform subtitle probe starts import without local ASR under bundled defaults', async () => {
+  const view = render({ withPlatformSubs: true, report: report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }) })
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 1)
+  assert.equal(view.calls[0].get('url'), 'https://youtube.com/watch?v=video')
+})
+
+test('fresh users can open the sample or start connecting', () => {
+  const view = render({ blocked: true })
+  assert.ok(button(view.tree, '先看示例'))
+  button(view.tree, '剪自己的视频').props.onClick()
+  assert.deepEqual(view.blocked, ['setup'])
 })

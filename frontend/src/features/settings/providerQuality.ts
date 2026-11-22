@@ -3,6 +3,7 @@
  * No network request. Providers missing from the file have no tier.
  */
 import raw from '@provider-quality'
+import { promotionCurrentlyPromoted } from './sponsorPromoState'
 
 export type SuccessTier = 'high' | 'mid' | 'low'
 export type LatencyTier = 'under_5m' | 'mid_5_20m' | 'over_20m'
@@ -99,10 +100,16 @@ export function qualityFor(id?: string | null): ProviderQuality | undefined {
 }
 
 export function displayCatalogGroup(preset: {
+  id?: string
   group: CatalogGroup
   sponsor?: unknown
   success_tier?: SuccessTier
 }): CatalogGroup {
+  if (preset.id === 'api88' || preset.id === 'infistar') {
+    if (promotionCurrentlyPromoted(preset.id)) return 'recommended'
+    if (preset.group === 'local' || preset.group === 'more') return preset.group
+    return 'popular'
+  }
   if (preset.success_tier === 'low') {
     if (preset.group === 'local') return 'local'
     if (preset.group === 'more') return 'more'
@@ -128,10 +135,15 @@ export function compareRecommended(
   a: { sponsor?: unknown; success_tier?: SuccessTier; success_rate?: number },
   b: { sponsor?: unknown; success_tier?: SuccessTier; success_rate?: number },
 ): number {
-  const aSponsor = a.sponsor ? 1 : 0
-  const bSponsor = b.sponsor ? 1 : 0
-  if (aSponsor !== bSponsor) return bSponsor - aSponsor
-  if (aSponsor && bSponsor) return 0
+  const bucket = (item: { sponsor?: unknown; success_tier?: SuccessTier }) => {
+    if (!item.sponsor && item.success_tier === 'high') return 0
+    if (item.sponsor) return 1
+    return 2
+  }
+  const aBucket = bucket(a)
+  const bBucket = bucket(b)
+  if (aBucket !== bBucket) return aBucket - bBucket
+  if (aBucket === 1) return 0
   const aRank = a.success_tier ? TIER_RANK[a.success_tier] : 0
   const bRank = b.success_tier ? TIER_RANK[b.success_tier] : 0
   if (aRank !== bRank) return bRank - aRank

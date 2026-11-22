@@ -1057,3 +1057,14 @@ def test_rejected_reservation_survives_a_denied_exact_rollback(client, source, m
         assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
     finally:
         blocked['active'] = False
+
+
+def test_editing_plan_preserves_template_unless_the_field_is_supplied(client, monkeypatch):
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    for update, expected in [({'html_template': 'street'}, 'street'), ({'duration': 18}, 'street'),
+                             ({'html_template': 'classic'}, 'classic'), ({'html_template': None}, None)]:
+        result = client.put('/studio/p1/plan', json={'goal': 'highlight', **update})
+        assert result.status_code == 200, result.text
+        state = store.read('p1')
+        assert state['plan']['overrides'].get('html_template') == expected
+        assert state['generation'].get('html_template') == expected

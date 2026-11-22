@@ -17,12 +17,11 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, FIRST_WINDOW_END_SEC, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type PreviewRouteKind, type ReadinessIssue, type ReadinessLineItem } from './importReadiness'
-import ReadinessLine from './ReadinessLine'
+import { CLOUD_TRANSCRIPTION_DESTINATION, analysisNeedsSetup, asrReadinessProperties, durationBucket, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessCheck, type ReadinessIssue } from './importReadiness'
 import ImportSetupCard from './ImportSetupCard'
 import { platformLabel } from './platformLabel'
 import { hasSuccessHistory, readRememberedPlatforms, resolvePlatforms, samePlatforms, takeReuseImport, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
-import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldArmAutostart, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
+import { claimBackgroundWhisperInstall, extractImportUrl, importUrlKind, isVideoFile, shouldArmAutostart, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
 import TranscriptionGatePrompt from './TranscriptionGatePrompt'
 import { isRecoveryCode, probeConfig, type RecoveryController } from './transcriptionRecovery'
@@ -33,8 +32,22 @@ import UrlPreview, { shouldSuggestFirstWindow, type UrlInspectPreview } from './
 import './studio.css'
 import './quick-output.css'
 
+function validationHint(check?: ReadinessCheck | null) {
+  if (check?.code === 'model_validation_failed') return t('型号 {{model}} 未通过校验，请更换型号或重新测试。', { model: check.label || '' })
+  if (check?.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+  return ''
+}
+
+const parseImportUrl = (raw: string): string | null => {
+  if (typeof extractImportUrl === 'function') return extractImportUrl(raw)
+  return importUrlKind(raw) ? raw.trim() : null
+}
+
 function issueCopy(item: ReadinessIssue) {
-  if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+  if (item.code === 'no_model') return t('服务商已保存，请选择精彩片段分析模型。')
+  const hint = validationHint(item)
+  if (hint) return hint
+  if (item.key === 'analysis' && item.code === 'image_model_in_analysis') return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model: item.label || '' })
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
   if (item.code === 'whisper_installing') return t('正在安装本地转写…')
   if (item.code === 'whisper_not_installed') return t('本地转写还没安装。已有字幕可以直接继续。')
@@ -50,7 +63,8 @@ function issueCopy(item: ReadinessIssue) {
 }
 
 function repairLabel(item: ReadinessIssue) {
-  if (item.repair === 'settings_ai') return item.code === 'validation_failed' ? t('去设置修改') : t('连接 AI 服务')
+  if (item.code === 'no_model') return t('选择分析模型')
+  if (item.repair === 'settings_ai') return (validationHint(item) || item.code === 'image_model_in_analysis') ? t('去设置修改') : t('连接 AI 服务')
   if (item.repair === 'install_whisper') return item.model ? t('下载转写模型') : t('安装 Whisper')
   if (item.repair === 'settings_transcription') return t('转写设置')
   if (item.repair === 'settings_vision') return t('视觉设置')
@@ -96,9 +110,19 @@ function longFormNotice(durationSec: number | null, platforms: string[]) {
 
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
-  if (reason === 'analysis') return readiness?.checks?.analysis?.code === 'validation_failed'
-    ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
-    : t('请先连接 AI 服务，再导入视频。')
+  if (reason === 'analysis' || reason === 'visual' || reason === 'transcription') {
+    const hint = validationHint(readiness?.checks?.[reason])
+    if (hint) return hint
+  }
+  if (reason === 'analysis') {
+    const code = readiness?.checks?.analysis?.code
+    if (code === 'no_model') return t('服务商已保存，请选择精彩片段分析模型。')
+    if (code === 'image_model_in_analysis') {
+      const model = readiness?.checks?.analysis?.label || ''
+      return t('{{model}} 是生图模型，只能用于封面，不能做分析。请到「设置 → 服务商与模型」改用对话模型后再生成。', { model })
+    }
+    return t('请先连接 AI 服务，再导入视频。')
+  }
   if (reason === 'transcription') return t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')
   if (reason === 'visual') return readiness?.checks?.visual?.code === 'vision_unsupported'
     ? t('画面理解使用的模型不能看图。请到「设置 → 服务商与模型」换一个能看图的模型后再生成。')
@@ -106,6 +130,19 @@ function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'ffmpeg') return t('找不到 FFmpeg，无法生成成片。')
   return ''
 }
+
+// A settings round trip stays in this window. File objects never enter browser storage or history.
+type ImportDraft = {
+  source: 'link' | 'file'
+  url: string
+  file: File | null
+  subtitle: File | null
+  options: ImportOptions
+  platforms: string[]
+  browser: string
+  platformSource: PlatformSource
+}
+let settingsDraft: ImportDraft | null = null
 
 export default function CreativeImport({ onImported, blocked = false, onBlocked, onExample, exampleBusy = false }: {
   onImported: () => Promise<void>
@@ -118,24 +155,32 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const navigate = useNavigate()
   const remembered = flagEnabled('remember_platforms')
   const reuse = useRef(takeReuseImport())
+  const restored = useRef(reuse.current ? null : settingsDraft).current
+  useEffect(() => { settingsDraft = null }, [])
   const initialPlatforms = useRef(
     reuse.current?.platforms?.length
       ? { platforms: reuse.current.platforms, source: 'user' as PlatformSource }
       : resolvePlatforms(remembered, uiLocale(), readRememberedPlatforms()),
   )
-  const [source, setSource] = useState<'link' | 'file'>('link')
+  const [source, setSource] = useState<'link' | 'file'>(restored?.source || 'link')
   const [url, setUrl] = useState(() => {
+    if (restored) return restored.url
     const incoming = reuse.current?.sourceUrl || reuse.current?.sourceMeta?.source_url
     return typeof incoming === 'string' ? incoming : ''
   })
-  const [file, setFile] = useState<File | null>(null)
-  const [subtitle, setSubtitle] = useState<File | null>(null)
-  const [options, setOptions] = useState<ImportOptions>({...defaultImportOptions})
+  const [file, setFile] = useState<File | null>(restored?.file || null)
+  const [subtitle, setSubtitle] = useState<File | null>(restored?.subtitle || null)
+  const videoInput = useRef<HTMLInputElement>(null)
+  const subtitleInput = useRef<HTMLInputElement>(null)
+  const [options, setOptions] = useState<ImportOptions>(restored?.options || {...defaultImportOptions})
   const templatesOn = useFlag('pkg_templates_v1') === true
   const visualOn = useFlag('pkg_template_picker_visual') === true
-  const [browser, setBrowser] = useState('')
+  const [browser, setBrowser] = useState(restored?.browser || '')
   const [cookieAssistLocal, setCookieAssistLocal] = useState(false)
-  const assist = cookieAssistLocal || cookieAssistFromLocation(typeof window === 'undefined' ? '' : (window.location?.search || ''))
+  const assist = cookieAssistLocal || cookieAssistFromLocation(
+    typeof window === 'undefined' ? '' : (window.location?.search || ''),
+    typeof window === 'undefined' ? '' : (window.location?.hash || ''),
+  )
   const browserRef = useRef<HTMLSelectElement | null>(null)
   useEffect(() => {
     if (!assist) return
@@ -147,7 +192,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     try { node.focus() } catch { /* focus is optional */ }
     try { node.scrollIntoView({ block: 'center' }) } catch { /* not a browser */ }
   }, [assist])
-  const [platforms, setPlatforms] = useState<string[]>(initialPlatforms.current.platforms)
+  const [platforms, setPlatforms] = useState<string[]>(restored?.platforms || initialPlatforms.current.platforms)
   const [preferences, setPreferences] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -186,7 +231,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     video.src = objectUrl
     return () => { cancel = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [file, source])
-  const platformSource = useRef<PlatformSource>(initialPlatforms.current.source)
+  const platformSource = useRef<PlatformSource>(restored?.platformSource || initialPlatforms.current.source)
   const overridden = useRef(false)
   const starting = useRef(false)
   const recoverRef = useRef<RecoveryController>(null as unknown as RecoveryController)
@@ -195,7 +240,23 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const dropZone = flagEnabled('import_drop_zone')
   const hidePreferences = flagEnabled('hide_legacy_entrypoints')
   const pasteFlag = String(flagValue('one_click_paste_start'))
-  const blockOptions = { source, allowLinkWithoutWhisper: allowLink }
+  const platformSubtitles = source === 'link' && previewUrlRef.current === url.trim() && urlPreview?.preview_route === 'platform_subtitle'
+  const blockOptions = { source, allowLinkWithoutWhisper: allowLink || platformSubtitles }
+  const transcriber = readiness?.checks?.transcription
+  const needsSourceTranscript = !subtitle && !platformSubtitles &&
+    (source === 'file' ? !!file : urlPreview?.preview_route === 'local_transcription') &&
+    transcriber?.ok === false && !transcriber.skippable
+  const subtitleLabel = subtitle?.name || (platformSubtitles ? t('平台字幕') : '')
+  const latestDraft = useRef<ImportDraft | null>(null)
+  latestDraft.current = { source, url, file, subtitle, options, platforms, browser, platformSource: platformSource.current }
+  useEffect(() => () => {
+    // The header Settings button can also interrupt an unfinished import.
+    if (window.location?.hash?.split('?')[0] === '#/settings') settingsDraft = latestDraft.current
+  }, [])
+  const openSettings = (destination: string) => {
+    settingsDraft = latestDraft.current
+    navigate(destination + (destination.includes('?') ? '&' : '?') + 'return_import=1')
+  }
   useEffect(() => {
     // The first-run dialog and the settings page save through the same notification.
     // This page stays mounted across that save, so the mount probe would stay stale until reload.
@@ -216,7 +277,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     return () => { ticket += 1; window.removeEventListener(SETTINGS_SAVED_EVENT, load) }
   }, [])
   useEffect(() => {
-    if (!hidePreferences) return
+    if (!hidePreferences || restored) return
     const stored = readImportPreferences()
     if (stored) setOptions(current => ({ ...stored, instruction: current.instruction }))
   }, [hidePreferences])
@@ -245,28 +306,27 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       if (target instanceof HTMLElement && target.closest('.ac-import-setup')) return
       if (target instanceof HTMLElement && target.closest('input, textarea, [contenteditable="true"]') && !target.closest('.ac-creative-import')) return
       const text = event.clipboardData?.getData('text') || ''
-      if (!importUrlKind(text) || !shouldAutoStart(pasteFlag, 'paste')) return
+      const extracted = parseImportUrl(text)
+      if (!extracted || !shouldAutoStart(pasteFlag, 'paste')) return
       event.preventDefault()
-      arm('paste', { url: text.trim() })
+      arm('paste', { url: extracted })
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
   }, [pasteFlag, dropZone, busy, settled, allowLink, source, analysisBlocked])
   const issues = visibleIssues(readiness, !!subtitle, blockOptions)
-  const repair = async (item: ReadinessIssue | ReadinessLineItem) => {
+  const repair = async (item: ReadinessIssue) => {
     // #353: the readiness list's install button goes through the one recovery controller (no second install flow).
-    const code = 'code' in item ? item.code : undefined
-    const model = 'model' in item ? item.model : undefined
     if (item.repair === 'install_whisper') {
       resumeSubmit.current = false
       setError('')
-      recover.open(code || readiness?.checks?.transcription?.code || 'whisper_not_installed', model || readiness?.checks?.transcription?.model)
+      recover.open(item.code, item.model)
       await recover.install()
       return
     }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
-    const destination = repairDestination(item.repair)
-    if (destination) navigate(destination)
+    const destination = item.code === 'no_model' ? '/settings?section=analysis' : repairDestination(item.repair)
+    if (destination) openSettings(destination)
   }
   // #418 rewrite: the one install-recovery controller (shared with the confirm page): install -> download ->
   // ready (continues by itself) / failed / timeout (retry or transcription settings).
@@ -296,17 +356,17 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     overridden.current = true
     trackAutoChoiceOverridden({ field: 'platform', stage: 'pre_import' }, true)
   }
-  const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }, readiness: ImportReadiness | null = currentReadiness) => {
+  const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }, readiness: ImportReadiness | null = currentReadiness, preview = urlPreview) => {
     if (blocked) { trackExperience('import_blocked', { reason: 'setup_required', placement: 'home_setup' }); setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return false }
     const nextFile = next && 'file' in next ? next.file : file
     const nextUrl = next?.url ?? url
     const nextSource = next?.file ? 'file' : next?.url ? 'link' : source
     if (nextSource === 'file' ? !nextFile : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
-    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
+    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink || (previewUrlRef.current === nextUrl.trim() && preview?.preview_route === 'platform_subtitle') })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
     const check = readiness?.checks?.transcription
-    if (reason === 'transcription' && nextSource === 'file' && !subtitle && !check?.skippable && isRecoveryCode(check?.code)) {
+    if (reason === 'transcription' && !subtitle && !check?.skippable && isRecoveryCode(check?.code)) {
       setError(''); resumeSubmit.current = true; recover.open(check!.code, check!.model); return false
     }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
@@ -319,12 +379,17 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     setUrlPreview(null)
     setPreviewLoading(false)
   }
-  const runInspect = async (nextUrl: string, _trigger: 'paste' | 'drop' | 'blur' = 'paste') => {
-    const trimmed = nextUrl.trim()
+  const inspectInFlight = useRef<{ url: string; ticket: number; promise: Promise<UrlInspectPreview | null> } | null>(null)
+  const inspectTimedOut = useRef(false)
+  const previewBrowserRef = useRef('')
+  const inspect = async (nextUrl: string, _trigger: 'paste' | 'drop' | 'blur' = 'paste') => {
+    const trimmed = parseImportUrl(nextUrl) || nextUrl.trim()
     if (!importUrlKind(trimmed)) { clearPreview(); return null }
-    if (previewUrlRef.current === trimmed && urlPreview) return urlPreview
+    if (previewUrlRef.current === trimmed && previewBrowserRef.current === (browser || '') && urlPreview) return urlPreview
     const ticket = ++previewTicket.current
     previewUrlRef.current = trimmed
+    previewBrowserRef.current = browser || ''
+    inspectTimedOut.current = false
     setPreviewLoading(true)
     setPending(null)
     try {
@@ -345,6 +410,9 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     } catch (e) {
       if (ticket !== previewTicket.current) return null
       setUrlPreview(null)
+      const errObj = e as { code?: string; response?: { status?: number } } | null
+      const status = errObj?.response?.status
+      inspectTimedOut.current = status === 504 || errObj?.code === 'ECONNABORTED' || errObj?.code === 'ETIMEDOUT'
       const code = errorCode(e)
       const message = t(errorText(e))
       if (browserCookieRecovery(code, errorText(e))) {
@@ -356,6 +424,15 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     } finally {
       if (ticket === previewTicket.current) setPreviewLoading(false)
     }
+  }
+  const runInspect = (nextUrl: string, trigger: 'paste' | 'drop' | 'blur') => {
+    const url = nextUrl.trim()
+    const pending = inspectInFlight.current
+    if (pending?.url === url && pending.ticket === previewTicket.current) return pending.promise
+    const promise = inspect(url, trigger)
+    inspectInFlight.current = { url, ticket: previewTicket.current, promise }
+    void promise.finally(() => { if (inspectInFlight.current?.promise === promise) inspectInFlight.current = null })
+    return promise
   }
   const needsPreviewTranscriptionInstall = !!(
     urlPreview?.preview_route === 'local_transcription'
@@ -390,7 +467,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         && !readiness?.checks?.transcription?.skippable
         && isRecoveryCode(readiness?.checks?.transcription?.code)
       if (needsInstall) return
-      if (!readyToStart(trigger, next)) return
+      if (!readyToStart(trigger, next, readiness, preview)) return
       setPending({ trigger })
     })()
   }
@@ -402,10 +479,14 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
   const submit = async (trigger: 'paste' | 'drop' | 'button' = 'button', fresh?: ImportReadiness | null, confirmed = false) => {
     if (starting.current) return
     if (trigger === 'button') setPending(null)
-    if (source === 'link' && url.trim() && !urlPreview && !previewLoading) {
-      const preview = await runInspect(url.trim(), 'blur')
-      if (!preview) return
-      if (preview.preview_route === 'local_transcription'
+    let preview = urlPreview
+    const normalizedUrl = source === 'link' ? (parseImportUrl(url) || url.trim()) : ''
+    if (source === 'link' && normalizedUrl && normalizedUrl !== url) setUrl(normalizedUrl)
+    if (source === 'link' && normalizedUrl && !preview) {
+      preview = await runInspect(normalizedUrl, 'blur')
+      if (starting.current) return
+      if (!preview && !inspectTimedOut.current) return
+      if (preview?.preview_route === 'local_transcription'
         && readiness?.checks?.transcription?.ok === false
         && !subtitle
         && !readiness?.checks?.transcription?.skippable
@@ -417,20 +498,20 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       }
     }
     if (platforms.includes('youtube_long') && !confirmed) {
-      if (!readyToStart(trigger, undefined, fresh ?? readiness)) return
+      if (!readyToStart(trigger, undefined, fresh ?? readiness, preview)) return
       setLongGate(prev => ({ ...prev, open: true, trigger }))
       return
     }
     // T2: file import (or link without UrlPreview dual buttons) — ask before spending ASR on a long first source.
     const durationForWindow = source === 'link'
-      ? (typeof urlPreview?.duration === 'number' ? urlPreview.duration : null)
+      ? (typeof preview?.duration === 'number' ? preview.duration : null)
       : longGate.durationSec
     if (
       !confirmed
       && !firstWindowDecided.current
       && shouldSuggestFirstWindow(hasSuccessHistory(), durationForWindow)
     ) {
-      if (!readyToStart(trigger, undefined, fresh ?? readiness)) return
+      if (!readyToStart(trigger, undefined, fresh ?? readiness, preview)) return
       setFirstWindowGate({ open: true, trigger })
       return
     }
@@ -445,7 +526,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         report = await probeReadiness(() => studioApi.readiness())
         if (report) setReadiness(report)
       }
-      if (!readyToStart(trigger, undefined, report)) return
+      if (!readyToStart(trigger, undefined, report, preview)) return
       setError('')
       const flowId = telemetryId()
       const body = new FormData()
@@ -470,7 +551,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       if (subtitle) body.append('subtitle', subtitle)
       body.append('name', file && source === 'file' ? file.name.replace(/\.[^.]+$/, '') : t("智能剪辑"))
       if (source === 'file' && file) body.append('video', file)
-      else { body.append('url', url.trim()); if (browser) body.append('browser', browser) }
+      else { body.append('url', normalizedUrl || url.trim()); if (browser) body.append('browser', browser) }
       body.append('features', JSON.stringify(featureSnapshot()))
       body.append('flow_id', flowId)
       const skippedWhisper = allowLink && source !== 'file' && !!readiness && !readiness?.checks?.transcription?.ok && !subtitle
@@ -481,7 +562,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           hasSubtitle: !!subtitle,
           code: readiness?.checks?.transcription?.code,
           skippedWhisper,
-          previewRoute: source === 'link' ? (urlPreview?.preview_route as PreviewRouteKind | undefined) : undefined,
+          previewRoute: source === 'link' ? preview?.preview_route : undefined,
         }),
       }, flagAssigned('one_click_paste_start') || flagAssigned('remember_platforms') || flagAssigned('link_import_without_whisper') || flagAssigned('import_drop_zone'))
       trackQuickOutputPlatforms({ platform_count: platforms.length, portrait_style: options.portrait_style || 'auto' })
@@ -496,6 +577,18 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       else setError(t(errorText(e)))  // includes coded source refusals (source_unreadable ...): shown at once
     } finally { starting.current = false; setBusy(false) }
   }
+  const attachSubtitle = (picked?: File) => {
+    if (!picked) return
+    if (!picked.name.toLowerCase().endsWith('.srt') || !picked.size || picked.size > 2 * 1024 * 1024) {
+      setError(t('请选择 2 MB 以内的非空 SRT 字幕文件。'))
+      return
+    }
+    resumeSubmit.current = false
+    recover.close()
+    setError('')
+    setPending(null)
+    setSubtitle(picked)
+  }
   submitRef.current = submit
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -503,10 +596,27 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     const dropped = [...event.dataTransfer.files].find(item => isVideoFile(item))
     if (dropped) { arm('drop', { file: dropped }); return }
     const text = event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain')
-    if (importUrlKind(text)) arm('paste', { url: text.trim() })
+    const extracted = parseImportUrl(text)
+    if (extracted) arm('paste', { url: extracted })
   }
   const names = platforms.map(platformLabel).join(uiLocale().toLowerCase().startsWith('zh') ? '、' : ', ')
   const youtubeLongOnlyTooShort = longGate.durationSec != null && longGate.durationSec < YOUTUBE_LONG_MIN_SEC && platforms.length > 0 && platforms.every(platform => platform === 'youtube_long')
+  if (blocked) return <section className="ac-welcome" aria-labelledby="welcome-title">
+    <div className="ac-welcome-copy">
+      <h1 id="welcome-title">{t('把长视频剪成精彩片段')}</h1>
+      <p>{t('导入一段视频或粘贴链接，让 AI 帮你找到值得分享的片段。')}</p>
+      <Btn variant="cta" onClick={onBlocked}>{t('剪自己的视频')}</Btn>
+    </div>
+    <figure className="ac-welcome-sample" aria-labelledby="welcome-sample-title">
+      <figcaption>
+        <span>{t('示例项目')}</span>
+        <strong id="welcome-sample-title">{t('Sam Altman 访谈')}</strong>
+        <button type="button" className="ac-welcome-play" disabled={exampleBusy} aria-busy={exampleBusy} onClick={onExample}>
+          {exampleBusy ? t('加载中…') : t('先看示例')}
+        </button>
+      </figcaption>
+    </figure>
+  </section>
   if (analysisBlocked) {
     return <section className="ac-creative-import">
       <div className="studio-import-box">
@@ -525,16 +635,44 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
         <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
       </div> : <>
-        <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>!busy&&setSource(v)} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
-        {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>:<label className="studio-file"><span>{file?.name || t("选择一段视频")}</span><input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={e=>{ const picked = e.target.files?.[0] || null; setFile(picked); if (picked) arm('drop', { file: picked }) }}/><small>MP4 / MOV / MKV / WEBM / AVI</small></label>}
+        <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v => { if (!busy && v !== source) { clearPreview(); setPending(null); setSource(v) } }} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
+        {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label> : (
+          <div className="studio-file">
+            <input type="file" hidden ref={videoInput} aria-label={t('视频文件')}
+              accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy}
+              onChange={event => {
+                const picked = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                if (picked) arm('drop', { file: picked })
+              }} />
+            {file && <span className="studio-file-name" title={file.name} role="status">{file.name}</span>}
+            <Btn size="sm" disabled={busy} aria-describedby="studio-video-formats" onClick={() => videoInput.current?.click()}>
+              {file ? t('换一个视频') : t('选择一段视频')}
+            </Btn>
+            <small id="studio-video-formats">MP4 / MOV / MKV / WEBM / AVI</small>
+          </div>
+        )}
       </>}
+      <div className="studio-source-subtitles">
+        <input type="file" accept=".srt" hidden ref={subtitleInput} aria-label={t('已有字幕')} disabled={busy}
+          onChange={event => { attachSubtitle(event.target.files?.[0]); event.target.value = '' }} />
+        {needsSourceTranscript && recovery.phase === 'idle' && <span>{t('选择字幕来源')}</span>}
+        {subtitleLabel && <span role="status">{t('将使用 {{name}}', { name: subtitleLabel })}</span>}
+        <Btn size="sm" disabled={busy} onClick={() => subtitleInput.current?.click()}>{t(subtitle ? '更换字幕' : '上传 SRT 字幕')}</Btn>
+        {needsSourceTranscript && recovery.phase === 'idle' && <>
+          {transcriber?.repair === 'install_whisper' && <Btn size="sm" disabled={busy}
+            onClick={() => { resumeSubmit.current = false; recover.open(transcriber.code, transcriber.model) }}>{t('本机转写')}</Btn>}
+          <Btn size="sm" disabled={busy} onClick={() => openSettings(CLOUD_TRANSCRIPTION_DESTINATION)}>{t('改用云端转写')}</Btn>
+        </>}
+        {subtitle && <Btn size="sm" variant="text" disabled={busy} onClick={() => setSubtitle(null)}>{t('移除')}</Btn>}
+      </div>
       {templatesOn && visualOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <StyleProbeLine sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} />}
       {remembered ? <div className="ac-platform-line"><p>{t('为 {{names}} 制作', { names })}</p><button type="button" className="studio-link" disabled={busy} onClick={() => setPlatformOpen(open => !open)}>{t('改')}</button></div> : null}
       {(!remembered || platformOpen) && <PlatformPicker value={platforms} onChange={changePlatforms} disabled={busy}/>}
       {templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <TemplatePicker visual={visualOn} disabled={busy} value={options.html_template} sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} url={url} file={file} sourceKind={source === 'file' ? (file ? 'file' : 'none') : (url.trim() ? 'link' : 'none')} onChange={(html_template: HtmlTemplateChoice) => setOptions({...options, html_template})}/>}
       {!templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
       {templatesOn && options.html_template === 'classic' && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
-      <OutputCaptionsSwitch label={t('字幕')} hint={t('关闭后成片不带字幕。标题只在封面上，不会烧进视频。')} />
+      <OutputCaptionsSwitch label={t('成片显示字幕')} hint={t('关闭后成片不带字幕。标题只在封面上，不会烧进视频。')} />
       <details className="studio-details"><summary>{t("有特别要求？（选填）")}</summary><label className="studio-field"><span className="studio-sr">{t("制作要求")}</span><input aria-label={t("制作要求")} placeholder={t("例如：保留完整观点或挑战过程")} maxLength={1000} value={options.instruction} disabled={busy} onChange={e=>setOptions({...options,instruction:e.target.value})}/></label></details>
       {issues.length > 0 && <div className="studio-readiness" role="status">
         {issues.map(item => <div className="studio-readiness-row" key={item.key}>
@@ -542,7 +680,6 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}
-      <ReadinessLine report={readiness} busy={busy} repairing={repairing} onFix={item => void repair(item)} />
       {(source === 'link' && (previewLoading || urlPreview)) && <UrlPreview
         preview={urlPreview}
         loading={previewLoading}
@@ -576,13 +713,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       {platforms.includes('youtube_long') && <p className="studio-muted" role="note">{longFormNotice(longGate.durationSec, platforms)}</p>}
       {assist && <details className="studio-details" open><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl assist browser={browser} busy={busy} onChange={setBrowser} selectRef={browserRef} /></details>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
-      <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
-      <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={navigate}/>
+      <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" disabled={!settled} loading={busy} onClick={() => submit('button')}>{!settled ? t('正在确认导入条件…') : busy ? t("正在生成") : t("生成成片")}</Btn></div>
+      <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={() => continueAfterRecovery(null)} navigate={openSettings} onAttach={() => subtitleInput.current?.click()}/>
       {error&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>
       <ImportPreferences value={options} onChange={setOptions}/>
-      <label className="studio-field">{t("已有字幕（选填）")}<input type="file" accept=".srt" aria-label={t("已有字幕")} onChange={e=>setSubtitle(e.target.files?.[0] || null)}/>{subtitle&&<small>{subtitle.name}<button className="studio-link" onClick={()=>setSubtitle(null)}>{t("移除")}</button></small>}</label>
       {source==='link'&&<details className="studio-details"><summary>{t("下载遇到登录限制时")}</summary><BrowserCookieControl browser={browser} busy={busy} onChange={setBrowser} assist={false} /></details>}
     </Dialog>
     <Dialog open={longGate.open} onClose={() => setLongGate(prev => ({ ...prev, open: false }))} title={t('YouTube 横屏')} description={youtubeLongOnlyTooShort ? <>{longFormNotice(longGate.durationSec, platforms)} {t('请再选一个其他平台。')}</> : longFormNotice(longGate.durationSec, platforms)} footer={youtubeLongOnlyTooShort ? <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('知道了')}</Btn></div> : <div className="studio-actions"><Btn onClick={() => setLongGate(prev => ({ ...prev, open: false }))}>{t('取消')}</Btn><Btn variant="cta" onClick={() => { const trigger = longGate.trigger || 'button'; setLongGate(prev => ({ ...prev, open: false })); void submit(trigger, undefined, true) }}>{t('确认并开始')}</Btn></div>} />

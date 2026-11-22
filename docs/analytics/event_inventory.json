@@ -46,6 +46,15 @@
     "survey sent",
     "survey dismissed"
   ],
+  "capture_volume": {
+    "as_of": "1.5.9",
+    "model_discovery_edit": "trigger=load, manual, and provider_change still emit on each discovery. trigger=edit emits one requested/finished pair per placement, 1.5s after the last real connection-field change. Rediscovery of the loaded document is not an edit. The discovery request itself is unchanged.",
+    "model_settings_load": "At most one requested/finished pair per placement per loaded document. A remount or repeat GET of the same settings does not emit. A changed document emits again. A failed load still emits.",
+    "desktop_pageview": "The Tauri webview (tauri.localhost / the app itself) does not send $pageview. capture_pageview and autocapture stay off. Browser navigations and the marketing site are unchanged.",
+    "asr_readiness_checked": "The desktop UI emits only when provider, code, has_subtitle, or blocked changes. The backend still emits once per accepted import.",
+    "provider_validation_finished": "An identical provider/host/result/error/probe_kind within 1.5s collapses. Save and connection-test events stay on the user action.",
+    "unchanged": "app_installed, app_opened, setup_presented, studio_generation_finished, generation/setup/connection failures, and identify/person profiles are not sampled or removed."
+  },
   "privacy": {
     "user_content_keys": [
       "text",
@@ -196,19 +205,23 @@
     },
     "model_settings_load_requested": {
       "status": "keep",
-      "domain": "provider"
+      "domain": "provider",
+      "notes": "Once per placement per loaded document. See capture_volume.model_settings_load."
     },
     "model_settings_load_finished": {
       "status": "keep",
-      "domain": "provider"
+      "domain": "provider",
+      "notes": "Paired with model_settings_load_requested. A failed load still emits."
     },
     "model_discovery_requested": {
       "status": "keep",
-      "domain": "provider"
+      "domain": "provider",
+      "notes": "trigger=edit is one pair per burst. See capture_volume.model_discovery_edit."
     },
     "model_discovery_finished": {
       "status": "keep",
-      "domain": "provider"
+      "domain": "provider",
+      "notes": "Paired with model_discovery_requested. A failure inside an edit burst is the outcome kept."
     },
     "output_branding_save_requested": {
       "status": "keep",
@@ -221,6 +234,7 @@
     "provider_validation_finished": {
       "status": "core",
       "domain": "provider",
+      "notes": "Identical result within 1.5s collapses. User save and connection test are not sampled.",
       "optional_properties": {
         "probe_kind": "quick|trial",
         "trial_context_ok": "boolean",
@@ -231,7 +245,8 @@
     },
     "asr_readiness_checked": {
       "status": "core",
-      "domain": "asr"
+      "domain": "asr",
+      "notes": "UI emits on state change. Backend still emits once per accepted import."
     },
     "diagnose_opened": {
       "status": "keep",
@@ -548,6 +563,10 @@
       "domain": "studio"
     },
     "studio_output_shared": {
+      "status": "keep",
+      "domain": "studio"
+    },
+    "studio_output_played": {
       "status": "keep",
       "domain": "studio"
     },

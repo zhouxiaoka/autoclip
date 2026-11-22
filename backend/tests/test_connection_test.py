@@ -172,7 +172,7 @@ def test_classification_stays_within_provider(monkeypatch):
 
 def test_every_error_type_maps_into_the_closed_set():
     from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
-    for kind in [*UPSTREAM_ERROR_TYPES, 'vision_unsupported', '', 'something_new']:
+    for kind in [*UPSTREAM_ERROR_TYPES, 'vision_unsupported', 'image_model_in_analysis', '', 'something_new']:
         assert connection_test_error_code(kind) in CONNECTION_TEST_ERROR_CODES
 
 

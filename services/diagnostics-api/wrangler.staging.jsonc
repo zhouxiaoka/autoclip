@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "autoclip-diagnostics-validation-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "triggers": { "crons": ["17 * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DIAGNOSTICS_DB",
+      "database_name": "autoclip-diagnostics-validation-meta",
+      "database_id": "REPLACE_WITH_NEW_D1_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DIAGNOSTICS_BUCKET",
+      "bucket_name": "autoclip-diagnostics-validation"
+    }
+  ],
+  "vars": {
+    "LANDED_BYTES_CAP": "4294967296",
+    "INFLIGHT_BYTES_CAP": "2147483648",
+    "RETENTION_SECONDS": "1209600",
+    "INCOMPLETE_SECONDS": "86400",
+    "MANIFEST_MAX": "262144",
+    "SUBTITLE_MAX": "2097152",
+    "EXCERPT_MAX": "209715200",
+    "ORIGINAL_MAX": "2147483648",
+    "RATE_PER_HOUR": "20",
+    "PART_TTL_SECONDS": "900",
+    "PART_BYTES": "8388608",
+    "R2_BUCKET_NAME": "autoclip-diagnostics-validation",
+    "QUOTA_APPROVAL": "pending"
+  }
+}

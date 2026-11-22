@@ -250,3 +250,102 @@ def test_automatic_dispatch_reuses_template_export_kwargs(root, monkeypatch):
     assert stored['d-rank']['requested_template'] == 'editorial'
     assert stored['d-rank']['template'] == recorded_style(None, 'editorial')['template']
     assert 'html_template' not in stored['d-classic']
+
+
+@pytest.mark.parametrize('choice', ['editorial', 'street', 'news', 'cinema', 'classic', None])
+def test_confirmed_manual_choice_survives_save_and_export(client, monkeypatch, choice):
+    submitted, _ = _capture(monkeypatch)
+    raw = _draft(True).model_copy(update={'aspect': 'portrait', 'packaging': None,
+                                          'origin': 'subtitle-highlight'}).model_dump()
+    # A resumed manual production uses the already confirmed plan, with no platform variant.
+    overrides = {'html_template': choice} if choice else {}
+    state = {'drafts': [], 'jobs': [], 'plan': {'overrides': overrides}, 'output_variants': []}
+    jobs._add_confirmed_drafts(state, [raw])
+    store.write('p1', state)
+    saved = client.put('/studio/p1/drafts/d', json={**state['drafts'][0], 'subtitle_style': 'accent'})
+    assert saved.status_code == 200
+    result = client.post('/studio/p1/drafts/d/export', json={'revision': saved.json()['revision']})
+    assert result.status_code == 200
+    assert result.json()['requested_template'] == (choice or 'classic')
+    assert submitted[0][1].get('html_template') == (choice if choice != 'classic' else None)
+    assert saved.json().get('html_template') == choice
+
+
+def test_shared_snapshot_different_design_renders_separately(client, monkeypatch):
+    submitted, _ = _capture(monkeypatch)
+    draft = _draft(True)
+    store.write('p1', {'jobs': [], 'drafts': [draft.model_dump()]})
+    first = jobs.export('p1', draft, html_template='editorial', safe_area='douyin')
+    second = jobs.export('p1', draft, html_template='street', safe_area='tiktok')
+    repeat = jobs.export('p1', draft, html_template='street', safe_area='tiktok')
+    assert first['job_id'] != second['job_id'] == repeat['job_id']
+    assert len(submitted) == 2
+
+
+def test_legacy_draft_inherits_only_its_own_confirmed_plan(root):
+    drafts = [{'id': 'old'}, {'id': 'owned'}, {'id': 'explicit', 'html_template': 'classic'}]
+    store.write('p1', {'drafts': drafts, 'plan': {'id': 'p', 'overrides': {'html_template': 'news'}},
+                       'attempts': [{'kind': 'production', 'plan_id': 'old-plan', 'draft_ids': ['old']},
+                                    {'kind': 'production', 'plan_id': 'p', 'draft_ids': ['owned', 'explicit']}]})
+    assert [d.get('html_template') for d in store.read('p1')['drafts']] == [None, 'news', 'classic']
+
+
+def test_old_manual_draft_can_select_design_after_recovery(client, monkeypatch):
+    submitted, _ = _capture(monkeypatch)
+    raw = _draft(True).model_copy(update={'aspect': 'portrait', 'packaging': None}).model_dump()
+    raw.pop('html_template')
+    store.write('p1', {'drafts': [raw], 'jobs': [], 'output_variants': []})
+    response = client.put('/studio/p1/drafts/d', json={**raw, 'html_template': 'editorial'})
+    assert response.status_code == 200
+    edited = response.json()
+    edited.pop('html_template')  # a pre-upgrade editor only sends fields it knows
+    response = client.put('/studio/p1/drafts/d', json={**edited, 'subtitle_style': 'accent'})
+    assert response.status_code == 200 and response.json()['html_template'] == 'editorial'
+    job = client.post('/studio/p1/drafts/d/export', json={'revision': response.json()['revision']})
+    assert job.status_code == 200 and submitted[0][1]['html_template'] == 'editorial'
+
+
+def test_remake_freezes_composition_until_confirmation_and_export(client, monkeypatch, source):
+    from backend.services.studio import planning
+    submitted, _ = _capture(monkeypatch)
+    old = _draft(True).model_copy(update={'aspect': 'portrait', 'origin': 'subtitle-highlight',
+        'layout': 'blur', 'revision': 2}).model_dump()
+    old['id'] = 'first'
+    store.write('p1', {'drafts': [old], 'jobs': [], 'analysis': {'status': 'running'}, 'output_variants': []})
+    monkeypatch.setattr(planning, 'recommend', lambda *args: {'preferences': {'duration': 15}, 'overrides': {'html_template': 'editorial'}})
+    monkeypatch.setattr(jobs, 'mark_project', lambda *args, **kw: None)
+    from backend.services.studio.models import ImportOptions
+    jobs._inspect('p1', ImportOptions(duration=15, auto_start=False), None, None)
+    pending = store.read('p1')
+    assert pending['analysis']['status'] == 'awaiting_confirmation' and len(pending['drafts']) == 1
+    new = {**old, 'id': 'next', 'layout': 'crop', 'revision': 1}
+    jobs._add_confirmed_drafts(pending, [new, {**new, 'id': 'horizontal', 'aspect': 'landscape', 'layout': 'fit'}])
+    assert [d['layout'] for d in pending['drafts']] == ['blur', 'blur', 'fit']
+    store.write('p1', pending)
+    response = client.post('/studio/p1/drafts/next/export', json={'revision': 1})
+    assert response.status_code == 200
+    exported = next(j for j in store.read('p1')['jobs'] if j['draft_id'] == 'next')
+    assert exported['snapshot']['layout'] == 'blur' and submitted
+
+
+@pytest.mark.parametrize(('scene', 'layout'), [
+    ({'id': 's', 'start': 0, 'end': 1}, 'blur'),
+    ({'id': 's', 'start': 0, 'end': 1, 'crop_x': .25}, 'crop'),
+])
+def test_manual_portrait_highlight_needs_a_subject_position_to_auto_crop(scene, layout):
+    state = {'drafts': [], 'plan': {}}
+    raw = _draft(True).model_dump()
+    jobs._add_confirmed_drafts(state, [{**raw, 'origin': 'subtitle-highlight', 'aspect': 'portrait',
+                                       'layout': 'crop', 'scenes': [scene]}])
+    assert state['drafts'][0]['layout'] == layout
+
+
+def test_existing_project_can_remake_after_old_version_already_lost_the_edit():
+    base = {'origin': 'subtitle-highlight', 'aspect': 'portrait', 'scenes': [{'id': 's', 'start': 0, 'end': 1}]}
+    first = {**base, 'id': 'v1', 'revision': 2, 'layout': 'blur'}
+    second = {**base, 'id': 'v2', 'revision': 1, 'layout': 'crop'}
+    state = {'drafts': [first, second], 'attempts': [
+        {'kind': 'production', 'draft_ids': ['v1']}, {'kind': 'production', 'draft_ids': ['v2']} ]}
+    assert jobs._remake_layouts(state) == {'subtitle-highlight:portrait': 'blur'}
+    second.update(revision=2, layout='fit')
+    assert jobs._remake_layouts(state) == {'subtitle-highlight:portrait': 'fit'}

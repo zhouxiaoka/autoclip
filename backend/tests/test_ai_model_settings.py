@@ -83,7 +83,9 @@ def test_b2_analysis_switch_and_visual_toggle_http_save_round_trip(binding_id, c
     app.include_router(router)
     with TestClient(app) as client:
         for index, document in enumerate([config, switched, off, on]):
-            response = client.put('/settings/ai-models', json=document.model_dump())
+            payload = document.model_dump()
+            payload['revision'] = client.get('/settings/ai-models').json()['revision']
+            response = client.put('/settings/ai-models', json=payload)
             assert response.status_code == 200
             public = response.json()
             loaded = ai.load()
@@ -201,7 +203,7 @@ def test_secrets_are_masked_preserved_and_can_be_cleared():
     response = ai.save(example())
     assert 'sk-first-secret' not in json.dumps(response)
     assert all('api_key' not in c for c in response['connections'])
-    ai.save(ai.ModelSettings.model_validate(response))
+    response = ai.save(ai.ModelSettings.model_validate(response))
     assert ai.load().connections[0].api_key == 'sk-first-secret'
     response['connections'][0]['api_key'] = ''
     ai.save(ai.ModelSettings.model_validate(response))
@@ -286,7 +288,7 @@ def test_qwen_verified_and_unknown_is_not_text_only():
     assert registry.lookup_capability(c, 'qwen3.8-flash') == 'multimodal'
     assert registry.lookup_capability(c, 'qwen-future-unknown') is None
     unknown = registry._records(c, [{'id': 'future-model'}], {})[0]
-    assert unknown['capability'] is None and unknown['analysis']
+    assert unknown['capability'] is None and not unknown['analysis']
 
 
 def test_http_config_and_discovery_use_saved_secrets_without_returning_them(monkeypatch):
@@ -344,7 +346,7 @@ def test_failed_refresh_preserves_last_live_list(monkeypatch):
     monkeypatch.setattr(registry, '_ensure_metadata', metadata)
     monkeypatch.setattr(registry.model_catalog, '_http_get_json', fail)
     result = asyncio.run(registry.discover(c, refresh=True))
-    assert result['models'] == [{'id': 'saved-model'}]
+    assert [row['id'] for row in result['models']] == ['saved-model']
     assert result['source'] == 'cache' and result['warning']
 
 
@@ -573,6 +575,72 @@ def test_dashscope_sync_asr_missing_from_models_stays_selectable(monkeypatch):
     assert not result.get('preview')
 
 
+def test_dashscope_new_model_discovery_and_cached_runtime(monkeypatch):
+    fixture = json.loads((Path(__file__).parent / 'fixtures/dashscope_model_settings.json').read_text())
+    async def fetch(url, **kwargs):
+        assert url == 'https://dashscope.aliyuncs.com/compatible-mode/v1/models'
+        return {'data': fixture['account']['data'] + fixture['synthetic']}
+
+    async def offline():
+        pass
+
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', fetch)
+    monkeypatch.setattr(registry, '_ensure_metadata', offline)
+    connection = ai.Connection(id='legacy-analysis', name='DashScope', provider='dashscope', api_key='fixture')
+    live = asyncio.run(registry.discover(connection))
+    cached = asyncio.run(registry.discover(connection))
+    assert live['source'] == 'live' and cached['source'] == 'cache'
+    records = {row['id']: row for row in cached['models']}
+    for expected in fixture['expected']:
+        assert {key: records[expected['id']][key] for key in expected} == expected
+    # Exact verified official allowlist (qwen4-max) resists boilerplate text-only input metadata,
+    # while unverified IDs still follow explicit provider input metadata.
+    [verified_mm, explicit_text] = registry._records(connection, [
+        {'id': 'qwen4-max', 'input_modalities': ['text']},
+        {'id': 'fixture-alpha', 'input_modalities': ['text']},
+    ], {})
+    assert verified_mm['capability'] == 'multimodal'
+    assert explicit_text['capability'] == 'text'
+    assert registry.lookup_capability(connection, 'fixture-alpha') == 'multimodal'
+    assert registry.lookup_capability(connection, 'fixture-max-new') is None
+
+
+@pytest.mark.parametrize('cover_model', [None, '', 'qwen-image-2.1-pro'])
+def test_dashscope_optional_cover_save_and_reopen(cover_model):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.services import cover
+
+    previous = example()
+    previous.connections.append(ai.Connection(id='legacy-analysis', name='DashScope', provider='dashscope', api_key='synthetic'))
+    ai.save(previous)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        url = '/settings/ai-models'
+        draft = client.get(url).json()
+        binding = {'connection_id': 'legacy-analysis', 'model': 'qwen4-max', 'capability': 'auto', 'model_source': 'user'}
+        draft.update(analysis=binding, vision=binding,
+                     transcription={**binding, 'provider': 'cloud', 'model': 'qwen-audio-3.1-asr-flash'},
+                     cover=None if cover_model is None else {**binding, 'model': cover_model},
+                     cover_enabled=True)
+        response = client.put(url, json=draft)
+        assert response.status_code == 200, response.text
+        reopened = client.get(url).json()
+    for role in ('analysis', 'vision', 'transcription'):
+        assert reopened[role]['connection_id'] == 'legacy-analysis'
+        assert reopened[role]['model'] == draft[role]['model']
+        assert reopened[role]['model_source'] == 'user'
+    assert reopened['allow_send_frame'] is True and not reopened['prefer_local_cover']
+    assert [c.api_key for c in ai.load().connections] == [c.api_key for c in previous.connections]
+    assert reopened['cover'] == (draft['cover'] if cover_model else None)
+    cfg = cover.load_config()
+    assert cfg.enabled == bool(cover_model)
+    assert cfg.model == (cover_model or '')
+    assert cfg.api_key == ('synthetic' if cover_model else '')
+
+
 def test_official_preview_does_not_call_authenticated_models_endpoint(monkeypatch):
     async def metadata():
         return None
@@ -647,8 +715,8 @@ def test_cloud_transcription_binding_is_validated():
     assert value.transcription.connection_id == 'asr'
     with pytest.raises(ValidationError):
         ModelSettings(transcription=Transcription(provider='cloud', model='whisper-1', connection_id='gone'))
-    with pytest.raises(ValidationError):
-        ModelSettings(connections=[connection], transcription=Transcription(provider='cloud', model='gpt-4o-transcribe', connection_id='asr'))
+    with pytest.raises(ValueError, match='转写'):
+        ai.save(ModelSettings(connections=[connection], transcription=Transcription(provider='cloud', model='gpt-4o-transcribe', connection_id='asr')))
 
 
 def test_cloud_selection_routes_auto_without_loading_whisper(monkeypatch, tmp_path):
@@ -720,6 +788,17 @@ def test_fal_image_connections_and_unknown_image_apis_from_newer_versions():
     assert future.image_api == 'auto'  # an unknown value never invalidates the whole settings file
 
 
+@pytest.mark.parametrize('prefer_local', [True, False])
+def test_image_binding_without_explicit_switch_follows_automatic_cover_preference(prefer_local):
+    from backend.services import cover
+    saved = example().model_dump()
+    saved.pop('cover_enabled')
+    saved.update(cover_choice_version=ai.COVER_CHOICE_VERSION, prefer_local_cover=prefer_local)
+    ai.path().parent.mkdir(parents=True, exist_ok=True)
+    ai.path().write_text(json.dumps(saved), encoding='utf-8')
+    assert cover.load_config().enabled is (not prefer_local)
+
+
 def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again():
     from backend.services import cover
     written_by_1_4 = example().model_dump()
@@ -734,7 +813,7 @@ def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again()
     assert ai.load().cover_enabled is True and cover.load_config().enabled is True
 
 
-@pytest.mark.parametrize('model', ['qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22'])
+@pytest.mark.parametrize('model', ['qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22', 'qwen4-max'])
 def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monkeypatch, model):
     monkeypatch.setattr(registry, '_read', lambda: {})
     config = ai.ModelSettings(
@@ -746,6 +825,7 @@ def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monk
     from backend.services.studio import intelligence, vision_settings
     assert intelligence.ready(), 'enabled frame analysis silently fell back to subtitles'
     assert vision_settings.effective()['model'] == model
+    assert vision_settings.effective()['model_source'] == 'user'
     # Do not infer an arbitrary gateway alias or a future model by its prefix.
     config.connections[0].provider = 'compatible'
     config.connections[0].base_url = 'https://gateway.example/v1'
@@ -1068,3 +1148,232 @@ def test_cover_follow_flag_drives_analysis_switch_round_trip(entry, follow):
         assert loaded.cover_follows_analysis is follow
         assert ai.connection_for(loaded, loaded.cover).id == ('new' if follow else 'old')
         assert cover.load_config().model == ('new-cover' if follow else 'own-cover')
+
+
+def test_save_rejects_image_model_in_analysis(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(id='c1', name='seed', provider='seed', api_key='sk-x')],
+        analysis=ai.Assignment(connection_id='c1', model='doubao-seedream-5-0-flash-260915'),
+        transcription=ai.Transcription(provider='whisper_local', model='base'),
+    )
+    with pytest.raises(ValueError, match='生图模型'):
+        ai.save(settings)
+
+
+def test_save_allows_same_image_model_on_cover(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
+    seedream = 'doubao-seedream-5-0-flash-260915'
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(id='c1', name='seed', provider='seed', api_key='sk-x')],
+        analysis=ai.Assignment(connection_id='c1', model='doubao-seed-2-1-lite-260915'),
+        cover=ai.Assignment(connection_id='c1', model=seedream),
+        cover_enabled=True,
+        cover_follows_analysis=False,
+        transcription=ai.Transcription(provider='whisper_local', model='base'),
+    )
+    public = ai.save(settings)
+    assert public['cover']['model'] == seedream
+    assert public['analysis']['model'] == 'doubao-seed-2-1-lite-260915'
+
+
+@pytest.mark.parametrize('nested', [True, False], ids=['desktop', 'flat'])
+def test_other_saved_legacy_cloud_account_can_be_selected_without_reentering_keys(tmp_path, monkeypatch, nested):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.core import llm_manager
+    from backend.services import cover
+    from backend.services.studio import vision_settings, analysis_preferences
+
+    active, other = ('dashscope', 'deepseek') if nested else ('deepseek', 'dashscope')
+    active_model = 'qwen-plus' if nested else 'deepseek-flash'
+    base = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
+    keys = {'dashscope': 'test-ali-only', 'deepseek': 'test-deep-only'}
+    legacy = {'api': {'api_provider': active, 'api_model': active_model, 'api_keys': keys}} if nested else {
+        'llm_provider': active, 'model_name': active_model, 'dashscope_base_url': base,
+        **{f'{p}_api_key': key for p, key in keys.items()},
+    }
+    legacy_path = tmp_path / 'settings.json'
+    original = json.dumps(legacy)
+    legacy_path.write_text(original, encoding='utf-8')
+    monkeypatch.setenv('API_KIMI_API_KEY', 'test-env-only')
+    monkeypatch.setattr(llm_manager.LLMManager, '_sync_config_if_needed', lambda self: None)
+    monkeypatch.setattr(llm_manager.LLMManager, '_initialize_provider', lambda self: None)
+    manager = llm_manager.LLMManager(legacy_path)
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: {})
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig())
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences())
+    monkeypatch.setattr(ai, 'migrate_legacy', legacy_migrate)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get('/settings/ai-models')
+        response.raise_for_status()
+        doc = response.json()
+        rows = {row['provider']: row for row in doc['connections']}
+        assert set(rows) == set(keys)
+        assert all(row['has_key'] and row['validation_status'] == 'unchecked' for row in rows.values())
+        assert not any(key in response.text for key in keys.values())
+        assert doc['analysis']['connection_id'] == rows[active]['id']
+        assert not ai.path().exists()
+        doc['analysis'] = {'connection_id': rows[other]['id'], 'model': 'deepseek-flash' if nested else 'qwen-plus',
+                           'capability': 'text', 'model_source': 'user'}
+        client.put('/settings/ai-models', json=doc).raise_for_status()
+        assert client.get('/settings/ai-models').json()['analysis'] == doc['analysis']
+        persisted = ai.load()
+        endpoint = ai.chat_endpoint(ai.connection_for(persisted, persisted.analysis), persisted.analysis.model)
+        assert endpoint['api_key'] == keys[other]
+        assert endpoint['base_url'] == ('https://api.deepseek.com/v1' if nested else base)
+        assert legacy_path.read_text(encoding='utf-8') == original
+
+
+def test_two_open_windows_preserve_disjoint_edits_and_reject_same_purpose():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    app = FastAPI()
+    app.include_router(router)
+    ai.save(example())
+    url = '/settings/ai-models'
+    with TestClient(app) as client:
+        a, b, c = (client.get(url).json() for _ in range(3))
+        a['analysis']['model'] = 'chosen-by-a'
+        b['chunk_size'] = 6000
+        c['analysis']['model'] = 'chosen-by-c'
+        assert client.put(url, json={**a, 'edited_fields': ['analysis']}).status_code == 200
+        assert client.put(url, json={**b, 'edited_fields': ['chunk_size']}).status_code == 200
+        assert client.put(url, json={**c, 'edited_fields': ['analysis']}).status_code == 409
+        reopened = client.get(url).json()
+        assert (reopened['analysis']['model'], reopened['chunk_size']) == ('chosen-by-a', 6000)
+        assert reopened['revision'] == a['revision'] + 2
+        assert all('api_key' not in row for row in reopened['connections'])
+    loaded = ai.load()
+    assert ai.require_analysis(loaded).model == 'chosen-by-a'
+    assert [row.api_key for row in loaded.connections] == [row.api_key for row in example().connections]
+
+
+def test_retired_transcription_only_blocks_transcription_and_supports_repair():
+    from backend.services.studio import readiness
+
+    data = example()
+    ai.save(data)
+    raw = json.loads(ai.path().read_text())
+    raw['transcription'] = {'provider': 'cloud', 'connection_id': 'one', 'model': 'retired-asr'}
+    ai.path().write_text(json.dumps(raw))
+    before = ai.path().read_bytes()
+    reopened = ai.public(ai.for_editing())
+    assert reopened['transcription_needs_repair'] and reopened['saved']
+    assert len(reopened['connections']) == 2 and ai.path().read_bytes() == before
+    assert readiness._analysis(ai.load())['ok']
+    assert readiness._transcription(ai.load())['repair'] == 'settings_transcription'
+    reopened['chunk_size'] = 6000
+    after = ai.save(ai.ModelSettings.model_validate(reopened), edited_fields={'chunk_size'})
+    assert after['transcription_needs_repair']
+    after['transcription']['model'] = 'whisper-1'
+    after = ai.save(ai.ModelSettings.model_validate(after), edited_fields={'transcription'})
+    assert not after['transcription_needs_repair']
+    assert ai.load().transcription.model == 'whisper-1' and readiness._transcription(ai.load())['ok']
+    assert ai.require_analysis(ai.load()) == data.analysis
+    assert [row.api_key for row in ai.load().connections] == [row.api_key for row in data.connections]
+
+
+def test_account_only_scoped_failure_and_hidden_fixed_model_in_production_request(tmp_path, monkeypatch):
+    import httpx
+    from openai import OpenAI
+    from backend.core.llm_manager import LLMManager
+    from backend.core.llm_providers import LLMProviderFactory
+    from backend.services.studio import readiness
+    from backend.tests.test_chunk_retry_budget import _response
+
+    account = ai.Connection(id='bailian', name='Bailian', provider='dashscope', api_key='fixture',
+                            failed_model_checks=[{'purpose': 'analysis', 'model': 'fixture-alpha'}])
+    saved = ai.save(ai.ModelSettings(connections=[account]))
+    assert saved['analysis'] is None and saved['connections'][0]['has_key']
+    assert readiness._analysis(ai.load())['code'] == 'no_model'
+    with pytest.raises(ValueError):
+        ai.require_analysis(ai.load())
+    saved['analysis'] = {'connection_id': account.id, 'model': 'fixture-alpha', 'model_source': 'user'}
+    ai.save(ai.ModelSettings.model_validate(saved))
+    assert readiness._analysis(ai.load())['code'] == 'model_validation_failed'
+    with pytest.raises(ValueError):
+        ai.require_analysis(ai.load())
+    working = ai.load()
+    working.analysis.model = 'qwen4-max'
+    working.connections[0].enabled_model_ids = []
+    ai.save(working)
+    assert readiness._analysis(ai.load())['ok']
+    hits = []
+    create_provider = LLMProviderFactory.create_provider
+
+    def receive(request):
+        hits.append((request.url.host, json.loads(request.content)['model']))
+        return _response(request, 'ok')
+
+    def offline_provider(*args, **kwargs):
+        provider = create_provider(*args, **kwargs)
+        provider.client = OpenAI(api_key='fixture', base_url=kwargs['base_url'],
+                                 http_client=httpx.Client(transport=httpx.MockTransport(receive)))
+        return provider
+
+    monkeypatch.setattr(LLMProviderFactory, 'create_provider', offline_provider)
+    monkeypatch.setattr(LLMManager, '_sync_config_if_needed', lambda self: None)
+    manager = LLMManager(tmp_path / 'settings.json')
+    assert manager.settings['model_source'] == 'user'
+    assert manager.call_with_retry('test', max_retries=1) == 'ok'
+    assert hits == [('dashscope.aliyuncs.com', 'qwen4-max')]
+
+
+def test_windows_upgrade_first_refresh_timeout_reclassifies_only_the_saved_account(tmp_path, monkeypatch):
+    profile = tmp_path / 'AppData' / 'Roaming' / 'AutoClip'
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(profile))
+    account = ai.Connection(id='legacy-analysis', name='Bailian', provider='dashscope', api_key='fixture-bailian')
+    other = account.model_copy(update={'id': 'other', 'api_key': 'fixture-other'})
+    ai.save(ai.ModelSettings(connections=[account, other], analysis=ai.Assignment(connection_id=account.id, model='qwen4-max')))
+    registry._update(registry._scope(account), {'source': 'live', 'updated_at': 1, 'models': [
+        {'id': 'qwen4-max', 'analysis': True, 'capability': None, 'kind': 'language'},
+        {'id': 'qwen-image-2.1-pro', 'image': False, 'kind': 'other'},
+        {'id': 'private-text', 'capability': 'text', 'capability_source': 'provider', 'analysis': True},
+    ]})
+    registry._update(registry._scope(other), {'models': [{'id': 'other-account-only'}]})
+    async def timeout(url, **kwargs):
+        assert kwargs['headers']['Authorization'] == 'Bearer fixture-bailian'
+        raise TimeoutError('fixture deadline')
+    async def offline():
+        pass
+    monkeypatch.setattr(registry, '_ensure_metadata', offline)
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', timeout)
+    listed = asyncio.run(registry.discover(ai.load().connections[0]))
+    by_id = {row['id']: row for row in listed['models']}
+    assert listed['source'] == 'cache' and listed['warning'] and listed['updated_at'] == 1
+    assert by_id['qwen4-max']['capability'] == 'multimodal'
+    assert by_id['qwen-image-2.1-pro']['kind'] == 'image'
+    assert by_id['private-text']['capability_source'] == 'provider'
+    assert 'other-account-only' not in by_id
+
+
+def test_unknown_ids_require_a_declaration_and_empty_metadata_defers_to_evidence():
+    from backend.core.model_recovery import pick_available_vision_model
+    from backend.core.provider_model_fetch import _page_models
+    c = ai.Connection(id='bailian', name='Bailian', provider='dashscope', api_key='fixture')
+    raw = [{'id': name} for name in ('custom-vision-widget', 'fixture-max-new', 'qwen-image-9.9-ultra')]
+    raw += [{'id': 'qwen-image-2.1-pro', 'output_modalities': [], 'supported_endpoint_types': ['multimodal-generation']},
+            {'id': 'qwen4-max', 'input_modalities': [], 'architecture': {'input_modalities': ['text']}},
+            {'id': 'fixture-text-only', 'architecture': {'input_modalities': ['text']}}]
+    rows = {row['id']: row for row in registry._records(c, raw, {})}
+    for row in raw[:3]:
+        assert rows[row['id']]['kind'] == 'other'
+        assert rows[row['id']]['capability'] is None
+    assert rows['qwen-image-2.1-pro']['image']
+    assert rows['qwen4-max']['capability'] == 'multimodal'
+    assert rows['fixture-text-only']['capability'] == 'text'
+    assert pick_available_vision_model('dashscope', ['qwen4-max']) == 'qwen4-max'
+    ids, caps = _page_models({'data': raw}, 'openai-completions', 'dashscope')
+    assert pick_available_vision_model('dashscope', ids, capabilities=caps) == 'qwen4-max'
+    assert pick_available_vision_model('dashscope', ['fixture-text-only'], capabilities=caps) is None

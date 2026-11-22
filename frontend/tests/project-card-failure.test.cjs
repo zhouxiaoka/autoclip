@@ -14,10 +14,12 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
     'react-i18next': { useTranslation: () => ({}) },
     'react-router-dom': { useNavigate: () => navigate },
     '../services/api': { projectApi: {} },
-    '../features/studio/api': { studioApi: {} },
+    '../features/studio/api': { studioApi: { retry: extra.studioRetry || (async () => ({})) } },
     '../utils/externalLinks': { openExternalLink: (url) => { opened.push(url); if (extra.onExternal) extra.onExternal(url) } },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
     './FeedbackDialog': { __esModule: true, default: () => null },
+    '../features/diagnostics/DiagnosticsDialog': { __esModule: true, default: () => null },
+    '../features/studio/DiagnosePanel': { __esModule: true, default: () => null },
     '../features/studio/SwitchModelDialog': { __esModule: true, default: () => null },
     '../stores/useSimpleProgressStore': {
       useSimpleProgressStore: (select) => select({ getProgress: () => ({ message: progressMessage }) }),
@@ -64,6 +66,21 @@ function renderCard(status, error, progressMessage, extra = {}, navigate = () =>
 const WEAK = '当前本地模型无法返回可用时间线'
 const LEGACY = '时间线模型回复没有有效时间区间（82 个话题，14 个字幕块）。 这个模型经常无法返回可用的时间线，自动重试已经用完。请改用云端模型，或更大、能返回结构化时间区间的模型。这一步尚未进入评分或最短时长筛选。'
 
+test('pending plan opens Studio results for managed projects and import review for older projects', () => {
+  for (const [settings, expected] of [
+    [{ awaiting_confirmation: true, smart_import: { auto_start: false }, import_staging: false }, '/project/test'],
+    [{ awaiting_confirmation: true }, '/import/test'],
+  ]) {
+    const buttons = {}
+    const visited = []
+    renderCard('pending', null, null, {
+      project: { settings }, onButton: (label, click) => { buttons[label] = click },
+    }, url => visited.push(url))
+    buttons['查看建议']()
+    assert.deepEqual(visited, [expected])
+  }
+})
+
 test('#428 home card with a replacement stays on the card and offers switch-and-retry', () => {
   const visited = []
   const buttons = {}
@@ -73,15 +90,35 @@ test('#428 home card with a replacement stays on the card and offers switch-and-
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, to => visited.push(to), { replacement: { displayName: 'DeepSeek' }, onSwitchAndRetry: id => switched.push(id) })
   assert.match(html, /失败/)
-  assert.match(html, /当前本地模型无法返回可用时间线/)
+  assert.match(html, /当前模型没能排出时间线。/)
   assert.match(html, /建议换用/)
   assert.match(html, /<strong>DeepSeek<\/strong>/)
   assert.doesNotMatch(html, /82|话题|字幕块|自动重试|经常无法/)
   assert.equal(html.includes('href="/project/'), false)
-  buttons['切换并重试']()
-  assert.deepEqual(switched, ['test'])
-  buttons['其他模型']()
+  assert.equal(buttons['切换并重试'], undefined)
+  buttons['去配置模型']()
+  assert.deepEqual(switched, [])
   assert.deepEqual(visited, ['/settings?section=analysis'])
+})
+
+test('a second click before the first retry settles does not send another attempt', async () => {
+  const calls = []
+  let release
+  const pending = new Promise(resolve => { release = resolve })
+  const buttons = {}
+  const restart = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8')).service_restarted
+  renderCard('failed', restart, null, {
+    project: { error_code: 'service_restarted', settings: { smart_import: { auto_start: true }, studio_generation_status: 'failed' } },
+    studioRetry: async (id, body) => { calls.push([id, body]); await pending },
+    onButton: (label, onClick) => { buttons[label] = onClick },
+  })
+  const first = buttons['重试制作']()
+  const second = buttons['重试制作']()
+  release()
+  await first
+  await second
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][1].retry_kind, 'same')
 })
 
 test('#428 home card without a replacement offers configure, and does not open the project', () => {
@@ -91,12 +128,12 @@ test('#428 home card without a replacement offers configure, and does not open t
     project: { error_code: 'invalid_response' },
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, to => visited.push(to))
-  assert.match(html, /当前本地模型无法返回可用时间线/)
+  assert.match(html, /当前模型没能排出时间线。/)
   assert.doesNotMatch(html, /82|话题|字幕块/)
   assert.equal(buttons['切换并重试'], undefined)
   buttons['去配置模型']()
   assert.deepEqual(visited, ['/settings?section=analysis'])
-  assert.equal(typeof buttons['重试'], 'function')
+  assert.equal(buttons['重试'], undefined)
 })
 
 test('B2 home card: whisper gate codes lead with 安装转写 and keep retry secondary', () => {
@@ -108,7 +145,7 @@ test('B2 home card: whisper gate codes lead with 安装转写 and keep retry sec
       onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
     }, to => visited.push(to))
     assert.equal(buttons['安装转写'].variant, 'cta', code)
-    assert.equal(buttons['重试'].variant, 'text', code)
+    assert.equal(buttons['重试'], undefined, code)
     assert.equal(buttons['转写设置'], undefined, code)
     buttons['安装转写'].onClick()
     assert.deepEqual(visited, ['/settings?section=speech'])
@@ -119,7 +156,7 @@ test('B2 home card: whisper gate codes lead with 安装转写 and keep retry sec
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
   })
   assert.equal(buttons['安装转写'], undefined)
-  assert.equal(buttons['重试'].variant, 'text')
+  assert.equal(buttons['重试'].variant, 'cta')
 })
 
 test('a generic invalid timeline does not add model settings on the project card', () => {
@@ -137,20 +174,21 @@ test('a quota failure is not rewritten into an invalid-key prompt', () => {
   const html = renderCard('failed', messages.insufficient_quota, null, {
     project: { error_code: 'llm_auth_invalid', upstream_error_type: 'insufficient_quota' },
   })
-  assert.match(html, /充值或更换令牌/)
+  assert.match(html, /额度用完了，请检查余额。/)
+  assert.doesNotMatch(html, /充值或更换令牌/)
   assert.doesNotMatch(html, /API Key 无效/)
 })
 
 test('failed project shows the persisted reason even after progress state is lost', () => {
   const html = renderCard('error', 'Whisper 模型文件缺失或不完整。')
   assert.match(html, /role="alert"/)
-  assert.match(html, /Whisper 模型文件缺失或不完整。/)
+  assert.match(html, /转写模型文件缺失或不完整，请重新下载。/)
 })
 
 test('progress failure remains visible before project refresh and is escaped', () => {
   const html = renderCard('failed', null, 'failed <script>alert(1)</script>')
-  assert.match(html, /failed &lt;script&gt;/)
-  assert.doesNotMatch(html, /<script>/)
+  assert.match(html, /这次没有做完，可以重试。/)
+  assert.doesNotMatch(html, /failed &lt;script&gt;|<script>/)
 })
 
 test('successful retry does not show a stale failure', () => {
@@ -167,13 +205,15 @@ test('restart-interrupted automatic project shows its reason and regenerates fro
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, (to) => visited.push(to))
   assert.match(html, /role="alert"/)
-  assert.ok(html.includes(restart))
-  assert.match(html, />重新生成</)
-  await buttons['重新生成']()
-  assert.deepEqual(visited, ['/project/test'])
+  assert.match(html, /应用刚重启，这次制作中断了。/)
+  assert.equal(html.includes(restart), false)
+  assert.match(html, />重试制作</)
+  assert.equal(buttons['重新生成'], undefined)
+  await buttons['重试制作']()
+  assert.deepEqual(visited, [])
 })
 
-test('managed project without a finished generation still reopens import review', async () => {
+test('failed screening retries on the card without reopening import review', async () => {
   const visited = []
   const buttons = {}
   renderCard('failed', '导入失败', null, {
@@ -181,7 +221,7 @@ test('managed project without a finished generation still reopens import review'
     onButton: (label, onClick) => { buttons[label] = onClick },
   }, (to) => visited.push(to))
   await buttons['重试']()
-  assert.deepEqual(visited, ['/import/test'])
+  assert.deepEqual(visited, [])
 })
 
 
@@ -216,37 +256,33 @@ test('X2 home card: switchable upstream + ≥2 connections offers 换模型重�
     onSwitchAndRetry: (id, choice) => { switched.push({ id, choice }) },
   })
   assert.equal(buttons['换模型重试'].variant, 'cta')
-  assert.equal(typeof buttons['重试'].onClick, 'function')
+  assert.equal(buttons['重试'], undefined)
   // Without a real dialog stub capturing open, openSwitchDialog sets switchOpen;
   // SwitchModelDialog is stubbed null so confirm path is covered via onSwitchAndRetry with choice in HomePage.
   buttons['换模型重试'].onClick()
 })
 
-test('X2 home card: switchable upstream + 1 connection offers 去设置 (add provider)', () => {
-  const visited = []
+test('X2 home card: one connection timeout retries and does not demand another provider', () => {
   const buttons = {}
-  renderCard('failed', '上游超时', null, {
+  const html = renderCard('failed', '上游超时', null, {
     project: { error_code: 'timeout', upstream_error_type: 'timeout' },
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
-  }, to => visited.push(to), { connectionCount: 1 })
-  assert.equal(buttons['去设置'].variant, 'cta')
+  }, () => {}, { connectionCount: 1 })
+  assert.equal(buttons['重试'].variant, 'cta')
+  assert.equal(buttons['去设置'], undefined)
   assert.equal(buttons['换模型重试'], undefined)
-  buttons['去设置'].onClick()
-  assert.deepEqual(visited, ['/settings?section=analysis'])
+  assert.doesNotMatch(html, /建议再加一个服务商/)
 })
 
-test('X2/X3 home card: insufficient_quota + sponsor offers 去 88API 充值', () => {
-  const visited = []
+test('X2/X3 home card: insufficient_quota leads with balance check, not a recharge button wall', () => {
   const buttons = {}
-  const extra = {
+  const html = renderCard('failed', '余额不足', null, {
     project: { error_code: 'provider_error', upstream_error_type: 'insufficient_quota' },
     onButton: (label, onClick, variant) => { buttons[label] = { onClick, variant } },
-  }
-  renderCard('failed', '余额不足', null, extra, to => visited.push(to), { analysisProvider: 'api88' })
-  assert.equal(buttons['去 88API 充值'].variant, 'cta')
-  buttons['去 88API 充值'].onClick()
-  assert.deepEqual(visited, [])
-  assert.ok(extra.opened.some(url => url.includes('88api.ai')))
+  }, () => {}, { analysisProvider: 'api88' })
+  assert.equal(buttons['核对余额并测试连接'].variant, 'cta')
+  assert.equal(buttons['去 88API 充值'], undefined)
+  assert.doesNotMatch(html, /API Key 无效/)
 })
 
 
@@ -255,38 +291,51 @@ test('failed card with empty/bare message still shows step-level human copy (#49
   for (const [error, code] of [[null, 'service_restarted'], ['', 'timeout'], ['错误', 'provider_error'], ['失败', null]]) {
     const html = renderCard('failed', error, null, { project: { error_code: code } })
     assert.match(html, /role="alert"/, String(error))
-    assert.match(html, /[下载转写分析制作]：/, String(error))
-    assert.doesNotMatch(html, /role="alert"[^>]*>\s*<span[^>]*>错误<\/span>/, String(error))
-    if (code === 'service_restarted') assert.ok(html.includes(messages.service_restarted))
+    assert.doesNotMatch(html, /<p class="ac-failure-reason"><\/p>/, String(error))
+    assert.doesNotMatch(html, /<p class="ac-failure-reason">错误<\/p>/, String(error))
+    if (code === 'service_restarted') assert.ok(html.includes('应用刚重启，这次制作中断了。'))
+    assert.equal(html.includes(messages.service_restarted || '___'), false)
   }
 })
 
-test('failed card with catalog message keeps step prefix without rewriting the reason', () => {
+test('failed card shows one short reason and keeps the long catalog text off the card', () => {
   const messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../backend/core/failure_messages.json'), 'utf8'))
   const html = renderCard('failed', messages.timeout, null, {
     project: { error_code: 'timeout', processing_config: { failure_stage: 'highlight' } },
   })
-  assert.match(html, /分析：/)
-  assert.ok(html.includes(messages.timeout))
+  assert.match(html, /响应超时了，可以重试。/)
+  assert.match(html, /更多选项/)
+  assert.doesNotMatch(html, />查看详情<|>提交诊断<|>反馈</)
+  assert.doesNotMatch(html, /分析：/)
+  assert.equal(html.includes(messages.timeout), false)
 })
 
 
-test('failed card with billable_calls_before_failure shows 本次已消耗 (#491 tip soft)', () => {
+test('failed card keeps one primary action and does not show a billable-call charge line', () => {
   const html = renderCard('failed', '错误', null, {
     project: {
       error_code: 'provider_error',
       processing_config: { billable_calls_before_failure: 3, failure_stage: 'analyze' },
     },
   })
-  assert.match(html, /分析：/)
-  assert.match(html, /ac-project-billing/)
-  assert.match(html, /本次已消耗 3 次请求/)
-  const quiet = renderCard('failed', '错误', null, {
-    project: { error_code: 'provider_error', processing_config: { billable_calls_before_failure: 0 } },
-  })
-  assert.doesNotMatch(quiet, /本次已消耗/)
-  const viaSettings = renderCard('failed', '错误', null, {
-    project: { error_code: 'provider_error', settings: { billable_calls_before_failure: 2 } },
-  })
-  assert.match(viaSettings, /本次已消耗 2 次请求/)
+  assert.match(html, /模型服务返回了无法识别的错误/)
+  assert.doesNotMatch(html, /分析：/)
+  assert.doesNotMatch(html, /本次已消耗/)
+  assert.doesNotMatch(html, /ac-project-billing/)
+  assert.doesNotMatch(html, /本次没有可用成果/)
+})
+
+test('duration failure on an older managed card explains the limit and retries in the list', async () => {
+  const error = '精彩高光：时间线提取为空：4 个有效候选在字幕边界校正后均未达到最短时长（20 秒）。 相邻片段合并和补足后仍不够长。'
+  const visited = [], calls = [], buttons = {}
+  const html = renderCard('failed', error, null, {
+    project: { error_code: 'timeline_empty', settings: { smart_import: { auto_start: false } } },
+    studioRetry: async (id, options) => calls.push([id, options.scope]),
+    onButton: (label, action) => { buttons[label] = action },
+  }, to => visited.push(to))
+  assert.match(html, /4 个候选片段.*20 秒/)
+  assert.match(html, /口播连续/)
+  await buttons['重试制作']()
+  assert.deepEqual(visited, [])
+  assert.deepEqual(calls, [['test', 'project']])
 })

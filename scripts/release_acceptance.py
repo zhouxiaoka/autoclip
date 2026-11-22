@@ -15,11 +15,11 @@ PLATFORMS = ('windows-x64', 'macos-arm64')
 CASES = ('clean_install', 'upgrade_legacy', 'model_settings', 'local_with_subtitles',
          'local_without_subtitles', 'link_import', 'visual_generation',
          'failure_recovery', 'output_delivery', 'privacy_telemetry')
-BUILD_JOBS = ('candidate-gate', 'Backend tests', 'Frontend checks', 'Release contract checks',
+BUILD_JOBS = ('candidate-gate', 'ci-guards', 'Backend tests', 'Frontend checks', 'Release contract checks',
               'Windows Proactor cleanup',
               'Windows media runtime regressions',
               'windows-recovery', 'real-transcription (ubuntu-latest)',
-              'real-transcription (windows-latest)', 'real-transcription (macos-14)',
+              'real-transcription (windows-latest)', 'real-transcription (macos-15)',
               'Docker compose smoke', 'Docker development compose smoke',
               'provider-e2e',
               'build-macos-arm64', 'build-windows-x64', 'smoke-windows-x64', 'release')
@@ -49,6 +49,15 @@ def digest(path):
 
 def assets_in(folder):
     return {path.name: digest(path) for path in sorted(folder.iterdir()) if path.is_file()}
+
+
+def assert_not_platform_qa(document):
+    """A platform QA marker is not a release and not internal acceptance."""
+    require(isinstance(document, dict), 'provenance document required')
+    require(document.get('stage') != 'platform-qa-ready',
+            'platform QA marker cannot authorize a release or internal acceptance')
+    require(document.get('release_ready') is not False,
+            'a marker that is not release-ready cannot authorize a release or internal acceptance')
 
 
 def provenance(tag, commit, assets, build_run_id):
@@ -314,6 +323,7 @@ def validate_assets(manifest, assets, tag, repository):
     require(manifest.get('assets') == actual, 'release assets changed or hashes do not match')
     require('build-provenance.json' in actual, 'build provenance missing')
     built = json.loads((assets / 'build-provenance.json').read_text(encoding='utf-8'))
+    assert_not_platform_qa(built)
     require(built == provenance(tag, manifest['commit'], assets, manifest['build_run_id']), 'assets do not match build provenance')
     for suffix in ('.dmg', 'setup.exe', '.app.tar.gz', '.whl', '-cli-mcp.zip'):
         require(any(name.endswith(suffix) for name in actual), f'release missing {suffix}')

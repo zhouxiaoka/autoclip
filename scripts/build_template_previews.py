@@ -7,26 +7,31 @@ Each style writes three files under frontend/src/assets/editing-style/:
   <id>.preview.webm  VP9, 216x384, 24fps, 2.5s, no audio, at most 120KB
   <id>.preview.mp4   H.264, same picture, at most 120KB
 
-The nine files together stay at or under 500KB, and every file stays under
+The fifteen files together stay at or under 500KB, and every file stays under
 300KB. Pass a real render with --video <id>=/path/to.mp4. Square footage is
-centered on a darkened blur so the frame is 9:16. Without --video the script
-falls back to the stills in scripts/fixtures/editing-style/.
+centered on a darkened blur so the frame is 9:16. Without --video, news and
+cinema use the Studio renderer, the bundled example interview, and the local
+packaging browser. The other styles use the stills in scripts/fixtures/editing-style/.
 
   python scripts/build_template_previews.py --video editorial=/path.mp4
+  python scripts/build_template_previews.py --style news --style cinema
   python scripts/build_template_previews.py --check
 """
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
+import statistics
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STILLS = ROOT / 'scripts' / 'fixtures' / 'editing-style'
 OUT = ROOT / 'frontend' / 'src' / 'assets' / 'editing-style'
-STYLES = ('editorial', 'street', 'classic')
+STYLES = ('editorial', 'street', 'news', 'cinema', 'classic')
 POSTER_MAX = 30 * 1024
 VIDEO_MAX = 120 * 1024
 FILE_MAX = 300 * 1024
@@ -63,7 +68,38 @@ def stills_for(style: str) -> list[Path]:
 
 
 def fit(path: Path, limit: int) -> bool:
-    return path.is_file() and path.stat().st_size <= limit
+    return path.is_file() and 0 < path.stat().st_size <= limit
+
+
+def render_example(style: str) -> Path:
+    """Export the same offline interview excerpt through each shipping template."""
+    from backend.services.studio.models import Draft, Packaging, PackagingCue, Scene
+    from backend.services.studio.render import render_draft
+    from backend.services.studio.store import directory
+
+    project = 'style-preview'
+    project_dir = directory(project)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    start = 40.0
+    end = start + DURATION
+    scene = Scene(id='interview', start=start, end=end)
+    # The excerpt straddles subtitles 19 and 20 of the bundled source.srt.
+    cue = PackagingCue(
+        start=start, end=end, text='走过低谷，回升才更有意思。',
+        original='The upswing is more fun after the downswing.',
+    )
+    draft = Draft(
+        id=style, title='Interview', scenes=[scene], aspect='portrait', original_audio=False,
+        layout='crop' if style == 'news' else 'blur', crop_x=0.34,
+        packaging=Packaging(version=2, template=style, audience_language='zh', source_language='en', cues=[cue]),
+    )
+    result = render_draft(
+        project, ROOT / 'backend/assets/example/source.mp4', draft, style, lambda _: None,
+        html_template=style, features={'pkg_templates_v1': True},
+    )
+    if result['template'] != style:
+        raise SystemExit(f'{style} preview could not use its template: {result["template_render"]}')
+    return project_dir / 'output' / 'studio' / f'{style}.mp4'
 
 
 def encode_pair(ff: str, frames: list[Path], dest: Path, codec: str, quality: int) -> None:
@@ -178,6 +214,23 @@ def outputs() -> list[Path]:
     return names
 
 
+def shows_footage(path: Path) -> bool:
+    # Sample the picture area, excluding captions and letterbox graphics. Those
+    # alone made the original flat placeholders look like valid, playable clips.
+    poster = path.suffix == '.webp'
+    samples = 1 if poster else int(DURATION * 2)
+    picture = 'crop=iw*0.8:ih/3,scale=32:32'
+    result = subprocess.run([
+        ffmpeg(), '-v', 'error', '-i', str(path), '-vf', picture if poster else 'fps=2,' + picture,
+        '-frames:v', str(samples), '-pix_fmt', 'gray', '-f', 'rawvideo', '-',
+    ], capture_output=True)
+    pixels = result.stdout
+    frame_size = 32 * 32
+    if result.returncode or len(pixels) != samples * frame_size:
+        return False
+    return all(statistics.pstdev(pixels[i:i + frame_size]) > 5 for i in range(0, len(pixels), frame_size))
+
+
 def check() -> int:
     files = outputs()
     missing = [path for path in files if not path.is_file()]
@@ -193,6 +246,9 @@ def check() -> int:
         if size > FILE_MAX or size > limit:
             print(f'{path.name} exceeds its cap', file=sys.stderr)
             return 1
+        if not shows_footage(path):
+            print(f'{path.name}: empty, undecodable, or missing picture content', file=sys.stderr)
+            return 1
     print(f'total {total}')
     if total > TOTAL_MAX:
         print(f'total {total} exceeds {TOTAL_MAX}', file=sys.stderr)
@@ -200,11 +256,13 @@ def check() -> int:
     return 0
 
 
-def build(videos: dict[str, Path]) -> None:
+def build(videos: dict[str, Path], styles: list[str]) -> None:
     ff = ffmpeg()
     OUT.mkdir(parents=True, exist_ok=True)
-    for style in STYLES:
+    for style in styles:
         source = videos.get(style)
+        if source is None and style in ('news', 'cinema'):
+            source = render_example(style)
         frames = stills_for(style)
         if source is None and not frames[0].exists():
             raise SystemExit(f'missing still {frames[0]}')
@@ -237,10 +295,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Build silent editing-style preview media')
     parser.add_argument('--check', action='store_true', help='only verify the committed files')
     parser.add_argument('--video', action='append', default=[], help='style=/path/to/render.mp4')
+    parser.add_argument('--style', action='append', choices=STYLES, help='only regenerate this style (repeatable)')
     args = parser.parse_args()
     if args.check:
         return check()
-    build(parse_videos(args.video))
+    # The export pipeline uses project directories. Keep generator runs independent
+    # of the developer's AutoClip projects and desktop configuration.
+    with tempfile.TemporaryDirectory(prefix='ac-preview-projects-') as data_dir:
+        os.environ.update(AUTOCLIP_DATA_DIR=data_dir, AUTOCLIP_APP_DIR=data_dir)
+        sys.path.insert(0, str(ROOT))
+        build(parse_videos(args.video), args.style or list(STYLES))
     return 0
 
 

@@ -38,7 +38,7 @@ export type FailureButton = {
 }
 export type FailurePlan = {
   message: string
-  step: '下载' | '转写' | '分析' | '制作'
+  step: '下载' | '转写' | '分析' | '制作' | '筛选' | null
   billing: string | null
   destination: string | null
   buttons: FailureButton[]
@@ -217,9 +217,9 @@ export function FailureCopy({ info, message }: { info: FailureInfo; message: str
   return <FailureCopyText step={card.step} reason={card.reason} billing={card.billing} />
 }
 
-function FailureCopyText({ step, reason, billing }: { step: string; reason: string; billing: string | null }) {
+function FailureCopyText({ step, reason, billing }: { step: string | null; reason: string; billing: string | null }) {
   return <>
-    <span className="studio-error">{t(step)}：{t(reason)}</span>
+    <span className="studio-error">{step ? <>{t(step)}：{t(reason)}</> : t(reason)}</span>
     {billing ? <p className="studio-billing">{t(billing)}</p> : null}
   </>
 }

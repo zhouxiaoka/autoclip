@@ -73,22 +73,47 @@ def staging_empty(tmp_path):
     return not staging.exists() or not any(staging.iterdir())
 
 
-def studio_import(monkeypatch, tmp_path, video_bytes, data=None, srt=False):
-    from backend.api.v1 import studio as api
+def studio_import(monkeypatch, tmp_path, video_bytes, data=None, srt=False, subtitle_text=SRT, entry='studio'):
+    if entry == 'content':
+        from backend.api.v1 import projects as api
+    else:
+        from backend.api.v1 import studio as api
     created, inspected = [], []
 
     def _create(*a, **k):
         created.append(1)
         raise RuntimeError('stop after the preflight passed')
     monkeypatch.setattr(api.ProjectService, 'create_project', _create)
-    monkeypatch.setattr(api.jobs, 'inspect_project', lambda *a, **k: inspected.append(1))
+    if entry == 'studio':
+        monkeypatch.setattr(api.jobs, 'inspect_project', lambda *a, **k: inspected.append(1))
     app = FastAPI(); app.include_router(api.router)
-    files = {'video': ('a.mp4', video_bytes, 'video/mp4')}
+    files = {'video_file' if entry == 'content' else 'video': ('a.mp4', video_bytes, 'video/mp4')}
     if srt:
-        files['subtitle'] = ('a.srt', SRT.encode(), 'application/x-subrip')
+        files['srt_file' if entry == 'content' else 'subtitle'] = ('a.srt', subtitle_text.encode(), 'application/x-subrip')
     with TestClient(app, raise_server_exceptions=False) as client:
-        r = client.post('/import', files=files, data={'auto_start': 'true', 'goal': 'auto', **(data or {})})
+        r = client.post('/upload' if entry == 'content' else '/import', files=files,
+                        data={'project_name': 'fixture', 'auto_start': 'true', 'goal': 'auto', **(data or {})})
     return r, created, inspected
+
+
+@pytest.mark.real_media_probe
+@pytest.mark.parametrize('subtitle_text,allowed', [(SRT, True), ('\n', False), ('not SRT', False)])
+@pytest.mark.parametrize('entry', ['studio', 'content'])
+def test_http_import_checks_actual_subtitle_before_asr_gate(tmp_path, monkeypatch, subtitle_text, allowed, entry):
+    settings('subtitle')
+    asr(monkeypatch, 'missing')
+    video = media(tmp_path / 'valid.mp4')
+    response, created, inspected = studio_import(monkeypatch, tmp_path, video.read_bytes(),
+                                                 srt=True, subtitle_text=subtitle_text, entry=entry)
+    if allowed:
+        assert created == [1], response.text
+        assert response.status_code == 500  # deliberate stop at project creation, after gate
+    else:
+        assert response.status_code == 422
+        assert response.json()['detail']['code'] == 'whisper_not_installed'
+        assert not created
+    assert not inspected
+    assert staging_empty(tmp_path)
 
 
 # ---------------------------------------------------------------- I1: unreadable first, before any paid call ---

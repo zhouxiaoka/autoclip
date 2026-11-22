@@ -3,8 +3,10 @@
 
 Blocking: review-round test filenames, review ids in comments and docstrings,
 product error-code literals outside event_catalog.json (including quoted keys),
-a second literal copy of a catalog error-code table, and a Python string
-that copies a failure_messages.json sentence. The line-count
+a second literal copy of a catalog error-code table, a Python string
+that copies a failure_messages.json sentence, tracked paths that collide
+when case is ignored, directory prefixes that differ only by case, and tests
+that record every global urlopen body as a PostHog event. The line-count
 table is written to the PR job summary and never fails the run.
 """
 from __future__ import annotations
@@ -385,6 +387,313 @@ def catalog_sentence_copies(root: Path = ROOT) -> list[str]:
     return found
 
 
+# Vite tries these in order. On a case-insensitive disk, import './FailureHint'
+# binds failureHint.ts before FailureHint.tsx, and the component default is missing.
+RESOLVE_EXTS = ('.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json', '.cjs', '.cts')
+
+
+def casefold_collisions(paths) -> list[str]:
+    """Paths that cannot stay distinct on macOS or Windows, including extensionless imports."""
+    exact: dict[str, list[str]] = {}
+    stems: dict[str, list[str]] = {}
+    for raw in paths:
+        rel = str(raw).replace('\\', '/').strip()
+        if not rel or any(part in SKIP_PARTS for part in rel.split('/')):
+            continue
+        exact.setdefault(rel.casefold(), []).append(rel)
+        root, ext = os.path.splitext(rel)
+        if ext.lower() in RESOLVE_EXTS:
+            stems.setdefault(root.casefold(), []).append(rel)
+    found = []
+    reported = set()
+    for group in exact.values():
+        unique = tuple(sorted(set(group)))
+        if len(unique) > 1:
+            found.append('大小写相同的路径: ' + ', '.join(unique))
+            reported.add(unique)
+    for group in stems.values():
+        unique = tuple(sorted(set(group)))
+        if len(unique) > 1 and unique not in reported:
+            found.append('大小写折叠后的模块名相同: ' + ', '.join(unique))
+    return found
+
+
+def tracked_paths(root: Path = ROOT) -> list[str]:
+    out = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z'])
+    return [part.decode() for part in out.split(b'\0') if part]
+
+
+def resolve_casefolded(spec: str, paths, extensions=RESOLVE_EXTS) -> str | None:
+    """The file an extensionless import hits when lookup ignores case."""
+    folded: dict[str, str] = {}
+    for raw in paths:
+        rel = str(raw).replace('\\', '/')
+        folded.setdefault(rel.casefold(), rel)
+    for ext in extensions:
+        hit = folded.get((spec + ext).casefold())
+        if hit:
+            return hit
+    return None
+
+
+def directory_casefold_collisions(paths) -> list[str]:
+    """Directory prefixes that differ only by case.
+
+    Foo/a.ts and foo/b.ts are different full paths, so a whole-path casefold
+    check does not see them. macOS and Windows still collapse the directory.
+    Sibling files such as Readme.md and readme.md are a separate check.
+    """
+    directories: dict[str, set[str]] = {}
+    files: list[str] = []
+    for raw in paths:
+        rel = str(raw).replace('\\', '/').strip().strip('/')
+        if not rel or any(part in SKIP_PARTS for part in rel.split('/')):
+            continue
+        files.append(rel)
+        parts = rel.split('/')
+        for index in range(1, len(parts)):
+            prefix = '/'.join(parts[:index])
+            directories.setdefault(prefix.casefold(), set()).add(prefix)
+    found = []
+    for spellings in directories.values():
+        if len(spellings) > 1:
+            found.append('目录名大小写不同: ' + ', '.join(sorted(spellings)))
+    for rel in files:
+        spellings = directories.get(rel.casefold())
+        if not spellings:
+            continue
+        mixed = set(spellings)
+        mixed.add(rel)
+        if len(mixed) > 1:
+            found.append('文件和目录大小写折叠后相同: ' + ', '.join(sorted(mixed)))
+    return sorted(found)
+
+
+def _is_global_urlopen_patch(node) -> bool:
+    """The process-wide urllib.request.urlopen. A module's own urllib.request is not this."""
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or node.func.attr != 'setattr':
+        return False
+    if len(node.args) < 2:
+        return False
+    target, name = node.args[0], node.args[1]
+    if isinstance(target, ast.Constant) and target.value == 'urllib.request.urlopen':
+        return True
+    return (
+        isinstance(name, ast.Constant) and name.value == 'urlopen'
+        and isinstance(target, ast.Attribute) and target.attr == 'request'
+        and isinstance(target.value, ast.Name) and target.value.id == 'urllib'
+    )
+
+
+def _has_global_urlopen_patch(fn) -> bool:
+    stack = list(ast.iter_child_nodes(fn))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if _is_global_urlopen_patch(node):
+            return True
+        stack.extend(ast.iter_child_nodes(node))
+    return False
+
+
+def _mentions_event(node) -> bool:
+    return any(isinstance(child, ast.Constant) and child.value == 'event' for child in ast.walk(node))
+
+
+def _is_request_json(node) -> bool:
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or node.func.attr != 'loads':
+        return False
+    owner = node.func.value
+    if not isinstance(owner, ast.Name) or owner.id != 'json':
+        return False
+    return any(
+        isinstance(child, ast.Attribute) and child.attr == 'data'
+        for arg in node.args for child in ast.walk(arg)
+    )
+
+
+def _unguarded_appends(fn) -> list[tuple[int, str]]:
+    """append(json body) that is not inside an if which looks at the event field."""
+    parsed: set[str] = set()
+    found = []
+
+    def walk(node, parents):
+        if isinstance(node, ast.Assign) and _is_request_json(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    parsed.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None and _is_request_json(node.value):
+            if isinstance(node.target, ast.Name):
+                parsed.add(node.target.id)
+        if (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'append'
+            and isinstance(node.func.value, ast.Name) and node.args
+        ):
+            arg = node.args[0]
+            records_body = _is_request_json(arg) or (isinstance(arg, ast.Name) and arg.id in parsed)
+            guarded = any(isinstance(parent, ast.If) and _mentions_event(parent.test) for parent in parents)
+            if records_body and not guarded:
+                found.append((node.lineno, node.func.value.id))
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            walk(child, parents + (node,))
+
+    walk(fn, ())
+    return found
+
+
+def _enables_posthog(fn) -> bool:
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or node.func.attr != 'setenv':
+            continue
+        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+            if 'POSTHOG' in node.args[0].value:
+                return True
+    return False
+
+
+def _reads_telemetry(fn, list_name: str) -> bool:
+    aliases = {list_name}
+    nodes = list(ast.walk(fn))
+    changed = True
+    while changed:
+        changed = False
+        for node in nodes:
+            if isinstance(node, ast.Assign):
+                targets, value = node.targets, node.value
+            elif isinstance(node, ast.For):
+                targets, value = [node.target], node.iter
+            else:
+                continue
+            root = value
+            while isinstance(root, ast.Subscript):
+                root = root.value
+            if not isinstance(root, ast.Name) or root.id not in aliases:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in aliases:
+                    aliases.add(target.id)
+                    changed = True
+    for node in nodes:
+        if not isinstance(node, ast.Subscript) or not isinstance(node.slice, ast.Constant):
+            continue
+        if node.slice.value not in {'event', 'properties'}:
+            continue
+        root = node.value
+        while isinstance(root, ast.Subscript):
+            root = root.value
+        if isinstance(root, ast.Name) and root.id in aliases:
+            return True
+    return False
+
+
+def _nested_functions(fn):
+    return [
+        node for node in ast.walk(fn)
+        if node is not fn and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+
+def global_urlopen_telemetry_mixes(root: Path = ROOT) -> list[str]:
+    """A global urlopen fake recorded a diagnostics body as if it were a PostHog event.
+
+    Diagnostics uploads and PostHog captures both call urllib.request.urlopen.
+    A diagnostics body has no event name. Patch the module that sends the event
+    when the test only cares about that module.
+    """
+    found = []
+    for name in TEST_ROOTS:
+        base = root / name
+        if not base.exists():
+            continue
+        for path in base.rglob('*.py'):
+            if any(part in SKIP_PARTS for part in path.parts):
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding='utf-8'))
+            except (SyntaxError, UnicodeError):
+                continue
+            functions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            patching = [fn for fn in functions if _has_global_urlopen_patch(fn)]
+            nested = {id(child) for fn in patching for child in _nested_functions(fn)}
+            for fn in patching:
+                if id(fn) in nested:
+                    continue
+                posthog = _enables_posthog(fn)
+                for scope in (fn, *_nested_functions(fn)):
+                    for line, list_name in _unguarded_appends(scope):
+                        if posthog or _reads_telemetry(fn, list_name):
+                            found.append(f'{path.relative_to(root)}:{line}: 未过滤的 JSON body 被当成 PostHog 事件')
+    return sorted(found)
+
+
+_LEGACY_ORPHAN_COMPONENTS = frozenset({
+    'frontend/src/features/studio/FailureActions.tsx',
+    'frontend/src/features/settings/EndpointProviderSetup.tsx',
+})
+
+
+def tauri_invoke_contracts(root: Path = ROOT) -> list[str]:
+    """Every literal invoke('cmd') in frontend/src must match src-tauri/src/lib.rs generate_handler!."""
+    lib_rs = root / 'src-tauri/src/lib.rs'
+    if not lib_rs.is_file():
+        return []
+    text = lib_rs.read_text(encoding='utf-8')
+    match = re.search(r'generate_handler!\[(.*?)\]', text, re.S)
+    if not match:
+        return ['src-tauri/src/lib.rs: missing generate_handler![]']
+    handlers = {
+        item.strip().split('::')[-1]
+        for item in match.group(1).split(',')
+        if item.strip()
+    }
+    hits: list[str] = []
+    src_root = root / 'frontend/src'
+    if not src_root.is_dir():
+        return []
+    for path in sorted(src_root.rglob('*.ts*')):
+        if not path.is_file():
+            continue
+        body = path.read_text(encoding='utf-8', errors='ignore')
+        for call in re.finditer(r"\binvoke(?:<[^>]+>)?\(\s*['\"]([a-z0-9_]+)['\"]", body):
+            cmd = call.group(1)
+            if cmd not in handlers:
+                line = body[:call.start()].count('\n') + 1
+                hits.append(f'{path.relative_to(root).as_posix()}:{line}: unregistered Tauri invoke({cmd!r})')
+    return hits
+
+
+def orphaned_ui_components(root: Path = ROOT) -> list[str]:
+    """Block newly orphaned feature .tsx components in studio/ and settings/."""
+    src_root = root / 'frontend/src'
+    if not src_root.is_dir():
+        return []
+    all_ts = {
+        p: p.read_text(encoding='utf-8', errors='ignore')
+        for p in src_root.rglob('*.ts*')
+        if p.is_file()
+    }
+    hits: list[str] = []
+    for sub in ('frontend/src/features/studio', 'frontend/src/features/settings'):
+        folder = root / sub
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.glob('*.tsx')):
+            rel = path.relative_to(root).as_posix()
+            if rel in _LEGACY_ORPHAN_COMPONENTS:
+                continue
+            stem = path.stem
+            pattern = re.compile(
+                rf"from\s+['\"][^'\"]*/{re.escape(stem)}(?:\.tsx?)?['\"]"
+                rf"|import\s*\(\s*['\"][^'\"]*/{re.escape(stem)}(?:\.tsx?)?['\"]\s*\)"
+            )
+            if not any(other != path and pattern.search(txt) for other, txt in all_ts.items()):
+                hits.append(f'{rel}: unreferenced feature component')
+    return hits
+
+
 def main() -> int:
     base = os.environ.get('GITHUB_BASE_REF', '')
     if base:
@@ -405,6 +714,29 @@ def main() -> int:
     sentences = catalog_sentence_copies()
     if sentences:
         problems.append('手写失败文案:\n' + '\n'.join(sentences))
+    paths = tracked_paths()
+    collisions = casefold_collisions(paths)
+    if collisions:
+        problems.append('跨平台文件名碰撞:\n' + '\n'.join(collisions))
+    directories = directory_casefold_collisions(paths)
+    if directories:
+        problems.append(
+            '目录名忽略大小写后相同。macOS 和 Windows 不能同时存放，Linux CI 仍会通过。'
+            '改掉冲突的文件或目录名，让 casefold 后每一级只有一种写法。\n' + '\n'.join(directories)
+        )
+    mixes = global_urlopen_telemetry_mixes()
+    if mixes:
+        problems.append(
+            '全局 urlopen 把诊断上传和 PostHog 记到一起。诊断请求没有 event。'
+            '记录之前要确认 event 是字符串；只想断言 PostHog 时，patch 发出事件的那个模块的 urllib.request，'
+            '不要 patch 进程全局的 urllib.request.urlopen。\n' + '\n'.join(mixes)
+        )
+    tauri_hits = tauri_invoke_contracts()
+    if tauri_hits:
+        problems.append('未注册的 Tauri invoke 命令:\n' + '\n'.join(tauri_hits))
+    orphan_hits = orphaned_ui_components()
+    if orphan_hits:
+        problems.append('新增孤立 UI 组件（0 引用）:\n' + '\n'.join(orphan_hits))
     if problems:
         print('\n\n'.join(problems), file=sys.stderr)
         return 1

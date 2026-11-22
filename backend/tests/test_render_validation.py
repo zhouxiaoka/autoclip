@@ -182,18 +182,20 @@ def test_full_body_with_outro_is_published(env, monkeypatch):
 
 def test_corrupt_tail_audio_is_rejected(env, monkeypatch):
     tmp, folder, output = env
-    video = _clip__r13_render_validation(tmp / 'v.mp4', 3)
-    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=3', '-c:a', 'aac', '-y', str(tmp / 'a.aac')], check=True)
-    import random
-    data = bytearray((tmp / 'a.aac').read_bytes())
-    rng = random.Random(1)
-    for i in range(int(len(data) * .7), len(data)):
-        if data[i - 1] != 0xFF:
-            data[i] = rng.randrange(256)
-    (tmp / 'bad.aac').write_bytes(bytes(data))
-    muxed = tmp / 'bad-audio.mp4'
-    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(video), '-i', str(tmp / 'bad.aac'), '-map', '0:v', '-map', '1:a',
-                    '-c', 'copy', '-movflags', '+faststart', '-y', str(muxed)], check=True)
+    import json
+    muxed = _clip__r13_render_validation(tmp / 'bad-audio.mp4', 3, audio=True)
+    # Corrupt packet payloads AFTER muxing: newer FFmpeg rejects damaged ADTS
+    # while creating the old fixture, before our output validator ever runs.
+    probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_packets',
+                            '-show_entries', 'packet=pos,size,pts_time', '-of', 'json', str(muxed)],
+                           check=True, capture_output=True, text=True)
+    packets = [p for p in json.loads(probe.stdout)['packets'] if float(p['pts_time']) >= 2.1]
+    assert packets, 'fixture needs audio packets in its final 30 percent'
+    data = bytearray(muxed.read_bytes())
+    for packet in packets:
+        start, size = int(packet['pos']), int(packet['size'])
+        data[start:start + size] = b'\xff' * size
+    muxed.write_bytes(data)
     with pytest.raises(ValueError, match='渲染输出'):
         _render(monkeypatch, muxed, seconds=3)
     assert output.read_bytes() == b'previous saved video'

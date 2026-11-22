@@ -6,6 +6,7 @@ reports balance numbers — only the enum ``skipped|ok|exhausted|unavailable``.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -21,7 +22,7 @@ RESULTS = frozenset({'skipped', 'ok', 'exhausted', 'unavailable'})
 _CACHE_TTL = 60.0
 _TIMEOUT = 3.0
 _lock = threading.Lock()
-_cache: dict[str, tuple[float, str]] = {}
+_cache: dict[tuple[str | None, str, str], tuple[float, str]] = {}
 
 
 def _preset_billing_probe(provider: str | None) -> str | None:
@@ -108,7 +109,8 @@ def check_quota(*, provider: str | None, base_url: str | None, api_key: str | No
         return 'skipped'
     if not base_url or not api_key:
         return 'unavailable'
-    cache_key = f'{provider}|{base_url.strip()}|{api_key[:8]}'
+    credential = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+    cache_key = (provider, base_url.strip(), credential)
     now = time.monotonic()
     with _lock:
         hit = _cache.get(cache_key)
@@ -139,9 +141,15 @@ def check_for_analysis_settings() -> tuple[str, dict]:
         connection = next((c for c in settings.connections if c.id == binding.connection_id), None)
         if connection is None:
             return 'skipped', extras
+        base_url = getattr(connection, 'base_url', None) or ''
+        if not base_url:
+            try:
+                base_url = (ai_models.chat_endpoint(connection, '') or {}).get('base_url') or ''
+            except Exception:  # noqa: BLE001
+                base_url = ''
         result = check_quota(
             provider=getattr(connection, 'provider', None),
-            base_url=getattr(connection, 'base_url', None),
+            base_url=base_url or None,
             api_key=getattr(connection, 'api_key', None) or None,
         )
         extras['provider'] = getattr(connection, 'provider', None)

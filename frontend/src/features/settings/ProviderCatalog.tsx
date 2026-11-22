@@ -9,6 +9,7 @@ import {
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
 import ProviderQualityMarks from './providerQualityMarks'
+import { promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl } from './sponsorPromoState'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
   all: 'settings.providers.filter.all',
@@ -31,7 +32,7 @@ function actionLabel(preset: ProviderPreset, connected: boolean, configured = fa
   if (connected) return preset.id === 'whisper' || preset.id === 'sensevoice' ? t('settings.providers.available') : t('settings.providers.connected')
   if (configured) return t('已配置')
   if (connectKind(preset) === 'needs_endpoint') return t('settings.providers.needs_endpoint')
-  if (preset.sponsor) return t('settings.providers.one_click')
+  if (promotionRegisterUrl(preset.id, preset.sponsor?.register_url || '')) return t('settings.providers.one_click')
   return t('settings.providers.configure')
 }
 
@@ -64,7 +65,7 @@ function CustomCard({
         <span className="ac-provider-card-title">{connection.name || t('自定义 OpenAI 兼容接口')}</span>
       </span>
       <span className="ac-provider-card-action">
-        <span className="ac-provider-action-label">{t('settings.providers.repair_custom')}</span>
+        <span className="ac-provider-action-label">{t(connection.validation_status === 'failed' ? 'settings.providers.repair_custom' : '编辑')}</span>
       </span>
     </button>
   )
@@ -90,6 +91,8 @@ function ProviderCard({
   onOpen: (id: string) => void
 }) {
   const connected = isCatalogConnected(settings, preset, asrReady)
+  const recommended = promotionRecommends(preset.id)
+  const upsell = promotionAllowsUpsell(preset.id)
   const caps = preset.capabilities.filter((capability): capability is Exclude<CapabilityFilter, 'all'> => capability !== 'all' && capability in FILTER_KEY)
   return (
     <button
@@ -104,7 +107,8 @@ function ProviderCard({
       <span className="ac-provider-card-body">
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
-          {preset.sponsor && <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>}
+          {(preset.sponsor || recommended) && recommended && <span className="ac-badge">{t('推荐')}</span>}
+          {preset.sponsor && !recommended && upsell && <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>}
         </span>
         {caps.length > 0 && (
           <span className="ac-provider-caps">
@@ -151,6 +155,7 @@ export default function ProviderCatalog({
           <span className="visually-hidden">{t('settings.providers.search')}</span>
           <input
             className="ac-input"
+            id="ai-provider-search"
             type="search"
             value={query}
             placeholder={t('settings.providers.search_placeholder')}

@@ -45,10 +45,13 @@ async def _transcription_gate(video_path, srt_path) -> None:
     await transcription_gate.for_paths(video_path, srt_path)  # off the event loop
 
 
-async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
+async def _stage_for_gate(video_file: UploadFile, *, srt_file: Optional[UploadFile] = None):
     """Run the import gate; returns the staged upload path when the file had to be probed, else None."""
+    subtitle_bytes = await srt_file.read() if srt_file is not None else None
+    if srt_file is not None:
+        await srt_file.seek(0)  # The accepted upload is persisted later from these same bytes.
     return await stage_for_gate(video_file, b'', Path(video_file.filename or '').suffix.lower() or '.mp4',
-                                srt_available=has_srt, route='content')
+                                subtitle_bytes=subtitle_bytes, route='content')
 
 
 from .studio import stage_upload, _stage_for_gate as stage_for_gate  # noqa: E402
@@ -89,7 +92,7 @@ async def upload_files(
         )
         
         # 1.5.7: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
-        staged = await _stage_for_gate(video_file, has_srt=bool(srt_file))
+        staged = await _stage_for_gate(video_file, srt_file=srt_file)
 
         # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（ ）。
         try:
@@ -809,38 +812,18 @@ async def get_project_logs(
     lines: int = Query(50, ge=1, le=1000, description="Number of log lines to return"),
     project_service: ProjectService = Depends(get_project_service)
 ):
-    """Get project logs."""
+    """Allowlisted log lines for this project. Raw log files are not returned."""
     try:
-        # 模拟日志数据，实际应该从日志服务获取
-        return {
-            "logs": [
-                {
-                    "timestamp": "2025-08-01T13:30:00.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "开始处理项目"
-                },
-                {
-                    "timestamp": "2025-08-01T13:30:05.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "Step 1: 提取大纲完成"
-                },
-                {
-                    "timestamp": "2025-08-01T13:30:10.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "Step 2: 时间定位完成"
-                },
-                {
-                    "timestamp": "2025-08-01T13:30:15.000Z",
-                    "module": "processing",
-                    "level": "INFO",
-                    "message": "Step 3: 内容评分进行中..."
-                }
-            ]
-        }
-    except Exception as e:
+        from backend.core.path_utils import get_log_file_path
+        from backend.services.diagnostics.redact import sanitized_log_file
+        project = project_service.get(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        logs = sanitized_log_file(get_log_file_path(), project_id=project_id, limit=lines)
+        return {"logs": logs, "returned_lines": len(logs)}
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("获取项目日志失败: %s", project_id)
         raise HTTPException(status_code=500, detail="获取项目日志失败，请稍后重试")
 

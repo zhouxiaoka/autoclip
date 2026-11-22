@@ -48,10 +48,16 @@ export function trackDiagnoseAction(action: 'switch_model' | 'install_transcript
   if (typeof safe.action === 'string') captureBusinessEvent('diagnose_action', safe)
 }
 
-/** ASR readiness at import probe and submit. Enums and booleans only. */
+/** Last emitted ASR state. Repeated probes of the same state are not another check. */
+let lastAsrReadiness = ''
+
+/** ASR readiness when the allowlisted state changes. Enums and booleans only. */
 export function trackAsrReadiness(properties: Record<string, unknown>) {
   const props = safeStudioProperties(properties)
   props.success_rate_schema_version = 1
+  const signature = JSON.stringify([props.provider, props.code, props.has_subtitle, props.blocked])
+  if (signature === lastAsrReadiness) return
+  lastAsrReadiness = signature
   captureBusinessEvent('asr_readiness_checked', props)
 }
 
@@ -106,6 +112,11 @@ export type VariantProperties = { strategy_id?: string; template?: string; packa
 /** Share intent only: which enum target, never the caption, title or link text. */
 export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' | 'copy_and_save' } & VariantProperties) {
   captureBusinessEvent('studio_output_shared', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
+}
+
+/** First play of a rendered output video on a result card; enum properties only. */
+export function trackOutputPlayed(projectId: string, properties: VariantProperties = {}) {
+  captureBusinessEvent('studio_output_played', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
 /** Anonymous three-level rating; free text is never collected. */

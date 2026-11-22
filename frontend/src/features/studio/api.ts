@@ -1,3 +1,4 @@
+import type { CoverDesign, CoverView } from '../../publish/coverApi'
 import { captureBusinessEvent } from '../../analytics/posthog'
 import { safeStudioProperties, telemetryId, type AttemptReceipt, type Properties } from '../../analytics/workflow'
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
@@ -24,6 +25,15 @@ type RetryReceipt = { attempt?: AttemptReceipt | null }
 /** One key per click: the same request re-sent returns the same receipt (backend idempotency). */
 const retryKey = () => `r-${telemetryId()}`
 
+export function exportCoverSlot(job: RenderJob) {
+  return job.result && job.result.height > job.result.width ? 'douyin' : 'bilibili'
+}
+
+export function exportPoster(projectId: string, job: RenderJob, stamp = 0) {
+  if (!job.cover_revision && !stamp) return undefined
+  return `${api.defaults.baseURL}/publish/covers/${projectId}/clips/studio-${job.job_id}/file?platform=${exportCoverSlot(job)}&t=${stamp || job.cover_revision}`
+}
+
 export const studioApi = {
   preparePreview: (pid: string): Promise<SourcePreview> => api.post(`/studio/${pid}/source-preview`),
   previewStatus: (pid: string): Promise<SourcePreview> => api.get(`/studio/${pid}/source-preview`),
@@ -31,7 +41,8 @@ export const studioApi = {
   analysisPreferences: (): Promise<AnalysisPreferences> => api.get('/studio/analysis-preferences'),
   saveAnalysisPreferences: (body: AnalysisPreferences): Promise<AnalysisPreferences> => observeStudioOperation('studio_analysis_preferences', () => api.put('/studio/analysis-preferences', body), undefined, { analysis_mode: body.analysis_mode, allow_visual_screening: body.allow_visual_screening }),
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,
-  subtitles: (pid: string, signal?: AbortSignal): Promise<{ cues: SubtitleCue[] }> => api.get(`/studio/${pid}/subtitles`, { signal }),
+  subtitles: (pid: string, draftId: string, width: number, height: number, style: Draft['subtitle_style'], signal: AbortSignal): Promise<{ cues: SubtitleCue[] }> =>
+    api.get(`/studio/${pid}/subtitles`, { signal, params: { draft_id: draftId, width, height, style } }),
   framingStatus: (): Promise<FramingStatus> => api.get('/studio/framing/status'),
   framingInstall: (): Promise<FramingStatus & { started: boolean }> => observeStudioOperation('studio_framing_install', () => api.post('/studio/framing/install'), (_result, props) => workflow.watch('framing-runtime', 'runtime', undefined, undefined, props, true)),
   autoFrame: (pid: string, draft: Draft, trigger: 'auto' | 'manual' | 'portrait_preset' = 'manual'): Promise<AutoFrameResult> => observeStudioOperation('studio_auto_frame', () => api.post(`/studio/${pid}/auto-frame`, draft, { timeout: 120000 }), (result: AutoFrameResult, props) => {
@@ -66,9 +77,12 @@ signal); every HTTP answer (even a 500) is seen. */
       workflow.watchAttempt(pid, result.attempt, props)
     }, { ...workflow.context(pid), retry_kind: 'same' }).then(result => result.variant),
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
+  kitUrl: (path: string) => `${api.defaults.baseURL}${path}`,
+  updateExportPost: (pid: string, jobId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/jobs/${jobId}/post`, post), undefined, workflow.context(pid)),
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
   updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post), undefined, workflow.context(pid)),
-  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/ai`), (job: NonNullable<OutputVariant['cover_job']>, props) => {
+  variantCoverDesign: (pid: string, variantId: string): Promise<CoverView> => api.get(`/studio/${pid}/output-variants/${variantId}/cover/design`),
+  redesignVariantCover: (pid: string, variantId: string, body?: { title?: string; design: CoverDesign; allow_reference_once?: boolean }): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/regenerate`, body), (job: NonNullable<OutputVariant['cover_job']>, props) => {
     workflow.watch('studio-cover', job.job_id, pid, undefined, props)
     for (const watch of workflow.list().filter(w => w.kind === 'studio-cover' && w.projectId === pid && w.id === job.job_id)) workflow.observeCoverJob(watch, job)
   }, workflow.context(pid)),
@@ -108,9 +122,14 @@ signal); every HTTP answer (even a 500) is seen. */
     if (automatic) workflow.watch('studio-generation', pid, undefined, undefined, props, false, _result.analysis_run_id)
   }, workflow.context(pid)),
   /** The failed-state 「重试」/「继续制作」 (#419): one backend retry command; the receipt carries retry_of. A manual
-   * project's production attempt is opened now and bound when the plan is confirmed. */
-  retry: (pid: string, opts?: { retry_kind?: 'same' | 'switch_model' | 'after_install'; fresh?: boolean }) => observeStudioOperation('studio_rescreen', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string }>(`/studio/${pid}/retry`, { scope: 'analysis', idempotency_key: retryKey(), fresh: !!opts?.fresh }), (result, props) => {
+   * project's production receipt is bound immediately when the list resumes a confirmed plan,
+   * or at the next confirmation when screening is required. */
+  retry: (pid: string, opts?: { scope?: 'project'; retry_kind?: 'same' | 'switch_model' | 'after_install'; fresh?: boolean }) => observeStudioOperation('studio_rescreen', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string }>(`/studio/${pid}/retry`, { scope: opts?.scope || 'analysis', idempotency_key: retryKey(), fresh: !!opts?.fresh }), (result, props) => {
     const link = result.attempt?.retry_of ? { retry_of: result.attempt.retry_of } : {}
+    if (result.attempt?.kind === 'production' && result.attempt.run_id) {
+      workflow.watchAttempt(pid, result.attempt, props)
+      return
+    }
     workflow.watch('studio-screen', pid, undefined, undefined, { ...props, ...link }, true, result.analysis_run_id)
     if (result.attempt?.kind === 'generation') workflow.watchAttempt(pid, result.attempt, props)
   }, { ...workflow.context(pid), retry_kind: opts?.retry_kind || 'same' }),

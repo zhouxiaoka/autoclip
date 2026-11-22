@@ -1,22 +1,24 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect } from 'react'
-import { message } from 'antd'
+import React, { useState, useEffect, useRef } from 'react'
+import { Dropdown, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import { studioApi } from '../features/studio/api'
+import { errorText } from '../features/studio/errorText'
 import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
+import DiagnosticsDialog from '../features/diagnostics/DiagnosticsDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
-import { openExternalLink } from '../utils/externalLinks'
-import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
-import { classifySubtitleFailure } from '../utils/subtitleFailure'
-import { ADD_PROVIDER_HINT, failureAction, isTranscriptionInstall, presentedFailure, SWITCH_MODEL_LABEL } from '../features/studio/failureAction'
+import { llmFailureText } from '../utils/llmFailure'
+import { countPreservedResults, presentFailure, type PrimaryAction } from '../features/studio/failurePresentation'
+import DiagnosePanel from '../features/studio/DiagnosePanel'
+import { stageBrowserCookieRecovery } from '../features/studio/browserCookieRecovery'
 import SwitchModelDialog from '../features/studio/SwitchModelDialog'
 import type { SwitchModelOption } from '../features/studio/switchModelOptions'
-import { classifyTimelineEmpty, weakLocalTimelineFailure } from '../utils/timelineFailure'
+import { weakLocalTimelineFailure } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
@@ -45,7 +47,8 @@ const autoStartedProjectIds = new Set<string>()
 interface ProjectCardProps {
   project: Project
   onDelete: (id: string) => void
-  onRetry?: (id: string) => void
+  onRetry?: (id: string) => void | Promise<void>
+  onChangeVideo?: () => void
   onClick?: () => void
   /** One already-connected replacement. Absent means the card offers model settings. */
   replacement?: { displayName: string } | null
@@ -65,7 +68,7 @@ function suggestLine(name: string) {
   return <>{text.slice(0, at)}<strong>{name}</strong>{text.slice(at + name.length)}</>
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick, replacement, switchOptions, connectionCount, analysisProvider, onSwitchAndRetry }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onChangeVideo, onClick, replacement, switchOptions, connectionCount, onSwitchAndRetry }) => {
   useTranslation()
   const navigate = useNavigate()
   const creative = project.settings?.creative || project.processing_config?.creative
@@ -74,6 +77,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
+  const retryLock = useRef(false)
+  const [retryError, setRetryError] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
 
@@ -232,8 +237,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // An automatic Studio run that ended failed/partial (including one interrupted by a restart,
   // RC156 #13) is regenerated from the project page (Studio retry → /studio/{id}/analyze, or
   // per-version retry), not by re-running the import screening.
-  const studioGeneration = String(project.settings?.studio_generation_status || project.processing_config?.studio_generation_status || '')
-  const regenerateInStudio = isManaged && (studioGeneration === 'failed' || studioGeneration === 'partial')
   
   // 状态标准化处理
   const normalizedStatus = project.status === 'error' ? 'failed' : 
@@ -283,6 +286,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                          project.status === 'processing' ? 10 : 0
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false)
   const failedProgress = useSimpleProgressStore((st) => st.getProgress(project.id))
   const failureContext = {
     source: 'failure' as const,
@@ -304,63 +309,51 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const billableRaw = project.processing_config?.billable_calls_before_failure
     ?? project.settings?.billable_calls_before_failure
   const billableCount = Number(billableRaw)
-  const failureCard = presentedFailure({
+  const indexed = project.processing_config || {}
+  const mirrored = project.settings || {}
+  const projectedPreserved = indexed.preserved_result_count ?? mirrored.preserved_result_count
+  // Old rows have no preserved_result_count. Use only the counts already on the
+  // project; do not invent collections or export jobs the index never stored.
+  const preservedCount = typeof projectedPreserved === 'number'
+    ? Math.max(0, projectedPreserved)
+    : countPreservedResults({
+      drafts: Number(indexed.studio_draft_count ?? mirrored.studio_draft_count ?? 0) || 0,
+      completedVariants: Number(indexed.studio_completed_variant_count ?? mirrored.studio_completed_variant_count ?? 0) || 0,
+      clips: Number(project.total_clips || 0) || 0,
+    })
+  const requestCount = Number(indexed.llm_calls ?? mirrored.llm_calls)
+  const asStrings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
+  const failureView = presentFailure({
     error: rawFailure,
     error_code: project.error_code,
     upstream_error_type: upstreamType,
-    failure_stage: failedProgress?.stage || project.processing_config?.failure_stage || project.settings?.failure_stage,
-    phase: project.processing_config?.analysis_phase || project.settings?.analysis_phase,
-    // Same plum as studio FailureActions (#491 tip soft): home must pass billable, not only screenshots.
-    billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
-  }, failureText)
-  const timelineEmpty = classifyTimelineEmpty(failureText || failureCard.reason, project.error_code)
-  const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureCard.reason, project.error_code)
-  const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText || failureCard.reason, project.error_code)
-  const subtitleFailure = timelineEmpty
-    ? null
-    : classifySubtitleFailure(failureText || failureCard.reason, project.error_code)
-  const recoveryAction = failureAction(
-    project.error_code,
-    upstreamType,
-    null,
+    failure_stage: indexed.failure_stage || mirrored.failure_stage,
+    phase: indexed.analysis_phase || mirrored.analysis_phase,
+    preservedCount,
     connectionCount,
-    analysisProvider,
-  )
-  const installTranscription = isTranscriptionInstall(recoveryAction) ? recoveryAction : null
-  const switchModelPrimary = recoveryAction.kind === 'switch_model'
-  const addProviderPrimary = recoveryAction.kind === 'settings' && recoveryAction.reason === ADD_PROVIDER_HINT
-  const rechargePrimary = recoveryAction.kind === 'recharge'
+    llm_calls: Number.isFinite(requestCount) ? requestCount : undefined,
+    billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined,
+    secondary_error_codes: asStrings(indexed.secondary_error_codes ?? mirrored.secondary_error_codes),
+    secondary_upstream_error_types: asStrings(indexed.secondary_upstream_error_types ?? mirrored.secondary_upstream_error_types),
+    secondary_failure_stages: asStrings(indexed.secondary_failure_stages ?? mirrored.secondary_failure_stages),
+  })
+  const weakLocalTimeline = weakLocalTimelineFailure(failureText || failureView.reason, project.error_code)
 
-  const handleRetry = async (opts?: { silent?: boolean; stay?: boolean }) => {
-    if (isRetrying) return
-
+  const studioStatus = indexed.studio_generation_status || mirrored.studio_generation_status
+  const handleRetry = async (opts?: { silent?: boolean }) => {
+    if (retryLock.current) return
+    retryLock.current = true
     setIsRetrying(true)
+    setRetryError('')
     try {
-      // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing。
-      // 弱本地时间线失败留在首页卡上重试，不进详情。
-      if (isManaged && opts?.stay) {
-        await studioApi.retry(project.id)
-      } else if (isManaged) {
-        navigate(regenerateInStudio ? `/project/${project.id}` : `/import/${project.id}`)
-        return
-      } else if (project.status === 'pending') {
-        await projectApi.startProcessing(project.id)
-      } else {
-        await projectApi.retryProcessing(project.id)
-      }
-      // 让父组件统一处理 toast / 刷新。但「静默自动启动」绝不能触发父组件，
-      // 否则会走 handleRetryProject → loadProjects → 列表重挂载 → 再次自动启动
-      // 的死循环。只有用户手动点重试才通知父组件。
-      if (onRetry && !opts?.silent) {
-        onRetry(project.id)
-      }
+      if (isManaged || studioStatus) await studioApi.retry(project.id, { scope: 'project', retry_kind: 'same' })
+      else if (project.status === 'pending') await projectApi.startProcessing(project.id)
+      else await projectApi.retryProcessing(project.id)
+      if (!opts?.silent) await onRetry?.(project.id)
     } catch (error) {
-      console.error('重试失败:', error)
-      // 自动启动（silent）失败不打扰用户；只有用户手动点重试才提示。
-      if (!opts?.silent) {
-        message.error(t("重试失败，请稍后再试"))
-      }
+      if (!opts?.silent) setRetryError(t(errorText(error)))
     } finally {
+      retryLock.current = false
       setIsRetrying(false)
     }
   }
@@ -369,26 +362,36 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const openSwitchDialog = () => {
     if (!onSwitchAndRetry) return
     if (switchOptions && switchOptions.length) { setSwitchOpen(true); return }
-    // Weak-timeline card may only know the recommended display name (no full option list yet).
-    if (replacement?.displayName) {
-      void (async () => {
-        setIsRetrying(true)
-        try { await onSwitchAndRetry(project.id) }
-        finally { setIsRetrying(false) }
-      })()
-      return
-    }
+    // A recommended name is not a selected connection. The user picks one in settings.
     openSettings()
   }
   const confirmSwitch = async (choice: { connectionId: string; model: string }) => {
-    if (isRetrying || !onSwitchAndRetry) return
+    if (retryLock.current || !onSwitchAndRetry) return
+    retryLock.current = true
     setIsRetrying(true)
     try { await onSwitchAndRetry(project.id, choice) }
-    finally { setIsRetrying(false); setSwitchOpen(false) }
+    finally { retryLock.current = false; setIsRetrying(false); setSwitchOpen(false) }
+  }
+
+  const runPrimary = async (action: PrimaryAction) => {
+    if (retryLock.current) return
+    if (action.id === 'view_results') { navigate(`/project/${project.id}`); return }
+    if (action.id === 'settings' || action.id === 'install_transcription' || action.id === 'quota_check') {
+      navigate(action.destination || '/settings?section=analysis')
+      return
+    }
+    if (action.id === 'browser') { navigate(stageBrowserCookieRecovery(project.source_url)); return }
+    if (action.id === 'change_video') { onChangeVideo?.(); return }
+    if (action.id === 'switch_model') { openSwitchDialog(); return }
+    await handleRetry()
   }
 
   const openProject = () => {
-    if (weakLocalTimeline) return
+    if (awaitingConfirmation) {
+      // Studio resolves initial imports vs. remakes from the persisted staging flag.
+      navigate(isManaged ? `/project/${project.id}` : `/import/${project.id}`)
+      return
+    }
     if (!isManaged && project.status === 'pending') {
       message.warning(t("项目正在导入中，请稍后再查看详情"))
       return
@@ -397,39 +400,43 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       message.warning(t("项目处理中，请完成后再查看"))
       return
     }
-    if (awaitingConfirmation) navigate(`/import/${project.id}`)
-    else if (onClick) onClick()
+    if (onClick) onClick()
     else navigate(`/project/${project.id}`)
   }
 
+  const failed = normalizedStatus === 'failed'
+  const primary = weakLocalTimeline && switchOptions?.length && !preservedCount
+    ? { id: 'switch_model', label: '切换并重试' } as const
+    : failureView.primary
+
   return (
     <>
-      <article className={`ac-card ac-project-card${weakLocalTimeline ? ' ac-project-card--weak' : ''}`}>
+      <article className={`ac-card ac-project-card${failed ? ' ac-project-card--failed' : ''}`}>
         <div className="ac-card-thumb" style={{ backgroundImage: videoThumbnail ? `url(${videoThumbnail})` : undefined }}>
-          {weakLocalTimeline ? (
-            <div className="ac-project-open" aria-hidden="true" />
-          ) : (
+          {(!failed || !weakLocalTimeline) && (
             <button type="button" className="ac-project-open" aria-label={project.name} onClick={openProject}>
               {!videoThumbnail && <Icon.Play size={30} />}
               {thumbnailLoading && <span className="ac-project-thumbnail-loading">{t("生成封面中…")}</span>}
             </button>
           )}
           <div className="ac-project-tags">
-            {weakLocalTimeline && <span className="ac-fail-pill"><StatusDot tone="error" label={t("失败")} /></span>}
             {isExample && <span className="ac-tag ac-tag--sans">{t("示例")}</span>}
             {project.video_category && project.video_category !== 'default' && <span className="ac-tag ac-tag--sans">{getCategoryInfo(project.video_category)}</span>}
           </div>
         </div>
         <div className="ac-card-body">
-          {weakLocalTimeline ? (
-            <h3 className="ac-card-title">{project.name}</h3>
+          {failed ? (
+            <div className="ac-failure-heading">
+              <h3 className="ac-card-title" title={project.name}>{project.name}</h3>
+              <StatusDot tone="error" label={t("处理失败")} />
+            </div>
           ) : (
             <button type="button" className="ac-project-title" onClick={openProject} title={project.name}>
               <span className="ac-card-title">{project.name}</span>
             </button>
           )}
-          {!weakLocalTimeline && (awaitingConfirmation ? (
-            <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={() => navigate(`/import/${project.id}`)}>{t("查看建议")}</Btn></div>
+          {normalizedStatus !== 'failed' && (awaitingConfirmation ? (
+            <div className="ac-project-status"><StatusDot tone="muted" label={t("待确认制作类型")} /><Btn size="sm" onClick={openProject}>{t("查看建议")}</Btn></div>
           ) : isManaged && project.status === 'processing' ? (
             <StatusDot tone="accent" label={t("制作中 · 查看进度")} />
           ) : (
@@ -440,59 +447,48 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               {isVisual ? t('成片草稿数量', { count: project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0 }) : <>{t("切片数量", { count: project.total_clips || 0 })}<span> · </span>{t("合集数量", { count: project.total_collections || 0 })}</>}
             </div>
           )}
-          {weakLocalTimeline && (
-            <div className="ac-project-weak">
-              <p className="ac-project-weak-reason">{t("当前本地模型无法返回可用时间线")}</p>
-              {replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
-              <div className="ac-project-weak-actions">
-                {replacement?.displayName ? (
-                  <>
-                    <Btn variant="cta" loading={isRetrying} onClick={openSwitchDialog}>{t("切换并重试")}</Btn>
-                    <Btn variant="text" onClick={openSettings}>{t("其他模型")}</Btn>
-                  </>
-                ) : (
-                  <>
-                    <Btn variant="cta" onClick={openSettings}>{t("去配置模型")}</Btn>
-                    <Btn variant="text" loading={isRetrying} onClick={() => handleRetry({ stay: true })}>{t("重试")}</Btn>
-                  </>
-                )}
-              </div>
+          {failed && (
+            <div className="ac-failure-summary" role="alert">
+              <p className="ac-failure-reason">{t(failureView.brief, failureView.briefValues)}</p>
+              {weakLocalTimeline && replacement?.displayName && <p className="ac-project-weak-suggest">{suggestLine(replacement.displayName)}</p>}
+              {preservedCount > 0 && <p className="ac-failure-outcome">{t(failureView.outcome, { count: preservedCount })}</p>}
             </div>
           )}
-          {!weakLocalTimeline && normalizedStatus === 'failed' && (
-            <div className="ac-empty ac-project-error" role="alert">
-              <span className="ac-mono">{t(failureCard.step)}：{t(failureCard.reason)}</span>
-              {failureCard.billing ? <p className="ac-project-billing">{t(failureCard.billing)}</p> : null}
-            </div>
-          )}
-          {!weakLocalTimeline && normalizedStatus === 'failed' && (
-            <div className="ac-project-recovery">
-              {installTranscription && <Btn variant="cta" size="sm" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
-              {switchModelPrimary && !installTranscription && <Btn variant="cta" size="sm" loading={isRetrying} onClick={openSwitchDialog}>{t(SWITCH_MODEL_LABEL)}</Btn>}
-              {addProviderPrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => navigate(recoveryAction.destination)}>{t(recoveryAction.label || '去设置')}</Btn>}
-              {rechargePrimary && !installTranscription && !switchModelPrimary && <Btn variant="cta" size="sm" onClick={() => {
-                const url = (recoveryAction.destination || '').trim()
-                if (/^https?:\/\//i.test(url)) void openExternalLink(url)
-                else navigate(url || '/settings?section=analysis')
-              }}>{t(recoveryAction.label || '去充值')}</Btn>}
-              {subtitleFailure && !installTranscription && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
-              {llmKeyFailure && !switchModelPrimary && !addProviderPrimary && !rechargePrimary && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
-              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
-              <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
-            </div>
-          )}
+          {retryError && <p className="studio-error" role="alert">{retryError}</p>}
           <div className="ac-card-foot">
-            <time className="meta" dateTime={project.created_at}>{dayjs(project.created_at).fromNow()}</time>
-            <div className="ac-card-actions">
-              {(normalizedStatus === 'processing' || normalizedStatus === 'importing') && !isManaged && <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()} title={t("重新提交任务")}><Icon.Refresh /></Btn>}
-              <Btn variant="danger" size="sm" onClick={() => setDeleteOpen(true)} title={t("删除")} aria-label={t("删除")}><Icon.Trash /></Btn>
-            </div>
+            {failed ? <>
+              <div className="ac-failure-actions" aria-busy={isRetrying}>
+                {primary && <Btn variant="cta" size="sm" loading={isRetrying} onClick={() => runPrimary(primary)}>{t(primary.label)}</Btn>}
+                {primary?.id === 'view_results' && <Btn variant="text" size="sm" disabled={isRetrying} onClick={() => runPrimary(failureView.recovery)}>{t(failureView.recovery.label)}</Btn>}
+                {primary?.id !== 'view_results' && failureView.briefValues && onChangeVideo && <Btn variant="text" size="sm" onClick={onChangeVideo}>{t("换一个视频")}</Btn>}
+              </div>
+              <div className="ac-failure-meta">
+                <time className="meta" dateTime={project.created_at}>{dayjs(project.created_at).fromNow()}</time>
+                <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+                  { key: 'details', label: t('查看详情'), onClick: () => setDiagnoseOpen(true) },
+                  { key: 'diagnostics', label: t('提交诊断'), onClick: () => setDiagnosticsOpen(true) },
+                  { key: 'feedback', label: t('反馈'), onClick: () => setFeedbackOpen(true) },
+                  { type: 'divider' },
+                  { key: 'delete', label: t('删除'), danger: true, onClick: () => setDeleteOpen(true) },
+                ] }}>
+                  <button type="button" className="ac-failure-more" aria-label={t('更多选项')} title={t('更多选项')}>···</button>
+                </Dropdown>
+              </div>
+            </> : <>
+              <time className="meta" dateTime={project.created_at}>{dayjs(project.created_at).fromNow()}</time>
+              <div className="ac-card-actions">
+                {(normalizedStatus === 'processing' || normalizedStatus === 'importing') && !isManaged && <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()} title={t("重新提交任务")}><Icon.Refresh /></Btn>}
+                <Btn variant="danger" size="sm" onClick={() => setDeleteOpen(true)} title={t("删除")} aria-label={t("删除")}><Icon.Trash /></Btn>
+              </div>
+            </>}
           </div>
         </div>
       </article>
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t("确定要删除这个项目吗？")} description={t("删除后无法恢复")}
         footer={<div className="right"><Btn onClick={() => setDeleteOpen(false)}>{t("取消")}</Btn><Btn variant="danger" onClick={() => { setDeleteOpen(false); onDelete(project.id) }}>{t("确定")}</Btn></div>} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+      <DiagnosticsDialog open={diagnosticsOpen} onClose={() => setDiagnosticsOpen(false)} projectId={project.id} />
+      <DiagnosePanel open={diagnoseOpen} onClose={() => setDiagnoseOpen(false)} info={{ error: rawFailure, error_code: project.error_code, upstream_error_type: upstreamType, failure_stage: project.processing_config?.failure_stage || project.settings?.failure_stage, llm_calls: Number.isFinite(requestCount) ? requestCount : undefined, billable_calls_before_failure: Number.isFinite(billableCount) ? billableCount : undefined }} reason={failureView.reason} onSettings={destination => navigate(destination)} />
       <SwitchModelDialog
         open={switchOpen}
         options={switchOptions || []}

@@ -16,9 +16,14 @@ export default function KeepAwakeGuard() {
   return null
 }
 
-/** Hook for Header / status bar indicator. */
+/**
+ * Header pill. True only while some source is still producing and the native
+ * lock is confirmed on. A failed release is unknown: the pill stays off, and
+ * this hook does not report that the machine is still producing or that sleep
+ * is already allowed.
+ */
 export function useKeepAwakeHeld(): boolean {
-  const [held, setHeld] = useState(() => getKeepAwakeController().isHeld())
-  useEffect(() => getKeepAwakeController().subscribe(setHeld), [])
-  return held
+  const [show, setShow] = useState(() => getKeepAwakeController().showsActivityLock())
+  useEffect(() => getKeepAwakeController().subscribe(setShow), [])
+  return show
 }

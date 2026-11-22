@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 /**
  * Default-model purpose slots (U2).
  *
@@ -6,13 +7,15 @@
  * `vision === null` follows analysis and warns when that model has no vision.
  * There is no video purpose slot.
  */
-import { connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
+import { failedCheck, connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
 export { modelHasVision } from './modelSettingsLogic'
+import { listFromOffers } from './customProvider'
 import { enabledModelIds } from './modelVisibility'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
 import { syncFollowingCover } from './modelDefaults'
-import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
+import { analysisCandidates, getProvider } from './providerPresets'
 import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings, ModelSource } from './modelSettingsApi'
+import { isImageModel } from './modelKind'
 
 export type PurposeId = 'analysis' | 'vision' | 'transcription' | 'cover'
 export type SlotKind = 'smart' | 'fixed' | 'local' | 'follow' | 'off' | 'empty'
@@ -29,15 +32,12 @@ export const PURPOSE_IDS = PURPOSE_SLOTS.map(slot => slot.id)
 export const COMING_SOON = ['配音 · 语音合成', '配乐 · 音乐'] as const
 export const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large', 'large-v3'] as const
 const GROUP_RANK: Record<string, number> = { recommended: 0, popular: 1, local: 2, more: 3 }
-const CANDIDATE_KEY: Record<PurposeId, CatalogPurpose> = {
-  analysis: 'analysis', vision: 'vision', transcription: 'asr', cover: 'image',
-}
-
 export type ModelOffer = {
   modelId: string
   provider: string
-  connectionId?: string
+  connectionId: string
   connected: boolean
+  selectable: boolean
   displayName: string
 }
 export type ModelGroup = { modelId: string; offers: ModelOffer[] }
@@ -84,42 +84,37 @@ function addOffer(byId: Record<string, ModelOffer[]>, offer: ModelOffer) {
   byId[offer.modelId] = list
 }
 
-/** Models from connected lists, enriched with other catalog providers that offer the same id. */
+/** Fixed choices need a configured account. Smart routing requires a verified account list. */
 export function collectModelGroups(settings: ModelSettings, lists: Record<string, ModelList>, purpose: PurposeId): ModelGroup[] {
-  const byId: Record<string, ModelOffer[]> = {}
-  const key = CANDIDATE_KEY[purpose]
+  const byId: Record<string, ModelOffer[]> = Object.create(null)
   for (const connection of settings.connections) {
-    if (!endpointProviderReady(connection)) continue
+    if (!connectionReady(connection)) continue
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
     const list = lists[connection.id]
+    const accountList = isAccountList(list)
+    if (preset?.auth === 'api_key' && !connection.has_key && !connection.api_key?.trim()) continue
+    const verified = isValidated(connection) && accountList
     const fitting = (list?.models || []).filter(entry => entryFits(purpose, entry))
-    // Visibility applies to account lists only. Explicit user choice is strict; the recommendation never empties a purpose.
-    const enabled = list && isAccountList(list) ? enabledModelIds(settings, connection, list.models) : null
+    const enabled = accountList && list ? enabledModelIds(settings, connection, list.models) : null
     const picked = enabled ? fitting.filter(entry => enabled.has(entry.id)) : fitting
-    const live = !enabled || Array.isArray(connection.enabled_model_ids) || picked.length ? picked : fitting
-    for (const entry of live) {
-      addOffer(byId, {
-        modelId: entry.id, provider, connectionId: connection.id,
-        connected: isValidated(connection) && isAccountList(list), displayName: displayName(connection),
-      })
+    const visible = !enabled || Array.isArray(connection.enabled_model_ids) || picked.length ? picked : fitting
+    const ids = new Set(accountList ? visible.map(entry => entry.id) : [])
+    // A saved cloud analysis connection can choose a fixed model before its first probe.
+    // Only use curated or explicitly configured IDs when account discovery is unavailable.
+    if (purpose === 'analysis' && !accountList && preset?.group !== 'local') {
+      for (const id of preset?.candidates.analysis || []) ids.add(id)
+      for (const entry of listFromOffers(connection.custom_models || []).models) {
+        if (entryFits(purpose, entry)) ids.add(entry.id)
+      }
+      if (settings.analysis?.connection_id === connection.id && settings.analysis.model) ids.add(settings.analysis.model)
     }
-    // A live/cache list with no suitable model is authoritative: do not invent catalog candidates.
-  }
-  for (const modelId of Object.keys(byId)) {
-    const offers = byId[modelId]
-    for (const preset of Object.values(getCatalog().providers)) {
-      if (!(preset.candidates[key] || []).includes(modelId)) continue
-      if (offers.some(item => item.provider === preset.id)) continue
-      const candidate = findCatalogConnection(settings, preset)
-      if (!preset.base_url && preset.protocol !== 'local' && (!candidate || !endpointProviderReady(candidate))) continue
-      const connection = candidate && connectionReady(candidate) ? candidate : undefined
-      const list = connection && lists[connection.id]
-      if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
+    for (const modelId of ids) {
+      if (Array.isArray(connection.enabled_model_ids) && !connection.enabled_model_ids.includes(modelId)) continue
+      if ((purpose === 'analysis' || purpose === 'vision') && isImageModel(modelId)) continue
       addOffer(byId, {
-        modelId, provider: preset.id, connectionId: connection?.id,
-        connected: isValidated(connection) && isAccountList(list),
-        displayName: preset.short_name || preset.display_name,
+        modelId, provider, connectionId: connection.id, displayName: displayName(connection),
+        connected: verified && !failedCheck(connection, purpose, modelId), selectable: !failedCheck(connection, purpose, modelId),
       })
     }
   }
@@ -159,7 +154,9 @@ function connectionName(settings: ModelSettings, id?: string): string | undefine
 }
 
 export function slotSummary(settings: ModelSettings, _lists: Record<string, ModelList>, purpose: PurposeId): SlotLine {
-  if (purpose === 'cover' && !settings.cover_enabled) return { kind: 'off' }
+  if (purpose === 'cover' && !settings.cover_enabled) {
+    return { kind: settings.prefer_local_cover || settings.cover?.model ? 'off' : 'empty' }
+  }
   if (purpose === 'vision' && !settings.vision) {
     return settings.analysis?.model ? { kind: 'follow', model: settings.analysis.model } : { kind: 'empty' }
   }
@@ -184,12 +181,20 @@ function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: 
   const connection = settings.connections.find(row => row.id === connectionId)
   if (!connection || !endpointProviderReady(connection)) return settings
   if (purpose === 'transcription') {
-    return { ...settings, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
+    return { ...settings, transcription_needs_repair: false, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
   }
   if (purpose === 'cover') {
     // E1: picking a fixed or smart cover model is an explicit provider choice → independent.
     // Only the 「跟随分析」 entry (setCoverSeparate(false)) turns following on.
-    return { ...settings, cover_enabled: true, cover_follows_analysis: false, cover: assignment(connectionId, model, source) }
+    // Selecting an image cover model switches cover design mode to editorial_edit so the chosen model actually runs.
+    return {
+      ...settings,
+      cover_enabled: true,
+      prefer_local_cover: false,
+      cover_follows_analysis: false,
+      cover_design_mode: 'editorial_edit',
+      cover: assignment(connectionId, model, source),
+    }
   }
   const next = { ...settings, [purpose]: assignment(connectionId, model, source) }
   return purpose === 'analysis' ? syncFollowingCover(settings, next) : next
@@ -209,7 +214,7 @@ export function applyVisionFollow(settings: ModelSettings): ModelSettings {
 
 /** Cover off keeps the existing `cover` assignment; only `cover_enabled` flips. */
 export function applyCoverOff(settings: ModelSettings): ModelSettings {
-  return { ...settings, cover_enabled: false }
+  return { ...settings, cover_enabled: false, prefer_local_cover: true }
 }
 
 /** 「改用云端转写」tries configured accounts in this order.
@@ -276,7 +281,8 @@ export function applyCloudTranscription(
     const preset = getProvider(providerId)
     const connection = preset ? findCatalogConnection(settings, preset) : undefined
     if (!preset || !connectionReadyForCloud(connection)) continue
-    const preferred = preset.candidates.asr || []
+    const visible = (id: string) => (!connection.enabled_model_ids || connection.enabled_model_ids.includes(id)) && !failedCheck(connection, 'transcription', id)
+    const preferred = (preset.candidates.asr || []).filter(visible)
     const list = lists[connection.id]
     const status = cloudListStatus(list)
     if (status === 'loading') {
@@ -290,7 +296,7 @@ export function applyCloudTranscription(
       continue
     }
     if (status !== 'ready' || !list) continue
-    const model = preferred.find(id => usableCloudAsr(list, id)) || ''
+    const model = preferred.find(id => usableCloudAsr(list, id)) || list.models.find(entry => visible(entry.id) && usableCloudAsr(list, entry.id))?.id || ''
     if (!model) continue
     return selectedCloud(settings, providerId, preset.short_name || preset.display_name, model, connection.id)
   }
@@ -327,7 +333,7 @@ export function cloudTranscriptionSavePatch(
 export function applyLocalTranscription(
   settings: ModelSettings, provider: 'whisper_local' | 'sensevoice_local', model: string,
 ): ModelSettings {
-  return { ...settings, transcription: { provider, model, model_source: 'user' } }
+  return { ...settings, transcription_needs_repair: false, transcription: { provider, model, model_source: 'user' } }
 }
 
 /** Enums and booleans only — never model ids, keys, URLs, or user content. */
@@ -367,3 +373,45 @@ export function isFixedSelected(settings: ModelSettings, purpose: PurposeId, mod
   const binding = settings[purpose]
   return binding?.model === modelId && binding.connection_id === offer.connectionId && resolvedModelSource(binding) === 'user'
 }
+
+/** Saved analysis (or vision) binding that is an image/T2I id — settings must offer a fix, not silent rebind. */
+export function analysisImageMisconfig(settings: ModelSettings): { model: string; connectionId: string; recommend: string } | null {
+  const binding = settings.analysis
+  if (!binding?.model || !isImageModel(binding.model)) return null
+  const connection = settings.connections.find(item => item.id === binding.connection_id)
+  const recommend = analysisCandidates(connection?.provider || connection?.catalog_provider_id)[0] || ''
+  return { model: binding.model, connectionId: binding.connection_id, recommend }
+}
+
+/** Copy for the analysis-slot image-model error. */
+export function analysisImageMisconfigCopy(model: string, recommend: string): string {
+  if (recommend) {
+    return t('{{model}} 是生图模型，只能用于封面，不能做分析。分析请选 {{recommend}}。', { model, recommend })
+  }
+  return t('{{model}} 是生图模型，只能用于封面，不能做分析。', { model })
+}
+
+/**
+ * Switch analysis off the image id onto the recommended chat model.
+ * If AI covers are on and cover is empty, park the image id on cover (explicit, not silent).
+ */
+export function applyAnalysisImageFix(settings: ModelSettings, fix: { model: string; connectionId: string; recommend: string }): ModelSettings {
+  if (!fix.recommend) return settings
+  const next: ModelSettings = {
+    ...settings,
+    analysis: settings.analysis
+      ? { ...settings.analysis, model: fix.recommend, model_source: 'preset' }
+      : { connection_id: fix.connectionId, model: fix.recommend, capability: 'auto', model_source: 'preset' },
+  }
+  if (next.cover_enabled && !next.cover?.model) {
+    next.cover = {
+      connection_id: fix.connectionId,
+      model: fix.model,
+      capability: 'auto',
+      model_source: 'user',
+    }
+    next.cover_follows_analysis = false
+  }
+  return next
+}
+

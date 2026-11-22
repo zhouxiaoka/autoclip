@@ -204,6 +204,12 @@ class LLMManager:
             except Exception as e:
                 logger.warning(f"加载设置文件失败: {sanitize_exception_text(e)}")
         
+        # The settings editor can migrate inactive, explicitly saved accounts. Do not
+        # turn keys supplied only by the process environment into persisted accounts.
+        self.stored_legacy_providers = tuple(
+            field.removesuffix("_api_key") for field in self._ENV_KEY_FALLBACKS
+            if isinstance(default_settings.get(field), str) and default_settings[field].strip()
+        )
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
@@ -584,7 +590,8 @@ class LLMManager:
         saved = str(info.get("model") or getattr(provider, "model_name", "") or "").strip()
         asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved
         catalog, base, key = self._analysis_endpoint(route)
-        cached = remembered_model(catalog, base, key, asked) if asked else None
+        allow_substitute = route.settings.get("model_source") != "user"
+        cached = remembered_model(catalog, base, key, asked, purpose="analysis") if asked and allow_substitute else None
         if cached:
             override = cached
         sent = cached or asked
@@ -592,6 +599,8 @@ class LLMManager:
             try:
                 response, chosen = self._invoke_text(route, prompt, input_data, override, kwargs)
             except Exception as error:
+                if not allow_substitute:
+                    raise
                 response, chosen = self._retry_missing_text_model(
                     error, route, prompt, input_data, kwargs, asked=asked, sent=sent,
                 )

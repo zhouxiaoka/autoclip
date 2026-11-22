@@ -842,18 +842,21 @@ test('purpose-slot telemetry keeps source enums and drops model ids', () => {
   assert.equal(JSON.stringify(props).includes('secret'),false)
 })
 
-function settingsHook(s, transport, initial) {
+function settingsHook(s, transport, initial, placement = 'home_setup') {
   let cursor=0;const slots=[]
   const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
   const providers={PROVIDERS:{openai:{}},}
   const defaults=loadTs('modelDefaults.ts')
   const access=loadTs('providerAccess.ts',{'../../i18n':{t:x=>x},'./providers':providers,'../../analytics/successRateContract':load('successRateContract')})
   const urls=loadTs('providerUrl.ts')
-  const logic=load('../features/settings/modelSettingsLogic',{'./endpointProvider':loadTs('endpointProvider.ts'),'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls,'./providerPresets':loadTs('providerPresets.ts',{'../../i18n':{t:x=>x}})})
+  const logic=load('../features/settings/modelSettingsLogic',{'./endpointProvider':loadTs('endpointProvider.ts'),'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls,'./providerPresets':loadTs('providerPresets.ts',{'../../i18n':{t:x=>x}}),'./modelKind':loadTs('modelKind.ts')})
   const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x}})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const custom=load('../features/settings/customProvider',{'./providerUrl':urls,'./modelSettingsLogic':logic,'./providerAccess':access},{URL,crypto:{randomUUID:()=>'uuid'}})
   const hook=load('../features/settings/useModelSettings',{
+    './quickConnect': loadTs('quickConnect.ts', { './modelSettingsLogic': logic }),
+    './providerModelSetup': loadTs('providerModelSetup.ts'),
+    './modelVisibility': loadTs('modelVisibility.ts'),
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},'../studio/settingsReturn':{notifySettingsSaved(){}},
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
@@ -863,10 +866,36 @@ function settingsHook(s, transport, initial) {
     './customProvider':custom,
     './keyGuide':loadTs('keyGuide.ts'),
     './keyGuideBus':loadTs('keyGuideBus.ts'),
+    './modelKind':loadTs('modelKind.ts'),
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}, AbortController})
-  return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
+  return ()=>{cursor=0;return hook.useModelSettings(placement)}
 }
 const modelFixture=()=>({version:1,saved:false,connections:[{id:'private-id',provider:'openai',api_key:'sk-secret',has_key:true,base_url:'https://gw.example/v1',name:'acct'}],analysis:{connection_id:'private-id',model:'private-model',capability:'text'},vision:null,cover:null,cover_enabled:false,allow_send_frame:false,analysis_mode:'subtitle',allow_visual_screening:false,transcription:{provider:'whisper_local',model:'base'},chunk_size:2000,min_score_threshold:.7,max_clips_per_collection:5})
+test('saving model selections in Settings never runs inference or requires a cover', async () => {
+  const fixture = require('../../backend/tests/fixtures/dashscope_model_settings.json')
+  const initial = modelFixture()
+  initial.saved = true
+  const account = { ...initial.connections[0], id: 'legacy-analysis', provider: 'dashscope', api_key: null,
+    base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', validation_status: 'unchecked' }
+  initial.connections.push(account)
+  const binding = { connection_id: account.id, model: 'qwen4-max', capability: 'auto', model_source: 'user' }
+  let persisted, probes = 0
+  const render = settingsHook(setup(), {
+    discover: async () => ({ source: 'live', models: fixture.expected }),
+    test: async () => { probes++; return { success: true } },
+    save: async value => { persisted = value; return { ...value, saved: true } },
+  }, initial, 'settings_model')
+  await render().load()
+  for (const model of ['', 'qwen-image-2.1-pro']) {
+    const result = await render().save({ analysis: binding, vision: binding,
+      cover_enabled: true, cover: { ...binding, model },
+      transcription: { ...binding, provider: 'cloud', model: 'qwen-audio-3.1-asr-flash' } })
+    assert.equal(result.ok, true)
+    assert.equal(persisted.cover?.model ?? '', model)
+    assert.equal(persisted.connections[1].validation_status, 'unchecked')
+    assert.equal(probes, 0)
+  }
+})
 test('R6 save persists transient validation without blocking and still blocks invalid keys', async () => {
  for (const [response, expected] of [
   [{success:false, result:'transient', error_type:'timeout'}, 'transient'],
@@ -950,6 +979,8 @@ test('actual fetchList ignores stale completions',async()=>{
  const latest=render()
  const ids=latest.lists[c.id].models.map(model=>model.id)
  assert.equal(ids.join(','),'fresh-id')
+ assert.equal(latest.lists[c.id].models[0].analysis,false)
+ assert.equal(latest.lists[c.id].models[0].kind,'other')
  assert.equal(JSON.stringify(s.events).includes('stale-id'),false)
 })
 
@@ -1040,7 +1071,7 @@ test('framing installation retries use distinct terminal deduplication keys',()=
 test('1.5 API observes cover and retry terminal results across restart without content',async()=>{
  const s=setup()
  const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
- const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{attempt:null,variant:{id:'private-variant',render_job_id:'private-new-render',status:'queued'}} /* #419: the retry command returns {attempt, variant} */,get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
+ const transport={post:async url=>url.endsWith('/cover/regenerate')?{job_id:'private-cover',status:'queued'}:{attempt:null,variant:{id:'private-variant',render_job_id:'private-new-render',status:'queued'}} /* #419: the retry command returns {attempt, variant} */,get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
  const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}},'./subtitleState':load('../features/studio/subtitleState'),'./transcriptionRecovery':load('../features/studio/transcriptionRecovery',{'./recoveryClock':load('../features/studio/recoveryClock')})}).studioApi
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.redesignVariantCover('private-project','private-variant')
@@ -1187,9 +1218,7 @@ test('save skips disabled/local connections and deduplicates shared access check
  },initial)
  await render().load();await Promise.resolve()
  const result=await render().save()
- // F2 post-save analysis trial also probes once; drain it before asserting.
- await Promise.resolve(); await Promise.resolve()
- assert.deepEqual(calls,['private-id','private-id'])
+ assert.deepEqual(calls,['private-id'])
  assert.equal(result.validationFailed,false)
 })
 
@@ -1204,9 +1233,7 @@ test('save rechecks only the changed optional binding on a validated connection'
  await render().load();await Promise.resolve()
  render().update({cover:{...initial.cover,model:'private-new-image'}})
  await render().save()
- // F2 post-save analysis trial probes the analysis binding after the cover recheck.
- await Promise.resolve(); await Promise.resolve()
- assert.deepEqual(calls,[['cover','private-new-image'],['private-id','private-model']])
+ assert.deepEqual(calls,[['cover','private-new-image']])
  assert.equal(render().lists.cover.preview,true,'non-chat ids must not be backfilled as live chat models')
 })
 

@@ -482,11 +482,14 @@ def publish_clip(req: BilibiliPublishRequest, session: requests.Session | None =
     cfg = load_config()
     if not cfg.configured:
         raise BilibiliError("还没有配置 B 站账号")
+    variant_cover = None
     if req.output_variant_id:
+        from backend.services.studio import publish_kit
         from backend.services.studio.publishing import output_variant_meta
         clip = output_variant_meta(req.project_id, req.output_variant_id)
         if clip.get('strategy_id') != 'bilibili':
             raise BilibiliError('请选择 B站横版成片版本后再投稿')
+        variant_cover,_ = publish_kit.cover_file(req.project_id,clip['studio_job_id'],clip['strategy_id'],req.output_variant_id)
         export = {'ok': True, 'path': clip['video_path'], 'preset': clip['strategy_id']}
     else:
         clip = load_clip_meta(req.project_id, req.clip_id)
@@ -513,7 +516,8 @@ def publish_clip(req: BilibiliPublishRequest, session: requests.Session | None =
         dtime=dtime,
         session=session,
         project_id=req.project_id,
-        clip_id=req.clip_id,
+        clip_id=None if req.output_variant_id else req.clip_id,
+        cover_jpeg=variant_cover.read_bytes() if variant_cover else None,
         tags=post.get("tags") or None,
     )
     request_id = str(uuid.uuid4())

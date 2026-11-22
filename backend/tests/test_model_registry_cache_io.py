@@ -167,7 +167,8 @@ def test_real_provider_failure_keeps_existing_fallback_semantics(catalog, status
     assert result['source'] == ('cache' if cached else 'catalog')
     assert result['warning']
     if cached:
-        assert result['models'] == [{'id': 'cached-model'}]
+        assert [row['id'] for row in result['models']] == ['cached-model']
+        assert result['models'][0]['kind'] == 'other' and result['updated_at'] == 1
         assert catalog.cache.read_bytes() == before
     else:
         assert result['preview'] and not catalog.cache.exists()

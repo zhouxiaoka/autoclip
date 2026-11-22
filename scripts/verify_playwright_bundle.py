@@ -25,6 +25,9 @@ def check(python_dir: Path | None) -> list[str]:
     driver = package / "driver"
     if not driver.is_dir() or not any(driver.iterdir()):
         problems.append("playwright driver directory is missing or empty")
+    node_bin = driver / ("node.exe" if sys.platform == "win32" else "node")
+    if not node_bin.is_file():
+        problems.append(f"playwright driver node binary is missing: {node_bin.name} (required by yt-dlp EJS)")
     for root in [package / "driver" / "package" / ".local-browsers", package / ".local-browsers"]:
         if root.is_dir() and any(c.name.startswith(BROWSER_DIR_PREFIXES) for c in root.iterdir()):
             problems.append(f"browser binaries were bundled under {root.name}; the desktop build must not ship browsers")

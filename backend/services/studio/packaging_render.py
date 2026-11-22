@@ -176,7 +176,7 @@ def _nameplate(scene: _Scene, at: float, name: str, role: str, y: int) -> None:
         scene.add(5, at, end, 'PlateRole', slide(y + 66, 80) + _esc(role), carry=False)
 
 
-def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None, *, titles_only: bool = False) -> str:
+def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None, *, titles_only: bool = False, layout: str | None = None) -> str:
     """ASS document for scene `index`; times are relative to that scene's start.
 
     Every caption screen is at most two lines (see caption_layout). Styles only change looks and
@@ -219,8 +219,15 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         if interview:
             caption_style = 'CaptionBox' if style == 'boxed' else 'Caption'
             size = 58 if style == 'boxed' else 62
+            full_bleed = layout == 'crop'
             # Burned captions sit at the bottom of the picture: put ours under the window instead.
-            anchor, y = ('\\an8', WIN_Y + WIN_H + 30) if packaging.burned_captions else ('\\an2', WIN_Y + WIN_H - 22)
+            # On full-bleed 9:16 crop clips, keep captions inside the portrait safe area (y <= 1560).
+            if full_bleed:
+                anchor, y = ('\\an2', 1420)
+                orig_y = 1440
+            else:
+                anchor, y = ('\\an8', WIN_Y + WIN_H + 30) if packaging.burned_captions else ('\\an2', WIN_Y + WIN_H - 22)
+                orig_y = WIN_Y + WIN_H + 34
             for s, e, text, original in timed_screens(spoken, start, end, _limit(size), original_line, _limit(36)):
                 body = _esc_lines(text)
                 if style == 'spotlight':
@@ -230,7 +237,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                     motion = f'\\pos(540,{y})\\fad(60,60)' if style == 'classic' else f'\\pos(540,{y})\\fad(90,90)'
                 add_caption(2, s, e, caption_style, f'{{{anchor}{motion}}}{body}')
                 if original:
-                    add_caption(1, s, e, 'Original', f'{{\\an8\\pos(540,{WIN_Y + WIN_H + 34})\\fad(60,60)}}{_esc_lines(original)}')
+                    add_caption(1, s, e, 'Original', f'{{\\an8\\pos(540,{orig_y})\\fad(60,60)}}{_esc_lines(original)}')
             continue
         highlights = {h.text.lower() for h in packaging.highlights if cue.start <= h.at < cue.end}
         if style == 'boxed' or packaging.audience_language == 'zh':
@@ -269,15 +276,17 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
 
     # Both preserved source captions and our two-line captions use the lower
     # picture. Keep decorations below the caption/original lanes in every
-    # interview; a missed burned-caption detection must not cause an overlap.
-    plate_y = WIN_Y + WIN_H + 370 if interview else 1180
+    # interview window; on full-bleed 9:16 crop clips, keep nameplate/tags inside
+    # the safe zone above the bottom platform UI dead-zone.
+    full_bleed_interview = interview and layout == 'crop'
+    plate_y = 1180 if (not interview or full_bleed_interview) else WIN_Y + WIN_H + 370
     for speaker in packaging.speakers:
         at = to_output(speaker.at, rows)
         if at is not None:
             _nameplate(out, at, speaker.name, speaker.role, plate_y)
 
     if interview and packaging.tags_enabled and style != 'spotlight':
-        tag_y = WIN_Y + WIN_H + 260
+        tag_y = 1280 if full_bleed_interview else WIN_Y + WIN_H + 260
         for tag in packaging.tags:
             at = to_output(tag.at, rows)
             if at is None:

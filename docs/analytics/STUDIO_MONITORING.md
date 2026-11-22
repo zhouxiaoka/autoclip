@@ -20,7 +20,7 @@
 | `studio_import_*` | 导入请求、受理、请求失败；固定来源与是否自带字幕 |
 | `studio_plan_update_*` / `studio_rescreen_*` | 修改方案或重新识别，并替换该项目本地观察记录 |
 | `studio_confirm_*` | 确认制作；记录分析路线、目标布尔值、画幅 |
-| `studio_screen_finished` | 初筛终态；local/ai 为 recommended，manual/fallback 分开；旧 plan 不算正在重试的完成；复用页面快照避免快速确认漏报，旧在途响应不能完成新 attempt |
+| `studio_screen_finished` | 首页重试沿用已确认方案时直接进入制作，只跟踪对应的 production 回执。需要重新初筛时才跟踪初筛终态；local/ai 为 recommended，manual/fallback 分开；旧 plan 不算正在重试的完成；复用页面快照避免快速确认漏报，旧在途响应不能完成新 attempt |
 | `studio_production_finished` | completed/partial/failed，本次 requested/succeeded/failed 目标、结果数量、后端耗时 |
 | `studio_draft_create/save/duplicate_*` | 用户显式编辑动作；不记录按键、字幕、标题或镜头正文 |
 | `studio_rewrite_*` | 改写接口结果和请求耗时；不上传提示词/模型回答 |
@@ -58,7 +58,7 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 
 找不到片源（HTTP 404/410、已删除、或只有 “Video unavailable”）归为 `source_not_found`，同样只记错误码和 `failure_stage=ingest`，不记链接、站点原文或状态码，不发送 Sentry，产品成功率按 error_code 剔除。私密、地区或年龄限制、版权，以及要求登录确认人机但没有落到 HTTP 403/412/429 的，仍是 `source_blocked`，提示换公开视频或在导入时用已登录浏览器的 Cookie。浏览器登录库被占用、读不到 Cookie 时也记 `source_blocked`（不带站点状态码、不上报），界面用「完全退出该浏览器或换一个已登录的浏览器」那句；失败页主按钮回到导入并展开浏览器选择。这不保证网站会放行。
 
-源视频本身走不了字幕路线时，在任何模型调用之前就失败（`backend/pipeline/media_precheck.py`，导入初筛、确认制作、内容管线入口与旧版导入任务共用）：比最短片段（短视频档 20 秒）还短归为 `source_too_short`，没有音轨且没有附带 SRT 归为 `source_no_audio`。能走画面路线时（画面识别已开启且模型支持图片）无声视频仍交给画面初筛，只有初筛仍选字幕路线才失败。两者都是用户素材问题，不是故障：本地失败记录保留错误码与失败阶段，界面显示可翻译的固定文案，**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`；旧版导入任务用 `ImportSourceUnusable`，`before_send` 按 `import_failure=source-input` 丢弃）。转写失败文案不再带内部异常名（如 `IndexError`），异常类型只进本地日志。
+源视频本身走不了字幕路线时，在任何模型调用之前就失败（`backend/pipeline/media_precheck.py`，导入初筛、确认制作、内容管线入口与旧版导入任务共用）：比最短片段（短视频档 10 秒）还短归为 `source_too_short`，没有音轨且没有附带 SRT 归为 `source_no_audio`。能走画面路线时（画面识别已开启且模型支持图片）无声视频仍交给画面初筛，只有初筛仍选字幕路线才失败。两者都是用户素材问题，不是故障：本地失败记录保留错误码与失败阶段，界面显示可翻译的固定文案，**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`；旧版导入任务用 `ImportSourceUnusable`，`before_send` 按 `import_failure=source-input` 丢弃）。转写失败文案不再带内部异常名（如 `IndexError`），异常类型只进本地日志。
 
 进程被结束时还在跑的 Studio 任务（初筛 / 内容制作 / 渲染）不会再继续。启动时（`backend/services/studio/restart_recovery.py`）以及首页列表、打开项目读取 `studio.json` 时，恢复逻辑把这类 generation / analysis 持久化为失败：错误码 `service_restarted`，文案「应用刚重启，这次制作已中断，请重试。」，并同步到项目索引，首页显示失败原因与「重新生成」入口（进入项目，走现有 `/studio/{id}/analyze` 或单条重试）。仍在运行的 CLI / MCP 制作进程（`generation.producer`）不受影响。`service_restarted` 是环境事件，不发送 Sentry（`UNREPORTED_STUDIO_ERROR_CODES`）。
 

@@ -146,18 +146,21 @@ def install(target: Path) -> None:
     if not GUIDE_SRC.is_file():
         fail(f"缺少 {GUIDE_SRC}")
 
+    # 先完成全部检查，再写文件。首页对不上时不能先覆盖已经单独维护的教程页。
+    index_text = patch_index(index.read_text(encoding="utf-8"))
+    sitemap = target / "sitemap.xml"
+    sitemap_text = patch_sitemap(sitemap.read_text(encoding="utf-8")) if sitemap.is_file() else None
+    i18n_test = target / "scripts" / "i18n.test.cjs"
+    i18n_text = patch_i18n_test(i18n_test.read_text(encoding="utf-8")) if i18n_test.is_file() else None
+
     dest = target / "guides" / "publish" / "index.html"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(GUIDE_SRC.read_text(encoding="utf-8"), encoding="utf-8")
-    index.write_text(patch_index(index.read_text(encoding="utf-8")), encoding="utf-8")
-
-    sitemap = target / "sitemap.xml"
-    if sitemap.is_file():
-        sitemap.write_text(patch_sitemap(sitemap.read_text(encoding="utf-8")), encoding="utf-8")
-
-    i18n_test = target / "scripts" / "i18n.test.cjs"
-    if i18n_test.is_file():
-        i18n_test.write_text(patch_i18n_test(i18n_test.read_text(encoding="utf-8")), encoding="utf-8")
+    index.write_text(index_text, encoding="utf-8")
+    if sitemap_text is not None:
+        sitemap.write_text(sitemap_text, encoding="utf-8")
+    if i18n_text is not None:
+        i18n_test.write_text(i18n_text, encoding="utf-8")
 
 
 def main() -> None:

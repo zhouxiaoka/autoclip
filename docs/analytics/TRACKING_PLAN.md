@@ -245,19 +245,19 @@ multiIf(
 
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
-| `setup_presented` | `placement`, `trigger` | 引导实际显示。`placement` 含 `home_setup` 与导入区替换卡 `import_card` |
+| `setup_presented` | `placement`, `trigger` | 首屏点击「剪自己的视频」打开选择器才记录引导曝光。仅看示例走 `example_project_viewed`。`placement` 含 `home_setup` 与导入区替换卡 `import_card` |
 | `setup_action` | `placement`, `action` | `later` / `open_settings` / `one_click` / `connect_recommended`（赞助商一键获取，以及「其他」里连接实测默认服务商，只记 action + provider，不记 URL / key） |
 | `setup_step_done` | `placement`, `step` | 导入区三步卡每步完成。`step` = `provider` / `key` / `connect`。不记密钥和 URL |
 | `import_blocked` | `reason` | 未配置就被导入挡住 |
-| `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；保存成功 ≠ 能调用 |
+| `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；一键配置多个用途只计一次保存，连接探测仍按账号计数 |
 | `provider_connection_test_requested` / `_finished` | `provider`, `outcome`（finished） | 现有连接测试 |
-| `provider_validation_finished` | `provider`, `result` | **线 B 主事件**：保存前真实小请求。`result`=`success`/`failed`/`skipped`；失败带 `upstream_error_type`、`base_url_host` |
+| `provider_validation_finished` | `provider`, `result` | **线 B 主事件**：统计实际发出的验证请求。保存复用匹配结果时不新增事件，样本试跑由用户主动触发。`result`=`success`/`failed`/`skipped`；失败带 `upstream_error_type`、`base_url_host`。1.5s 内完全相同的结果只发一次；保存和连接测试本身不采样 |
 
 ### 5.3 导入
 
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
-| `asr_readiness_checked` | `provider`, `blocked`, `has_subtitle` | 探针与提交都发；`code` 有则带 |
+| `asr_readiness_checked` | `provider`, `blocked`, `has_subtitle` | 桌面界面在 `provider` / `code` / `has_subtitle` / `blocked` 变化时发，同状态的重复探针不发。后端受理导入仍各发一次；`code` 有则带 |
 | `studio_import_requested` | `source_type`, `material_origin` | 用户提交 |
 | `studio_import_accepted` | 同上 | 后端已建项目 |
 | `studio_import_request_failed` | `error_code` | 未建项目 |
@@ -330,8 +330,11 @@ multiIf(
 | `import_blocked` | 未配置服务商就被导入挡住 | `frontend/src/features/studio/CreativeImport.tsx` | `trackExperience('import_blocked', …)` |
 | `settings_section_viewed` | 打开设置分区 | `frontend/src/pages/SettingsPage.tsx` | `trackExperience` |
 | `provider_configuration_save_*` / `provider_connection_test_*` | 设置页保存 / 连接测试 | `frontend/src/analytics/experience.ts` | `beginExperience` |
-| `provider_validation_finished` | 保存前真实小请求终态（线 B 挂钩） | `backend/core/llm_emit.py`（预留） | `emit_provider_validation_finished` |
-| `asr_readiness_checked` | 导入页探针变化；以及后端受理导入/初筛 | 前端 `CreativeImport.tsx` → `studio.ts`；后端 `backend/services/studio/jobs.py` | `trackAsrReadiness` / `emit_asr_readiness_checked`（`inspect_project`） |
+| `provider_validation_finished` | 保存前真实小请求终态（线 B 挂钩）。相同结果 1.5s 内不重复 | `frontend/src/analytics/experience.ts`；后端 `backend/core/llm_emit.py`（预留） | `trackProviderValidation` / `emit_provider_validation_finished` |
+| `asr_readiness_checked` | 导入页探针状态变化；以及后端受理导入/初筛 | 前端 `CreativeImport.tsx` → `studio.ts`；后端 `backend/services/studio/jobs.py` | `trackAsrReadiness` / `emit_asr_readiness_checked`（`inspect_project`） |
+| `model_discovery_*`（`trigger=edit`） | 连接字段真正改动后 1.5s，每个界面最多一对。刚加载的文档再发现一次不算 edit | `frontend/src/features/settings/useModelSettings.ts` → `experience.ts` | `beginDebouncedEditDiscovery` |
+| `model_settings_load_*` | 每个界面、每份已加载文档最多一对。失败仍发 | 同上 | `claimModelSettingsLoad` |
+| `$pageview` | 只在浏览器路由变化时发。Tauri / `tauri.localhost` 不发。自动 pageview 保持关闭 | `frontend/src/analytics/posthog.ts` | `trackPageview` |
 | `studio_import_requested` / `_accepted` / `_request_failed` | 用户提交导入 | `frontend/src/analytics/studio.ts` | `observeStudioOperation('studio_import', …)` |
 | `studio_screen_finished` | 观察器看到初筛终态 | `frontend/src/analytics/workflow.ts` | `WorkflowTracker.observeStudio` |
 | `llm_request_finished`（text） | 每一次 `LLMProvider.call` 返回或抛错 | `backend/core/llm_providers.py` → `llm_emit.py` | `LLMProvider.__init_subclass__` 包装 → `observe_provider_call` → `request_finished` |

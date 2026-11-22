@@ -77,9 +77,25 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
             job['requested_template'] = requested_template
     if _variant_identity is not None:
         job['variant_links'] = [list(_variant_identity)]
+    def same_render(candidate):
+        if candidate.get('status') not in ('queued', 'running') or candidate.get('draft_id') != draft.id:
+            return False
+        if candidate.get('brand_outro', False) != brand_outro:
+            return False
+        for key in ('html_template', 'html_fallback', 'html_safe_area'):
+            if candidate.get(key) != job.get(key):
+                return False
+        previous_request = candidate.get('requested_template') or candidate.get('html_template') or 'classic'
+        if previous_request != job['requested_template']:
+            return False
+        # Read older snapshots with the same optional-field defaults as the incoming draft.
+        try:
+            return Draft.model_validate(candidate.get('snapshot')) == draft
+        except ValueError:
+            return False
+
     def add(data):
-        active = next((j for j in data['jobs'] if j['status'] in ('queued', 'running') and j.get('snapshot') == job['snapshot']
-                       and j.get('brand_outro', False) == brand_outro), None)
+        active = next((candidate for candidate in data['jobs'] if same_render(candidate)), None)
         if active:
             if _variant_identity is not None and list(_variant_identity) not in active.get('variant_links', []):
                 active.setdefault('variant_links', []).append(list(_variant_identity))
@@ -258,6 +274,10 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         _sync_variant_status(project_id, job_id, 'completed')
         _schedule_qa()
     except project_cancellation.JobStopped:
+        if render_saved:
+            with suspend_clip_job_budget():
+                _sync_variant_status(project_id, job_id, 'completed')
+            return
         with project_cancellation.record_stop():
             try:
                 update(status='cancelled', error_code='cancelled', duration_ms=round((monotonic() - started) * 1000))
@@ -386,10 +406,17 @@ def _classify_landed_source(video, options=None):
         raise failure
 
 
+_NON_SPEECH_SUBTITLE_KEYS = frozenset({'danmaku', 'live_chat'})
+
+
 def _platform_subtitle_code(info):
-    """Language-matched manual subtitle code from yt-dlp info (not auto-captions)."""
+    """Language-matched manual subtitle code from yt-dlp info (not auto-captions or danmaku)."""
     language = str((info or {}).get('language') or '').lower()
-    manual = (info or {}).get('subtitles') or {}
+    manual = {
+        c: tracks
+        for c, tracks in ((info or {}).get('subtitles') or {}).items()
+        if str(c).lower() not in _NON_SPEECH_SUBTITLE_KEYS
+    }
     return next(
         (c for c in manual if language and (c.lower() == language or c.lower().split('-')[0] == language)),
         None,
@@ -832,6 +859,76 @@ def _distinct_ranges(picked, bounds):
     return [(picked[i][0], *kept[i]) for i in sorted(kept)]
 
 
+def _drafts_from_content_clips(
+    project_id,
+    clips,
+    prefs,
+    source_duration,
+    window=None,
+    *,
+    origin='auto-content',
+    include_score=True,
+):
+    from backend.utils.text_processor import TextProcessor
+    picked = []
+    for clip in clips or []:
+        if not isinstance(clip, dict):
+            continue
+        try:
+            start = float(clip.get('start_time_seconds')) if clip.get('start_time_seconds') is not None else TextProcessor.time_to_seconds(clip['start_time'])
+            end = float(clip.get('end_time_seconds')) if clip.get('end_time_seconds') is not None else TextProcessor.time_to_seconds(clip['end_time'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        picked.append((clip, start, end))
+    if not picked:
+        return []
+    bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
+    win_start = win_end = None
+    if isinstance(window, dict) and window.get('end') is not None:
+        try:
+            win_start = float(window.get('start', 0) or 0)
+            win_end = float(window['end'])
+            if win_end <= win_start:
+                win_start = win_end = None
+        except (TypeError, ValueError):
+            win_start = win_end = None
+    drafts = []
+    for clip, start, end in _distinct_ranges(picked, bounds):
+        # Transcript timestamps can run past the final video frame. Keep valid content
+        # from that clip, and never let one invalid range discard the whole batch.
+        if source_duration > 0:
+            end = min(end, source_duration)
+        # T2: drop clips that fall entirely outside the requested source_window.
+        if win_start is not None and win_end is not None:
+            if end <= win_start or start >= win_end:
+                continue
+            start = max(start, win_start)
+            end = min(end, win_end)
+            if end <= start:
+                continue
+        try:
+            scene = Scene(
+                id=uuid.uuid4().hex,
+                label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
+                start=start,
+                end=end,
+                evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
+            )
+            if source_duration > 0:
+                intelligence.validate_scenes([scene], source_duration)
+        except (KeyError, TypeError, ValueError):
+            continue
+        row = Draft(
+            id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin=origin,
+            language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
+            subtitles=True,
+        ).model_dump()
+        if include_score:
+            row[SCORE_KEY] = _score(clip)
+        drafts.append(row)
+    return drafts
+
+
 def _content_drafts(project_id, plan, video, platforms=()):
     """Create drafts once from the selected content route, before platform derivation."""
     route = plan.get('recommended_analysis', 'subtitle')
@@ -842,56 +939,16 @@ def _content_drafts(project_id, plan, video, platforms=()):
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
         clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
-        from backend.utils.text_processor import TextProcessor
-        picked = []
-        for clip in clips:
-            try:
-                start = float(clip.get('start_time_seconds')) if clip.get('start_time_seconds') is not None else TextProcessor.time_to_seconds(clip['start_time'])
-                end = float(clip.get('end_time_seconds')) if clip.get('end_time_seconds') is not None else TextProcessor.time_to_seconds(clip['end_time'])
-            except (KeyError, TypeError, ValueError):
-                continue
-            picked.append((clip, start, end))
-        bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
         source_duration = float(intelligence._probe(video).get('duration') or 0)
-        window = (plan.get('overrides') or {}).get('source_window')
-        win_start = win_end = None
-        if isinstance(window, dict) and window.get('end') is not None:
-            try:
-                win_start = float(window.get('start', 0) or 0)
-                win_end = float(window['end'])
-                if win_end <= win_start:
-                    win_start = win_end = None
-            except (TypeError, ValueError):
-                win_start = win_end = None
-        drafts = []
-        for clip, start, end in _distinct_ranges(picked, bounds):
-            # Transcript timestamps can run past the final video frame. Keep valid content
-            # from that clip, and never let one invalid range discard the whole batch.
-            end = min(end, source_duration)
-            # T2: drop clips that fall entirely outside the requested source_window.
-            if win_start is not None and win_end is not None:
-                if end <= win_start or start >= win_end:
-                    continue
-                start = max(start, win_start)
-                end = min(end, win_end)
-                if end <= start:
-                    continue
-            try:
-                scene = Scene(
-                    id=uuid.uuid4().hex,
-                    label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
-                    start=start,
-                    end=end,
-                    evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
-                )
-                intelligence.validate_scenes([scene], source_duration)
-            except (KeyError, TypeError, ValueError):
-                continue
-            drafts.append({**Draft(
-                id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
-                language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
-                subtitles=True,
-            ).model_dump(), SCORE_KEY: _score(clip)})
+        drafts = _drafts_from_content_clips(
+            project_id,
+            clips,
+            prefs,
+            source_duration,
+            window=(plan.get('overrides') or {}).get('source_window'),
+            origin='auto-content',
+            include_score=True,
+        )
         if not drafts:
             raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
         return drafts
@@ -1045,6 +1102,15 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None, cue
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
     nobody to follow, `full_frame_pending` when the detector is not available yet.
     """
+    from backend.core.job_budget import ensure_clip_job_budget, pause_clip_job_budget
+    ensure_clip_job_budget()
+    # Detector installation, frame decoding and face tracking are local work, just like
+    # Whisper and encoding. Preserve the remaining request budget even on fallback.
+    with pause_clip_job_budget():
+        return _local_speaker_framing(value, video, window=window, wait_sec=wait_sec, scans=scans, cues=cues)
+
+
+def _local_speaker_framing(value, video, *, window, wait_sec, scans, cues):
     from backend.services.studio import framing
     deadline = monotonic() + wait_sec
     while not framing.is_installed() and framing.get_status().get('status') == 'installing' and monotonic() < deadline:
@@ -1163,25 +1229,39 @@ def _content_key(value):
 def _posts_for(project_id, items, cache):
     """{(content key, strategy id): post copy}: one model call per clip covering all its platforms, side by side."""
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+    from threading import Lock
     from backend.services.studio import packaging, post_copy
     _packaging_inputs(project_id, cache)
     clips = {}
     for strategy_id, value in items:
         clips.setdefault(_content_key(value), (value, []))[1].append(strategy_id)
+    completed = {}
+    completed_lock = Lock()
 
     def one(entry):
         key, (value, platforms) = entry
         lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
         title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
-        return key, post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        posts = post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        with completed_lock:
+            completed[key] = posts
 
     try:
-        with llm_usage.stage('post_copy'):
-            results = map_chunks(one, clips.items())
+        # Publishing descriptions are optional. A small model can keep streaming
+        # them indefinitely; do not spend the entire generation budget before
+        # any of the already prepared videos can enter rendering.
+        with clip_step_budget(post_copy.POST_COPY_BUDGET_SEC, reserve_seconds=30), llm_usage.stage('post_copy'):
+            map_chunks(one, clips.items(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # parent expiration remains a real job failure
+        logger.warning('Post copy step timed out; keeping completed copy and rendering prepared clips')
+    except (JobStopped, ProjectDeleted, ServiceRestarted):
+        raise
     except Exception as error:  # noqa: BLE001 - copy is never a blocker
         logger.warning('Post copy failed: %s', type(error).__name__)
-        return {}
-    return {(key, platform): post for key, by_platform in results for platform, post in by_platform.items()}
+    return {(key, platform): post for key, by_platform in completed.items() for platform, post in by_platform.items()}
 
 
 def _design_covers(project_id, draft, job_id):
@@ -1189,55 +1269,126 @@ def _design_covers(project_id, draft, job_id):
     from backend.services.studio import publish_kit
     state = store.read(project_id)
     targets = [item for item in state.get('output_variants', []) if item.get('render_job_id') == job_id]
+    if not targets:
+        # Standalone editor exports have no platform variant or publish kit.
+        from backend.services import cover
+        job = next((j for j in state.get('jobs', []) if j['job_id'] == job_id), {})
+        result = job.get('result') or {}
+        if not job or job.get('variant_links'):
+            return
+        platform = 'douyin' if result.get('height', 0) > result.get('width', 0) else 'bilibili'
+        try:
+            clip = publish_kit.clip_id(job_id)
+            if not cover.get_cover(project_id, clip, platform):
+                cover.generate_cover(project_id=project_id, clip_id=clip, platform=platform)
+        except Exception as error:  # The saved video is usable and its cover can be retried.
+            logger.warning('Export cover failed: %s', type(error).__name__)
+        return
     designed = []
     for variant in targets:
         try:
             publish_kit.design_cover(project_id, source(project_id), draft.model_dump() if hasattr(draft, 'model_dump') else draft,
-                                     job_id, variant['strategy_id'], (variant.get('post') or {}).get('title', ''))
+                                     job_id, variant['strategy_id'], (variant.get('post') or {}).get('title', ''), variant_id=variant['id'])
             designed.append(variant['id'])
-        except Exception as error:  # noqa: BLE001 - the video is done; the cover can be redone from the card
-            logger.warning('Cover design failed: %s', type(error).__name__)
+        except Exception as error:  # Use the exported video if the original frame is unavailable.
+            store.raise_owned_read_error(error)
+            try:
+                publish_kit.redesign_local_cover(project_id, job_id, variant['strategy_id'],variant_id=variant['id'])
+                designed.append(variant['id'])
+            except Exception as fallback_error:
+                store.raise_owned_read_error(fallback_error)
+                logger.warning('Cover design failed: %s / %s', type(error).__name__, type(fallback_error).__name__)
     if designed:
         def mark(data):
             for item in data.get('output_variants', []):
-                if item['id'] in designed and item.get('cover') != 'ai':
+                if item['id'] in designed and item.get('render_job_id') == job_id and item.get('cover') != 'ai':
                     item['cover'] = 'design'
         store.change(project_id, mark)
-        for variant in targets:
-            if variant['id'] in designed:
-                request_ai_cover(project_id, variant['id'])
+    for variant in targets:
+        request_ai_cover(project_id, variant['id'], job_id)
 
 
-cover_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='studio-cover')
+# Cap background cover work to 1 worker so PIL/OpenCV jobs do not spike RAM alongside renders on 8GB machines.
+cover_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-cover')
 
 
-def request_ai_cover(project_id, variant_id):
+def request_ai_cover(
+    project_id, variant_id, render_job_id=None, *, allow_local=False, options=None, title=None, allow_reference_once=False
+):
     """Share one tracked AI task between automatic covers and requests from the output card."""
     from backend.services import cover
+
     cfg = cover.load_config()
-    if not (cfg.enabled and cfg.configured and cfg.allow_send_frame):
+    from backend.services import cover_brief as cb
+    from backend.services.studio import publish_kit
+
+    explicit = render_job_id is None and not allow_local
+    if explicit and options is None:
+        options = cb.Options(mode="editorial_edit")
+    mode = options.mode if options else getattr(cfg, "design_mode", "crop_grade_text_only")
+    can_send = cfg.allow_send_frame or bool(allow_reference_once)
+    use_model = mode == "editorial_edit" and cfg.enabled and cfg.configured and can_send
+    if not (use_model or allow_local):
+        logger.info(
+            "AI cover skipped: project=%s variant=%s mode=%s enabled=%s configured=%s allow_send_frame=%s allow_reference_once=%s model=%s",
+            project_id, variant_id, mode, cfg.enabled, cfg.configured, cfg.allow_send_frame, bool(allow_reference_once), getattr(cfg, "model", ""),
+        )
         return None
     job_id = uuid.uuid4().hex
 
     def claim(data):
-        variant = next((item for item in data['output_variants'] if item['id'] == variant_id), None)
+        variant = next((item for item in data["output_variants"] if item["id"] == variant_id), None)
         if variant is None:
-            raise FileNotFoundError('成片版本不存在')
-        active = variant.get('cover_job')
-        if active and active['status'] in ('queued', 'running'):
+            raise FileNotFoundError("成片版本不存在")
+        if render_job_id and variant.get("render_job_id") != render_job_id:
+            return None
+        active = variant.get("cover_job")
+        signature = [title, options.model_dump() if options else None, bool(allow_reference_once)]
+        if (
+            active
+            and active.get("design_request") == signature
+            and active.get("render_job_id", variant.get("render_job_id")) == variant.get("render_job_id")
+            and active["status"] in ("queued", "running")
+        ):
             return active
-        variant['cover_job'] = {'job_id': job_id, 'status': 'queued', 'instance': store.INSTANCE}
-        return variant['cover_job']
+        variant["cover_job"] = {
+            "job_id": job_id,
+            "render_job_id": variant.get("render_job_id"),
+            "status": "queued",
+            "instance": store.INSTANCE,
+        }
+        variant["cover_job"]["reuse"] = bool(render_job_id and not allow_local)
+        variant["cover_job"]["allow_reference_once"] = bool(allow_reference_once)
+        variant["cover_job"]["design_request"] = signature
+        # Legacy records may have no rendered output yet. They have no cover slot to reserve.
+        if variant.get("render_job_id") and variant.get("strategy_id"):
+            slot = publish_kit.cd_meta_path(project_id, variant["render_job_id"], variant["strategy_id"], variant_id)
+            variant["cover_job"]["design_token"] = cb.begin(slot)
+        return variant["cover_job"]
 
     with store.lock:
         claimed = store.change(project_id, claim)
-        if claimed['job_id'] == job_id:
+        if not claimed:
+            return None
+        if claimed["job_id"] == job_id:
             try:
-                cover_executor.submit(_ai_cover_job, project_id, variant_id, job_id, _io_receipt=('cover', variant_id, job_id))
+                mode = "ai" if use_model else "local"
+                cover_executor.submit(
+                    _ai_cover_job,
+                    project_id,
+                    variant_id,
+                    job_id,
+                    mode=mode,
+                    _io_receipt=("cover", variant_id, job_id),
+                )
             except Exception as error:  # noqa: BLE001 - preserve the ready video and designed cover
-                store.remember_submission_rejection(project_id, ('cover', variant_id, job_id), error_code=studio_error_code(error))
-                logger.warning('AI cover dispatch failed: %s', type(error).__name__)
-                _update_cover_job(project_id, variant_id, job_id, status='failed', error='AI 封面任务未能启动，请重试')
+                store.remember_submission_rejection(
+                    project_id, ("cover", variant_id, job_id), error_code=studio_error_code(error)
+                )
+                logger.warning("AI cover dispatch failed: %s", type(error).__name__)
+                _update_cover_job(
+                    project_id, variant_id, job_id, status="failed", error="AI 封面任务未能启动，请重试"
+                )
         return ai_cover_status(project_id, variant_id)
 
 
@@ -1245,34 +1396,76 @@ def ai_cover_status(project_id, variant_id):
     variant = next((item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id), None)
     if variant is None or not variant.get('cover_job'):
         raise FileNotFoundError('封面任务不存在')
-    return {key: value for key, value in variant['cover_job'].items() if key != 'instance'}
+    return {
+        key: value
+        for key, value in variant['cover_job'].items()
+        if key not in ('instance', 'design_request', 'design_token', 'reuse', 'allow_reference_once')
+    }
 
 
-def _update_cover_job(project_id, variant_id, job_id, **values):
+def _update_cover_job(project_id, variant_id, job_id, *, cover_kind='ai', **values):
     def update(data):
         variant = next(item for item in data['output_variants'] if item['id'] == variant_id)
         job = variant.get('cover_job') or {}
         if job.get('job_id') == job_id:
             job.update(values)
-            if values.get('status') == 'completed':
-                variant['cover'] = 'ai'
+            if values.get('status') == 'completed' and job.get('render_job_id', variant.get('render_job_id')) == variant.get('render_job_id'):
+                variant['cover'] = cover_kind
     store.change(project_id, update)
 
 
 @_tracked('ai_cover')
-def _ai_cover_job(project_id, variant_id, job_id):
+def _ai_cover_job(project_id, variant_id, job_id, *, mode="ai"):
     from backend.services.studio import publish_kit
+
+    made = False
+    cover_kind = "ai"
     try:
-        _update_cover_job(project_id, variant_id, job_id, status='running')
-        variant = next(item for item in store.read(project_id).get('output_variants', []) if item['id'] == variant_id)
-        with llm_usage.timed('ai_cover'):
-            made = publish_kit.ai_cover(project_id, variant['render_job_id'], variant['strategy_id'])
+        _update_cover_job(project_id, variant_id, job_id, status="running")
+        variant = next(
+            item for item in store.read(project_id).get("output_variants", []) if item["id"] == variant_id
+        )
+        task = variant.get("cover_job") or {}
+        if task.get("job_id") != job_id:
+            return
+        render_id = task.get("render_job_id", variant.get("render_job_id"))
+        strategy_id = variant.get("strategy_id")
+        if not render_id or not strategy_id or render_id != variant.get("render_job_id"):
+            _update_cover_job(project_id, variant_id, job_id, status="failed", error="成片版本缺少可用的渲染记录")
+            return
+        args = (project_id, render_id, strategy_id)
+        from backend.services import cover_brief as cb
+
+        design_request = task.get("design_request") or (None, None)
+        title, values = design_request[0], design_request[1]
+        params = dict(
+            title=title,
+            variant_id=variant_id,
+            reuse=task.get("reuse", False),
+            options=cb.Options.model_validate(values) if values else None,
+            request_token=task.get("design_token"),
+            allow_reference_once=bool(task.get("allow_reference_once")),
+        )
+        if mode == "ai":
+            with llm_usage.tracking(project_id), llm_usage.timed("ai_cover"):
+                result = publish_kit.ai_cover(*args, **params)
+                made = bool(result)
+                cover_kind = "design" if result in ("local_design", "source_frame") else "ai"
+        else:
+            with llm_usage.tracking(project_id):
+                publish_kit.redesign_local_cover(*args, **params)
+            cover_kind, made = "design", True
     except Exception as error:  # noqa: BLE001 - the designed cover stays
         store.raise_owned_read_error(error)
-        logger.warning('AI cover job failed: %s', type(error).__name__)
+        logger.warning("AI cover job failed: %s", type(error).__name__)
         made = False
-    _update_cover_job(project_id, variant_id, job_id, **({'status': 'completed'} if made else
-                      {'status': 'failed', 'error': 'AI 封面未生成，已保留原封面'}))
+    _update_cover_job(
+        project_id,
+        variant_id,
+        job_id,
+        cover_kind=cover_kind,
+        **({"status": "completed"} if made else {"status": "failed", "error": "AI 封面未生成，已保留原封面"}),
+    )
 
 
 def update_post(project_id, variant_id, post):
@@ -1308,19 +1501,33 @@ def _packaging_inputs(project_id, cache):
 def _prefetch_packaging(project_id, items, burned, cache):
     """Run the packaging model calls of a batch side by side (one per distinct content and template).
 
-    Each call waits ~20 s on the model; done one after another they were ~8 minutes for 25 clips.
+    Keep completed packages when the optional phase expires; remaining drafts use
+    deterministic fallback captions so model formatting cannot block rendering.
     """
     from backend.pipeline.concurrency import map_chunks
+    from backend.core.job_budget import JobDurationExceeded, clip_step_budget, ensure_clip_job_budget
+    from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)  # load shared inputs once, before the threads
     first = {}
     for strategy_id, value in items:
         strategy = _project_strategy(project_id, strategy_id)
         key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
         first.setdefault(key, (strategy_id, value))
-    map_chunks(lambda item: _apply_packaging(project_id, item[1], item[0], burned, cache), first.values())
+    def one(item):
+        ensure_clip_job_budget()
+        return _apply_packaging(project_id, item[1], item[0], burned, cache)
+
+    try:
+        with clip_step_budget(packaging.PACKAGING_BUDGET_SEC, reserve_seconds=30):
+            map_chunks(one, first.values(), stop_on_error=True)
+    except JobDurationExceeded:
+        ensure_clip_job_budget()  # expiration of the whole job is still terminal
+        logger.warning('Packaging step timed out; keeping completed packages and available source captions')
+        for strategy_id, value in first.values():
+            _apply_packaging(project_id, value, strategy_id, burned, cache, allow_model=False)
 
 
-def _apply_packaging(project_id, value, strategy_id, burned, cache):
+def _apply_packaging(project_id, value, strategy_id, burned, cache, *, allow_model=True):
     """Attach template packaging (title, captions, nameplates, tags) for vertical templates.
 
     One model call per scene set and template; every vertical platform of the same audience
@@ -1342,7 +1549,7 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
         with llm_usage.stage('packaging'):
             cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, burned_language=cache.get('burned_language'),
                                                    known_names=cache['names'],
-                                                   avoid_palettes=tuple(used[-2:]))
+                                                   avoid_palettes=tuple(used[-2:]), **({} if allow_model else {'allow_model': False}))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
     return {**value, 'packaging': cache[key]}
@@ -1497,7 +1704,12 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
             if now:
                 with llm_usage.timed('framing'):
-                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache, use_html)
+                    # Rank skips the HTML overlay only. The picture uses the same 9:16
+                    # window as the selected template, not the classic 4:3 interview window.
+                    value, framed = _apply_framing(
+                        project_id, value, strategy_id, video, burned, framing_cache,
+                        use_html or rank_fallback,
+                    )
             planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback, source_id))
     with llm_usage.timed('packaging'):
         _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _, _source in planned if now], burned, packaging_cache)
@@ -1508,6 +1720,13 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
             value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
         layout = 'crop' if use_html and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
+        # Rank skips the overlay. Only the interview window is put back on the 9:16 crop.
+        # Blur stays blur. Burned-in captions stay on the classic fallback. A classic
+        # import never sets rank_fallback, so an explicit interview window stays.
+        if rank_fallback and framed != 'full_frame_captions' and layout == 'window':
+            # When speaker detection ran and confirmed no face track (full_frame), keep full width on
+            # a blurred 9:16 backdrop instead of blindly center-cropping off subjects/slides.
+            layout = 'blur' if framed == 'full_frame' else 'crop'
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(generation))
         derived_drafts.append(draft.model_dump())
         variants.append({
@@ -1929,11 +2148,20 @@ def _produce_on_demand(project_id, variant_id):
         video = source(project_id)
         burned = _source_has_burned_subtitles(project_id, video)
         strategy_id = variant['strategy_id']
-        value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
-        value = _apply_packaging(project_id, value, strategy_id, burned, {})
-        posts = _posts_for(project_id, [(strategy_id, value)], {})
+        from backend.services.platform_strategy import platform_strategy
+        from backend.services.studio.template_choice import selected_template
+        chosen = selected_template(state.get('generation'))
+        portrait_crop = bool(chosen) and platform_strategy(strategy_id).aspect == 'portrait'
+        value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {}, portrait_crop)
+        packaging_cache = {}
+        _prefetch_packaging(project_id, [(strategy_id, value)], burned, packaging_cache)
+        value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+        posts = _posts_for(project_id, [(strategy_id, value)], packaging_cache)
         value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
-        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
+        layout = value.get('layout') if framed else None
+        if portrait_crop and framed != 'full_frame_captions' and layout == 'window':
+            layout = 'blur' if framed == 'full_frame' else 'crop'
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout, output_captions=_snapshotted_captions(state.get('generation'))).model_dump()
 
         def ready(data):
             for index, item in enumerate(data['drafts']):
@@ -2082,6 +2310,20 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             parent = _retry_parent(previous, retry.get('parent_attempt_id'))
         if (previous.get('analysis') or {}).get('status') == 'running':
             raise UserFacingError('当前任务正在运行，请稍后再试')
+        if retry and retry.get('scope') == 'project':
+            analysis = previous.get('analysis') or {}
+            generation = previous.get('generation') or {}
+            plan = previous.get('plan') or {}
+            if (analysis or generation) and analysis.get('status') != 'failed' and generation.get('status') not in ('failed', 'partial'):
+                raise store.ConflictError('只有失败或部分完成的制作可以重试')
+            if (not options.auto_start and not generation.get('auto_start')
+                    and analysis.get('phase') == 'production' and plan.get('confirmed_at')
+                    and plan.get('selected_goals') and plan.get('confirmed_preferences')
+                    and plan.get('confirmed_analysis') in ('subtitle', 'visual')):
+                restore_source = (url, browser, options) if url else None
+                if not restore_source:
+                    _check_production_route(project_id, plan['confirmed_analysis'], plan['selected_goals'])
+                return _dispatch_confirmed_plan(project_id, deepcopy(previous), previous, retry, parent, restore_source)
         state = deepcopy(previous)
         state.setdefault('schema_version', 2)
         from backend.services.output_captions import load_settings as load_output_captions
@@ -2189,6 +2431,9 @@ def _inspect(project_id, options, url, browser):
         def awaiting_confirmation(data):
             from backend.services.studio.failure_identity import SCREENING_KEY, screening_identity
             screening = screening_identity(data.get('analysis'))
+            layouts = _remake_layouts(data)
+            if layouts:
+                plan['remake_layouts'] = layouts
             data.update(plan=plan, analysis={**screening, **({SCREENING_KEY: screening} if screening else {}), 'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
             if data.get('generation'):
                 data['generation']['status'] = 'awaiting_confirmation'
@@ -2218,6 +2463,22 @@ def _inspect(project_id, options, url, browser):
             pass
 
 
+def _check_production_route(project_id, route, goals):
+    if route == 'visual' and goals == ['content']:
+        raise UserFacingError('内容切片当前使用字幕分析，请选择字幕模式后确认')
+    if route == 'visual':
+        from backend.services.studio import intelligence
+        if not intelligence.ready():
+            raise UserFacingError('视觉模型不可用，请配置后重新确认；原素材已保留')
+    if route == 'subtitle' or 'content' in goals:
+        # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
+        # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
+        # prompt (coded 422, waiting codes kept as is), before production spends any model call.
+        from backend.services.studio import preflight
+        video = source(project_id)
+        preflight.check(preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', route='subtitle'))
+
+
 def confirm_project(project_id, body):
     from backend.services.studio import readiness
     readiness.ensure_analysis_usable()
@@ -2227,19 +2488,7 @@ def confirm_project(project_id, body):
         if plan.get('id') != body.plan_id or (state.get('analysis') or {}).get('status') != 'awaiting_confirmation':
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
         route = body.analysis_mode or plan.get('recommended_analysis', 'subtitle')
-        if route == 'visual' and body.goals == ['content']:
-            raise UserFacingError('内容切片当前使用字幕分析，请选择字幕模式后确认')
-        if route == 'visual':
-            from backend.services.studio import intelligence
-            if not intelligence.ready():
-                raise UserFacingError('视觉模型不可用，请配置后重新确认；原素材已保留')
-        if route == 'subtitle' or 'content' in body.goals:
-            # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
-            # The one preflight on the confirmed subtitle route (#418 rewrite): source first, then the install
-            # prompt (coded 422, waiting codes kept as is), before production spends any model call.
-            from backend.services.studio import preflight
-            video = source(project_id)
-            preflight.check(preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', route='subtitle'))
+        _check_production_route(project_id, route, body.goals)
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals
@@ -2255,38 +2504,91 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        from backend.services.studio.failure_identity import phase_identity
-        state['analysis'] = {**phase_identity('production', plan, body.goals), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
-        # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
-        pending = attempts.current(state)
-        if pending and pending['kind'] == 'production' and not pending.get('run_id'):
-            attempts.bind_run(pending, state['analysis']['run_id'])
-        else:
-            pending = attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
-        attempts.bind_plan(pending, plan)  # the confirmed plan is this attempt's own
-        store.write(project_id, state)
-        try:
-            executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
-        except Exception as error:
-            store.remember_submission_rejection(project_id, ('analysis', state['analysis']['run_id'], 'production'), error_code=studio_error_code(error))
-            logger.warning('Studio production dispatch failed: %s', type(error).__name__)
-            capture_studio_exception(error, 'dispatch')
-            # No worker accepted this confirmation. Preserve the exact plan and
-            # staging state so an explicit retry can use the same plan ID.
-            store.write(project_id, previous, restore=True)  # rollback is not a transition
-            raise UserFacingError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+        return _dispatch_confirmed_plan(project_id, state, previous)
 
-        return state['analysis']['run_id']
+
+def _dispatch_confirmed_plan(project_id, state, previous, retry=None, parent=None, restore_source=None):
+    plan = state['plan']
+    from backend.services.studio.failure_identity import phase_identity
+    state['analysis'] = {**phase_identity('production', plan, plan['selected_goals']), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+    if isinstance(state.get('generation'), dict) and not state['generation'].get('auto_start') and state['generation'].get('status') == 'awaiting_confirmation':
+        state['generation']['status'] = 'production'
+    # #419: the production attempt is the backend's. A retry command left an unbound one: bind it, else open one.
+    pending = attempts.current(state)
+    if retry:
+        pending = attempts.open_attempt(state, 'production', trigger='retry', parent=parent,
+                                        run_id=state['analysis']['run_id'], key=retry['key'], now=store.now())
+    elif pending and pending['kind'] == 'production' and not pending.get('run_id'):
+        attempts.bind_run(pending, state['analysis']['run_id'])
+    else:
+        pending = attempts.open_attempt(state, 'production', run_id=state['analysis']['run_id'], now=store.now())
+    attempts.bind_plan(pending, plan)  # the confirmed plan is this attempt's own
+    store.write(project_id, state)
+    try:
+        kwargs = {'restore_source': restore_source} if restore_source else {}
+        executor.submit(_produce_selected, project_id, plan, **kwargs, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
+    except Exception as error:
+        store.remember_submission_rejection(project_id, ('analysis', state['analysis']['run_id'], 'production'), error_code=studio_error_code(error))
+        logger.warning('Studio production dispatch failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'dispatch')
+        # No worker accepted this confirmation. Preserve the exact plan and
+        # staging state so an explicit retry can use the same plan ID.
+        store.write(project_id, previous, restore=True)  # rollback is not a transition
+        raise UserFacingError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+
+    return state['analysis']['run_id']
+
+
+def _untracked_subtitle_crop(draft):
+    return (draft.get('origin') in ('subtitle-highlight', 'subtitle-content') and draft.get('aspect') == 'portrait'
+            and draft.get('layout') == 'crop' and not any(
+                scene.get('crop_track') or scene.get('crop_x') is not None for scene in draft.get('scenes', [])))
+
+
+def _remake_layouts(data):
+    """Freeze the prior manual output's composition for each matching type and aspect."""
+    rounds = {draft_id: n for n, receipt in enumerate(data.get('attempts') or [])
+              if receipt.get('kind') == 'production' for draft_id in receipt.get('draft_ids') or []}
+    choices, priorities = {}, {}
+    for draft in data.get('drafts') or []:
+        if rounds and draft['id'] not in rounds:
+            continue
+        layout = draft.get('layout')
+        if layout not in ('fit', 'crop', 'blur', 'window'):
+            continue
+        edited = (draft.get('revision') or 1) > 1
+        if not edited and _untracked_subtitle_crop(draft):
+            continue
+        key = f"{draft.get('origin')}:{draft.get('aspect')}"
+        # Older releases may already have produced a later, untouched center crop.
+        # Prefer the most recent edited round, then the latest generated round.
+        priority = (edited, rounds.get(draft['id'], 0))
+        if key not in priorities or priority > priorities[key]:
+            priorities[key], choices[key] = priority, set()
+        if priority == priorities[key]:
+            choices[key].add(layout)
+    # Conflicting clip-specific edits cannot establish a project-wide default.
+    return {key: next(iter(layouts)) for key, layouts in choices.items() if len(layouts) == 1}
 
 
 def _add_confirmed_drafts(data, drafts):
-    rows = [{**d, 'updated_at': store.now()} for d in drafts]
+    from backend.services.studio.template_choice import manual_draft_template
+    choice = manual_draft_template(data)
+    rows = [{**d, 'html_template': choice, 'updated_at': store.now()} for d in drafts]
+    layouts = (data.get('plan') or {}).get('remake_layouts') or {}
+    for row in rows:
+        layout = layouts.get(f"{row.get('origin')}:{row.get('aspect')}")
+        if layout:
+            row['layout'] = layout
+        elif _untracked_subtitle_crop(row):
+            # Timing from subtitles carries no evidence about where the speaker is on screen.
+            row['layout'] = 'blur'
     attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
     data['drafts'].extend(rows)
 
 
 @_tracked('production')
-def _produce_selected(project_id, plan):
+def _produce_selected(project_id, plan, *, restore_source=None):
     from backend.core.job_budget import suspend_clip_job_budget
     from backend.services.studio import intelligence
     started = monotonic()
@@ -2306,6 +2608,10 @@ def _produce_selected(project_id, plan):
         store.change(project_id, lambda data:data['analysis'].update(message=message))
     try:
         mark_project(project_id, 'processing', awaiting_confirmation=False, import_staging=False, creative=plan['confirmed_preferences'])
+        if restore_source:
+            with llm_usage.timed('download'):
+                download(project_id, *restore_source)
+            _check_production_route(project_id, plan['confirmed_analysis'], plan['selected_goals'])
         video = source(project_id)
         instruction = plan.get('overrides', {}).get('instruction', '')
         for goal in plan['selected_goals']:
@@ -2321,6 +2627,21 @@ def _produce_selected(project_id, plan):
                         except Exception as error:
                             subtitle_error = error
                             raise
+                    if goal == 'content':
+                        drafts = []
+                        if subtitle_clips:
+                            source_duration = float(intelligence._probe(video).get('duration') or 0)
+                            drafts = _drafts_from_content_clips(
+                                project_id,
+                                subtitle_clips,
+                                prefs,
+                                source_duration,
+                                window=(plan.get('overrides') or {}).get('source_window'),
+                                origin='subtitle-content',
+                                include_score=False,
+                            )
+                            if drafts:
+                                store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                     if goal == 'highlight':
                         from backend.services.studio.subtitle_highlights import make_highlights
                         drafts = make_highlights(subtitle_clips, prefs, intelligence._probe(video).get('duration'))
@@ -2330,7 +2651,7 @@ def _produce_selected(project_id, plan):
                         drafts = make_promos(project_id, subtitle_clips, prefs, intelligence._probe(video).get('duration'), instruction)
                         store.change(project_id, lambda data, drafts=drafts: _add_confirmed_drafts(data, drafts))
                     mark_project(project_id, 'processing')
-                    result_count += len(subtitle_clips) if goal == 'content' else len(drafts)
+                    result_count += len(drafts) if (goal != 'content' or drafts) else len(subtitle_clips)
                     succeeded_goals.append(goal)
                     continue
                 if plan.get('confirmed_analysis', 'subtitle') != 'visual':

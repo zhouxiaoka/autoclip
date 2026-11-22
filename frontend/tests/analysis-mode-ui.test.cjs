@@ -13,7 +13,7 @@ function view(mode,goals,available=true){
  'react/jsx-runtime':{jsx:element,jsxs:element,Fragment:'fragment'},
  '../../ui':{Btn:'button',Dialog:'dialog',Row:'row',Segmented:'segmented',fmtDuration:String},
  './types':{defaultImportOptions:{},goalLabels:{content:'content',highlight:'highlight',promo:'promo'},languages:[]},
- './ImportPreferences':{default:'preferences'},
+ './PlanEditDialog':{default:()=>null},'./ImportPreferences':{default:'preferences'},
  './api':{studioApi:{confirmPlan:async(...args)=>calls.push(args)},errorText:String,errorCode:()=>undefined},
  'react-router-dom':{useNavigate:()=>()=>{}},'../../services/api':{speechApi:{}},
  './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]}
@@ -37,4 +37,44 @@ test('missing capability blocks visual confirmation but subtitle content remains
 test('confirm sends explicit route with selected outputs',async()=>{
  const x=view('visual',['highlight']);await x.render().find(n=>n.props?.children==='确认并开始制作').props.onClick()
  assert.equal(x.calls[0][4],'visual');assert.deepEqual(x.calls[0][2],['highlight'])
+})
+
+test('another version uses confirmed output settings and requires a separate production confirmation', async () => {
+  const React = require('react')
+  const { renderToStaticMarkup } = require('react-dom/server')
+  const calls = []
+  let options, submit, cancel, cancelled = 0, submitted = 0
+  const Dialog = ({ children, footer }) => React.createElement('div', null, children, footer)
+  const Btn = ({ children, onClick }) => {
+    if (children === '生成新方案') submit = onClick
+    if (children === '取消') cancel = onClick
+    return null
+  }
+  const component = load('PlanEditDialog.tsx', {
+    react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-i18next': { useTranslation: () => ({ t: s => s }) },
+    '../../ui': { Dialog, Btn },
+    './ImportPreferences': { default: ({ value }) => { options = value; return null } },
+    './types': { defaultImportOptions: { goal: 'auto', instruction: '' } },
+    './api': { studioApi: { correctPlan: async (id, body) => calls.push({ id, body }) } },
+  }).default
+  const plan = {
+    selected_goals: ['highlight'],
+    overrides: { auto_start: true, goal: 'auto', source_window: { start: 0, end: 90 } },
+    confirmed_preferences: { goal: 'highlight', duration: 18, aspect: 'original', language: 'en' },
+    goal_preferences: { highlight: { aspect: 'portrait' } },
+  }
+  renderToStaticMarkup(React.createElement(component, { projectId: 'p', plan, remake: true,
+    onClose: () => cancelled++, onSubmitted: () => submitted++ }))
+  cancel()
+  assert.equal(cancelled, 1)
+  assert.equal(calls.length, 0)
+  assert.equal(options.duration, 18)
+  assert.equal(options.aspect, 'portrait')
+  await submit()
+  assert.equal(submitted, 1)
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ id: 'p', body: {
+    goal: 'highlight', instruction: '', auto_start: false, source_window: { start: 0, end: 90 },
+    duration: 18, aspect: 'portrait', language: 'en',
+  } }])
 })

@@ -5,6 +5,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
+
+def _without_removed_caption_keys(value, keys: frozenset[str]):
+    """Drop caption-correction fields saved while #598 was on this RC.
+
+    The merge is reverted. These keys are not interpreted and are not written
+    back. Any other unknown key still fails validation.
+    """
+    if isinstance(value, dict) and not keys.isdisjoint(value):
+        return {key: item for key, item in value.items() if key not in keys}
+    return value
+
 Goal = Literal['content', 'highlight', 'promo']
 Language = Literal['source', 'zh', 'en', 'ja']
 
@@ -40,6 +51,11 @@ class Scene(BaseModel):
     # Speaker-following framing: piecewise-constant crop_x over the scene. Empty/None = static crop_x.
     crop_track: list[CropPoint] | None = Field(default=None, max_length=400)
 
+    @model_validator(mode='before')
+    @classmethod
+    def drop_removed_caption_anchor(cls, value):
+        return _without_removed_caption_keys(value, frozenset({'caption_end'}))
+
     @model_validator(mode='after')
     def interval(self):
         if self.end - self.start < .1:
@@ -59,6 +75,11 @@ class PackagingCue(BaseModel):
     original: str = Field(default='', max_length=900)
     emphasis: str = Field(default='', max_length=30)
     speaker: str = Field(default='', max_length=40)
+
+    @model_validator(mode='before')
+    @classmethod
+    def drop_removed_caption_identity(cls, value):
+        return _without_removed_caption_keys(value, frozenset({'source_id', 'source_text', 'manually_edited'}))
 
 
 class PackagingSpeaker(BaseModel):
@@ -111,6 +132,13 @@ class Packaging(BaseModel):
     them and still load, and classic ASS does not paint them.
     """
     model_config = ConfigDict(extra='forbid')
+
+    @model_validator(mode='before')
+    @classmethod
+    def drop_removed_caption_coverage(cls, value):
+        return _without_removed_caption_keys(
+            value, frozenset({'untranslated_cues', 'translation_status', 'translated_rows', 'translation_total_rows'}))
+
     version: Literal[1, 2] = 1
     template: str
     audience_language: Literal['zh', 'en']
@@ -128,6 +156,7 @@ class Packaging(BaseModel):
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
+    fallback_captions: Literal['source', 'translated'] | None = None
     # Visual style inside the classic templates; None = the golden default (classic / pop).
     style: Literal['classic', 'boxed', 'spotlight', 'pop', 'cinematic'] | None = None
     # Content mood chosen by the model; it picks the palette and style (packaging.choose_look).
@@ -170,6 +199,12 @@ class Packaging(BaseModel):
 
 class Draft(BaseModel):
     model_config = ConfigDict(extra='forbid')
+
+    @model_validator(mode='before')
+    @classmethod
+    def drop_removed_ending_review(cls, value):
+        return _without_removed_caption_keys(value, frozenset({'ending_review_required'}))
+
     id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     title: str = Field(min_length=1, max_length=200)
     hook: str = Field(default='', max_length=120)
@@ -192,6 +227,8 @@ class Draft(BaseModel):
     origin: str = 'manual'
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
+    # Frozen import choice for standalone drafts. Platform versions own their render settings.
+    html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
     packaging: Packaging | None = None
     # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
     # an English version of a source with Chinese captions in the picture.

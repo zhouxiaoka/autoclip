@@ -20,6 +20,7 @@ export interface Connection {
   image_base_url: string
   validation_status?: 'ok' | 'failed' | 'unchecked' | 'transient'
   validation_error_type?: string
+  failed_model_checks?: { purpose: 'analysis' | 'vision' | 'transcription' | 'cover'; model: string }[]
   /** 1.5.9 3B: ISO stamp while retry is locked after insufficient_quota. */
   quota_exhausted_at?: string | null
   /** F2 trial-run card state — F5 import area reads the same fields. */
@@ -37,10 +38,12 @@ export interface Connection {
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: Source }
 export interface ModelSettings {
+  revision?: number
   version: 1
   saved?: boolean
+  transcription_needs_repair?: boolean
   migration_warnings?: string[]
-  model_substitutions?: { purpose: string; saved_model: string; replacement: string }[]
+  model_substitutions?: { purpose: string; connection_id?: string; saved_model: string; replacement: string }[]
   catalog_version?: number
   preset_update_available?: boolean
   seen_notices?: string[]
@@ -50,9 +53,11 @@ export interface ModelSettings {
   vision: Assignment | null
   cover: Assignment | null
   transcription?: { provider: 'whisper_local' | 'sensevoice_local' | 'cloud'; model: string; connection_id?: string; capability?: Capability; model_source?: ModelSource } | null
+  prefer_local_cover?: boolean
   cover_enabled: boolean
   /** Explicit "cover follows analysis"; absent only in documents older than the flag. */
   cover_follows_analysis?: boolean | null
+  cover_design_mode?: 'crop_grade_text_only' | 'editorial_edit'
   allow_send_frame: boolean
   analysis_mode: 'auto' | 'subtitle' | 'visual'
   allow_visual_screening: boolean
@@ -60,7 +65,7 @@ export interface ModelSettings {
   min_score_threshold: number
   max_clips_per_collection: number
 }
-export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other'; /** T3: billions of params when known (Ollama show / name inference). */ params_b?: number | null; /** T3: context window tokens when known. */ context_tokens?: number | null }
+export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; manual_roles?: ('analysis' | 'vision' | 'cover')[]; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other'; /** T3: billions of params when known (Ollama show / name inference). */ params_b?: number | null; /** T3: context window tokens when known. */ context_tokens?: number | null }
 export interface ModelList { models: ModelEntry[]; source: 'live' | 'cache' | 'catalog'; preview?: boolean; updated_at: number | null; warning?: string }
 export interface FetchListResult {
   ok?: boolean
@@ -74,9 +79,18 @@ export interface FetchListResult {
   message_key?: string
   base_url_host?: string
 }
+const editableFields = [
+  'connections', 'analysis', 'vision', 'transcription', 'cover', 'cover_enabled', 'cover_follows_analysis',
+  'prefer_local_cover', 'allow_send_frame', 'analysis_mode', 'allow_visual_screening', 'chunk_size',
+  'min_score_threshold', 'max_clips_per_collection', 'seen_notices',
+] as const
+
 export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
-  save: (value: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', value),
+  save: (value: ModelSettings, baseline?: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', {
+    ...value,
+    edited_fields: baseline && editableFields.filter(key => JSON.stringify(value[key]) !== JSON.stringify(baseline[key])),
+  }),
   discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
   test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis', probeKind: 'quick' | 'trial' = 'quick', opts?: { signal?: AbortSignal; language?: 'zh' | 'en' }) =>
     api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose, probe_kind: probeKind, language: opts?.language || 'zh' }, opts?.signal ? { signal: opts.signal } : undefined),

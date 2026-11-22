@@ -144,7 +144,8 @@ test('R24 page: FailureActions uses the page rule', () => {
 
 test('R24 page: StudioResults hands the secondary causes to FailureActions', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.match(src, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\?\.run_id\) \|\| analysisPageFailure\(workspace\.analysis, workspace\.generation\)/)
+  assert.match(src, /receiptFailureInfo\(workspace\.attempts, workspace\.analysis\?\.run_id\)/)
+  assert.match(src, /resolveFailureCause\(\{/)
   const info = fa.analysisPageFailure(record)
   assert.deepEqual(info.secondary_error_codes, ['authentication'])
   assert.deepEqual(info.secondary_upstream_error_types, ['invalid_key'])
@@ -214,7 +215,7 @@ test('X2: FailureAction.kind covers retry | settings | install_asr | switch_mode
   assert.deepEqual([...fa.SWITCHABLE_UPSTREAM].sort(), [
     'bad_endpoint', 'invalid_response', 'model_not_found', 'rate_limited', 'timeout', 'upstream_unavailable',
   ].sort())
-  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['api88', 'apimart', 'infistar'].sort())
+  assert.deepEqual([...fa.SPONSOR_PROVIDERS].sort(), ['apimart'])
 
   assert.equal(fa.failureAction('timeout').kind, 'retry')
 
@@ -233,11 +234,14 @@ test('X2: FailureAction.kind covers retry | settings | install_asr | switch_mode
     assert.equal(fa.failureAction(null, upstream, null, null).kind, 'retry', upstream)
   }
 
-  const recharge = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'api88')
+  const recharge = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'apimart')
   assert.equal(recharge.kind, 'recharge')
-  assert.equal(recharge.provider, 'api88')
-  assert.equal(recharge.label, '去 88API 充值')
+  assert.equal(recharge.provider, 'apimart')
+  assert.equal(recharge.label, '去 APIMart 充值')
   assert.match(recharge.destination, /^https?:\/\//)
+  const ended = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'api88')
+  assert.equal(String(ended.destination || '').includes('apimart'), false)
+  assert.equal(String(ended.label || '').includes('APIMart'), false)
   // non-sponsor quota → 查看余额 (opens keyUrl / docs)
   const quota = fa.failureAction('provider_error', 'insufficient_quota', null, null, 'openai')
   assert.equal(quota.kind, 'recharge')
@@ -254,7 +258,7 @@ test('X2: pageFailureAction uses connection_count and provider', () => {
   }).kind, 'settings')
   assert.equal(fa.pageFailureAction({
     error_code: 'provider_error', upstream_error_type: 'insufficient_quota', provider: 'infistar',
-  }).kind, 'recharge')
+  }).kind, 'settings')
 })
 
 test('X2: FailureActions routes the five kinds', () => {
@@ -333,7 +337,7 @@ test('N3: quota_exhausted_at null unlocks bare retry without returnedFromSetting
   const locked = fa.failurePlan({
     error_code: 'provider_error',
     upstream_error_type: 'insufficient_quota',
-    provider: 'api88',
+    provider: 'apimart',
     quota_exhausted_at: '2026-11-02T12:00:00Z',
   }, true, false)
   assert.ok(locked.buttons.some(b => b.key === 'settings' && b.label === '核对余额并测试连接'))
@@ -342,7 +346,7 @@ test('N3: quota_exhausted_at null unlocks bare retry without returnedFromSetting
   const cleared = fa.failurePlan({
     error_code: 'provider_error',
     upstream_error_type: 'insufficient_quota',
-    provider: 'api88',
+    provider: 'apimart',
     quota_exhausted_at: null,
   }, true, false)
   assert.ok(cleared.buttons.some(b => b.key === 'retry'), 'cleared stamp unlocks retry')
@@ -351,7 +355,7 @@ test('N3: quota_exhausted_at null unlocks bare retry without returnedFromSetting
   const unplumbed = fa.failurePlan({
     error_code: 'provider_error',
     upstream_error_type: 'insufficient_quota',
-    provider: 'api88',
+    provider: 'apimart',
   }, true, false)
   assert.equal(unplumbed.buttons.some(b => b.key === 'retry'), false, 'undefined stamp still locks without returnedFromSettings')
 })
@@ -368,15 +372,18 @@ const { loadTs } = require('./load-ts.cjs')
 const fa = loadTs(path.resolve(__dirname, '../src/features/studio/failureAction.ts'))
 
 test('X3: sponsor insufficient_quota → 去 XX 充值 with topup_url', () => {
-  for (const [id, short] of [['api88', '88API'], ['infistar', 'Infistar'], ['apimart', 'APIMart']]) {
+  for (const [id, short] of [['apimart', 'APIMart']]) {
     const action = fa.failureAction('provider_error', 'insufficient_quota', null, null, id)
     assert.equal(action.kind, 'recharge', id)
     assert.equal(action.label, `去 ${short} 充值`, id)
     const target = fa.rechargeTarget(id)
     assert.equal(target.sponsor, true, id)
     assert.equal(action.destination, target.url, id)
-    assert.ok(target.url.includes(id === 'api88' ? '88api.ai' : id === 'infistar' ? 'infistar' : 'apimart'), id)
+    assert.ok(target.url.includes('apimart'), id)
   }
+  assert.equal(fa.rechargeTarget('api88'), null)
+  const stored = fa.rechargeTarget('infistar')
+  assert.equal(stored, null)
   assert.equal(fa.RECHARGE_HINT, '密钥没问题，是余额不足。充值后点重试即可。')
 })
 
@@ -435,6 +442,56 @@ test('A3-3: insufficient_quota billable=0 / billable=3 copy + verify-balance loc
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     assert.equal(typeof data['核对余额并测试连接'], 'string', lang)
     assert.equal(typeof data['这次制作没有向服务商发出计费请求。'], 'string', lang)
+  }
+})
+
+test('ingest connection copy is the download sentence, not the model sentence or a login CTA', () => {
+  const model = '无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。'
+  const card = fa.presentedFailure({
+    error: model,
+    error_code: 'connection',
+    failure_stage: 'ingest',
+  }, model)
+  assert.equal(card.step, '下载')
+  assert.equal(card.reason, '下载视频时网络超时或中断。请检查网络后重试，或换一个视频链接。')
+  assert.equal(card.reason.includes('模型'), false)
+  assert.equal(fa.failureAction('connection', null, 'ingest').kind, 'retry')
+  assert.equal(fa.suggestedAction('connection', null, 'ingest').id, 'change_material')
+  assert.equal(fa.suggestedAction('connection', null, 'analyze').id, 'switch_model')
+  const analyze = fa.presentedFailure({
+    error: model,
+    error_code: 'connection',
+    failure_stage: 'analyze',
+  }, model)
+  assert.equal(analyze.reason, model)
+  assert.equal(analyze.step, '分析')
+  const deleted = fa.presentedFailure({
+    error: '找不到这个视频，它可能已被删除或链接不正确。请核对链接，或换一个视频后重试。',
+    error_code: 'source_not_found',
+    failure_stage: 'ingest',
+  })
+  assert.equal(deleted.reason.includes('超时'), false)
+  assert.equal(fa.pageFailureText({
+    error: model,
+    error_code: 'connection',
+    failure_stage: 'download',
+  }), card.reason)
+  const importSrc = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/ImportReview.tsx'), 'utf8')
+  assert.match(importSrc, /downloadConnectionFailure\(workspace\.analysis\)/)
+  assert.doesNotMatch(importSrc, /llmFailure/)
+  assert.doesNotMatch(importSrc, /upstream_error_type/)
+  assert.doesNotMatch(importSrc, /failure_stage/)
+  assert.match(importSrc, /选择已登录的浏览器/)
+  const projectPage = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
+  const presentation = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/failurePresentation.ts'), 'utf8')
+  assert.match(presentation, /failure_stage === 'ingest' \|\| input\.failure_stage === 'download'/)
+  assert.doesNotMatch(presentation, /模型设置/)
+  for (const lang of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
+    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
+    const text = data[card.reason]
+    assert.equal(typeof text, 'string', lang)
+    assert.equal(text.includes('模型'), false, lang)
+    assert.notEqual(text, data[model])
   }
 })
 

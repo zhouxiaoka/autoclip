@@ -51,6 +51,12 @@ FAILURE_STAGES: frozenset[str] = frozenset({
     "other",
 })
 
+# Request steps keep their own names; run failure stages retain their coarse contract.
+LLM_REQUEST_STAGES: frozenset[str] = FAILURE_STAGES | frozenset({
+    "clip_finder", "boundaries", "packaging", "post_copy", "burned_captions",
+    "cover_frame", "cover_check",
+})
+
 # run 级（generation / production 终态 + Sentry tag）
 RUN_LEVEL_FIELDS: frozenset[str] = frozenset({
     "provider", "config_source", "model", "base_url_host", "http_status", "upstream_error_type",
@@ -179,7 +185,9 @@ class _LogSafeLLMError(AttributedError, RuntimeError):
 
 
 def log_safe_exception(error: Exception) -> Exception:
-    if isinstance(error, _LogSafeLLMError) or type(error).__name__ == "JobDurationExceeded":
+    from backend.core.job_budget import JobDurationExceeded
+    from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+    if isinstance(error, (_LogSafeLLMError, JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted)):
         return error
     from backend.core.llm_retry import retry_after_from_error
     from backend.core.upstream_errors import classify_exception, http_error_parts
@@ -287,7 +295,7 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
         out["upstream_error_type"] = error_type
     if kind == "request":
         _put_enum(out, raw, "kind", REQUEST_KINDS)
-        _put_enum(out, raw, "stage", FAILURE_STAGES)
+        _put_enum(out, raw, "stage", LLM_REQUEST_STAGES)
         _put_enum(out, raw, "outcome", REQUEST_OUTCOMES)
         _put_enum(out, raw, "finish_reason", FINISH_REASONS)
         _put_http_status(out, raw.get("http_status"), minimum=100)

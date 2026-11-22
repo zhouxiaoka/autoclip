@@ -538,7 +538,7 @@ class SpeechRecognizer:
                 str(audio_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=300)
             
             if result.returncode != 0:
                 raise SpeechRecognitionError(f"音频提取失败: {result.stderr}")
@@ -660,6 +660,9 @@ class SpeechRecognizer:
                                        config: SpeechRecognitionConfig) -> Path:
         """使用本地 faster-whisper 生成字幕（桌面按需安装的运行时）。"""
         from backend.services import whisper_runtime
+        from backend.core.job_budget import JobDurationExceeded
+        from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+        stop_errors = (JobStopped, ProjectDeleted, ServiceRestarted, JobDurationExceeded)
 
         if not whisper_runtime.is_installed():
             raise SpeechRecognitionError(
@@ -701,6 +704,8 @@ class SpeechRecognizer:
                     from backend.core.job_budget import pause_clip_job_budget
                     with pause_clip_job_budget():
                         cached_model = manager.ensure_downloaded(config.model)
+                except stop_errors:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     # 每个下载源的失败原因只进日志；界面文案不带异常名和原文（RC156 #11）。
                     logger.warning("Whisper 模型 %s 下载失败: %s: %s", config.model, type(exc).__name__, exc)
@@ -798,6 +803,8 @@ class SpeechRecognizer:
             def transcribe_with_vad_fallback(model):
                 try:
                     return transcribe(model, vad_filter=True)
+                except stop_errors:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     if not vad_backend_failed(exc):
                         raise
@@ -809,6 +816,8 @@ class SpeechRecognizer:
 
             try:
                 model = load_model(device, compute_type)
+            except stop_errors:
+                raise
             except Exception as exc:  # noqa: BLE001
                 if device == "cpu":
                     raise
@@ -820,6 +829,8 @@ class SpeechRecognizer:
                 from backend.core.job_budget import pause_clip_job_budget
                 with pause_clip_job_budget():
                     segments, _info = transcribe_with_vad_fallback(model)
+            except stop_errors:
+                raise
             except RuntimeError as exc:
                 if device == "cpu":
                     raise
@@ -850,16 +861,13 @@ class SpeechRecognizer:
             logger.info(f"本地 faster-whisper 字幕生成成功: {output_path}")
             return output_path
 
-        except SpeechRecognitionError:
+        except (SpeechRecognitionError, *stop_errors):
             raise
         except ModuleNotFoundError as e:
             raise SpeechRecognitionError(
                 f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 默认模型 → 语音转字幕」重新安装 Whisper。"
             )
         except Exception as e:  # noqa: BLE001
-            from backend.core.project_cancellation import ProjectDeleted
-            if isinstance(e, ProjectDeleted):
-                raise
             # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。
             # 这里已经变成给客户端的 SpeechRecognitionError，进程继续跑。
             logger.warning("本地 faster-whisper 生成字幕失败: %s: %s", type(e).__name__, e)
@@ -1113,11 +1121,21 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         raise SpeechRecognitionError(NO_AUDIO_MESSAGE)
     # 创建配置。本地导入会带上设置里的时间戳 / 超时 / 密钥；缺了这些参数会在进 Whisper 之前 TypeError。
     from backend.services.ai_model_settings import load as load_model_settings
+    from backend.services.cloud_transcription import clear_asr_info, record_asr_info
+    clear_asr_info()
     model_settings = load_model_settings()
     selection = model_settings.transcription if model_settings else None
     if method == 'sensevoice_local' or method == 'auto' and selection and selection.provider == 'sensevoice_local':
+        from backend.core import llm_usage
         from backend.services.sensevoice_runtime import transcribe
-        return transcribe(Path(video_path), output_path, language, timeout)
+        started = time.monotonic()
+        logger.info('Local ASR started: provider=sensevoice_local model=SenseVoiceSmall language=%s', language)
+        result = transcribe(Path(video_path), output_path, language, timeout)
+        elapsed = round(time.monotonic() - started, 2)
+        record_asr_info(asr_provider='sensevoice_local', asr_model='SenseVoiceSmall', asr_route='local')
+        llm_usage.record_asr('sensevoice_local', 'SenseVoiceSmall', route='local', seconds=elapsed)
+        logger.info('Local ASR completed: provider=sensevoice_local model=SenseVoiceSmall seconds=%.2f', elapsed)
+        return result
     if method == 'auto' and selection and selection.provider == 'cloud':
         from backend.services.cloud_transcription import transcribe
         return transcribe(Path(video_path), output_path, model_settings, language, timeout)
@@ -1163,7 +1181,15 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         else:
             raise SpeechRecognitionError("没有可用的语音识别服务，请安装whisper或配置API密钥")
     
-    return recognizer.generate_subtitle(video_path, output_path, config)
+    from backend.core import llm_usage
+    started = time.monotonic()
+    logger.info('Local ASR started: provider=%s model=%s language=%s', config.method.value, config.model, language)
+    result = recognizer.generate_subtitle(video_path, output_path, config)
+    elapsed = round(time.monotonic() - started, 2)
+    record_asr_info(asr_provider=config.method.value, asr_model=str(config.model or ''), asr_route='local')
+    llm_usage.record_asr(config.method.value, str(config.model or ''), route='local', seconds=elapsed)
+    logger.info('Local ASR completed: provider=%s model=%s seconds=%.2f', config.method.value, config.model, elapsed)
+    return result
 
 
 def get_available_speech_recognition_methods() -> Dict[str, bool]:

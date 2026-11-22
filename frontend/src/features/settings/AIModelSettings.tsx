@@ -4,24 +4,32 @@ import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, StatusDot } from '../../ui'
 import api, { speechApi } from '../../services/api'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { mainConnection, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import { mainConnection, failedSelection, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import TrialRunPanel from './TrialRunPanel'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
+import { isImageModel } from './modelKind'
 import ProviderCatalog from './ProviderCatalog'
 import ProviderDetail from './ProviderDetail'
 import {
   catalogPreset, customConnectionId, sensevoiceAsrReady, whisperAsrReady,
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
+import ModelSettingsLeaveGuard from './ModelSettingsLeaveGuard'
 import DefaultModels from './DefaultModels'
 import {
+  analysisImageMisconfig, analysisImageMisconfigCopy, applyAnalysisImageFix,
   applyRequestedCloudTranscription, cloudTranscriptionDiscoverTargets, cloudTranscriptionSavePatch,
   cloudTranscriptionWaitExpired, CLOUD_TRANSCRIPTION_WAIT_MS,
 } from './defaultModelSlots'
+import { toConnection } from './customProvider'
 import AddCustomProviderDialog from './AddCustomProviderDialog'
 import { requestClipboardScan, takePendingSelect } from './keyGuideBus'
+import { PROVIDERS } from './providers'
+import { enabledUsageNotices } from './sponsorPromo'
+import { useSponsorPromo } from './sponsorPromoWatch'
+import type { UsageSlot } from './sponsorPromo'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
   const [ready, setReady] = useState<LocalAsrReady>({})
@@ -76,6 +84,8 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
         onChoose={p => m.chooseProvider('analysis', p)}
         onEdit={patch => m.editConnection(connection, patch)}
       />
+      <p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
+      <Btn variant="cta" size="sm" onClick={() => void m.configureProvider(connection)}>{t('一键配置模型')}</Btn>
       {isAnalysis && settings.analysis
         ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
             <ModelPicker
@@ -87,6 +97,7 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
               busy={!!busy[connection.id]}
               listError={listErrors[connection.id]}
               mode={settings.analysis_mode}
+              invalid={isImageModel(settings.analysis.model)}
               onChange={value => m.update({ analysis: { connection_id: connection.id, model: value, capability: 'auto', model_source: 'user' } })}
               onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
               onRefresh={() => void m.discover(connection, true)}
@@ -100,6 +111,21 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
                 </span>
               )}
             />
+            <p className="ac-note">{t('settings.providers.test_cost')}</p>
+            {(() => {
+              const fix = analysisImageMisconfig(settings)
+              if (!fix) return null
+              return (
+                <div className="ac-note ac-note--error" role="alert" data-testid="analysis-image-misconfig">
+                  <p>{analysisImageMisconfigCopy(fix.model, fix.recommend)}</p>
+                  {fix.recommend && (
+                    <Btn variant="text" size="sm" data-testid="analysis-image-fix" onClick={() => m.update(applyAnalysisImageFix(settings, fix))}>
+                      {t('改用 {{recommend}}', { recommend: fix.recommend })}
+                    </Btn>
+                  )}
+                </div>
+              )
+            })()}
             {m.testWarning?.id === connection.id && (
               <p className="ac-note" role="status">{m.testWarning.text}</p>
             )}
@@ -112,9 +138,11 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
   )
 }
 
-export default function AIModelSettings({ requestedSection, requestedProvider = '' }: { requestedSection: string; requestedProvider?: string }) {
-  useTranslation()
-  const m = useModelSettings()
+export default function AIModelSettings({ requestedSection, requestedProvider = '', returnToImport = false }: { requestedSection: string; requestedProvider?: string; returnToImport?: boolean }) {
+  const translation = useTranslation() as { i18n?: { language?: string } }
+  const promo = useSponsorPromo()
+  const language = (translation?.i18n?.language || 'zh').toLowerCase().split('-')[0]
+  const m = useModelSettings('settings_model', returnToImport && requestedProvider === 'cloud')
   const { settings } = m
   const asrReady = useLocalAsrReady(settings)
   const [query, setQuery] = useState('')
@@ -191,25 +219,50 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
     const patch = cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)
+    if (returnToImport && requestedProvider === 'cloud' && !patch?.transcription && settings.transcription?.provider !== 'cloud') return false
     const result = await m.save(patch)
     if (result.ok && !result.validationFailed && patch?.transcription?.provider === 'cloud' && patch.transcription.model) {
       cloudPending.current = false
       const chosen = applyRequestedCloudTranscription('cloud', { ...settings, ...patch }, m.lists)
       if (chosen.kind === 'selected') setCloudNote({ provider: chosen.providerLabel, model: chosen.model })
     }
-    if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    if (result.issue) {
+      const slot = document.getElementById(issueAnchor(result.issue))
+      slot?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
     else if (result.validationFailed) document.getElementById('ai-defaults')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    return result.ok
   }
+  const needsCloudModel = returnToImport && requestedProvider === 'cloud' && settings.transcription?.provider !== 'cloud'
+    && !cloudTranscriptionSavePatch(cloudPending.current, settings, m.lists)?.transcription
+  const providerOf = (id?: string) => settings.connections.find(item => item.id === id)?.provider
+  const usageSlots: UsageSlot[] = [
+    { provider: providerOf(settings.analysis?.connection_id), label: 'analysis' },
+    { provider: providerOf(settings.vision?.connection_id), label: 'vision' },
+    { provider: settings.cover_enabled ? providerOf(settings.cover?.connection_id) : undefined, label: 'cover' },
+    { provider: settings.transcription?.provider === 'cloud' ? providerOf(settings.transcription.connection_id) : undefined, label: 'transcription' },
+  ]
+  const usageNotices = enabledUsageNotices(usageSlots, promo, language)
   const visionFailed = visionFollowLacksCapability(settings, m.lists)
-  const failed = validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') || visionFailed
+  const invalid = failedSelection(settings)
+  const failed = !!invalid || visionFailed
+  const failureHint = invalid?.account ? t('模型连接未通过校验。请到「设置 → 服务商与模型」按提示改密钥或地址后再生成。')
+    : invalid ? t('型号 {{model}} 未通过校验，请更换型号或重新测试。', { model: invalid.model }) : t(VISION_HINT_KEY)
   return <div className="ac-ai-settings" data-layout="v6">
+    <ModelSettingsLeaveGuard dirty={m.dirtyRef} saving={m.saving} onSave={save} />
+    {usageNotices.map(notice => {
+      const usageKey = notice.label === 'vision' ? '画面理解' : notice.label === 'cover' ? '封面' : notice.label === 'transcription' ? '转写' : '分析'
+      const who = PROVIDERS[notice.provider as keyof typeof PROVIDERS]?.short || notice.provider
+      const body = notice.text || t(notice.status === 'out_of_service' ? '该服务商当前暂停服务。已保存的接口和密钥保持不变。' : '该服务商当前不稳定。已保存的接口和密钥保持不变。')
+      return <p key={`${notice.provider}:${notice.label}`} className="ac-note" role="status" data-provider-service-notice={notice.status} data-usage-label={notice.label}>{t(usageKey)} · {who}：{body}</p>
+    })}
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.includes('purpose_reset_to_recommended') && <p role="alert" className="ac-note">{t('部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。')}</p>}
     {settings.migration_warnings?.includes('preset_catalog_updated') && <p role="alert" className="ac-note">{t('服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving || m.testing}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
-        : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
+        : selected ? <ProviderDetail key={selected.id} preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <header className="ac-settings-ai-head">
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
           <Btn variant="text" size="sm" onClick={() => requestClipboardScan()}>{t('settings.key_guide.detect')}</Btn>
@@ -245,19 +298,31 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
         </details>
       </>}
     </fieldset>
-    {settings.analysis && settings.model_substitutions?.filter(item => item.purpose === 'analysis' && item.saved_model === settings.analysis?.model).map(item => (
-      <p className="ac-note" role="status" key={item.replacement}>
-        {t('分析模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。', { saved: item.saved_model, replacement: item.replacement })}
+    {settings.model_substitutions?.map(item => {
+      const role = item.purpose === 'vision' ? 'vision' : 'analysis'
+      const binding = role === 'vision' ? settings.vision || settings.analysis : settings.analysis
+      if (binding?.model_source !== 'preset' || binding.model !== item.saved_model || (item.connection_id && binding.connection_id !== item.connection_id)) return null
+      return <p className="ac-note" role="status" key={role}>
+        {t(role === 'vision' ? '视觉模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。' : '分析模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。', { saved: item.saved_model, replacement: item.replacement })}
         {' '}
-        <Btn variant="text" size="sm" disabled={m.saving} onClick={() => void m.save({ analysis: { ...settings.analysis!, model: item.replacement } })}>{t('保存这个模型')}</Btn>
+        <Btn variant="text" size="sm" disabled={m.saving} onClick={() => void m.save({ [role]: { ...binding, model: item.replacement, model_source: 'user' } })}>{t('保存这个模型')}</Btn>
       </p>
-    ))}
+    })}
+    {needsCloudModel && <p className="ac-note">{t('连接支持语音识别的服务商后，即可继续导入。')}</p>}
+    {!m.error && failed && <p role="alert" className="studio-error">{failureHint}</p>}
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
+    {m.conflicted && <Btn size="sm" onClick={() => void m.load()}>{t('放弃本页更改并重新载入')}</Btn>}
     <div className="ac-savebar">
-      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
-      <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing} loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
+      <StatusDot tone={m.dirty ? 'muted' : failed ? 'error' : 'ok'} label={m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
+      <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing || needsCloudModel} loading={m.saving} onClick={() => void save()}>{returnToImport ? t('保存并继续导入') : t('保存设置')}</Btn>
     </div>
     <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}
+      onAuto={async draft => {
+        const connection = toConnection(draft)
+        const result = await m.configureProvider(connection, { ...settings, connections: [...settings.connections, connection] })
+        if (result.ok) setCustomOpen(false)
+        return result
+      }}
       onSubmit={draft => { m.addCustomProvider(draft); setCustomOpen(false) }} />
   </div>
 }

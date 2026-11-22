@@ -1,46 +1,51 @@
-# 官网（autoclip_intro）随发版自动更新
+# 官网（autoclip_intro）随正式版自动更新
 
-官网是 GitHub Pages 上的单文件 `index.html`，版本号、下载链接、安装包体积硬编码在十来处（四语各一份）。
-以前发版后要手改三处；现在链路是：
+官网仓库是 [zhouxiaoka/autoclip_intro](https://github.com/zhouxiaoka/autoclip_intro)，GitHub Pages 发布在 <https://zhouxiaoka.github.io/autoclip_intro/>。页面不在本仓库。这里保存同步脚本，避免本仓库的旧副本以后覆盖官网。
 
 ```
-git tag vX.Y.0 ─▶ desktop-build.yml ─▶ Pre-release 出包（官网不动）
-                                   … 真机冒烟 + 观察期 …
-promote-release.yml(promote) ─▶ 转正为 latest
+git tag vX.Y.Z ─▶ desktop-build.yml ─▶ Pre-release（官网不动）
+                              … 真机冒烟 + 观察期 …
+promote-release.yml promote ─▶ 转正为 GitHub Latest
                         │
-                        └─▶ repository_dispatch(autoclip-release, {tag}) ─▶ autoclip_intro/sync-release.yml
-                                                                               │  python scripts/sync_release.py vX.Y.0
-                                                                               │  （读 GitHub Release API，改 index.html）
-                                                                               └▶ 提交到 main ─▶ Pages 约 1 分钟生效
+                        └─▶ repository_dispatch(autoclip-release, {tag})
+                                      │
+                                      ▼
+                         autoclip_intro/sync-release.yml
+                           读 Release API，拒绝 draft / prerelease
+                           写入 data/release.json 和当前版本槽位
+                           提交 main，再请求 Pages 构建
 ```
 
-兜底：官网 workflow 每天 03:17 UTC 也会拉一次 latest release，所以即使主仓库没配 token，官网最多落后一天。
+halt 时通知使用 fallback 正式版。没配 `WEBSITE_DISPATCH_TOKEN` 时跳过通知，不影响转正；官网每天 03:17 UTC 读取 GitHub Latest。API 失败、预发布或缺少 macOS / Windows 安装包时，官网脚本失败且不提交，页面保持上一份正式版。
 
-## 一次性安装（官网仓库那边）
+手动更正：在官网 Actions 里运行 Sync release info，tag 留空取 Latest，或填写一个已经转正的 tag。
 
-主仓库的 token 没有官网仓库的写权限，所以文件放在这里，由你复制过去：
+## 安装到官网仓库
 
 ```bash
 bash scripts/website/install.sh ../autoclip_intro
-cd ../autoclip_intro && git add -A && git commit -m "build: sync release info automatically" && git push
 ```
 
-## 让发版即时触发（可选）
+默认只更新同步脚本和 workflow，并按当前正式版重写发布槽位。不会覆盖已经独立维护的 `guides/publish/index.html`。
 
-1. GitHub → Settings → Developer settings → Fine-grained tokens → 新建：Repository access 只选 `autoclip_intro`，Permissions → Contents: **Read and write**。
-2. 主仓库 `autoclip` → Settings → Secrets and variables → Actions → 新建 `WEBSITE_DISPATCH_TOKEN`。
-3. 之后每次 `promote-release.yml` 转正（或 halt 撤回）都会推一次 `autoclip-release` 事件；没配 token 时该步骤跳过，不影响发版。打 tag 只出 Pre-release，官网不会跟着变。流程见 `RELEASE_CHECKLIST.md`。
+发布教程页的旧模板仍在 `scripts/website/guides/publish/`。只有确认要用这份旧模板替换官网页面时，才设置 `WITH_PUBLISH_GUIDE=1`。
+
+## 发版即时触发
+
+1. Fine-grained token：Repository access 只选 `autoclip_intro`，Contents 为 Read and write。
+2. 本仓库 Actions secret：`WEBSITE_DISPATCH_TOKEN`。
+3. token 只出现在 secret 里。官网提交使用它自己的 `GITHUB_TOKEN`。
+
+打 tag 只出 Pre-release，`promote-release.yml` 发现目标仍是 draft / prerelease 时不发送通知。
 
 ## 文件
 
-发布教程页（`guides/publish/`）也放在这个目录，应用内「操作教程」链到官网。改步骤只改官网这一页，不必发客户端。`install.sh` 会一并拷过去，并在首页 FAQ / 页脚加入口。
-
 | 文件 | 去处 | 作用 |
 |---|---|---|
-| `sync_release.py` | `autoclip_intro/scripts/` | 读 Release → 改 `index.html`（`--check` 只报告） |
-| `sync-release.yml` | `autoclip_intro/.github/workflows/` | 三种触发（dispatch / cron / 手动）→ 跑脚本 → 有改动就提交 |
-| `guides/publish/index.html` | `autoclip_intro/guides/publish/` | 八语发布操作教程（Upload-Post、B 站三个 Cookie、仅自己试发） |
-| `install_publish_guide.py` | 留在这里 | 拷教程页，并补首页 FAQ / 页脚 / sitemap |
-| `install.sh` | 留在这里 | 复制同步脚本、教程页并同步一次 Release |
+| `sync_release.py` | `autoclip_intro/scripts/` | 读正式 Release，改当前版本槽位 |
+| `sync-release.yml` | `autoclip_intro/.github/workflows/` | dispatch / cron / 手动；失败不提交 |
+| `guides/publish/index.html` | 仅在 `WITH_PUBLISH_GUIDE=1` 时覆盖 | 旧的八语发布教程模板 |
+| `install_publish_guide.py` | 留在这里 | 重装教程页并补首页入口 |
+| `install.sh` | 留在这里 | 复制同步脚本 |
 
-主仓库端：`.github/workflows/desktop-build.yml` → `release` job → "Notify website" 步骤。
+通知步骤在 `.github/workflows/promote-release.yml`，不在 `desktop-build.yml`。

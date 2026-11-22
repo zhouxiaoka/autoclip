@@ -10,7 +10,8 @@ from pathlib import Path
 
 from backend.services.simple_progress import emit_progress, clear_progress
 from backend.core.job_budget import JobDurationExceeded
-from backend.core.project_cancellation import ProjectDeleted
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
+from backend.utils.text_processor import TextProcessor
 from backend.pipeline.failures import (
     PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG, http_status_of,
     llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
@@ -72,7 +73,7 @@ def _cut_audio_window(video: Path, start: float, end: float, out_wav: Path) -> P
         '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1',
         str(out_wav),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600)
     if result.returncode != 0 or not out_wav.is_file():
         raise PipelineFailure('SUBTITLE', f'按时间窗口提取音频失败: {(result.stderr or "")[-400:]}', code='source_window_cut_failed')
     return out_wav
@@ -279,6 +280,7 @@ class SimplePipelineAdapter:
             generate_subtitle_for_video,
         )
         from backend.services.cloud_transcription import CloudTranscriptionError
+        from backend.core.failure_codes import sentence
         try:
             logger.info(f"开始为视频 {video_path} 自动生成字幕")
             
@@ -326,24 +328,35 @@ class SimplePipelineAdapter:
                     if window:
                         start, end = window
                         _apply_source_window_to_srt(Path(srt_path), start, end, shift=shift)
-                    logger.info(f"转写生成字幕成功: {srt_path}")
+                    if not TextProcessor.has_usable_srt(Path(srt_path)):
+                        raise PipelineFailure('SUBTITLE', sentence('transcription_empty'), code='transcription_empty')
+                    from backend.services.cloud_transcription import last_asr_info
+                    asr_info = last_asr_info()
+                    logger.info(
+                        "转写生成字幕成功: %s (provider=%s model=%s route=%s)",
+                        srt_path,
+                        asr_info.get('asr_provider', ''),
+                        asr_info.get('asr_model', ''),
+                        asr_info.get('asr_route', ''),
+                    )
                     emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=TRANSCRIBE_DONE_SUBPERCENT)
                     return srt_path
                 logger.warning("转写生成字幕失败")
                     
-            except (SpeechRecognitionError, CloudTranscriptionError):
+            except (SpeechRecognitionError, CloudTranscriptionError, PipelineFailure,
+                    ProjectDeleted, JobStopped, ServiceRestarted, JobDurationExceeded):
                 raise
             except Exception as e:
-                logger.warning(f"转写生成字幕失败: {e}")
+                raise PipelineFailure('SUBTITLE', sentence('subtitle_setup'), code='subtitle_setup') from e
             
             logger.error("字幕生成失败")
             return None
             
-        except (SpeechRecognitionError, CloudTranscriptionError):
+        except (SpeechRecognitionError, CloudTranscriptionError, PipelineFailure,
+                ProjectDeleted, JobStopped, ServiceRestarted, JobDurationExceeded):
             raise
         except Exception as e:
-            logger.error(f"自动生成字幕过程中发生错误: {e}")
-            return None
+            raise PipelineFailure('SUBTITLE', sentence('subtitle_setup'), code='subtitle_setup') from e
         
     @staticmethod
     def _preflight_llm() -> None:
@@ -364,7 +377,7 @@ class SimplePipelineAdapter:
 
     def _find_clips_in_one_pass(self, srt_path: Path, metadata_dir: Path, platform_min_sec=None, platform_min_label=''):
         """Titled clips from one model pass over the whole transcript, or None to use the legacy steps."""
-        from backend.pipeline.clip_finder import find_clips
+        from backend.pipeline.clip_finder import ClipFinderError, find_clips
         from backend.pipeline.step3_scoring import resolve_min_score_threshold
         from backend.services.studio.intelligence import text_json
         from backend.utils.text_processor import TextProcessor
@@ -375,9 +388,9 @@ class SimplePipelineAdapter:
             with llm_usage.timed("clip_finder"):
                 return find_clips(entries, text_json, threshold=resolve_min_score_threshold(), metadata_dir=metadata_dir,
                                   platform_min_sec=platform_min_sec, platform_min_label=platform_min_label)
-        except ProjectDeleted:
-            raise
-        except Exception as error:  # noqa: BLE001 - the legacy steps still work with any model
+        except ClipFinderError as error:
+            # Only unusable model output may try a different analysis strategy.
+            # Request, cancellation and budget errors must keep their original cause.
             logger.warning("一次挑片不可用，改用分步分析: %s", error)
             return None
 
@@ -424,8 +437,10 @@ class SimplePipelineAdapter:
             # The one preflight (#418 rewrite), before any paid call, SRT attached or not: the source is decided
             # first (unreadable / under 1 s / too short / no audio without SRT), then transcription.
             from backend.services.studio import preflight
+            video_path = Path(input_video_path)
+            srt_candidate = Path(input_srt_path) if input_srt_path else (video_path.parent / 'input.srt')
             checked = preflight.preflight(preflight.ResolvedInputs(
-                Path(input_video_path), Path(input_srt_path) if input_srt_path else None, entry='content'))
+                video_path, None if fresh else srt_candidate, entry='content'))
             if checked.source_failure is not None:
                 raise checked.source_failure
             if not checked.ok:
@@ -454,7 +469,7 @@ class SimplePipelineAdapter:
                 invalidate=True,
             ) if resume else {
                 'resumed_from': 'none',
-                'skip_transcription': bool(input_srt_path and Path(input_srt_path).exists()),
+                'skip_transcription': TextProcessor.has_usable_srt(srt_candidate),
                 'start_step': 'step1',
                 'reuse_steps': frozenset(),
                 'stamp_ok': False,
@@ -470,10 +485,10 @@ class SimplePipelineAdapter:
             # 阶段2: 字幕处理
             emit_progress(self.project_id, "SUBTITLE", "开始字幕处理")
             
-            if decision['skip_transcription'] and srt_candidate.is_file():
+            if decision['skip_transcription'] and TextProcessor.has_usable_srt(srt_candidate):
                 logger.info(f"R3: 复用现有SRT文件: {srt_candidate}")
                 srt_path = srt_candidate
-            elif input_srt_path and Path(input_srt_path).exists() and not fresh:
+            elif input_srt_path and TextProcessor.has_usable_srt(Path(input_srt_path)) and not fresh:
                 logger.info(f"使用现有SRT文件: {input_srt_path}")
                 srt_path = Path(input_srt_path)
             else:
@@ -490,12 +505,17 @@ class SimplePipelineAdapter:
                 if not (srt_path and srt_path.exists()):
                     # 以前这里写一个空大纲然后一路「成功」到底，用户看到的是 Completed · 0 切片
                     raise missing_subtitle_failure()
+                if not TextProcessor.has_usable_srt(Path(srt_path)):
+                    from backend.core.failure_codes import sentence
+                    raise PipelineFailure('SUBTITLE', sentence('transcription_empty'), code='transcription_empty')
                 logger.info(f"自动生成字幕成功: {srt_path}")
                 # Stamp source fingerprint as soon as transcription is accepted.
                 # P1 #6: mark ASR origin so 「从头重做」 can safely delete only Whisper/cloud SRT.
+                from backend.services.cloud_transcription import last_asr_info
+                asr_extra = {k: v for k, v in last_asr_info().items() if v}
                 pipeline_resume.write_stamp(
                     metadata_dir, video=video_path, prompt_files=prompt_files,
-                    extra={'srt_origin': 'asr'},
+                    extra={'srt_origin': 'asr', **asr_extra},
                 )
 
             # T2: existing / platform SRT still needs the source_window filter (ASR path already applied it).
@@ -688,8 +708,8 @@ class SimplePipelineAdapter:
                 }
             }
             
-        except ProjectDeleted:
-            raise  # 项目已删除：停下，不写失败进度（RC156 #12）
+        except (ProjectDeleted, JobStopped, ServiceRestarted):
+            raise  # The enclosing Studio job owns the stopped/deleted outcome.
         except JobDurationExceeded as error:
             # The wall-clock cap is a timeout the user can retry. The sentence is ours.
             message = str(error)
@@ -700,7 +720,7 @@ class SimplePipelineAdapter:
                 "stage": "ANALYZE",
                 "error": message,
                 "message": message,
-                "error_code": "timeout",
+                "error_code": "job_budget",
             }
             _carry_attribution(failed, error)
             return failed

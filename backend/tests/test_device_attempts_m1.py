@@ -110,7 +110,9 @@ def test_settle_writes_m1_dims_onto_queued_terminal(tmp_path, monkeypatch):
     posted = []
 
     def fake(req, timeout=0):
-        posted.append(json.loads(req.data.decode()))
+        body = json.loads(req.data.decode())
+        if isinstance(body, dict) and isinstance(body.get('event'), str):
+            posted.append(body)
         raise OSError('tests do not send')
 
     monkeypatch.setattr('urllib.request.urlopen', fake)

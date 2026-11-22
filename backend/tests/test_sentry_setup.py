@@ -87,7 +87,7 @@ def test_before_send_splits_import_failures_without_keeping_the_message(monkeypa
 
 def test_before_send_keeps_code_locations_without_private_payload(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
-    event = {"release": "autoclip-backend@1.3.1", "request": {"data": "private"},
+    event = {"release": "autoclip-backend@1.5.9", "request": {"data": "private"},
              "breadcrumbs": ["private"], "extra": {"key": "private"}, "server_name": "private",
              "exception": {"values": [{"type": "ValueError", "value": "private",
                  "stacktrace": {"frames": [{"filename": "/Users/private/backend/service.py",
@@ -480,3 +480,141 @@ def test_a1_3_fault_frames_scrub_paths(tmp_path, monkeypatch):
     joined = str(frames)
     assert 'Users' not in joined and 'home/' not in joined and '\\' not in joined
     assert 'foo.py' in joined or any(f.get('filename') == 'foo.py' for f in frames)
+
+
+# --- 1.5.9 Sentry quota guard (legacy release / Vision noise / JobDurationExceeded) -------------
+
+@pytest.mark.parametrize('release,expected', [
+    ('autoclip-backend@1.5.6', True),
+    ('autoclip-backend@1.5.5', True),
+    ('autoclip-backend@1.4.0', True),
+    ('autoclip-backend@1.0.0', True),
+    ('autoclip-backend@1.5.6-rc1', True),
+    ('autoclip-backend@1.5.7', False),
+    ('autoclip-backend@1.5.8', False),
+    ('autoclip-backend@1.5.9', False),
+    ('autoclip-backend@1.5.9-rc', False),
+    ('autoclip-backend@2.0.0', False),
+    ('autoclip-frontend@1.5.6', False),
+    ('1.5.6', False),
+    ('unknown', False),
+    ('', False),
+    (None, False),
+])
+def test_is_legacy_backend_release(release, expected):
+    assert sentry_setup._is_legacy_backend_release(release) is expected
+
+
+def test_before_send_drops_legacy_backend_releases(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    base = {'exception': {'values': [{'type': 'RuntimeError', 'value': 'boom'}]},
+            'tags': {'error_code': 'unexpected'}}
+    for release in ('autoclip-backend@1.5.6', 'autoclip-backend@1.5.5', 'autoclip-backend@1.4.2'):
+        assert sentry_setup.before_send({**base, 'release': release}) is None
+    for release in ('autoclip-backend@1.5.7', 'autoclip-backend@1.5.8', 'autoclip-backend@1.5.9'):
+        kept = sentry_setup.before_send({**base, 'release': release})
+        assert kept is not None
+        assert kept['release'] == release
+
+
+def test_before_send_drops_vision_timeout_and_output_truncated(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    from backend.services.studio.intelligence import VisionRequestError
+
+    for code in ('timeout', 'output_truncated'):
+        error = VisionRequestError(code, 'private vision body')
+        event = {
+            'exception': {'values': [{'type': 'VisionRequestError', 'value': str(error)}]},
+            'tags': {'area': 'studio', 'phase': 'screening', 'error_code': code},
+        }
+        assert sentry_setup.before_send(
+            event, {'exc_info': (VisionRequestError, error, None)}
+        ) is None
+        # Type name alone (no exc_info) is enough.
+        assert sentry_setup.before_send(event, {}) is None
+
+
+def test_before_send_drops_timeout_with_provider_attribution_tags(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    event = {
+        'exception': {'values': [{'type': 'PipelineFailure', 'value': 'private'}]},
+        'tags': {
+            'area': 'studio', 'phase': 'production', 'error_code': 'timeout',
+            'upstream_error_type': 'timeout', 'provider': 'api88',
+        },
+    }
+    assert sentry_setup.before_send(event) is None
+
+
+def test_before_send_keeps_local_timeout_without_provider_attribution(monkeypatch, tmp_path):
+    """subprocess.TimeoutExpired maps to timeout but is not Vision/provider noise."""
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    event = {
+        'exception': {'values': [{'type': 'TimeoutExpired', 'value': 'private'}]},
+        'tags': {'area': 'studio', 'phase': 'render', 'error_code': 'timeout'},
+    }
+    kept = sentry_setup.before_send(event)
+    assert kept is not None
+    assert kept['tags']['error_code'] == 'timeout'
+
+
+def test_before_send_drops_job_duration_exceeded(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    from backend.core.job_budget import JobDurationExceeded
+
+    error = JobDurationExceeded()
+    event = {
+        'exception': {'values': [{'type': 'JobDurationExceeded', 'value': str(error)}]},
+        'tags': {'area': 'studio', 'phase': 'production', 'error_code': 'timeout'},
+    }
+    assert sentry_setup.before_send(
+        event, {'exc_info': (JobDurationExceeded, error, None)}
+    ) is None
+    # Even without tags, the type alone is enough.
+    bare = {'exception': {'values': [{'type': 'JobDurationExceeded', 'value': 'x'}]}}
+    assert sentry_setup.before_send(bare) is None
+
+
+def test_capture_studio_exception_skips_job_duration_exceeded(monkeypatch, tmp_path):
+    import sentry_sdk
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    sent = []
+    monkeypatch.setattr(sentry_sdk, 'capture_exception', lambda e: sent.append(e) or 'id')
+    from backend.core.job_budget import JobDurationExceeded
+    assert sentry_setup.capture_studio_exception(JobDurationExceeded(), 'production') is None
+    assert sent == []
+    assert sentry_setup.capture_studio_exception(RuntimeError('x'), 'production') == 'id'
+
+
+@pytest.mark.parametrize('code', ['framing', 'render', 'unexpected'])
+def test_before_send_keeps_real_studio_failures(monkeypatch, tmp_path, code):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    # framing / render may not be in STUDIO_ERROR_CODES allowlist; unexpected is.
+    # Use unexpected + a real type, and also pass framing/render as phase with unexpected code
+    # when the code itself is not allowlisted.
+    from backend.core.failure_codes import sentry_codes
+    allowed = sentry_codes()
+    error_code = code if code in allowed else 'unexpected'
+    phase = code if code in {'framing', 'render'} else 'production'
+    # Prefer phase tags that survive scrubbing for framing/render semantics.
+    tags = {'area': 'studio', 'phase': phase if phase in {
+        'screening', 'production', 'render', 'analysis', 'dispatch', 'vision_test',
+        'rewrite', 'auto_frame', 'framing_install', 'qa', 'packaging_html',
+        'packaging_runtime', 'model_download',
+    } else 'production', 'error_code': error_code}
+    if code == 'framing':
+        tags['phase'] = 'auto_frame'  # allowlisted phase for framing work
+        tags['error_code'] = 'unexpected'
+    elif code == 'render':
+        tags['phase'] = 'render'
+        tags['error_code'] = 'unexpected'
+    event = {
+        'release': 'autoclip-backend@1.5.9',
+        'exception': {'values': [{'type': 'RuntimeError', 'value': 'private boom'}]},
+        'tags': tags,
+    }
+    kept = sentry_setup.before_send(event)
+    assert kept is not None, code
+    assert kept['exception']['values'][0]['type'] == 'RuntimeError'
+    assert 'private' not in json.dumps(kept)

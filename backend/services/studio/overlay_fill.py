@@ -766,11 +766,19 @@ def _en_screens(english: list[dict], limit: int = _EN_SCREEN) -> list[list[int]]
     return screens
 
 
+def _join_phrases(left: str, right: str) -> str:
+    # Wrapping keeps Latin words whole and strips whitespace at the line edges.
+    # Restore their separating space when two caption phrases share a line again.
+    edges = left[-1:] + right[:1]
+    separator = ' ' if len(edges) == 2 and edges.isascii() and edges.isalnum() else ''
+    return left + separator + right
+
+
 def _fit_pieces(pieces: list[str], span: int) -> list[str]:
     """Never ask for more phrases than frames. Extra pieces join the previous one."""
     merged = list(pieces)
     while len(merged) > max(1, span):
-        merged[-2] = f'{merged[-2]}{merged[-1]}'
+        merged[-2] = _join_phrases(merged[-2], merged[-1])
         merged.pop()
     return merged
 
@@ -1045,7 +1053,7 @@ def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[
     def fits(left: str, right: str) -> bool:
         if not line_limit:
             return True
-        return width(left + right) <= float(line_limit) + 1e-6
+        return width(_join_phrases(left, right)) <= float(line_limit) + 1e-6
 
     items = list(placed)
     skipped: set[int] = set()
@@ -1060,12 +1068,12 @@ def _hold_phrases(placed: list[tuple], line_limit: float | None = None) -> list[
         prev = items[short - 1] if short else None
         nxt = items[short + 1] if short + 1 < len(items) else None
         if prev is not None and prev[2] >= item[1] - 0.05 and fits(prev[0], item[0]):
-            items[short - 1] = (prev[0] + item[0], prev[1], max(prev[2], item[2]), prev[3], max(prev[4], item[4]))
+            items[short - 1] = (_join_phrases(prev[0], item[0]), prev[1], max(prev[2], item[2]), prev[3], max(prev[4], item[4]))
             del items[short]
             skipped.clear()
             continue
         if nxt is not None and item[2] >= nxt[1] - 0.05 and fits(item[0], nxt[0]):
-            items[short + 1] = (item[0] + nxt[0], item[1], max(item[2], nxt[2]), item[3], max(item[4], nxt[4]))
+            items[short + 1] = (_join_phrases(item[0], nxt[0]), item[1], max(item[2], nxt[2]), item[3], max(item[4], nxt[4]))
             del items[short]
             skipped.clear()
             continue

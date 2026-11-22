@@ -3,6 +3,7 @@
  * Driven by backend/presets/provider_presets.json. No React, no telemetry payloads.
  */
 import { PROVIDERS, type ProviderKey } from './providers'
+import { promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 import { compareRecommended, displayCatalogGroup, qualityFor } from './providerQuality'
 import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
 import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
@@ -75,11 +76,20 @@ export function filterCatalog(query: string, filter: CapabilityFilter): Provider
 
 export function groupCatalog(presets: ProviderPreset[]): Record<ProviderGroupId, ProviderPreset[]> {
   const groups: Record<ProviderGroupId, ProviderPreset[]> = { recommended: [], popular: [], local: [], more: [] }
-  for (const preset of presets) groups[displayCatalogGroup(preset)].push(preset)
-  groups.recommended.sort((a, b) => compareRecommended(
-    { sponsor: a.sponsor, success_tier: a.success_tier, success_rate: qualityFor(a.id)?.success_rate },
-    { sponsor: b.sponsor, success_tier: b.success_tier, success_rate: qualityFor(b.id)?.success_rate },
-  ))
+  for (const preset of presets) {
+    let group = displayCatalogGroup(preset)
+    if (group === 'recommended' && !promotionEligible(preset.id)) group = 'popular'
+    groups[group].push(preset)
+  }
+  groups.recommended.sort((a, b) => {
+    const left = promotionRank(a.id)
+    const right = promotionRank(b.id)
+    if (left !== null && right !== null && left !== right) return left - right
+    return compareRecommended(
+      { sponsor: Boolean(a.sponsor) || promotionCurrentlyPromoted(a.id), success_tier: a.success_tier, success_rate: qualityFor(a.id)?.success_rate },
+      { sponsor: Boolean(b.sponsor) || promotionCurrentlyPromoted(b.id), success_tier: b.success_tier, success_rate: qualityFor(b.id)?.success_rate },
+    )
+  })
   return groups
 }
 
@@ -124,19 +134,18 @@ export function sensevoiceAsrReady(status?: { status?: string } | null): boolean
 }
 
 /** Credentials (or a keyless connection) are configuration, not proof of connectivity. */
-export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset): boolean {
-  const connection = findCatalogConnection(settings, preset)
+export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset, connection = findCatalogConnection(settings, preset)): boolean {
   if (!connection || !endpointProviderReady(connection)) return false
   if (!preset.base_url && preset.protocol !== 'local') return true
   if (preset.auth === 'none') return true
   return !!(connection.api_key?.trim() || connection.has_key)
 }
 
-export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
+export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}, connection = findCatalogConnection(settings, preset)): boolean {
   // Readiness describes the installed engine, independently of the current ASR selection.
   if (preset.id === 'whisper') return !!asrReady.whisper
   if (preset.id === 'sensevoice') return !!asrReady.sensevoice
-  return isCatalogConfigured(settings, preset) && findCatalogConnection(settings, preset)?.validation_status === 'ok'
+  return isCatalogConfigured(settings, preset, connection) && connection?.validation_status === 'ok'
 }
 
 export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: string): ModelSettings {
@@ -225,7 +234,7 @@ export function matchedCatalogPreset(connection: Connection): ProviderPreset | u
   const host = catalogHost(connection.base_url)
   if (!host) return undefined
   return catalogProviders().find(preset => (
-    catalogHost(preset.base_url) === host && OPENAI_LIKE.has(preset.protocol)
+    preset.id !== 'openai' && catalogHost(preset.base_url) === host && OPENAI_LIKE.has(preset.protocol)
   ))
 }
 

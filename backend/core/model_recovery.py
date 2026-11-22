@@ -17,10 +17,10 @@ from typing import Mapping, Optional, Sequence
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-# (provider, host, key digest, saved model) -> substitute id
-_remembered: dict[tuple[str, str, str, str], str] = {}
+# (purpose, provider, host, key digest, saved model) -> substitute id
+_remembered: dict[tuple[str, str, str, str, str], str] = {}
 # purpose + saved id -> {purpose, saved_model, replacement}. Model ids only.
-_notices: dict[tuple[str, str], dict[str, str]] = {}
+_notices: dict[tuple[str, str, str, str, str], dict[str, str]] = {}
 # Successful account lists, 60s. A timeout is not stored.
 _LIST_TTL_S = 60.0
 _lists: dict[tuple[str, str, str], tuple[float, object]] = {}
@@ -64,10 +64,10 @@ def _slot(provider: str, base_url: str, api_key: str, saved_model: str) -> tuple
     )
 
 
-def remembered_model(provider: str, base_url: str, api_key: str, saved_model: str) -> Optional[str]:
+def remembered_model(provider: str, base_url: str, api_key: str, saved_model: str, *, purpose: str = "vision") -> Optional[str]:
     saved = (saved_model or "").strip()
     with _lock:
-        found = _remembered.get(_slot(provider, base_url, api_key, saved))
+        found = _remembered.get((purpose, *_slot(provider, base_url, api_key, saved)))
     if found and found != saved:
         return found
     return None
@@ -81,20 +81,18 @@ def remember_model(
     if not saved or not alt or alt == saved:
         return
     with _lock:
-        _remembered[_slot(provider, base_url, api_key, saved)] = alt
+        _remembered[(purpose or "vision", *_slot(provider, base_url, api_key, saved))] = alt
         if purpose in {"analysis", "vision", "ocr"}:
-            _notices[(purpose, saved)] = {
+            _notices[(purpose, *_slot(provider, base_url, api_key, saved))] = {
                 "purpose": purpose, "saved_model": saved, "replacement": alt,
             }
 
 
-def substitution_notices(purpose: str = "") -> list[dict[str, str]]:
-    """In-process swaps. Ids only: no keys, hosts, or response text."""
+def substitution_notice(purpose: str, provider: str, base_url: str, api_key: str, saved_model: str):
+    """Only show a substitution observed for the selected account and purpose."""
     with _lock:
-        items = [dict(item) for item in _notices.values()]
-    if purpose:
-        return [item for item in items if item["purpose"] == purpose]
-    return items
+        notice = _notices.get((purpose, *_slot(provider, base_url, api_key, saved_model)))
+        return dict(notice) if notice else None
 
 
 def _cached_account_list(*, base_url: str, api_key: str, provider: str, http):
@@ -123,32 +121,21 @@ def _cached_account_list(*, base_url: str, api_key: str, provider: str, http):
     return listed
 
 
-def _listed_vision_ready(name: str, capabilities: Optional[Mapping[str, str]]) -> bool:
-    """Vision/Omni tags add vision. A Text tag never vetoes the name heuristic."""
-    from backend.core.model_catalog import is_image_model, is_non_chat_family, supports_vision
+def _pick_listed_model(provider, live_ids, exclude, capabilities, purpose):
+    from backend.core.model_catalog import is_image_model, is_non_chat_family
+    from backend.core.model_registry import listed_chat_capabilities
+    from backend.core.provider_model_fetch import recommended_by_purpose
 
-    if is_image_model(name) or is_non_chat_family(name):
-        return False
-    listed = (capabilities or {}).get(name)
-    if listed == "multimodal":
-        return True
-    return supports_vision(name)
-
-
-def _listed_chat_ready(name: str, capabilities: Optional[Mapping[str, str]]) -> bool:
-    """A chat model on the live list. Non-chat families stay out.
-
-    A Text tag does not remove a chat id. A Vision tag does not make a
-    realtime, speech, search, or embedding model eligible.
-    """
-    from backend.core.model_catalog import is_chat_model, is_image_model, is_non_chat_family
-
-    if not (name or "").strip() or is_image_model(name) or is_non_chat_family(name):
-        return False
-    if not is_chat_model(name):
-        return False
-    # Only multimodal is stored today. text would not veto; anything else is not a chat offer.
-    return (capabilities or {}).get(name) in {None, "multimodal", "text"}
+    skipped = set(exclude)
+    live = [name for name in live_ids if name and name not in skipped and not is_image_model(name)
+            and not is_non_chat_family(name)]
+    evidence = dict(capabilities or {})
+    missing = [name for name in live if name not in evidence]
+    if missing:
+        evidence.update(listed_chat_capabilities(provider, missing))
+    preferred = recommended_by_purpose(provider, live).get(purpose) or []
+    allowed = {'multimodal'} if purpose == 'vision' else {'multimodal', 'text', 'chat'}
+    return next((name for name in (*preferred, *live) if evidence.get(name) in allowed), None)
 
 
 def pick_available_analysis_model(
@@ -158,23 +145,7 @@ def pick_available_analysis_model(
     exclude: Sequence[str] = (),
     capabilities: Optional[Mapping[str, str]] = None,
 ) -> Optional[str]:
-    """First live chat model for text. Preset analysis order, then the account list.
-
-    Preset ids are only an ordering hint among ids the account still lists.
-    Non-chat families (realtime, speech, search, embeddings, moderation) are skipped.
-    """
-    from backend.core.provider_model_fetch import recommended_by_purpose
-
-    skipped = {(name or "").strip() for name in exclude if (name or "").strip()}
-    live = [name for name in live_ids if name and name not in skipped]
-    recommended = recommended_by_purpose(provider, live).get("analysis") or []
-    for name in recommended:
-        if _listed_chat_ready(name, capabilities):
-            return name
-    for name in live:
-        if _listed_chat_ready(name, capabilities):
-            return name
-    return None
+    return _pick_listed_model(provider, live_ids, exclude, capabilities, "analysis")
 
 
 def analysis_catalog(*, identity: Optional[Mapping] = None, base_url: str = "", named: Sequence[str] = ()) -> str:
@@ -239,23 +210,7 @@ def pick_available_vision_model(
     exclude: Sequence[str] = (),
     capabilities: Optional[Mapping[str, str]] = None,
 ) -> Optional[str]:
-    """First live vision model. Preset vision order, then the account list order.
-
-    Preset ids are only an ordering hint among ids the account still lists.
-    A Vision/Omni tag marks that id ready. A Text tag does not remove it.
-    """
-    from backend.core.provider_model_fetch import recommended_by_purpose
-
-    skipped = {(name or "").strip() for name in exclude if (name or "").strip()}
-    live = [name for name in live_ids if name and name not in skipped]
-    recommended = recommended_by_purpose(provider, live).get("vision") or []
-    for name in recommended:
-        if _listed_vision_ready(name, capabilities):
-            return name
-    for name in live:
-        if _listed_vision_ready(name, capabilities):
-            return name
-    return None
+    return _pick_listed_model(provider, live_ids, exclude, capabilities, "vision")
 
 
 def resolve_available_model(

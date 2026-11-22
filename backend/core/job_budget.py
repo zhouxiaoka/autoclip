@@ -18,18 +18,18 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Iterator, Optional
 
+from backend.core.failure_codes import sentence
+
 # One read is 600s. 20 minutes covers that read plus its SDK retry, then stops
 # the next manager retry instead of stacking hours of 600s waits.
 CLIP_JOB_BUDGET_SEC = 20 * 60
-
-_MESSAGE = "这次制作已超过时间上限，已停止。请重试；服务商一直很慢时可以换一个更快的模型。"
 
 
 class JobDurationExceeded(Exception):
     """The clip/generation job used its wall-clock budget. Not a single-request timeout."""
 
     def __init__(self) -> None:
-        super().__init__(_MESSAGE)
+        super().__init__(sentence("job_budget"))
 
 
 class _Budget:
@@ -104,6 +104,24 @@ def bound_clip_job(seconds: Optional[float] = None) -> Iterator[None]:
         yield
     finally:
         unbind_clip_job(token)
+
+
+@contextmanager
+def clip_step_budget(seconds: float, *, reserve_seconds: float = 0) -> Iterator[None]:
+    """A tighter deadline for an optional step, without resetting the parent clock.
+
+    Stream readers/watchdogs inherit this deadline. After the context restores
+    the job budget, callers must check it before treating a step timeout as a
+    fallback: expiration of the whole job is still terminal.
+    """
+    ensure_clip_job_budget()
+    parent = _current.get()
+    limit = min(float(seconds), max(0, parent.remaining() - reserve_seconds)) if parent is not None else float(seconds)
+    token = _current.set(_Budget(limit, time.monotonic()))
+    try:
+        yield
+    finally:
+        _current.reset(token)
 
 
 @contextmanager

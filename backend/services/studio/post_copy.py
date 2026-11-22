@@ -8,6 +8,8 @@ missing or malformed falls back to the clip title, so a post is never blocked on
 from __future__ import annotations
 
 from backend.core.failure_codes import UserFacingError
+from backend.core.job_budget import JobDurationExceeded
+from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted
 import logging
 import re
 import unicodedata
@@ -41,6 +43,7 @@ RULES = {
     'original': PostRules('zh', 60, 300, (3, 5), '通用：标题概括核心观点，描述交代出处'),
 }
 TAG_CHARS = 20
+POST_COPY_BUDGET_SEC = 120
 
 PROMPT = (
     '你是短视频运营编辑。根据这段视频的字幕 lines 与参考标题 title_hint，为 platforms 里的每个平台写发布文案。'
@@ -153,6 +156,46 @@ def fallback(title: str, platform: str) -> dict[str, Any]:
     return {'title': _fit(text, rules.title_max), 'description': '', 'tags': []}
 
 
+def _extract_posts(result: Any, platforms: list[str]) -> tuple[dict[str, Any] | None, str]:
+    """Normalize equivalent valid JSON shapes before rejecting; return a safe closed-set reason on failure."""
+    if not isinstance(result, dict):
+        return None, 'non_dict_response'
+    if 'posts' in result:
+        raw = result.get('posts')
+        if isinstance(raw, dict):
+            return raw, ''
+        if isinstance(raw, list):
+            mapped: dict[str, Any] = {}
+            for entry in raw:
+                if not isinstance(entry, dict):
+                    continue
+                key = entry.get('platform') or entry.get('id')
+                if isinstance(key, str) and key in platforms:
+                    mapped[key] = entry
+                elif len(platforms) == 1 and len(raw) == 1 and isinstance(entry.get('title'), str):
+                    mapped[platforms[0]] = entry
+            if mapped:
+                return mapped, ''
+        return None, 'posts_wrong_type'
+    direct = {p: result[p] for p in platforms if isinstance(result.get(p), dict)}
+    if direct:
+        return direct, ''
+    if len(platforms) == 1 and isinstance(result.get('title'), str):
+        return {platforms[0]: result}, ''
+    return None, 'posts_missing'
+
+
+def _rejection_reason(error: BaseException, fallback_reason: str) -> str:
+    if fallback_reason:
+        return fallback_reason
+    name = type(error).__name__
+    if name == 'ModelResponseInvalid':
+        return 'invalid_json'
+    if isinstance(error, UserFacingError):
+        return 'mixed_language_title'
+    return 'validation_error'
+
+
 def build_posts(title: str, lines: list[str], platforms: list[str], *, source: str = '',
                 call: Callable[[str, dict], dict] | None = None) -> dict[str, dict[str, Any]]:
     """{platform: {'title','description','tags'}}; never raises for model problems."""
@@ -168,11 +211,12 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
                'rules': {p: {'language': r.language, 'title_max': r.title_max, 'description_max': r.description_max,
                              'tags': f'{r.tags[0]}-{r.tags[1]}', 'style': r.style} for p in platforms for r in [RULES[p]]}}
     for attempt in range(2):
+        reject_reason = ''
         try:
             result = call(PROMPT, payload)
-            raw = (result or {}).get('posts') if isinstance(result, dict) else None
+            raw, reject_reason = _extract_posts(result, platforms)
             if not isinstance(raw, dict):
-                raise ValueError('posts missing')
+                raise ValueError(reject_reason or 'posts_missing')
             mixed = []
             for platform in platforms:
                 item = raw.get(platform) if isinstance(raw.get(platform), dict) else {}
@@ -197,9 +241,19 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
                 if post_title:
                     posts[platform] = {'title': post_title, 'description': description, 'tags': tags}
             if mixed and attempt == 0:
+                reject_reason = 'mixed_language_title'
                 raise UserFacingError(f'{"、".join(mixed)} 的标题必须是英文，不能有中文')
             return posts
-        except Exception as error:  # noqa: BLE001 - copy falls back to the clip title
-            logger.warning('Post copy rejected (attempt %d): %s', attempt + 1, type(error).__name__)
+        except (JobDurationExceeded, JobStopped, ProjectDeleted, ServiceRestarted):
+            raise  # a stopped request is not malformed copy to regenerate
+        except (ValueError, TypeError, UserFacingError) as error:
+            reason = _rejection_reason(error, reject_reason)
+            logger.warning(
+                'Post copy rejected (attempt %d): error_type=%s reason=%s',
+                attempt + 1, type(error).__name__, reason,
+            )
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按格式重新返回。'}
+        except Exception as error:  # noqa: BLE001 - transport/auth errors are not format repairs
+            logger.warning('Post copy fell back: %s', type(error).__name__)
+            break
     return posts

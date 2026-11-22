@@ -202,6 +202,15 @@ export function needsOverwrite(endpoint: GuideEndpoint | undefined, apiKey: stri
   return true
 }
 
+/** A named compatible preset is persisted with the generic protocol and its full endpoint. */
+export function findGuideEndpoint(endpoints: GuideEndpoint[], providerId: string, baseUrl: string) {
+  const named = endpoints.find(endpoint => endpoint.providerId === providerId)
+  if (named) return named
+  const address = normalizeGuideBaseUrl(baseUrl)
+  return endpoints.find(endpoint => endpoint.providerId === 'compatible' && !!address
+    && normalizeGuideBaseUrl(endpoint.baseUrl) === address)
+}
+
 export function planPlacement(input: {
   endpoints: GuideEndpoint[]
   providerId: string
@@ -214,10 +223,7 @@ export function planPlacement(input: {
   const custom = input.providerId === CUSTOM_PROVIDER_ID
   const baseUrl = custom ? normalizeGuideBaseUrl(input.baseUrl || '') : (input.officialBaseUrl || '').trim()
   const host = hostOf(baseUrl)
-  const existing = input.endpoints.find(endpoint => {
-    if (custom) return endpoint.providerId === 'compatible' && host && hostOf(endpoint.baseUrl) === host
-    return endpoint.providerId === input.providerId
-  })
+  const existing = findGuideEndpoint(input.endpoints, input.providerId, baseUrl)
   if (existing) {
     const saved = (existing.apiKey || '').trim()
     if (saved && saved === apiKey && (!custom || !baseUrl || hostOf(existing.baseUrl) === host)) {

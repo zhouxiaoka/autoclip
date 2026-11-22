@@ -23,6 +23,25 @@ from ..schemas.task import TaskStatus
 logger = logging.getLogger(__name__)
 
 
+def _input_metadata(source_url):
+    """Record link versus local file without changing how the video is imported."""
+    if isinstance(source_url, str) and source_url.strip():
+        return {"source_url": source_url.strip(), "input_origin": "link"}
+    return {"source_url": None, "input_origin": "file"}
+
+
+def _remember_input_origin(project) -> None:
+    meta = getattr(project, "project_metadata", None) or {}
+    origin = meta.get("input_origin")
+    if origin not in {"link", "file"}:
+        return
+    try:
+        from backend.services.diagnostics.source import record_input_origin
+        record_input_origin(str(project.id), origin, source_url=meta.get("source_url"))
+    except Exception:  # noqa: BLE001 - a diagnostics note must not block project creation
+        logger.warning("input origin was not recorded", exc_info=True)
+
+
 class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectResponse]):
     """Project service with business logic."""
     
@@ -44,10 +63,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             "status": "pending",  # 默认状态为 pending
             "video_path": project_dict.get("source_file"),  # Map source_file to video_path
             "processing_config": project_dict.get("settings", {}),  # Map settings to processing_config
-            "project_metadata": {"source_url": project_dict.get("source_url")}  # Map source_url to metadata
+            "project_metadata": _input_metadata(project_dict.get("source_url"))
         }
         
-        return self.create(**orm_data)
+        project = self.create(**orm_data)
+        _remember_input_origin(project)
+        return project
     
     def update_project(self, project_id: str, project_data: ProjectUpdate) -> Optional[Project]:
         """Update a project with business logic."""
@@ -77,7 +98,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if str(status_value).lower() != "failed":
             return None, None
         config = getattr(project, 'processing_config', None) or {}
-        if config.get('smart_import') and config.get('studio_generation_status') in ('failed', 'partial'):
+        if config.get('studio_generation_status') in ('failed', 'partial'):
             # Studio-managed runs mirror their own reason; a Task row may be from an older run
             # or carry nothing when the render (not the pipeline) failed (RC156 #13).
             message = config.get('studio_generation_error')
@@ -169,8 +190,22 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if filters:
             filter_data = filters.model_dump()
             filter_dict = {k: v for k, v in filter_data.items() if v is not None}
-        
-        items, pagination_response = self.get_paginated(pagination, filter_dict)
+
+        skip = (pagination.page - 1) * pagination.size
+        items, total = self.repository.list_paginated(
+            skip=skip,
+            limit=pagination.size,
+            filters=filter_dict or None,
+        )
+        pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+        pagination_response = PaginationResponse(
+            page=pagination.page,
+            size=pagination.size,
+            total=total,
+            pages=pages,
+            has_next=pagination.page < pages,
+            has_prev=pagination.page > 1,
+        )
         
         # Convert to response schemas
         project_responses = []
@@ -181,6 +216,10 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             from ..models.task import Task
             
             project_id = str(project.id)
+            config = project.processing_config or {}
+            if (project.status == ProjectStatus.FAILED and not (config.get('smart_import') or {}).get('auto_start')
+                    and ('smart_import' in config or (config.get('creative') or {}).get('goal') in ('highlight', 'promo'))):
+                sync_project_completion(project_id, self.db)
             total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
             completed_variants = (project.processing_config or {}).get('studio_completed_variant_count', 0)
             if isinstance(completed_variants, int):

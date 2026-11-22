@@ -33,6 +33,7 @@ _BY_TYPE = {
     'connection': 'network',
     'output_truncated': 'output_truncated',
     'vision_unsupported': 'vision_unsupported',
+    'image_model_in_analysis': 'image_model_in_analysis',
 }
 
 

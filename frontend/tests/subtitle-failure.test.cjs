@@ -43,7 +43,7 @@ test('classifies structured codes and the four user-facing cases', () => {
 test('does not treat unrelated failures as a transcription settings problem', () => {
   assert.equal(classifySubtitleFailure('没有可用的 LLM 提供商。请到「设置 → 服务商与模型」检查。'), null)
   assert.equal(classifySubtitleFailure('没有片段通过评分筛选。到「设置 → 服务商与模型 → 最低评分阈值」调低后重试。'), null)
-  const timeline = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
+  const timeline = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 10 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
   assert.equal(classifySubtitleFailure(timeline), null)
   assert.equal(classifySubtitleFailure(timeline, 'timeline_empty'), null)
   assert.equal(classifySubtitleFailure(''), null)
@@ -67,7 +67,7 @@ test('safe cloud ASR failures keep the generic failure view and never request Wh
 test('source_too_short / source_no_audio never open transcription settings (RC156 #10 #11)', () => {
   const noAudio = '这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，请到「设置 → 服务商与模型」换一个能看图的模型。'
   assert.equal(classifySubtitleFailure(noAudio, 'source_no_audio'), null)
-  assert.equal(classifySubtitleFailure('视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。', 'source_too_short'), null)
+  assert.equal(classifySubtitleFailure('视频太短：不到 10 秒，按字幕切不出完整片段。请换一段 10 秒以上的视频。', 'source_too_short'), null)
   // Even text mentioning transcription settings stays out when the code says it is the source.
   assert.equal(classifySubtitleFailure('字幕 设置 → 默认模型 → 语音转字幕', 'source_no_audio'), null)
 })

@@ -14,6 +14,7 @@ const BY_TYPE: Record<string, ConnectionTestErrorCode> = {
   model_not_found: 'model_not_found', bad_endpoint: 'bad_base_url', rate_limited: 'rate_limited',
   upstream_unavailable: 'http_5xx', timeout: 'timeout', connection: 'network',
   output_truncated: 'output_truncated', vision_unsupported: 'vision_unsupported',
+  image_model_in_analysis: 'image_model_in_analysis',
 }
 
 export function isConnectionTestErrorCode(value: unknown): value is ConnectionTestErrorCode {
@@ -48,6 +49,7 @@ export function codeFromRequestError(error: unknown, context: { emptyKey?: boole
       const detail = typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : ''
       if (context.emptyKey || /API Key|密钥/.test(detail)) return 'empty_key'
       if (/图像识别|图片输入/.test(detail)) return 'vision_unsupported'
+      if (/生图模型|只能用于封面/.test(detail)) return 'image_model_in_analysis'
       if (/地址|URL|url|控制台/.test(detail)) return 'bad_base_url'
       if (/模型/.test(detail)) return 'model_not_found'
       return 'invalid_request'

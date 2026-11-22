@@ -82,6 +82,11 @@ class CustomModelOffer(BaseModel):
         return self
 
 
+class FailedModelCheck(BaseModel):
+    purpose: Scenario
+    model: str = Field(min_length=1, max_length=200)
+
+
 class Connection(BaseModel):
     # hide_input_in_errors: str(ValidationError) otherwise keeps the tail of a long api_key.
     model_config = ConfigDict(extra='ignore', hide_input_in_errors=True)
@@ -95,6 +100,7 @@ class Connection(BaseModel):
     image_base_url: str = ''
     validation_status: Literal['ok', 'failed', 'unchecked', 'transient'] = 'unchecked'
     validation_error_type: str = ''
+    failed_model_checks: list[FailedModelCheck] = Field(default_factory=list, max_length=2000)
     # 1.5.9 3B: ISO timestamp when insufficient_quota last hit; cleared on a successful connection test.
     quota_exhausted_at: str | None = None
     # F2 trial-run card state (F5 import area reads the same fields).
@@ -200,6 +206,10 @@ class Connection(BaseModel):
 
     @model_validator(mode='after')
     def infer_url_source(self):
+        # Older clients recorded model-specific failures against the entire account.
+        if self.validation_status == 'failed' and self.validation_error_type in ('model_not_found', 'permission_denied'):
+            self.validation_status = 'unchecked'
+            self.validation_error_type = ''
         if self.base_url_source is None:
             self.base_url_source = infer_base_url_source(self.provider, self.base_url)
         return self
@@ -254,6 +264,8 @@ class Transcription(BaseModel):
 class ModelSettings(BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
     _migration_warnings: list[str] = PrivateAttr(default_factory=list)
+    revision: int = Field(default=0, ge=0)
+    field_revisions: dict[str, int] = Field(default_factory=dict)
     version: Literal[1] = 1
     connections: list[Connection] = Field(default_factory=list, max_length=100)
     seen_notices: list[str] = Field(default_factory=list)
@@ -264,11 +276,13 @@ class ModelSettings(BaseModel):
     cover: Assignment | None = None
     transcription: Transcription | None = None
     cover_enabled: bool = False
+    prefer_local_cover: bool = False  # Explicit choice, independent of image model availability.
     # Explicit "cover follows analysis". None only while reading a document written before the
     # flag existed: a cover on the analysis connection was the old "follow", anything else is
     # independent. Following covers move with analysis; independent ones never change provider.
     cover_follows_analysis: bool | None = None
-    allow_send_frame: bool = False
+    cover_design_mode: Literal["crop_grade_text_only","editorial_edit"] = "crop_grade_text_only"
+    allow_send_frame: bool = True
     # 1 = saved by 1.5+, where AI covers are an explicit choice. 1.4 switched them on by itself at
     # first setup, and 1.5 generates one per output in the background (billed), so a file 1.4 wrote
     # reads with AI covers off; the chosen model stays, one click turns them back on.
@@ -292,6 +306,9 @@ class ModelSettings(BaseModel):
         warnings: list[str] = []
         if isinstance(data, dict):
             data, warnings = annotate_document(data)
+            cover = data.get('cover')
+            if isinstance(cover, dict) and isinstance(cover.get('model'), str) and not cover['model'].strip():
+                data['cover'] = None
         settings = handler(data)
         if warnings:
             settings._migration_warnings = list(dict.fromkeys([*settings._migration_warnings, *warnings]))
@@ -309,17 +326,17 @@ class ModelSettings(BaseModel):
             connection = next((c for c in self.connections if c.id == self.transcription.connection_id), None)
             if not connection:
                 raise ValueError('转写模型引用的服务已被移除')
-            from backend.core.asr_model_catalog import adapter
-            if not adapter(connection.provider, self.transcription.model):
-                raise ValueError('该 ASR 模型的字幕时间戳接口尚未适配，请选择其他转写模型')
         if self.cover_follows_analysis is None:
             self.cover_follows_analysis = bool(
                 self.cover and self.analysis and self.cover.connection_id == self.analysis.connection_id)
         if (self.cover_follows_analysis and self.cover and self.analysis
                 and self.cover.connection_id != self.analysis.connection_id):
             raise ValueError('跟随分析的封面必须使用分析服务连接')
-        if self.cover_enabled and not self.cover:
-            raise ValueError('请选择封面生图模型')
+        if 'cover_enabled' not in self.model_fields_set and self.cover and not self.prefer_local_cover:
+            self.cover_enabled = True
+        if not self.cover:
+            self.cover_enabled = False
+            self.cover_follows_analysis = False
         if self.analysis_mode == 'subtitle':
             self.allow_visual_screening = False
         return self
@@ -361,6 +378,9 @@ def load(*, persist_migration: bool = False) -> ModelSettings | None:
             _atomic_write_json(target, raw)
         if settings.cover_choice_version < COVER_CHOICE_VERSION and settings.cover_enabled:
             settings = settings.model_copy(update={'cover_enabled': False})
+        if 'prefer_local_cover' not in raw and settings.cover and not settings.cover_enabled:
+            # Older documents cannot distinguish a user's Off choice from a preset saved as Off.
+            settings = settings.model_copy(update={'prefer_local_cover': True})
         return settings
 
 
@@ -394,15 +414,42 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
     return connection
 
 
+def failed_check(connection: Connection, purpose: Scenario, model: str) -> bool:
+    return failure_scope(connection, purpose, model) is not None
+
+
+def failure_scope(connection: Connection, purpose: Scenario, model: str) -> str | None:
+    if connection.validation_status == 'failed':
+        return 'validation_failed'
+    if any(check.purpose == purpose and check.model == model for check in connection.failed_model_checks):
+        return 'model_validation_failed'
+    return None
+
+
+def transcription_needs_repair(settings: ModelSettings) -> bool:
+    from backend.core.asr_model_catalog import adapter
+    choice = settings.transcription
+    if not choice or choice.provider != 'cloud':
+        return False
+    connection = next((c for c in settings.connections if c.id == choice.connection_id), None)
+    return not connection or not adapter(connection.provider, choice.model)
+
+
 def ensure_runtime_bindings(settings: ModelSettings, *, require_vision: bool = False) -> None:
     """A lost explicit assignment is never consent to borrow another provider."""
     if {'analysis_configuration_invalid', 'vision_configuration_invalid'} & set(settings._migration_warnings):
         raise ValueError('分析或视觉模型引用的服务连接已缺失或配置无效，请到「设置 → 服务商与模型」修复并保存后再生成。')
-    for binding in (settings.analysis, settings.vision):
-        if binding is not None:
-            connection = connection_for(settings, binding)
-            if connection.validation_status == 'failed' and (binding is settings.analysis or settings.analysis_mode == 'visual' or require_vision):
-                raise ValueError('当前模型连接未通过校验。请到「设置 → 服务商与模型」修复密钥或地址后再生成。')
+    for purpose, binding in (('analysis', settings.analysis), ('vision', vision_follow_binding(settings))):
+        if not binding:
+            continue
+        connection = connection_for(settings, binding)
+        required = purpose == 'analysis' or require_vision or settings.analysis_mode == 'visual'
+        if required:
+            failure = failure_scope(connection, purpose, binding.model)
+            if failure == 'model_validation_failed':
+                raise ValueError(f'型号 {binding.model} 未通过校验，请更换型号或重新测试。')
+            if failure:
+                raise ValueError('当前模型连接未通过校验。请到「设置 → 服务商与模型」检查密钥或接口地址。')
 
 
 def require_analysis(settings: ModelSettings) -> Assignment:
@@ -455,29 +502,17 @@ def image_endpoint(connection: Connection) -> dict:
 
 
 def capability(settings: ModelSettings, assignment: Assignment) -> str | None:
-    """The one capability answer for a binding: readiness, the pipeline, save checks and
-    the settings list all use this. A name classified as text-only stays text even when
-    a live list or an explicit multimodal flag says otherwise. Other explicit
-    multimodal/text choices win; auto asks the provider and catalog metadata first,
-    then (for named providers, not a generic compatible gateway) the model-name rules
-    in supports_vision (gpt-5.x, gpt-6.x, o1/o3/o4-mini ...). auto never turns an
-    unknown name into "text": it stays None, which simply means "not confirmed to see images"."""
+    """Resolve an explicit choice or discover capabilities for the selected account.
+    Unrecognized models keep an unknown capability until the user declares a purpose.
+    """
     from backend.core.model_catalog import known_text_only
     if known_text_only(assignment.model):
         return 'text'
     if assignment.capability != 'auto':
         return assignment.capability
     from backend.core.model_registry import lookup_capability
-    known = lookup_capability(connection_for(settings, assignment), assignment.model)
-    if known:
-        return known
     connection = connection_for(settings, assignment)
-    if connection is None or connection.provider == 'compatible':
-        # A self-hosted "compatible" gateway can alias any name; keep requiring
-        # provider metadata or an explicit choice there.
-        return None
-    from backend.core.model_catalog import supports_vision
-    return 'multimodal' if supports_vision(assignment.model) else None
+    return lookup_capability(connection, assignment.model) if connection else None
 
 
 def sees_images(settings: ModelSettings, assignment: Assignment | None) -> bool:
@@ -518,8 +553,25 @@ def vision_endpoint(settings: ModelSettings) -> dict | None:
     return chat_endpoint(connection_for(settings, binding), binding.model)
 
 
+def _substitution_notice(settings: ModelSettings, purpose: str) -> dict | None:
+    from backend.core.model_recovery import analysis_catalog, substitution_notice
+    from backend.services.studio.failure_identity import connection_identity
+    binding = settings.analysis if purpose == 'analysis' else vision_follow_binding(settings)
+    if not binding or binding.model_source != 'preset':
+        return None
+    try:
+        connection = connection_for(settings, binding)
+        endpoint = chat_endpoint(connection, binding.model)
+    except ValueError:
+        return None  # An incomplete endpoint can still be opened and repaired in Settings.
+    provider = analysis_catalog(identity=connection_identity(connection, binding.model),
+                                base_url=endpoint['base_url'], named=[connection.provider])
+    notice = substitution_notice(purpose, provider, endpoint['base_url'], endpoint['api_key'], binding.model)
+    return {**notice, 'connection_id': connection.id} if notice else None
+
+
 def public(settings: ModelSettings) -> dict:
-    value = settings.model_dump()
+    value = settings.model_dump(exclude={'field_revisions'})
     notices = [item for item in settings._migration_warnings if item not in settings.seen_notices]
     update_available = preset_update_available(settings)
     value['catalog_version'] = current_catalog_version()
@@ -532,19 +584,15 @@ def public(settings: ModelSettings) -> dict:
         from backend.core.desktop_config import get_desktop_config
         previous = get_desktop_config().speech_recognition.whisper_config.model_name
         try:
-            value['transcription'] = Transcription(model=previous).model_dump()
+            value['transcription'] = Transcription(model=previous, model_source='preset' if previous == 'base' else 'user').model_dump()
         except ValidationError:
             value['transcription'] = Transcription().model_dump()
             value.setdefault('migration_warnings', []).append('transcription_configuration_invalid')
+    value['transcription_needs_repair'] = transcription_needs_repair(settings)
     value['saved'] = path().exists() and 'settings_configuration_invalid' not in settings._migration_warnings
-    if settings.analysis and settings.analysis.model:
-        from backend.core.model_recovery import substitution_notices
-        pending = [
-            item for item in substitution_notices('analysis')
-            if item['saved_model'] == settings.analysis.model and item['replacement'] != settings.analysis.model
-        ]
-        if pending:
-            value['model_substitutions'] = pending
+    substitutions = [notice for purpose in ('analysis', 'vision') if (notice := _substitution_notice(settings, purpose))]
+    if substitutions:
+        value['model_substitutions'] = substitutions
     for c in value['connections']:
         key = c.pop('api_key') or ''
         c['has_key'] = bool(key)
@@ -562,10 +610,27 @@ def resolve_secret(connection: Connection, previous: ModelSettings | None = None
     return connection.model_copy(update={'api_key': old.api_key if old else ''})
 
 
-def save(settings: ModelSettings) -> dict:
+class SettingsConflict(ValueError):
+    pass
+
+
+_EDITABLE_FIELDS = set(ModelSettings.model_fields) - {
+    'revision', 'version', 'field_revisions', 'cover_choice_version', 'acked_catalog_version',
+}
+
+
+def save(settings: ModelSettings, *, edited_fields: set[str] | None = None) -> dict:
     with _lock:
-        settings = ModelSettings.model_validate(settings.model_dump())
         previous = for_editing()
+        incoming = settings.model_dump()
+        if edited_fields is not None and not edited_fields <= _EDITABLE_FIELDS:
+            raise ValueError('设置字段无效')
+        if 'revision' in settings.model_fields_set and settings.revision != previous.revision:
+            if (settings.revision > previous.revision or edited_fields is None
+                    or any(previous.field_revisions.get(field, 0) > settings.revision for field in edited_fields)):
+                raise SettingsConflict('设置已在另一处修改，请重新载入后再保存。')
+            incoming = {**previous.model_dump(), **{field: incoming[field] for field in edited_fields}}
+        settings = ModelSettings.model_validate(incoming)
         resolved = settings.model_copy(update={
             'connections': prepare_connections_for_save(
                 [resolve_secret(c, previous) for c in settings.connections]
@@ -574,8 +639,15 @@ def save(settings: ModelSettings) -> dict:
             'seen_notices': known_notices([*previous._migration_warnings, *settings.seen_notices, *previous.seen_notices]),
             'acked_catalog_version': max(settings.acked_catalog_version, previous.acked_catalog_version, current_catalog_version()),
         })
-        if not resolved.analysis:
+        if transcription_needs_repair(resolved) and (resolved.transcription != previous.transcription or not transcription_needs_repair(previous)):
+            raise ValueError('该 ASR 模型的字幕时间戳接口尚未适配，请选择其他转写模型')
+        if not resolved.analysis and not resolved.connections and not previous.connections:
             raise ValueError('请选择高光分析模型')
+        from backend.core.model_catalog import is_image_model
+        from backend.services.provider_validation import IMAGE_MODEL_IN_ANALYSIS_HINT
+        for binding in (resolved.analysis, resolved.vision):
+            if binding and binding.model and is_image_model(binding.model):
+                raise ValueError(IMAGE_MODEL_IN_ANALYSIS_HINT)
         # Visual-follow without vision: persist (marked red) and block at generation.
         target = path()
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -585,6 +657,11 @@ def save(settings: ModelSettings) -> dict:
             backup = target.with_name('ai-model-settings.invalid.' + uuid.uuid4().hex + '.json')
             with os.fdopen(os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
                 stream.write(target.read_bytes())
+        resolved.revision = previous.revision + 1
+        resolved.field_revisions = dict(previous.field_revisions)
+        for field in _EDITABLE_FIELDS:
+            if getattr(previous, field) != getattr(resolved, field):
+                resolved.field_revisions[field] = resolved.revision
         _atomic_write_json(target, resolved.model_dump())
         return public(resolved)
 
@@ -709,6 +786,19 @@ def migrate_legacy() -> ModelSettings:
             # Keep the old file untouched and never send its values in the warning.
             cover_assignment = None
             migration_warnings.append('cover_configuration_invalid')
+    # Legacy clients saved a key per provider even when only one was selected.
+    # The shared OpenAI URL may belong to the active gateway or local runtime.
+    for other in getattr(manager, 'stored_legacy_providers', ()):
+        if other == provider or (other == 'openai' and s.get('openai_base_url')):
+            continue
+        url = (s.get('dashscope_base_url') or '') if other == 'dashscope' else ''
+        try:
+            account = Connection(id=f'legacy-provider-{other}', name=other, provider=other,
+                                 api_key=s[f'{other}_api_key'], base_url=url)
+        except ValidationError:
+            continue
+        if not any(c.provider == other and c.api_key == account.api_key and c.base_url == url for c in connections):
+            connections.append(account)
     prefs = analysis_preferences.load()
     settings = ModelSettings(connections=connections, analysis=analysis, vision=vision,
                          cover=cover_assignment, cover_enabled=cfg.enabled and cover_assignment is not None,

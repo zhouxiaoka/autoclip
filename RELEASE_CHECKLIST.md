@@ -99,7 +99,7 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 - [ ] Actions → **Release Acceptance** → tag、该 tag 的 build run ID、已提交的脱敏验收 manifest 路径；等待成功
 - [ ] Actions → **Promote / Halt Release** → `tag=vX.Y.Z`，`action=promote`，`acceptance_run_id=上一步成功 run ID`
   → 该版本变成 latest，应用内更新开始推送，官网同步
-- [ ] 成功率发布时间：执行本步 Promote 的人，打开该版本的 GitHub Release，复制 `published_at`（UTC，形如 `YYYY-MM-DDTHH:MM:SSZ`）。到 PostHog 项目 `450605`、看板「AutoClip｜1.5.7 出片成功率」，把每条 insight 里的 `docs/analytics/success_rate.sql` 参数 `{release_1_5_7}` 换成 `'YYYY-MM-DD HH:MM:SS'`：去掉 `T` 和 `Z`，日期与时间之间改成空格，保留 UTC，外面加单引号（`version_releases` 中 1.5.7 那一行的 `released_at_text`）。还没拿到发布时间就填空字符串 `''`，这一版的事件先全部不计入。不要猜日期，也不要把这个时间写回仓库。1.5.6 及更早不在这张表里，不用填
+- [ ] 成功率发布时间：执行本步 Promote 的人，打开该版本的 GitHub Release，复制 `published_at`（UTC，形如 `YYYY-MM-DDTHH:MM:SSZ`）。到 PostHog 项目 `450605`、出片成功率看板，把每条 insight 里的 `docs/analytics/success_rate.sql` 对应版本参数（`{release_1_5_7}` / `{release_1_5_8}` / `{release_1_5_9}`）换成 `'YYYY-MM-DD HH:MM:SS'`：去掉 `T` 和 `Z`，日期与时间之间改成空格，保留 UTC，外面加单引号（`version_releases` 中该版本那一行的 `released_at_text`）。还没拿到发布时间就填空字符串 `''`，这一版的事件先全部不计入。不要猜日期，也不要把这个时间写回仓库。1.5.6 及更早不在这张表里，不用填
 - [ ] 更新置顶帖 #96 的版本号和「这版修了什么」
 - [ ] 本版修复的 issue：回复「已在 vX.Y.Z 修复，请升级」后关闭；重复的 issue 合并到一个跟踪 issue 再一起关
 - [ ] `HANDOFF.md` 头部状态同步
@@ -157,4 +157,4 @@ PyPI 版本可以是产品版本的 post 发行（产品 `1.5.7`、包 `1.5.7.po
 | 打包脚本 | `scripts/build_macos_arm.sh`、`scripts/build_windows_x64.sh` |
 | 每周反馈周报 | `scripts/weekly_digest.py` |
 | 当前状态 / 待办 | `HANDOFF.md` |
-| 出片成功率发布时间下限 | `docs/analytics/success_rate.sql` 的 `{release_1_5_7}`。Promote 的人用 GitHub Release `published_at`（UTC）填进 PostHog insight，不写回仓库 |
+| 出片成功率发布时间下限 | `docs/analytics/success_rate.sql` 的 `{release_1_5_7}` / `{release_1_5_8}` / `{release_1_5_9}`。Promote 的人用 GitHub Release `published_at`（UTC）填进 PostHog insight，不写回仓库 |

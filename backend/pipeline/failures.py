@@ -96,7 +96,7 @@ HINT_CHECK_FFMPEG = "确认 ffmpeg 可用（桌面版内置；Docker / 脚本模
 # The extractor itself distinguishes request, response and duration failures.
 CODE_TIMELINE_EMPTY = "timeline_empty"
 HINT_EMPTY_TIMELINE = (
-    "短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。"
+    "短视频里的片段常被最短时长滤掉（短片约 10 秒起），或模型给出的时间戳对不上字幕。"
     "换一条更长、口播更完整的素材后再试。"
 )
 
@@ -251,6 +251,10 @@ def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> Pip
             "到「设置 → 默认模型 → 语音转字幕」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
             code="subtitle_setup",
         )
+    if code in {"validation_failed", "model_validation_failed"}:
+        action = ("请在转写设置中检查账号密钥或接口地址。" if code == "validation_failed"
+                  else "请更换转写型号或重新测试。")
+        return PipelineFailure(stage, "所选云端转写未通过校验。", action, code="provider_error")
     if code == "cloud_not_configured":
         return PipelineFailure(
             stage,

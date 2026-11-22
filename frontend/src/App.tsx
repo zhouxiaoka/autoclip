@@ -13,7 +13,9 @@ import SettingsReturnListener from './features/studio/SettingsReturnListener'
 import KeyGuidePrompt from './features/settings/KeyGuidePrompt'
 import QuitGuard from './features/studio/quitGuard'
 import KeepAwakeGuard from './features/studio/KeepAwakeGuard'
+import BackendCrashBanner from './desktop/BackendCrashBanner'
 import { startKeyGuideWatch } from './features/settings/keyGuideWatch'
+import { refreshSponsorPromo, startSponsorPromoWatch } from './features/settings/sponsorPromoWatch'
 import Header from './components/Header'
 import { UpdateProvider } from './desktop/UpdatePrompt'
 import { trackPageview } from './analytics/posthog'
@@ -21,12 +23,21 @@ import { startWorkflowObserver } from './analytics/observer'
 
 const { Content } = Layout
 
-// HashRouter 下手动上报 pageview（init 时已关闭自动 pageview）
+// HashRouter 下手动上报 pageview（init 时已关闭自动 pageview）。桌面 webview 在 trackPageview 里跳过。
 function usePageviewTracking() {
   const location = useLocation()
   useEffect(() => {
     trackPageview(location.pathname + location.search)
   }, [location.pathname, location.search])
+}
+
+function SponsorPromoHost() {
+  const location = useLocation()
+  useEffect(() => startSponsorPromoWatch(), [])
+  useEffect(() => {
+    if (location.pathname === '/settings') void refreshSponsorPromo('settings')
+  }, [location.pathname])
+  return null
 }
 
 function App() {
@@ -39,10 +50,12 @@ function App() {
     <UpdateProvider>
       <Layout>
         <Header />
+        <SponsorPromoHost />
         <SettingsReturnListener />
         <KeyGuidePrompt />
         <QuitGuard />
         <KeepAwakeGuard />
+        <BackendCrashBanner />
         <Content>
           <Routes>
             <Route path="/" element={<HomePage />} />

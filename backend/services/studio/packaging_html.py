@@ -12,6 +12,7 @@ A failed encode deletes its partial file. The caller downgrades to classic.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import json
 import logging
@@ -98,10 +99,20 @@ def collapse_hashes(hashes: list[str]) -> list[dict]:
     return runs
 
 
-async def capture_changed(frame_count: int, fps: int, render, shoot, pages: int = PAGES) -> list[dict]:
+async def capture_changed(
+    frame_count: int,
+    fps: int,
+    render,
+    shoot,
+    pages: int = PAGES,
+    *,
+    out_dir: Path | None = None,
+) -> list[dict]:
     """Capture only frames whose hash differs from the previous frame on that page.
 
-    ``render(page, time_seconds)`` returns the hash. ``shoot(page, index)`` returns PNG bytes.
+    ``render(page, time_seconds)`` returns the hash. ``shoot(page, index)`` returns PNG bytes
+    or a ``Path`` already written to disk. When ``out_dir`` is provided, PNG bytes are flushed
+    immediately to ``out_dir/<index:05d>.png`` so 1080x1920 RGBA buffers do not accumulate in RAM.
     """
     if fps <= 0:
         raise OverlayEncodeError('capture')
@@ -117,6 +128,10 @@ async def capture_changed(frame_count: int, fps: int, render, shoot, pages: int 
                 frames[-1]['count'] += 1
                 continue
             png = await shoot(ordinal, index)
+            if out_dir is not None and isinstance(png, (bytes, bytearray)):
+                target = out_dir / f'{int(index):05d}.png'
+                target.write_bytes(png)
+                png = target
             frames.append({'index': index, 'hash': digest, 'count': 1, 'png': png})
             last = digest
         return frames
@@ -418,10 +433,12 @@ def _concat_listing(holds: list[tuple[Path, int]], fps: int, listing: Path) -> N
 
 def _run(cmd: list[str], timeout: float):
     from backend.core import project_cancellation
+    from backend.services import render_limits
+    full, priority = render_limits.low_priority(cmd)
     # A bound studio render must be able to kill this ffmpeg with the rest of the task.
     if project_cancellation.current():
-        return project_cancellation.run(cmd, capture_output=True, text=True, timeout=timeout)
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return project_cancellation.run(full, capture_output=True, text=True, timeout=timeout, **priority)
+    return subprocess.run(full, capture_output=True, text=True, timeout=timeout, **priority)
 
 
 def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, *, timeout: float, run=None) -> None:
@@ -443,8 +460,16 @@ def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, *, tim
         with tempfile.TemporaryDirectory(prefix='ac-ffconcat-') as temp:
             listing = Path(temp) / 'list.ffconcat'
             _concat_listing(holds, fps, listing)
+            from backend.services import render_limits
             from backend.utils.ffmpeg_utils import get_ffmpeg_path
-            cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing), *ffv1_args(), '-f', 'matroska', '-y', str(partial)]
+            cmd = [
+                get_ffmpeg_path(), '-v', 'error',
+                *render_limits.input_args(),
+                '-f', 'concat', '-safe', '0', '-i', str(listing),
+                *ffv1_args(),
+                *render_limits.output_args(),
+                '-f', 'matroska', '-y', str(partial),
+            ]
             try:
                 proc = _run(cmd, timeout) if run is None else run(cmd)
             except subprocess.TimeoutExpired as error:
@@ -474,14 +499,18 @@ def _write_holds(frames: list[dict], folder: Path) -> list[tuple[Path, int]]:
     for frame in frames:
         path = folder / f"{int(frame['index']):05d}.png"
         png = frame.get('png')
-        if isinstance(png, (bytes, bytearray)):
+        if isinstance(png, Path):
+            if png.resolve() != path.resolve():
+                path.write_bytes(png.read_bytes())
+        elif isinstance(png, (bytes, bytearray)):
             path.write_bytes(png)
-        elif isinstance(png, Path):
-            path.write_bytes(png.read_bytes())
         else:
             raise OverlayEncodeError('capture')
         holds.append((path, int(frame['count'])))
     return holds
+
+
+_capture_out_dir: contextvars.ContextVar[Path | None] = contextvars.ContextVar('ac_overlay_out_dir', default=None)
 
 
 async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: int) -> list[dict]:
@@ -490,6 +519,7 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
     from backend.services.packaging_runtime import launch_kwargs
     from backend.services.studio.templates.registry import ASSET_ROOT, get
 
+    out_dir = _capture_out_dir.get()
     width, height = get(template).canvas.overlay_px
     page_url = (ASSET_ROOT / template / 'index.html').as_uri()
     async with async_playwright() as playwright:
@@ -528,9 +558,13 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                 return digest
 
             async def shoot(ordinal, index):
+                if out_dir is not None:
+                    target = out_dir / f'{int(index):05d}.png'
+                    await pages[ordinal].screenshot(path=str(target), omit_background=True, type='png')
+                    return target
                 return await pages[ordinal].screenshot(omit_background=True, type='png')
 
-            return await capture_changed(frame_count, fps, render, shoot)
+            return await capture_changed(frame_count, fps, render, shoot, out_dir=out_dir)
         finally:
             await browser.close()
 
@@ -617,15 +651,21 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     try:
         if remaining() <= 0:
             return finish(_downgrade('over_budget', requested=template))
-        produced = asyncio.run(asyncio.wait_for(
-            _bounded_capture(template, fill, frames, fps, capture),
-            timeout=remaining(),
-        ))
-        left = remaining()
-        if left <= 0:
-            return finish(_downgrade('over_budget', requested=template))
         with tempfile.TemporaryDirectory(prefix='ac-overlay-') as temp:
-            holds = _write_holds(produced, Path(temp))
+            temp_dir = Path(temp)
+            token = _capture_out_dir.set(temp_dir)
+            try:
+                produced = asyncio.run(asyncio.wait_for(
+                    _bounded_capture(template, fill, frames, fps, capture),
+                    timeout=remaining(),
+                ))
+            finally:
+                _capture_out_dir.reset(token)
+            left = remaining()
+            if left <= 0:
+                return finish(_downgrade('over_budget', requested=template))
+            holds = _write_holds(produced, temp_dir)
+            del produced
             encode_ffv1(holds, dest, fps=fps, timeout=left)
     except ProjectDeleted:
         raise

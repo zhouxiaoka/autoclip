@@ -42,6 +42,23 @@ test('four purpose slots and no video purpose', () => {
   assert.deepEqual(plain(slots.COMING_SOON), ['配音 · 语音合成', '配乐 · 音乐'])
 })
 
+test('Bailian account models retain their purpose and fixed account through save', () => {
+  const { expected } = require('../../backend/tests/fixtures/dashscope_model_settings.json')
+  const state = settings({ connections: [conn('ds', 'dashscope', { enabled_model_ids: expected.map(m => m.id) })] })
+  const account = { ds: { source: 'live', models: expected } }
+  let next = state
+  for (const [purpose, model] of Object.entries({ analysis: 'qwen4-max', vision: 'qwen4-max',
+    transcription: 'qwen-audio-3.1-asr-flash', cover: 'qwen-image-2.1-pro' })) {
+    const groups = slots.collectModelGroups(next, account, purpose)
+    assert.ok(groups.some(g => g.modelId === model && g.offers.some(o => o.connectionId === 'ds' && o.selectable)))
+    assert.ok(!groups.some(g => g.modelId === 'fixture-max-new'))
+    next = slots.applyFixedSelection(next, purpose, model, 'ds')
+    assert.equal(next[purpose].model_source, 'user')
+  }
+  assert.equal(logic.saveIssue(next), null)
+  assert.equal(logic.forSave(next).allow_send_frame, false)
+})
+
 test('old files without model_source count as user; empty slots are preset', () => {
   assert.equal(slots.resolvedModelSource({ model: 'qwen-plus' }), 'user')
   assert.equal(slots.resolvedModelSource({ model: '' }), 'preset')
@@ -50,8 +67,10 @@ test('old files without model_source count as user; empty slots are preset', () 
 })
 
 test('provider rank is recommended then popular then other', () => {
-  assert.ok(slots.providerRank('api88') < slots.providerRank('dashscope'))
-  assert.ok(slots.providerRank('infistar') < slots.providerRank('openai'))
+  assert.ok(slots.providerRank('apimart') < slots.providerRank('dashscope'))
+  assert.equal(slots.providerRank('api88'), slots.providerRank('dashscope'))
+  assert.ok(slots.providerRank('apimart') < slots.providerRank('infistar'))
+  assert.equal(slots.providerRank('infistar'), slots.providerRank('openai'))
   assert.ok(slots.providerRank('dashscope') < slots.providerRank('openrouter'))
 })
 
@@ -212,7 +231,7 @@ test('the same model id is listed once and smart pick prefers the sponsor connec
   assert.equal(gpt.offers.length >= 2, true)
   const preferred = slots.preferredOffer(gpt.offers)
   assert.equal(preferred.provider, 'infistar')
-  assert.equal(gpt.offers.some(offer => !offer.connected), true, 'unconnected catalog providers stay visible')
+  assert.deepEqual(plain(gpt.offers.map(offer => offer.connectionId).sort()), ['infi', 'or'], 'only configured accounts appear')
   const next = slots.applySmartSelection(settings(), 'analysis', 'gpt-4o-mini', preferred.connectionId)
   assert.equal(next.analysis.model, 'gpt-4o-mini')
   assert.equal(next.analysis.connection_id, 'infi')
@@ -355,10 +374,10 @@ test('catalog enrichment respects authoritative lists on compatible connections'
   }
 })
 
-test('missing lists create no models and do not make matched catalog offers connected', () => {
+test('missing account lists never certify a model or enable smart selection', () => {
   const gateway = conn('ds', 'compatible', { name: 'DeepSeek', base_url: 'https://api.deepseek.com' })
   const state = settings({ connections: [conn('infi', 'infistar'), gateway] })
-  assert.deepEqual(plain(slots.collectModelGroups(state, {}, 'analysis')), [])
+  assert.ok(slots.collectModelGroups(state, {}, 'analysis').every(group => !slots.preferredOffer(group.offers)))
   const infi = { ...lists.infi, models: [{ id: 'deepseek-flash', capability: 'text', analysis: true, image: false }] }
   const groups = slots.collectModelGroups(state, { infi }, 'analysis')
   const group = groups.find(item => item.modelId === 'deepseek-flash')
@@ -369,7 +388,7 @@ test('missing lists create no models and do not make matched catalog offers conn
   assert.equal(slots.preferredOffer([offer]), undefined)
 })
 
-test('catalog and preview lists never make a validated connection selectable', () => {
+test('catalog and preview lists never qualify a validated connection for smart routing', () => {
   for (const flags of [
     { source: 'catalog' }, { source: 'catalog', preview: false },
     { source: 'live', preview: true }, { source: 'cache', preview: true },
@@ -378,7 +397,7 @@ test('catalog and preview lists never make a validated connection selectable', (
       ...lists, infi: { ...lists.infi, ...flags },
     }, 'analysis')
     const gpt = groups.find(group => group.modelId === 'gpt-4o-mini')
-    assert.equal(gpt.offers.find(offer => offer.connectionId === 'infi').connected, false)
+    assert.equal(gpt.offers.some(offer => offer.connectionId === 'infi'), false, 'a public preview cannot add an unlisted model')
     assert.equal(slots.preferredOffer(gpt.offers).connectionId, 'or')
   }
   const cached = slots.collectModelGroups(settings(), {
@@ -449,4 +468,37 @@ test('visibility: untouched gateway lists enable a recommendation; explicit list
   assert.ok(groups.includes('claude-sonnet-5') && !groups.includes('codex-auto-review'))
   const strict = settings({ connections: [{ ...gw, enabled_model_ids: ['grok-4.5'] }] })
   assert.deepEqual(plain(slots.collectModelGroups(strict, { gw: { source: 'live', models } }, 'analysis').map(g => g.modelId)), ['grok-4.5'])
+})
+
+test('configured Bailian and DeepSeek analysis models can be chosen before an account list or successful probe', () => {
+  const bailian = conn('aliyun', 'dashscope', { validation_status: 'unchecked', api_key: undefined })
+  const deepseek = conn('deep', 'compatible', { name: 'DeepSeek', base_url: 'https://api.deepseek.com', validation_status: undefined, api_key: undefined })
+  const state = settings({ connections: [bailian, deepseek], analysis: { connection_id: 'aliyun', model: 'qwen-plus', model_source: 'user' } })
+  const groups = slots.collectModelGroups(state, {}, 'analysis')
+  const bailianOffer = groups.find(g => g.modelId === 'qwen-plus')?.offers.find(o => o.connectionId === 'aliyun')
+  const deepOffer = groups.flatMap(g => g.offers).find(o => o.connectionId === 'deep' && o.modelId.startsWith('deepseek'))
+  for (const offer of [bailianOffer, deepOffer]) {
+    assert.ok(offer?.selectable, 'configured accounts have a fixed choice even before verification')
+    assert.equal(offer.connected, false, 'discovery fallback does not certify credentials')
+  }
+  const next = slots.applyFixedSelection(state, 'analysis', deepOffer.modelId, deepOffer.connectionId)
+  assert.equal(logic.forSave(next).analysis.connection_id, 'deep')
+  assert.equal(logic.validationTargets(next)[0].model, deepOffer.modelId)
+  assert.equal(slots.collectModelGroups(state, { deep: { source: 'live', models: [] } }, 'analysis')
+    .some(g => g.offers.some(o => o.connectionId === 'deep' && o.selectable)), false)
+  for (const c of [{ ...deepseek, has_key: false }, { ...deepseek, enabled_model_ids: [] }, { ...deepseek, validation_status: 'failed' }]) {
+    assert.equal(slots.collectModelGroups(settings({ connections: [c] }), {}, 'analysis')
+      .some(g => g.offers.some(o => o.selectable)), false)
+  }
+})
+
+test('hiding a model keeps its active assignment but excludes it from pickers and cloud-ASR shortcuts', () => {
+  const state = settings({ connections: [conn('ds', 'dashscope', { enabled_model_ids: [] })] })
+  assert.equal(slots.collectModelGroups(state, lists, 'analysis').length, 0)
+  assert.equal(slots.slotSummary(state, lists, 'analysis').model, 'qwen-plus')
+  const asr = { id: 'qwen-audio-3.1-asr-flash', asr: true, asr_supported: true }
+  const live = { ds: { source: 'live', models: [asr] } }
+  assert.equal(slots.applyCloudTranscription(state, live).kind, 'add')
+  assert.equal(slots.cloudTranscriptionSavePatch(true, state, live), undefined)
+  assert.notEqual(slots.applyCloudTranscription(state).kind, 'selected')
 })

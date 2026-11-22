@@ -7,7 +7,7 @@ import { modelSettingsApi } from './modelSettingsApi'
 import { getCatalog } from './providerPresets'
 import { isLiveConnectable } from './providerCatalogView'
 import {
-  CUSTOM_PROVIDER_ID, hostOf, keyTail, needsOverwrite, normalizeGuideBaseUrl,
+  CUSTOM_PROVIDER_ID, findGuideEndpoint, hostOf, keyTail, needsOverwrite, normalizeGuideBaseUrl,
   type GuideEndpoint, type GuideTarget,
 } from './keyGuide'
 import { clearOffer, commitKeyGuide, currentOffer, onClipboardScanRequest, subscribeOffers, type KeyOffer } from './keyGuideBus'
@@ -34,6 +34,7 @@ export default function KeyGuidePrompt() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [providerId, setProviderId] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [model, setModel] = useState('')
   const [endpoints, setEndpoints] = useState<GuideEndpoint[]>([])
   const [busy, setBusy] = useState(false)
   const [emptyNote, setEmptyNote] = useState(false)
@@ -50,6 +51,7 @@ export default function KeyGuidePrompt() {
 
   useEffect(() => {
     if (!offer) return
+    setModel('')
     setProviderId(offer.hintedProviderId || '')
     setBaseUrl(offer.baseUrl || '')
   }, [offer])
@@ -79,11 +81,8 @@ export default function KeyGuidePrompt() {
   const selected = providerId || undefined
   const custom = providerId === CUSTOM_PROVIDER_ID
   const preset = !custom && providerId ? getCatalog().providers[providerId] : undefined
-  const endpoint = endpoints.find(item => (
-    custom
-      ? item.providerId === 'compatible' && hostOf(item.baseUrl) === hostOf(baseUrl)
-      : item.providerId === providerId
-  ))
+  const endpoint = findGuideEndpoint(endpoints, providerId, preset?.base_url || baseUrl)
+  const discoverModel = preset && !preset.default_model && !preset.candidates.analysis.length
   const replace = !!offer && needsOverwrite(endpoint, offer.key)
   const urlReady = !custom || !!normalizeGuideBaseUrl(baseUrl)
   const canConfirm = !!offer && !!providerId && urlReady && !busy
@@ -103,6 +102,7 @@ export default function KeyGuidePrompt() {
         providerId,
         apiKey: offer.key,
         baseUrl: custom ? baseUrl : (preset?.base_url || baseUrl),
+        ...(discoverModel && model.trim() ? { model: model.trim() } : {}),
         overwrite: true,
       })
       if (result.blocked || (!result.ok && !result.deferred)) return
@@ -110,7 +110,14 @@ export default function KeyGuidePrompt() {
       clearOffer()
       setDialogOpen(false)
       const presetQuery = custom ? '' : providerId
-      navigate(presetQuery ? `/settings?section=ai&provider=${encodeURIComponent(presetQuery)}` : '/settings?section=ai')
+      const currentSearch = typeof window !== 'undefined'
+        ? (window.location.hash.includes('?') ? window.location.hash.slice(window.location.hash.indexOf('?')) : window.location.search)
+        : ''
+      const keepReturn = new URLSearchParams(currentSearch).get('return_import') === '1'
+      const params = new URLSearchParams({ section: 'ai' })
+      if (presetQuery) params.set('provider', presetQuery)
+      if (keepReturn) params.set('return_import', '1')
+      navigate(`/settings?${params.toString()}`)
     } finally {
       setBusy(false)
     }
@@ -152,7 +159,7 @@ export default function KeyGuidePrompt() {
             value={selected}
             placeholder={t('settings.key_guide.pick_required')}
             options={choices}
-            onChange={value => setProviderId(value)}
+            onChange={value => { setProviderId(value); setModel('') }}
           />
         </Row>
         {(custom || !preset?.base_url) && (
@@ -163,6 +170,12 @@ export default function KeyGuidePrompt() {
               placeholder="https://example.com/v1"
               onChange={event => setBaseUrl(event.target.value)}
             />
+          </Row>
+        )}
+        {discoverModel && (
+          <Row stack wide label={t('模型 ID')} hint={t('自动获取模型列表，也可以直接输入模型 ID。')}>
+            <Input aria-label={t('模型 ID')} value={model} maxLength={200} placeholder={t('可选')}
+              onChange={event => setModel(event.target.value)} />
           </Row>
         )}
         {replace && <p className="ac-note" role="status">{t('settings.key_guide.keep')}</p>}

@@ -11,6 +11,9 @@ from contextvars import ContextVar
 from typing import Callable, Optional
 import logging
 
+from backend.core.job_budget import JobDurationExceeded
+from backend.core.project_cancellation import JobStopped, ServiceRestarted
+
 logger = logging.getLogger(__name__)
 
 _reporter: ContextVar[Optional[Callable[[float], None]]] = ContextVar('transcription_progress', default=None)
@@ -39,7 +42,7 @@ def report(processed_sec, total_sec) -> None:
     fraction = min(1.0, max(0.0, processed / total))
     try:
         callback(fraction)
-    except FileNotFoundError:
-        raise  # ProjectDeleted (RC156 #12): the project is gone, stop transcribing
+    except (FileNotFoundError, JobStopped, ServiceRestarted, JobDurationExceeded):
+        raise  # Stop signals are control flow, never a display-only failure.
     except Exception as error:  # noqa: BLE001
         logger.debug('Transcription progress display failed: %s', type(error).__name__)

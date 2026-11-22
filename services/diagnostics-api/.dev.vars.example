@@ -1,0 +1,5 @@
+# Copy to .dev.vars locally. Never commit real values. The desktop app has none of these.
+ADMIN_TOKEN=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=

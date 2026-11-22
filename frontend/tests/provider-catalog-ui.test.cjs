@@ -5,6 +5,13 @@ const path = require('path')
 const React = require('react')
 const { loadTs } = require('./load-ts.cjs')
 
+function loadDetail(mocks) {
+  return loadTs('ProviderDetail.tsx', {
+    ...mocks,
+    react: { ...React, useRef: current => ({ current }), ...(mocks.react || {}) },
+  }).default
+}
+
 function flatten(node) {
   if (node == null || typeof node === 'boolean') return []
   if (Array.isArray(node)) return node.flatMap(flatten)
@@ -51,7 +58,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   const cards = nodes.filter(node => node.props && node.props['data-provider-id'])
   const recommended = nodes.find(node => node.props && node.props['data-provider-group'] === 'recommended')
   const recommendedIds = flatten(recommended).filter(node => node.props && node.props['data-provider-id']).map(node => node.props['data-provider-id'])
-  assert.deepEqual(recommendedIds, ['apimart', 'api88', 'infistar', 'deepseek', 'dashscope'])
+  assert.deepEqual(recommendedIds, ['deepseek', 'dashscope', 'apimart'])
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'api88'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'deepseek'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'whisper'))
@@ -66,7 +73,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   const deepseek = cards.find(node => node.props['data-provider-id'] === 'deepseek')
   assert.match(textOf(deepseek), /settings\.providers\.configure/)
   const api88 = cards.find(node => node.props['data-provider-id'] === 'api88')
-  assert.match(textOf(api88), /settings\.providers\.one_click/)
+  assert.match(textOf(api88), /settings\.providers\.configure/)
   deepseek.props.onClick()
   assert.deepEqual(opened, ['deepseek'])
   assert.ok(flatten(deepseek).some(node => node.props && node.props['data-success-tier'] === 'high'))
@@ -81,7 +88,7 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   assert.equal(recommendedIds.includes('openai'), false)
 })
 
-test('saved custom gateways appear as a repair entry', () => {
+test('custom gateways are editable without a repair warning', () => {
   const tree = Catalog({
     settings: {
       ...settings,
@@ -97,7 +104,7 @@ test('saved custom gateways appear as a repair entry', () => {
   assert.ok(nodes.some(node => node.props && node.props['data-provider-group'] === 'custom'))
   const card = nodes.find(node => node.props && node.props['data-provider-id'] === 'custom:gw')
   assert.ok(card)
-  assert.match(textOf(card), /settings\.providers\.repair_custom/)
+  assert.match(textOf(card), /编辑/)
 })
 
 test('whisper is not marked available until the local model is ready', () => {
@@ -140,7 +147,7 @@ test('catalog shows both ready local ASR engines while cloud transcription is se
 })
 
 test('detail only shows a successful status for verified connections or ready local ASR', () => {
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -149,7 +156,7 @@ test('detail only shows a successful status for verified connections or ready lo
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   for (const id of ['deepseek', 'ollama']) {
     for (const validation_status of ['unchecked', 'failed', 'ok']) {
@@ -187,7 +194,7 @@ test('search and capability filter show unconnected more-group providers', () =>
 })
 
 test('detail shows a configure form for an unconnected preset without writing a connection', () => {
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n,
     '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
@@ -202,7 +209,7 @@ test('detail shows a configure form for an unconnected preset without writing a 
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const ensured = []
   const tree = Detail({
     preset: {
@@ -262,6 +269,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
   }
   const m = { settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
   const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
     './AddCustomProviderDialog': { default: () => null },
     react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {}, useRef: initial => ({ current: initial }) },
     'react-i18next': { useTranslation: () => {} },
@@ -325,6 +333,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
       update: () => {}, save: async () => ({}),
     }
     const Page = loadTs('AIModelSettings.tsx', {
+    './ModelSettingsLeaveGuard': { default: () => null },
       './AddCustomProviderDialog': { default: () => null },
       react: {
         ...React,
@@ -362,7 +371,8 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
 }
 
 test('provider detail uses two-column connect/models layout without analysis ModelPicker', () => {
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
+    react: { useState: initial => [initial, () => {}] },
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -370,7 +380,7 @@ test('provider detail uses two-column connect/models layout without analysis Mod
     './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
   const tree = Detail({
     preset: view.catalogPreset('deepseek'),
@@ -408,7 +418,7 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
   assert.ok(openai && openai.locked && openai.base_url)
   const edits = []
   const tests = []
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -419,7 +429,7 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   const detail = Detail({
     preset: openai,
     m: {
@@ -442,10 +452,81 @@ test('locked catalog detail shows editable 接口地址 and 测试连接', () =>
   assert.equal(tests[0].draft.base_url, openai.base_url)
 })
 
+for (const [presetId, address, legacy] of [
+  ['openai', 'https://api.openai.com/v', false],
+  ['openai', 'https://api.openai.com/proxy/v1', true],
+  ['openrouter', 'https://my-gateway.example/v1', false],
+]) {
+  test(`editing ${legacy ? 'a legacy' : 'a new'} ${presetId} connection retains its address across renders (#636)`, () => {
+    const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+    const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
+    const preset = view.catalogPreset(presetId)
+    const tracked = { current: undefined }
+    const probes = []
+    const configured = []
+    const m = {
+      settings: { ...settings, connections: legacy ? [{ ...logic.newConnection(presetId, 'legacy'), base_url: '', has_key: true }] : [] },
+      lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, saving: false, testing: false,
+      ensureCatalogProvider(id, patch) {
+        const result = view.ensureCatalogConnection(this.settings, preset)
+        this.settings = logic.editConnection(result.settings, result.connection.id, patch)
+        return result.connection.id
+      },
+      editConnection(connection, patch) {
+        this.settings = logic.editConnection(this.settings, connection.id, patch)
+      },
+      configureProvider(connection) { configured.push([connection.id, connection.base_url]) },
+      testCatalogProvider(id, connection, kind) { probes.push([connection.id, connection.base_url, kind]) },
+    }
+    const Detail = loadTs('ProviderDetail.tsx', {
+      react: { ...React, useRef: () => tracked },
+      '../../i18n': i18n, '../../ui': ui,
+      '../../utils/externalLinks': { openExternalLink: () => {} },
+      '../../components/SpeechRecognitionConfig': { default: () => null },
+      './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('input', {
+        value: connection.base_url, onChange: value => onEdit({ base_url: value }),
+      }) },
+      './SenseVoiceConfig': { default: () => null },
+      './TrialRunPanel': { default: () => null },
+    }).default
+    const render = () => flatten(Detail({ preset, m, onBack: () => {} }))
+    const field = () => render().find(node => node.type === 'input')
+    assert.equal(field().props.value, preset.base_url)
+    assert.equal(m.settings.connections.length, legacy ? 1 : 0)
+    if (legacy) assert.equal(render().find(node => node.type === 'button' && textOf(node) === '快速测试').props.disabled, false)
+    field().props.onChange(address)
+    assert.equal(field().props.value, address)
+    const connectionId = m.settings.connections[0].id
+    field().props.onChange('')
+    assert.equal(field().props.value, '')
+    assert.equal(render().find(node => node.type === 'button' && textOf(node) === '快速测试').props.disabled, true)
+    field().props.onChange('https://gateway.example/first/v1')
+    field().props.onChange(address)
+    m.editConnection(m.settings.connections[0], { api_key: 'test-only' })
+    const enableBtn = render().find(node => node.type === 'button' && textOf(node) === '测试并启用')
+    assert.equal(enableBtn.props.disabled, false)
+    enableBtn.props.onClick()
+    for (const label of ['快速测试', '试跑一段']) {
+      const button = render().find(node => node.type === 'button' && textOf(node) === label)
+      assert.equal(button.props.disabled, false)
+      button.props.onClick()
+    }
+    assert.deepEqual(configured, [[connectionId, address]])
+    assert.deepEqual(probes, [[connectionId, address, 'quick'], [connectionId, address, 'trial']])
+    const saved = logic.forSave(m.settings)
+    assert.equal(saved.connections.length, 1)
+    assert.equal(saved.connections[0].id, connectionId)
+    assert.equal(saved.connections[0].base_url, address)
+    const custom = view.unmatchedCompatibleConnections(logic.prepareLoaded(saved))
+    assert.equal(custom.length, 1)
+    assert.equal(custom[0].id, connectionId)
+  })
+}
+
 
 test('all endpoint-only catalog cards open an address entry flow without binding a default', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -458,7 +539,7 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
+  })
   for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
     const opened = []
     const tree = Catalog({ settings, query: preset.id, filter: 'all', moreOpen: true,
@@ -530,7 +611,7 @@ test('R6 transient validation shows an existing hint without marking credentials
 
 test('sponsor detail keeps only essentials: key, address, one-click, test, models', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
-  const Detail = loadTs('ProviderDetail.tsx', {
+  const Detail = loadDetail({
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
@@ -542,8 +623,9 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     './ModelPicker': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
     './TrialRunPanel': { default: () => null },
-  }).default
-  for (const id of ['api88', 'infistar', 'apimart']) {
+  })
+  assert.equal(view.catalogPreset('api88').sponsor, undefined)
+  for (const id of ['apimart']) {
     const preset = view.catalogPreset(id)
     assert.ok(preset?.sponsor)
     const tree = Detail({
@@ -559,5 +641,47 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === '接口地址'))
     assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === 'API 密钥'))
     assert.ok(flatten(tree).some(n => n.type === 'button' && /one_click|一键获取/.test(textOf(n))))
+  }
+})
+
+test('leaving the key field to save does not invalidate the model list or repeat a key edit', () => {
+  const Fields = loadTs('ProviderFields.tsx', {
+    react: { ...React, useState: () => [false, () => {}] },
+    antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
+    '../../i18n': i18n, '../../ui': ui, '../../utils/externalLinks': {}, '../../analytics/events': {},
+  }).default
+  const connection = { id: 'account', provider: 'dashscope', base_url: '', has_key: true }
+  const edits = []
+  const field = () => flatten(Fields({
+    connection, hideProvider: true, placement: 'settings_model',
+    onEdit: patch => { edits.push(patch.api_key); Object.assign(connection, patch) },
+  })).find(node => node.type === 'password').props
+  const event = value => ({ target: { value } })
+  field().onBlur(event(''))
+  field().onChange(event(' example-key '))
+  field().onBlur(event('example-key'))
+  field().onBlur(event('autofilled-key'))
+  field().onChange(event(''))
+  assert.deepEqual(edits, ['example-key', 'autofilled-key', undefined])
+})
+
+test('pasting an OpenRouter key into its compatible connection stays in the field (#621)', () => {
+  const watch = loadTs('keyGuideWatch.ts', {
+    '../../utils/desktopMode': {}, './keyGuideBus': { publishOffer() {} },
+  })
+  watch.setKeyGuideTargets([{ id: 'openrouter', hosts: ['openrouter.ai'] }])
+  const Fields = loadTs('ProviderFields.tsx', {
+    react: { ...React, useState: () => [false, () => {}] },
+    antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
+    '../../i18n': i18n, '../../ui': ui, '../../utils/externalLinks': {}, '../../analytics/events': {},
+    './keyGuideWatch': watch,
+  }).default
+  for (const [base_url, intercept] of [['https://openrouter.ai/api/v1', false], ['https://other.example/v1', true]]) {
+    const connection = { id: 'gateway', name: 'Gateway', provider: 'compatible', base_url }
+    const tree = Fields({ connection, hideProvider: true, placement: 'settings_model', onEdit() {} })
+    const input = flatten(tree).find(node => node.type === 'password')
+    let prevented = false
+    input.props.onPaste({ clipboardData: { getData: () => 'sk-or-v1-fixture-only-abcdefghijklmnopqrstuvwxyz' }, preventDefault() { prevented = true } })
+    assert.equal(prevented, intercept)
   }
 })

@@ -366,6 +366,9 @@ def test_frontend_contract_lists_stay_aligned():
     from backend.core import llm_telemetry as telemetry
     assert set(const_list("TELEMETRY_PROVIDERS")) == telemetry.TELEMETRY_PROVIDERS
     assert set(const_list("FAILURE_STAGES")) == telemetry.FAILURE_STAGES
+    assert set(const_list("LLM_REQUEST_STAGES")) == telemetry.LLM_REQUEST_STAGES
+    from backend.core import event_catalog
+    assert set(event_catalog.load_catalog()["enums"]["llm_request_stage"]) == telemetry.LLM_REQUEST_STAGES
     assert set(const_list("RUN_LEVEL_FIELDS")) == telemetry.RUN_LEVEL_FIELDS
     assert set(const_list("LLM_REQUEST_FIELDS")) == telemetry.LLM_REQUEST_FIELDS
     messages = json.loads((Path(__file__).resolve().parents[1] / "core" / "failure_messages.json").read_text(encoding="utf-8"))

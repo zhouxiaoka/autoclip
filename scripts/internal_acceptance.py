@@ -48,6 +48,7 @@ def validate(manifest, folder, assets, version, commit, build, jobs, now=None, w
     release.require(manifest.get('evidence_contract') in release.EVIDENCE_CONTRACTS, 'unknown evidence contract')
     release.require(manifest.get('assets') == release.assets_in(assets), 'internal asset hashes do not match')
     built = json.loads((assets / PROVENANCE).read_text(encoding='utf-8'))
+    release.assert_not_platform_qa(built)
     release.require(built == provenance(version, commit, assets, manifest.get('build_run_id')), 'internal build provenance mismatch')
     release.require(build.get('id') == manifest['build_run_id'], 'build run mismatch')
     release.require(build.get('path') == '.github/workflows/desktop-build.yml', 'evidence must use Desktop Build')

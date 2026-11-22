@@ -24,6 +24,9 @@ import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
+import DiagnosticsDialog from '../features/diagnostics/DiagnosticsDialog'
+import FailureHint from '../features/diagnostics/FailureHint'
+import { nextLiveFailure } from '../features/diagnostics/failureHintPolicy'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { flagAssigned } from '../analytics/flags'
@@ -48,6 +51,14 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadVersion = useRef(0)
+  const seenStatus = useRef<Record<string, string>>({})
+  const [liveFailure, setLiveFailure] = useState(false)
+  useEffect(() => {
+    if (!currentProject?.id) return
+    const step = nextLiveFailure(seenStatus.current, [currentProject])
+    seenStatus.current = step.previous
+    if (step.failed) setLiveFailure(true)
+  }, [currentProject])
   const exampleView = useRef('')
   const exampleVisible = !loading && !error && currentProject?.id === id && !!(currentProject?.settings?.example || currentProject?.processing_config?.example)
   useEffect(() => {
@@ -59,6 +70,7 @@ const ProjectDetailPage: React.FC = () => {
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
@@ -123,9 +135,11 @@ const ProjectDetailPage: React.FC = () => {
           if (version !== loadVersion.current) return
           console.error('Failed to load clips/collections:', err)
           setCurrentProject(project)
+          upsertProject(project)
         }
       } else {
         setCurrentProject(project)
+        upsertProject(project)
       }
     } catch (err) {
       if (version !== loadVersion.current) return
@@ -366,6 +380,7 @@ const ProjectDetailPage: React.FC = () => {
           )}
           {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Btn onClick={() => setDiagnosticsOpen(true)}>{t("提交诊断")}</Btn>
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
               {installTranscription && !bodyOwnsInstall && <Btn variant="cta" onClick={() => navigate(installTranscription.destination)}>{t(installTranscription.label)}</Btn>}
               <Btn variant={llmKeyFailure || shownSubtitleKind || installTranscription ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
@@ -374,6 +389,7 @@ const ProjectDetailPage: React.FC = () => {
         </div>
       </header>
 
+      {liveFailure && <FailureHint active project={currentProject} />}
       {isCompleted || isVisual ? (
         <StudioResults key={currentProject.id} project={currentProject} onCreateCollection={() => setShowCreateCollection(true)} onReload={loadProject}>
           {sortedCollections.map(collection => <CollectionCard key={collection.id} collection={collection} clips={clips}
@@ -404,7 +420,12 @@ const ProjectDetailPage: React.FC = () => {
           <b>{t("这次处理没有成功")}</b>
           {currentProject.error_message ? (
             <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-word' }}>
-              {t(llmFailureText(currentProject.error_message, currentProject.error_code, failureUpstream))}
+              {t(llmFailureText(
+                currentProject.error_message,
+                currentProject.error_code,
+                typeof failureUpstream === 'string' ? failureUpstream : null,
+                [currentProject.processing_config?.failure_stage, currentProject.settings?.failure_stage].find((value): value is string => typeof value === 'string'),
+              ))}
             </span>
           ) : (
             t("可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。")
@@ -419,6 +440,7 @@ const ProjectDetailPage: React.FC = () => {
       )}
 
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+      <DiagnosticsDialog open={diagnosticsOpen} onClose={() => setDiagnosticsOpen(false)} projectId={currentProject.id} />
 
       <CreateCollectionModal
         visible={showCreateCollection}

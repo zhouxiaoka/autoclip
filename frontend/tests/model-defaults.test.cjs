@@ -8,12 +8,12 @@ const models = [
   { id: 'wanx2.1-t2i-turbo', image: true, analysis: false },
 ]
 const blank = () => ({ analysis: { connection_id: 'main', model: '', capability: 'auto' }, vision: null, cover: null, cover_enabled: false })
-test('first setup chooses the analysis model; covers stay on the free local design', () => {
+test('first setup chooses the analysis model; covers use the available image model', () => {
   const value = applyModelDefaults(blank(), connection, models, true)
   assert.equal(value.analysis.model, 'qwen3.8-flash')
   assert.equal(value.analysis.model_source, 'preset')
-  assert.equal(value.cover, null, 'no image service is assumed')
-  assert.equal(value.cover_enabled, false)
+  assert.equal(value.cover.model, 'wanx2.1-t2i-turbo')
+  assert.equal(value.cover_enabled, true)
   const chosen = applyModelDefaults({ ...blank(), cover_enabled: true }, connection, models, false)
   assert.equal(chosen.cover.model, 'wanx2.1-t2i-turbo', 'once the user switches to AI covers, the recommended image model is filled')
   assert.equal(chosen.cover.model_source, 'preset')
@@ -82,13 +82,13 @@ test('APIMart orders live models and does not default to the first multimodal id
     { id: 'gemini-3.8-flash', analysis: true, capability: 'multimodal' },
     { id: 'qwen3.8-flash', analysis: true, capability: 'multimodal' },
   ]
-  assert.equal(defaultModel('apimart', listed), 'qwen3.8-flash')
+  assert.equal(defaultModel('apimart', listed), 'deepseek-v4-flash')
   assert.equal(defaultModel('apimart', listed, false, 'vision'), 'qwen3.8-flash')
   const applied = applyModelDefaults({
     ...blank(),
     vision: { connection_id: 'main', model: '', capability: 'auto' },
   }, { id: 'main', provider: 'apimart' }, listed, false)
-  assert.equal(applied.analysis.model, 'qwen3.8-flash')
+  assert.equal(applied.analysis.model, 'deepseek-v4-flash')
   assert.equal(applied.vision.model, 'qwen3.8-flash')
   assert.equal(applied.analysis.model_source, 'preset')
 })

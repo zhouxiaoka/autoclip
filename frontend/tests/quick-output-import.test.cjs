@@ -32,7 +32,6 @@ test('quick import submits platform targets, branding and auto-starts to results
   '../../analytics/flags':{useFlag:()=>false,flagEnabled:()=>false,flagValue:()=>'button',flagAssigned:()=>false,featureSnapshot:()=>({pkg_templates_v1:false})},
   './TemplatePicker':{default:'template-picker',templateImportFields:()=>({})},
   './StyleProbeLine':{default:'style-probe'},
-  './ReadinessLine':{default:'readiness-line'},
   './editingStyleSession':{readStyle:()=>({key:'',status:'idle',result:null,latencyMs:0})},
   './platformLabel':{platformLabel:id=>id},'./platformMemory':{hasSuccessHistory:()=>false,readRememberedPlatforms:()=>null,resolvePlatforms:()=>({platforms:['douyin'],source:'user'}),samePlatforms:()=>true,takeReuseImport:()=>null,writeRememberedPlatforms(){}},
   './pasteStart':{claimBackgroundWhisperInstall:()=>false,importUrlKind: text => { try { const u = new URL(String(text||'').trim()); if (u.protocol!=='https:') return null; const h=u.hostname.toLowerCase(); if (h==='youtu.be'||h==='youtube.com'||h.endsWith('.youtube.com')) return 'youtube'; if (h==='b23.tv'||h==='bilibili.com'||h.endsWith('.bilibili.com')) return 'bilibili'; return null } catch { return null } },isVideoFile:()=>false,shouldArmAutostart: () => false, shouldAutoStart:()=>false,shouldBackgroundInstallWhisper:()=>false,UNDO_MS:3000},
@@ -335,17 +334,61 @@ async function flush(act) {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
 
+test('leaving for cloud transcription preserves the original video and an attached SRT can finish the import', async () => {
+  const React = require('react')
+  const { Window } = await import('happy-dom')
+  const window = new Window({ url: 'http://localhost/' })
+  const restore = installDom(window)
+  const calls = []
+  const routes = []
+  try {
+    const view = await mountImport(window, React, React.createElement, calls, {
+      transcriberMissing: true, navigate: route => routes.push(route),
+    })
+    await React.act(async () => { buttonText(view.host, '文件导入').click() })
+    const picker = view.host.querySelector('input[aria-label="视频文件"]')
+    assert.equal(picker.hidden, true, 'the OS file input must not add an untranslated row')
+    let pickerClicks = 0
+    picker.addEventListener('click', () => { pickerClicks++ })
+    await React.act(async () => { buttonText(view.host, '选择一段视频').click() })
+    assert.equal(pickerClicks, 1)
+    await chooseFile(window, React.act, view)
+    await React.act(async () => { buttonText(view.host, '换一个视频').click() })
+    assert.equal(pickerClicks, 2)
+    Object.defineProperty(picker, 'files', { configurable: true, value: [] })
+    await React.act(async () => { picker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    assert.match(view.host.textContent, /short\.mp4/)
+    await React.act(async () => { buttonText(view.host, '改用云端转写').click() })
+    assert.equal(routes[0], '/settings?section=speech&provider=cloud&return_import=1')
+    await view.remount()
+    assert.match(view.host.textContent, /short\.mp4/)
+    const input = view.host.querySelector('input[aria-label="已有字幕"]')
+    const srt = new window.File(['first subtitle'], 'clip.srt')
+    Object.defineProperty(input, 'files', { configurable: true, value: [srt] })
+    await React.act(async () => { input.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    await React.act(async () => { buttonText(view.host, '生成成片').click() })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].get('video').name, 'short.mp4')
+    assert.equal(await calls[0].get('video').text(), 'x')
+    assert.equal(calls[0].get('subtitle').name, 'clip.srt')
+    await view.unmount()
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
+})
+
 async function mountImport(window, React, h, calls, options = {}) {
   const { createRoot } = require('react-dom/client')
   const ts = require('typescript')
   const studioDir = path.resolve(__dirname, '../src/features/studio')
   const ready = { analysis_mode: 'auto', ready: true, checks: { analysis: { ok: true, code: 'ok', repair: 'none' }, transcription: { ok: true, code: 'ok', repair: 'none' }, visual: { ok: true, code: 'ok', repair: 'none' }, ffmpeg: { ok: true, code: 'ok', repair: 'none' } } }
+  if (options.transcriberMissing) ready.checks.transcription = { ok: false, code: 'whisper_not_installed', repair: 'install_whisper' }
   const started = []
   const mocks = {
     'react-i18next': { useTranslation() {} },
     '../../i18n': { t: value => value, getLocale: () => 'zh-CN' },
     antd: { Select: () => null },
-    'react-router-dom': { useNavigate: () => () => {} },
+    'react-router-dom': { useNavigate: () => options.navigate || (() => {}) },
     '../../ui': {
       Btn: ({ children, onClick, variant }) => h('button', { type: 'button', onClick, 'data-variant': variant || '' }, children),
       Segmented: ({ onChange, options }) => h('div', null, (options || []).map(option => h('button', { type: 'button', key: option.value, onClick: () => onChange(option.value) }, option.label))),
@@ -371,7 +414,6 @@ async function mountImport(window, React, h, calls, options = {}) {
     './ImportSetupCard': { default: () => null },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
-    './ReadinessLine': { default: 'readiness-line' },
     './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: () => null },
@@ -412,5 +454,9 @@ async function mountImport(window, React, h, calls, options = {}) {
   document.body.appendChild(host)
   const root = createRoot(host)
   await React.act(async () => { root.render(h(CreativeImport, { onImported: async () => {} })) })
-  return { host, started, unmount: async () => { await React.act(async () => { root.unmount() }); host.remove() } }
+  const remount = async () => {
+    await React.act(async () => { root.render(null) })
+    await React.act(async () => { root.render(h(CreativeImport, { onImported: async () => {} })) })
+  }
+  return { host, started, remount, unmount: async () => { await React.act(async () => { root.unmount() }); host.remove() } }
 }

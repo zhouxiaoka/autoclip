@@ -209,6 +209,20 @@
 .ac-update-percent { font-family: var(--ac-font-mono); font-size: 12px; color: var(--ac-muted); min-width: 36px; text-align: right; }
 .ac-update-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
+.ac-failure-hint {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40;
+  width: min(440px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 14px;
+  background: var(--ac-card); color: var(--ac-ink); border: 1px solid var(--ac-line); border-radius: 12px;
+  box-shadow: var(--ac-shadow); font-size: 13px; line-height: 1.45;
+}
+.ac-failure-hint-link {
+  flex: 0 0 auto; border: 0; background: transparent; padding: 0; cursor: pointer;
+  color: var(--ac-sub); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px;
+}
+.ac-failure-hint-link:hover, .ac-failure-hint-link:focus-visible { color: var(--ac-ink); }
+
 /* ---- inline status row (dot + label), used in failed/complete states ---- */
 .ac-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ac-sub); }
 .ac-status--error { color: var(--ac-error); }
@@ -292,45 +306,24 @@
 
 /* ---- default-model purpose slots (U2) ---- */
 .ac-default-models { min-width: 0; }
-.ac-purpose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.ac-purpose-slot { min-width: 0; }
-.ac-purpose-card {
-  appearance: none; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  width: 100%; padding: 20px 22px; border-radius: 16px; border: 1px solid var(--ac-line);
-  background: var(--ac-card); color: inherit; font-family: inherit; text-align: left; cursor: pointer;
-  transition: background var(--ac-t-micro, 100ms) ease-out, border-color var(--ac-t-micro, 100ms) ease-out;
-}
-.ac-purpose-card:hover { background: var(--ac-sel); }
-.ac-purpose-card[aria-expanded="true"] { background: var(--ac-sel); border-color: var(--ac-line); }
-.ac-purpose-title { font-size: 15px; font-weight: 500; color: var(--ac-ink); }
-.ac-purpose-kind { font-size: 12.5px; color: var(--ac-sub); }
-.ac-purpose-line { font-size: 13px; color: var(--ac-ink); overflow-wrap: anywhere; }
-.ac-purpose-panel { margin-top: 8px; padding: 8px; border: 1px solid var(--ac-line); border-radius: 16px; background: var(--ac-card); }
-.ac-purpose-search { margin: 8px 0; }
-.ac-purpose-group { padding: 8px 0; border-top: 1px solid var(--ac-line-2); }
-.ac-purpose-group:first-child { border-top: 0; }
-.ac-purpose-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 10px 8px; }
-.ac-purpose-count { font-size: 12px; color: var(--ac-muted); }
-.ac-purpose-smart { display: flex; align-items: center; gap: 4px; }
-.ac-purpose-smart .ac-purpose-option { flex: 1; }
-.ac-purpose-help {
-  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 12px; color: var(--ac-muted); cursor: help;
-}
-.ac-purpose-option {
-  appearance: none; display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: inherit;
-  font-family: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
-}
-.ac-purpose-option:hover:not(:disabled) { background: var(--ac-line-2); }
-.ac-purpose-option[aria-selected="true"] { background: var(--ac-sel); }
-.ac-purpose-option:disabled { opacity: .45; cursor: default; }
-.ac-purpose-option-label { flex: 1; min-width: 0; }
-.ac-purpose-option-hint { font-size: 12px; color: var(--ac-muted); }
+.ac-default-models-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ac-default-models-head h3 { margin: 0; }
+.ac-purpose-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; }
+.ac-purpose-slot { min-width: 0; display: flex; flex-direction: column; }
+.ac-purpose-card { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; padding: 16px; background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: 12px; }
+.ac-purpose-heading, .ac-model-choice { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ac-purpose-title { font-size: 14px; font-weight: 600; color: var(--ac-ink); }
+.ac-purpose-kind, .ac-model-choice small { font-size: 12px; color: var(--ac-sub); }
+.ac-purpose-select { width: 100%; min-width: 0; }
+.ac-model-choice > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-model-choice small { flex-shrink: 0; }
 .ac-purpose-soon { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0 0; font-size: 12.5px; color: var(--ac-muted); pointer-events: none; }
 .ac-purpose-soon span + span::before { content: "·"; margin-right: 16px; color: var(--ac-line); }
 @media (max-width: 680px) {
-  .ac-purpose-grid { grid-template-columns: 1fr; }
+  .ac-purpose-grid { gap: 10px; }
+  .ac-purpose-card { padding: 10px; }
+  .ac-purpose-heading { flex-wrap: wrap; row-gap: 2px; }
+  .ac-purpose-card .ac-link-button { overflow-wrap: anywhere; }
 }
 
 /* ---- first-run dialog: settings rows stacked to fit the 520px dialog ---- */
@@ -415,17 +408,10 @@
 .ac-project-tags .ac-tag { position: static; }
 .ac-project-title { padding: 0; text-align: left; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
 .ac-project-card .ac-card-body { padding: 18px 20px 20px; gap: 12px; }
-.ac-project-card--weak .ac-card-thumb { cursor: default; }
-.ac-project-card--weak .ac-project-open { cursor: default; }
-.ac-project-card--weak .ac-card-title { margin: 0; font-size: 16px; font-weight: 600; min-height: 0; -webkit-line-clamp: 2; }
-.ac-fail-pill {
-  display: inline-flex; align-items: center; padding: 3px 10px 3px 8px;
-  border-radius: 999px; background: var(--ac-card);
-  box-shadow: 0 1px 2px rgba(26,26,25,.08);
-}
-.ac-fail-pill .ac-status { font-weight: 500; font-size: 12.5px; }
-.ac-project-weak { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.ac-project-weak-reason { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ac-sub); }
+.ac-project-card--failed .ac-card-body { gap: 8px; padding: 16px; }
+.ac-failure-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ac-failure-heading .ac-card-title { min-width: 0; min-height: 0; margin: 0; overflow-wrap: anywhere; font-size: 16px; font-weight: 600; }
+.ac-failure-heading .ac-status { flex: none; font-size: 12px; }
 .ac-project-weak-suggest { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ac-ink); }
 .ac-project-weak-suggest strong { font-weight: 600; }
 .ac-project-weak-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -435,6 +421,15 @@
 .ac-project-billing { margin: 8px 0 0; color: var(--ac-sub); font-size: 12.5px; line-height: 1.6; }
 .ac-project-recovery { display: flex; gap: 2px; flex-wrap: wrap; }
 .ac-project-card:focus-within .ac-card-actions { opacity: 1; }
+.ac-failure-summary { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ac-failure-reason { margin: 0; font-size: 13px; line-height: 1.6; color: var(--ac-sub); overflow-wrap: anywhere; user-select: text; }
+.ac-failure-outcome { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--ac-sub); }
+.ac-project-card--failed .ac-card-foot { margin-top: 6px; padding-top: 12px; }
+.ac-failure-actions, .ac-failure-meta { display: flex; align-items: center; gap: 4px; }
+.ac-failure-actions { flex-wrap: wrap; }
+.ac-failure-meta { margin-inline-start: auto; }
+.ac-failure-more { padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-sub); font-family: inherit; font-size: 18px; font-weight: 600; line-height: 1; min-height: 30px; cursor: pointer; }
+.ac-failure-more:hover, .ac-failure-more:focus-visible { background: var(--ac-bg); color: var(--ac-ink); }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
