@@ -90,6 +90,7 @@ def test_docs_advertise_the_one_line_install_commands():
         ROOT / 'README-PT.md',
         ROOT / 'README-RU.md',
         ROOT / 'README-FR.md',
+        ROOT / 'README-TR.md',
         ROOT / 'docs' / 'CLI_AND_MCP.md',
         ROOT / 'skills' / 'autoclip' / 'SKILL.md',
     ]

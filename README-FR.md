@@ -21,7 +21,7 @@ L’app est gratuite ; les modèles cloud sont facturés à l’usage. Ajustez d
 
 **[Site](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Télécharger le bureau](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Cas](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Recherche](docs/research/2026-10-what-drives-views/article-en.md) · [Démarrage](#démarrage) · [Docs](#documentation) · [Signaler](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · **Français**
+[简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · **Français** · [Türkçe](README-TR.md)
 
 </div>
 

@@ -21,7 +21,7 @@
 
 **[公式サイト](https://zhouxiaoka.github.io/autoclip_intro/)** · **[デスクトップ版を入手](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [事例](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](docs/research/2026-10-what-drives-views/article-en.md) · [クイックスタート](#クイックスタート) · [ドキュメント](#ドキュメント) · [不具合報告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [English](README-EN.md) · **日本語** · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
+[简体中文](README.md) · [English](README-EN.md) · **日本語** · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Türkçe](README-TR.md)
 
 </div>
 
