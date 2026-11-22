@@ -13,6 +13,22 @@ type Props = {
   coverStamp?: number; onCoverChanged?: () => void
 }
 
+export function coverWarningMessage(warning?: string | null): string {
+  if (!warning) return ''
+  if (warning === 'frame_sending_disabled') return t('已关闭上传参考帧，当前使用本地排版封面')
+  if (warning === 'needs_source_validation') return t('当前是截帧封面')
+  if (warning === 'text_unavailable' || warning === 'text_mismatch') return t('生图标题校对未通过，已改成本地排版')
+  if (
+    warning === 'cover_photo_degraded' ||
+    warning === 'cover_layout_changed' ||
+    warning === 'subject_changed' ||
+    warning === 'fidelity_unavailable'
+  ) {
+    return t(warning)
+  }
+  return t('生图失败，已改成本地排版或截帧')
+}
+
 /** Reads the cover made for this export. Older exports can generate their missing cover here. */
 export default function ExportCover({ projectId, job, variant, coverStamp = 0, onCoverChanged }: Props) {
   const clip = `studio-${job.job_id}`
@@ -42,9 +58,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
       setDesign(view?.options || { mode: cfg?.design_mode || 'crop_grade_text_only', recipe: 'auto' })
       setTimes(view?.candidate_times || [])
       setFrameLocked(!!view?.frame_locked)
-      setWarning(view?.warning === 'needs_source_validation' ? t('当前是截帧封面') :
-        view?.warning === 'cover_photo_degraded' || view?.warning === 'cover_layout_changed' || view?.warning === 'subject_changed' || view?.warning === 'fidelity_unavailable' ? t(view.warning) :
-          view?.warning ? t('生图失败，已改成本地排版或截帧') : '')
+      setWarning(coverWarningMessage(view?.warning))
       setAskReference(!!cfg?.enabled && cfg.configured && !cfg.allow_send_frame)
       setReferenceOnce(false)
     })
