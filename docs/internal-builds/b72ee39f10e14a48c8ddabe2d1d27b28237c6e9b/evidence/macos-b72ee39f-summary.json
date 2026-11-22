@@ -1,0 +1,63 @@
+{
+  "platform": "macos-arm64",
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "build_run_id": 45041924842,
+  "package": {
+    "name": "AutoClip Desktop_1.5.9_aarch64.dmg",
+    "sha256": "a9af9fdc71bd7eda2836c0ed699dccfaf4276672113aae84ff9919e8fde7547e",
+    "bytes": 423665040
+  },
+  "installed_binary_sha256": "54782b54e131187ec347f2d547a9c39f08ce2441f4bdd6359e7b997e7886d64b",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:09:20Z",
+      "summary": "Installed bundle portable Python started cleanly with isolated empty AUTOCLIP_APP_DIR/AUTOCLIP_DATA_DIR; health=200 version=1.5.9, projects_count=0, autoclip.db initialized."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-22T16:47:30Z",
+      "summary": "Replaced previous 7e651f6a app copy with b72ee39f (native binary sha256 changed 509ab9a1 -> 54782b54); existing settings, DB, and projects loaded intact."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:10:25Z",
+      "summary": "Existing DashScope roles (qwen4-max, qwen-audio-3.1-asr-flash, qwen-image-2.1-pro) persisted across upgrade; loopback probe verified 401 invalid_key -> 429 rate_limited -> 200 ok."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:13:00Z",
+      "summary": "Real local MP4 + SRT import completed in 39s via qwen4-max and h264_videotoolbox; rendered 3,649,744-byte MP4."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-22T16:58:15Z",
+      "summary": "Real local 20s spoken MP4 without SRT transcribed via DashScope Cloud ASR (557-byte SRT), analyzed, and rendered 1080x1920 h264+aac 21.82s MP4 (3,716,553 bytes) in 40s."
+    },
+    "link_import": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:01:28Z",
+      "summary": "Real public YouTube link (Me at the zoo, 19s) passed inspect-url, downloaded via bundled yt-dlp, transcribed, and rendered 1080x1920 h264+aac 19.59s MP4 (3,798,826 bytes) in 60s."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-22T16:52:10Z",
+      "summary": "Primary OutputVariantCard Cover modal with global allow_send_frame=false exposed one-time opt-in checkbox; real qwen-image-2.1-pro completed on attempt 1 (result=model, fallback_reason=None) while global allow_send_frame stayed false."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:10:25Z",
+      "summary": "Isolated loopback mock verified HTTP 401 (invalid_key), HTTP 429 (rate_limited transient), and recovery to HTTP 200 (ok) without restart."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:13:00Z",
+      "summary": "Rendered MP4 streams verified via ffprobe (h264 1080x1920 + aac); Publish view and Cover modal live preview refreshed after AI cover completion."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:09:20Z",
+      "summary": "Isolated clean install verified /api/v1/settings/privacy crash_reports=false and /api/v1/settings/analytics-consent enabled=false persisted cleanly."
+    }
+  }
+}

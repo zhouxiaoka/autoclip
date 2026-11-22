@@ -1,0 +1,58 @@
+{
+  "platform": "windows-x64",
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "build_run_id": 45041924842,
+  "package": {
+    "name": "AutoClip Desktop_1.5.9_x64-setup.exe",
+    "sha256": "837d236f753daf90275f608bafa4402df9cfb662e30da576c91a10f168180427",
+    "bytes": 207910478
+  },
+  "installed_binary_sha256": "1ee7868fb9062b0815bdf0e81efc31ea7c52ae04a823495c23e2ce1523f01c7d",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:11:25Z",
+      "summary": "Installed portable Python started cleanly with isolated empty AUTOCLIP_APP_DIR/AUTOCLIP_DATA_DIR; health=200, projects_count=0, autoclip.db initialized; CI smoke-windows-x64 also passed."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-22T16:51:10Z",
+      "summary": "Silent /S upgrade over 7e651f6a exited 0 with binary sha256 changed (5f74e974 -> 1ee7868f); existing settings, DB, and projects retained intact; CI smoke-windows-x64 verified upgrade over v1.5.8."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:11:25Z",
+      "summary": "Existing DashScope roles persisted across upgrade; isolated loopback probe verified 401 invalid_key -> 429 rate_limited -> 200 ok."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:13:45Z",
+      "summary": "Real 45s spoken MP4 + SRT completed in 68s via qwen4-max and libx264; ffprobe verified 1080x1920 h264+aac 46.89s MP4 (11,793,914 bytes)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:04:05Z",
+      "summary": "Real 45s spoken MP4 without SRT transcribed via DashScope Cloud ASR (917-byte SRT), analyzed, and rendered 1080x1920 h264+aac 46.89s MP4 (11,743,935 bytes) in 80s."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:00:12Z",
+      "summary": "Cross-language Chinese title on English transcript without manual title re-edit invoked qwen-image-2.1-pro twice (attempts=2) with zero needs_source_validation abort and zero numpy ModuleNotFoundError in portable Python; OCR guard rejected text_mismatch and preserved prior cover cleanly."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:11:25Z",
+      "summary": "Isolated loopback probe verified HTTP 401 (invalid_key), HTTP 429 (rate_limited transient), and HTTP 200 recovery; live Bilibili HTTP 412 cleanly classified as source_blocked with browser-cookie guidance."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:13:45Z",
+      "summary": "Both no-SRT (11,743,935 bytes) and with-SRT (11,793,914 bytes) MP4 outputs verified via bundled ffprobe as 1080x1920 h264+aac 46.89s; GUI Publish and Cover modal verified in active RDP session 2."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-22T17:11:25Z",
+      "summary": "Isolated clean install verified /api/v1/settings/privacy crash_reports=false and /api/v1/settings/analytics-consent enabled=false persisted cleanly."
+    }
+  }
+}

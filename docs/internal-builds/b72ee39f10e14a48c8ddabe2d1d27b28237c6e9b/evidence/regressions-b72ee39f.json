@@ -1,0 +1,30 @@
+{
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "build_run_id": 45041924842,
+  "regressions": [
+    {
+      "id": "rc159-pr653-card-stability-and-reveal",
+      "summary": "Same-source remake preserves existing OutputVariantCard layout without flipping to DraftResultCard; reveal-in-folder action renders full-row without squeezing Download/Publish.",
+      "verified_on": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    {
+      "id": "rc159-pr654-remake-content-draft-and-cover-optout",
+      "summary": "Confirmed content remake creates Studio draft (origin=subtitle-content), settles generation.status to completed, exports new playable MP4 without modifying prior files, and shows consistent reference-frame opt-out notice.",
+      "verified_on": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    {
+      "id": "rc159-pr656-ai-cover-confirmed-title-and-once-optin",
+      "summary": "Manual Generate/Regenerate Cover confirms visible title so cross-language/LLM headlines are not aborted by needs_source_validation; primary OutputVariantCard exposes one-time allow_reference_once checkbox; Windows cover_fidelity._measure_title_ink gracefully handles missing numpy.",
+      "verified_on": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    }
+  ]
+}
