@@ -10,7 +10,7 @@ import { bindingCapability, modelSettingsApi, type Connection, type FetchListRes
 import { applyModelDefaults } from './modelDefaults'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
-import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
+import { assignAnalysis, catalogPreset, ensureCatalogConnection, selectLocalAsr, unsavedConnectionIds as computeUnsavedConnectionIds, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
@@ -155,10 +155,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     replace(result.settings)
     void discover(result.connection, false, 'provider_change')
   }
-  const ensureCatalogProvider = (id: string, patch?: Partial<Connection>, useForAnalysis = false) => {
-    if (!settings) return
+  const ensureCatalogProvider = (id: string, patch?: Partial<Connection>, useForAnalysis = false): Connection | undefined => {
+    if (!settings) return undefined
     const preset = getProvider(id)
-    if (!preset) return
+    if (!preset) return undefined
     const result = ensureCatalogConnection(settings, preset)
     let next = result.settings
     let connection = result.connection
@@ -175,6 +175,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       replace(next)
     }
     if (connection) void discover(connection, false, 'provider_change')
+    return connection
   }
   const assignAnalysisConnection = (connection: Connection) => {
     if (!settings) return
@@ -489,11 +490,15 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     presetId: string,
     draft?: Partial<Connection>,
     probeKind: 'quick' | 'trial' = 'quick',
+    connectionId?: string | null,
   ) => {
     if (!settings) return
     const preset = catalogPreset(presetId)
     if (!preset) return
-    const ensured = ensureCatalogConnection(settings, preset)
+    const pinned = connectionId ? settings.connections.find(row => row.id === connectionId) : undefined
+    const ensured = pinned
+      ? { settings, connection: pinned, changed: false }
+      : ensureCatalogConnection(settings, preset)
     let next = ensured.settings
     let connection = ensured.connection
     if (!connection) return
@@ -665,8 +670,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   }, [settings])
 
   const main = settings ? logic.mainConnection(settings) : undefined
+  const unsavedConnectionIds = computeUnsavedConnectionIds(settings, savedRef.current)
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, testWarning, setError, main, keyHints,
+    unsavedConnectionIds,
     load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test, cancelTrial,

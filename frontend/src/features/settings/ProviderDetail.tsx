@@ -9,7 +9,8 @@ import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
 import TrialRunPanel from './TrialRunPanel'
 import {
-  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
+  catalogDraftConnection, connectKind, displayNameOf,
+  isCatalogConnectionConfigured, isCatalogConnectionConnected, resolveCatalogConnection,
   type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
@@ -46,23 +47,25 @@ const MODEL_GROUP: Array<{ key: GroupKey; title: string; open: boolean }> = [
 ]
 
 export default function ProviderDetail({
-  preset, m, asrReady = {}, onBack,
+  preset, m, asrReady = {}, connectionId, onConnectionId, onBack,
 }: {
   preset: ProviderPreset
   m: ModelSettingsStore
   asrReady?: LocalAsrReady
+  connectionId?: string | null
+  onConnectionId?: (id: string) => void
   onBack: () => void
 }) {
   const { settings, lists, busy, listErrors } = m
   if (!settings) return null
   const kind = connectKind(preset)
-  const persisted = findCatalogConnection(settings, preset)
+  const persisted = resolveCatalogConnection(settings, preset, connectionId)
   const draft = persisted || catalogDraftConnection(preset)
   const connection = draft && {
     ...draft,
     base_url: draft.base_url || preset.base_url || '',
   }
-  const connected = isCatalogConnected(settings, preset, asrReady)
+  const connected = isCatalogConnectionConnected(persisted, preset, asrReady)
   const list = connection ? lists[connection.id] : undefined
   // Only a real (live/cache, non-preview) fetch shows models; catalog/preview reference IDs would mislead.
   const fetched = !!list && list.preview !== true && list.source !== 'catalog'
@@ -86,8 +89,13 @@ export default function ProviderDetail({
   }
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
-    if (persisted) m.editConnection(persisted, patch)
-    else m.ensureCatalogProvider(preset.id, patch)
+    if (persisted) {
+      onConnectionId?.(persisted.id)
+      m.editConnection(persisted, patch)
+    } else {
+      const created = m.ensureCatalogProvider(preset.id, patch)
+      if (created) onConnectionId?.(created.id)
+    }
   }
 
   const onTest = () => {
@@ -96,7 +104,7 @@ export default function ProviderDetail({
       api_key: connection.api_key,
       base_url: connection.base_url,
       has_key: connection.has_key,
-    }, 'quick')
+    }, 'quick', persisted?.id)
   }
 
   const showModels = kind !== 'local_asr' && kind !== 'guide'
@@ -131,7 +139,7 @@ export default function ProviderDetail({
             </span>
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
-          {!connected && isCatalogConfigured(settings, preset) && <span className="ac-badge">{t('已配置')}</span>}
+          {!connected && isCatalogConnectionConfigured(persisted, preset) && <span className="ac-badge">{t('已配置')}</span>}
         </h3>
         {/* Sponsors: no long hint / marketing. Others keep one short line. */}
         {!isSponsor && <p className="ac-note">{t(preset.hint)}</p>}
@@ -197,7 +205,7 @@ export default function ProviderDetail({
                       api_key: connection.api_key,
                       base_url: connection.base_url,
                       has_key: connection.has_key,
-                    }, 'trial')
+                    }, 'trial', persisted?.id)
                   }}>
                     {t('试跑一段')}
                   </Btn>

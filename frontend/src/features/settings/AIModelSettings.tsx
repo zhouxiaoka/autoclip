@@ -12,7 +12,7 @@ import ModelPicker from './ModelPicker'
 import ProviderCatalog from './ProviderCatalog'
 import ProviderDetail from './ProviderDetail'
 import {
-  catalogPreset, customConnectionId, sensevoiceAsrReady, whisperAsrReady,
+  catalogPreset, customConnectionId, findCatalogConnection, sensevoiceAsrReady, whisperAsrReady,
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
 import DefaultModels from './DefaultModels'
@@ -121,16 +121,23 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   const [filter, setFilter] = useState<CapabilityFilter>('all')
   const [moreOpen, setMoreOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(() => catalogPreset(requestedProvider)?.id || null)
+  const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
   const selected = catalogPreset(selectedId)
   const customSelected = settings?.connections.find(connection => connection.id === customConnectionId(selectedId))
 
   useEffect(() => {
     const preset = catalogPreset(requestedProvider)
-    if (preset) setSelectedId(preset.id)
+    if (preset) {
+      setSelectedId(preset.id)
+      setEditingConnectionId(null)
+    }
   }, [requestedProvider])
   useEffect(() => {
     const pending = takePendingSelect()
-    if (pending) setSelectedId(pending)
+    if (pending) {
+      setSelectedId(pending)
+      setEditingConnectionId(null)
+    }
   }, [settings])
 
   const cloudChoice = useRef(false)
@@ -184,9 +191,14 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   }, [requestedSection, !!settings, selectedId])
 
   const openProvider = (id: string) => {
+    const preset = catalogPreset(id)
     setSelectedId(id)
+    setEditingConnectionId(preset && settings ? (findCatalogConnection(settings, preset)?.id ?? null) : null)
   }
-  const closeProvider = () => setSelectedId(null)
+  const closeProvider = () => {
+    setSelectedId(null)
+    setEditingConnectionId(null)
+  }
 
   if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
@@ -209,7 +221,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving || m.testing}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
-        : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
+        : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} connectionId={editingConnectionId} onConnectionId={setEditingConnectionId} onBack={closeProvider} /> : <>
         <header className="ac-settings-ai-head">
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
           <Btn variant="text" size="sm" onClick={() => requestClipboardScan()}>{t('settings.key_guide.detect')}</Btn>
@@ -232,6 +244,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           moreOpen={moreOpen}
           selectedId={selectedId}
           asrReady={asrReady}
+          unsavedConnectionIds={m.unsavedConnectionIds}
           onQuery={setQuery}
           onFilter={setFilter}
           onToggleMore={() => setMoreOpen(open => !open)}

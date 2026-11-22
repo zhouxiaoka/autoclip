@@ -109,6 +109,19 @@ export function findCatalogConnection(settings: ModelSettings, preset: ProviderP
   ))
 }
 
+/** Resolve the connection being edited in a catalog detail view; a pinned id survives base_url edits. */
+export function resolveCatalogConnection(
+  settings: ModelSettings,
+  preset: ProviderPreset,
+  pinnedConnectionId?: string | null,
+): Connection | undefined {
+  if (pinnedConnectionId) {
+    const pinned = settings.connections.find(connection => connection.id === pinnedConnectionId)
+    if (pinned) return pinned
+  }
+  return findCatalogConnection(settings, preset)
+}
+
 export function whisperAsrReady(
   runtime?: { status?: string } | null,
   models?: Array<{ name: string; status: string }> | null,
@@ -124,19 +137,26 @@ export function sensevoiceAsrReady(status?: { status?: string } | null): boolean
 }
 
 /** Credentials (or a keyless connection) are configuration, not proof of connectivity. */
-export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset): boolean {
-  const connection = findCatalogConnection(settings, preset)
+export function isCatalogConnectionConfigured(connection: Connection | undefined, preset: ProviderPreset): boolean {
   if (!connection || !endpointProviderReady(connection)) return false
   if (!preset.base_url && preset.protocol !== 'local') return true
   if (preset.auth === 'none') return true
   return !!(connection.api_key?.trim() || connection.has_key)
 }
 
-export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
+export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset): boolean {
+  return isCatalogConnectionConfigured(findCatalogConnection(settings, preset), preset)
+}
+
+export function isCatalogConnectionConnected(connection: Connection | undefined, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
   // Readiness describes the installed engine, independently of the current ASR selection.
   if (preset.id === 'whisper') return !!asrReady.whisper
   if (preset.id === 'sensevoice') return !!asrReady.sensevoice
-  return isCatalogConfigured(settings, preset) && findCatalogConnection(settings, preset)?.validation_status === 'ok'
+  return isCatalogConnectionConfigured(connection, preset) && connection?.validation_status === 'ok'
+}
+
+export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
+  return isCatalogConnectionConnected(findCatalogConnection(settings, preset), preset, asrReady)
 }
 
 export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: string): ModelSettings {
@@ -236,4 +256,18 @@ export function isUnmatchedCompatible(connection: Connection): boolean {
 
 export function unmatchedCompatibleConnections(settings: ModelSettings): Connection[] {
   return settings.connections.filter(isUnmatchedCompatible)
+}
+
+export function unsavedConnectionIds(
+  current: ModelSettings | null | undefined,
+  saved: ModelSettings | null | undefined,
+): Set<string> {
+  const ids = new Set<string>()
+  if (!current) return ids
+  const savedById = new Map((saved?.connections || []).map(connection => [connection.id, connection]))
+  for (const connection of current.connections) {
+    const prev = savedById.get(connection.id)
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(connection)) ids.add(connection.id)
+  }
+  return ids
 }

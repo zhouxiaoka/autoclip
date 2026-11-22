@@ -243,6 +243,32 @@ test('catalog host helper never returns a full URL', () => {
   assert.equal(view.catalogHost('not a url'), '')
 })
 
+test('resolveCatalogConnection keeps a pinned connection across base_url edits and tracks unsaved changes', () => {
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
+  const openai = view.catalogPreset('openai')
+  const saved = {
+    ...blank(),
+    saved: true,
+    connections: [{
+      id: 'oa-1', name: 'OpenAI', provider: 'openai',
+      base_url: 'https://api.openai.com/v1', api_key: '', has_key: true,
+      image_api: 'auto', image_base_url: '', base_url_source: 'preset',
+    }],
+  }
+  assert.equal(view.unsavedConnectionIds(saved, saved).size, 0)
+
+  const edited1 = logic.editConnection(saved, 'oa-1', { base_url: 'https://api.openai.com/v' })
+  assert.equal(view.findCatalogConnection(edited1, openai), undefined)
+  assert.equal(view.resolveCatalogConnection(edited1, openai, 'oa-1')?.base_url, 'https://api.openai.com/v')
+
+  const edited2 = logic.editConnection(edited1, 'oa-1', { base_url: 'https://gateway.example/first/v1' })
+  const edited3 = logic.editConnection(edited2, 'oa-1', { base_url: 'https://gateway.example/final/v1' })
+  assert.equal(edited3.connections.length, 1)
+  assert.equal(view.resolveCatalogConnection(edited3, openai, 'oa-1')?.base_url, 'https://gateway.example/final/v1')
+  assert.deepEqual([...view.unsavedConnectionIds(edited3, saved)], ['oa-1'])
+  assert.equal(view.unsavedConnectionIds(edited3, edited3).size, 0)
+})
+
 test('every catalog name and hint used in the UI exists in all eight locales', () => {
   const langs = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']
   const locales = Object.fromEntries(langs.map(lang => [

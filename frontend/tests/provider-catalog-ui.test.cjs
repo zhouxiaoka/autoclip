@@ -561,3 +561,154 @@ test('sponsor detail keeps only essentials: key, address, one-click, test, model
     assert.ok(flatten(tree).some(n => n.type === 'button' && /one_click|一键获取/.test(textOf(n))))
   }
 })
+
+test('editing OpenAI base_url keeps partial edits in place without spawning duplicate connections (#636)', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
+  const openai = view.catalogPreset('openai')
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('input', {
+      'aria-label': '接口地址',
+      value: connection.base_url,
+      onChange: event => onEdit({ base_url: event.target.value }),
+    }) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
+  }).default
+
+  const saved = {
+    ...settings,
+    saved: true,
+    connections: [{
+      id: 'oa-1', name: 'OpenAI', provider: 'openai',
+      base_url: 'https://api.openai.com/v1', api_key: '', has_key: true,
+      image_api: 'auto', image_base_url: '', base_url_source: 'preset',
+    }],
+  }
+  let state = saved
+  let pinnedId = view.findCatalogConnection(state, openai)?.id ?? null
+  let nextSeq = 2
+  const testCalls = []
+
+  const makeStore = () => ({
+    settings: state, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, testing: false, keyHints: {},
+    editConnection: (conn, patch) => { state = logic.editConnection(state, conn.id, patch) },
+    ensureCatalogProvider: (id, patch) => {
+      const created = view.ensureCatalogConnection(state, view.catalogPreset(id), undefined, () => `oa-${nextSeq++}`)
+      state = created.settings
+      if (created.connection && patch) state = logic.editConnection(state, created.connection.id, patch)
+      return state.connections.find(c => c.id === created.connection?.id)
+    },
+    testCatalogProvider: (id, draft, probeKind, connectionId) => {
+      testCalls.push({ id, draft, probeKind, connectionId })
+    },
+  })
+
+  const renderDetail = () => flatten(Detail({
+    preset: openai,
+    m: makeStore(),
+    connectionId: pinnedId,
+    onConnectionId: id => { pinnedId = id },
+    onBack: () => {},
+  }))
+
+  // Step 1: delete trailing '1' -> input must keep '/v' instead of reverting to '/v1'.
+  let input = renderDetail().find(node => node.props?.['aria-label'] === '接口地址')
+  assert.equal(input.props.value, 'https://api.openai.com/v1')
+  input.props.onChange({ target: { value: 'https://api.openai.com/v' } })
+  input = renderDetail().find(node => node.props?.['aria-label'] === '接口地址')
+  assert.equal(input.props.value, 'https://api.openai.com/v')
+  assert.equal(state.connections.length, 1)
+
+  // Step 2: paste first gateway URL, then replace with final gateway URL -> still only 1 connection.
+  input.props.onChange({ target: { value: 'https://gateway.example/first/v1' } })
+  input = renderDetail().find(node => node.props?.['aria-label'] === '接口地址')
+  assert.equal(input.props.value, 'https://gateway.example/first/v1')
+  input.props.onChange({ target: { value: 'https://gateway.example/final/v1' } })
+  const nodes = renderDetail()
+  input = nodes.find(node => node.props?.['aria-label'] === '接口地址')
+  assert.equal(input.props.value, 'https://gateway.example/final/v1')
+  assert.equal(state.connections.length, 1)
+  assert.equal(state.connections[0].id, 'oa-1')
+  assert.equal(state.connections[0].base_url, 'https://gateway.example/final/v1')
+
+  // Quick test must target the pinned connection id rather than creating a duplicate.
+  const quickBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('快速测试'))
+  quickBtn.props.onClick()
+  assert.equal(testCalls.length, 1)
+  assert.equal(testCalls[0].connectionId, 'oa-1')
+  assert.equal(testCalls[0].draft.base_url, 'https://gateway.example/final/v1')
+
+  // Returning to the catalog before saving shows only 1 custom card with an unsaved badge.
+  const unsavedIds = view.unsavedConnectionIds(state, saved)
+  const catalogTree = Catalog({
+    settings: state, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    unsavedConnectionIds: unsavedIds,
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const customCards = flatten(catalogTree).filter(node => String(node.props?.['data-provider-id'] || '').startsWith('custom:'))
+  assert.equal(customCards.length, 1)
+  assert.equal(customCards[0].props['data-provider-id'], 'custom:oa-1')
+  assert.equal(customCards[0].props['data-unsaved'], '1')
+  assert.match(textOf(customCards[0]), /有未保存的更改/)
+
+  // Once saved, the unsaved badge disappears.
+  const savedCatalog = Catalog({
+    settings: state, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    unsavedConnectionIds: view.unsavedConnectionIds(state, state),
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const savedCard = flatten(savedCatalog).find(node => node.props?.['data-provider-id'] === 'custom:oa-1')
+  assert.equal(savedCard.props['data-unsaved'], undefined)
+  assert.doesNotMatch(textOf(savedCard), /有未保存的更改/)
+})
+
+test('editing a new draft OpenAI or compatible preset URL pins the created connection without duplicates', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('input', {
+      'aria-label': '接口地址',
+      value: connection.base_url,
+      onChange: event => onEdit({ base_url: event.target.value }),
+    }) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+    './TrialRunPanel': { default: () => null },
+  }).default
+
+  for (const presetId of ['openai', 'siliconflow']) {
+    const preset = view.catalogPreset(presetId)
+    let state = { ...settings, connections: [] }
+    let pinnedId = null
+    let nextSeq = 1
+    const makeStore = () => ({
+      settings: state, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, testing: false, keyHints: {},
+      editConnection: (conn, patch) => { state = logic.editConnection(state, conn.id, patch) },
+      ensureCatalogProvider: (id, patch) => {
+        const created = view.ensureCatalogConnection(state, view.catalogPreset(id), undefined, () => `${presetId}-${nextSeq++}`)
+        state = created.settings
+        if (created.connection && patch) state = logic.editConnection(state, created.connection.id, patch)
+        return state.connections.find(c => c.id === created.connection?.id)
+      },
+      testCatalogProvider: () => {},
+    })
+    const getInput = () => flatten(Detail({
+      preset, m: makeStore(), connectionId: pinnedId, onConnectionId: id => { pinnedId = id }, onBack: () => {},
+    })).find(node => node.props?.['aria-label'] === '接口地址')
+
+    getInput().props.onChange({ target: { value: 'https://gateway.example/first/v1' } })
+    assert.equal(getInput().props.value, 'https://gateway.example/first/v1', presetId)
+    getInput().props.onChange({ target: { value: 'https://gateway.example/final/v1' } })
+    assert.equal(getInput().props.value, 'https://gateway.example/final/v1', presetId)
+    assert.equal(state.connections.length, 1, presetId)
+    assert.equal(state.connections[0].base_url, 'https://gateway.example/final/v1', presetId)
+  }
+})
