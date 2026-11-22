@@ -652,6 +652,7 @@ def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session 
 class CoverRedesignBody(BaseModel):
     title: str | None = None
     design: CoverOptions | None = None
+    allow_reference_once: bool = False
 
 
 @router.get('/{project_id}/output-variants/{variant_id}/cover/design')
@@ -687,6 +688,7 @@ def regenerate_output_variant_cover(
         allow_local=True,
         options=body.design if body else None,
         title=body.title if body else None,
+        allow_reference_once=bool(body.allow_reference_once) if body else False,
     )
     if task is None:
         raise HTTPException(409, "成片版本已更新，请刷新重试")

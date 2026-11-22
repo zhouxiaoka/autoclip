@@ -1312,7 +1312,9 @@ def _design_covers(project_id, draft, job_id):
 cover_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-cover')
 
 
-def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=False, options=None, title=None):
+def request_ai_cover(
+    project_id, variant_id, render_job_id=None, *, allow_local=False, options=None, title=None, allow_reference_once=False
+):
     """Share one tracked AI task between automatic covers and requests from the output card."""
     from backend.services import cover
 
@@ -1324,11 +1326,12 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
     if explicit and options is None:
         options = cb.Options(mode="editorial_edit")
     mode = options.mode if options else getattr(cfg, "design_mode", "crop_grade_text_only")
-    use_model = mode == "editorial_edit" and cfg.enabled and cfg.configured and cfg.allow_send_frame
+    can_send = cfg.allow_send_frame or bool(allow_reference_once)
+    use_model = mode == "editorial_edit" and cfg.enabled and cfg.configured and can_send
     if not (use_model or allow_local):
         logger.info(
-            "AI cover skipped: project=%s variant=%s mode=%s enabled=%s configured=%s allow_send_frame=%s model=%s",
-            project_id, variant_id, mode, cfg.enabled, cfg.configured, cfg.allow_send_frame, getattr(cfg, "model", ""),
+            "AI cover skipped: project=%s variant=%s mode=%s enabled=%s configured=%s allow_send_frame=%s allow_reference_once=%s model=%s",
+            project_id, variant_id, mode, cfg.enabled, cfg.configured, cfg.allow_send_frame, bool(allow_reference_once), getattr(cfg, "model", ""),
         )
         return None
     job_id = uuid.uuid4().hex
@@ -1340,7 +1343,7 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
         if render_job_id and variant.get("render_job_id") != render_job_id:
             return None
         active = variant.get("cover_job")
-        signature = [title, options.model_dump() if options else None]
+        signature = [title, options.model_dump() if options else None, bool(allow_reference_once)]
         if (
             active
             and active.get("design_request") == signature
@@ -1355,6 +1358,7 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
             "instance": store.INSTANCE,
         }
         variant["cover_job"]["reuse"] = bool(render_job_id and not allow_local)
+        variant["cover_job"]["allow_reference_once"] = bool(allow_reference_once)
         variant["cover_job"]["design_request"] = signature
         # Legacy records may have no rendered output yet. They have no cover slot to reserve.
         if variant.get("render_job_id") and variant.get("strategy_id"):
@@ -1392,7 +1396,11 @@ def ai_cover_status(project_id, variant_id):
     variant = next((item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id), None)
     if variant is None or not variant.get('cover_job'):
         raise FileNotFoundError('封面任务不存在')
-    return {key: value for key, value in variant['cover_job'].items() if key not in ('instance','design_request','design_token','reuse')}
+    return {
+        key: value
+        for key, value in variant['cover_job'].items()
+        if key not in ('instance', 'design_request', 'design_token', 'reuse', 'allow_reference_once')
+    }
 
 
 def _update_cover_job(project_id, variant_id, job_id, *, cover_kind='ai', **values):
@@ -1428,13 +1436,15 @@ def _ai_cover_job(project_id, variant_id, job_id, *, mode="ai"):
         args = (project_id, render_id, strategy_id)
         from backend.services import cover_brief as cb
 
-        title, values = task.get("design_request") or (None, None)
+        design_request = task.get("design_request") or (None, None)
+        title, values = design_request[0], design_request[1]
         params = dict(
             title=title,
             variant_id=variant_id,
             reuse=task.get("reuse", False),
             options=cb.Options.model_validate(values) if values else None,
             request_token=task.get("design_token"),
+            allow_reference_once=bool(task.get("allow_reference_once")),
         )
         if mode == "ai":
             with llm_usage.tracking(project_id), llm_usage.timed("ai_cover"):
