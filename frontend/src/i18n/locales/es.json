@@ -2302,5 +2302,6 @@
   "查看已导出": "Ver exportado",
   "已导出成片": "Video exportado",
   "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "Esta versión ya está renderizada. Puedes descargar el video existente o renderizar uno nuevo.",
-  "重新渲染": "Renderizar de nuevo"
+  "重新渲染": "Renderizar de nuevo",
+  "已关闭上传参考帧，当前使用本地排版封面": "El envío de fotogramas de referencia está desactivado; se usa diseño local."
 }

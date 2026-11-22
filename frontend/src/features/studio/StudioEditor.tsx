@@ -280,7 +280,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
       <Row label={t("片头标题")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style||'plain'))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{subtitlesOn?t("字幕压进画面"):t("已关闭")}</Row>
       {showExport && previewUrl && currentJob ? <ExportCover key={currentJob.job_id} projectId={projectId} job={currentJob} variant={coverVariant} /> : <Row label={t("封面")}>{t("导出时自动生成")}</Row>}
       {currentJob?.status==='completed' && !!currentJob.result?.warnings?.length && <div role="status" className="studio-muted">{currentJob.result.warnings.map(w=><p key={w}>{t(w)}</p>)}</div>}
-      {active && <ProgressLine percent={active.percent}/>}<p className="studio-muted">{previewUrl?t("当前版本已渲染完成，可以直接下载。"):t("任务在后台继续，关闭面板不会取消渲染。")}</p>{error && <p className="studio-error">{error}</p>}{currentJob?.status==='failed'&&<p className="studio-error">{t(currentJob.error || '')}</p>}
+      {active && <ProgressLine percent={active.percent}/>}{!previewUrl && <p className="studio-muted">{t("任务在后台继续，关闭面板不会取消渲染。")}</p>}{error && <p className="studio-error">{error}</p>}{currentJob?.status==='failed'&&<p className="studio-error">{t(currentJob.error || '')}</p>}
     </Dialog>
   </div>
 }
