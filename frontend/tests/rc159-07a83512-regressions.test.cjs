@@ -185,3 +185,39 @@ test('StudioResults opens in-place remake dialog for local-file projects and kee
     /disabled=\{loading \|\| workspace\.analysis\?\.status === 'running'\} onClick=\{startAnotherPlatform\}>\{t\('用同一素材再做一个'\)\}/,
   )
 })
+
+test('ExportHistory displays matched variant post title consistently with result card and falls back to job title', () => {
+  const root = path.resolve(__dirname, '../src/features/studio')
+  const exportsObj = {}
+  const mocks = {
+    'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-i18next': { useTranslation: () => ({ t: s => s }) },
+    '../../i18n': { t: s => s, getLocale: () => 'zh' },
+    '../../ui': { Dialog: p => React.createElement('section', null, p.children), ProgressLine: () => null },
+    'react-router-dom': { Link: p => React.createElement('a', { href: p.to }, p.children) },
+    './outputVariantPublish': loadTs(path.join(root, 'outputVariantPublish.ts')),
+    './StudioDownloadLink': { default: () => null },
+  }
+  runInSandbox(
+    ts.transpileModule(read('src/features/studio/ExportHistory.tsx'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
+    }).outputText,
+    { exports: exportsObj, require: id => mocks[id] },
+  )
+  const ExportHistory = exportsObj.default
+  const jobs = [
+    { job_id: 'j1', draft_id: 'd1', revision: 1, title: '过去12个月不佳，主要是我的错', status: 'completed', created_at: '2026-11-22T08:00:00Z' },
+    { job_id: 'j2', draft_id: 'd1', revision: 2, title: '模糊背景第二版', status: 'completed', created_at: '2026-11-22T09:00:00Z' },
+  ]
+  const variants = [
+    { id: 'v1', strategy_id: 'douyin', draft_id: 'd1', draft_revision: 1, render_job_id: 'j1', status: 'completed', post: { title: '过去12个月不是最好的，主要是我的错', description: '', tags: [] } },
+  ]
+  const html = renderToStaticMarkup(React.createElement(ExportHistory, { projectId: 'p1', jobs, variants, open: true, onClose() {} }))
+  assert.ok(html.includes('<b>过去12个月不是最好的，主要是我的错</b>'), 'variant-linked job should show post.title')
+  assert.ok(!html.includes('<b>过去12个月不佳，主要是我的错</b>'), 'stale draft title should not diverge from card')
+  assert.ok(html.includes('variant=v1'), 'variant-linked publish link should carry variant id')
+  assert.ok(html.includes('<b>模糊背景第二版</b>'), 'standalone export keeps its own job.title')
+
+  const resultsSrc = read('src/features/studio/StudioResults.tsx')
+  assert.match(resultsSrc, /<ExportHistory projectId=\{project\.id\} jobs=\{workspace\.jobs\} variants=\{workspace\.output_variants\}/)
+})

@@ -899,6 +899,10 @@ def choose_copy(proposed, rows, locked):
     transcript = " ".join(row["text"] for row in rows)
     if proposed and norm(proposed).casefold() in norm(transcript).casefold():
         return proposed
+    # Cross-language audience titles (e.g., Chinese Douyin title over English raw subtitles)
+    # must not be replaced with an untranslated quote from the source-language transcript.
+    if proposed and bool(re.search(r"[\u3400-\u9fff]", proposed)) != bool(re.search(r"[\u3400-\u9fff]", transcript)):
+        return proposed
     parts = [s.strip(" >") for s in re.split(r"(?<=[。！？.!?])\s*|\s*>>\s*", transcript) if s.strip(" >")]
     if not parts:
         return proposed
