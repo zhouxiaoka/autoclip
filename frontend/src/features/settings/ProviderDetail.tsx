@@ -60,6 +60,7 @@ export default function ProviderDetail({
 }) {
   const { settings, lists, busy, listErrors } = m
   const editingConnectionId = useRef<string | undefined>(undefined)
+  const draftSession = useRef<{ preset: string; id: string } | null>(null)
   if (!settings) return null
   const kind = connectKind(preset)
   // Editing base_url may move the connection out of the catalog preset match,
@@ -319,12 +320,18 @@ export default function ProviderDetail({
         {advancedConnections.length > 0 && (
           <details className="ac-disclosure ac-provider-detail-card" data-panel="advanced">
             <summary>{t('高级')}</summary>
-            {advancedConnections.map(row => <div key={row.id} data-request-connection-id={row.id}>
+            {advancedConnections.map(row => <div key={
+              !savedAdvanced.some(item => item === row) || (draftSession.current?.preset === preset.id && draftSession.current.id === row.id)
+                ? `new:${preset.id}` : `saved:${row.id}`
+            } data-request-connection-id={row.id}>
               {(advancedConnections.length > 1 || row.id !== connection?.id) && <p className="ac-note">{row.name}</p>}
               <CustomRequestOptions value={row} onEdit={patch => {
-                const saved = settings.connections.find(item => item.id === row.id)
+                const saved = savedAdvanced.find(item => item === row)
                 if (saved) m.editConnection(saved, patch)
-                else persistEdit(patch)
+                else {
+                  const created = m.ensureCatalogProvider(preset.id, patch)
+                  if (created) draftSession.current = { preset: preset.id, id: created }
+                }
               }} />
             </div>)}
           </details>

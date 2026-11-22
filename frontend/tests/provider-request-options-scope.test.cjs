@@ -7,7 +7,7 @@ const catalog = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
 const optionMock = { default: props => React.createElement('request-options', props) }
 const ui = { Row: 'row', Btn: 'button', StatusDot: 'status', Icon: { Back: () => null } }
 const mocks = {
-  react: { ...React, useState: () => [false, () => {}] },
+  react: { ...React, useState: () => [false, () => {}], useRef: initial => ({ current: initial }) },
   antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
   '../../i18n': i18n, '../../ui': ui,
   '../../utils/externalLinks': { openExternalLink() {} },
@@ -107,4 +107,30 @@ test('saved compatible official connections keep their original edit identities 
     assert.deepEqual(edits[0][1], { reasoning_effort: 'low' })
     assert.deepEqual(ensured, [])
   }
+})
+
+test('an unrelated saved gateway with the draft id cannot receive new catalog edits', () => {
+  const unrelated = connection({ id: 'draft:azure-openai', base_url: 'https://unrelated-gateway.invalid/v1' })
+  const { tree, edits, ensured } = renderDetail(catalog.catalogPreset('azure-openai'), [unrelated])
+  secondary(tree).props.onEdit({ reasoning_effort: 'low' })
+  assert.deepEqual(edits, [])
+  assert.deepEqual(ensured, [['azure-openai', { reasoning_effort: 'low' }]])
+})
+
+test('creating a real catalog account preserves the draft editor session key', () => {
+  let ref
+  const StatefulDetail = loadTs('ProviderDetail.tsx', {
+    ...mocks, react: { ...mocks.react, useRef: initial => ref || (ref = { current: initial }) },
+    './ProviderFields': { default: Fields }, '../../components/SpeechRecognitionConfig': { default: () => null },
+    './SenseVoiceConfig': { default: () => null }, './TrialRunPanel': { default: () => null },
+  }).default
+  const state = { ...settings, connections: [] }
+  const created = connection({ id: 'real-created-id', catalog_provider_id: 'azure-openai', base_url: 'https://enterprise.invalid/v1', reasoning_effort: 'low' })
+  const props = { preset: catalog.catalogPreset('azure-openai'), onBack() {}, m: { settings: state, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, testing: false, ensureCatalogProvider() { state.connections = [created]; return created }, editConnection() {} } }
+  const before = StatefulDetail(props)
+  const key = flatten(before).find(node => node.props?.['data-request-connection-id']).key
+  secondary(before).props.onEdit({ reasoning_effort: 'low' })
+  const after = StatefulDetail(props)
+  assert.equal(flatten(after).find(node => node.props?.['data-request-connection-id']).key, key)
+  assert.equal(secondary(after).props.value.id, created.id)
 })
