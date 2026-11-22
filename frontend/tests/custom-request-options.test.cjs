@@ -37,6 +37,8 @@ test('saved headers stay private, blank retains them and empty object clears the
   assert.equal(options.wireRequestOptions({ ...saved, _http_headers_text: '' }).http_headers, undefined)
   assert.deepEqual(plain(options.wireRequestOptions({ ...saved, _http_headers_text: '{}' }).http_headers), {})
   assert.equal(options.wireRequestOptions(saved).http_headers, undefined)
+  assert.equal(options.wireRequestOptions({ ...saved, http_headers: null }).http_headers, null)
+  assert.equal(options.wireRequestOptions({ ...saved, _http_headers_text: 'null' }).http_headers, null)
   assert.equal(options.requestOptionsIssue({ extra_body: { value: Infinity } }), 'body')
   assert.equal(options.requestOptionsIssue({ _extra_body_text: JSON.stringify({ value: 'x'.repeat(16385) }) }), 'body')
 })
@@ -140,10 +142,10 @@ test('JSON import validates before replacing, copies only local values and handl
   const x = editor({ has_http_headers: true })
   x.button('导入 JSON').props.onClick()
   assert.equal(x.field('HTTP Headers（JSON）').type, 'Password')
-  for (const text of ['bad JSON', '{"Host":"elsewhere"}', '{"X":"one","X":"two"}']) {
+  for (const text of ['bad JSON', 'null', '[]', 'true', '12', '"value"', '{"Host":"elsewhere"}', '{"X":"one","X":"two"}']) {
     x.field('HTTP Headers（JSON）').props.onChange({ target: { value: text } })
     assert.equal(x.button('导入并替换').props.disabled, true)
-    x.button('导入并替换').props.onClick()
+    assert.doesNotThrow(() => x.button('导入并替换').props.onClick())
     assert.equal(x.draft()._http_headers_text, undefined)
   }
   x.field('HTTP Headers（JSON）').props.onChange({ target: { value: '{"X-Workspace":"fixture-value"}' } })

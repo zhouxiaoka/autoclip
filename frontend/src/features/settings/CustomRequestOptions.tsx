@@ -56,7 +56,9 @@ export function HeaderEditor({ value, onEdit }: Props) {
   const [importText, setImportText] = useState('')
   const [feedback, setFeedback] = useState('')
   const invalid = requestOptionsIssue({ _http_headers_text: text }) === 'headers'
-  const importInvalid = !importText.trim() || requestOptionsIssue({ _http_headers_text: importText }) === 'headers'
+  let imported: HeaderEntry[] | null = null
+  try { imported = parseHeaderEntries(importText) } catch { /* Import accepts objects, not the API's null/preserve sentinel. */ }
+  const importInvalid = imported === null || requestOptionsIssue({ _http_headers_text: importText }) === 'headers'
   const copyable = !!text.trim() && !invalid && rows.some(row => row.name || row.value)
   const names = new Set(rows.map(row => row.name.toLowerCase()))
 
@@ -70,8 +72,8 @@ export function HeaderEditor({ value, onEdit }: Props) {
   }
   const edit = (index: number, patch: Partial<HeaderEntry>) => update(rows.map((row, i) => i === index ? { ...row, ...patch } : row))
   const importHeaders = () => {
-    if (importInvalid) return
-    const entries = parseHeaderEntries(importText)
+    if (importInvalid || imported === null) return
+    const entries = imported
     setRows(entries.map(row))
     onEdit({ _http_headers_text: headerEntriesText(entries) })
     setImportText('')
