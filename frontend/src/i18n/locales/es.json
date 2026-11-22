@@ -1,4 +1,6 @@
 {
+  "发布文案": "Texto de la publicación",
+  "成片暂不可用": "Este vídeo no está disponible",
   "视觉模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。": "El modelo de visión {{saved}} no está disponible. Se usó {{replacement}} en esta tarea.",
   "指定模型用途": "Asignar uso al modelo",
   "未指定用途": "Uso sin asignar",

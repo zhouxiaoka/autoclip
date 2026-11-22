@@ -1,4 +1,6 @@
 {
+  "发布文案": "Post copy",
+  "成片暂不可用": "This export is unavailable",
   "视觉模型 {{saved}} 当前不可用，这次已改用 {{replacement}}。": "The vision model {{saved}} is unavailable. This run used {{replacement}}.",
   "指定模型用途": "Set model purpose",
   "未指定用途": "Purpose not set",
