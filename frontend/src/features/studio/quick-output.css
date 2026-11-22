@@ -224,7 +224,7 @@
 .studio-output-card .ac-card-actions {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   width: 100%;
 }
 
@@ -237,6 +237,23 @@
   min-height: 34px;
   padding: 7px 6px;
   text-align: center;
+}
+
+.studio-output-card .ac-card-actions > .studio-reveal-link {
+  grid-column: 1 / -1;
+  order: 10;
+  border: 0;
+  border-radius: 0;
+  color: var(--ac-sub);
+  font-size: 12px;
+  min-height: 22px;
+  padding: 4px 2px 0;
+  text-align: left;
+}
+
+.studio-output-card .ac-card-actions > .studio-reveal-link:hover {
+  color: var(--ac-ink);
+  text-decoration: underline;
 }
 
 .studio-output-download {
