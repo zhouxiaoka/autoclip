@@ -51,6 +51,11 @@ export function coverStatusMessages(
   return messages
 }
 
+export function resolvedCoverTitle(headline: string | null, savedTitle: string, jobTitle?: string): string | undefined {
+  const raw = headline === null ? (savedTitle || jobTitle || '') : headline
+  return raw.trim() || undefined
+}
+
 /** Reads the cover made for this export. Older exports can generate their missing cover here. */
 export default function ExportCover({ projectId, job, variant, coverStamp = 0, onCoverChanged }: Props) {
   const clip = `studio-${job.job_id}`
@@ -133,13 +138,16 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
   const generate = async () => {
     setBusy(true)
     setError('')
+    const title = resolvedCoverTitle(headline, savedTitle, job.title)
     try {
       if (variant) {
-        const result = await studioApi.redesignVariantCover(projectId, variant.id, { design, title: headline?.trim() || undefined })
-        if (mounted.current) setTask({ id: result.job_id, variantId: variant.id })
+        const result = await studioApi.redesignVariantCover(projectId, variant.id, { design, title, allow_reference_once: referenceOnce })
+        if (!mounted.current) return
+        setReferenceOnce(false)
+        setTask({ id: result.job_id, variantId: variant.id })
         return
       }
-      const result = await coverApi.start(projectId, clip, { platform, design, title: headline?.trim() || undefined, allow_reference_once: referenceOnce })
+      const result = await coverApi.start(projectId, clip, { platform, design, title, allow_reference_once: referenceOnce })
       if (!mounted.current) return
       setReferenceOnce(false)
       if ('job_id' in result) setTask({ id: result.job_id })
@@ -176,7 +184,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
         onChange={e => setDesign({ ...design, change_frame: e.target.value === 'next', frame_time: !e.target.value || e.target.value === 'next' ? undefined : Number(e.target.value) })}>
         <option value="">{t('保留当前帧')}</option><option value="next">{t('重选镜头')}</option>
         {times.map(at => <option key={at} value={at}>{at.toFixed(2)} s</option>)}</select></label>
-      {!variant && askReference && design.mode === 'editorial_edit' && <label><input type="checkbox" checked={referenceOnce} onChange={e => setReferenceOnce(e.target.checked)} /> {t('仅本次将所选视频帧发送给封面模型')}</label>}
+      {askReference && design.mode === 'editorial_edit' && <label><input type="checkbox" checked={referenceOnce} onChange={e => setReferenceOnce(e.target.checked)} /> {t('仅本次将所选视频帧发送给封面模型')}</label>}
     </div>}
     {error && <p className="studio-error" role="alert">{error}</p>}
   </section>

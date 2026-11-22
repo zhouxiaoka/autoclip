@@ -157,11 +157,14 @@ def _title_ok(image: bytes, lines: list[str]) -> bool | None:
     return cb.matches(answer.get('text',''),' '.join(lines))
 
 
-def _deliver(project_id, job_id, strategy_id, frame, brief, options, token, allow_model, variant_id=None):
+def _deliver(
+    project_id, job_id, strategy_id, frame, brief, options, token, allow_model, variant_id=None, *, allow_reference_once=False
+):
     from backend.core.image_providers import generate_image
     from backend.services import cover
 
     cfg = cover.load_config()
+    can_send = cfg.allow_send_frame or bool(allow_reference_once)
 
     def generate(req):
         return generate_image(provider=cfg.provider, api_key=cfg.api_key, base_url=cfg.base_url, request=req)
@@ -171,7 +174,7 @@ def _deliver(project_id, job_id, strategy_id, frame, brief, options, token, allo
             brief,
             frame,
             cfg,
-            can_send=cfg.allow_send_frame,
+            can_send=can_send,
             allow_model=allow_model,
             generate=generate,
             check=_title_ok,
@@ -189,8 +192,8 @@ def _deliver(project_id, job_id, strategy_id, frame, brief, options, token, allo
     )
     cb.save(cd_meta_path(project_id, job_id, strategy_id, variant_id), token, data, frame, audit)
     logger.info(
-        "Studio cover delivered: project=%s job=%s strategy=%s allow_model=%s mode=%s allow_send_frame=%s result=%s attempts=%d fallback_reason=%s",
-        project_id, job_id, strategy_id, allow_model, brief.permissions.get("mode"), cfg.allow_send_frame,
+        "Studio cover delivered: project=%s job=%s strategy=%s allow_model=%s mode=%s allow_send_frame=%s allow_reference_once=%s result=%s attempts=%d fallback_reason=%s",
+        project_id, job_id, strategy_id, allow_model, brief.permissions.get("mode"), cfg.allow_send_frame, bool(allow_reference_once),
         audit.get("result"), int(audit.get("attempts") or 0), audit.get("fallback_reason"),
     )
     return audit['result']
@@ -207,6 +210,7 @@ def _redesign(
     request_token=None,
     variant_id=None,
     reuse=False,
+    allow_reference_once=False,
 ):
     from backend.services import cover
     from backend.services.studio import cover_design as cd, store
@@ -290,7 +294,10 @@ def _redesign(
         size=size,
         revision=revision,
     )
-    return _deliver(project_id,job_id,strategy_id,frame,brief,opts,token,use_model,variant_id)
+    return _deliver(
+        project_id, job_id, strategy_id, frame, brief, opts, token, use_model, variant_id,
+        allow_reference_once=allow_reference_once,
+    )
 
 
 def redesign_local_cover(project_id, job_id, strategy_id, **kwargs):

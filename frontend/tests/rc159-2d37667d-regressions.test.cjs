@@ -214,3 +214,31 @@ test('ExportCover consistently shows reference-frame opt-out notice even when vi
     '生图失败，已改成本地排版或截帧',
   ])
 })
+
+test('ExportCover sends visible confirmed title and exposes allow_reference_once for both variant and standalone covers', () => {
+  const coverSrc = read('src/features/studio/ExportCover.tsx')
+  assert.match(coverSrc, /export function resolvedCoverTitle\(/)
+  const mod = loadTs(path.join(__dirname, '../src/features/studio/ExportCover.tsx'), {
+    react: {},
+    antd: { message: {} },
+    '../../i18n': { t: s => s },
+    '../../publish/coverApi': { coverApi: {} },
+    '../../services/api': { default: { defaults: { baseURL: '' } } },
+    '../../ui': { Btn: () => null, Dialog: () => null },
+    './api': { exportCoverSlot: () => 'douyin', studioApi: {} },
+    './nativeDownload': { isDesktopDownload: () => false, saveLocalFile: async () => {} },
+  })
+  // Unedited input on existing cover -> confirms savedTitle so backend treats it as locked instead of needs_source_validation
+  assert.equal(mod.resolvedCoverTitle(null, '奥特曼复盘：我们产品做得太多了', 'fallback'), '奥特曼复盘：我们产品做得太多了')
+  // Unedited input before first cover exists (savedTitle empty, placeholder=job.title) -> confirms job.title
+  assert.equal(mod.resolvedCoverTitle(null, '', '奥特曼复盘：我们产品做得太多了'), '奥特曼复盘：我们产品做得太多了')
+  // Explicitly edited input -> sends trimmed value
+  assert.equal(mod.resolvedCoverTitle('  自定义封面标题  ', 'old', 'job'), '自定义封面标题')
+  // Explicitly cleared input -> undefined (does not override with stale title)
+  assert.equal(mod.resolvedCoverTitle('', 'old', 'job'), undefined)
+
+  // Both variant and standalone covers must be able to opt-in once when global allow_send_frame is false
+  assert.doesNotMatch(coverSrc, /!variant\s*&&\s*askReference/)
+  assert.match(coverSrc, /askReference\s*&&\s*design\.mode === 'editorial_edit'/)
+  assert.match(coverSrc, /redesignVariantCover\(projectId,\s*variant\.id,\s*\{\s*design,\s*title,\s*allow_reference_once:\s*referenceOnce\s*\}\)/)
+})
