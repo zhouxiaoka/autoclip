@@ -154,8 +154,8 @@ test('StudioResults opens in-place remake dialog for local-file projects and kee
     source_file: 'qa684-20s.mp4',
     settings: { smart_import: { goal: 'content' } },
   })
-  const localBtn = local.buttons.find(b => b.children === '用同一素材再做一个')
-  assert.ok(localBtn, 'local completed automatic project should expose 用同一素材再做一个')
+  const localBtn = local.buttons.find(b => b.children === '再做一版')
+  assert.ok(localBtn, 'local completed automatic project should expose 再做一版')
   localBtn.onClick()
   assert.deepEqual(local.setRemakingCalls, [true])
   assert.deepEqual(local.navigated, [])
@@ -169,8 +169,8 @@ test('StudioResults opens in-place remake dialog for local-file projects and kee
     source_url: 'https://www.youtube.com/watch?v=abc123',
     settings: { smart_import: { goal: 'content' } },
   })
-  const linkBtn = link.buttons.find(b => b.children === '用同一素材再做一个')
-  assert.ok(linkBtn, 'URL completed automatic project should expose 用同一素材再做一个')
+  const linkBtn = link.buttons.find(b => b.children === '再做一版')
+  assert.ok(linkBtn, 'URL completed automatic project should expose 再做一版')
   linkBtn.onClick()
   assert.deepEqual(link.setRemakingCalls, [])
   assert.deepEqual(link.navigated, ['/'])
@@ -182,7 +182,7 @@ test('StudioResults opens in-place remake dialog for local-file projects and kee
   const resultsSrc = read('src/features/studio/StudioResults.tsx')
   assert.match(
     resultsSrc,
-    /disabled=\{loading \|\| workspace\.analysis\?\.status === 'running'\} onClick=\{startAnotherPlatform\}>\{t\('用同一素材再做一个'\)\}/,
+    /disabled=\{loading \|\| workspace\.analysis\?\.status === 'running'\} onClick=\{startAnotherPlatform\}>\{t\('再做一版'\)\}/,
   )
 })
 

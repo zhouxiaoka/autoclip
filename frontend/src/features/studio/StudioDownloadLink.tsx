@@ -42,7 +42,7 @@ export default function StudioDownloadLink({ projectId, jobId, className = 'stud
     {savedPath && (
       <button
         type="button"
-        className="studio-link"
+        className="studio-link studio-reveal-link"
         data-testid="reveal-in-folder-btn"
         onClick={() => void revealInFolder(savedPath).catch(() => message.error(t('无法打开所在文件夹')))}
       >
