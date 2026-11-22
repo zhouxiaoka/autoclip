@@ -782,3 +782,10 @@
   .studio-publish-grid { grid-template-columns: minmax(0, 1fr); }
   .studio-publish-player video { max-height: 52vh; }
 }
+
+.studio-publish-destinations { border-top: 1px solid var(--ac-line); padding-top: 16px; min-width: 0; }
+.studio-publish-destinations .publish-controls { padding: 0; border: 0; }
+.studio-publish-destinations .publish-panel-head h2 { font-size: 14px; }
+.studio-publish-destinations .publish-submit { border-top: 0; padding-top: 0; }
+.studio-publish-destinations .publish-submit .ac-btn { width: 100%; }
+.studio-publish-destinations .ac-row { flex-wrap: wrap; gap: 8px; }

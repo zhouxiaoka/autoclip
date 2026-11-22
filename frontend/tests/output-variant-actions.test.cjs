@@ -23,8 +23,8 @@ test('result page retries a failed output and has no append-platform entry',()=>
 test('completed variants publish their own file and only bilibili variants go straight to B站',()=>{
  const helper=fs.readFileSync(path.join(__dirname,'../src/features/studio/outputVariantPublish.ts'),'utf8')
  const page=fs.readFileSync(path.join(__dirname,'../src/pages/PublishClipPage.tsx'),'utf8')
- assert.match(card,/studioPublishPreviewPath\(projectId, draft.id, job.job_id, variant.id\)/)
- assert.match(helper,/publish\/studio-\$\{variant\.render_job_id\}\?\$\{query\}/)
+ assert.match(card,/studioPublishPreviewPath\(projectId, job.draft_id, job.job_id, variant.id\)/)
+ assert.match(helper,/new URLSearchParams\(\{ variant: variant.id, strategy: variant.strategy_id \}\)/)
  assert.match(helper,/strategy'\) === 'bilibili' \? id : undefined/)
  assert.match(page,/output_variant_id: variantTarget\.uploadPost/)
  assert.match(page,/output_variant_id: variantTarget\.bilibili/)

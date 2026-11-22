@@ -9,7 +9,7 @@ import StudioDownloadLink from './StudioDownloadLink'
 import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, RenderJob } from './types'
 import { exportPoster, studioApi } from './api'
-import { outputAnalytics, outputVariantPublishPath, studioPublishPreviewPath } from './outputVariantPublish'
+import { outputAnalytics, studioPublishPreviewPath } from './outputVariantPublish'
 import { markRatingAsked, shouldAskRating } from './outputShare'
 import { platformLabel } from './platformLabel'
 import { packagingLabel, packagingFallbackHint } from './packagingLabel'
@@ -58,7 +58,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       <div className="ac-card-foot"><div className="ac-card-actions">
         {completed && variant.render_job_id && <StudioDownloadLink className="studio-output-download" projectId={projectId} jobId={variant.render_job_id} onSaved={downloaded} variant={analytics}/>}
         {completed && variant.render_job_id
-          ? <Btn size="sm" onClick={() => navigate(draft ? studioPublishPreviewPath(projectId, draft.id, job.job_id, variant.id) : outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>
+          ? <Btn size="sm" onClick={() => navigate(studioPublishPreviewPath(projectId, job.draft_id, job.job_id, variant.id))}>{t('发布')}</Btn>
           : draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {onDemand && <Btn variant="text" onClick={onProduce}>{t('生成这条')}</Btn>}

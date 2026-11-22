@@ -1,15 +1,13 @@
-import ExportCover from '../features/studio/ExportCover'
 import { socialPublishObserved, socialPublishOutcome } from '../analytics/studio'
 import { workflow } from '../analytics/observer'
 import i18n, { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import StudioDownloadLink from '../features/studio/StudioDownloadLink'
-import type { OutputVariant, RenderJob } from '../features/studio/types'
+import type { PostCopy } from '../features/studio/types'
 import './publish-clip.css'
-import { exportCoverSlot, exportPoster, studioApi } from '../features/studio/api'
-import { outputVariantPublishTarget } from '../features/studio/outputVariantPublish'
+import { studioApi } from '../features/studio/api'
+import { outputVariantPublishTarget, studioPublishPreviewPath } from '../features/studio/outputVariantPublish'
 import { mediaUrl, projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
@@ -84,16 +82,34 @@ function defaultWhen(): string {
 export default function PublishClipPage() {
   const { id: projectId = '', clipId = '' } = useParams()
   const { search } = useLocation()
+  const studioJobId = /^studio-([a-f0-9]{32})$/.exec(clipId)?.[1]
+  if (studioJobId) return <StudioPublishLink key={`${projectId}/${clipId}${search}`} projectId={projectId} jobId={studioJobId} search={search} />
   return <PublishClip key={`${projectId}/${clipId}${search}`} projectId={projectId} clipId={clipId} search={search} />
 }
 
-function PublishClip({ projectId, clipId, search }: { projectId: string; clipId: string; search: string }) {
+/** Older history links identify the export without its draft. Resolve them to the same studio workspace. */
+function StudioPublishLink({ projectId, jobId, search }: { projectId: string; jobId: string; search: string }) {
+  const navigate = useNavigate()
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    studioApi.get(projectId).then(workspace => {
+      if (!active) return
+      const job = workspace.jobs.find(item => item.job_id === jobId && item.status === 'completed')
+      if (job) navigate(studioPublishPreviewPath(projectId, job.draft_id, jobId, outputVariantPublishTarget(search).uploadPost), { replace: true })
+      else setError(t('成片尚未完成或不存在，请返回项目重新导出'))
+    }).catch(err => { if (active) setError(readApiDetail(err, t('发布失败'))) })
+    return () => { active = false }
+  }, [projectId, jobId, search, navigate])
+  return <div className="ac-page"><button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t('‹ 返回项目')}</button>
+    <p role={error ? 'alert' : 'status'}>{error || t('还在处理中')}</p></div>
+}
+
+export function PublishClip({ projectId, clipId, search, preparedPost }: { projectId: string; clipId: string; search: string; preparedPost?: PostCopy }) {
+  const embedded = !!preparedPost
   useTranslation()
   const studioJobId = /^studio-[a-f0-9]{32}$/.test(clipId) ? clipId.slice(7) : null
   const variantTarget = outputVariantPublishTarget(search)
-  const [studioVariant, setStudioVariant] = useState<OutputVariant | undefined>()
-  const [coverRevision, setCoverRevision] = useState(0)
-  const [studioExport, setStudioExport] = useState<RenderJob | null>(null)
   const navigate = useNavigate()
   const runId = useRef(0)
 
@@ -107,8 +123,10 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
   const [visibility, setVisibility] = useState<PublishVisibility>('private')
   const [when, setWhen] = useState<'now' | 'later'>('now')
   const [whenValue, setWhenValue] = useState(defaultWhen)
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [inputTitle, setTitle] = useState('')
+  const [inputDescription, setDescription] = useState('')
+  const title = preparedPost?.title ?? inputTitle
+  const description = preparedPost ? [preparedPost.description, preparedPost.tags.map(tag => `#${tag}`).join(' ')].filter(Boolean).join('\n\n') : inputDescription
   const [subtitles, setSubtitles] = useState(true)
   const [titleCard, setTitleCard] = useState(true)
   const [savingFile, setSavingFile] = useState(false)
@@ -131,50 +149,32 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
       setLoading(true)
       try {
         const [project, cfg, bili] = await Promise.all([
-          projectApi.getProject(projectId),
+          embedded ? null : projectApi.getProject(projectId),
           uploadPostApi.getConfig(),
           bilibiliApi.getConfig(),
         ])
         if (cancelled || runId.current !== session) return
-        let clips = project.clips || []
-        if (!clips.length) {
-          try { clips = await projectApi.getClips(projectId) } catch { clips = [] }
-        }
-        const clip = clips.find((item) => item.id === clipId)
-        let nextTitle = clip?.generated_title || clip?.title || ''
-        let coverSlot = 'bilibili'
-        if (studioJobId) {
-          const workspace = await studioApi.get(projectId)
-          if (cancelled || runId.current !== session) return
-          const exported = workspace.jobs.find(job => job.job_id === studioJobId && job.status === 'completed')
-          if (!exported) throw new Error(t('成片尚未完成或不存在，请返回项目重新导出'))
-          nextTitle = exported.title
-          setStudioExport(exported)
-          // An automatic output arrives with its publish kit: start from its copy and cover.
-          const variant = (workspace.output_variants || []).find(item => item.id === variantTarget.uploadPost)
-          setStudioVariant(variant)
-          const post = variant?.post || exported.post
-          if (post) {
-            nextTitle = post.title || nextTitle
-            setTitle(post.title)
-            setDescription([post.description, post.tags.map(tag => `#${tag}`).join(' ')].filter(Boolean).join('\n\n'))
+        if (project) {
+          let clips = project.clips || []
+          if (!clips.length) {
+            try { clips = await projectApi.getClips(projectId) } catch { clips = [] }
           }
-          if (!variant) coverSlot = exportCoverSlot(exported)
-          if (variant && !['bilibili', 'youtube_long', 'original'].includes(variant.strategy_id)) coverSlot = 'douyin'
+          const clip = clips.find((item) => item.id === clipId)
+          const nextTitle = clip?.generated_title || clip?.title || ''
+          setClipTitle(nextTitle)
+          setCoverTitle(nextTitle)
+          try {
+            const existing = await coverApi.get(projectId, clipId, 'bilibili')
+            if (!cancelled && runId.current === session && existing?.ok && existing.url) {
+              setCover(existing)
+              if (existing.title) setCoverTitle(existing.title)
+              if (existing.subtitle) setCoverSubtitle(existing.subtitle)
+              if (existing.badge) setCoverBadge(existing.badge)
+            }
+          } catch { /* 没有封面时忽略 */ }
         }
-        setClipTitle(nextTitle)
-        setCoverTitle(nextTitle)
         setConfigured(cfg.configured)
         setBiliConfigured(bili.configured)
-        try {
-          const existing = variantTarget.uploadPost ? null : await coverApi.get(projectId, clipId, coverSlot)
-          if (!cancelled && runId.current === session && existing?.ok && existing.url) {
-            setCover(existing)
-            if (existing.title) setCoverTitle(existing.title)
-            if (existing.subtitle) setCoverSubtitle(existing.subtitle)
-            if (existing.badge) setCoverBadge(existing.badge)
-          }
-        } catch { /* 没有封面时忽略 */ }
         let list: UploadPostProfile[] = []
         let next = ''
         if (cfg.configured) {
@@ -195,7 +195,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
     }
     void load()
     return () => { cancelled = true; runId.current++; coverJob.current++ }
-  }, [projectId, clipId, studioJobId])
+  }, [projectId, clipId, embedded])
 
   const chooseUser = (next: string) => {
     setUser(next)
@@ -427,35 +427,12 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
             ? t("正在渲成片并提交")
             : null
 
-  const exported = studioExport?.job_id === studioJobId ? studioExport : null
-  const showMedia = !loading && (studioJobId ? !!exported : !!clipId)
+  const showMedia = !loading && !!clipId
   const settingsLink = () => navigate('/settings?section=publish')
 
   const coverImage = cover?.url?.startsWith('/api/v1/') ? mediaUrl(cover.url.slice('/api/v1'.length)) : cover?.url
-  return (
-    <div className="ac-page publish-clip-page">
-      <header>
-        <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>
-          <Icon.Back />{t("项目")}
-        </button>
-        <h1 className="ac-title">{t("发布")}</h1>
-      </header>
-
-      {loading && <div className="publish-loading" role="status"><StatusDot tone="accent" label={t("还在处理中")} /></div>}
-      <div className="publish-layout">
-        {showMedia && <section className="publish-media" aria-label={t('视频预览')}>
-          <video key={clipId} controls playsInline preload="metadata" aria-label={clipTitle || t('视频预览')}
-            src={exported ? studioApi.video(projectId, exported.job_id) : projectApi.getClipVideoUrl(projectId, clipId)}
-            poster={(studioVariant && studioVariant.render_job_id === studioJobId ? studioApi.variantCover(projectId, studioVariant.id,coverRevision) : coverImage) || (exported ? exportPoster(projectId, exported) || studioApi.thumbnail(projectId, exported.draft_id, exported.revision, exported.job_id) : undefined)} />
-          <div className="publish-media-info">
-            {exported && <p className="publish-revision"><StatusDot tone="ok" label={t('已导出')} /> · V{exported.revision}</p>}
-            <h2>{clipTitle || t("切片")}</h2>
-            {exported
-              ? <StudioDownloadLink className="ac-btn ac-btn--sm" projectId={projectId} jobId={exported.job_id} />
-              : <Btn size="sm" loading={savingFile} disabled={busy} onClick={() => void downloadFile()}>{t("下载成片")}</Btn>}
-          </div>
-        </section>}
-        {!loading && <div className="publish-controls">
+  const loadingState = loading && <div className="publish-loading" role="status"><StatusDot tone="accent" label={t("还在处理中")} /></div>
+  const controls = !loading && <div className="publish-controls">
           <div className="publish-panel-head">
             <h2>{t(ready ? '发布设置' : '发布账号')}</h2>
             <a href={publishGuideHref(i18n.language)} onClick={(e) => { e.preventDefault(); void openExternalLink(publishGuideHref(i18n.language)) }}>{t("操作教程")}<Icon.External size={12} /></a>
@@ -467,19 +444,10 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
           <div className="publish-fields">
             {ready && (
               <>
-                {profiles.length > 1 && (
+                {profiles.length > 0 && (
                   <Row label={t("默认账号")}>
-                    <Segmented size="sm" ariaLabel={t("默认账号")} value={user} onChange={chooseUser}
-                      options={profiles.map((p) => ({ value: p.username, label: p.username }))} />
-                  </Row>
-                )}
-                <Row label={t("何时")}>
-                  <Segmented size="sm" ariaLabel={t("何时")} value={when} onChange={setWhen}
-                    options={[{ value: 'now', label: t("现在发") }, { value: 'later', label: t("定时") }]} />
-                </Row>
-                {when === 'later' && (
-                  <Row label={t("选择发出的时间")} hint={selected.includes('bilibili') ? t("B 站定时要晚于现在两小时。") : undefined}>
-                    <input className="ac-input" style={{ width: 220 }} type="datetime-local" aria-label={t("选择发出的时间")} value={whenValue} onChange={(e) => setWhenValue(e.target.value)} />
+                    {profiles.length === 1 ? <span>{user}</span> : <Segmented size="sm" ariaLabel={t("默认账号")} value={user} onChange={chooseUser}
+                      options={profiles.map((p) => ({ value: p.username, label: p.username }))} />}
                   </Row>
                 )}
                 {destinations.length > 0 && (
@@ -497,10 +465,20 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
                 {reconnect && (
                   <p style={{ color: 'var(--ac-sub)', fontSize: 13, margin: '8px 0 0' }}>{t("需要重新连接：{{platforms}}", { platforms: reconnect })}</p>
                 )}
+                <Row label={t("何时")}>
+                  <Segmented size="sm" ariaLabel={t("何时")} value={when} onChange={setWhen}
+                    options={[{ value: 'now', label: t("现在发") }, { value: 'later', label: t("定时") }]} />
+                </Row>
+                {when === 'later' && (
+                  <Row label={t("选择发出的时间")} hint={selected.includes('bilibili') ? t("B 站定时要晚于现在两小时。") : undefined}>
+                    <input className="ac-input" style={{ width: 220 }} type="datetime-local" aria-label={t("选择发出的时间")} value={whenValue} onChange={(e) => setWhenValue(e.target.value)} />
+                  </Row>
+                )}
                 <Row label={t("可见范围")} hint={t("默认先发到自己看得到的地方。公开会直接出现在账号上。")}>
                   <Segmented size="sm" ariaLabel={t("可见范围")} value={visibility} onChange={setVisibility}
                     options={[{ value: 'private', label: t("仅自己") }, { value: 'public', label: t("公开") }]} />
                 </Row>
+                {!embedded && <>
                 <Row wide label={t("标题")} hint={longYoutube ? t("YouTube 标题超过 100 字时会自动缩短。") : t("不填就用切片标题。")}>
                   <input className="ac-input" aria-label={t("标题")} value={title} onChange={(e) => setTitle(e.target.value)} />
                 </Row>
@@ -508,7 +486,7 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
                   <textarea className="ac-input ac-textarea" style={{ minHeight: 88 }} aria-label={t("描述")} value={description} onChange={(e) => setDescription(e.target.value)} />
                 </Row>
                 <Row stack label={t("封面")} hint={t("生图失败或未生成时，投稿会自动截帧，不会卡住发布。")}>
-                  {exported ? <ExportCover projectId={projectId} job={exported} variant={studioVariant} onCoverChanged={() => setCoverRevision(v=>v+1)} /> : <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
                     <div style={{
                       width: '100%',
                       maxWidth: 360,
@@ -539,8 +517,9 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
                     {cover?.method === 'frame' && !coverHint && (
                       <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{t("当前是截帧封面")}</p>
                     )}
-                  </div>}
+                  </div>
                 </Row>
+                </>}
               </>
             )}
             {!studioJobId && (
@@ -598,7 +577,29 @@ function PublishClip({ projectId, clipId, search }: { projectId: string; clipId:
               )}
             </div>
           )}
-        </div>}
+        </div>
+  if (embedded) return <section className="studio-publish-destinations">{loadingState}{controls}</section>
+  return (
+    <div className="ac-page publish-clip-page">
+      <header>
+        <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>
+          <Icon.Back />{t("项目")}
+        </button>
+        <h1 className="ac-title">{t("发布")}</h1>
+      </header>
+
+      {loadingState}
+      <div className="publish-layout">
+        {showMedia && <section className="publish-media" aria-label={t('视频预览')}>
+          <video key={clipId} controls playsInline preload="metadata" aria-label={clipTitle || t('视频预览')}
+            src={projectApi.getClipVideoUrl(projectId, clipId)} poster={coverImage || undefined} />
+          <div className="publish-media-info">
+            <h2>{clipTitle || t("切片")}</h2>
+            <Btn size="sm" loading={savingFile} disabled={busy} onClick={() => void downloadFile()}>{t("下载成片")}</Btn>
+          </div>
+        </section>}
+        {controls}
+
       </div>
     </div>
   )

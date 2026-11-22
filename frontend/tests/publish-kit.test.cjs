@@ -14,7 +14,7 @@ const editor=read('src/features/studio/StudioEditor.tsx')
 test('ready cards open the publish preview for the selected export',()=>{
  for(const source of [card,read('src/features/studio/DraftResultCard.tsx')]){
    assert.doesNotMatch(source,/<PublishKit|studio-publish-tools/)
-   assert.match(source,/studioPublishPreviewPath\(projectId, draft.id,/)
+   assert.match(source,/studioPublishPreviewPath\(projectId, (?:draft.id|job.draft_id),/)
  }
  assert.match(preview,/<PublishKit projectId=\{projectId\} job=\{job\} variant=\{variant\}/)
  assert.match(editor,/j.job_id === publishJobId && j.status === 'completed'/)
@@ -32,9 +32,9 @@ test('post copy is pasted as title, description, then hashtags; the kit saves na
 })
 
 test('the publish page starts from the output kit: copy, hashtags and the matching cover slot',()=>{
- assert.match(publish,/setTitle\(post\.title\)/)
- assert.match(publish,/setDescription\(\[post\.description, post\.tags\.map/)
- assert.match(publish,/coverApi\.get\(projectId, clipId, coverSlot\)/)
+ assert.match(preview,/variant\?.post \?\? job.post/)
+ assert.match(publish,/preparedPost.description, preparedPost.tags.map/)
+ assert.match(cover,/exportCoverSlot\(job\)/)
 })
 
 test('the thumbnail and caption open one cover dialog from the publish kit',()=>{
@@ -42,4 +42,12 @@ test('the thumbnail and caption open one cover dialog from the publish kit',()=>
  assert.match(cover,/<img src=\{src\}/)
  assert.match(cover,/aria-haspopup="dialog"/)
  assert.match(preview,/studioApi.video\(projectId, job.job_id\)/)
+})
+
+test('studio submissions reuse the platform controls on the preview and use its saved post',()=>{
+ assert.match(preview,/<PublishClip projectId=\{projectId\} clipId=\{`studio-\$\{job.job_id\}`\}[^>]+preparedPost=\{post\}/)
+ assert.doesNotMatch(preview,/navigate\(publishPath|发布这版成片/)
+ assert.match(publish,/const title = preparedPost\?.title/)
+ assert.match(publish,/if \(embedded\) return <section className="studio-publish-destinations">/)
+ assert.match(publish,/studioPublishPreviewPath\(projectId, job.draft_id, jobId/)
 })

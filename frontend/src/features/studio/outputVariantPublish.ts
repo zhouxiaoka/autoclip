@@ -9,9 +9,8 @@ export function studioPublishPreviewPath(projectId: string, draftId: string, job
   return `/project/${projectId}/studio/${draftId}?${query}`
 }
 
-export function outputVariantPublishPath(projectId: string, variant: OutputVariant) {
-  const query = new URLSearchParams({ variant: variant.id, strategy: variant.strategy_id })
-  return `/project/${projectId}/publish/studio-${variant.render_job_id}?${query}`
+export function outputVariantPublishQuery(variant: OutputVariant) {
+  return new URLSearchParams({ variant: variant.id, strategy: variant.strategy_id }).toString()
 }
 
 /** Which completed variant the publish page was opened for; only a bilibili variant goes straight to B站. */
